@@ -249,7 +249,12 @@ Conceptually:
 ```rust
 pub enum EffectSource {
     Entity(SimId),
-    BuilderItem { owner: PlayerId, builder: SimId, item: ItemId },
+    BuilderItem {
+        owner: PlayerId,
+        builder: SimId,
+        item_instance: ItemInstanceId,
+        item_type: ItemId,
+    },
     BuildingAbility { building: SimId, ability: AbilityId },
     Environment(EffectId),
 }
@@ -264,7 +269,7 @@ This ensures builder-held projectile items can damage enemies without causing un
 A provisional ability phase relationship is:
 
 ```text
-apply accepted player commands
+apply finalized tick inputs
         ↓
 automatic ability eligibility/target evaluation
         ↓
@@ -302,7 +307,17 @@ stacking/refresh policy
 
 All authoritative numeric quantities use deterministic types.
 
-## 18. Performance
+Distinct item copies MUST retain `ItemInstanceId` through source attribution, deterministic ordering, cooldown/charge state, and RNG keys wherever identity matters. Two copies of the same `ItemId` MUST NOT accidentally share a random stream or effect-order identity.
+
+## 18. Effect expansion and termination
+
+Effects that can recursively generate more effects (reflection, on-hit, on-damage, death triggers, chained procs, etc.) MUST have explicit termination semantics.
+
+Content validation SHOULD reject unbounded static effect cycles. Runtime resolution MUST additionally enforce a deterministic per-root expansion budget/depth guard as a safety invariant. Exceeding that guard is a simulation/content error that is surfaced deterministically; the engine MUST NOT hang or depend on wall-clock watchdog timing.
+
+The guard value and failure behavior are part of the simulation version.
+
+## 19. Performance
 
 Automatic spellcasting MUST not imply an all-world scan per building per tick.
 
@@ -310,7 +325,7 @@ Use the dynamic spatial index for finite-radius abilities. Global abilities may 
 
 Expensive ability evaluation MAY be staggered if and only if the stagger schedule is itself deterministic and does not change the intended cast semantics.
 
-## 19. Required tests
+## 20. Required tests
 
 The ability test suite MUST eventually include:
 
@@ -325,4 +340,6 @@ The ability test suite MUST eventually include:
 9. disconnect does not pause autonomous building casting;
 10. snapshot/reload preserves mana, cooldown, charge, and cast-sequence state;
 11. rejected manual cast spends no mana/charge and creates no projectile/effect;
-12. replay of the same command stream reproduces all ability outcomes exactly.
+12. replay of the same finalized input stream reproduces all ability outcomes exactly;
+13. two identical item types with different `ItemInstanceId`s do not share RNG/cooldown/effect identity;
+14. recursive effect definitions are rejected or deterministically trip the expansion guard rather than hanging.

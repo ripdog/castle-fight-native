@@ -54,18 +54,24 @@ Use a fixed tick schedule with explicit targeting/combat/movement/cleanup phases
 
 No real networking or graphics required.
 
+Add a minimal logical snapshot round trip in this milestone rather than postponing restoration until networking work.
+
 Exit criteria:
 
 - deterministic duel/battle fixtures;
 - 1/2/4/N worker runs yield identical hashes;
 - no authoritative float state;
-- target decisions use stable tie-breaks.
+- target decisions use stable tie-breaks;
+- snapshot -> restore -> continue matches uninterrupted execution for the minimal battle;
+- snapshot reconstruction does not depend on ECS insertion order.
 
 ## 4. Milestone 2 — Spatial grid and individual targeting at scale
 
 Add the dynamic uniform spatial index.
 
 Implement per-unit candidate queries and deterministic target ranking.
+
+Before freezing those rules, inspect representative Castle Fight behavior for target retention, melee engagement, attack-building priorities, and caged-target selection. Record each observed rule as verified, inferred, or intentionally different.
 
 Benchmark against a brute-force reference implementation for correctness.
 
@@ -92,6 +98,8 @@ Add:
 
 Explicitly implement caging tests before adding anti-stuck behavior.
 
+Add a minimal debug visualizer during this milestone (circles/boxes, footprints, selected target links, spatial cells, and flow arrows). It is a development tool only and MUST remain outside authoritative state.
+
 Exit criteria:
 
 - legal cage can be built;
@@ -99,7 +107,8 @@ Exit criteria:
 - trapped units remain individually targetable by ranged attacks;
 - destroying cage wall updates pathing and releases units;
 - navigation output remains identical across worker counts;
-- topology changes do not trigger per-unit A* searches.
+- topology changes do not trigger per-unit A* searches;
+- debug visualization makes footprints, target choices, cages, and navigation directions inspectable while preserving identical headless checksums.
 
 ## 6. Milestone 4 — Headless gameplay prototype
 
@@ -124,17 +133,18 @@ Exit criteria:
 - replaying the same command stream reproduces final checksum;
 - content bundle hash/version enforced.
 
-## 7. Milestone 5 — Snapshot/replay foundation
+## 7. Milestone 5 — Snapshot/replay and continuity hardening
 
-Implement canonical snapshot serialization and command logs before live networking.
+Extend the snapshot mechanism already proven in Milestone 1 into the full canonical state format and finalized-input history required by networking.
 
 Exit criteria:
 
-- snapshot/reload continuation equals uninterrupted simulation;
+- full-game snapshot/reload continuation equals uninterrupted simulation;
 - replay from match start reproduces checkpoints;
 - seek snapshot + fast-forward equals full replay;
 - snapshot rebuild does not depend on ECS insertion order;
-- catch-up throughput is measured.
+- snapshot input-stream boundaries and duplicate/gap handling are tested;
+- catch-up throughput is measured on defined reference hardware/workloads.
 
 This milestone de-risks reconnect before transport complexity exists.
 
@@ -150,7 +160,7 @@ Implement:
 - player command submission;
 - server validation;
 - canonical tick/order assignment;
-- accepted command broadcast;
+- scheduled command broadcast plus finalized tick-input records;
 - periodic checksum checkpoints;
 - disconnect/reconnect;
 - snapshot resync.
@@ -163,9 +173,9 @@ Exit criteria:
 - reconnecting player catches up without pausing match;
 - corrupted client state can be repaired from server snapshot.
 
-## 9. Milestone 7 — Minimal Bevy client
+## 9. Milestone 7 — Player-facing Bevy client
 
-Only after the headless game is stable, add visual presentation:
+The debug visualizer already exists by this point. This milestone turns presentation into the actual player-facing client:
 
 - window/camera;
 - simple meshes/sprites/colored primitives;

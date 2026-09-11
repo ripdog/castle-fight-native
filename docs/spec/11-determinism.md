@@ -6,7 +6,7 @@ Status: **normative**
 
 Determinism is a multiplayer, replay, testing, and recovery requirement rather than an implementation preference.
 
-For a fixed simulation version, content bundle, initial state, match seed, and ordered accepted-command stream, every conforming simulation instance MUST produce identical authoritative state at every tick checkpoint.
+For a fixed simulation version, content bundle, initial state, match seed, and ordered finalized tick-input stream, every conforming simulation instance MUST produce identical authoritative state at every tick checkpoint.
 
 ## 2. Determinism boundary
 
@@ -57,6 +57,22 @@ Each arithmetic domain MUST choose one of:
 - checked arithmetic with deterministic failure handling;
 - saturating arithmetic where saturation is part of the game rule;
 - deliberately wrapping arithmetic for hash/RNG primitives only where specified.
+
+### 3.4 Rounding, division, and geometry intermediates
+
+The initial arithmetic contract is:
+
+- signed integer/fixed-point division truncates toward zero;
+- fixed-point multiplication uses a widened intermediate before rescaling, then truncates toward zero;
+- code MUST NOT use right-shift as a substitute for signed division where negative values are possible;
+- squared distance/dot-product intermediates use a width proven sufficient for the validated coordinate/range bounds;
+- normalization uses deterministic integer/fixed-point math with an explicitly specified integer square-root/length routine rather than floating point;
+- content/map loading validates coordinate, velocity, range, and radius bounds so those intermediate-width proofs remain true;
+- conversions between fixed-point scales use explicit documented rounding rather than casts whose intent is unclear.
+
+If the selected fixed-point crate/library does not expose these exact semantics, the simulation MUST wrap or replace the relevant operations rather than inherit different behavior implicitly.
+
+These arithmetic rules are part of the simulation version and require fixture tests around zero, negative values, half-unit boundaries, and maximum supported coordinates.
 
 ## 4. Stable identity
 
@@ -293,7 +309,7 @@ Development builds SHOULD be able to capture:
 
 - last matching tick;
 - first mismatching tick;
-- accepted command history around the mismatch;
+- finalized tick-input history around the mismatch;
 - simulation/content version;
 - hierarchical state hashes;
 - optionally canonical state dumps for offline comparison.

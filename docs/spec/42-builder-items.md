@@ -81,7 +81,7 @@ MoveBuilder {
 }
 ```
 
-The server validates ownership and destination legality, assigns the accepted command a canonical tick/order, and all simulations apply the same movement intent.
+The server validates ownership/admission, assigns the movement command a canonical tick/order, and all simulations execute or reject it identically from canonical state at that tick.
 
 Builder movement MUST NOT push, stop, separate, or reroute combat units.
 
@@ -162,12 +162,11 @@ Conceptual player command:
 ```rust
 UseItem {
     item_instance: ItemInstanceId,
-    target: AbilityTarget::Area {
-        center: SimPoint,
-        radius: SimDistance,
-    },
+    target_center: SimPoint,
 }
 ```
+
+The authoritative effect radius is derived from the validated `ItemId`/item definition, not supplied by the client. If a future item deliberately supports a player-adjustable radius, the command must carry only a bounded authored parameter and the server must validate it against the content-defined range.
 
 The server validates:
 
@@ -176,7 +175,7 @@ The server validates:
 - target coordinate is valid under the item's rules;
 - match state permits activation.
 
-At the canonical execution tick, eligible units in the authoritative area receive the deterministic effect.
+At the canonical execution tick, eligible units in the authoritative content-defined area receive the deterministic effect.
 
 The target coordinate MUST be authoritative fixed-point/grid space, never a raw client render-space float.
 
@@ -251,7 +250,7 @@ Snapshots MUST preserve all future-relevant builder/item state, including:
 - automatic-item cast/attack sequences;
 - any persistent aura state not fully derivable from inventory.
 
-Replay uses ordinary accepted builder/item commands and deterministic autonomous item behavior.
+Replay uses the finalized tick-input stream containing builder/item commands plus deterministic autonomous item behavior.
 
 ## 21. Required tests
 
