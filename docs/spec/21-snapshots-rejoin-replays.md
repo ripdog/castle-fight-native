@@ -12,7 +12,9 @@ These capabilities intentionally share one state-continuity mechanism.
 
 A snapshot is a complete logical representation of authoritative state at a specific completed simulation tick.
 
-A snapshot MUST contain enough information to resume the simulation with identical future results when supplied the same subsequent accepted commands.
+A snapshot labeled tick `T` means **all authoritative phases of tick `T`, including structural commit, victory evaluation, and checksum-visible state, have completed**. Loading it resumes with finalized inputs for tick `T + 1`; tick `T` is never executed again.
+
+A snapshot MUST contain enough information to resume the simulation with identical future results when supplied the same subsequent finalized tick-input stream.
 
 It includes, directly or transitively:
 
@@ -20,6 +22,7 @@ It includes, directly or transitively:
 - protocol/snapshot schema version;
 - content/map hashes or canonical references;
 - completed tick number;
+- exact finalized input-stream boundary included in the snapshot state;
 - match seed;
 - players/resources/game-mode state;
 - all authoritative entities sorted or encoded by stable `SimId`;
@@ -65,7 +68,7 @@ Cadence is provisional and should be selected from measurements balancing:
 - reconnect fast-forward length;
 - replay seek granularity.
 
-A likely initial design is a snapshot every several seconds plus a complete accepted-command log after the oldest retained live snapshot.
+A likely initial design is a snapshot every several seconds plus complete finalized tick-input history after the oldest retained live snapshot.
 
 ## 5. Snapshot creation and simulation stalls
 
@@ -82,20 +85,22 @@ Compression and disk/network encoding may run asynchronously because encoded byt
 
 ## 6. Live command history
 
-The server retains accepted commands with canonical tick/order for at least the period needed to advance from the oldest reconnect/desync snapshot to current time.
+The server retains finalized tick inputs with canonical tick/order and monotonic input-stream positions for at least the period needed to advance from the oldest reconnect/desync snapshot to the live boundary.
+
+Every snapshot records the exact input-stream position through which its state is complete. Inputs after that boundary are replayed exactly once.
 
 Conceptually:
 
 ```text
-Snapshot at T=10000
-AcceptedCommand T=10003 #0
-AcceptedCommand T=10007 #0
-AcceptedCommand T=10007 #1
+Snapshot at completed T=10000, input boundary P=8301
+Finalized T=10001, P=8302, no commands
+Finalized T=10002, P=8303, no commands
+Finalized T=10003, P=8304, command #0
 ...
-Current T=11200
+Current finalized T=11200, P=9506
 ```
 
-Command history MUST be complete and ordered.
+History MUST be complete and ordered, including logically empty finalized ticks (which may be wire-compressed).
 
 ## 7. Rejoin flow
 
@@ -104,15 +109,19 @@ A reconnecting player does not reconstitute the world from their stale local pro
 Recommended flow:
 
 1. client reconnects/authenticates to the existing player/session slot;
-2. server reports canonical current tick/version;
-3. server selects a suitable snapshot `S <= current`;
-4. server sends snapshot plus accepted commands after `S`;
-5. client replaces its authoritative local world with snapshot;
-6. client disables or minimizes presentation work;
-7. client replays commands and advances as fast as possible;
-8. client reaches a server-defined near-live tick/checkpoint;
-9. checksum is verified;
-10. normal real-time pacing/presentation resumes.
+2. server records a live subscription boundary and pins all required history after the chosen snapshot boundary for the duration of transfer;
+3. server reports canonical current finalized tick/version and input-stream position;
+4. server selects a suitable snapshot `S <= current`; the snapshot contains its completed tick and exact input-stream boundary `P_s`;
+5. server sends snapshot plus every finalized input record after `P_s`, including commands already scheduled for future ticks that fall within the subscribed stream;
+6. live finalized input records continue to queue after the recorded subscription boundary rather than racing the snapshot transfer;
+7. client replaces its authoritative local world with the snapshot;
+8. client disables or minimizes presentation work;
+9. client consumes finalized input records strictly by stream position, suppressing duplicates by identity/position and refusing to cross gaps;
+10. client advances as fast as possible until it reaches a server-defined near-live tick/checkpoint;
+11. checksum is verified;
+12. queued live input delivery and normal real-time pacing/presentation continue without changing stream identity.
+
+The handoff MUST have neither a gap nor an ambiguous overlap between snapshot history and live subscription. Required retained history MUST NOT be discarded while a reconnect transfer depends on it.
 
 The player's units/buildings continued running on the server throughout disconnection.
 
@@ -127,6 +136,8 @@ During catch-up, the client SHOULD:
 - process ticks as quickly as CPU allows.
 
 The client MAY join presentation slightly behind the newest server tick with a normal input-delay buffer rather than repeatedly chasing a moving exact tick.
+
+If replay catch-up cannot close the gap quickly enough, the server SHOULD prefer a fresher snapshot rather than forcing a client to replay an impractically large backlog. Catch-up throughput is therefore an early measurable performance requirement, not an assumption.
 
 ## 9. Fresh snapshot vs old snapshot + replay
 
@@ -154,13 +165,13 @@ A replay SHOULD be representable as:
 ```text
 ReplayHeader
 InitialSnapshot (or deterministic match-construction data)
-AcceptedCommand stream
+FinalizedTickInputs stream
 Optional periodic seek snapshots
 Optional checksum checkpoints
 Optional metadata/chat/events not affecting simulation
 ```
 
-The accepted command stream is canonical gameplay history.
+The finalized tick-input stream is canonical gameplay history.
 
 A replay player runs the same deterministic simulation code rather than storing every entity transform for every frame.
 
@@ -170,7 +181,7 @@ To seek to tick `T`:
 
 1. choose nearest compatible snapshot/checkpoint `S <= T`;
 2. load `S`;
-3. replay accepted commands;
+3. replay finalized tick inputs;
 4. simulate unpaced to `T`;
 5. render state.
 
@@ -220,7 +231,7 @@ Compression should occur off the critical simulation path where practical.
 A later dedicated-server milestone SHOULD support surviving server process restart by persisting:
 
 - a recent canonical snapshot;
-- accepted commands after it;
+- finalized tick inputs after it;
 - match/session metadata needed to resume ownership/authentication.
 
 This is separate from ordinary player reconnect but deliberately uses the same canonical state machinery.

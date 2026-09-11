@@ -205,13 +205,13 @@ Persistent inability to maintain the target tick rate is an overload condition t
 
 ## 13. Client catch-up after snapshot
 
-A reconnecting client may receive a snapshot older than the current server tick plus the accepted command log after it.
+A reconnecting client may receive a snapshot older than the current server tick plus the finalized tick-input history after it.
 
 It MUST be possible to run the simulation without presentation during catch-up:
 
 ```text
 load snapshot T
-apply accepted commands
+apply finalized tick inputs
 step T+1 ... current
 publish current state to presentation
 ```

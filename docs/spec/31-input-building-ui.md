@@ -50,7 +50,7 @@ Recommended client placement flow:
 6. player confirms;
 7. client sends `PlaceBuilding` command with canonical position/rotation representation;
 8. server validates against canonical state;
-9. server rejects or emits accepted command for a future/canonical tick;
+9. server rejects admission or schedules the command for a future/canonical tick; execution may still deterministically fail if state changes before that tick;
 10. all simulations apply accepted placement identically.
 
 ## 5. Canonical placement coordinates

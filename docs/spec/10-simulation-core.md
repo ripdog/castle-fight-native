@@ -31,7 +31,7 @@ Wall-clock elapsed time MUST NOT alter authoritative results.
 
 ## 3. Canonical world state
 
-The canonical world contains all state required to produce the next tick from the current tick plus accepted player commands.
+The canonical world contains all state required to produce the next tick from the current tick plus that tick's finalized authoritative inputs.
 
 At minimum this includes:
 
@@ -231,7 +231,7 @@ pub struct Simulation { /* private canonical + derived state */ }
 impl Simulation {
     pub fn new(config: MatchConfig, content: ContentHashBundle) -> Result<Self>;
 
-    pub fn enqueue_command(&mut self, command: AcceptedCommand) -> Result<()>;
+    pub fn enqueue_input(&mut self, input: FinalizedTickInputs) -> Result<()>;
 
     pub fn step(&mut self) -> TickResult;
 

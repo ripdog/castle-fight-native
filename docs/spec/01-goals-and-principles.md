@@ -23,7 +23,7 @@ Given:
 - the same simulation build and content version,
 - the same initial match state,
 - the same match seed,
-- and the same ordered stream of accepted player commands,
+- and the same ordered finalized tick-input stream,
 
 every conforming simulation instance MUST produce the same authoritative world state and checksum at every synchronization checkpoint.
 
@@ -38,7 +38,7 @@ Determinism MUST hold independently of:
 
 ### 2.3 Authoritative server with reconnect
 
-The server MUST be the canonical authority for match state and accepted player commands.
+The server MUST be the canonical authority for match state, command scheduling, finalized tick inputs, and command execution outcomes.
 
 A client MAY predict/run the complete deterministic simulation locally, but server state wins on disagreement.
 
@@ -230,7 +230,7 @@ Building placement MUST be restricted to the player's canonical owned build regi
 
 The network model SHOULD combine the bandwidth efficiency of deterministic command replication with the recoverability of an authoritative server.
 
-Clients SHOULD normally receive accepted player commands and simulate the resulting world locally rather than receiving continuous transforms for every unit.
+Clients SHOULD normally receive finalized tick inputs and simulate the resulting world locally rather than receiving continuous transforms for every unit.
 
 The server MUST retain enough canonical state/history to recover a client from:
 
