@@ -1,0 +1,398 @@
+# Implementation Roadmap and Open Questions
+
+Status: **planning document**
+
+## 1. Purpose
+
+This document turns the architectural specifications into an implementation sequence that validates the riskiest assumptions early.
+
+The project should resist the temptation to begin with art/UI/content breadth. Determinism, simulation scaling, navigation, targeting, and continuity are the expensive architectural risks; they should be proven while the world can still be rendered as debug circles/boxes.
+
+## 2. Milestone 0 — Workspace and deterministic primitives
+
+Create the Rust workspace and crate boundaries.
+
+Suggested initial crates:
+
+```text
+crates/sim
+crates/content
+crates/protocol
+crates/server
+crates/client
+```
+
+Initial `sim` primitives:
+
+- `Tick`;
+- `SimId` + deterministic allocator;
+- fixed-point scalar/vector types or selected dependency wrapper;
+- deterministic keyed RNG;
+- canonical checksum writer;
+- worker-count-configurable simulation harness.
+
+Exit criteria:
+
+- same primitive/RNG fixtures pass across debug/release;
+- canonical state/checksum format has tests;
+- headless `Simulation::step()` skeleton exists;
+- CI can run simulation with different worker counts.
+
+## 3. Milestone 1 — Minimal ECS battle
+
+Implement enough ECS to represent:
+
+- two teams;
+- units;
+- position/movement;
+- health;
+- one melee attack, with the attack API shaped so the four specified delivery modes can be added without changing targeting identity;
+- stable IDs;
+- simple target state.
+
+Use a fixed tick schedule with explicit targeting/combat/movement/cleanup phases.
+
+No real networking or graphics required.
+
+Exit criteria:
+
+- deterministic duel/battle fixtures;
+- 1/2/4/N worker runs yield identical hashes;
+- no authoritative float state;
+- target decisions use stable tie-breaks.
+
+## 4. Milestone 2 — Spatial grid and individual targeting at scale
+
+Add the dynamic uniform spatial index.
+
+Implement per-unit candidate queries and deterministic target ranking.
+
+Benchmark against a brute-force reference implementation for correctness.
+
+Exit criteria:
+
+- candidate ordering permutations do not change results;
+- optimized targeting matches reference selector;
+- synthetic 10,000-unit targeting/combat scenario is practical enough to profile interactively;
+- phase timings identify actual bottlenecks.
+
+## 5. Milestone 3 — Buildings, topology, flow navigation, caging
+
+Add:
+
+- build grid/footprints;
+- objective/castle;
+- production buildings;
+- deterministic spawn placement;
+- topology field;
+- flow/integration navigation;
+- local steering;
+- attack buildings;
+- non-combat builder entity and owned build-region validation.
+
+Explicitly implement caging tests before adding anti-stuck behavior.
+
+Exit criteria:
+
+- legal cage can be built;
+- units remain trapped;
+- trapped units remain individually targetable by ranged attacks;
+- destroying cage wall updates pathing and releases units;
+- navigation output remains identical across worker counts;
+- topology changes do not trigger per-unit A* searches.
+
+## 6. Milestone 4 — Headless gameplay prototype
+
+Add enough content/game rules for a complete headless match:
+
+- resources;
+- building costs;
+- production cadence;
+- castle health/victory;
+- all four attack delivery modes: melee, guaranteed-hit ranged, ballistic/siege, and bounce;
+- builder inventory with at least one automatic/passive item and one active area-target item;
+- mana-bearing automatic spellcasting building;
+- at least one player-targeted legendary building ability;
+- data-driven definitions;
+- deterministic match seed/config.
+
+A command-line simulation should be able to run an entire match and emit a replay/checksum trace.
+
+Exit criteria:
+
+- full match completes without client/rendering;
+- replaying the same command stream reproduces final checksum;
+- content bundle hash/version enforced.
+
+## 7. Milestone 5 — Snapshot/replay foundation
+
+Implement canonical snapshot serialization and command logs before live networking.
+
+Exit criteria:
+
+- snapshot/reload continuation equals uninterrupted simulation;
+- replay from match start reproduces checkpoints;
+- seek snapshot + fast-forward equals full replay;
+- snapshot rebuild does not depend on ECS insertion order;
+- catch-up throughput is measured.
+
+This milestone de-risks reconnect before transport complexity exists.
+
+## 8. Milestone 6 — Authoritative server + deterministic clients
+
+Add protocol and network transport.
+
+Start with correctness over exotic transport optimization.
+
+Implement:
+
+- match handshake/version/content checks;
+- player command submission;
+- server validation;
+- canonical tick/order assignment;
+- accepted command broadcast;
+- periodic checksum checkpoints;
+- disconnect/reconnect;
+- snapshot resync.
+
+Exit criteria:
+
+- multiple clients remain bit/checksum synchronized with server;
+- different worker counts remain synchronized;
+- fault-injected packet delay/reorder/duplication does not alter canonical command order;
+- reconnecting player catches up without pausing match;
+- corrupted client state can be repaired from server snapshot.
+
+## 9. Milestone 7 — Minimal Bevy client
+
+Only after the headless game is stable, add visual presentation:
+
+- window/camera;
+- simple meshes/sprites/colored primitives;
+- simulation-to-presentation mapping;
+- interpolated movement;
+- builder movement and owned-region building placement UI;
+- builder inventory / active item targeting UI;
+- selection/inspection for non-commandable combat units;
+- explicit player-targeted legendary ability UI;
+- basic audio/event bridge.
+
+Exit criteria:
+
+- graphics can be disabled without changing checksums;
+- render FPS independent of simulation rate;
+- reconnect fast-forward does not replay all historical cosmetic events;
+- building footprint/caging behavior is visually understandable.
+
+## 10. Milestone 8 — Rendering scale and game feel
+
+Profile large visible battles.
+
+Evaluate:
+
+- GPU instancing;
+- compact render extraction;
+- animation batching;
+- culling/LOD;
+- audio event aggregation;
+- richer effects.
+
+Do not optimize rendering based on assumptions from simulation profiling; profile GPU/client separately.
+
+## 11. Milestone 9 — Content compatibility pass
+
+Once systems are stable, focus on accurately recreating desired Castle Fight rules/content.
+
+For each behavior, record whether it is:
+
+- verified original behavior;
+- inferred behavior;
+- intentional divergence.
+
+Important compatibility areas likely include:
+
+- exact acquisition/target-retention rules;
+- melee engagement behavior;
+- attack-building target priorities;
+- production timing;
+- building footprints/spacing;
+- armor/damage types;
+- special abilities;
+- spawn congestion;
+- caging/attack soaking nuances;
+- victory/resource pacing.
+
+## 12. Open question — simulation tick rate
+
+Candidate initial values: 20 Hz or 30 Hz.
+
+Need prototype measurements for:
+
+- visual interpolation quality;
+- melee/ranged timing feel;
+- projectile granularity;
+- server CPU budget;
+- command latency/input delay.
+
+Decision becomes compatibility-sensitive once replays/network matches exist.
+
+## 13. Open question — fixed-point representation
+
+Need select between:
+
+- custom integer subunit scheme;
+- custom Q-format wrapper;
+- mature Rust fixed-point crate after auditing semantics/performance.
+
+Requirements:
+
+- explicit overflow behavior;
+- predictable rounding;
+- efficient vector math;
+- serde/network friendliness;
+- cross-platform bit identity.
+
+Benchmark before freezing representation.
+
+## 14. Open question — navigation representation
+
+Prototype likely starts with a regular navigation/build grid + flow/integration field.
+
+Need determine:
+
+- cell size;
+- diagonal movement rules;
+- building footprint resolution;
+- how movement radii interact with grid blockers;
+- whether distinct movement classes need distinct fields;
+- whether hierarchical/tiled fields are needed for map size;
+- incremental vs full topology recomputation threshold.
+
+Caging behavior is non-negotiable during these experiments.
+
+## 15. Open question — local crowd steering
+
+Start simple.
+
+Candidates:
+
+- deterministic separation/repulsion;
+- reserved local occupancy;
+- velocity-obstacle/RVO-like system implemented with deterministic math;
+- lane-direction bias plus local collision solver.
+
+Evaluation criteria:
+
+- handles thousands of units;
+- does not produce excessive oscillation;
+- preserves cages/blocked geometry;
+- deterministic across worker counts;
+- acceptable melee packing/game feel.
+
+Avoid importing a floating-point nondeterministic physics engine into authoritative movement merely for convenience.
+
+## 16. Open question — combat timing semantics
+
+Need establish compatibility rules for:
+
+- attack windup;
+- backswing;
+- same-tick mutual kills;
+- whether already-issued attacks complete if source dies;
+- guaranteed-hit projectile target death/removal behavior;
+- exact guaranteed-hit travel-time/interpolation rule;
+- ballistic impact tick, zone shape, and impact occupant semantics;
+- ballistic projectile interaction with dead/moved original target;
+- bounce candidate range, repeat policy, travel delay, and damage scaling;
+- retarget timing;
+- attack range checked before/after movement;
+- splash/chain ordering;
+- stun/disable timing;
+- automatic spell cast timing relative to movement/ordinary attacks;
+- mana regeneration/cast-cost ordering on the same tick.
+
+These should become small executable fixtures as soon as decided.
+
+## 17. Open question — target ranking compatibility
+
+Individual targeting is required, but exact ranking must be determined.
+
+Need investigate/decide:
+
+- current target stickiness;
+- closest target vs target priority classes;
+- acquisition vs attack range hysteresis;
+- whether attack buildings use same base rules as units;
+- how caged targets compete with lane targets;
+- aggro/taunt mechanics, while preserving the rule that damage from a builder-held item does not by itself make the builder a target;
+- air/ground/building preferences.
+
+The engine provides a deterministic total ordering; content/game rules fill in the semantic score.
+
+## 18. Open question — transport
+
+Do not freeze transport before protocol semantics.
+
+Evaluate after command/snapshot prototypes exist:
+
+- QUIC ecosystem maturity/performance;
+- simpler reliable transports for first playable;
+- NAT/dedicated-server assumptions;
+- encryption/auth needs;
+- snapshot streaming support;
+- browser client relevance (currently not a core requirement).
+
+Simulation/protocol should remain transport-agnostic.
+
+## 19. Open question — server deployment model
+
+Likely first target: native headless Linux dedicated server.
+
+Need later decide:
+
+- one process per match vs multiple matches/process;
+- match persistence policy;
+- crash recovery;
+- orchestration/container model;
+- authentication/lobby/matchmaking boundaries;
+- resource limits per match;
+- server tick overload behavior.
+
+These are operational layers above deterministic simulation.
+
+## 20. Open question — scripting/modding
+
+Do not add a scripting runtime until actual content proves static data + Rust systems insufficient.
+
+If needed, evaluate only deterministic/sandboxable choices and snapshot semantics.
+
+Modding is desirable architecturally but not worth compromising the first deterministic core.
+
+## 21. Open question — original assets/IP
+
+A native implementation must distinguish engine/gameplay compatibility work from copyrighted Warcraft III/custom-map assets and other third-party intellectual property.
+
+Before distributing a standalone game, asset/code/name/licensing provenance must be reviewed. The architecture should permit clean original/replacement assets and data.
+
+This is a distribution/legal project concern rather than a simulation rule, but it should be addressed before public release.
+
+## 22. First implementation slice
+
+The recommended first code slice is deliberately tiny:
+
+```text
+fixed-point position
++ SimId
++ 2 teams
++ unit ECS components
++ uniform spatial grid
++ individual target selection
++ integer damage/cooldown
++ fixed tick schedule
++ canonical checksum
++ worker-count determinism test
+```
+
+Render nothing.
+
+Once that survives a synthetic multicore battle reproducibly, add navigation/buildings/caging and the structurally non-combat builder. Then add the remaining attack delivery modes and ability/item machinery before freezing the network command schema. That sequence validates the project's hardest architectural premise before substantial client/content work accumulates.
