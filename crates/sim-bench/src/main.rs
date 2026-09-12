@@ -53,7 +53,7 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             scenarios: vec![Scenario::Lane, Scenario::Cage, Scenario::Crowd],
-            units: vec![1_000, 5_000, 10_000],
+            units: vec![700, 1_000, 5_000, 10_000],
             workers: vec![1, 2, 4],
             ticks: 200,
             warmup: 20,
@@ -695,7 +695,7 @@ fn parse_args() -> Args {
                 println!(
                     "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce"
                 );
-                println!("  --units 1000,5000,10000");
+                println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
                 println!("  --ticks 200");
                 println!("  --warmup 20");

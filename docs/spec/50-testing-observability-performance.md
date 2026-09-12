@@ -247,7 +247,9 @@ The first meaningful milestone SHOULD establish a repeatable baseline on named r
 
 For each reference workload, record catch-up ratio as `headless_ticks_per_second / live_tick_rate`. A ratio at or below 1.0 means replay catch-up cannot reach live state and therefore requires a fresher snapshot or different support target.
 
-A useful early diagnostic stress scenario is **10,000 simultaneously active units**, but it is not a support promise. Minimum hardware, supported late-game unit count, and reconnect catch-up requirements will be chosen only after representative prototype measurements exist.
+The original Castle Fight compatibility target caps total units at **700**, so performance verification SHOULD include 700-unit workloads as the primary compatibility-scale reference. Larger workloads remain architectural stress tests rather than implied gameplay support targets.
+
+A useful early diagnostic stress scenario is **10,000 simultaneously active units**, but it is not a support promise. Minimum hardware and reconnect catch-up requirements will be chosen only after representative prototype measurements exist.
 
 The architecture should then be profiled at larger counts to find the next limiting subsystem.
 
@@ -261,9 +263,10 @@ Exact budget percentages are open pending benchmark data.
 
 ## 17. Scaling tests
 
-Benchmarks SHOULD sweep unit counts, e.g.:
+Benchmarks SHOULD include the compatibility-scale ceiling and then sweep larger architectural stress points, e.g.:
 
 ```text
+700
 1k
 2k
 5k

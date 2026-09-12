@@ -52,7 +52,7 @@ The benchmark remains an architectural scaling probe, not a final game performan
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release -p castle-fight-sim-bench -- \
-  --scenario lane,cage,crowd --units 1000,5000,10000 \
+  --scenario lane,cage,crowd --units 700,1000,5000,10000 \
   --workers 1,2,4,8 --warmup 5 --ticks 20
 
 # Architecture-risk probes (use smaller counts first for deliberately adversarial pathing)
@@ -62,21 +62,37 @@ cargo run --release -p castle-fight-sim-bench -- \
 
 # Guaranteed-hit projectile/targeting density
 cargo run --release -p castle-fight-sim-bench -- \
-  --scenario projectile --units 1000,5000,10000 \
+  --scenario projectile --units 700,1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
 
 # Ballistic post-movement splash density
 cargo run --release -p castle-fight-sim-bench -- \
-  --scenario ballistic --units 1000,5000,10000 \
+  --scenario ballistic --units 700,1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
 
 # Bounce chain / candidate density
 cargo run --release -p castle-fight-sim-bench -- \
-  --scenario bounce --units 1000,5000,10000 \
+  --scenario bounce --units 700,1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
 ```
 
 The benchmark exits non-zero if different worker counts produce different final canonical checksums for the same fixture.
+
+## Compatibility-scale ceiling — 700 units
+
+The original Castle Fight compatibility target caps total units at **700**, so 700-unit cases are now first-class benchmark points. The 1k/5k/10k workloads remain deliberate architecture stress probes rather than implied gameplay support targets.
+
+On the Ryzen 5 5600 reference machine, the ordinary 700-unit fixtures are far below a 30 Hz tick budget even on one worker: lane `0.782 ms/tick`, cage `1.151 ms/tick`, and crossing crowd `0.864 ms/tick`. The corresponding eight-worker runs are `0.831`, `0.950`, and `1.055 ms/tick`; at this scale thread-pool overhead often outweighs parallel savings. Worker-count checksums match for every fixture.
+
+The intentionally extreme delivery-density fixtures also have substantial headroom at 700 total units, despite every attacker being allowed to launch every tick:
+
+| Delivery stress | 1 worker ms/tick | 8 workers ms/tick | Peak live projectiles | Extra density work | Final checksum |
+| --- | ---: | ---: | ---: | --- | --- |
+| Guaranteed-hit | 1.634 | 1.898 | 4,000 | 535 impacts/tick | `e33e6a41bdbed0dc` |
+| Ballistic splash | 2.657 | 3.016 | 4,198 | 525.1 impacts and 6,746.9 effects/tick | `c6077c6b4df6ecac` |
+| Bounce chain | 4.472 | 4.733 | 7,170 | 1,442.7 extra jumps/tick, 104.39 candidates/jump | `b3157f85a005905c` |
+
+These numbers are **full simulation wall-clock time per tick**, including the deliberately expensive full canonical checksum performed every tick by the benchmark. They put the larger 5k/10k results in context: those larger cases are useful for finding eventual architectural limits, but the current delivery implementations are not near the compatibility-scale unit ceiling's real-time budget.
 
 Run the placeholder viewer with the cage workload:
 
