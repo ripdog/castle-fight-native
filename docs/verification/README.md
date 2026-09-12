@@ -21,7 +21,8 @@ Implemented:
 - melee attack cooldown/damage resolution;
 - authoritative `RangedGuaranteedHit` projectiles with integer travel time, retained target identity, source-death independence, and deterministic target-death invalidation;
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
-- projectile/targeting-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, target retentions/changes, and ally-defense candidate counts;
+- authoritative `Bounce` projectiles with persistent chain identity, bounded hit history, integer travel/falloff, and keyed deterministic subsequent-target selection;
+- projectile/targeting-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
 - failed spawn attempts are lost rather than backlogged;
@@ -29,7 +30,7 @@ Implemented:
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, and ballistic splash-density release benchmarks;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, and bounce-chain-density release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -38,7 +39,6 @@ Not implemented yet:
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
 - building attacks, mana, automatic abilities, or legendary abilities;
-- bounce delivery;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -68,6 +68,11 @@ cargo run --release -p castle-fight-sim-bench -- \
 # Ballistic post-movement splash density
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario ballistic --units 1000,5000,10000 \
+  --workers 1,8 --warmup 2 --ticks 20
+
+# Bounce chain / candidate density
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario bounce --units 1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
 ```
 
@@ -360,8 +365,29 @@ Final ballistic-density sweep:
 
 At 10,000 units the full every-tick verification checksum itself costs ~22.7 ms/tick on eight workers; the other timed phases total roughly 12.3 ms/tick. The ballistic impact query is therefore not the limiting subsystem in this synthetic splash-heavy fixture. The current implementation still checks buildings linearly per ballistic impact; that is acceptable for the current unit-heavy probe but should be revisited if a future many-building siege benchmark makes building splash membership material.
 
+## Bounce chain / candidate density — 2026-09-12
+
+`Bounce` now has executable authoritative chain state. The initial ordinary target is guaranteed-hit, then one persistent projectile `SimId` is retained across every hop. The projectile stores bounded hit history and authored range/repeat/falloff/travel rules; source death cannot cancel an already-launched chain. A due hop whose retained target already died/disappeared invalidates the chain. Successful impacts apply damage first, then optionally choose another living hostile unit inside the authored bounce radius. Repeats are excluded when disabled, subsequent buildings are excluded in the provisional verifier, and hop damage uses integer floor scaling.
+
+Subsequent target selection introduces the simulation's first executable keyed-random gameplay primitive. Each valid candidate receives a SplitMix64-derived rank keyed by match seed, impact tick, persistent projectile `SimId`, stable bounce-target purpose plus candidate `SimId`, and next bounce index; minimum `(rank, SimId)` wins. This result is independent of spatial enumeration and worker order. Focused regressions verify stable projectile identity across the chain, no-repeat history, `8 -> 4 -> 2` damage at 50% falloff, chain completion/removal, and identical final checksums on 1/2/8 workers.
+
+The first density version materialized and sorted the full valid candidate list for every hop. At 5,000 units that spent ~53–55 ms/tick in combat and ~78 ms/tick overall. Replacing the allocation/sort with an enumeration-order-independent minimum keyed rank preserves the same rule class while removing the intermediate vector/sort; the 5,000-unit final combat phase is ~28 ms/tick. The remaining cost is real candidate evaluation rather than sorting: this deliberately dense fixture reaches ~553 broad-phase candidates per successful hop.
+
+Final bounce-density sweep:
+
+| Units | Workers | ms/tick | Combat ms/tick | Checksum ms/tick | Avg live | Peak live | Impacts/tick | Jumps/tick | Candidates/jump | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1,000 | 1 | 7.227 | 2.721 | 3.323 | 8,400 | 10,559 | 2,541.1 | 2,019.0 | 146.25 | `c360765063672360` |
+| 1,000 | 8 | 7.586 | 2.926 | 3.311 | 8,400 | 10,559 | 2,541.1 | 2,019.0 | 146.25 | `c360765063672360` |
+| 5,000 | 1 | 52.528 | 28.434 | 18.660 | 47,932.2 | 64,629 | 10,468.4 | 8,449.9 | 552.84 | `36efd04adf1da8fd` |
+| 5,000 | 8 | 51.175 | 27.814 | 18.278 | 47,932.2 | 64,629 | 10,468.4 | 8,449.9 | 552.84 | `36efd04adf1da8fd` |
+| 10,000 | 1 | 100.095 | 45.658 | 43.156 | 103,195.6 | 152,372 | 16,494.3 | 13,613.0 | 552.28 | `bae9ffc39ab04c2c` |
+| 10,000 | 8 | 104.762 | 48.271 | 44.527 | 103,195.6 | 152,372 | 16,494.3 | 13,613.0 | 552.28 | `bae9ffc39ab04c2c` |
+
+This is intentionally a pathological architecture probe: every unit launches a bounce attack every tick and every chain may add three more guaranteed-hit hops. It is **not** a 10,000-unit support target. The worker-count hashes match at every scale, but extra threads do not help the canonically ordered chain-resolution phase. At 10,000 units roughly half the wall time is the full verification checksum and roughly half is pre-movement bounce combat. The candidate count plateaus with local density rather than total population, but total work still scales with the number of simultaneous hops. A future optimization must preserve the keyed-random candidate rule and remain independent of spatial bucket configuration; making gameplay choose “the first grid entry” merely to reduce this benchmark is explicitly rejected.
+
 ## Current interpretation
 
-Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage and ballistic post-movement splash queries also remain viable in the current synthetic density probes.
+Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage and ballistic post-movement splash queries also remain viable in the current synthetic density probes. Bounce is functionally/deterministically viable, but extreme simultaneous chain density exposes canonically ordered candidate evaluation as a measurable scaling risk that should be revisited only with realistic content frequency/support targets or an acceleration structure that provably preserves the keyed rule.
 
-The next high-risk delivery mechanic is bounce. It must stress deterministic subsequent-target selection, repeat/eligibility rules, travel delay, and chain effect density without turning each jump into an uncontrolled candidate scan. Longer playable verification matches should continue in parallel so congestion, topology, targeting, production, and projectile failures discovered interactively become focused regressions.
+All four ordinary delivery architecture classes now have executable verification semantics: melee, guaranteed-hit ranged, ballistic/siege, and bounce. The next verification work should return to longer realistic playable matches and then stress the next rule-heavy systems most likely to affect simulation architecture, particularly attack-capable buildings and automatic ability/mana scheduling, rather than expanding into production UI/content/networking prematurely.
