@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use bevy::{camera::ScalingMode, prelude::*, time::Fixed, window::PrimaryWindow};
 use castle_fight_sim::{
     AttackDelivery, BuildingFootprint, BuildingSpawn, BuildingView, MovementProfile, NavCell,
-    ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
-    Team, UnitTemplate, UnitView,
+    ProductionProfile, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
+    SimulationConfig, Team, UnitTemplate, UnitView,
 };
 
 const SIMULATION_HZ: f64 = 30.0;
@@ -573,6 +573,7 @@ fn draw_attack_traces(mut gizmos: Gizmos, attacks: Res<AttackVisuals>) {
         let color = match trace.delivery {
             AttackDelivery::Melee => Color::srgba(1.0, 0.92, 0.62, 0.9),
             AttackDelivery::RangedGuaranteedHit { .. } => Color::srgba(0.72, 0.95, 1.0, 0.95),
+            AttackDelivery::RangedBallistic { .. } => Color::srgba(1.0, 0.78, 0.38, 0.95),
         };
         gizmos.line_2d(trace.start, trace.end, color);
     }
@@ -581,12 +582,21 @@ fn draw_attack_traces(mut gizmos: Gizmos, attacks: Res<AttackVisuals>) {
 fn draw_authoritative_projectiles(state: Res<GameState>, mut gizmos: Gizmos) {
     let tick = state.simulation.tick();
     for projectile in state.simulation.projectiles() {
-        let target = if let Some(unit) = state.simulation.unit(projectile.target) {
-            sim_point_to_world(unit.position)
-        } else if let Some(building) = state.simulation.building(projectile.target) {
-            footprint_world_rect(building.footprint).0
-        } else {
-            continue;
+        let (target, color) = match projectile.kind {
+            ProjectileViewKind::GuaranteedHit { target } => {
+                let target = if let Some(unit) = state.simulation.unit(target) {
+                    sim_point_to_world(unit.position)
+                } else if let Some(building) = state.simulation.building(target) {
+                    footprint_world_rect(building.footprint).0
+                } else {
+                    continue;
+                };
+                (target, Color::srgba(0.72, 0.95, 1.0, 0.95))
+            }
+            ProjectileViewKind::Ballistic { destination, .. } => (
+                sim_point_to_world(destination),
+                Color::srgba(1.0, 0.78, 0.38, 0.95),
+            ),
         };
         let start = sim_point_to_world(projectile.launch_position);
         let travel_ticks = projectile
@@ -603,7 +613,7 @@ fn draw_authoritative_projectiles(state: Res<GameState>, mut gizmos: Gizmos) {
         gizmos.line_2d(
             position - direction * half_length,
             position + direction * half_length,
-            Color::srgba(0.72, 0.95, 1.0, 0.95),
+            color,
         );
     }
 }
@@ -740,6 +750,7 @@ fn unit_size(unit: &UnitView) -> Vec2 {
     match unit.attack_delivery {
         AttackDelivery::Melee => Vec2::splat(9.0),
         AttackDelivery::RangedGuaranteedHit { .. } => Vec2::splat(7.0),
+        AttackDelivery::RangedBallistic { .. } => Vec2::splat(8.0),
     }
 }
 

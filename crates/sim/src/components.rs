@@ -20,7 +20,13 @@ pub struct Health {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AttackDelivery {
     Melee,
-    RangedGuaranteedHit { speed_per_tick: i32 },
+    RangedGuaranteedHit {
+        speed_per_tick: i32,
+    },
+    RangedBallistic {
+        speed_per_tick: i32,
+        impact_radius: i32,
+    },
 }
 
 impl AttackDelivery {
@@ -29,6 +35,7 @@ impl AttackDelivery {
         match self {
             Self::Melee => 0,
             Self::RangedGuaranteedHit { .. } => 1,
+            Self::RangedBallistic { .. } => 2,
         }
     }
 }
@@ -62,6 +69,18 @@ pub(crate) struct GuaranteedHitProjectile {
     pub target: SimId,
     pub damage: i32,
     pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BallisticProjectile {
+    pub source: SimId,
+    pub source_team: Team,
+    pub damage: i32,
+    pub launch_position: SimPoint,
+    pub destination: SimPoint,
+    pub impact_radius: i32,
     pub launch_tick: u64,
     pub impact_tick: u64,
 }

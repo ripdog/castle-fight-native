@@ -317,14 +317,14 @@ The initial playable rules are fixed:
 - already-launched persistent projectiles survive source death;
 - ballistic/siege impacts resolve after movement and query post-movement occupants.
 
-The verification implementation now also has provisional executable `RangedGuaranteedHit` semantics: integer launch-distance/speed travel time, retained target identity, source-death independence, and deterministic invalidation when the target has already died/been removed before impact. These are specified in `15-targeting-combat.md` and remain compatibility-tunable rather than unexamined behavior.
+The verification implementation now also has provisional executable `RangedGuaranteedHit` and `RangedBallistic` semantics. Guaranteed-hit uses integer launch-distance/speed travel time, retained target identity, source-death independence, and deterministic invalidation when the target has already died/been removed before impact. Ballistic captures a fixed pre-movement destination, uses the same integer travel rule, resolves a hostile circular splash query against post-movement occupants, and canonically orders due projectiles and affected targets by stable `SimId`. These are specified in `15-targeting-combat.md` and remain compatibility-tunable rather than unexamined behavior.
 
 Compatibility work still needs to establish:
 
 - attack windup and backswing details;
 - exact canonical ordering for otherwise simultaneous strikes beyond the stable-ID fallback;
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;
-- ballistic zone shape/splash details;
+- whether observed Castle Fight behavior requires revising the provisional ballistic circular-zone, hostile-only splash, building-intersection, or travel rules;
 - bounce candidate range, repeat policy, travel delay, and damage scaling;
 - target-retention/range hysteresis details;
 - splash/chain ordering;

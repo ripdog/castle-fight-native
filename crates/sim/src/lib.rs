@@ -12,8 +12,8 @@ pub use components::{
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
-    AttackEvent, BuildingPlacementError, BuildingView, ProjectileView, Simulation,
-    SimulationConfig, TickResult, TickTimings, UnitView,
+    AttackEvent, BuildingPlacementError, BuildingView, ProjectileView, ProjectileViewKind,
+    Simulation, SimulationConfig, TickResult, TickTimings, UnitView,
 };
 pub use topology::NavCell;
 
@@ -522,7 +522,10 @@ mod tests {
         assert_eq!(projectile.launch_tick, 1);
         assert_eq!(projectile.impact_tick, 5);
         assert_eq!(projectile.source, source);
-        assert_eq!(projectile.target, caged);
+        assert_eq!(
+            projectile.kind,
+            ProjectileViewKind::GuaranteedHit { target: caged }
+        );
 
         for expected_tick in 2..5 {
             let in_flight = sim.step();
@@ -538,6 +541,147 @@ mod tests {
         assert_eq!(impact.projectile_invalidations, 0);
         assert_eq!(impact.projectiles_alive, 0);
         assert_eq!(sim.unit(caged).unwrap().health, 9_999);
+    }
+
+    #[test]
+    fn ballistic_projectile_misses_original_target_after_it_moves_out_of_zone() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            team_objective: [SimPoint::new(0, 0), SimPoint::new(20 * cell, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let source = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedBallistic {
+                    speed_per_tick: 2 * cell,
+                    impact_radius: cell / 2,
+                },
+                damage: 7,
+                range: 10 * cell,
+                acquisition_range: 10 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(4 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell,
+            },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(target));
+        let target_position_at_launch = sim.unit(target).unwrap().position;
+        let launch = sim.step();
+        assert_eq!(launch.completed_tick, 1);
+        assert_eq!(launch.projectiles_launched, 1);
+        let projectile = sim.projectiles()[0];
+        let ProjectileViewKind::Ballistic {
+            destination,
+            impact_radius,
+        } = projectile.kind
+        else {
+            panic!("expected ballistic projectile");
+        };
+        assert_eq!(destination, target_position_at_launch);
+        assert_eq!(impact_radius, cell / 2);
+        assert_eq!(projectile.impact_tick, 4);
+
+        while sim.tick() < 4 {
+            sim.step();
+        }
+        let impact = sim.step();
+        assert_eq!(impact.completed_tick, 4);
+        assert_eq!(impact.projectile_impacts, 1);
+        assert_eq!(impact.projectile_effects, 0);
+        assert_eq!(sim.projectile_count(), 0);
+        assert_eq!(sim.unit(target).unwrap().health, 100);
+        assert!(sim.unit(target).unwrap().position.x > destination.x + impact_radius);
+    }
+
+    #[test]
+    fn ballistic_projectile_hits_unit_that_moves_into_captured_zone() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            team_objective: [SimPoint::new(0, 0), SimPoint::new(5 * cell, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedBallistic {
+                    speed_per_tick: 2 * cell,
+                    impact_radius: 2 * cell,
+                },
+                damage: 7,
+                range: 10 * cell,
+                acquisition_range: 10 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let target = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 5 * cell)
+        });
+        let bystander = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(9 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell,
+            },
+        });
+
+        sim.step();
+        let before_launch = sim.unit(bystander).unwrap().position;
+        let launch = sim.step();
+        assert_eq!(launch.projectiles_launched, 1);
+        let destination = match sim.projectiles()[0].kind {
+            ProjectileViewKind::Ballistic { destination, .. } => destination,
+            ProjectileViewKind::GuaranteedHit { .. } => panic!("expected ballistic projectile"),
+        };
+        assert_eq!(destination, SimPoint::new(5 * cell, 0));
+        assert!(sim.unit(bystander).unwrap().position.x < before_launch.x);
+
+        while sim.tick() < 4 {
+            sim.step();
+        }
+        let impact = sim.step();
+        assert_eq!(impact.completed_tick, 4);
+        assert_eq!(impact.projectile_impacts, 1);
+        assert_eq!(impact.projectile_effects, 2);
+        assert!(impact.ballistic_candidate_checks >= 2);
+        assert_eq!(sim.unit(target).unwrap().health, 93);
+        assert_eq!(sim.unit(bystander).unwrap().health, 93);
+        assert!(
+            destination.distance_sq(sim.unit(bystander).unwrap().position)
+                <= (i64::from(2 * cell) * i64::from(2 * cell)) as u64
+        );
     }
 
     #[test]

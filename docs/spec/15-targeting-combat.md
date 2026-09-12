@@ -178,16 +178,21 @@ A successfully launched projectile is independent of its source. Source death af
 
 This mode is typically used by siege/artillery attacks.
 
-At launch, the attack captures a target position/impact zone. The projectile then follows a deterministic ballistic/arc presentation toward that fixed destination and does **not** follow the original target.
+The verification implementation authors ballistic delivery with positive integer `speed_per_tick` and a non-negative integer circular `impact_radius`. At launch, ordinary pre-movement combat captures the selected target's current authoritative 2D position as a fixed destination. Travel ticks use the same upward-rounded integer distance/speed rule as `RangedGuaranteedHit`, and the projectile stores source identity/team, damage, launch position, fixed destination, impact radius, launch tick, and due impact tick as canonical state. Once launched it is independent of source death.
 
-At impact, after movement for that simulation tick has resolved, the simulation refreshes the relevant spatial index and queries entities in the target/impact zone. The effect applies to the entities actually present at those post-movement positions. Therefore:
+The projectile then follows presentation toward that fixed destination and does **not** follow the original target. Its vertical arc is presentation-only in this slice because only the 2D destination and due impact tick affect gameplay.
+
+When the projectile becomes due, its impact resolves in a dedicated subphase **after movement** for that simulation tick. The simulation builds a fresh spatial index from living units' post-movement positions and evaluates the authored circular zone. The current provisional splash rule damages every living hostile unit whose center lies within the radius and every living hostile building whose footprint intersects the radius; there is no friendly fire in this verification rule. A landing counts as a projectile impact even when the zone is empty, while each successfully damaged entity is counted as a separate projectile effect.
+
+Due ballistic projectiles resolve in ascending projectile `SimId`; targets inside each impact resolve in ascending target `SimId`. Spatial enumeration order and worker completion order MUST NOT affect effect order. Therefore:
 
 - the originally selected unit can move away and be missed;
-- other units can move into the impact zone and be hit;
-- area/splash rules are evaluated at impact time;
-- the projectile destination must be authoritative fixed-point state.
+- another unit can move into the captured zone and be hit;
+- area/splash membership is evaluated from post-movement state at impact time;
+- an empty destination still consumes/resolves the projectile without retargeting;
+- the projectile destination and impact timing remain authoritative and participate in canonical checksums.
 
-The vertical arc may be presentation-only if only impact tick and 2D destination affect gameplay. If arc height itself can interact with gameplay, it becomes authoritative state.
+The exact Castle Fight-compatible zone shape, friendly-fire policy, building interaction, splash falloff, and presentation arc remain compatibility-tunable content/rule details, but replacements MUST preserve explicit deterministic impact-time semantics.
 
 ### 9.4 Bounce
 

@@ -8,9 +8,10 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 use crate::{
     components::{
-        AttackCooldown, AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn,
-        GuaranteedHitProjectile, Health, MovementProfile, Position, ProductionProfile,
-        ProductionState, RetaliationState, SimId, SpawnTick, TargetState, Team, UnitSpawn,
+        AttackCooldown, AttackDelivery, AttackProfile, BallisticProjectile, BuildingFootprint,
+        BuildingSpawn, GuaranteedHitProjectile, Health, MovementProfile, Position,
+        ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick, TargetState, Team,
+        UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -59,6 +60,7 @@ pub struct TickTimings {
     pub combat: Duration,
     pub movement_intent: Duration,
     pub crowd_and_collision: Duration,
+    pub ballistic_impact: Duration,
     pub structural_commit: Duration,
     pub checksum: Duration,
     pub total: Duration,
@@ -81,7 +83,9 @@ pub struct TickResult {
     pub projectiles_alive: usize,
     pub projectiles_launched: usize,
     pub projectile_impacts: usize,
+    pub projectile_effects: usize,
     pub projectile_invalidations: usize,
+    pub ballistic_candidate_checks: usize,
     pub retained_targets: usize,
     pub target_changes: usize,
     pub ally_defense_queries: usize,
@@ -101,13 +105,24 @@ pub struct AttackEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectileViewKind {
+    GuaranteedHit {
+        target: SimId,
+    },
+    Ballistic {
+        destination: SimPoint,
+        impact_radius: i32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectileView {
     pub id: SimId,
     pub source: SimId,
-    pub target: SimId,
     pub launch_position: SimPoint,
     pub launch_tick: u64,
     pub impact_tick: u64,
+    pub kind: ProjectileViewKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -339,11 +354,21 @@ impl Simulation {
         let phase_start = Instant::now();
         let mut units = self.snapshot_units();
         let buildings = self.snapshot_buildings();
-        let defense_victims = grouped_defense_victims(&self.defense_alerts, &units, &buildings);
+        let needs_ally_defense_index = !self.defense_alerts.is_empty()
+            && self.pool.install(|| {
+                units
+                    .par_iter()
+                    .any(|unit| self.unit_will_query_ally_defense(unit, &units, &buildings))
+            });
+        let defense_victims = if needs_ally_defense_index {
+            grouped_defense_victims(&self.defense_alerts, &units, &buildings)
+        } else {
+            Vec::new()
+        };
         let needs_global_unit_grid = units.iter().any(|unit| {
             matches!(
                 unit.attack.delivery,
-                AttackDelivery::RangedGuaranteedHit { .. }
+                AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. }
             )
         });
         let grid = SpatialGrid::build(
@@ -427,9 +452,13 @@ impl Simulation {
 
         let phase_start = Instant::now();
         let due_projectiles = self.snapshot_due_projectiles();
-        let mut projectile_entities_to_remove = Vec::with_capacity(due_projectiles.len());
+        let due_ballistic_projectiles = self.snapshot_due_ballistic_projectiles();
+        let mut projectile_entities_to_remove =
+            Vec::with_capacity(due_projectiles.len() + due_ballistic_projectiles.len());
         let mut projectile_impacts = 0usize;
+        let mut projectile_effects = 0usize;
         let mut projectile_invalidations = 0usize;
+        let mut ballistic_candidate_checks = 0usize;
         for snapshot in due_projectiles {
             projectile_entities_to_remove.push(snapshot.entity);
             let Some(target) = find_target_index(&units, &buildings, snapshot.projectile.target)
@@ -445,6 +474,7 @@ impl Simulation {
                 DamageTargetState {
                     units: &units,
                     buildings: &buildings,
+                    unit_positions: &positions,
                     unit_health: &mut unit_health,
                     building_health: &mut building_health,
                     attackers_this_tick: &mut attackers_this_tick,
@@ -455,6 +485,7 @@ impl Simulation {
             .is_some()
             {
                 projectile_impacts += 1;
+                projectile_effects += 1;
             } else {
                 projectile_invalidations += 1;
             }
@@ -465,6 +496,7 @@ impl Simulation {
 
         let mut attacks_resolved = 0;
         let mut projectile_launches = Vec::new();
+        let mut ballistic_projectile_launches = Vec::new();
         for intent in intents {
             if unit_health[intent.source_index] <= 0 {
                 continue;
@@ -491,6 +523,7 @@ impl Simulation {
                         DamageTargetState {
                             units: &units,
                             buildings: &buildings,
+                            unit_positions: &positions,
                             unit_health: &mut unit_health,
                             building_health: &mut building_health,
                             attackers_this_tick: &mut attackers_this_tick,
@@ -501,8 +534,7 @@ impl Simulation {
                     debug_assert!(applied.is_some());
                 }
                 AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
-                    let travel_ticks =
-                        guaranteed_hit_travel_ticks(intent.distance_sq, speed_per_tick);
+                    let travel_ticks = projectile_travel_ticks(intent.distance_sq, speed_per_tick);
                     let impact_tick = completed_tick
                         .checked_add(travel_ticks)
                         .expect("projectile impact tick overflow");
@@ -511,6 +543,25 @@ impl Simulation {
                         target: intent.target_id,
                         damage: intent.damage,
                         launch_position: source.position,
+                        launch_tick: completed_tick,
+                        impact_tick,
+                    });
+                }
+                AttackDelivery::RangedBallistic {
+                    speed_per_tick,
+                    impact_radius,
+                } => {
+                    let travel_ticks = projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                    let impact_tick = completed_tick
+                        .checked_add(travel_ticks)
+                        .expect("projectile impact tick overflow");
+                    ballistic_projectile_launches.push(BallisticProjectileLaunch {
+                        source: intent.source_id,
+                        source_team: source.team,
+                        damage: intent.damage,
+                        launch_position: source.position,
+                        destination: target_position,
+                        impact_radius,
                         launch_tick: completed_tick,
                         impact_tick,
                     });
@@ -526,7 +577,7 @@ impl Simulation {
             });
             attacks_resolved += 1;
         }
-        let projectiles_launched = projectile_launches.len();
+        let projectiles_launched = projectile_launches.len() + ballistic_projectile_launches.len();
         let combat = phase_start.elapsed();
 
         let movement = self.resolve_movement(
@@ -536,6 +587,88 @@ impl Simulation {
             &building_health,
             &mut positions,
         );
+
+        let phase_start = Instant::now();
+        if !due_ballistic_projectiles.is_empty() {
+            let impact_grid = SpatialGrid::build(
+                self.config.spatial_cell_size,
+                units
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| unit_health[*index] > 0)
+                    .map(|(index, unit)| {
+                        (
+                            SpatialPartition::global(unit.team.0),
+                            index,
+                            positions[index],
+                        )
+                    }),
+            );
+            for snapshot in due_ballistic_projectiles {
+                projectile_entities_to_remove.push(snapshot.entity);
+                projectile_impacts += 1;
+                let enemy_team = 1u8
+                    .checked_sub(snapshot.projectile.source_team.0)
+                    .expect("verification slice supports teams 0 and 1 only");
+                let radius_sq = square_i32(snapshot.projectile.impact_radius);
+                let mut targets = Vec::new();
+                impact_grid.for_each_candidate(
+                    SpatialPartition::global(enemy_team),
+                    snapshot.projectile.destination,
+                    snapshot.projectile.impact_radius,
+                    |unit_index| {
+                        ballistic_candidate_checks += 1;
+                        if unit_health[unit_index] > 0
+                            && snapshot
+                                .projectile
+                                .destination
+                                .distance_sq(positions[unit_index])
+                                <= radius_sq
+                        {
+                            targets.push(TargetIndex::Unit(unit_index));
+                        }
+                    },
+                );
+                for (building_index, building) in buildings.iter().enumerate() {
+                    if building.team.0 != enemy_team || building_health[building_index] <= 0 {
+                        continue;
+                    }
+                    ballistic_candidate_checks += 1;
+                    if point_to_footprint_distance_sq(
+                        snapshot.projectile.destination,
+                        building.footprint,
+                        self.config.navigation_cell_size,
+                    ) <= radius_sq
+                    {
+                        targets.push(TargetIndex::Building(building_index));
+                    }
+                }
+                targets.sort_unstable_by_key(|target| target_sim_id(*target, &units, &buildings));
+                for target in targets {
+                    if apply_damage_to_target(
+                        target,
+                        snapshot.projectile.source,
+                        snapshot.projectile.damage,
+                        completed_tick,
+                        DamageTargetState {
+                            units: &units,
+                            buildings: &buildings,
+                            unit_positions: &positions,
+                            unit_health: &mut unit_health,
+                            building_health: &mut building_health,
+                            attackers_this_tick: &mut attackers_this_tick,
+                            next_defense_alerts: &mut next_defense_alerts,
+                            navigation_cell_size: self.config.navigation_cell_size,
+                        },
+                    )
+                    .is_some()
+                    {
+                        projectile_effects += 1;
+                    }
+                }
+            }
+        }
+        let ballistic_impact = phase_start.elapsed();
 
         let phase_start = Instant::now();
         for entity in projectile_entities_to_remove {
@@ -550,6 +683,22 @@ impl Simulation {
                     target: launch.target,
                     damage: launch.damage,
                     launch_position: launch.launch_position,
+                    launch_tick: launch.launch_tick,
+                    impact_tick: launch.impact_tick,
+                },
+            ));
+        }
+        for launch in ballistic_projectile_launches {
+            let id = self.allocate_id();
+            self.world.spawn((
+                id,
+                BallisticProjectile {
+                    source: launch.source,
+                    source_team: launch.source_team,
+                    damage: launch.damage,
+                    launch_position: launch.launch_position,
+                    destination: launch.destination,
+                    impact_radius: launch.impact_radius,
                     launch_tick: launch.launch_tick,
                     impact_tick: launch.impact_tick,
                 },
@@ -638,6 +787,7 @@ impl Simulation {
             combat,
             movement_intent: movement.intent,
             crowd_and_collision: movement.crowd_and_collision,
+            ballistic_impact,
             structural_commit,
             checksum: checksum_time,
             total: tick_start.elapsed(),
@@ -663,7 +813,9 @@ impl Simulation {
             projectiles_alive,
             projectiles_launched,
             projectile_impacts,
+            projectile_effects,
             projectile_invalidations,
+            ballistic_candidate_checks,
             retained_targets: target_selection.retained_targets,
             target_changes: target_selection.target_changes,
             ally_defense_queries: target_selection.ally_defense_queries,
@@ -706,7 +858,10 @@ impl Simulation {
     pub fn projectile_count(&self) -> usize {
         self.world
             .iter_entities()
-            .filter(|entity| entity.get::<GuaranteedHitProjectile>().is_some())
+            .filter(|entity| {
+                entity.get::<GuaranteedHitProjectile>().is_some()
+                    || entity.get::<BallisticProjectile>().is_some()
+            })
             .count()
     }
 
@@ -991,6 +1146,39 @@ impl Simulation {
         projectiles
     }
 
+    fn snapshot_due_ballistic_projectiles(&mut self) -> Vec<BallisticProjectileSnapshot> {
+        let mut query = self.world.query::<(Entity, &SimId, &BallisticProjectile)>();
+        let mut projectiles: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+            .map(|(entity, id, projectile)| BallisticProjectileSnapshot {
+                entity,
+                id: *id,
+                projectile: *projectile,
+            })
+            .collect();
+        projectiles.sort_unstable_by_key(|projectile| projectile.id);
+        projectiles
+    }
+
+    fn unit_will_query_ally_defense(
+        &self,
+        unit: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> bool {
+        let current = unit
+            .target
+            .filter(|target| self.target_retainable_for(unit, *target, units, buildings));
+        if let Some(current) = current
+            && (unit.direct_retaliation_lock || find_building_index(buildings, current).is_none())
+        {
+            return false;
+        }
+        self.recent_retaliation_target(unit, units, buildings)
+            .is_none()
+    }
+
     fn select_targets(
         &self,
         units: &[UnitSnapshot],
@@ -1105,7 +1293,9 @@ impl Simulation {
             .expect("verification slice supports teams 0 and 1 only");
         let partition = match source.attack.delivery {
             AttackDelivery::Melee => SpatialPartition::new(enemy_team, component),
-            AttackDelivery::RangedGuaranteedHit { .. } => SpatialPartition::global(enemy_team),
+            AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. } => {
+                SpatialPartition::global(enemy_team)
+            }
         };
         let mut best: Option<(u8, u64, SimId)> = None;
         grid.for_each_candidate(
@@ -1402,7 +1592,7 @@ impl Simulation {
                     self.topology.cell_of_point(target.position),
                 ) && (in_attack_range || source.movement.speed_per_tick > 0)
             }
-            AttackDelivery::RangedGuaranteedHit { .. } => {
+            AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. } => {
                 in_attack_range
                     || (source.movement.speed_per_tick > 0
                         && self.topology.same_component(
@@ -1426,7 +1616,7 @@ impl Simulation {
         let in_attack_range = distance_sq <= source.attack.range_sq();
         if matches!(
             source.attack.delivery,
-            AttackDelivery::RangedGuaranteedHit { .. }
+            AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. }
         ) && in_attack_range
         {
             return true;
@@ -2079,6 +2269,13 @@ struct ProjectileSnapshot {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct BallisticProjectileSnapshot {
+    entity: Entity,
+    id: SimId,
+    projectile: BallisticProjectile,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct ProjectileLaunch {
     source: SimId,
     target: SimId,
@@ -2088,9 +2285,22 @@ struct ProjectileLaunch {
     impact_tick: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct BallisticProjectileLaunch {
+    source: SimId,
+    source_team: Team,
+    damage: i32,
+    launch_position: SimPoint,
+    destination: SimPoint,
+    impact_radius: i32,
+    launch_tick: u64,
+    impact_tick: u64,
+}
+
 struct DamageTargetState<'a> {
     units: &'a [UnitSnapshot],
     buildings: &'a [BuildingSnapshot],
+    unit_positions: &'a [SimPoint],
     unit_health: &'a mut [i32],
     building_health: &'a mut [i32],
     attackers_this_tick: &'a mut [Option<SimId>],
@@ -2246,8 +2456,18 @@ fn validate_unit_template(unit: crate::components::UnitTemplate) {
     assert!(unit.attack.damage >= 0);
     assert!(unit.attack.range >= 0);
     assert!(unit.attack.acquisition_range >= unit.attack.range);
-    if let AttackDelivery::RangedGuaranteedHit { speed_per_tick } = unit.attack.delivery {
-        assert!(speed_per_tick > 0);
+    match unit.attack.delivery {
+        AttackDelivery::Melee => {}
+        AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
+            assert!(speed_per_tick > 0);
+        }
+        AttackDelivery::RangedBallistic {
+            speed_per_tick,
+            impact_radius,
+        } => {
+            assert!(speed_per_tick > 0);
+            assert!(impact_radius >= 0);
+        }
     }
     assert!(unit.movement.speed_per_tick >= 0);
 }
@@ -2289,14 +2509,29 @@ fn spiral_cells(center: NavCell, radius: u16) -> impl Iterator<Item = NavCell> {
 
 fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<ProjectileView> {
     let id = *entity.get::<SimId>()?;
-    let projectile = *entity.get::<GuaranteedHitProjectile>()?;
+    if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
+        return Some(ProjectileView {
+            id,
+            source: projectile.source,
+            launch_position: projectile.launch_position,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::GuaranteedHit {
+                target: projectile.target,
+            },
+        });
+    }
+    let projectile = *entity.get::<BallisticProjectile>()?;
     Some(ProjectileView {
         id,
         source: projectile.source,
-        target: projectile.target,
         launch_position: projectile.launch_position,
         launch_tick: projectile.launch_tick,
         impact_tick: projectile.impact_tick,
+        kind: ProjectileViewKind::Ballistic {
+            destination: projectile.destination,
+            impact_radius: projectile.impact_radius,
+        },
     })
 }
 
@@ -2340,6 +2575,17 @@ fn find_target_index(
         .or_else(|| find_building_index(buildings, id).map(TargetIndex::Building))
 }
 
+fn target_sim_id(
+    target: TargetIndex,
+    units: &[UnitSnapshot],
+    buildings: &[BuildingSnapshot],
+) -> SimId {
+    match target {
+        TargetIndex::Unit(index) => units[index].id,
+        TargetIndex::Building(index) => buildings[index].id,
+    }
+}
+
 fn live_target_position(
     target: TargetIndex,
     units: &[UnitSnapshot],
@@ -2374,11 +2620,11 @@ fn apply_damage_to_target(
             state.next_defense_alerts.push(DefenseAlert {
                 victim_id: state.units[index].id,
                 victim_team: state.units[index].team,
-                victim_position: state.units[index].position,
+                victim_position: state.unit_positions[index],
                 attacker_id: source_id,
                 attacked_tick: completed_tick,
             });
-            Some(state.units[index].position)
+            Some(state.unit_positions[index])
         }
         TargetIndex::Building(index) => {
             if state.building_health[index] <= 0 {
@@ -2395,7 +2641,7 @@ fn apply_damage_to_target(
     }
 }
 
-fn guaranteed_hit_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
+fn projectile_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
     debug_assert!(speed_per_tick > 0);
     let floor_distance = distance_sq.isqrt();
     let distance = floor_distance + u64::from(floor_distance * floor_distance < distance_sq);
@@ -2511,6 +2757,14 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     projectile: *projectile,
                 }));
             }
+            if let Some(projectile) = entity.get::<BallisticProjectile>() {
+                return Some(CanonicalEntity::BallisticProjectile(
+                    CanonicalBallisticProjectile {
+                        id,
+                        projectile: *projectile,
+                    },
+                ));
+            }
             let team = *entity.get::<Team>()?;
             let health = *entity.get::<Health>()?;
             if let Some(position) = entity.get::<Position>() {
@@ -2609,6 +2863,20 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(projectile.projectile.launch_tick);
                 hash.write_u64(projectile.projectile.impact_tick);
             }
+            CanonicalEntity::BallisticProjectile(projectile) => {
+                hash.write_u8(3);
+                hash.write_u64(projectile.id.0);
+                hash.write_u64(projectile.projectile.source.0);
+                hash.write_u8(projectile.projectile.source_team.0);
+                hash.write_i32(projectile.projectile.damage);
+                hash.write_i32(projectile.projectile.launch_position.x);
+                hash.write_i32(projectile.projectile.launch_position.y);
+                hash.write_i32(projectile.projectile.destination.x);
+                hash.write_i32(projectile.projectile.destination.y);
+                hash.write_i32(projectile.projectile.impact_radius);
+                hash.write_u64(projectile.projectile.launch_tick);
+                hash.write_u64(projectile.projectile.impact_tick);
+            }
         }
     }
 
@@ -2640,6 +2908,7 @@ enum CanonicalEntity {
     Unit(CanonicalUnit),
     Building(CanonicalBuilding),
     Projectile(CanonicalProjectile),
+    BallisticProjectile(CanonicalBallisticProjectile),
 }
 
 impl CanonicalEntity {
@@ -2648,6 +2917,7 @@ impl CanonicalEntity {
             Self::Unit(unit) => unit.id,
             Self::Building(building) => building.id,
             Self::Projectile(projectile) => projectile.id,
+            Self::BallisticProjectile(projectile) => projectile.id,
         }
     }
 }
@@ -2682,10 +2952,26 @@ struct CanonicalProjectile {
     projectile: GuaranteedHitProjectile,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CanonicalBallisticProjectile {
+    id: SimId,
+    projectile: BallisticProjectile,
+}
+
 fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
     hash.write_u8(delivery.stable_tag());
-    if let AttackDelivery::RangedGuaranteedHit { speed_per_tick } = delivery {
-        hash.write_i32(speed_per_tick);
+    match delivery {
+        AttackDelivery::Melee => {}
+        AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
+            hash.write_i32(speed_per_tick);
+        }
+        AttackDelivery::RangedBallistic {
+            speed_per_tick,
+            impact_radius,
+        } => {
+            hash.write_i32(speed_per_tick);
+            hash.write_i32(impact_radius);
+        }
     }
 }
 
