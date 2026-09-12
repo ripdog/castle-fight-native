@@ -756,6 +756,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_rawcodes = analysis["function_rawcodes"]
     runtime_mutators = analysis["runtime_mutators"]
     rawcode_mutator_traces = analysis["rawcode_mutator_traces"]
+    function_aliases = analysis["function_aliases"]
+    function_value_arguments = analysis["function_value_arguments"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
 
     function_names = [str(function["name"]) for function in functions]
@@ -787,6 +789,39 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         writer.writerow(["caller", "callee", "count"])
         for (caller, callee), count in sorted(call_edges.items()):
             writer.writerow([caller, callee, count])
+
+    slot_prefix_aliases = 0
+    with (script_dir / "function-aliases.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "alias", "slot", "target_function", "structural_relation",
+            "alias_byte_offset", "target_byte_offset",
+        ])
+        for alias in function_aliases:
+            alias_name = str(alias["alias"])
+            slot = alias_name.split(".", 1)[-1]
+            target = str(alias["target_function"])
+            relation = "slot-name-prefix" if target.startswith(slot) else "assigned-other-target"
+            slot_prefix_aliases += int(relation == "slot-name-prefix")
+            writer.writerow([
+                alias_name,
+                slot,
+                target,
+                relation,
+                alias["alias_byte_offset"],
+                alias["target_byte_offset"],
+            ])
+
+    with (script_dir / "function-value-arguments.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["target_function", "byte_offset", "function", "containing_call"])
+        for reference in function_value_arguments:
+            writer.writerow([
+                reference["target_function"],
+                reference["byte_offset"],
+                reference["function"],
+                reference["containing_call"],
+            ])
 
     def rawcode_metadata(integer_id: int) -> tuple[str, str, str, str, int]:
         rows = object_metadata[integer_id]
@@ -939,6 +974,13 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "unique_call_tokens": len(calls),
         "call_graph_edges": len(call_edges),
         "resolved_call_graph_edges": resolved_call_edges,
+        "function_alias_assignments": len(function_aliases),
+        "slot_prefix_function_aliases": slot_prefix_aliases,
+        "aliased_function_targets": len({str(alias["target_function"]) for alias in function_aliases}),
+        "function_value_arguments": len(function_value_arguments),
+        "function_value_argument_targets": len({
+            str(reference["target_function"]) for reference in function_value_arguments
+        }),
         "readable_function_names": len(readable),
         "direct_map_rawcode_references": len(rawcode_sites),
         "referenced_map_rawcodes": len(sites_by_rawcode),
@@ -953,7 +995,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             (int(trace["hop_count"]) for trace in rawcode_mutator_traces),
             default=0,
         ),
-        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow or branch execution.",
+        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Function aliases/value arguments are indexed separately from direct calls. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow, virtual dispatch, callback execution, or branch execution.",
     }
 
 

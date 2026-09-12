@@ -292,6 +292,146 @@ def _rawcode_mutator_traces(
     return traces, resolved_edges
 
 
+def _function_value_links(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Recover exact named-function aliases and function-valued call arguments.
+
+    Wurst emits large prototype/dispatch tables such as
+    `Class.someEvent=Concrete_handler`. These assignments are strong lexical
+    evidence that the generated slot points at that function, but they are not
+    direct call edges: later virtual dispatch may select the slot through a
+    different receiver expression. Bare named functions passed as call
+    arguments are recorded separately for the same reason.
+    """
+    defined = {str(function["name"]) for function in functions}
+    reserved = {
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+        "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
+        "true", "until", "while",
+    }
+    stream = TokenStream(iter_lua_tokens(data))
+    parens: list[str | None] = []
+    pending_call: str | None = None
+    aliases: list[dict[str, object]] = []
+    value_arguments: list[dict[str, object]] = []
+
+    def identifier_chain(first: LuaToken) -> str:
+        parts = [first.text]
+        while True:
+            separator = stream.peek()
+            member = stream.peek(1)
+            if (
+                separator is None
+                or member is None
+                or separator.kind != "symbol"
+                or separator.text not in (".", ":")
+                or member.kind != "ident"
+            ):
+                break
+            parts.append(stream.pop().text)
+            parts.append(stream.pop().text)
+        return "".join(parts)
+
+    while (token := stream.pop()) is not None:
+        if token.kind == "ident":
+            if token.text == "function":
+                declared = stream.peek()
+                if declared is not None and declared.kind == "ident":
+                    identifier_chain(stream.pop())
+                opening = stream.peek()
+                if opening is not None and opening.kind == "symbol" and opening.text == "(":
+                    stream.pop()
+                    parens.append(None)
+                pending_call = None
+                continue
+            if token.text in reserved:
+                pending_call = None
+                continue
+
+            name = identifier_chain(token)
+            opening = stream.peek()
+            if opening is not None and opening.kind == "symbol" and opening.text == "(":
+                pending_call = name
+                continue
+
+            containing_call = next((call for call in reversed(parens) if call is not None), "")
+            if containing_call and name in defined:
+                value_arguments.append({
+                    "target_function": name,
+                    "byte_offset": token.start,
+                    "containing_call": containing_call,
+                })
+
+            if opening is not None and opening.kind == "symbol" and opening.text == "=":
+                stream.pop()
+                rhs = stream.peek()
+                if rhs is not None and rhs.kind == "ident" and rhs.text not in reserved:
+                    rhs = stream.pop()
+                    target = identifier_chain(rhs)
+                    after_target = stream.peek()
+                    if target in defined and not (
+                        after_target is not None
+                        and after_target.kind == "symbol"
+                        and after_target.text == "("
+                    ):
+                        aliases.append({
+                            "alias": name,
+                            "target_function": target,
+                            "alias_byte_offset": token.start,
+                            "target_byte_offset": rhs.start,
+                        })
+                    if (
+                        after_target is not None
+                        and after_target.kind == "symbol"
+                        and after_target.text == "("
+                    ):
+                        pending_call = target
+                    else:
+                        pending_call = None
+                else:
+                    pending_call = None
+                continue
+
+            pending_call = None
+            continue
+
+        if token.kind == "symbol":
+            if token.text == "(":
+                parens.append(pending_call)
+            elif token.text == ")":
+                if not parens:
+                    raise ValueError(f"unexpected Lua ) while indexing function values at byte {token.start}")
+                parens.pop()
+            pending_call = None
+        else:
+            pending_call = None
+
+    if parens:
+        raise ValueError("unterminated Lua parenthesis stack while indexing function values")
+
+    aliases.sort(key=lambda alias: (int(alias["alias_byte_offset"]), str(alias["alias"])))
+    value_arguments.sort(key=lambda value: int(value["byte_offset"]))
+    return aliases, value_arguments
+
+
+def _enclosing_named_function(
+    functions: list[dict[str, object]],
+    byte_offset: int,
+) -> str:
+    containing = [
+        function
+        for function in functions
+        if int(function["start"]) <= byte_offset < int(function["end"])
+    ]
+    if not containing:
+        return "<top-level>"
+    # Named nested functions are possible. The one with the latest start is the
+    # innermost named lexical scope containing this source offset.
+    return str(max(containing, key=lambda function: int(function["start"]))["name"])
+
+
 def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     """Return lexical functions/calls/rawcode sites and runtime mutation sites."""
     stream = TokenStream(iter_lua_tokens(data))
@@ -442,6 +582,12 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         function_rawcodes,
         runtime_mutators,
     )
+    function_aliases, function_value_arguments = _function_value_links(data, functions)
+    for reference in function_value_arguments:
+        reference["function"] = _enclosing_named_function(
+            functions,
+            int(reference["byte_offset"]),
+        )
 
     return {
         "functions": functions,
@@ -452,4 +598,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_rawcodes": function_rawcodes,
         "runtime_mutators": runtime_mutators,
         "rawcode_mutator_traces": rawcode_mutator_traces,
+        "function_aliases": function_aliases,
+        "function_value_arguments": function_value_arguments,
     }

@@ -149,6 +149,41 @@ class LuaIndexTests(unittest.TestCase):
 
         self.assertEqual(indexed["rawcode_mutator_traces"], [])
 
+    def test_indexes_generated_function_alias_assignments_without_making_call_edges(self) -> None:
+        source = (
+            "function handler(unit) BlzSetUnitArmor(unit,4.0) end "
+            "Dispatch.Snowveil_onEvent=handler "
+            "function runner() xpcall(handler,errorHandler) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, set())
+
+        self.assertEqual(indexed["function_aliases"], [{
+            "alias": "Dispatch.Snowveil_onEvent",
+            "target_function": "handler",
+            "alias_byte_offset": source.find(b"Dispatch.Snowveil_onEvent"),
+            "target_byte_offset": source.find(b"handler", source.find(b"Dispatch.Snowveil_onEvent")),
+        }])
+        self.assertNotIn(("<top-level>", "handler"), indexed["call_edges"])
+        values = indexed["function_value_arguments"]
+        self.assertEqual(len(values), 1)
+        self.assertEqual(values[0]["target_function"], "handler")
+        self.assertEqual(values[0]["containing_call"], "xpcall")
+        self.assertEqual(values[0]["function"], "runner")
+
+    def test_function_value_index_skips_strings_comments_and_function_declarations(self) -> None:
+        source = (
+            '-- Dispatch.fake=handler xpcall(handler,errorHandler)\n'
+            'local text="Dispatch.fake=handler" '
+            "function handler(value) return value end "
+            "function other(handler) return handler end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, set())
+
+        self.assertEqual(indexed["function_aliases"], [])
+        self.assertEqual(indexed["function_value_arguments"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
