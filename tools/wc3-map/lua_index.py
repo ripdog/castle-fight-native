@@ -213,6 +213,85 @@ def _is_runtime_mutator(callee: str) -> tuple[bool, str]:
     return False, normalized
 
 
+def _rawcode_mutator_traces(
+    functions: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+    function_rawcodes: Counter[tuple[str, int]],
+    runtime_mutators: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], int]:
+    """Find deterministic shortest lexical call paths from rawcodes to mutators.
+
+    These are static reachability traces, not data-flow proofs. A rawcode and a
+    mutator connected by one of these paths can participate in the same direct
+    call chain, but the scan does not prove that the rawcode is passed to that
+    mutator, that the relevant branches execute, or that an indirect function
+    value/callback target has been resolved.
+    """
+    defined_functions = {str(function["name"]) for function in functions}
+    adjacency: dict[str, set[str]] = defaultdict(set)
+    resolved_edges = 0
+    for (caller, callee), _count in call_edges.items():
+        # The caller may be top-level or an anonymous function, both of which
+        # can still provide useful source context. The callee must resolve to a
+        # named function definition before we can follow it safely.
+        if callee in defined_functions:
+            adjacency[caller].add(callee)
+            resolved_edges += 1
+
+    rawcodes_by_function: dict[str, dict[int, int]] = defaultdict(dict)
+    for (function, rawcode), count in function_rawcodes.items():
+        rawcodes_by_function[function][rawcode] = count
+
+    mutators_by_function: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for site in runtime_mutators:
+        mutators_by_function[str(site["function"])].append(site)
+    mutator_functions = set(mutators_by_function)
+
+    traces: list[dict[str, object]] = []
+    for source_function in sorted(rawcodes_by_function):
+        # BFS gives minimum hop count. Sorted neighbors make the one retained
+        # shortest path stable when several equally short paths exist.
+        queue: deque[str] = deque([source_function])
+        paths: dict[str, tuple[str, ...]] = {source_function: (source_function,)}
+        remaining_targets = set(mutator_functions)
+        while queue and remaining_targets:
+            current = queue.popleft()
+            if current in remaining_targets:
+                remaining_targets.remove(current)
+            for callee in sorted(adjacency.get(current, ())):
+                if callee in paths:
+                    continue
+                paths[callee] = (*paths[current], callee)
+                queue.append(callee)
+
+        for mutation_function in sorted(mutator_functions.intersection(paths)):
+            call_path = paths[mutation_function]
+            hops = len(call_path) - 1
+            for rawcode, reference_count in sorted(rawcodes_by_function[source_function].items()):
+                for site in mutators_by_function[mutation_function]:
+                    traces.append({
+                        "rawcode_integer": rawcode,
+                        "source_function": source_function,
+                        "source_reference_count": reference_count,
+                        "mutation_function": mutation_function,
+                        "mutator_callee": site["callee"],
+                        "normalized_mutator": site["normalized_callee"],
+                        "mutator_byte_offset": site["byte_offset"],
+                        "hop_count": hops,
+                        "call_path": call_path,
+                        "evidence_kind": "direct-same-function" if hops == 0 else "static-call-path",
+                    })
+
+    traces.sort(key=lambda trace: (
+        int(trace["rawcode_integer"]),
+        int(trace["hop_count"]),
+        str(trace["source_function"]),
+        int(trace["mutator_byte_offset"]),
+        tuple(trace["call_path"]),
+    ))
+    return traces, resolved_edges
+
+
 def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     """Return lexical functions/calls/rawcode sites and runtime mutation sites."""
     stream = TokenStream(iter_lua_tokens(data))
@@ -357,11 +436,20 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     for site in runtime_mutators:
         site["direct_map_rawcodes"] = sorted(rawcodes_by_function.get(site["function"], ()))
 
+    rawcode_mutator_traces, resolved_call_edges = _rawcode_mutator_traces(
+        functions,
+        call_edges,
+        function_rawcodes,
+        runtime_mutators,
+    )
+
     return {
         "functions": functions,
         "calls": calls,
         "call_edges": call_edges,
+        "resolved_call_edges": resolved_call_edges,
         "rawcode_sites": rawcode_sites,
         "function_rawcodes": function_rawcodes,
         "runtime_mutators": runtime_mutators,
+        "rawcode_mutator_traces": rawcode_mutator_traces,
     }

@@ -755,6 +755,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     rawcode_sites = analysis["rawcode_sites"]
     function_rawcodes = analysis["function_rawcodes"]
     runtime_mutators = analysis["runtime_mutators"]
+    rawcode_mutator_traces = analysis["rawcode_mutator_traces"]
+    resolved_call_edges = int(analysis["resolved_call_edges"])
 
     function_names = [str(function["name"]) for function in functions]
     definitions = Counter(function_names)
@@ -869,6 +871,59 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 " | ".join(names),
             ])
 
+    traces_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
+    with (script_dir / "rawcode-mutator-traces.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "categories", "names", "evidence_kind",
+            "source_function", "source_reference_count", "mutation_function", "mutator_callee",
+            "normalized_mutator", "mutator_byte_offset", "hop_count", "call_path",
+        ])
+        for trace in rawcode_mutator_traces:
+            integer_id = int(trace["rawcode_integer"])
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            traces_by_rawcode[integer_id].append(trace)
+            writer.writerow([
+                rawcode,
+                integer_id,
+                categories,
+                names,
+                trace["evidence_kind"],
+                trace["source_function"],
+                trace["source_reference_count"],
+                trace["mutation_function"],
+                trace["mutator_callee"],
+                trace["normalized_mutator"],
+                trace["mutator_byte_offset"],
+                trace["hop_count"],
+                " -> ".join(str(part) for part in trace["call_path"]),
+            ])
+
+    with (script_dir / "rawcode-mutator-summary.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "categories", "names", "trace_count",
+            "direct_trace_count", "source_function_count", "reachable_mutator_site_count",
+            "mutation_function_count", "normalized_mutators", "min_hops", "max_hops",
+        ])
+        for integer_id in sorted(traces_by_rawcode, key=lambda value: rawcode_metadata(value)[0]):
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            traces = traces_by_rawcode[integer_id]
+            writer.writerow([
+                rawcode,
+                integer_id,
+                categories,
+                names,
+                len(traces),
+                sum(trace["evidence_kind"] == "direct-same-function" for trace in traces),
+                len({str(trace["source_function"]) for trace in traces}),
+                len({int(trace["mutator_byte_offset"]) for trace in traces}),
+                len({str(trace["mutation_function"]) for trace in traces}),
+                ",".join(sorted({str(trace["normalized_mutator"]) for trace in traces})),
+                min(int(trace["hop_count"]) for trace in traces),
+                max(int(trace["hop_count"]) for trace in traces),
+            ])
+
     readable = sorted({
         name for name in function_names
         if len(name) >= 5 and ("_" in name or any(ch.isupper() for ch in name[1:]))
@@ -883,12 +938,22 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "unique_function_names": len(definitions),
         "unique_call_tokens": len(calls),
         "call_graph_edges": len(call_edges),
+        "resolved_call_graph_edges": resolved_call_edges,
         "readable_function_names": len(readable),
         "direct_map_rawcode_references": len(rawcode_sites),
         "referenced_map_rawcodes": len(sites_by_rawcode),
         "known_map_rawcodes": len(object_metadata),
         "runtime_mutator_sites": len(runtime_mutators),
-        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code.",
+        "runtime_mutator_trace_rows": len(rawcode_mutator_traces),
+        "rawcodes_with_runtime_mutator_paths": len(traces_by_rawcode),
+        "runtime_mutator_sites_with_rawcode_paths": len({
+            int(trace["mutator_byte_offset"]) for trace in rawcode_mutator_traces
+        }),
+        "max_runtime_mutator_path_hops": max(
+            (int(trace["hop_count"]) for trace in rawcode_mutator_traces),
+            default=0,
+        ),
+        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow or branch execution.",
     }
 
 

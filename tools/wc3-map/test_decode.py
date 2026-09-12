@@ -103,6 +103,52 @@ class LuaIndexTests(unittest.TestCase):
         self.assertEqual(indexed["call_edges"][("outer", "callback")], 1)
         self.assertGreater(indexed["functions"][0]["end"], indexed["functions"][0]["start"])
 
+    def test_propagates_rawcode_context_to_runtime_mutator_through_named_calls(self) -> None:
+        rawcode = int.from_bytes(b"ABCD", "big")
+        source = (
+            "function source() use(1094861636) helper() end "
+            "function helper() mutate() end "
+            "function mutate(unit) __wurst_safe_BlzSetUnitMaxHP(unit,500) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {rawcode})
+
+        self.assertEqual(indexed["resolved_call_edges"], 2)
+        self.assertEqual(len(indexed["rawcode_mutator_traces"]), 1)
+        trace = indexed["rawcode_mutator_traces"][0]
+        self.assertEqual(trace["rawcode_integer"], rawcode)
+        self.assertEqual(trace["source_function"], "source")
+        self.assertEqual(trace["mutation_function"], "mutate")
+        self.assertEqual(trace["normalized_mutator"], "BlzSetUnitMaxHP")
+        self.assertEqual(trace["hop_count"], 2)
+        self.assertEqual(trace["call_path"], ("source", "helper", "mutate"))
+        self.assertEqual(trace["evidence_kind"], "static-call-path")
+
+    def test_mutator_trace_keeps_direct_same_function_evidence_distinct(self) -> None:
+        rawcode = int.from_bytes(b"ABCD", "big")
+        source = (
+            "function apply(unit) use(1094861636) BlzSetUnitArmor(unit,4.0) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {rawcode})
+
+        self.assertEqual(len(indexed["rawcode_mutator_traces"]), 1)
+        trace = indexed["rawcode_mutator_traces"][0]
+        self.assertEqual(trace["hop_count"], 0)
+        self.assertEqual(trace["call_path"], ("apply",))
+        self.assertEqual(trace["evidence_kind"], "direct-same-function")
+
+    def test_mutator_trace_does_not_invent_indirect_callback_target(self) -> None:
+        rawcode = int.from_bytes(b"ABCD", "big")
+        source = (
+            "function source(callback) use(1094861636) callback() end "
+            "function mutate(unit) BlzSetUnitArmor(unit,4.0) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {rawcode})
+
+        self.assertEqual(indexed["rawcode_mutator_traces"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
