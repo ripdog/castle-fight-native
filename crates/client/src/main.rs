@@ -1,4 +1,5 @@
 mod bridge;
+mod build_ui;
 mod demo;
 mod presentation;
 
@@ -6,13 +7,14 @@ use bevy::{prelude::*, time::Fixed};
 use castle_fight_sim::Simulation;
 
 use bridge::{PresentationSamples, PresentationSnapshot};
-use demo::create_demo_world;
+use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
+use demo::{create_demo_world, production_structure};
 use presentation::CastlePresentationPlugin;
 
 const SIMULATION_HZ: f64 = 30.0;
 
 #[derive(Resource)]
-struct AuthoritativeSimulation {
+pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
 }
 
@@ -36,7 +38,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(CastlePresentationPlugin)
+        .add_plugins((CastlePresentationPlugin, BuildUiPlugin))
         .add_systems(FixedUpdate, advance_authoritative_simulation)
         .run();
 }
@@ -44,7 +46,30 @@ fn main() {
 fn advance_authoritative_simulation(
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
+    mut pending_builds: ResMut<PendingBuildPlacements>,
+    mut build_selection: ResMut<BuildSelection>,
 ) {
+    for request in pending_builds.0.drain(..) {
+        match authoritative
+            .simulation
+            .try_spawn_building(production_structure(
+                request.team,
+                request.footprint,
+                request.kind,
+            )) {
+            Ok(_) => {
+                build_selection.status = format!(
+                    "Placed {} {}.",
+                    if request.team.0 == 0 { "Blue" } else { "Red" },
+                    request.kind.label()
+                );
+            }
+            Err(error) => {
+                build_selection.status = format!("Placement rejected by simulation: {error:?}.");
+            }
+        }
+    }
+
     authoritative.simulation.step();
     presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
 }

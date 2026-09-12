@@ -17,6 +17,9 @@ const STATIC_BLOCKER_HEIGHT: f32 = 5.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
 const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
+const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
+const HEALTH_BAR_DEPTH: f32 = 6.0;
+const HEALTH_BAR_LAYERS: usize = 7;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -37,7 +40,7 @@ impl WorldMetrics {
         }
     }
 
-    fn navigation_cell_world(&self) -> f32 {
+    pub(crate) fn navigation_cell_world(&self) -> f32 {
         self.navigation_cell_size_subunits as f32 / SUBUNITS_PER_WORLD_UNIT as f32
     }
 
@@ -58,7 +61,7 @@ impl WorldMetrics {
         Vec3::new(center.x, 0.0, center.y)
     }
 
-    fn footprint_center_size(&self, footprint: BuildingFootprint) -> (Vec3, Vec2) {
+    pub(crate) fn footprint_center_size(&self, footprint: BuildingFootprint) -> (Vec3, Vec2) {
         let cell = self.navigation_cell_world();
         let width = f32::from(footprint.width) * cell;
         let depth = f32::from(footprint.height) * cell;
@@ -67,6 +70,23 @@ impl WorldMetrics {
         (
             Vec3::new(min_x + width * 0.5, 0.0, min_z + depth * 0.5),
             Vec2::new(width, depth),
+        )
+    }
+
+    pub(crate) fn footprint_at_world(
+        &self,
+        world: Vec3,
+        width: u16,
+        height: u16,
+    ) -> BuildingFootprint {
+        let cell = self.navigation_cell_world();
+        let cell_x = (world.x / cell).floor() as i32;
+        let cell_y = (world.z / cell).floor() as i32;
+        BuildingFootprint::new(
+            cell_x - i32::from(width / 2),
+            cell_y - i32::from(height / 2),
+            width,
+            height,
         )
     }
 }
@@ -167,6 +187,7 @@ struct RtsCamera {
     focus: Vec3,
     distance: f32,
     yaw: f32,
+    grab_anchor: Option<Vec3>,
 }
 
 pub struct CastlePresentationPlugin;
@@ -299,6 +320,7 @@ fn setup_scene(
         focus: world_center,
         distance,
         yaw: 0.0,
+        grab_anchor: None,
     };
     commands.spawn((
         Camera3d::default(),
@@ -562,7 +584,7 @@ fn draw_presentation_gizmos(
             draw_health_bar(
                 &mut gizmos,
                 position,
-                9.0,
+                UNIT_HEALTH_BAR_WIDTH,
                 unit.health,
                 entry.max_health_seen,
                 unit.team,
@@ -577,7 +599,7 @@ fn draw_presentation_gizmos(
             draw_health_bar(
                 &mut gizmos,
                 position,
-                size.x.min(60.0),
+                size.x.clamp(24.0, 72.0),
                 building.health,
                 entry.max_health_seen,
                 building.team,
@@ -657,13 +679,30 @@ fn draw_health_bar(
 ) {
     let ratio = (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0);
     let half = width * 0.5;
-    let start = center - Vec3::X * half;
-    let end = center + Vec3::X * half;
-    gizmos.line(start, end, Color::srgb(0.035, 0.035, 0.04));
-    gizmos.line(start, start + Vec3::X * width * ratio, team_color(team));
+    let start_x = center.x - half;
+    let fill_end_x = start_x + width * ratio;
+    let background = Color::srgb(0.085, 0.085, 0.095);
+    let fill = team_color(team);
+
+    for layer in 0..HEALTH_BAR_LAYERS {
+        let t = layer as f32 / (HEALTH_BAR_LAYERS - 1) as f32;
+        let z = center.z + (t - 0.5) * HEALTH_BAR_DEPTH;
+        gizmos.line(
+            Vec3::new(start_x - 0.6, center.y, z),
+            Vec3::new(center.x + half + 0.6, center.y, z),
+            background,
+        );
+        if ratio > 0.0 {
+            gizmos.line(
+                Vec3::new(start_x, center.y + 0.12, z),
+                Vec3::new(fill_end_x, center.y + 0.12, z),
+                fill,
+            );
+        }
+    }
 }
 
-fn draw_footprint_outline(
+pub(crate) fn draw_footprint_outline(
     gizmos: &mut Gizmos,
     metrics: &WorldMetrics,
     footprint: BuildingFootprint,
@@ -708,11 +747,21 @@ fn toggle_debug_controls(keys: Res<ButtonInput<KeyCode>>, mut debug: ResMut<Debu
 fn update_camera(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut mouse_wheel: MessageReader<MouseWheel>,
+    window: Single<&Window, With<PrimaryWindow>>,
     metrics: Res<WorldMetrics>,
-    mut camera: Single<(&mut RtsCamera, &mut Transform)>,
+    mut camera: Single<(&Camera, &mut RtsCamera, &mut Transform), With<Camera3d>>,
 ) {
-    let (rig, transform) = &mut *camera;
+    let (camera_component, rig, transform) = &mut *camera;
+
+    if mouse_buttons.just_pressed(MouseButton::Middle)
+        && let Some(cursor) = window.cursor_position()
+    {
+        let camera_global = GlobalTransform::from(**transform);
+        rig.grab_anchor = viewport_ground_point(camera_component, &camera_global, cursor);
+    }
+
     let dt = time.delta_secs();
     let forward = Vec3::new(-rig.yaw.sin(), 0.0, -rig.yaw.cos());
     let right = Vec3::new(rig.yaw.cos(), 0.0, -rig.yaw.sin());
@@ -753,7 +802,36 @@ fn update_camera(
         rig.distance = world_size.max_element() * 0.72;
         rig.yaw = 0.0;
     }
+
+    if mouse_buttons.pressed(MouseButton::Middle)
+        && let Some(anchor) = rig.grab_anchor
+        && let Some(cursor) = window.cursor_position()
+    {
+        let proposed = camera_transform(rig);
+        let proposed_global = GlobalTransform::from(proposed);
+        if let Some(cursor_world) =
+            viewport_ground_point(camera_component, &proposed_global, cursor)
+        {
+            let correction = anchor - cursor_world;
+            rig.focus += Vec3::new(correction.x, 0.0, correction.z);
+        }
+    }
+
+    if mouse_buttons.just_released(MouseButton::Middle) {
+        rig.grab_anchor = None;
+    }
+
     **transform = camera_transform(rig);
+}
+
+pub(crate) fn viewport_ground_point(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    cursor: Vec2,
+) -> Option<Vec3> {
+    let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
+    let distance = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))?;
+    Some(ray.origin + ray.direction.normalize() * distance)
 }
 
 fn camera_transform(rig: &RtsCamera) -> Transform {
@@ -772,7 +850,7 @@ fn update_window_title(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
     window.title = format!(
-        "Castle Fight Native 3D | tick {} | units {} | buildings {} | projectiles {} | F1 debug {} | H health {} | WASD pan • Q/E rotate • wheel zoom • Home reset",
+        "Castle Fight Native 3D | tick {} | units {} | buildings {} | projectiles {} | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
         samples.current.tick,
         samples.current.units.len(),
         samples.current.buildings.len(),

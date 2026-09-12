@@ -50,8 +50,8 @@ pub fn create_demo_world(workers: usize) -> DemoWorld {
             BuildingFootprint::new(147, 44, 4, 4),
         ),
     ] {
-        simulation.spawn_building(production_structure(team, melee, UnitKind::Melee));
-        simulation.spawn_building(production_structure(team, ranged, UnitKind::Ranged));
+        simulation.spawn_building(production_structure(team, melee, BuildKind::Melee));
+        simulation.spawn_building(production_structure(team, ranged, BuildKind::Ranged));
     }
 
     DemoWorld {
@@ -99,13 +99,26 @@ fn passive_structure(team: Team, footprint: BuildingFootprint, health: i32) -> B
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum UnitKind {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BuildKind {
     Melee,
     Ranged,
 }
 
-fn production_structure(team: Team, footprint: BuildingFootprint, kind: UnitKind) -> BuildingSpawn {
+impl BuildKind {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Melee => "Melee Hall",
+            Self::Ranged => "Ranged Hall",
+        }
+    }
+}
+
+pub(crate) fn production_structure(
+    team: Team,
+    footprint: BuildingFootprint,
+    kind: BuildKind,
+) -> BuildingSpawn {
     BuildingSpawn {
         team,
         footprint,
@@ -121,12 +134,12 @@ fn production_structure(team: Team, footprint: BuildingFootprint, kind: UnitKind
     }
 }
 
-fn unit_template(kind: UnitKind) -> UnitTemplate {
+fn unit_template(kind: BuildKind) -> UnitTemplate {
     let movement = MovementProfile {
         speed_per_tick: 40 * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32,
     };
     match kind {
-        UnitKind::Melee => UnitTemplate {
+        BuildKind::Melee => UnitTemplate {
             health: 100,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -137,7 +150,7 @@ fn unit_template(kind: UnitKind) -> UnitTemplate {
             },
             movement,
         },
-        UnitKind::Ranged => UnitTemplate {
+        BuildKind::Ranged => UnitTemplate {
             health: 80,
             attack: AttackProfile {
                 delivery: AttackDelivery::RangedGuaranteedHit {
