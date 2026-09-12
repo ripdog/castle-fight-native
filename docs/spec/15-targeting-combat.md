@@ -185,7 +185,7 @@ It has no gameplay projectile. Animation may show weapon travel, but presentatio
 
 ### 9.2 Ranged guaranteed-hit
 
-A ranged attack launches a missile toward a specific target and is guaranteed to hit that target once the attack has successfully launched while that target remains a live authoritative entity through the impact subphase. The current verification rule invalidates the impact if the retained target identity has already died or been removed before the due impact resolves; the missile does not retarget another entity.
+A ranged attack launches a missile toward a specific target and, once any applicable attack-accuracy gate has succeeded, is guaranteed to hit that target while that target remains a live authoritative entity through the impact subphase. Here, "guaranteed-hit" means target movement after launch cannot dodge the projectile; it does **not** bypass global attack-accuracy rules such as uphill miss. The current verification rule invalidates the impact if the retained target identity has already died or been removed before the due impact resolves; the missile does not retarget another entity.
 
 The verification travel-time rule is deterministic and integer-only. At launch, use the same authoritative source-to-target distance used by the attack-range calculation, round Euclidean subunit distance upward to the next integer subunit, divide that distance upward by the authored positive `speed_per_tick`, and clamp the result to at least one tick. The resulting due impact tick is `launch_tick + travel_ticks`. This exact rule is provisional compatibility behavior, but any replacement MUST remain explicit and deterministic.
 
@@ -317,11 +317,24 @@ Examples:
 critical hit:
   key = (match seed, tick, attacker SimId, CriticalHit, attack sequence)
 
+uphill miss:
+  key = (match seed, tick, attacker SimId, UphillMiss, attack sequence)
+
 proc chance:
   key = (match seed, tick, source SimId, ProcId, local sequence)
 ```
 
 Parallel execution order MUST NOT consume or shift another entity's random sequence.
+
+### 13.1 Uphill miss
+
+Castle Fight inherits a terrain-height combat advantage: when a unit attacks an enemy unit that is on higher authoritative terrain, the attack has a chance to miss. This rule applies to every ordinary unit attack attempt regardless of its delivery mode. It does not automatically apply to spells/abilities or attacks made by buildings unless their own rules explicitly opt into the same accuracy mechanic.
+
+"Uphill" MUST be determined from authoritative map/gameplay elevation data at the units' authoritative ground positions, not from rendered mesh height, camera-space coordinates, animation offsets, projectile arcs, or floating-point presentation transforms. In Castle Fight's standard map layout, each team's base is elevated relative to the central lane; this therefore provides defenders in the base with the intended terrain advantage without any special-case "base defense" modifier.
+
+The uphill miss check is a deterministic accuracy gate on the attack attempt. A miss consumes the attack attempt/cooldown but produces no ordinary attack damage or on-hit effect from that attack. Delivery-specific guarantees apply only after this accuracy gate succeeds: for example, `RangedGuaranteedHit` still cannot be dodged by later target movement, but it may fail its uphill accuracy roll before that guarantee applies. If a chained/bounce attack is authored as one initial ordinary attack followed by secondary guaranteed effects, only the portions explicitly classified as attack attempts perform their own uphill checks; compatibility extraction must settle the original-map behavior rather than inferring it from visuals.
+
+The roll MUST use keyed deterministic randomness and a stable `UphillMiss` purpose so worker scheduling, ECS iteration order, or unrelated random effects cannot change the result. The exact miss probability, the terrain-height/elevation threshold that qualifies as uphill, and the exact point at which attacker/target elevation is sampled (attack start, strike/launch, or impact) are compatibility data still to be mined from the original map/game rules. These values MUST be data/rule parameters rather than guessed constants embedded in combat code.
 
 ## 14. Death and disable precedence
 
@@ -431,9 +444,12 @@ The targeting/combat test suite MUST eventually include:
 19. a unit cannot attack on its spawn tick;
 20. projectile impact timing is identical across runs;
 21. deterministic random proc/crit values do not change with worker count;
-22. attack building performs independent target selection;
-23. melee attack has no authoritative projectile trajectory;
-24. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
-25. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
-26. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
-27. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.
+22. uphill eligibility is derived from authoritative terrain elevation rather than presentation height;
+23. equivalent uphill attack sequences produce identical hit/miss results across runs and worker counts;
+24. downhill/level-ground attacks are not subjected to the uphill miss gate;
+25. attack building performs independent target selection;
+26. melee attack has no authoritative projectile trajectory;
+27. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules once any applicable accuracy gate succeeds;
+28. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
+29. bounce attack chooses identical subsequent random targets across worker counts, with any uphill interaction following its explicit authored/compatibility semantics;
+30. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.

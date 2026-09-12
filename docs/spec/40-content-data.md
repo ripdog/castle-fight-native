@@ -334,7 +334,10 @@ Authoritative map content includes:
 - spawn-related anchors if needed;
 - lane/objective connectivity semantics;
 - terrain movement costs/classes;
+- authoritative terrain combat elevation/cliff-level data used by rules such as uphill miss;
 - game-mode parameters.
+
+Authoritative combat elevation SHOULD be represented in a deterministic queryable form appropriate to the imported map (for example discrete cliff/elevation levels or regions), rather than recomputed from presentation mesh geometry at runtime. The standard Castle Fight bases are elevated above the lane, so imported map data must preserve that relationship for combat even if the presentation terrain is rebuilt differently.
 
 Decorative terrain/props MAY be client-only where they do not affect navigation/visibility/gameplay.
 
@@ -354,7 +357,8 @@ Validation SHOULD catch:
 - cyclic upgrade dependencies unless intentionally supported;
 - unsupported effect combinations;
 - map objectives outside bounds;
-- inconsistent build/navigation grids.
+- inconsistent build/navigation grids;
+- missing/invalid combat-elevation data where terrain-height combat rules are enabled.
 
 ## 18. Hot reload
 

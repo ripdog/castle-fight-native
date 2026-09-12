@@ -324,6 +324,7 @@ Compatibility work still needs to establish:
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;
 - whether observed Castle Fight behavior requires revising the provisional ballistic circular-zone, hostile-only splash, building-intersection, or travel rules;
 - whether observed Castle Fight behavior requires revising the provisional bounce range, repeat/building eligibility, chain cap, damage falloff, travel, or keyed-random selection rules;
+- exact uphill-miss probability, authoritative elevation/cliff threshold, and the combat subphase at which attacker/target elevation is sampled; map extraction should recover these from Warcraft/Castle Fight data where possible rather than choosing guessed constants;
 - target-retention/range hysteresis details;
 - splash/chain ordering;
 - compatibility-specific cast windup/channeling/interruption details beyond the current atomic automatic-cast slice;
