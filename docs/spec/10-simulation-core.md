@@ -153,7 +153,8 @@ Structural mutations SHOULD be deferred until designated commit points rather th
 Examples:
 
 - spawn unit;
-- remove dead unit;
+- remove dead unit and, when its content requires one, create the corresponding authoritative corpse at the deterministic death commit;
+- consume/expire/remove an authoritative corpse;
 - add/remove a status component;
 - transform one unit type into another;
 - create/destroy gameplay projectile;

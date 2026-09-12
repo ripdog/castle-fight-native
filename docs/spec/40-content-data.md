@@ -257,11 +257,12 @@ Targeting/effects will likely need stable gameplay categories such as:
 - mechanical;
 - summoned;
 - hero/boss;
-- organic;
+- organic/biological;
+- corpse-producing;
 - magic immune;
 - etc.
 
-These should be explicit stable bitsets/IDs, not string comparisons in hot loops.
+These should be explicit stable bitsets/IDs, not string comparisons in hot loops. Corpse production SHOULD be authored explicitly in the unit definition (for example by an optional corpse definition/reference) rather than inferred only from a presentation model; biological units are expected to produce corpses unless original/imported content says otherwise.
 
 The actual set depends on the intended Castle Fight rules/content.
 
@@ -277,6 +278,8 @@ Reusable deterministic effects may represent:
 - knockback if supported;
 - timed aura/status;
 - map-wide aura/modifier;
+- corpse selection/consumption;
+- corpse-derived effects such as explosion damage or spawning raised units;
 - stun/disable;
 - chained/bounce attack;
 - spawn attack/ability projectile.

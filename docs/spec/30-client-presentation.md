@@ -63,7 +63,7 @@ SimId -> presentation/render entity or instance handle
 
 The mapping is process-local and rebuildable.
 
-A simulation entity spawn causes presentation creation. Despawn may leave a cosmetic corpse/death animation after the authoritative entity is gone, provided the cosmetic object has no gameplay effect.
+A simulation entity spawn causes presentation creation. When a corpse-producing unit dies, presentation should transition from the living unit to the authoritative corpse entity/state rather than replacing gameplay state with a cosmetic-only corpse. The client may still layer non-authoritative death animation, particles, decals, or later visual remains around that corpse. For units/content that do not produce authoritative corpses, despawn may leave cosmetic death remnants provided they have no gameplay effect.
 
 ## 5. Interpolation
 

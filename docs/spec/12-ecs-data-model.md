@@ -124,7 +124,25 @@ LegendaryAbilityState (if applicable)
 
 Building footprint/topology participation is authoritative. A building may combine production, attack, mana/spellcasting, passive aura, and explicit player-targeted legendary ability behavior.
 
-### 5.6 Projectiles
+### 5.6 Corpses
+
+Corpses produced by biological/corpse-producing units are authoritative entities because later gameplay may target or consume them.
+
+Possible components:
+
+```text
+CorpseMarker
+SourceUnit / SourceUnitType
+CorpseDefinitionId
+SimPosition
+CreatedTick
+ExpiryTick (if this corpse decays)
+CorpseEligibility / tags (if applicable)
+```
+
+A corpse has its own stable `SimId` and is created through the deterministic death-resolution/structural-commit path. It is not an ordinary combat unit and SHOULD NOT carry movement, attack, retaliation, or living-unit target state merely to reuse unit systems. A successful consuming effect removes it through the same canonical structural-mutation mechanism used for other authoritative entities.
+
+### 5.7 Projectiles
 
 A projectile should be authoritative only if its future trajectory/timing can affect gameplay.
 
@@ -154,6 +172,7 @@ pub struct UnitDefinition {
     pub movement: MovementDefinition,
     pub attacks: Vec<AttackDefinition>,
     pub target_rules: TargetRuleSetId,
+    pub corpse: Option<CorpseDefinitionId>,
     // ...
 }
 ```

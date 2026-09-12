@@ -306,9 +306,17 @@ The engine MUST be able to represent at least:
 
 Only content explicitly marked with a player-targeted ability exposes such a command. This does not weaken the rule that ordinary combat units are non-commandable.
 
-## 21. Unit death and rewards
+## 21. Unit death, corpses, and rewards
 
 When a unit dies, reward/bounty/resource effects must occur in a deterministic death-resolution stage.
+
+Biological/corpse-producing units MUST leave an authoritative corpse at their death position. The corpse is gameplay state, not merely a presentation artifact: abilities may query, target, consume, or transform it, including mechanics such as corpse explosion and raise dead.
+
+Corpse creation occurs as part of deterministic death resolution after the victim has become unable to perform further actions. A corpse is not a living combat unit: it does not move, attack, retaliate, acquire targets, or participate in ordinary unit separation/path blocking unless a particular content rule explicitly gives a corpse additional behavior. Its authoritative state MUST be sufficient to determine at least its stable identity, position, source unit/type or corpse definition, creation tick, and any content-defined eligibility/expiry state.
+
+A successful corpse-consuming effect MUST consume/remove the selected corpse atomically with its effect. If multiple same-tick effects compete for the same corpse, canonical effect ordering decides which one succeeds; later effects must revalidate that the corpse still exists and remains eligible. Corpse selection among multiple eligible corpses follows the same deterministic candidate/tie-breaking requirements as other ability targeting.
+
+Whether a particular unit leaves a corpse, what corpse definition it produces, and whether/how long that corpse decays are content data. Biological units are corpse-producing by default unless imported/original-map semantics explicitly specify otherwise. A corpse remains authoritative until consumed, expired by its deterministic lifetime rule, or removed by another explicit gameplay rule.
 
 Rules must define credit when:
 
