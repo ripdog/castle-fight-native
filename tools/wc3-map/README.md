@@ -101,7 +101,10 @@ The normal extraction path therefore opens only canonical Warcraft III map-membe
 - `resolved/protection-conflicts.tsv` — the small set of repeated W3P modifications whose candidate values disagree;
 - `resolved/base-data-manifest.json`, `resolved/summary.json` — exact local base-data hashes/build identity and resolution coverage;
 - `script/war3map.lua` — verbatim protected runtime Lua;
-- `script/functions.tsv`, `script/calls.tsv`, `script/readable-function-names.txt` — static indexes into the protected Lua without executing it;
+- `script/functions.tsv`, `script/function-spans.tsv`, `script/readable-function-names.txt` — Lua-aware named-function indexes with true source byte offsets/spans;
+- `script/calls.tsv`, `script/call-graph.tsv` — lexical call counts plus caller→callee edges, excluding function declarations and tokens hidden inside strings/comments;
+- `script/rawcode-summary.tsv`, `script/rawcode-reference-sites.tsv`, `script/function-rawcodes.tsv` — direct decimal rawcode references cross-linked back to map object IDs/categories/names and the exact function/call context where they occur;
+- `script/runtime-mutators.tsv` — calls that can mutate unit/ability object state at runtime (`BlzSetUnit*`, `BlzSetAbility*`, unit ability add/remove/level, movement/state setters), annotated with map rawcodes directly referenced by the same function;
 - `war3mapMisc.txt`, `war3mapSkin.txt` — already-plaintext map configuration.
 
 The ASCII pathing maps use `#` for blocked and `.` for allowed. WPM bit meanings currently decoded are `0x02` no-walk, `0x04` no-fly, `0x08` no-build, `0x20` blight, `0x40` no-water, with unknown/unused bits retained in the hex grid and histogram.
@@ -114,7 +117,7 @@ W3P protection creates one remaining object-data ambiguity: 29 unit definitions 
 
 Building and static-doodad footprints no longer rely on filename hints. The resolver decodes the actual Blizzard pathing TGAs. TGA red/green/blue channels become unwalkable/unflyable/unbuildable bits respectively, and each TGA pixel is a 32-world-unit pathing cell. Irregular footprints are kept cell-for-cell as hexadecimal bit rows.
 
-The W3P runtime script remains obfuscated/minified. Its source is retained verbatim and thousands of Wurst-generated function names are still searchable, but encrypted string constants and control flow have not yet been semantically deobfuscated. Script code can also mutate unit/ability fields at runtime (`BlzSetUnitMaxHP`, attack cooldown/damage setters, ability level-field setters, etc.), so object-data resolution is strong static evidence but not proof that every runtime value stays unchanged throughout a match. No map code is executed by this pipeline.
+The W3P runtime script remains obfuscated/minified. Its source is retained verbatim and thousands of Wurst-generated function names are still searchable, but encrypted string constants and higher-level control flow have not yet been semantically deobfuscated. The script indexer is deliberately lexical: it skips strings/comments, understands named/method/anonymous function scope, records exact byte offsets, and never executes map code. Direct same-function rawcode↔setter links are useful evidence, while generic helper setters require following `call-graph.tsv` before attributing them to a particular object. Script code can mutate unit/ability fields at runtime (`BlzSetUnitMaxHP`, attack cooldown/damage setters, ability level-field setters, etc.), so object-data resolution is strong static evidence but not proof that every runtime value stays unchanged throughout a match.
 
 The absence of a canonical member such as `war3mapUnits.doo`, `war3map.w3q`, or `war3map.imp` means it could not be opened under that standard name in this protected archive. Do not infer from that alone that the original editor project never contained equivalent data; protected-map packaging can remove editor-only sources and hide imported assets.
 
@@ -122,7 +125,7 @@ The absence of a canonical member such as `war3mapUnits.doo`, `war3map.w3q`, or 
 
 ```sh
 python -m unittest tools/wc3-map/test_decode.py tools/wc3-map/test_resolve_base.py
-python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/resolve-base-data.py
+python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/lua_index.py tools/wc3-map/resolve-base-data.py
 ```
 
 A full end-to-end validation is `tools/wc3-map/extract-base-data.sh` followed by `tools/wc3-map/extract.sh` and inspection of both `summary.json` and `resolved/summary.json`. The current resolved summary requires zero unresolved inheritance anchors, missing referenced pathing textures, or unknown placed doodad rawcodes.

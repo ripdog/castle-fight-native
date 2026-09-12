@@ -62,5 +62,47 @@ class TextRepairTests(unittest.TestCase):
         self.assertEqual(DECODE.repair_translator_text("Jäger"), "Jäger")
 
 
+class LuaIndexTests(unittest.TestCase):
+    def test_indexes_method_scope_rawcodes_calls_and_mutators_without_string_matches(self) -> None:
+        hfoo = int.from_bytes(b"hfoo", "big")
+        source = (
+            '--W3P\nlocal decoy="function Fake() BlzSetUnitMaxHP(1751543663) •" '
+            "-- 1751543663 in comment\n"
+            "function unitStats:apply(unit) "
+            "if true then prepareSmokeUnit(1751543663) end "
+            "__wurst_safe_BlzSetUnitMaxHP(unit,250) end"
+        ).encode("utf-8")
+
+        indexed = DECODE.analyze_lua(source, {hfoo})
+
+        self.assertEqual([function["name"] for function in indexed["functions"]], ["unitStats:apply"])
+        self.assertEqual(indexed["calls"]["prepareSmokeUnit"], 1)
+        self.assertEqual(indexed["calls"]["__wurst_safe_BlzSetUnitMaxHP"], 1)
+        self.assertNotIn("Fake", indexed["calls"])
+        self.assertEqual(len(indexed["rawcode_sites"]), 1)
+        site = indexed["rawcode_sites"][0]
+        self.assertEqual(site["byte_offset"], source.find(b"1751543663", source.find(b"function unitStats")))
+        self.assertEqual(site["function"], "unitStats:apply")
+        self.assertEqual(site["call"], "prepareSmokeUnit")
+        self.assertEqual(indexed["runtime_mutators"][0]["function"], "unitStats:apply")
+        self.assertEqual(indexed["runtime_mutators"][0]["direct_map_rawcodes"], [hfoo])
+        self.assertEqual(indexed["call_edges"][("unitStats:apply", "prepareSmokeUnit")], 1)
+
+    def test_tracks_nested_function_and_block_ends(self) -> None:
+        rawcode = int.from_bytes(b"A0HO", "big")
+        source = (
+            "function outer() if true then local callback=function() "
+            "useAbility(1093683279) end callback() end return 1 end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {rawcode})
+
+        self.assertEqual([function["name"] for function in indexed["functions"]], ["outer"])
+        self.assertEqual(indexed["rawcode_sites"][0]["function"], "<anonymous@45>")
+        self.assertEqual(indexed["rawcode_sites"][0]["call"], "useAbility")
+        self.assertEqual(indexed["call_edges"][("outer", "callback")], 1)
+        self.assertGreater(indexed["functions"][0]["end"], indexed["functions"][0]["start"])
+
+
 if __name__ == "__main__":
     unittest.main()

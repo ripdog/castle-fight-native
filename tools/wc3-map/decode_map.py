@@ -15,14 +15,19 @@ import json
 import re
 import shutil
 import struct
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+TOOLS_DIR = Path(__file__).resolve().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+from lua_index import analyze_lua
+
 
 TRIGSTR_RE = re.compile(r"^TRIGSTR_(\d+)$")
-FUNCTION_RE = re.compile(r"\b(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-CALL_RE = re.compile(r"(?<![A-Za-z0-9_\.])([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 
 class Reader:
@@ -734,26 +739,135 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     destination = script_dir / "war3map.lua"
     shutil.copyfile(lua_path, destination)
 
-    text = lua_path.read_text(encoding="utf-8", errors="replace")
-    function_matches = list(FUNCTION_RE.finditer(text))
-    function_names = [match.group(1) for match in function_matches]
+    object_metadata: dict[int, list[dict[str, str]]] = defaultdict(list)
+    with (output / "catalog" / "objects.tsv").open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            raw = row["rawcode"].encode("latin1")
+            if len(raw) != 4:
+                continue
+            object_metadata[int.from_bytes(raw, "big")].append(row)
+
+    data = lua_path.read_bytes()
+    analysis = analyze_lua(data, set(object_metadata))
+    functions = analysis["functions"]
+    calls = analysis["calls"]
+    call_edges = analysis["call_edges"]
+    rawcode_sites = analysis["rawcode_sites"]
+    function_rawcodes = analysis["function_rawcodes"]
+    runtime_mutators = analysis["runtime_mutators"]
+
+    function_names = [str(function["name"]) for function in functions]
     definitions = Counter(function_names)
-    calls = Counter(CALL_RE.findall(text))
+    first = {str(function["name"]): int(function["start"]) for function in functions}
 
     with (script_dir / "functions.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow(["name", "definition_count", "first_byte_offset"])
-        first: dict[str, int] = {}
-        for match in function_matches:
-            first.setdefault(match.group(1), match.start())
         for name in sorted(definitions):
             writer.writerow([name, definitions[name], first[name]])
+
+    with (script_dir / "function-spans.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["name", "start_byte_offset", "end_byte_offset", "byte_length"])
+        for function in sorted(functions, key=lambda function: int(function["start"])):
+            start = int(function["start"])
+            end = int(function["end"])
+            writer.writerow([function["name"], start, end, end - start])
 
     with (script_dir / "calls.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow(["callee", "count"])
         for name, count in sorted(calls.items(), key=lambda item: (-item[1], item[0])):
             writer.writerow([name, count])
+
+    with (script_dir / "call-graph.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["caller", "callee", "count"])
+        for (caller, callee), count in sorted(call_edges.items()):
+            writer.writerow([caller, callee, count])
+
+    def rawcode_metadata(integer_id: int) -> tuple[str, str, str, str, int]:
+        rows = object_metadata[integer_id]
+        rawcode = rows[0]["rawcode"]
+        categories = ",".join(sorted({row["category"] for row in rows}))
+        tables = ",".join(sorted({row["table"] for row in rows}))
+        names = " | ".join(sorted({row["name"] for row in rows if row["name"]}))
+        return rawcode, categories, tables, names, len(rows)
+
+    sites_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
+    for site in rawcode_sites:
+        sites_by_rawcode[int(site["rawcode_integer"])].append(site)
+
+    with (script_dir / "rawcode-reference-sites.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "categories", "names", "byte_offset", "function", "call",
+        ])
+        for site in sorted(rawcode_sites, key=lambda site: int(site["byte_offset"])):
+            integer_id = int(site["rawcode_integer"])
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            writer.writerow([
+                rawcode,
+                integer_id,
+                categories,
+                names,
+                site["byte_offset"],
+                site["function"],
+                site["call"],
+            ])
+
+    with (script_dir / "rawcode-summary.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "categories", "tables", "names", "definition_count",
+            "reference_count", "function_count", "functions", "first_byte_offset",
+        ])
+        for integer_id in sorted(object_metadata, key=lambda value: object_metadata[value][0]["rawcode"]):
+            rawcode, categories, tables, names, definition_count = rawcode_metadata(integer_id)
+            sites = sites_by_rawcode.get(integer_id, [])
+            functions_for_rawcode = sorted({str(site["function"]) for site in sites})
+            writer.writerow([
+                rawcode,
+                integer_id,
+                categories,
+                tables,
+                names,
+                definition_count,
+                len(sites),
+                len(functions_for_rawcode),
+                ",".join(functions_for_rawcode),
+                min((int(site["byte_offset"]) for site in sites), default=""),
+            ])
+
+    with (script_dir / "function-rawcodes.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["function", "rawcode", "rawcode_integer", "categories", "names", "reference_count"])
+        for (function, integer_id), count in sorted(function_rawcodes.items()):
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            writer.writerow([function, rawcode, integer_id, categories, names, count])
+
+    with (script_dir / "runtime-mutators.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "callee", "normalized_callee", "byte_offset", "function", "direct_map_rawcodes", "direct_map_object_names",
+        ])
+        for site in runtime_mutators:
+            integer_ids = [int(value) for value in site["direct_map_rawcodes"]]
+            rawcodes = [rawcode_metadata(value)[0] for value in integer_ids]
+            names = sorted({
+                name
+                for value in integer_ids
+                for name in (rawcode_metadata(value)[3],)
+                if name
+            })
+            writer.writerow([
+                site["callee"],
+                site["normalized_callee"],
+                site["byte_offset"],
+                site["function"],
+                ",".join(rawcodes),
+                " | ".join(names),
+            ])
 
     readable = sorted({
         name for name in function_names
@@ -762,14 +876,19 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     (script_dir / "readable-function-names.txt").write_text("\n".join(readable) + "\n", encoding="utf-8")
 
     return {
-        "bytes": lua_path.stat().st_size,
-        "line_count": text.count("\n") + 1,
-        "w3p_marker": text.startswith("--W3P"),
-        "function_definitions": len(function_matches),
+        "bytes": len(data),
+        "line_count": data.count(b"\n") + 1,
+        "w3p_marker": data.startswith(b"--W3P"),
+        "function_definitions": len(functions),
         "unique_function_names": len(definitions),
         "unique_call_tokens": len(calls),
+        "call_graph_edges": len(call_edges),
         "readable_function_names": len(readable),
-        "note": "The source is retained verbatim but is W3P-obfuscated; indexes are static and do not execute map code.",
+        "direct_map_rawcode_references": len(rawcode_sites),
+        "referenced_map_rawcodes": len(sites_by_rawcode),
+        "known_map_rawcodes": len(object_metadata),
+        "runtime_mutator_sites": len(runtime_mutators),
+        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code.",
     }
 
 
