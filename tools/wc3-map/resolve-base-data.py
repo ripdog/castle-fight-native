@@ -1417,6 +1417,111 @@ def main() -> None:
         effective_unit_rows,
     )
 
+    # Normalize each production unit into explicit weapon profiles. xO is a
+    # useful one-number building/AI summary, but it necessarily flattens units
+    # with multiple attacks or conditional weapon switches. This table keeps
+    # the decoded UnitStat attack primitives beside static targeting/type data
+    # and structurally decoded War Club (Agra) attack-index switching.
+    protected_unit_catalog: dict[str, dict[str, str]] = {}
+    with (output / "protected-unit-stats.tsv").open(encoding="utf-8", newline="") as handle:
+        protected_unit_catalog = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    level_one_abilities: dict[str, dict[str, str]] = {}
+    with (output / "abilities.tsv").open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row["level"] == "1":
+                level_one_abilities[row["rawcode"]] = row
+
+    production_attack_rows: list[list[Any]] = []
+    production_attack_profiles = 0
+    conditional_attack_profiles = 0
+    two_profile_sum_patterns = 0
+    if effective_unit_path.exists():
+        with effective_unit_path.open(encoding="utf-8", newline="") as handle:
+            for catalog in csv.DictReader(handle, delimiter="\t"):
+                unit = static_units.get(catalog["unit_rawcode"])
+                protected = protected_unit_catalog.get(catalog["unit_rawcode"])
+                if unit is None or protected is None:
+                    raise ValueError(f"production unit has no resolved attack source: {catalog['unit_rawcode']}")
+
+                attack_switches: list[dict[str, Any]] = []
+                for ability_rawcode in (part for part in unit["abilities"].split(",") if part):
+                    ability = level_one_abilities.get(ability_rawcode)
+                    if ability is None or ability["base_rawcode"] != "Agra":
+                        continue
+                    labeled = json.loads(ability["data_fields_labeled_json"] or "{}")
+                    attack_switches.append({
+                        "rawcode": ability_rawcode,
+                        "name": ability["name"],
+                        "disabled": int(labeled.get("Disabled Attack Index", -1)),
+                        "enabled": int(labeled.get("Enabled Attack Index", -1)),
+                        "maximum_attacks": labeled.get("Maximum Attacks"),
+                    })
+
+                known_ranges: list[float] = []
+                for attack_index in (1, 2):
+                    attack_range = numeric(protected[f"unitstat_attack{attack_index}_range"])
+                    if attack_range is not None:
+                        known_ranges.append(attack_range)
+                xo_range = numeric(catalog["attack_range"])
+                sum_pattern = (
+                    len(known_ranges) == 2
+                    and xo_range is not None
+                    and math.isclose(xo_range, sum(known_ranges) - 1.0, rel_tol=0.0, abs_tol=1e-6)
+                )
+                if sum_pattern:
+                    two_profile_sum_patterns += 1
+
+                for attack_index in (1, 2):
+                    prefix = f"attack{attack_index}"
+                    zero_index = attack_index - 1
+                    enabling = [switch for switch in attack_switches if switch["enabled"] == zero_index]
+                    disabling = [switch for switch in attack_switches if switch["disabled"] == zero_index]
+                    default_enabled = unit[f"{prefix}_enabled"] == "True"
+                    activation = "default" if default_enabled else ("conditional" if enabling else "unavailable")
+                    if activation != "unavailable":
+                        production_attack_profiles += 1
+                    if enabling:
+                        conditional_attack_profiles += 1
+
+                    range_value = protected[f"unitstat_{prefix}_range"]
+                    dps_value = protected[f"unitstat_{prefix}_dps"]
+                    range_relation = effective_comparison(catalog["attack_range"], range_value).replace("static-", "xo-")
+                    dps_relation = effective_comparison(catalog["dps"], dps_value, tolerance=0.011).replace("static-", "xo-")
+                    if sum_pattern and range_relation == "xo-differs":
+                        range_relation = "xo-two-profile-sum-minus-one"
+
+                    production_attack_rows.append([
+                        catalog["building_rawcode"], catalog["building_names"],
+                        catalog["unit_rawcode"], catalog["unit_names"], attack_index,
+                        activation, int(default_enabled),
+                        ",".join(switch["rawcode"] for switch in enabling),
+                        ",".join(switch["name"] for switch in enabling),
+                        ",".join(value_as_text(switch["maximum_attacks"]) for switch in enabling),
+                        ",".join(switch["rawcode"] for switch in disabling),
+                        unit[f"{prefix}_type"], unit[f"{prefix}_weapon_type"], unit[f"{prefix}_targets"],
+                        protected[f"unitstat_{prefix}_base_damage"], protected[f"{prefix}_base_damage_source"],
+                        protected[f"unitstat_{prefix}_dice_number"], protected[f"{prefix}_dice_number_source"],
+                        protected[f"unitstat_{prefix}_dice_sides"], protected[f"{prefix}_dice_sides_source"],
+                        protected[f"unitstat_{prefix}_cooldown"], protected[f"{prefix}_cooldown_source"],
+                        range_value, protected[f"{prefix}_range_source"],
+                        protected[f"unitstat_{prefix}_min"], protected[f"unitstat_{prefix}_max"],
+                        protected[f"unitstat_{prefix}_avg"], dps_value,
+                        catalog["dps"], dps_relation, catalog["attack_range"], range_relation,
+                    ])
+    write_tsv(
+        output / "production-unit-attacks.tsv",
+        [
+            "building_rawcode", "building_names", "unit_rawcode", "unit_names", "attack_index",
+            "activation", "default_enabled", "enabled_by_ability", "enabled_by_ability_name", "conditional_max_attacks",
+            "disabled_by_ability", "attack_type", "weapon_type", "targets",
+            "base_damage", "base_damage_source", "dice_number", "dice_number_source", "dice_sides", "dice_sides_source",
+            "cooldown", "cooldown_source", "range", "range_source", "min_damage", "max_damage", "avg_damage", "dps",
+            "xo_effective_dps", "xo_dps_relation", "xo_effective_range", "xo_range_relation",
+        ],
+        production_attack_rows,
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -1502,6 +1607,10 @@ def main() -> None:
         "effective_unit_stat_vs_unitstat_comparisons": {
             field: dict(sorted(counts.items())) for field, counts in effective_unit_vs_unitstat_comparisons.items()
         },
+        "production_unit_attack_rows": len(production_attack_rows),
+        "production_unit_available_attack_profiles": production_attack_profiles,
+        "production_unit_conditional_attack_profiles": conditional_attack_profiles,
+        "production_unit_two_profile_sum_patterns": two_profile_sum_patterns,
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -1510,6 +1619,7 @@ def main() -> None:
             "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
+            "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

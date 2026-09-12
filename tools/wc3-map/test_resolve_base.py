@@ -179,6 +179,41 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["move_speed"], {"unitstat-match": 162})
 
+    def test_production_attack_profiles_keep_conditional_and_dual_weapons(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["production_unit_attack_rows"], 324)
+        self.assertEqual(summary["production_unit_available_attack_profiles"], 174)
+        self.assertEqual(summary["production_unit_conditional_attack_profiles"], 1)
+        self.assertEqual(summary["production_unit_two_profile_sum_patterns"], 2)
+
+        with (self.resolved / "production-unit-attacks.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        indexed = {(row["unit_rawcode"], row["attack_index"]): row for row in rows}
+
+        giant_default = indexed[("e00F", "1")]
+        giant_club = indexed[("e00F", "2")]
+        self.assertEqual(giant_default["activation"], "default")
+        self.assertEqual(giant_default["disabled_by_ability"], "A0BC")
+        self.assertEqual(giant_club["activation"], "conditional")
+        self.assertEqual(giant_club["enabled_by_ability"], "A0BC")
+        self.assertEqual(giant_club["conditional_max_attacks"], "10")
+        self.assertEqual(giant_club["attack_type"], "siege")
+        self.assertEqual(giant_club["range"], "150")
+        self.assertIn("air", giant_club["targets"].split(","))
+        self.assertEqual(giant_club["xo_range_relation"], "xo-two-profile-sum-minus-one")
+
+        rotero_air = indexed[("h06Q", "1")]
+        rotero_building = indexed[("h06Q", "2")]
+        self.assertEqual(rotero_air["activation"], "default")
+        self.assertEqual(rotero_air["targets"], "air")
+        self.assertEqual(rotero_air["range"], "500")
+        self.assertEqual(rotero_air["dps"], "25.0")
+        self.assertEqual(rotero_building["activation"], "default")
+        self.assertEqual(rotero_building["targets"], "structure")
+        self.assertEqual(rotero_building["range"], "500")
+        self.assertEqual(rotero_building["dps"], "20.0")
+        self.assertEqual(rotero_building["xo_range_relation"], "xo-two-profile-sum-minus-one")
+
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["unresolved_base_objects"], [])

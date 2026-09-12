@@ -106,6 +106,10 @@
       "unitstat-match": 162
     }
   },
+  "production_unit_attack_rows": 324,
+  "production_unit_available_attack_profiles": 174,
+  "production_unit_conditional_attack_profiles": 1,
+  "production_unit_two_profile_sum_patterns": 2,
   "notes": [
     "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -113,6 +117,7 @@
     "base-source-fields.tsv exposes the W3I-selected custom_v1/base SLK values before map overrides, including computed columns",
     "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
     "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
-    "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization"
+    "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
+    "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary"
   ]
 }
