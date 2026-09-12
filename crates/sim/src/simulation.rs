@@ -92,6 +92,7 @@ pub struct TickResult {
     pub spawn_failures: usize,
     pub topology_rebuilds: usize,
     pub pursuit_steps: usize,
+    pub navigation_route_steps: usize,
     pub movement_intents: usize,
     pub movement_blocked: usize,
     pub objective_move_intents: usize,
@@ -1344,6 +1345,7 @@ impl Simulation {
             spawn_failures,
             topology_rebuilds: usize::from(topology_rebuilt),
             pursuit_steps: movement.pursuit_steps,
+            navigation_route_steps: movement.navigation_route_steps,
             movement_intents: movement.movement_intents,
             movement_blocked: movement.movement_blocked,
             objective_move_intents: movement.objective_move_intents,
@@ -3043,6 +3045,10 @@ impl Simulation {
             .iter()
             .filter(|decision| decision.pursuit_step)
             .count();
+        let navigation_route_steps = decisions
+            .iter()
+            .filter(|decision| decision.navigation_route_step)
+            .count();
         let movement_intents = decisions
             .iter()
             .zip(units)
@@ -3093,6 +3099,7 @@ impl Simulation {
             intent,
             crowd_and_collision,
             pursuit_steps,
+            navigation_route_steps,
             movement_intents,
             movement_blocked,
             objective_move_intents,
@@ -3235,6 +3242,7 @@ impl Simulation {
         }
 
         let mut pursuit_step = false;
+        let mut navigation_route_step = false;
         let mut used_a_star = false;
         let mut a_star_cache_hit = false;
         let mut a_star_expanded_nodes = 0;
@@ -3245,6 +3253,7 @@ impl Simulation {
                 if cell == source_cell {
                     Some(cell)
                 } else {
+                    navigation_route_step = true;
                     let route_bias = sidestep_sign(unit.id);
                     let route_bias_key =
                         i8::try_from(route_bias).expect("route bias must fit signed byte");
@@ -3286,17 +3295,83 @@ impl Simulation {
                 }
             }
             None => {
-                let bias = sidestep_sign(unit.id);
-                if let Some(radius) = unit.collision_radius_override {
+                let route_bias = sidestep_sign(unit.id);
+                let objective_cell = self
+                    .topology
+                    .cell_of_point(self.config.team_objective[usize::from(unit.team.0)]);
+                let fallback_objective_step = if let Some(radius) = unit.collision_radius_override {
                     let field = self
                         .radius_objective_fields
                         .get(&(unit.team.0, radius))
                         .expect("radius-aware objective field was not prepared");
                     self.topology
-                        .step_from_distance_field_with_bias(source_cell, field, bias)
+                        .step_from_distance_field_with_bias(source_cell, field, route_bias)
                 } else {
                     self.topology
-                        .objective_step_with_bias(unit.team.0, source_cell, bias)
+                        .objective_step_with_bias(unit.team.0, source_cell, route_bias)
+                };
+                if objective_cell.x == source_cell.x || fallback_objective_step.is_none() {
+                    None
+                } else {
+                    let step_x = (objective_cell.x - source_cell.x).signum();
+                    let direct_cell = NavCell::new(source_cell.x + step_x, source_cell.y);
+                    let direct_position = self.topology.center_of_cell(direct_cell);
+                    if self.position_is_traversable_from(
+                        source_cell,
+                        direct_position,
+                        unit.collision_radius_override,
+                    ) {
+                        Some(direct_cell)
+                    } else if let Some(cell) = self.horizontal_objective_goal_cell(
+                        source_cell,
+                        objective_cell.x,
+                        unit.collision_radius_override,
+                    ) {
+                        navigation_route_step = true;
+                        let route_bias_key =
+                            i8::try_from(route_bias).expect("route bias must fit signed byte");
+                        let cache_key = (
+                            source_cell,
+                            cell,
+                            unit.collision_radius_override,
+                            route_bias_key,
+                        );
+                        let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
+                        let result = if let Some(radius) = unit.collision_radius_override {
+                            self.topology.pursuit_step_with_radius(
+                                source_cell,
+                                cell,
+                                cached_fallback,
+                                radius,
+                                route_bias,
+                            )
+                        } else {
+                            self.topology.pursuit_step(
+                                source_cell,
+                                cell,
+                                cached_fallback,
+                                route_bias,
+                            )
+                        };
+                        used_a_star = result.used_a_star;
+                        a_star_cache_hit = result.a_star_cache_hit;
+                        a_star_expanded_nodes = result.a_star_expanded_nodes;
+                        if result.used_a_star
+                            && !result.a_star_cache_hit
+                            && let Some(next) = result.next_cell
+                        {
+                            cache_insert = Some(PursuitCacheInsert {
+                                from: source_cell,
+                                target: cell,
+                                collision_radius: unit.collision_radius_override,
+                                route_bias: route_bias_key,
+                                next,
+                            });
+                        }
+                        result.next_cell
+                    } else {
+                        fallback_objective_step
+                    }
                 }
             }
         };
@@ -3306,6 +3381,7 @@ impl Simulation {
                 pursuit_step,
                 pursuit_target,
                 attack_goal,
+                navigation_route_step,
                 used_a_star,
                 a_star_cache_hit,
                 a_star_expanded_nodes,
@@ -3315,6 +3391,8 @@ impl Simulation {
         let target_position =
             if pursuit_step && next_cell == target_cell.expect("pursuit target cell disappeared") {
                 attack_goal.expect("pursuit movement missing attack-envelope goal")
+            } else if target_cell.is_none() && next_cell.y == source_cell.y {
+                SimPoint::new(self.topology.center_of_cell(next_cell).x, current.y)
             } else {
                 self.topology.center_of_cell(next_cell)
             };
@@ -3333,11 +3411,43 @@ impl Simulation {
             pursuit_step,
             pursuit_target,
             attack_goal,
+            navigation_route_step,
             used_a_star,
             a_star_cache_hit,
             a_star_expanded_nodes,
             cache_insert,
         }
+    }
+
+    fn horizontal_objective_goal_cell(
+        &self,
+        source_cell: NavCell,
+        objective_x: i32,
+        collision_radius: Option<i32>,
+    ) -> Option<NavCell> {
+        let step_x = (objective_x - source_cell.x).signum();
+        if step_x == 0 {
+            return None;
+        }
+        let source_component = self.topology.component_id(source_cell)?;
+        let mut x = objective_x;
+        while x != source_cell.x {
+            let cell = NavCell::new(x, source_cell.y);
+            let valid = if let Some(radius) = collision_radius {
+                self.topology.circle_is_traversable_in_component(
+                    self.topology.center_of_cell(cell),
+                    radius,
+                    source_component,
+                )
+            } else {
+                self.topology.component_id(cell) == Some(source_component)
+            };
+            if valid {
+                return Some(cell);
+            }
+            x = x.checked_sub(step_x)?;
+        }
+        None
     }
 
     fn apply_crowd_separation(
@@ -3928,6 +4038,7 @@ struct MovementDecision {
     pursuit_step: bool,
     pursuit_target: Option<SimId>,
     attack_goal: Option<SimPoint>,
+    navigation_route_step: bool,
     used_a_star: bool,
     a_star_cache_hit: bool,
     a_star_expanded_nodes: usize,
@@ -3941,6 +4052,7 @@ impl MovementDecision {
             pursuit_step: false,
             pursuit_target: None,
             attack_goal: None,
+            navigation_route_step: false,
             used_a_star: false,
             a_star_cache_hit: false,
             a_star_expanded_nodes: 0,
@@ -3964,6 +4076,7 @@ struct MovementMetrics {
     intent: Duration,
     crowd_and_collision: Duration,
     pursuit_steps: usize,
+    navigation_route_steps: usize,
     movement_intents: usize,
     movement_blocked: usize,
     objective_move_intents: usize,

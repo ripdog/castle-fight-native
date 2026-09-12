@@ -3080,6 +3080,280 @@ mod tests {
     }
 
     #[test]
+    fn objective_march_preserves_current_horizontal_line() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, -20),
+            navigation_max: NavCell::new(100, 20),
+            team_objective: [
+                SimPoint::new(900 * world, 100 * world),
+                SimPoint::new(100 * world, -100 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let start = SimPoint::new(100 * world, 17 * world + world / 3);
+        let unit = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: start,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: world,
+            },
+        });
+
+        for _ in 0..20 {
+            sim.step();
+            let position = sim.unit(unit).unwrap().position;
+            assert_eq!(position.y, start.y, "objective movement drifted vertically");
+        }
+        assert!(sim.unit(unit).unwrap().position.x > start.x);
+    }
+
+    #[test]
+    fn objective_march_uses_new_horizontal_line_after_combat_displacement() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, -40),
+            navigation_max: NavCell::new(100, 40),
+            team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(100 * world, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 100,
+                range: 10 * world,
+                acquisition_range: 200 * world,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: 10 * world,
+            },
+        });
+        let victim = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(170 * world, 40 * world),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        for _ in 0..30 {
+            sim.step();
+            if sim.unit(victim).is_none() {
+                break;
+            }
+        }
+        assert!(sim.unit(victim).is_none(), "combat target never died");
+        let displaced = sim.unit(attacker).unwrap().position;
+        assert!(
+            displaced.y > 0,
+            "combat never pulled the attacker off its spawn line"
+        );
+
+        sim.step();
+        let resumed = sim.unit(attacker).unwrap().position;
+        assert!(
+            resumed.x > displaced.x,
+            "unit did not resume objective march"
+        );
+        assert_eq!(
+            resumed.y, displaced.y,
+            "unit attempted to restore a remembered pre-combat lane"
+        );
+    }
+
+    #[test]
+    fn horizontal_objective_march_detours_without_restoring_old_line() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, -10),
+            navigation_max: NavCell::new(30, 10),
+            static_blockers: vec![BuildingFootprint::new(10, 0, 1, 1)],
+            team_objective: [SimPoint::new(290 * world, 0), SimPoint::new(10 * world, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let unit = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(50 * world, 5 * world),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: 10 * world,
+            },
+        });
+
+        for _ in 0..20 {
+            sim.step();
+        }
+        let after_detour = sim.unit(unit).unwrap().position;
+        assert!(
+            after_detour.x > 120 * world,
+            "unit never cleared the blocker"
+        );
+        assert_ne!(
+            after_detour.y,
+            5 * world,
+            "unit never took the required detour"
+        );
+        let detour_y = after_detour.y;
+
+        for _ in 0..5 {
+            sim.step();
+            assert_eq!(
+                sim.unit(unit).unwrap().position.y,
+                detour_y,
+                "unit tried to return to its pre-detour horizontal line"
+            );
+        }
+    }
+
+    #[test]
+    fn horizontal_march_can_bypass_enemy_mass_outside_acquisition_range() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, -30),
+            navigation_max: NavCell::new(100, 30),
+            team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let bypass = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(100 * world, -100 * world),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 10 * world,
+                acquisition_range: 60 * world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: 10 * world,
+            },
+        });
+        for offset in -2..=2 {
+            sim.spawn_unit(UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new((250 + offset * 8) * world, 20 * world),
+                health: 1_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+        }
+
+        for _ in 0..25 {
+            sim.step();
+        }
+        let view = sim.unit(bypass).unwrap();
+        assert!(
+            view.position.x > 300 * world,
+            "unit failed to bypass the enemy clump"
+        );
+        assert_eq!(view.position.y, -100 * world);
+        assert_eq!(
+            view.target, None,
+            "distant enemy clump incorrectly pulled the unit off-line"
+        );
+    }
+
+    #[test]
+    fn produced_unit_marches_from_its_spawned_horizontal_line() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(100, 60),
+            team_objective: [
+                SimPoint::new(900 * world, 300 * world),
+                SimPoint::new(100 * world, 300 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_building(BuildingSpawn {
+            team: Team(0),
+            footprint: BuildingFootprint::new(10, 4, 4, 4),
+            health: 1_000,
+            production: Some(ProductionProfile {
+                initial_delay_ticks: 0,
+                interval_ticks: 60,
+                search_radius_cells: 4,
+                unit: UnitTemplate {
+                    health: 100,
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::Melee,
+                        damage: 0,
+                        range: 0,
+                        acquisition_range: 0,
+                        cooldown_ticks: 30,
+                    },
+                    movement: MovementProfile {
+                        speed_per_tick: world,
+                    },
+                },
+            }),
+            attack: None,
+            spellcasting: None,
+        });
+
+        let spawn = sim.step();
+        assert_eq!(spawn.units_spawned, 1);
+        let produced = sim.units()[0];
+        let spawn_y = produced.position.y;
+        assert!(
+            spawn_y < 100 * world,
+            "low production building spawned too high"
+        );
+
+        for _ in 0..20 {
+            sim.step();
+            assert_eq!(
+                sim.unit(produced.id).unwrap().position.y,
+                spawn_y,
+                "produced unit drifted toward objective center"
+            );
+        }
+        assert!(sim.unit(produced.id).unwrap().position.x > produced.position.x);
+    }
+
+    #[test]
     fn packed_convoy_uses_simultaneously_vacated_space() {
         fn run(workers: usize) -> (u64, Vec<SimPoint>, TickResult) {
             let world = SUBUNITS_PER_WORLD_UNIT;

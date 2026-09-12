@@ -185,7 +185,9 @@ If steering aggregates multiple neighbors, accumulation order must either be can
 
 ## 13. Local movement, pursuit, and steering
 
-Strategic navigation provides a preferred direction toward the objective. When a unit has an individually selected target that is not yet in attack position, movement instead pursues the nearest reachable part of that target's **attack envelope**: the region of authoritative positions from which the unit's current attack is legal.
+Strategic navigation provides a preferred direction toward the objective. In the standard Castle Fight lane profile, a targetless ground unit prefers **pure horizontal progress** toward the enemy objective side at its current authoritative `y`; it does not converge toward the objective/castle centerline merely because the center is the destination point used by the topology field. This horizontal preference is stateless. There is no per-unit lane anchor: if combat, crowd flow, or static-topology detouring changes the unit's `y`, subsequent targetless movement proceeds horizontally from that new position. The shared objective field remains the reachability/detour fallback and caged units with no objective route remain stationary.
+
+When a unit has an individually selected target that is not yet in attack position, movement instead pursues the nearest reachable part of that target's **attack envelope**: the region of authoritative positions from which the unit's current attack is legal.
 
 The current executable attacks have no authored minimum range, so their envelope contains every collision-legal position whose distance to the target geometry is `<= max_range`. A unit already anywhere inside that envelope stops pursuing and may attack from its current position; it MUST NOT back away merely to sit at maximum range. If later content authors a positive minimum range, the same model becomes a band/annulus whose inner region is excluded.
 
@@ -350,4 +352,7 @@ Spatial/navigation tests MUST eventually include:
 33. a radius-aware pursuer can route around inflated blocker clearance to an alternate legal attack position for both unit and building targets;
 34. radius-aware objective pursuit can temporarily detour away from the objective and still converge through a physically wide-enough route without oscillating;
 35. an objective-following unit blocked by stationary allies preserves a deterministic bypass side and flows around the clump when lateral space exists;
+36. an unobstructed targetless lane unit preserves its exact current `y` while advancing toward the enemy side rather than drifting toward the objective centerline;
+37. after combat or a forced topology detour moves a unit vertically, targetless movement resumes horizontally from the unit's new `y` without restoring any remembered spawn/home line;
+38. a unit in a disconnected cage does not pace horizontally inside the cage merely because same-row cells exist in its local component;
 36. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping.

@@ -207,6 +207,8 @@ Its behavior is composed from:
 - combat;
 - deterministic no-route behavior when caged/disconnected.
 
+For the standard Castle Fight lane profile, targetless ground units do **not** steer toward the castle centerline. Their strategic preference is horizontal progress toward the enemy side at their **current authoritative `y`**. This preference is stateless: no spawn-lane/home-line value is stored on the unit. Production placement matters because it determines the unit's initial `y`; combat, crowd flow, or a topology detour may later move the unit vertically, and once the unit has no retained target it simply resumes horizontal marching from that new `y`. A valid combat target overrides this rule with ordinary attack-envelope pursuit.
+
 ## 15. Objective/castle entities
 
 Castles/objectives are authoritative entities or canonical match structures with:

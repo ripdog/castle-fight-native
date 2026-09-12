@@ -231,7 +231,7 @@ total tick duration
 per-phase duration, including automatic ability evaluation/resolution
 spatial candidate queries/counts
 navigation rebuild count/duration
-A* fallback count/cache-hit count/expanded nodes
+navigation-route step count plus A* fallback count/cache-hit count/expanded nodes
 movement intents, objective-following intents, and hard-collision-rejected movement intents
 target reacquisitions vs retentions
 ally-defense query/victim/attacker candidate counts
