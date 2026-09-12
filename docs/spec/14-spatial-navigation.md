@@ -171,6 +171,10 @@ The grid supports:
 - local collision candidates;
 - optional projectile broad-phase queries.
 
+For **melee/ground-reachability target acquisition**, the verification implementation partitions target buckets by `(team, navigation connected-component)`. A unit therefore queries only hostile units in its own reachable component instead of enumerating nearby enemies in disconnected cages and rejecting them one by one. This is an acceleration structure only; every unit still makes its own target decision.
+
+Other query classes (for example long-range attacks that may hit across disconnected ground components, auras, or projectiles) MUST use an index/query partition appropriate to their own semantics rather than incorrectly inheriting the melee reachability partition.
+
 ## 12. Grid query determinism
 
 Grid storage order MUST NOT become a targeting tie-break.
@@ -183,7 +187,11 @@ If steering aggregates multiple neighbors, accumulation order must either be can
 
 Strategic navigation provides a preferred direction toward the objective. When a unit has an individually selected target that is not yet in attack position, movement instead pursues a reachable attack position for that target.
 
-Target pursuit MUST respect topology. If no valid attack position is reachable for any applicable attack, that target is invalid for this attacker and targeting must select something else. The implementation may use local pathfinding, cached target fields, component reachability, or another measured algorithm; the gameplay semantic is that units do not push indefinitely against blockers toward an unreachable target.
+Target pursuit MUST respect topology. If no valid attack position is reachable for any applicable attack, that target is invalid for this attacker and targeting must select something else.
+
+The verification implementation uses a cheap deterministic greedy step while it makes progress toward the selected attack position. If a blocker creates a local minimum (for example a straight wall directly between attacker and target), it falls back to deterministic A* and takes the first step of the resulting route. This avoids paying full pathfinding cost on ordinary open-lane movement while still routing around real building obstacles instead of oscillating against them.
+
+This algorithm is provisional and must be profiled under realistic obstacle density. Cached target fields, bounded/local path search, or another deterministic strategy may replace it if A* fallback frequency becomes expensive.
 
 Units then apply local movement rules.
 
@@ -296,9 +304,10 @@ Spatial/navigation tests MUST eventually include:
 7. flow field identical across worker counts;
 8. equal-cost route chooses the documented deterministic direction;
 9. reachable attack-position filtering correctly rejects unreachable melee targets without rejecting valid long-range targets;
-10. high-density crowd does not cause O(N²) candidate explosion under ordinary distributions;
-11. bounded expanding-spiral spawn search always selects the same first valid position;
-12. a fully congested search region causes the production attempt to fail with no backlog;
-13. spawn search does not special-case cage connectivity and may select a valid position across an enclosure boundary if reached by the bounded spiral;
-14. builder standing in a lane neither blocks nor steers combat units;
-15. builder cannot complete a cage and is absent from ordinary combat target queries.
+10. disconnected high-density cages do not force melee targeting to enumerate every caged unit; component-partitioned target queries remain bounded by the attacker's reachable component;
+11. target pursuit routes around a simple wall instead of oscillating at a greedy local minimum;
+12. bounded expanding-spiral spawn search always selects the same first valid position;
+13. a fully congested search region causes the production attempt to fail with no backlog;
+14. spawn search does not special-case cage connectivity and may select a valid position across an enclosure boundary if reached by the bounded spiral;
+15. builder standing in a lane neither blocks nor steers combat units;
+16. builder cannot complete a cage and is absent from ordinary combat target queries.

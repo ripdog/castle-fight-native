@@ -1,37 +1,71 @@
+use std::{
+    collections::HashSet,
+    time::{Duration, Instant},
+};
+
 use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 use crate::{
     components::{
-        AttackCooldown, AttackProfile, Health, MovementProfile, Position, SimId, SpawnTick,
+        AttackCooldown, AttackProfile, BuildingFootprint, BuildingSpawn, Health, MovementProfile,
+        Position, ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick,
         TargetState, Team, UnitSpawn,
     },
-    math::SimPoint,
-    spatial::SpatialGrid,
+    math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
+    spatial::{SpatialGrid, SpatialPartition},
+    topology::{NavCell, TopologyGrid},
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct SimulationConfig {
     pub spatial_cell_size: i32,
-    pub team_objective_x: [i32; 2],
+    pub navigation_cell_size: i32,
+    pub navigation_min: NavCell,
+    pub navigation_max: NavCell,
+    pub target_pursuit_extra_range: i32,
+    pub team_objective: [SimPoint; 2],
 }
 
 impl Default for SimulationConfig {
     fn default() -> Self {
         Self {
-            spatial_cell_size: 8 * crate::math::SUBUNITS_PER_WORLD_UNIT,
-            team_objective_x: [120 * crate::math::SUBUNITS_PER_WORLD_UNIT, 0],
+            spatial_cell_size: 8 * SUBUNITS_PER_WORLD_UNIT,
+            navigation_cell_size: SUBUNITS_PER_WORLD_UNIT,
+            navigation_min: NavCell::new(0, -64),
+            navigation_max: NavCell::new(120, 64),
+            target_pursuit_extra_range: 3 * SUBUNITS_PER_WORLD_UNIT,
+            team_objective: [
+                SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
+                SimPoint::new(0, 0),
+            ],
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TickTimings {
+    pub topology_and_timers: Duration,
+    pub production: Duration,
+    pub snapshot_and_spatial: Duration,
+    pub targeting: Duration,
+    pub combat: Duration,
+    pub movement_and_commit: Duration,
+    pub checksum: Duration,
+    pub total: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TickResult {
     pub completed_tick: u64,
     pub units_alive: usize,
+    pub buildings_alive: usize,
     pub attacks_resolved: usize,
     pub deaths: usize,
+    pub units_spawned: usize,
+    pub spawn_failures: usize,
     pub checksum: u64,
+    pub timings: TickTimings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,13 +75,26 @@ pub struct UnitView {
     pub position: SimPoint,
     pub health: i32,
     pub target: Option<SimId>,
+    pub last_attacker: Option<SimId>,
     pub cooldown_remaining: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuildingView {
+    pub id: SimId,
+    pub team: Team,
+    pub footprint: BuildingFootprint,
+    pub health: i32,
+    pub production: Option<ProductionProfile>,
+    pub next_spawn_tick: Option<u64>,
 }
 
 pub struct Simulation {
     world: World,
     config: SimulationConfig,
     pool: ThreadPool,
+    topology: TopologyGrid,
+    topology_dirty: bool,
     next_tick: u64,
     next_id: u64,
 }
@@ -56,17 +103,28 @@ impl Simulation {
     pub fn new(config: SimulationConfig, workers: usize) -> Self {
         assert!(workers > 0, "simulation requires at least one worker");
         assert!(config.spatial_cell_size > 0);
+        assert!(config.navigation_cell_size > 0);
+        assert!(config.target_pursuit_extra_range >= 0);
 
         let pool = ThreadPoolBuilder::new()
             .num_threads(workers)
             .thread_name(|index| format!("castle-sim-{index}"))
             .build()
             .expect("failed to create simulation worker pool");
+        let topology = TopologyGrid::build(
+            config.navigation_cell_size,
+            config.navigation_min,
+            config.navigation_max,
+            [],
+            config.team_objective,
+        );
 
         Self {
             world: World::new(),
             config,
             pool,
+            topology,
+            topology_dirty: false,
             next_tick: 0,
             next_id: 1,
         }
@@ -83,95 +141,164 @@ impl Simulation {
     }
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
-        assert!(unit.health > 0);
-        assert!(unit.attack.damage >= 0);
-        assert!(unit.attack.range >= 0);
-        assert!(unit.attack.acquisition_range >= unit.attack.range);
-        assert!(unit.movement.speed_per_tick >= 0);
+        validate_unit_spawn(unit);
+        self.spawn_unit_unchecked(unit)
+    }
+
+    pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
+        assert!(building.health > 0);
+        assert!(building.team.0 < 2, "verification slice supports two teams");
+        assert!(building.footprint.width > 0 && building.footprint.height > 0);
+        if let Some(production) = building.production {
+            assert!(production.interval_ticks > 0);
+            validate_unit_template(production.unit);
+        }
+
+        for y in building.footprint.min_y..=building.footprint.max_y() {
+            for x in building.footprint.min_x..=building.footprint.max_x() {
+                assert!(
+                    self.topology.contains(NavCell::new(x, y)),
+                    "building footprint outside navigation bounds"
+                );
+            }
+        }
+
+        let mut query = self.world.query::<&BuildingFootprint>();
         assert!(
-            unit.team.0 < 2,
-            "first verification slice supports two teams"
+            query
+                .iter(&self.world)
+                .all(|existing| !footprints_overlap(*existing, building.footprint)),
+            "building footprints overlap"
         );
 
-        let id = SimId(self.next_id);
-        self.next_id = self.next_id.checked_add(1).expect("SimId space exhausted");
-
-        self.world.spawn((
+        let id = self.allocate_id();
+        let mut entity = self.world.spawn((
             id,
-            unit.team,
-            Position(unit.position),
+            building.team,
+            building.footprint,
             Health {
-                current: unit.health,
-                max: unit.health,
+                current: building.health,
+                max: building.health,
             },
-            unit.attack,
-            AttackCooldown::default(),
-            TargetState::default(),
-            unit.movement,
-            SpawnTick(self.next_tick),
         ));
-
+        if let Some(production) = building.production {
+            entity.insert((
+                production,
+                ProductionState {
+                    next_spawn_tick: self.next_tick,
+                },
+            ));
+        }
+        self.topology_dirty = true;
         id
     }
 
     pub fn step(&mut self) -> TickResult {
+        let tick_start = Instant::now();
         let completed_tick = self.next_tick;
-        self.advance_cooldowns();
 
+        let phase_start = Instant::now();
+        self.refresh_topology_if_dirty();
+        self.advance_cooldowns();
+        let topology_and_timers = phase_start.elapsed();
+
+        let phase_start = Instant::now();
+        let (units_spawned, spawn_failures) = self.advance_production();
+        let production = phase_start.elapsed();
+
+        let phase_start = Instant::now();
         let mut units = self.snapshot_units();
+        let buildings = self.snapshot_buildings();
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
-            units
-                .iter()
-                .enumerate()
-                .map(|(index, unit)| (index, unit.position)),
+            units.iter().enumerate().filter_map(|(index, unit)| {
+                let cell = self.topology.cell_of_point(unit.position);
+                let component = self.topology.component_id(cell)?;
+                Some((
+                    SpatialPartition::new(unit.team.0, component),
+                    index,
+                    unit.position,
+                ))
+            }),
         );
+        let snapshot_and_spatial = phase_start.elapsed();
 
-        let choices = self.select_targets(&units, &grid);
+        let phase_start = Instant::now();
+        let choices = self.select_targets(&units, &buildings, &grid);
         for (unit, target) in units.iter_mut().zip(choices) {
             unit.target = target;
         }
+        let targeting = phase_start.elapsed();
 
-        let mut health: Vec<i32> = units.iter().map(|unit| unit.health).collect();
+        let mut unit_health: Vec<i32> = units.iter().map(|unit| unit.health).collect();
+        let mut building_health: Vec<i32> =
+            buildings.iter().map(|building| building.health).collect();
         let mut cooldowns: Vec<u16> = units.iter().map(|unit| unit.cooldown_remaining).collect();
         let mut positions: Vec<SimPoint> = units.iter().map(|unit| unit.position).collect();
+        let mut attackers_this_tick = vec![None; units.len()];
 
-        let mut intents = self.attack_intents(&units);
+        let phase_start = Instant::now();
+        let mut intents = self.attack_intents(&units, &buildings);
         intents.sort_unstable_by_key(|intent| (intent.source_id, intent.target_id));
 
         let mut attacks_resolved = 0;
         for intent in intents {
-            if health[intent.source_index] <= 0 || health[intent.target_index] <= 0 {
+            if unit_health[intent.source_index] <= 0 {
                 continue;
             }
 
-            health[intent.target_index] = health[intent.target_index]
-                .checked_sub(intent.damage)
-                .expect("damage arithmetic overflowed validated combat bounds");
+            let target_alive = match intent.target {
+                TargetIndex::Unit(index) => unit_health[index] > 0,
+                TargetIndex::Building(index) => building_health[index] > 0,
+            };
+            if !target_alive {
+                continue;
+            }
+
+            match intent.target {
+                TargetIndex::Unit(index) => {
+                    unit_health[index] = unit_health[index]
+                        .checked_sub(intent.damage)
+                        .expect("unit damage arithmetic overflowed validated bounds");
+                    attackers_this_tick[index].get_or_insert(intent.source_id);
+                }
+                TargetIndex::Building(index) => {
+                    building_health[index] = building_health[index]
+                        .checked_sub(intent.damage)
+                        .expect("building damage arithmetic overflowed validated bounds");
+                }
+            }
             cooldowns[intent.source_index] = intent.cooldown_ticks;
             attacks_resolved += 1;
         }
+        let combat = phase_start.elapsed();
 
-        self.resolve_movement(&units, &health, &mut positions);
+        let phase_start = Instant::now();
+        self.resolve_movement(
+            &units,
+            &buildings,
+            &unit_health,
+            &building_health,
+            &mut positions,
+        );
 
         let mut deaths = 0;
         for (index, unit) in units.iter().enumerate() {
-            if health[index] <= 0 {
+            if unit_health[index] <= 0 {
                 self.world.despawn(unit.entity);
                 deaths += 1;
                 continue;
             }
 
             let live_target = unit.target.filter(|target| {
-                find_index_by_id(&units, *target)
-                    .is_some_and(|target_index| health[target_index] > 0)
+                target_is_alive(*target, &units, &buildings, &unit_health, &building_health)
             });
 
             let mut entity = self.world.entity_mut(unit.entity);
             entity
                 .get_mut::<Health>()
                 .expect("unit health missing")
-                .current = health[index];
+                .current = unit_health[index];
             entity
                 .get_mut::<AttackCooldown>()
                 .expect("unit cooldown missing")
@@ -184,20 +311,71 @@ impl Simulation {
                 .get_mut::<TargetState>()
                 .expect("unit target missing")
                 .current = live_target;
+            *entity
+                .get_mut::<RetaliationState>()
+                .expect("unit retaliation state missing") = match attackers_this_tick[index] {
+                Some(attacker) => RetaliationState {
+                    attacker: Some(attacker),
+                    attacked_tick: Some(completed_tick),
+                },
+                None => RetaliationState::default(),
+            };
+        }
+
+        let mut building_deaths = Vec::new();
+        for (index, building) in buildings.iter().enumerate() {
+            if building_health[index] <= 0 {
+                building_deaths.push(building.entity);
+                deaths += 1;
+            } else {
+                self.world
+                    .entity_mut(building.entity)
+                    .get_mut::<Health>()
+                    .expect("building health missing")
+                    .current = building_health[index];
+            }
+        }
+        if !building_deaths.is_empty() {
+            for entity in building_deaths {
+                self.world.despawn(entity);
+            }
+            self.topology_dirty = true;
         }
 
         self.next_tick = self
             .next_tick
             .checked_add(1)
             .expect("tick counter exhausted");
+        let movement_and_commit = phase_start.elapsed();
+
+        let phase_start = Instant::now();
         let checksum = canonical_checksum(&self.world, self.next_tick);
+        let checksum_time = phase_start.elapsed();
+        let timings = TickTimings {
+            topology_and_timers,
+            production,
+            snapshot_and_spatial,
+            targeting,
+            combat,
+            movement_and_commit,
+            checksum: checksum_time,
+            total: tick_start.elapsed(),
+        };
 
         TickResult {
             completed_tick,
-            units_alive: units.len() - deaths,
+            units_alive: units.len() - unit_health.iter().filter(|health| **health <= 0).count(),
+            buildings_alive: buildings.len()
+                - building_health
+                    .iter()
+                    .filter(|health| **health <= 0)
+                    .count(),
             attacks_resolved,
             deaths,
+            units_spawned,
+            spawn_failures,
             checksum,
+            timings,
         }
     }
 
@@ -210,7 +388,17 @@ impl Simulation {
     pub fn unit_count(&self) -> usize {
         self.world
             .iter_entities()
-            .filter(|entity| entity.get::<SimId>().is_some())
+            .filter(|entity| {
+                entity.get::<Position>().is_some() && entity.get::<BuildingFootprint>().is_none()
+            })
+            .count()
+    }
+
+    #[must_use]
+    pub fn building_count(&self) -> usize {
+        self.world
+            .iter_entities()
+            .filter(|entity| entity.get::<BuildingFootprint>().is_some())
             .count()
     }
 
@@ -226,6 +414,17 @@ impl Simulation {
     }
 
     #[must_use]
+    pub fn buildings(&self) -> Vec<BuildingView> {
+        let mut buildings: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(building_view_from_entity)
+            .collect();
+        buildings.sort_unstable_by_key(|building| building.id);
+        buildings
+    }
+
+    #[must_use]
     pub fn unit(&self, id: SimId) -> Option<UnitView> {
         self.world
             .iter_entities()
@@ -233,11 +432,134 @@ impl Simulation {
             .find(|unit| unit.id == id)
     }
 
+    #[must_use]
+    pub fn building(&self, id: SimId) -> Option<BuildingView> {
+        self.world
+            .iter_entities()
+            .filter_map(building_view_from_entity)
+            .find(|building| building.id == id)
+    }
+
+    fn allocate_id(&mut self) -> SimId {
+        let id = SimId(self.next_id);
+        self.next_id = self.next_id.checked_add(1).expect("SimId space exhausted");
+        id
+    }
+
+    fn spawn_unit_unchecked(&mut self, unit: UnitSpawn) -> SimId {
+        let id = self.allocate_id();
+        self.world.spawn((
+            id,
+            unit.team,
+            Position(unit.position),
+            Health {
+                current: unit.health,
+                max: unit.health,
+            },
+            unit.attack,
+            AttackCooldown::default(),
+            TargetState::default(),
+            RetaliationState::default(),
+            unit.movement,
+            SpawnTick(self.next_tick),
+        ));
+        id
+    }
+
+    fn refresh_topology_if_dirty(&mut self) {
+        if !self.topology_dirty {
+            return;
+        }
+        let mut query = self.world.query::<&BuildingFootprint>();
+        let footprints: Vec<_> = query.iter(&self.world).copied().collect();
+        self.topology = TopologyGrid::build(
+            self.config.navigation_cell_size,
+            self.config.navigation_min,
+            self.config.navigation_max,
+            footprints,
+            self.config.team_objective,
+        );
+        self.topology_dirty = false;
+    }
+
     fn advance_cooldowns(&mut self) {
         let mut query = self.world.query::<&mut AttackCooldown>();
         for mut cooldown in query.iter_mut(&mut self.world) {
             cooldown.remaining = cooldown.remaining.saturating_sub(1);
         }
+    }
+
+    fn advance_production(&mut self) -> (usize, usize) {
+        let mut query = self.world.query::<(
+            Entity,
+            &SimId,
+            &Team,
+            &BuildingFootprint,
+            &ProductionProfile,
+            &ProductionState,
+        )>();
+        let mut attempts: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, _, _, _, state)| state.next_spawn_tick <= self.next_tick)
+            .map(
+                |(entity, id, team, footprint, profile, state)| ProductionAttempt {
+                    entity,
+                    id: *id,
+                    team: *team,
+                    footprint: *footprint,
+                    profile: *profile,
+                    next_spawn_tick: state.next_spawn_tick,
+                },
+            )
+            .collect();
+        attempts.sort_unstable_by_key(|attempt| attempt.id);
+
+        if attempts.is_empty() {
+            return (0, 0);
+        }
+
+        let mut occupied: HashSet<NavCell> = self
+            .units()
+            .into_iter()
+            .map(|unit| self.topology.cell_of_point(unit.position))
+            .collect();
+        let mut spawned = 0;
+        let mut failed = 0;
+
+        for attempt in attempts {
+            let preferred = preferred_spawn_cell(attempt.team, attempt.footprint);
+            let spawn_cell =
+                spiral_cells(preferred, attempt.profile.search_radius_cells).find(|cell| {
+                    self.topology.contains(*cell)
+                        && !self.topology.is_blocked(*cell)
+                        && !occupied.contains(cell)
+                });
+
+            if let Some(cell) = spawn_cell {
+                let position = self.topology.center_of_cell(cell);
+                self.spawn_unit_unchecked(UnitSpawn::from_template(
+                    attempt.team,
+                    position,
+                    attempt.profile.unit,
+                ));
+                occupied.insert(cell);
+                spawned += 1;
+            } else {
+                failed += 1;
+            }
+
+            let next = attempt
+                .next_spawn_tick
+                .checked_add(u64::from(attempt.profile.interval_ticks))
+                .expect("production tick overflow");
+            self.world
+                .entity_mut(attempt.entity)
+                .get_mut::<ProductionState>()
+                .expect("production state missing")
+                .next_spawn_tick = next;
+        }
+
+        (spawned, failed)
     }
 
     fn snapshot_units(&mut self) -> Vec<UnitSnapshot> {
@@ -250,13 +572,13 @@ impl Simulation {
             &AttackProfile,
             &AttackCooldown,
             &TargetState,
+            &RetaliationState,
             &MovementProfile,
             &SpawnTick,
         )>();
-
-        let mut units: Vec<UnitSnapshot> = query
+        let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, health, _, _, _, _, _, _)| health.current > 0)
             .map(
                 |(
                     entity,
@@ -267,71 +589,215 @@ impl Simulation {
                     attack,
                     cooldown,
                     target,
+                    retaliation,
                     movement,
                     spawn_tick,
-                )| {
-                    UnitSnapshot {
-                        entity,
-                        id: *id,
-                        team: *team,
-                        position: position.0,
-                        health: health.current,
-                        attack: *attack,
-                        cooldown_remaining: cooldown.remaining,
-                        target: target.current,
-                        movement: *movement,
-                        spawn_tick: spawn_tick.0,
-                    }
+                )| UnitSnapshot {
+                    entity,
+                    id: *id,
+                    team: *team,
+                    position: position.0,
+                    health: health.current,
+                    attack: *attack,
+                    cooldown_remaining: cooldown.remaining,
+                    target: target.current,
+                    retaliation: *retaliation,
+                    movement: *movement,
+                    spawn_tick: spawn_tick.0,
                 },
             )
             .collect();
-
         units.sort_unstable_by_key(|unit| unit.id);
         units
     }
 
-    fn select_targets(&self, units: &[UnitSnapshot], grid: &SpatialGrid) -> Vec<Option<SimId>> {
+    fn snapshot_buildings(&mut self) -> Vec<BuildingSnapshot> {
+        let mut query = self
+            .world
+            .query::<(Entity, &SimId, &Team, &BuildingFootprint, &Health)>();
+        let mut buildings: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, _, _, health)| health.current > 0)
+            .map(|(entity, id, team, footprint, health)| BuildingSnapshot {
+                entity,
+                id: *id,
+                team: *team,
+                footprint: *footprint,
+                health: health.current,
+            })
+            .collect();
+        buildings.sort_unstable_by_key(|building| building.id);
+        buildings
+    }
+
+    fn select_targets(
+        &self,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        grid: &SpatialGrid,
+    ) -> Vec<Option<SimId>> {
         self.pool.install(|| {
             units
                 .par_iter()
                 .map(|unit| {
-                    if let Some(current) = unit.target
-                        && let Some(index) = find_index_by_id(units, current)
-                        && is_valid_target(unit, &units[index])
-                        && unit.position.distance_sq(units[index].position)
-                            <= unit.attack.acquisition_range_sq()
-                    {
+                    let current = unit.target.filter(|target| {
+                        self.target_retainable_for(unit, *target, units, buildings)
+                    });
+                    let retaliation = self.recent_retaliation_target(unit, units, buildings);
+
+                    if let Some(current) = current {
+                        let current_fights_back = find_unit_index(units, current)
+                            .is_some_and(|index| units[index].target == Some(unit.id));
+                        if !current_fights_back
+                            && let Some(attacker) = retaliation
+                            && attacker != current
+                        {
+                            return Some(attacker);
+                        }
                         return Some(current);
                     }
 
-                    let mut best: Option<(u64, SimId)> = None;
-                    grid.for_each_candidate(
-                        unit.position,
-                        unit.attack.acquisition_range,
-                        |index| {
-                            let candidate = &units[index];
-                            if !is_valid_target(unit, candidate) {
-                                return;
-                            }
+                    if let Some(attacker) = retaliation {
+                        return Some(attacker);
+                    }
 
-                            let distance_sq = unit.position.distance_sq(candidate.position);
-                            if distance_sq > unit.attack.acquisition_range_sq() {
-                                return;
-                            }
-
-                            let key = (distance_sq, candidate.id);
-                            if best.is_none_or(|current| key < current) {
-                                best = Some(key);
-                            }
-                        },
-                    );
-                    best.map(|(_, id)| id)
+                    self.acquire_target(unit, units, buildings, grid)
                 })
                 .collect()
         })
     }
 
-    fn attack_intents(&self, units: &[UnitSnapshot]) -> Vec<AttackIntent> {
+    fn acquire_target(
+        &self,
+        source: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        grid: &SpatialGrid,
+    ) -> Option<SimId> {
+        let source_cell = self.topology.cell_of_point(source.position);
+        let mut best: Option<(u8, u64, SimId)> = None;
+        if let Some(component) = self.topology.component_id(source_cell) {
+            let enemy_team = 1u8
+                .checked_sub(source.team.0)
+                .expect("verification slice supports teams 0 and 1 only");
+            grid.for_each_candidate(
+                SpatialPartition::new(enemy_team, component),
+                source.position,
+                source.attack.acquisition_range,
+                |index| {
+                    let candidate = &units[index];
+                    debug_assert_ne!(source.team, candidate.team);
+                    let distance_sq = source.position.distance_sq(candidate.position);
+                    if distance_sq > source.attack.acquisition_range_sq()
+                        || (distance_sq > source.attack.range_sq()
+                            && source.movement.speed_per_tick == 0)
+                    {
+                        return;
+                    }
+                    let key = (0, distance_sq, candidate.id);
+                    if best.is_none_or(|current| key < current) {
+                        best = Some(key);
+                    }
+                },
+            );
+        }
+
+        for building in buildings {
+            if source.team == building.team || building.health <= 0 {
+                continue;
+            }
+            if self
+                .topology
+                .nearest_reachable_perimeter_cell(source_cell, building.footprint)
+                .is_none()
+            {
+                continue;
+            }
+            let distance_sq = point_to_footprint_distance_sq(
+                source.position,
+                building.footprint,
+                self.config.navigation_cell_size,
+            );
+            if distance_sq > source.attack.acquisition_range_sq()
+                || (distance_sq > source.attack.range_sq() && source.movement.speed_per_tick == 0)
+            {
+                continue;
+            }
+            let key = (1, distance_sq, building.id);
+            if best.is_none_or(|current| key < current) {
+                best = Some(key);
+            }
+        }
+        best.map(|(_, _, id)| id)
+    }
+
+    fn recent_retaliation_target(
+        &self,
+        source: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> Option<SimId> {
+        let previous_tick = self.next_tick.checked_sub(1)?;
+        if source.retaliation.attacked_tick != Some(previous_tick) {
+            return None;
+        }
+        let attacker = source.retaliation.attacker?;
+        self.target_retainable_for(source, attacker, units, buildings)
+            .then_some(attacker)
+    }
+
+    fn target_retainable_for(
+        &self,
+        source: &UnitSnapshot,
+        target_id: SimId,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> bool {
+        let pursuit_range = source
+            .attack
+            .range
+            .checked_add(self.config.target_pursuit_extra_range)
+            .expect("pursuit range overflowed validated coordinate bounds")
+            .max(source.attack.acquisition_range);
+        let pursuit_range = i64::from(pursuit_range);
+        let pursuit_range_sq = (pursuit_range * pursuit_range) as u64;
+        let source_cell = self.topology.cell_of_point(source.position);
+
+        if let Some(index) = find_unit_index(units, target_id) {
+            let target = &units[index];
+            let distance_sq = source.position.distance_sq(target.position);
+            return source.team != target.team
+                && target.health > 0
+                && distance_sq <= pursuit_range_sq
+                && (distance_sq <= source.attack.range_sq() || source.movement.speed_per_tick > 0)
+                && self
+                    .topology
+                    .same_component(source_cell, self.topology.cell_of_point(target.position));
+        }
+        if let Some(index) = find_building_index(buildings, target_id) {
+            let target = &buildings[index];
+            let distance_sq = point_to_footprint_distance_sq(
+                source.position,
+                target.footprint,
+                self.config.navigation_cell_size,
+            );
+            return source.team != target.team
+                && target.health > 0
+                && distance_sq <= pursuit_range_sq
+                && (distance_sq <= source.attack.range_sq() || source.movement.speed_per_tick > 0)
+                && self
+                    .topology
+                    .nearest_reachable_perimeter_cell(source_cell, target.footprint)
+                    .is_some();
+        }
+        false
+    }
+
+    fn attack_intents(
+        &self,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> Vec<AttackIntent> {
         self.pool.install(|| {
             units
                 .par_iter()
@@ -340,17 +806,30 @@ impl Simulation {
                     if source.spawn_tick == self.next_tick || source.cooldown_remaining != 0 {
                         return None;
                     }
-
                     let target_id = source.target?;
-                    let target_index = find_index_by_id(units, target_id)?;
-                    let target = &units[target_index];
-                    if source.position.distance_sq(target.position) > source.attack.range_sq() {
+                    let (target, distance_sq) =
+                        if let Some(index) = find_unit_index(units, target_id) {
+                            (
+                                TargetIndex::Unit(index),
+                                source.position.distance_sq(units[index].position),
+                            )
+                        } else {
+                            let index = find_building_index(buildings, target_id)?;
+                            (
+                                TargetIndex::Building(index),
+                                point_to_footprint_distance_sq(
+                                    source.position,
+                                    buildings[index].footprint,
+                                    self.config.navigation_cell_size,
+                                ),
+                            )
+                        };
+                    if distance_sq > source.attack.range_sq() {
                         return None;
                     }
-
                     Some(AttackIntent {
                         source_index,
-                        target_index,
+                        target,
                         source_id: source.id,
                         target_id,
                         damage: source.attack.damage,
@@ -361,29 +840,71 @@ impl Simulation {
         })
     }
 
-    fn resolve_movement(&self, units: &[UnitSnapshot], health: &[i32], positions: &mut [SimPoint]) {
+    fn resolve_movement(
+        &self,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        unit_health: &[i32],
+        building_health: &[i32],
+        positions: &mut [SimPoint],
+    ) {
         for (index, unit) in units.iter().enumerate() {
-            if health[index] <= 0 || unit.movement.speed_per_tick == 0 {
+            if unit_health[index] <= 0 || unit.movement.speed_per_tick == 0 {
                 continue;
             }
+            let source_cell = self.topology.cell_of_point(positions[index]);
 
-            if let Some(target_id) = unit.target
-                && let Some(target_index) = find_index_by_id(units, target_id)
-                && health[target_index] > 0
-            {
-                let target_position = positions[target_index];
-                if positions[index].distance_sq(target_position) > unit.attack.range_sq() {
-                    positions[index] = positions[index]
-                        .step_towards(target_position, unit.movement.speed_per_tick);
+            let target_cell = unit.target.and_then(|target_id| {
+                if let Some(target_index) = find_unit_index(units, target_id) {
+                    if unit_health[target_index] <= 0 {
+                        return None;
+                    }
+                    let target_position = positions[target_index];
+                    if positions[index].distance_sq(target_position) <= unit.attack.range_sq() {
+                        return Some(source_cell);
+                    }
+                    let cell = self.topology.cell_of_point(target_position);
+                    self.topology
+                        .same_component(source_cell, cell)
+                        .then_some(cell)
+                } else if let Some(target_index) = find_building_index(buildings, target_id) {
+                    if building_health[target_index] <= 0 {
+                        return None;
+                    }
+                    if point_to_footprint_distance_sq(
+                        positions[index],
+                        buildings[target_index].footprint,
+                        self.config.navigation_cell_size,
+                    ) <= unit.attack.range_sq()
+                    {
+                        return Some(source_cell);
+                    }
+                    self.topology.nearest_reachable_perimeter_cell(
+                        source_cell,
+                        buildings[target_index].footprint,
+                    )
+                } else {
+                    None
                 }
-                continue;
-            }
+            });
 
-            let objective_x = self.config.team_objective_x[usize::from(unit.team.0)];
-            positions[index] = positions[index].step_towards(
-                SimPoint::new(objective_x, positions[index].y),
-                unit.movement.speed_per_tick,
-            );
+            let next_cell = match target_cell {
+                Some(cell) if cell == source_cell => continue,
+                Some(cell) => self.topology.pursuit_step(source_cell, cell),
+                None => self.topology.objective_step(unit.team.0, source_cell),
+            };
+            let Some(next_cell) = next_cell else {
+                continue;
+            };
+            let target_position = self.topology.center_of_cell(next_cell);
+            let candidate =
+                positions[index].step_towards(target_position, unit.movement.speed_per_tick);
+            if !self
+                .topology
+                .is_blocked(self.topology.cell_of_point(candidate))
+            {
+                positions[index] = candidate;
+            }
         }
     }
 }
@@ -398,71 +919,255 @@ struct UnitSnapshot {
     attack: AttackProfile,
     cooldown_remaining: u16,
     target: Option<SimId>,
+    retaliation: RetaliationState,
     movement: MovementProfile,
     spawn_tick: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
+struct BuildingSnapshot {
+    entity: Entity,
+    id: SimId,
+    team: Team,
+    footprint: BuildingFootprint,
+    health: i32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProductionAttempt {
+    entity: Entity,
+    id: SimId,
+    team: Team,
+    footprint: BuildingFootprint,
+    profile: ProductionProfile,
+    next_spawn_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TargetIndex {
+    Unit(usize),
+    Building(usize),
+}
+
+#[derive(Debug, Clone, Copy)]
 struct AttackIntent {
     source_index: usize,
-    target_index: usize,
+    target: TargetIndex,
     source_id: SimId,
     target_id: SimId,
     damage: i32,
     cooldown_ticks: u16,
 }
 
+fn validate_unit_template(unit: crate::components::UnitTemplate) {
+    assert!(unit.health > 0);
+    assert!(unit.attack.damage >= 0);
+    assert!(unit.attack.range >= 0);
+    assert!(unit.attack.acquisition_range >= unit.attack.range);
+    assert!(unit.movement.speed_per_tick >= 0);
+}
+
+fn validate_unit_spawn(unit: UnitSpawn) {
+    validate_unit_template(crate::components::UnitTemplate {
+        health: unit.health,
+        attack: unit.attack,
+        movement: unit.movement,
+    });
+    assert!(unit.team.0 < 2, "verification slice supports two teams");
+}
+
+fn preferred_spawn_cell(team: Team, footprint: BuildingFootprint) -> NavCell {
+    let y = footprint.min_y + i32::from(footprint.height / 2);
+    if team.0 == 0 {
+        NavCell::new(footprint.max_x() + 1, y)
+    } else {
+        NavCell::new(footprint.min_x - 1, y)
+    }
+}
+
+fn spiral_cells(center: NavCell, radius: u16) -> impl Iterator<Item = NavCell> {
+    let radius = i32::from(radius);
+    std::iter::once(center).chain((1..=radius).flat_map(move |r| {
+        let min_x = center.x - r;
+        let max_x = center.x + r;
+        let min_y = center.y - r;
+        let max_y = center.y + r;
+        let top = (min_x..=max_x).map(move |x| NavCell::new(x, min_y));
+        let right = (min_y + 1..=max_y).map(move |y| NavCell::new(max_x, y));
+        let bottom = (min_x..max_x).rev().map(move |x| NavCell::new(x, max_y));
+        let left = (min_y + 1..max_y)
+            .rev()
+            .map(move |y| NavCell::new(min_x, y));
+        top.chain(right).chain(bottom).chain(left)
+    }))
+}
+
 fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitView> {
+    if entity.get::<BuildingFootprint>().is_some() {
+        return None;
+    }
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
         health: entity.get::<Health>()?.current,
         target: entity.get::<TargetState>()?.current,
+        last_attacker: entity.get::<RetaliationState>()?.attacker,
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
     })
 }
 
-fn is_valid_target(source: &UnitSnapshot, target: &UnitSnapshot) -> bool {
-    source.id != target.id && source.team != target.team && target.health > 0
+fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<BuildingView> {
+    let production = entity.get::<ProductionProfile>().copied();
+    Some(BuildingView {
+        id: *entity.get::<SimId>()?,
+        team: *entity.get::<Team>()?,
+        footprint: *entity.get::<BuildingFootprint>()?,
+        health: entity.get::<Health>()?.current,
+        production,
+        next_spawn_tick: entity
+            .get::<ProductionState>()
+            .map(|state| state.next_spawn_tick),
+    })
 }
 
-fn find_index_by_id(units: &[UnitSnapshot], id: SimId) -> Option<usize> {
+fn target_is_alive(
+    id: SimId,
+    units: &[UnitSnapshot],
+    buildings: &[BuildingSnapshot],
+    unit_health: &[i32],
+    building_health: &[i32],
+) -> bool {
+    find_unit_index(units, id).is_some_and(|index| unit_health[index] > 0)
+        || find_building_index(buildings, id).is_some_and(|index| building_health[index] > 0)
+}
+
+fn find_unit_index(units: &[UnitSnapshot], id: SimId) -> Option<usize> {
     units.binary_search_by_key(&id, |unit| unit.id).ok()
 }
 
+fn find_building_index(buildings: &[BuildingSnapshot], id: SimId) -> Option<usize> {
+    buildings
+        .binary_search_by_key(&id, |building| building.id)
+        .ok()
+}
+
+fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
+    a.min_x <= b.max_x() && a.max_x() >= b.min_x && a.min_y <= b.max_y() && a.max_y() >= b.min_y
+}
+
+fn point_to_footprint_distance_sq(
+    point: SimPoint,
+    footprint: BuildingFootprint,
+    cell_size: i32,
+) -> u64 {
+    let min_x = footprint.min_x * cell_size;
+    let min_y = footprint.min_y * cell_size;
+    let max_x = (footprint.max_x() + 1) * cell_size;
+    let max_y = (footprint.max_y() + 1) * cell_size;
+    let closest = SimPoint::new(point.x.clamp(min_x, max_x), point.y.clamp(min_y, max_y));
+    point.distance_sq(closest)
+}
+
 fn canonical_checksum(world: &World, next_tick: u64) -> u64 {
-    let mut units: Vec<CanonicalUnit> = world
+    let mut entities: Vec<CanonicalEntity> = world
         .iter_entities()
         .filter_map(|entity| {
-            Some(CanonicalUnit {
-                id: *entity.get::<SimId>()?,
-                team: *entity.get::<Team>()?,
-                position: entity.get::<Position>()?.0,
-                health: *entity.get::<Health>()?,
-                cooldown: *entity.get::<AttackCooldown>()?,
-                target: *entity.get::<TargetState>()?,
-                spawn_tick: *entity.get::<SpawnTick>()?,
-            })
+            let id = *entity.get::<SimId>()?;
+            let team = *entity.get::<Team>()?;
+            let health = *entity.get::<Health>()?;
+            if let Some(position) = entity.get::<Position>() {
+                Some(CanonicalEntity::Unit(CanonicalUnit {
+                    id,
+                    team,
+                    position: position.0,
+                    health,
+                    cooldown: *entity.get::<AttackCooldown>()?,
+                    target: *entity.get::<TargetState>()?,
+                    retaliation: *entity.get::<RetaliationState>()?,
+                    spawn_tick: *entity.get::<SpawnTick>()?,
+                }))
+            } else {
+                Some(CanonicalEntity::Building(CanonicalBuilding {
+                    id,
+                    team,
+                    footprint: *entity.get::<BuildingFootprint>()?,
+                    health,
+                    production: entity.get::<ProductionProfile>().copied(),
+                    production_state: entity.get::<ProductionState>().copied(),
+                }))
+            }
         })
         .collect();
-    units.sort_unstable_by_key(|unit| unit.id);
+    entities.sort_unstable_by_key(CanonicalEntity::id);
 
     let mut hash = Fnv64::new();
     hash.write_u64(next_tick);
-    hash.write_u64(units.len() as u64);
-    for unit in units {
-        hash.write_u64(unit.id.0);
-        hash.write_u8(unit.team.0);
-        hash.write_i32(unit.position.x);
-        hash.write_i32(unit.position.y);
-        hash.write_i32(unit.health.current);
-        hash.write_i32(unit.health.max);
-        hash.write_u16(unit.cooldown.remaining);
-        hash.write_u64(unit.target.current.map_or(0, |target| target.0));
-        hash.write_u64(unit.spawn_tick.0);
+    hash.write_u64(entities.len() as u64);
+    for entity in entities {
+        match entity {
+            CanonicalEntity::Unit(unit) => {
+                hash.write_u8(0);
+                hash.write_u64(unit.id.0);
+                hash.write_u8(unit.team.0);
+                hash.write_i32(unit.position.x);
+                hash.write_i32(unit.position.y);
+                hash.write_i32(unit.health.current);
+                hash.write_i32(unit.health.max);
+                hash.write_u16(unit.cooldown.remaining);
+                hash.write_u64(unit.target.current.map_or(0, |target| target.0));
+                hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
+                hash.write_u64(unit.retaliation.attacked_tick.unwrap_or(u64::MAX));
+                hash.write_u64(unit.spawn_tick.0);
+            }
+            CanonicalEntity::Building(building) => {
+                hash.write_u8(1);
+                hash.write_u64(building.id.0);
+                hash.write_u8(building.team.0);
+                hash.write_i32(building.footprint.min_x);
+                hash.write_i32(building.footprint.min_y);
+                hash.write_u16(building.footprint.width);
+                hash.write_u16(building.footprint.height);
+                hash.write_i32(building.health.current);
+                hash.write_i32(building.health.max);
+                if let Some(profile) = building.production {
+                    hash.write_u8(1);
+                    hash.write_u16(profile.interval_ticks);
+                    hash.write_u16(profile.search_radius_cells);
+                    hash.write_i32(profile.unit.health);
+                    hash.write_i32(profile.unit.attack.damage);
+                    hash.write_i32(profile.unit.attack.range);
+                    hash.write_i32(profile.unit.attack.acquisition_range);
+                    hash.write_u16(profile.unit.attack.cooldown_ticks);
+                    hash.write_i32(profile.unit.movement.speed_per_tick);
+                    hash.write_u64(
+                        building
+                            .production_state
+                            .expect("production profile missing state")
+                            .next_spawn_tick,
+                    );
+                } else {
+                    hash.write_u8(0);
+                }
+            }
+        }
     }
     hash.finish()
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CanonicalEntity {
+    Unit(CanonicalUnit),
+    Building(CanonicalBuilding),
+}
+
+impl CanonicalEntity {
+    const fn id(&self) -> SimId {
+        match self {
+            Self::Unit(unit) => unit.id,
+            Self::Building(building) => building.id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -473,7 +1178,18 @@ struct CanonicalUnit {
     health: Health,
     cooldown: AttackCooldown,
     target: TargetState,
+    retaliation: RetaliationState,
     spawn_tick: SpawnTick,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CanonicalBuilding {
+    id: SimId,
+    team: Team,
+    footprint: BuildingFootprint,
+    health: Health,
+    production: Option<ProductionProfile>,
+    production_state: Option<ProductionState>,
 }
 
 struct Fnv64(u64);

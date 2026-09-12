@@ -27,18 +27,20 @@ No architectural assumption may require a formation, squad, lane segment, or wor
 
 ## 3. Target lifecycle
 
+Targeting is **engagement-sticky**, not a continuous closest-target search.
+
 Each targeting phase conceptually performs:
 
-1. resolve existing `SimId` target;
-2. check whether it remains valid under retention rules;
-3. retain it if valid and retention rules prefer retention;
-4. otherwise query nearby candidates;
-5. filter candidates by eligibility;
-6. score/rank each eligible candidate;
-7. select the deterministic best candidate;
-8. store the new target or `None`.
+1. resolve the existing `SimId` target;
+2. drop it if it is dead, disappeared, invisible/untargetable, no longer attackable by any applicable attack, unreachable from any valid attack position, or beyond the pursuit leash;
+3. if the current target is still valid, normally retain it even if a closer/better enemy has appeared;
+4. exception: if the current target is **not** attacking this unit and another valid enemy actually attacked this unit during the preceding combat resolution, switch to that attacker;
+5. if there is no retained target, prefer a recent valid attacker, otherwise query nearby candidates and acquire a fresh target;
+6. store the selected target or `None`.
 
-The exact frequency of full reacquisition may be optimized later, but invalid targets MUST be handled deterministically.
+An enemy merely selecting, approaching, or standing near a unit does not trigger retaliation. The retaliation rule is caused by an actual resolved attack. In the deterministic phased implementation, an attack received on tick `N` can affect target selection on tick `N+1`.
+
+A newly visible closer unit MUST NOT cause gratuitous retargeting while the existing engagement remains valid.
 
 ## 4. Candidate discovery
 
@@ -80,18 +82,13 @@ The player builder is explicitly outside ordinary combat targetability. It MUST 
 
 The exact Castle Fight-compatible ranking needs empirical/gameplay specification work. The engine nevertheless requires a total deterministic ordering.
 
-A ranking function SHOULD conceptually produce comparable terms such as:
+Ranking applies primarily when acquiring a **new** target; it does not continuously replace a valid current target.
 
-```text
-forced/taunt priority
-explicit target class/threat priority
-current-target retention preference
-range/distance preference
-other gameplay-specific preference
-SimId final tie-break
-```
+For fresh acquisition, the standard rules prefer attackable enemy combat units over non-attacking buildings. Within an otherwise equivalent class, deterministic distance and then `SimId` may be used to resolve candidates that become visible/eligible together.
 
-For the standard rules, an eligible enemy combat unit outranks a non-attacking building even when that passive building is closer. This is important around cages: if the caged units themselves are unreachable to a melee attacker, reachable enemy units outside the cage remain preferred; if no higher-priority combat-unit target is available, the cage buildings themselves may become the closest valid targets. More detailed ordering for attack-capable buildings/objectives remains content-compatible behavior to verify.
+This is important around cages: if caged units are unreachable to a melee attacker, reachable enemy units outside the cage are preferred; if no attackable combat-unit target is available, the cage buildings themselves may become valid fallback targets. A unit already engaged with a valid cage building does not abandon it merely because another passive candidate is closer.
+
+Forced-target/taunt rules, attack-capable building priorities, and other special threat classes may add explicit exceptions later.
 
 Distance SHOULD be compared using deterministic squared fixed/integer distance where possible.
 
@@ -99,22 +96,22 @@ If two candidates are otherwise identical, the project explicitly accepts stable
 
 ## 7. Target retention
 
-Units SHOULD NOT necessarily retarget every tick.
+A valid engagement is retained until a defined break condition occurs or the retaliation exception applies.
 
-Retention is important both for performance and for stable/comprehensible combat behavior.
+A current target is dropped when, as applicable:
 
-Rules must eventually define when a current target is dropped, including:
-
-- target death/despawn;
-- target becomes untargetable;
-- target leaves allowed acquisition/retention range;
-- attacker becomes disabled;
-- taunt/forced-target effect;
-- attack mode can no longer hit target category;
+- it dies/despawns or otherwise disappears;
+- it becomes invisible, invulnerable, untargetable, or otherwise invalid for every applicable attack;
+- its target class is no longer attackable;
 - no reachable attack position remains for any applicable attack;
-- explicit content-specific retarget rule.
+- it exceeds the pursuit/chase leash;
+- an explicit forced-target rule overrides it.
 
-Retention semantics MUST be deterministic and individually evaluated.
+A short pursuit leash is part of standard behavior: units chase a retreating target for only a modest distance before giving up. The verification implementation initially uses a **3-tile extra pursuit allowance** beyond ordinary attack range, while never making retention shorter than the unit's normal acquisition range. The exact content-compatible value may be tuned later.
+
+Retaliation has one important guard: if current target `B` is itself attacking `A`, then `A` stays engaged with `B` even if another unit `C` also attacks `A`. `C` only pre-empts `B` when `B` is not fighting back and `C` is a valid target that `A` is capable of attacking.
+
+Builder-held item damage and other explicitly non-retaliatory effect sources MUST NOT populate this combat-attacker retaliation state.
 
 ## 8. Combat intent
 
@@ -363,16 +360,19 @@ The targeting/combat test suite MUST eventually include:
 4. caged unit remains targetable by a ranged attacker that can actually hit it;
 5. melee attacker rejects a caged unit with no reachable attack position and can instead acquire a reachable cage building;
 6. reachable enemy combat unit outside the cage outranks a closer non-attacking cage building;
-7. lost/dead/unreachable target triggers deterministic reacquisition;
-8. same battle yields identical checksum at different worker counts;
-9. same-tick multi-attacker damage follows documented canonical/death precedence;
-10. a stun applied before attack resolution cancels the affected source's pending attack;
-11. a unit cannot attack on its spawn tick;
-12. projectile impact timing is identical across runs;
-13. deterministic random proc/crit values do not change with worker count;
-14. attack building performs independent target selection;
-15. melee attack has no authoritative projectile trajectory;
-16. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
-17. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
-18. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
-19. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.
+7. a valid current target is retained even when a closer non-attacking enemy appears;
+8. when current target `B` is not attacking `A`, a valid unit `C` that actually attacks `A` causes `A` to switch to `C` on the next targeting phase;
+9. when `B` is attacking `A`, another attacker `C` does not break that mutual engagement;
+10. dead/invisible/untargetable/unreachable/out-of-pursuit target triggers deterministic reacquisition;
+11. same battle yields identical checksum at different worker counts;
+12. same-tick multi-attacker damage follows documented canonical/death precedence;
+13. a stun applied before attack resolution cancels the affected source's pending attack;
+14. a unit cannot attack on its spawn tick;
+15. projectile impact timing is identical across runs;
+16. deterministic random proc/crit values do not change with worker count;
+17. attack building performs independent target selection;
+18. melee attack has no authoritative projectile trajectory;
+19. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
+20. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
+21. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
+22. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.

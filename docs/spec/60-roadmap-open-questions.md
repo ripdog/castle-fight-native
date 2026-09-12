@@ -332,20 +332,21 @@ Compatibility work still needs to establish:
 
 These should become small executable fixtures as soon as decided.
 
-## 17. Partially resolved — target ranking compatibility
+## 17. Partially resolved — target acquisition and engagement
 
-The initial rules establish that a candidate requiring pursuit is invalid when the attacker has no reachable attack position; a unit that can hit a caged target from its current/reachable position may still select it. Eligible enemy combat units outrank non-attacking buildings, so an attacker unable to hit units inside a cage may instead attack the cage buildings while still preferring reachable enemy units outside it. Stable `SimId` is accepted as the final exact tie-break.
+The initial rules establish that a candidate requiring pursuit is invalid when the attacker has no reachable attack position; a unit that can hit a caged target from its current/reachable position may still select it. Eligible enemy combat units outrank non-attacking buildings for **fresh acquisition**, so an attacker unable to hit units inside a cage may instead attack cage buildings while still preferring reachable enemy units outside it. Stable `SimId` is accepted as the final exact tie-break.
+
+Current-target behavior is now also defined: engagements are sticky. A closer/new enemy does not replace a valid current target. If current target `B` is not attacking `A` and another valid unit `C` actually attacks `A`, then `A` switches to `C` on the next targeting phase. If `B` is attacking `A`, that mutual engagement is retained. Dead, disappeared, invisible, invulnerable, unattackable, unreachable, or sufficiently distant retreating targets are dropped. The verification implementation starts with a provisional three-tile extra pursuit allowance.
 
 Compatibility work still needs to investigate/decide:
 
-- current target stickiness;
 - finer target priority classes, including attack-capable buildings/objectives;
-- acquisition vs attack range hysteresis;
-- whether attack buildings use the same base ranking rules as units;
-- aggro/taunt mechanics, while preserving the rule that damage from a builder-held item does not by itself make the builder a target;
+- exact acquisition/pursuit distances per unit/content type;
+- whether attack buildings use the same base acquisition rules as units;
+- explicit taunt/forced-target mechanics, while preserving the rule that builder-held item damage does not create ordinary retaliation;
 - detailed air/ground/building preferences.
 
-The engine provides the deterministic reachability filter and total ordering; content/game rules fill in the remaining semantic score.
+The engine provides deterministic reachability/capability filtering, sticky engagement state, retaliation state, and total ordering; content/game rules fill in the remaining semantic score.
 
 ## 18. Open question — transport
 

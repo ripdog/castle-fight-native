@@ -1,5 +1,7 @@
 use crate::{
-    components::{AttackProfile, MovementProfile, Team, UnitSpawn},
+    components::{
+        AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, Team, UnitSpawn,
+    },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     simulation::Simulation,
 };
@@ -46,5 +48,72 @@ pub fn populate_lane_battle(simulation: &mut Simulation, total_units: usize) {
                 movement,
             });
         }
+    }
+}
+
+pub fn populate_dense_cage_battle(simulation: &mut Simulation, total_units: usize) {
+    assert!(total_units >= 2);
+    assert!(
+        total_units.is_multiple_of(2),
+        "fixture requires an even unit count"
+    );
+
+    let cage_team = Team(1);
+    for footprint in [
+        BuildingFootprint::new(59, -9, 1, 19),
+        BuildingFootprint::new(68, -9, 1, 19),
+        BuildingFootprint::new(60, -9, 8, 1),
+        BuildingFootprint::new(60, 9, 8, 1),
+    ] {
+        simulation.spawn_building(BuildingSpawn {
+            team: cage_team,
+            footprint,
+            health: 1_000_000_000,
+            production: None,
+        });
+    }
+
+    let attack = AttackProfile {
+        damage: 5,
+        range: 2 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 12 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 10,
+    };
+    let movement = MovementProfile {
+        speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+    };
+    let per_team = total_units / 2;
+
+    for index in 0..per_team {
+        let column = (index % 16) as i32;
+        let row = (index / 16) as i32;
+        simulation.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(
+                (58 * SUBUNITS_PER_WORLD_UNIT) - column * (SUBUNITS_PER_WORLD_UNIT / 3),
+                ((row % 48) - 24) * (SUBUNITS_PER_WORLD_UNIT / 3),
+            ),
+            health: 10_000,
+            attack,
+            movement,
+        });
+    }
+
+    for index in 0..per_team {
+        let cell_x = 60 + (index % 8) as i32;
+        let cell_y = -8 + ((index / 8) % 17) as i32;
+        let subcell = (index / (8 * 17)) as i32;
+        let jitter_x = (subcell % 8) * (SUBUNITS_PER_WORLD_UNIT / 16);
+        let jitter_y = ((subcell / 8) % 8) * (SUBUNITS_PER_WORLD_UNIT / 16);
+        simulation.spawn_unit(UnitSpawn {
+            team: cage_team,
+            position: SimPoint::new(
+                cell_x * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 4 + jitter_x,
+                cell_y * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 4 + jitter_y,
+            ),
+            health: 10_000,
+            attack,
+            movement,
+        });
     }
 }
