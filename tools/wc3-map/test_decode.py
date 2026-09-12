@@ -103,6 +103,56 @@ class LuaIndexTests(unittest.TestCase):
         self.assertEqual(indexed["call_edges"][("outer", "callback")], 1)
         self.assertGreater(indexed["functions"][0]["end"], indexed["functions"][0]["start"])
 
+    def test_extracts_protected_ability_table_and_jass_add_overlap(self) -> None:
+        ability = int.from_bytes(b"A005", "big")
+        source = (
+            "function xD()"
+            "AbilityLevelFields_AbilityLevelFields_cd(_I[_d[1]](1093677109,0),60.0)"
+            "AbilityLevelFields_AbilityLevelFields_mana(_I[_d[2]](1093677109,0),0)"
+            "end "
+            "function applyProtectedAbilityFieldsForJassAdd(unit,abil) "
+            "if(abil==1093677109)then "
+            "__wurst_safe_BlzSetAbilityRealLevelField(unit,ABILITY_RLF_COOLDOWN,0,60.)"
+            "__wurst_safe_BlzSetAbilityIntegerLevelField(unit,ABILITY_ILF_MANA_COST,0,0) end end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {ability})
+
+        self.assertEqual(len(indexed["protected_ability_fields"]), 2)
+        fields = {row["field"]: row for row in indexed["protected_ability_fields"]}
+        self.assertEqual(fields["cooldown"]["value_text"], "60.0")
+        self.assertEqual(fields["mana_cost"]["value_text"], "0")
+        self.assertTrue(fields["cooldown"]["jass_add_restore"])
+        self.assertEqual(
+            {row["canonical_relation"] for row in indexed["jass_add_protected_fields"]},
+            {"canonical-match"},
+        )
+
+    def test_allows_jass_add_restore_absent_from_canonical_table(self) -> None:
+        source = (
+            "function xD() end "
+            "function applyProtectedAbilityFieldsForJassAdd(unit,abil) "
+            "if(abil==1093677360)then "
+            "__wurst_safe_BlzSetAbilityRealLevelField(unit,ABILITY_RLF_COOLDOWN,0,3.) end end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, set())
+
+        self.assertEqual(indexed["protected_ability_fields"], [])
+        self.assertEqual(indexed["jass_add_protected_fields"][0]["canonical_relation"], "jass-only")
+
+    def test_rejects_disagreeing_protected_jass_add_restore(self) -> None:
+        source = (
+            "function xD()"
+            "AbilityLevelFields_AbilityLevelFields_cd(_I[_d[1]](1093677109,0),60.0) end "
+            "function applyProtectedAbilityFieldsForJassAdd(unit,abil) "
+            "if(abil==1093677109)then "
+            "__wurst_safe_BlzSetAbilityRealLevelField(unit,ABILITY_RLF_COOLDOWN,0,30.) end end"
+        ).encode("ascii")
+
+        with self.assertRaisesRegex(ValueError, "disagrees with xD table"):
+            DECODE.analyze_lua(source, set())
+
     def test_propagates_rawcode_context_to_runtime_mutator_through_named_calls(self) -> None:
         rawcode = int.from_bytes(b"ABCD", "big")
         source = (

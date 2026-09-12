@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Iterable, Iterator
 
 
@@ -211,6 +212,262 @@ def _is_runtime_mutator(callee: str) -> tuple[bool, str]:
     }:
         return True, normalized
     return False, normalized
+
+
+def _function_body_tokens(
+    data: bytes,
+    functions: list[dict[str, object]],
+    name: str,
+) -> tuple[int, list[LuaToken]] | None:
+    matches = [function for function in functions if function["name"] == name]
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one Lua function named {name!r}, found {len(matches)}")
+    start = int(matches[0]["start"])
+    end = int(matches[0]["end"])
+    return start, list(iter_lua_tokens(data[start:end]))
+
+
+def _call_arguments(tokens: list[LuaToken], callee_index: int) -> tuple[list[list[LuaToken]], int]:
+    if callee_index + 1 >= len(tokens) or tokens[callee_index + 1].text != "(":
+        raise ValueError(f"expected call after {tokens[callee_index].text!r}")
+    args: list[list[LuaToken]] = []
+    current: list[LuaToken] = []
+    paren_depth = 1
+    bracket_depth = 0
+    brace_depth = 0
+    index = callee_index + 2
+    while index < len(tokens):
+        token = tokens[index]
+        if token.kind == "symbol":
+            if token.text == "(":
+                paren_depth += 1
+            elif token.text == ")":
+                paren_depth -= 1
+                if paren_depth == 0:
+                    args.append(current)
+                    return args, index + 1
+            elif token.text == "[":
+                bracket_depth += 1
+            elif token.text == "]":
+                bracket_depth -= 1
+            elif token.text == "{":
+                brace_depth += 1
+            elif token.text == "}":
+                brace_depth -= 1
+            elif token.text == "," and paren_depth == 1 and bracket_depth == 0 and brace_depth == 0:
+                args.append(current)
+                current = []
+                index += 1
+                continue
+        if paren_depth <= 0 or bracket_depth < 0 or brace_depth < 0:
+            raise ValueError(f"malformed Lua call near byte {tokens[callee_index].start}")
+        current.append(token)
+        index += 1
+    raise ValueError(f"unterminated Lua call near byte {tokens[callee_index].start}")
+
+
+def _numeric_literal_text(tokens: list[LuaToken]) -> str:
+    if not tokens:
+        raise ValueError("empty Lua numeric literal")
+    text = "".join(token.text for token in tokens)
+    allowed = all(
+        token.kind == "number" or (token.kind == "symbol" and token.text in {"+", "-", "."})
+        for token in tokens
+    )
+    if not allowed:
+        raise ValueError(f"non-literal Lua numeric expression: {text!r}")
+    try:
+        Decimal(text)
+    except InvalidOperation as error:
+        raise ValueError(f"invalid Lua numeric literal: {text!r}") from error
+    return text
+
+
+def _protected_row_reference(tokens: list[LuaToken]) -> tuple[int, int]:
+    if len(tokens) < 7 or tokens[0].kind != "ident" or tokens[0].text != "_I" or tokens[1].text != "[":
+        raise ValueError("protected ability row is not referenced through _I[...](rawcode, level)")
+    if tokens[-1].text != ")":
+        raise ValueError("protected ability row reference does not end in a call")
+    depth = 0
+    opening = None
+    for index in range(len(tokens) - 1, -1, -1):
+        token = tokens[index]
+        if token.text == ")":
+            depth += 1
+        elif token.text == "(":
+            depth -= 1
+            if depth == 0:
+                opening = index
+                break
+    if opening is None or opening == 0 or tokens[opening - 1].text != "]":
+        raise ValueError("protected ability row reference has unexpected registry-call shape")
+    row_args = tokens[opening + 1 : -1]
+    if (
+        len(row_args) != 3
+        or row_args[0].kind != "number"
+        or row_args[0].integer_value is None
+        or row_args[1].text != ","
+        or row_args[2].kind != "number"
+        or row_args[2].integer_value is None
+    ):
+        raise ValueError("protected ability row reference requires integer rawcode and level index")
+    rawcode = int(row_args[0].integer_value)
+    level_index = int(row_args[2].integer_value)
+    if rawcode <= 0 or level_index < 0:
+        raise ValueError("protected ability row has invalid rawcode or level index")
+    return rawcode, level_index
+
+
+def _extract_protected_ability_fields(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    body = _function_body_tokens(data, functions, "xD")
+    if body is None:
+        return []
+    function_start, tokens = body
+    callees = {
+        "AbilityLevelFields_AbilityLevelFields_cd": "cooldown",
+        "AbilityLevelFields_AbilityLevelFields_mana": "mana_cost",
+    }
+    fields: list[dict[str, object]] = []
+    seen: set[tuple[int, int, str]] = set()
+    for index, token in enumerate(tokens):
+        if token.kind != "ident" or token.text not in callees:
+            continue
+        args, _next = _call_arguments(tokens, index)
+        if len(args) != 2:
+            raise ValueError(f"{token.text} in xD must have exactly two arguments")
+        rawcode, level_index = _protected_row_reference(args[0])
+        value_text = _numeric_literal_text(args[1])
+        field = callees[token.text]
+        value = Decimal(value_text)
+        if field == "mana_cost" and value != value.to_integral_value():
+            raise ValueError(f"protected mana cost must be an integer, got {value_text!r}")
+        key = (rawcode, level_index, field)
+        if key in seen:
+            raise ValueError(f"duplicate protected ability field in xD: {key}")
+        seen.add(key)
+        fields.append({
+            "ability_id": rawcode,
+            "level_index": level_index,
+            "field": field,
+            "value_text": value_text,
+            "byte_offset": function_start + token.start,
+            "source_function": "xD",
+            "jass_add_restore": False,
+        })
+    return fields
+
+
+def _extract_jass_add_protected_fields(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    function_name = "applyProtectedAbilityFieldsForJassAdd"
+    body = _function_body_tokens(data, functions, function_name)
+    if body is None:
+        return []
+    function_start, tokens = body
+    mutators = {
+        "__wurst_safe_BlzSetAbilityRealLevelField": ("ABILITY_RLF_COOLDOWN", "cooldown"),
+        "BlzSetAbilityRealLevelField": ("ABILITY_RLF_COOLDOWN", "cooldown"),
+        "__wurst_safe_BlzSetAbilityIntegerLevelField": ("ABILITY_ILF_MANA_COST", "mana_cost"),
+        "BlzSetAbilityIntegerLevelField": ("ABILITY_ILF_MANA_COST", "mana_cost"),
+    }
+    current_rawcode: int | None = None
+    guard_variable: str | None = None
+    fields: list[dict[str, object]] = []
+    seen: set[tuple[int, int, str]] = set()
+
+    for index, token in enumerate(tokens):
+        if token.kind == "ident" and token.text in {"if", "elseif"}:
+            condition = tokens[index + 1 : index + 7]
+            if (
+                len(condition) == 6
+                and condition[0].text == "("
+                and condition[1].kind == "ident"
+                and condition[2].text == "=="
+                and condition[3].kind == "number"
+                and condition[3].integer_value is not None
+                and condition[4].text == ")"
+                and condition[5].kind == "ident"
+                and condition[5].text == "then"
+            ):
+                variable = condition[1].text
+                if guard_variable is None:
+                    guard_variable = variable
+                elif variable != guard_variable:
+                    continue
+                current_rawcode = int(condition[3].integer_value)
+            continue
+
+        if token.kind != "ident" or token.text not in mutators:
+            continue
+        if current_rawcode is None:
+            raise ValueError(f"protected JASS-add mutator at byte {function_start + token.start} has no rawcode guard")
+        args, _next = _call_arguments(tokens, index)
+        if len(args) != 4:
+            raise ValueError(f"{token.text} in {function_name} must have four arguments")
+        field_constant, field = mutators[token.text]
+        if len(args[1]) != 1 or args[1][0].kind != "ident" or args[1][0].text != field_constant:
+            raise ValueError(f"unexpected protected JASS-add field constant in {token.text}")
+        if len(args[2]) != 1 or args[2][0].kind != "number" or args[2][0].integer_value is None:
+            raise ValueError(f"protected JASS-add level index must be an integer in {token.text}")
+        level_index = int(args[2][0].integer_value)
+        value_text = _numeric_literal_text(args[3])
+        value = Decimal(value_text)
+        if field == "mana_cost" and value != value.to_integral_value():
+            raise ValueError(f"protected JASS-add mana cost must be an integer, got {value_text!r}")
+        key = (current_rawcode, level_index, field)
+        if key in seen:
+            raise ValueError(f"duplicate protected JASS-add field: {key}")
+        seen.add(key)
+        fields.append({
+            "ability_id": current_rawcode,
+            "level_index": level_index,
+            "field": field,
+            "value_text": value_text,
+            "byte_offset": function_start + token.start,
+            "source_function": function_name,
+        })
+    return fields
+
+
+def _cross_check_protected_ability_fields(
+    protected_fields: list[dict[str, object]],
+    jass_add_fields: list[dict[str, object]],
+) -> None:
+    """Mark overlapping JASS-add restores and require exact agreement.
+
+    The generated JASS-add compatibility helper contains one field (`A010`
+    cooldown) whose static object value is already correct, so it is not
+    present in the canonical protected table. Such JASS-only rows are retained
+    for downstream comparison with resolved object data rather than rejected.
+    """
+    protected = {
+        (int(row["ability_id"]), int(row["level_index"]), str(row["field"])): row
+        for row in protected_fields
+    }
+    for jass_row in jass_add_fields:
+        key = (
+            int(jass_row["ability_id"]),
+            int(jass_row["level_index"]),
+            str(jass_row["field"]),
+        )
+        table_row = protected.get(key)
+        if table_row is None:
+            jass_row["canonical_relation"] = "jass-only"
+            continue
+        if Decimal(str(table_row["value_text"])) != Decimal(str(jass_row["value_text"])):
+            raise ValueError(
+                f"JASS-add protected field disagrees with xD table for {key}: "
+                f"{jass_row['value_text']} != {table_row['value_text']}"
+            )
+        table_row["jass_add_restore"] = True
+        jass_row["canonical_relation"] = "canonical-match"
 
 
 def _rawcode_mutator_traces(
@@ -576,6 +833,10 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     for site in runtime_mutators:
         site["direct_map_rawcodes"] = sorted(rawcodes_by_function.get(site["function"], ()))
 
+    protected_ability_fields = _extract_protected_ability_fields(data, functions)
+    jass_add_protected_fields = _extract_jass_add_protected_fields(data, functions)
+    _cross_check_protected_ability_fields(protected_ability_fields, jass_add_protected_fields)
+
     rawcode_mutator_traces, resolved_call_edges = _rawcode_mutator_traces(
         functions,
         call_edges,
@@ -598,6 +859,8 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_rawcodes": function_rawcodes,
         "runtime_mutators": runtime_mutators,
         "rawcode_mutator_traces": rawcode_mutator_traces,
+        "protected_ability_fields": protected_ability_fields,
+        "jass_add_protected_fields": jass_add_protected_fields,
         "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
     }

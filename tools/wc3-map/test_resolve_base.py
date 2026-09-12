@@ -142,6 +142,34 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["unresolved_placed_object_types"], [])
         self.assertEqual(summary["missing_placed_pathing_textures"], [])
 
+    def test_protected_ability_runtime_table_overrides_static_sentinels(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["protected_ability_runtime_fields"], 452)
+        self.assertEqual(summary["protected_ability_runtime_field_comparisons"], {"static-differs": 452})
+
+        with (self.resolved / "protected-ability-fields.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        indexed = {(row["rawcode"], row["level"], row["field"]): row for row in rows}
+
+        rescue = indexed[("A005", "1", "cooldown")]
+        self.assertEqual(rescue["runtime_value"], "60.0")
+        self.assertEqual(rescue["static_resolved_value"], "99")
+        self.assertEqual(rescue["comparison"], "static-differs")
+
+        snowfall = indexed[("A0HO", "1", "mana_cost")]
+        self.assertEqual(snowfall["runtime_value"], "15")
+        self.assertEqual(snowfall["static_resolved_value"], "9999")
+
+    def test_jass_add_restore_cross_check_keeps_static_match(self) -> None:
+        with (self.resolved / "protected-ability-jass-add-restores.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        jass_only = [row for row in rows if row["canonical_relation"] == "jass-only"]
+        self.assertEqual(len(jass_only), 1)
+        self.assertEqual(jass_only[0]["rawcode"], "A010")
+        self.assertEqual(jass_only[0]["runtime_value"], "3.")
+        self.assertEqual(jass_only[0]["static_resolved_value"], "3")
+        self.assertEqual(jass_only[0]["comparison"], "static-match")
+
 
 if __name__ == "__main__":
     unittest.main()

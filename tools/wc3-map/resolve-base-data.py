@@ -1075,6 +1075,95 @@ def main() -> None:
         ability_rows,
     )
 
+    def protected_static_value(rawcode: str, level: int, field: str) -> tuple[Any, str]:
+        field_id = {"cooldown": "acdn", "mana_cost": "amcs"}[field]
+        object_fields = rows_by_object.get(("abilities", rawcode), {})
+        row = object_fields.get((field_id, level, 0)) or object_fields.get((field_id, 0, 0))
+        if row is None:
+            return None, ""
+        return row["recovered_value"], str(row["selection"])
+
+    def protected_comparison(runtime_value: str, static_value: Any) -> str:
+        if static_value is None:
+            return "static-missing"
+        runtime_number = numeric(runtime_value)
+        static_number = numeric(static_value)
+        if runtime_number is not None and static_number is not None:
+            return "static-match" if math.isclose(runtime_number, static_number, rel_tol=0.0, abs_tol=1e-6) else "static-differs"
+        return "static-match" if str(runtime_value) == str(static_value) else "static-differs"
+
+    protected_rows: list[list[Any]] = []
+    protected_comparisons: Counter[str] = Counter()
+    protected_path = map_root / "script" / "protected-ability-fields.tsv"
+    if protected_path.exists():
+        with protected_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                rawcode = row["rawcode"]
+                level = int(row["level"])
+                static_value, static_selection = protected_static_value(rawcode, level, row["field"])
+                comparison = protected_comparison(row["runtime_value"], static_value)
+                protected_comparisons[comparison] += 1
+                protected_rows.append([
+                    rawcode,
+                    row["rawcode_integer"],
+                    row["names"],
+                    row["level_index"],
+                    level,
+                    row["field"],
+                    row["runtime_value"],
+                    value_as_text(static_value),
+                    static_selection,
+                    comparison,
+                    row["jass_add_restore"],
+                    row["source_function"],
+                    row["byte_offset"],
+                ])
+    write_tsv(
+        output / "protected-ability-fields.tsv",
+        [
+            "rawcode", "rawcode_integer", "names", "level_index", "level", "field", "runtime_value",
+            "static_resolved_value", "static_selection", "comparison", "jass_add_restore", "source_function",
+            "byte_offset",
+        ],
+        protected_rows,
+    )
+
+    protected_jass_rows: list[list[Any]] = []
+    protected_jass_comparisons: Counter[str] = Counter()
+    protected_jass_path = map_root / "script" / "protected-ability-jass-add-restores.tsv"
+    if protected_jass_path.exists():
+        with protected_jass_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                rawcode = row["rawcode"]
+                level = int(row["level"])
+                static_value, static_selection = protected_static_value(rawcode, level, row["field"])
+                comparison = protected_comparison(row["runtime_value"], static_value)
+                protected_jass_comparisons[comparison] += 1
+                protected_jass_rows.append([
+                    rawcode,
+                    row["rawcode_integer"],
+                    row["names"],
+                    row["level_index"],
+                    level,
+                    row["field"],
+                    row["runtime_value"],
+                    value_as_text(static_value),
+                    static_selection,
+                    comparison,
+                    row["canonical_relation"],
+                    row["source_function"],
+                    row["byte_offset"],
+                ])
+    write_tsv(
+        output / "protected-ability-jass-add-restores.tsv",
+        [
+            "rawcode", "rawcode_integer", "names", "level_index", "level", "field", "runtime_value",
+            "static_resolved_value", "static_selection", "comparison", "canonical_relation", "source_function",
+            "byte_offset",
+        ],
+        protected_jass_rows,
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -1143,11 +1232,16 @@ def main() -> None:
         "missing_placed_pathing_textures": sorted(missing_placed_pathing),
         "unresolved_base_objects": unresolved_base_objects,
         "unknown_map_field_ids": dict(sorted(unknown_map_fields.items())),
+        "protected_ability_runtime_fields": len(protected_rows),
+        "protected_ability_runtime_field_comparisons": dict(sorted(protected_comparisons.items())),
+        "protected_ability_jass_add_fields": len(protected_jass_rows),
+        "protected_ability_jass_add_field_comparisons": dict(sorted(protected_jass_comparisons.items())),
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
             "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
             "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
+            "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

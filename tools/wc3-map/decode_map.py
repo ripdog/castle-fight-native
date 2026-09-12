@@ -756,6 +756,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_rawcodes = analysis["function_rawcodes"]
     runtime_mutators = analysis["runtime_mutators"]
     rawcode_mutator_traces = analysis["rawcode_mutator_traces"]
+    protected_ability_fields = analysis["protected_ability_fields"]
+    jass_add_protected_fields = analysis["jass_add_protected_fields"]
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
@@ -906,6 +908,54 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 " | ".join(names),
             ])
 
+    with (script_dir / "protected-ability-fields.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "categories", "names", "level_index", "level",
+            "field", "runtime_value", "source_function", "byte_offset", "jass_add_restore",
+        ])
+        for row in protected_ability_fields:
+            integer_id = int(row["ability_id"])
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            level_index = int(row["level_index"])
+            writer.writerow([
+                rawcode,
+                integer_id,
+                categories,
+                names,
+                level_index,
+                level_index + 1,
+                row["field"],
+                row["value_text"],
+                row["source_function"],
+                row["byte_offset"],
+                int(bool(row["jass_add_restore"])),
+            ])
+
+    with (script_dir / "protected-ability-jass-add-restores.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "categories", "names", "level_index", "level",
+            "field", "runtime_value", "canonical_relation", "source_function", "byte_offset",
+        ])
+        for row in jass_add_protected_fields:
+            integer_id = int(row["ability_id"])
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            level_index = int(row["level_index"])
+            writer.writerow([
+                rawcode,
+                integer_id,
+                categories,
+                names,
+                level_index,
+                level_index + 1,
+                row["field"],
+                row["value_text"],
+                row["canonical_relation"],
+                row["source_function"],
+                row["byte_offset"],
+            ])
+
     traces_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
     with (script_dir / "rawcode-mutator-traces.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
@@ -986,6 +1036,15 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "referenced_map_rawcodes": len(sites_by_rawcode),
         "known_map_rawcodes": len(object_metadata),
         "runtime_mutator_sites": len(runtime_mutators),
+        "protected_ability_field_assignments": len(protected_ability_fields),
+        "protected_ability_rows": len({
+            (int(row["ability_id"]), int(row["level_index"])) for row in protected_ability_fields
+        }),
+        "protected_abilities": len({int(row["ability_id"]) for row in protected_ability_fields}),
+        "protected_ability_jass_add_assignments": len(jass_add_protected_fields),
+        "protected_ability_jass_add_only_assignments": sum(
+            str(row["canonical_relation"]) == "jass-only" for row in jass_add_protected_fields
+        ),
         "runtime_mutator_trace_rows": len(rawcode_mutator_traces),
         "rawcodes_with_runtime_mutator_paths": len(traces_by_rawcode),
         "runtime_mutator_sites_with_rawcode_paths": len({
@@ -995,7 +1054,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             (int(trace["hop_count"]) for trace in rawcode_mutator_traces),
             default=0,
         ),
-        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Function aliases/value arguments are indexed separately from direct calls. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow, virtual dispatch, callback execution, or branch execution.",
+        "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. The protected ability-field table is parsed structurally from its generated initializer and cross-checked against overlapping JASS-add restores. Function aliases/value arguments are indexed separately from direct calls. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow, virtual dispatch, callback execution, or branch execution.",
     }
 
 
