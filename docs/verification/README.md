@@ -24,8 +24,9 @@ Implemented:
 - failed spawn attempts are lost rather than backlogged;
 - dedicated Rayon worker pool configurable per simulation instance;
 - cross-worker determinism tests;
-- phase-level tick timing diagnostics;
-- open-lane, dense-cage, and crossing-crowd release benchmarks;
+- phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, targeting, combat, movement intent, collision/commit, structural commit, and checksum;
+- pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, and production-churn release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -50,6 +51,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario lane,cage,crowd --units 1000,5000,10000 \
   --workers 1,2,4,8 --warmup 5 --ticks 20
+
+# Architecture-risk probes (use smaller counts first for deliberately adversarial pathing)
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario pathing,topology,production --units 100,500,1000 \
+  --workers 1,8 --warmup 2 --ticks 10
 ```
 
 The benchmark exits non-zero if different worker counts produce different final canonical checksums for the same fixture.
@@ -214,6 +220,60 @@ The 10,000-unit regression after this fix remains worker-count deterministic:
 | cage | 13.796 ms/tick | 7.828 ms/tick |
 | crowd | 9.556 ms/tick | 7.360 ms/tick |
 
+## Pursuit fallback, topology mutation, and production churn — 2026-09-12
+
+Adding explicit fallback instrumentation immediately exposed a correctness and scaling problem in arbitrary-target pursuit. The previous implementation took one deterministic A* step when greedy pursuit hit a local minimum, then resumed ordinary greedy pursuit on the next tick. Around a straight wall this could select the previous cell because it was geometrically closer to the target, producing a two-cell oscillation. A sustained wall-detour regression now advances repeatedly until the target is reached rather than checking only the first fallback step.
+
+The verifier now uses a greedy step only when repeated deterministic greedy descent can be proven to reach the requested target cell. Otherwise it uses canonical A*. Exact fallback results are cached by `(source cell, target cell)` and the cache is cleared on every topology rebuild. The cache is deliberately derived/performance-only: capacity or eviction can change work performed but cannot change the selected canonical next cell.
+
+The first adversarial `pathing` benchmark deliberately placed opposing units across a long wall so every pursuit required a detour. Before caching, fallback was the dominant cost:
+
+| Units | Workers | ms/tick | Movement intent ms/tick | A* fallback rate | A* expanded nodes/tick | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 100 | 1 | 8.905 | 8.788 | 100% | 166,971.6 | `16de9b1972445c23` |
+| 100 | 8 | 1.759 | 1.632 | 100% | 166,971.6 | `16de9b1972445c23` |
+| 500 | 1 | 32.163 | 31.599 | 100% | 567,409.2 | `40a9e48ae36313e5` |
+| 500 | 8 | 6.159 | 5.694 | 100% | 567,409.2 | `40a9e48ae36313e5` |
+| 1,000 | 1 | 70.041 | 68.822 | 100% | 1,200,125.1 | `8cd598c576fde6ad` |
+| 1,000 | 8 | 15.212 | 14.091 | 100% | 1,200,125.1 | `8cd598c576fde6ad` |
+
+With exact-pair fallback caching, the same fixtures produced the **same canonical checksums** while removing most repeated searches:
+
+| Units | Workers | ms/tick | Movement intent ms/tick | A* cache-hit rate | A* expanded nodes/tick | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 100 | 1 | 0.154 | 0.053 | 99.40% | 559.0 | `16de9b1972445c23` |
+| 100 | 8 | 0.145 | 0.031 | 99.40% | 559.0 | `16de9b1972445c23` |
+| 500 | 1 | 2.240 | 1.660 | 94.54% | 26,650.3 | `40a9e48ae36313e5` |
+| 500 | 8 | 0.858 | 0.378 | 94.54% | 26,650.3 | `40a9e48ae36313e5` |
+| 1,000 | 1 | 3.629 | 2.485 | 95.99% | 40,792.9 | `8cd598c576fde6ad` |
+| 1,000 | 8 | 1.431 | 0.551 | 95.99% | 40,792.9 | `8cd598c576fde6ad` |
+
+At 1,000 units this reduces one-worker movement-intent time by about **27.7x** and A* node expansion by about **29.4x**. The adversarial fallback rate remains 100%, which is intentional for this fixture; the important result is that sticky pursuit no longer repeats the same global search each tick. Maps with rapidly changing target cells or topology can still defeat this cache and remain candidates for cached target fields/local search if realistic verification shows that pattern.
+
+The `topology` benchmark separately forces a building removal/rebuild every tick while 10,000 ordinary lane units remain active. Full connected-component and both objective-field rebuilds currently cost about 0.7 ms/tick on the reference map:
+
+| Units | Workers | ms/tick | Topology ms/tick | Final checksum |
+| ---: | ---: | ---: | ---: | --- |
+| 10,000 | 1 | 10.119 | 0.725 | `e1c6a790567ade` |
+| 10,000 | 8 | 8.488 | 0.707 | `e1c6a790567ade` |
+
+A separate cage-opening regression seals a 24-unit group behind a complete building wall, verifies that the group remains stationary while disconnected, removes one gate building, observes the topology rebuild, and verifies that at least half the group begins leaving on the next tick. This covers the semantic reaction to topology change while the benchmark above isolates repeated rebuild cost.
+
+The `production` benchmark creates up to 100 production buildings that attempt to spawn every tick into bounded two-cell search regions. At the 100-building scale, congestion makes most attempts fail as intended, but the production phase remains small:
+
+| Scale arg | Workers | ms/tick | Production ms/tick | Spawns/tick | Failed attempts/tick | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1,000 | 1 | 0.167 | 0.023 | 5.50 | 4.50 | `8b8d0e6d645e21be` |
+| 1,000 | 8 | 0.177 | 0.023 | 5.50 | 4.50 | `8b8d0e6d645e21be` |
+| 5,000 | 1 | 0.550 | 0.073 | 15.70 | 34.30 | `66f28f520639f55f` |
+| 5,000 | 8 | 0.539 | 0.081 | 15.70 | 34.30 | `66f28f520639f55f` |
+| 10,000 | 1 | 1.077 | 0.130 | 24.40 | 75.60 | `f173780ae3f8e98` |
+| 10,000 | 8 | 0.888 | 0.143 | 24.40 | 75.60 | `f173780ae3f8e98` |
+
+The ordinary 10,000-unit regression remained in its prior performance band after the stronger pursuit rule: lane 9.343/7.715 ms/tick, cage 13.972/8.174 ms/tick, and crowd 9.616/7.560 ms/tick for 1/8 workers respectively, with matching checksums at both worker counts.
+
 ## Current interpretation
 
-The core deterministic architecture remains viable under deliberately hostile topology and crowd workloads. The next meaningful risks are repeated topology mutations, arbitrary-target pursuit/A* fallback frequency, production churn, and attack/projectile/ability density. Each should receive a deliberately adversarial benchmark before broader game content is built.
+Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback **was** both a correctness and performance risk; sustained path verification plus exact deterministic fallback caching makes the current architecture viable again, while the new counters make future regressions visible.
+
+The next high-risk verification slice is authoritative attack-delivery density: implement real `RangedGuaranteedHit` travel/impact timing, count live projectiles and impacts explicitly, and stress projectile-heavy battles before proceeding to ballistic and bounce delivery. Longer playable verification matches should continue in parallel so congestion/topology/targeting failures discovered interactively become focused regressions.
