@@ -111,6 +111,7 @@ pub enum BuildingPlacementError {
     OutsideNavigation,
     StaticObstacle,
     BuildingOverlap,
+    UnitOccupied,
 }
 
 pub struct Simulation {
@@ -210,6 +211,9 @@ impl Simulation {
         {
             return Err(BuildingPlacementError::BuildingOverlap);
         }
+        if self.footprint_contains_live_unit(building.footprint) {
+            return Err(BuildingPlacementError::UnitOccupied);
+        }
 
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
@@ -246,6 +250,19 @@ impl Simulation {
                 .iter_entities()
                 .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
                 .any(|existing| footprints_overlap(existing, footprint))
+            && !self.footprint_contains_live_unit(footprint)
+    }
+
+    fn footprint_contains_live_unit(&self, footprint: BuildingFootprint) -> bool {
+        self.world.iter_entities().any(|entity| {
+            let Some(position) = entity.get::<Position>() else {
+                return false;
+            };
+            let alive = entity
+                .get::<Health>()
+                .is_none_or(|health| health.current > 0);
+            alive && footprint_contains_cell(footprint, self.topology.cell_of_point(position.0))
+        })
     }
 
     fn footprint_inside_navigation(&self, footprint: BuildingFootprint) -> bool {
@@ -272,6 +289,9 @@ impl Simulation {
         let phase_start = Instant::now();
         let mut units = self.snapshot_units();
         let buildings = self.snapshot_buildings();
+        let has_ranged = units
+            .iter()
+            .any(|unit| unit.attack.delivery == AttackDelivery::RangedGuaranteedHit);
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
             units
@@ -284,13 +304,19 @@ impl Simulation {
                 })
                 .flat_map(|(index, unit, component)| {
                     [
-                        (
+                        Some((
                             SpatialPartition::new(unit.team.0, component),
                             index,
                             unit.position,
-                        ),
-                        (SpatialPartition::global(unit.team.0), index, unit.position),
+                        )),
+                        has_ranged.then_some((
+                            SpatialPartition::global(unit.team.0),
+                            index,
+                            unit.position,
+                        )),
                     ]
+                    .into_iter()
+                    .flatten()
                 }),
         );
         let snapshot_and_spatial = phase_start.elapsed();
@@ -1375,6 +1401,13 @@ fn exact_overlap_direction(a: SimId, b: SimId) -> (i32, i32) {
 
 fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
     a.min_x <= b.max_x() && a.max_x() >= b.min_x && a.min_y <= b.max_y() && a.max_y() >= b.min_y
+}
+
+fn footprint_contains_cell(footprint: BuildingFootprint, cell: NavCell) -> bool {
+    cell.x >= footprint.min_x
+        && cell.x <= footprint.max_x()
+        && cell.y >= footprint.min_y
+        && cell.y <= footprint.max_y()
 }
 
 fn footprint_center_point(footprint: BuildingFootprint, cell_size: i32) -> SimPoint {

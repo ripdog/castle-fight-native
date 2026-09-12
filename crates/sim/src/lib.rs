@@ -363,6 +363,15 @@ mod tests {
     }
 
     #[test]
+    fn live_unit_blocks_building_placement() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        sim.spawn_unit(passive_unit(0, 20 * SUBUNITS_PER_WORLD_UNIT));
+        let result =
+            sim.try_spawn_building(passive_building(0, BuildingFootprint::new(20, 0, 1, 1)));
+        assert_eq!(result, Err(BuildingPlacementError::UnitOccupied));
+    }
+
+    #[test]
     fn production_can_delay_its_first_spawn() {
         let mut sim = Simulation::new(SimulationConfig::default(), 1);
         let mut building = production_building(0, BuildingFootprint::new(20, 0, 1, 1), 1);
