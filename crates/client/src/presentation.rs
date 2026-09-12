@@ -26,6 +26,10 @@ const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
 const HEALTH_BAR_DEPTH: f32 = 6.0;
+const CORPSE_SIZE: f32 = 7.5;
+const CORPSE_THICKNESS: f32 = 0.8;
+const SWORD_SWING_SECONDS: f32 = 0.24;
+const GUN_RECOIL_SECONDS: f32 = 0.16;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -103,13 +107,22 @@ struct PresentationAssets {
     ranged_mesh: Handle<Mesh>,
     ballistic_unit_mesh: Handle<Mesh>,
     bounce_unit_mesh: Handle<Mesh>,
+    sword_blade_mesh: Handle<Mesh>,
+    sword_guard_mesh: Handle<Mesh>,
+    gun_body_mesh: Handle<Mesh>,
+    gun_barrel_mesh: Handle<Mesh>,
+    gun_grip_mesh: Handle<Mesh>,
     building_mesh: Handle<Mesh>,
     projectile_mesh: Handle<Mesh>,
+    corpse_mesh: Handle<Mesh>,
     unit_materials: [Handle<StandardMaterial>; 2],
     building_materials: [Handle<StandardMaterial>; 2],
+    corpse_materials: [Handle<StandardMaterial>; 2],
     projectile_materials: [Handle<StandardMaterial>; 4],
+    weapon_material: Handle<StandardMaterial>,
     neutral_unit_material: Handle<StandardMaterial>,
     neutral_building_material: Handle<StandardMaterial>,
+    neutral_corpse_material: Handle<StandardMaterial>,
 }
 
 impl PresentationAssets {
@@ -136,6 +149,13 @@ impl PresentationAssets {
             .unwrap_or_else(|| self.neutral_building_material.clone())
     }
 
+    fn corpse_material(&self, team: Team) -> Handle<StandardMaterial> {
+        self.corpse_materials
+            .get(usize::from(team.0))
+            .cloned()
+            .unwrap_or_else(|| self.neutral_corpse_material.clone())
+    }
+
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
             ProjectileViewKind::GuaranteedHit { .. } => 0,
@@ -152,6 +172,7 @@ impl PresentationAssets {
 #[derive(Debug, Clone, Copy)]
 struct PresentedEntry {
     entity: Entity,
+    weapon: Option<Entity>,
     max_health_seen: i32,
 }
 
@@ -159,6 +180,7 @@ struct PresentedEntry {
 struct RenderMap {
     units: HashMap<SimId, PresentedEntry>,
     buildings: HashMap<SimId, PresentedEntry>,
+    corpses: HashMap<SimId, Entity>,
     projectiles: HashMap<SimId, Entity>,
 }
 
@@ -196,6 +218,18 @@ struct RtsCamera {
     grab_anchor: Option<Vec3>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WeaponKind {
+    Sword,
+    Gun,
+}
+
+#[derive(Component)]
+struct WeaponPresentation {
+    kind: WeaponKind,
+    elapsed: Option<f32>,
+}
+
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct HealthBarGizmos;
 
@@ -226,7 +260,9 @@ impl Plugin for CastlePresentationPlugin {
                     toggle_debug_controls,
                     update_camera,
                     sync_render_entities,
+                    trigger_attack_animations,
                     interpolate_render_transforms,
+                    animate_unit_weapons,
                     age_death_remnants,
                     draw_health_bars,
                     draw_presentation_gizmos,
@@ -251,8 +287,14 @@ fn setup_scene(
     let ranged_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
     let ballistic_unit_mesh = meshes.add(Cuboid::new(7.0, UNIT_RANGED_HEIGHT, 7.0));
     let bounce_unit_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
+    let sword_blade_mesh = meshes.add(Cuboid::new(0.9, 6.0, 0.65));
+    let sword_guard_mesh = meshes.add(Cuboid::new(2.8, 0.45, 0.8));
+    let gun_body_mesh = meshes.add(Cuboid::new(1.6, 1.5, 5.0));
+    let gun_barrel_mesh = meshes.add(Cuboid::new(0.8, 0.8, 4.0));
+    let gun_grip_mesh = meshes.add(Cuboid::new(1.1, 2.2, 1.1));
     let building_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let projectile_mesh = meshes.add(Cuboid::new(3.0, 3.0, 3.0));
+    let corpse_mesh = meshes.add(Cuboid::new(CORPSE_SIZE, CORPSE_THICKNESS, CORPSE_SIZE));
 
     let unit_materials = [
         materials.add(StandardMaterial {
@@ -278,27 +320,62 @@ fn setup_scene(
             ..default()
         }),
     ];
+    let corpse_materials = [
+        materials.add(StandardMaterial {
+            base_color: Color::srgba(0.12, 0.32, 0.62, 0.42),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        }),
+        materials.add(StandardMaterial {
+            base_color: Color::srgba(0.58, 0.14, 0.11, 0.42),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        }),
+    ];
     let projectile_materials = [
         materials.add(Color::srgb(0.55, 0.90, 1.0)),
         materials.add(Color::srgb(1.0, 0.62, 0.18)),
         materials.add(Color::srgb(0.65, 1.0, 0.35)),
         materials.add(Color::srgb(0.95, 1.0, 0.52)),
     ];
+    let weapon_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.72, 0.76, 0.80),
+        metallic: 0.65,
+        perceptual_roughness: 0.34,
+        ..default()
+    });
     let neutral_unit_material = materials.add(Color::srgb(0.72, 0.72, 0.74));
     let neutral_building_material = materials.add(Color::srgb(0.32, 0.32, 0.34));
+    let neutral_corpse_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.34, 0.34, 0.36, 0.40),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        ..default()
+    });
 
     commands.insert_resource(PresentationAssets {
         melee_mesh,
         ranged_mesh,
         ballistic_unit_mesh,
         bounce_unit_mesh,
+        sword_blade_mesh,
+        sword_guard_mesh,
+        gun_body_mesh,
+        gun_barrel_mesh,
+        gun_grip_mesh,
         building_mesh: building_mesh.clone(),
         projectile_mesh,
+        corpse_mesh,
         unit_materials,
         building_materials,
+        corpse_materials,
         projectile_materials,
+        weapon_material,
         neutral_unit_material,
         neutral_building_material,
+        neutral_corpse_material,
     });
 
     let world_size = metrics.world_size();
@@ -360,6 +437,122 @@ fn setup_scene(
     ));
 }
 
+fn spawn_unit_weapon(
+    commands: &mut Commands,
+    assets: &PresentationAssets,
+    unit_entity: Entity,
+    visual_kind: UnitVisualKind,
+) -> Entity {
+    let kind = match visual_kind {
+        UnitVisualKind::Melee => WeaponKind::Sword,
+        UnitVisualKind::Ranged | UnitVisualKind::Ballistic | UnitVisualKind::Bounce => {
+            WeaponKind::Gun
+        }
+    };
+    let mut weapon_entity = None;
+    commands.entity(unit_entity).with_children(|unit| {
+        let mut weapon = unit.spawn((
+            weapon_transform(kind, None),
+            Visibility::default(),
+            WeaponPresentation {
+                kind,
+                elapsed: None,
+            },
+        ));
+        weapon_entity = Some(weapon.id());
+        weapon.with_children(|weapon| match kind {
+            WeaponKind::Sword => {
+                weapon.spawn((
+                    Mesh3d(assets.sword_blade_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, 3.1, 0.0),
+                ));
+                weapon.spawn((
+                    Mesh3d(assets.sword_guard_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, 0.15, 0.0),
+                ));
+            }
+            WeaponKind::Gun => {
+                weapon.spawn((
+                    Mesh3d(assets.gun_body_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, 0.0, 1.8),
+                ));
+                weapon.spawn((
+                    Mesh3d(assets.gun_barrel_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, 0.0, 5.5),
+                ));
+                weapon.spawn((
+                    Mesh3d(assets.gun_grip_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, -1.25, 1.0),
+                ));
+            }
+        });
+    });
+    weapon_entity.expect("unit weapon entity was not spawned")
+}
+
+fn trigger_attack_animations(
+    samples: Res<PresentationSamples>,
+    render_map: Res<RenderMap>,
+    mut weapons: Query<&mut WeaponPresentation>,
+) {
+    if !samples.is_changed() {
+        return;
+    }
+    for attack in &samples.current.attacks {
+        let Some(weapon_entity) = render_map
+            .units
+            .get(&attack.source)
+            .and_then(|entry| entry.weapon)
+        else {
+            continue;
+        };
+        if let Ok(mut weapon) = weapons.get_mut(weapon_entity) {
+            weapon.elapsed = Some(0.0);
+        }
+    }
+}
+
+fn animate_unit_weapons(
+    time: Res<Time>,
+    mut weapons: Query<(&mut WeaponPresentation, &mut Transform)>,
+) {
+    for (mut weapon, mut transform) in &mut weapons {
+        let Some(mut elapsed) = weapon.elapsed else {
+            continue;
+        };
+        elapsed += time.delta_secs();
+        let duration = match weapon.kind {
+            WeaponKind::Sword => SWORD_SWING_SECONDS,
+            WeaponKind::Gun => GUN_RECOIL_SECONDS,
+        };
+        let progress = (elapsed / duration).clamp(0.0, 1.0);
+        *transform = weapon_transform(weapon.kind, Some(progress));
+        if progress >= 1.0 {
+            weapon.elapsed = None;
+            *transform = weapon_transform(weapon.kind, None);
+        } else {
+            weapon.elapsed = Some(elapsed);
+        }
+    }
+}
+
+fn weapon_transform(kind: WeaponKind, progress: Option<f32>) -> Transform {
+    let envelope = progress.map_or(0.0, |progress| (std::f32::consts::PI * progress).sin());
+    match kind {
+        WeaponKind::Sword => Transform {
+            translation: Vec3::new(4.2, -1.7, 0.0),
+            rotation: Quat::from_rotation_z(-0.35 - 1.75 * envelope),
+            ..default()
+        },
+        WeaponKind::Gun => Transform::from_translation(Vec3::new(3.8, 0.0, -1.7 * envelope)),
+    }
+}
+
 fn sync_render_entities(
     mut commands: Commands,
     samples: Res<PresentationSamples>,
@@ -384,7 +577,12 @@ fn sync_render_entities(
             .remove(&id)
             .expect("stale unit entry disappeared during presentation sync");
         commands.entity(entry.entity).despawn();
-        if let Some(unit) = samples.previous.units.get(&id) {
+        let became_authoritative_corpse = samples
+            .current
+            .corpses
+            .values()
+            .any(|corpse| corpse.source_unit == id);
+        if !became_authoritative_corpse && let Some(unit) = samples.previous.units.get(&id) {
             remnants.0.push(DeathRemnant {
                 position: sim_point_to_world(unit.position),
                 team: unit.team,
@@ -417,6 +615,18 @@ fn sync_render_entities(
         }
     }
 
+    let stale_corpses: Vec<_> = render_map
+        .corpses
+        .keys()
+        .copied()
+        .filter(|id| !samples.current.corpses.contains_key(id))
+        .collect();
+    for id in stale_corpses {
+        if let Some(entity) = render_map.corpses.remove(&id) {
+            commands.entity(entity).despawn();
+        }
+    }
+
     let stale_projectiles: Vec<_> = render_map
         .projectiles
         .keys()
@@ -442,10 +652,12 @@ fn sync_render_entities(
                 Transform::from_translation(position),
             ))
             .id();
+        let weapon = spawn_unit_weapon(&mut commands, &assets, entity, unit.visual_kind);
         render_map.units.insert(
             unit.id,
             PresentedEntry {
                 entity,
+                weapon: Some(weapon),
                 max_health_seen: unit.health.max(1),
             },
         );
@@ -473,9 +685,25 @@ fn sync_render_entities(
             building.id,
             PresentedEntry {
                 entity,
+                weapon: None,
                 max_health_seen: building.health.max(1),
             },
         );
+    }
+
+    for corpse in samples.current.corpses.values() {
+        if render_map.corpses.contains_key(&corpse.id) {
+            continue;
+        }
+        let position = corpse_render_position(corpse.position);
+        let entity = commands
+            .spawn((
+                Mesh3d(assets.corpse_mesh.clone()),
+                MeshMaterial3d(assets.corpse_material(corpse.source_team)),
+                Transform::from_translation(position),
+            ))
+            .id();
+        render_map.corpses.insert(corpse.id, entity);
     }
 
     for projectile in samples.current.projectiles.values() {
@@ -904,6 +1132,10 @@ fn camera_transform(rig: &RtsCamera) -> Transform {
     Transform::from_translation(rig.focus + offset).looking_at(rig.focus, Vec3::Y)
 }
 
+fn corpse_render_position(position: SimPoint) -> Vec3 {
+    sim_point_to_world(position) + Vec3::Y * (-CORPSE_THICKNESS * 0.5 + 0.08)
+}
+
 fn update_window_title(
     samples: Res<PresentationSamples>,
     debug: Res<DebugPresentation>,
@@ -915,10 +1147,11 @@ fn update_window_title(
         .and_then(|diagnostic| diagnostic.smoothed())
         .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
     window.title = format!(
-        "Castle Fight Native 3D | {fps} FPS | tick {} | units {} | buildings {} | projectiles {} | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
+        "Castle Fight Native 3D | {fps} FPS | tick {} | units {} | buildings {} | corpses {} | projectiles {} | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
         samples.current.tick,
         samples.current.units.len(),
         samples.current.buildings.len(),
+        samples.current.corpses.len(),
         samples.current.projectiles.len(),
         if debug.overlays { "on" } else { "off" },
         if debug.health_bars { "on" } else { "off" },
@@ -973,6 +1206,30 @@ mod tests {
     fn sim_subunits_map_one_to_one_to_render_world_units() {
         let point = SimPoint::new(7 * SUBUNITS_PER_WORLD_UNIT, -3 * SUBUNITS_PER_WORLD_UNIT);
         assert_eq!(sim_point_to_world(point), Vec3::new(7.0, 0.0, -3.0));
+    }
+
+    #[test]
+    fn weapon_attack_poses_move_from_rest_and_return() {
+        let sword_rest = weapon_transform(WeaponKind::Sword, None);
+        let sword_mid = weapon_transform(WeaponKind::Sword, Some(0.5));
+        let sword_end = weapon_transform(WeaponKind::Sword, Some(1.0));
+        assert_ne!(sword_mid.rotation, sword_rest.rotation);
+        assert!(sword_end.rotation.dot(sword_rest.rotation).abs() > 0.999_999);
+
+        let gun_rest = weapon_transform(WeaponKind::Gun, None);
+        let gun_mid = weapon_transform(WeaponKind::Gun, Some(0.5));
+        let gun_end = weapon_transform(WeaponKind::Gun, Some(1.0));
+        assert!(gun_mid.translation.z < gun_rest.translation.z);
+        assert!(gun_end.translation.distance(gun_rest.translation) < 1.0e-5);
+    }
+
+    #[test]
+    fn corpse_marker_is_mostly_sunk_into_ground() {
+        let position = corpse_render_position(SimPoint::new(0, 0));
+        let top = position.y + CORPSE_THICKNESS * 0.5;
+        assert!(position.y < 0.0);
+        assert!(top > 0.0);
+        assert!(top < CORPSE_THICKNESS * 0.25);
     }
 
     #[test]

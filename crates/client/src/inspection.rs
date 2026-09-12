@@ -387,7 +387,9 @@ mod tests {
             tick: 10,
             units: BTreeMap::new(),
             buildings: BTreeMap::new(),
+            corpses: BTreeMap::new(),
             projectiles: BTreeMap::new(),
+            attacks: Vec::new(),
         };
         PresentationSamples::new(snapshot)
     }

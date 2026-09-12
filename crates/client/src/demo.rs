@@ -1,7 +1,7 @@
 use castle_fight_sim::{
-    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, NavCell,
-    ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig, Team,
-    UnitSpawn, UnitTemplate,
+    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, CorpseDefinitionId,
+    CorpseProfile, MovementProfile, NavCell, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimPoint,
+    Simulation, SimulationConfig, Team, UnitSpawn, UnitTemplate,
 };
 
 use crate::presentation::WorldMetrics;
@@ -20,6 +20,7 @@ const PRODUCTION_HEALTH: i32 = 1_000;
 const PRODUCTION_INTERVAL_TICKS: u16 = 120;
 const ATTACK_COOLDOWN_TICKS: u16 = 30;
 const PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
+const DEMO_CORPSE_LIFETIME_TICKS: u32 = 300;
 
 const PLAYER_CASTLE: BuildingFootprint = BuildingFootprint::new(30, 34, 7, 7);
 const ENEMY_CASTLE: BuildingFootprint = BuildingFootprint::new(163, 34, 7, 7);
@@ -53,8 +54,14 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
                 BuildingFootprint::new(147, 44, 4, 4),
             ),
         ] {
-            simulation.spawn_building(production_structure(team, melee, BuildKind::Melee));
-            simulation.spawn_building(production_structure(team, ranged, BuildKind::Ranged));
+            simulation.spawn_building_with_production_corpse(
+                production_structure(team, melee, BuildKind::Melee),
+                demo_corpse_profile(),
+            );
+            simulation.spawn_building_with_production_corpse(
+                production_structure(team, ranged, BuildKind::Ranged),
+                demo_corpse_profile(),
+            );
         }
     }
 
@@ -152,6 +159,13 @@ impl BuildKind {
             Self::Melee => "Melee Hall",
             Self::Ranged => "Ranged Hall",
         }
+    }
+}
+
+pub(crate) const fn demo_corpse_profile() -> CorpseProfile {
+    CorpseProfile {
+        definition: CorpseDefinitionId(1),
+        lifetime_ticks: Some(DEMO_CORPSE_LIFETIME_TICKS),
     }
 }
 

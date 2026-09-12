@@ -14,7 +14,7 @@ use castle_fight_sim::Simulation;
 
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
-use demo::{create_demo_world, production_structure};
+use demo::{create_demo_world, demo_corpse_profile, production_structure};
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
 
@@ -90,11 +90,12 @@ fn print_perf_telemetry(
         .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
         .and_then(|diagnostic| diagnostic.smoothed());
     println!(
-        "client-perf fps={:.1} frame_ms={:.2} units={} buildings={} projectiles={}",
+        "client-perf fps={:.1} frame_ms={:.2} units={} buildings={} corpses={} projectiles={}",
         fps.unwrap_or_default(),
         frame_ms.unwrap_or_default(),
         presentation.current.units.len(),
         presentation.current.buildings.len(),
+        presentation.current.corpses.len(),
         presentation.current.projectiles.len(),
     );
 }
@@ -150,11 +151,10 @@ fn advance_authoritative_simulation(
     for request in pending_builds.0.drain(..) {
         match authoritative
             .simulation
-            .try_spawn_building(production_structure(
-                request.team,
-                request.footprint,
-                request.kind,
-            )) {
+            .try_spawn_building_with_production_corpse(
+                production_structure(request.team, request.footprint, request.kind),
+                demo_corpse_profile(),
+            ) {
             Ok(_) => {
                 build_selection.status = format!(
                     "Placed {} {}.",

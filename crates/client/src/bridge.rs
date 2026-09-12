@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AttackDelivery, BuildingFootprint, ProjectileView, SimId, SimPoint, Simulation, Team,
+    AttackDelivery, AttackEvent, BuildingFootprint, CorpseView, ProjectileView, SimId, SimPoint,
+    Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +67,9 @@ pub struct PresentationSnapshot {
     pub tick: u64,
     pub units: BTreeMap<SimId, UnitSample>,
     pub buildings: BTreeMap<SimId, BuildingSample>,
+    pub corpses: BTreeMap<SimId, CorpseView>,
     pub projectiles: BTreeMap<SimId, ProjectileView>,
+    pub attacks: Vec<AttackEvent>,
 }
 
 impl PresentationSnapshot {
@@ -124,6 +127,11 @@ impl PresentationSnapshot {
                 )
             })
             .collect();
+        let corpses = simulation
+            .corpses()
+            .into_iter()
+            .map(|corpse| (corpse.id, corpse))
+            .collect();
         let projectiles = simulation
             .projectiles()
             .into_iter()
@@ -134,7 +142,9 @@ impl PresentationSnapshot {
             tick: simulation.tick(),
             units,
             buildings,
+            corpses,
             projectiles,
+            attacks: simulation.attacks_last_tick().to_vec(),
         }
     }
 }
@@ -162,10 +172,64 @@ impl PresentationSamples {
 #[cfg(test)]
 mod tests {
     use castle_fight_sim::{
-        AttackProfile, MovementProfile, SUBUNITS_PER_WORLD_UNIT, SimulationConfig, UnitSpawn,
+        AttackProfile, CorpseDefinitionId, CorpseProfile, MovementProfile, SUBUNITS_PER_WORLD_UNIT,
+        SimulationConfig, UnitSpawn,
     };
 
     use super::*;
+
+    #[test]
+    fn captures_authoritative_corpses_and_attack_events() {
+        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        simulation.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 100,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let victim = simulation.spawn_unit_with_corpse(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(SUBUNITS_PER_WORLD_UNIT, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            CorpseProfile {
+                definition: CorpseDefinitionId(7),
+                lifetime_ticks: Some(5),
+            },
+        );
+
+        simulation.step();
+        simulation.step();
+        let snapshot = PresentationSnapshot::capture(&simulation);
+
+        assert_eq!(snapshot.corpses.len(), 1);
+        assert_eq!(
+            snapshot.corpses.values().next().unwrap().source_unit,
+            victim
+        );
+        assert!(
+            snapshot
+                .attacks
+                .iter()
+                .any(|attack| attack.target == victim)
+        );
+    }
 
     #[test]
     fn repeated_presentation_capture_does_not_change_authoritative_checksums() {
