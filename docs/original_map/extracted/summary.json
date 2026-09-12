@@ -79,12 +79,17 @@
     "unique_function_names": 6879,
     "unique_call_tokens": 5723,
     "call_graph_edges": 29478,
+    "resolved_call_graph_edges": 22680,
     "readable_function_names": 4910,
     "direct_map_rawcode_references": 12611,
     "referenced_map_rawcodes": 1332,
     "known_map_rawcodes": 1461,
     "runtime_mutator_sites": 157,
-    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code."
+    "runtime_mutator_trace_rows": 6728,
+    "rawcodes_with_runtime_mutator_paths": 270,
+    "runtime_mutator_sites_with_rawcode_paths": 117,
+    "max_runtime_mutator_path_hops": 11,
+    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow or branch execution."
   },
   "plaintext_members_copied": [
     "war3mapMisc.txt",

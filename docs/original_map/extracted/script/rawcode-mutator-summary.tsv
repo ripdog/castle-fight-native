@@ -1,0 +1,271 @@
+rawcode	rawcode_integer	categories	names	trace_count	direct_trace_count	source_function_count	reachable_mutator_site_count	mutation_function_count	normalized_mutators	min_hops	max_hops
+A000	1093677104	abilities	HEL: Obelisk of Light	30	0	1	30	20	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState,UnitAddAbility	3	5
+A001	1093677105	abilities		8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A005	1093677109	abilities	Rescue Strike	43	17	6	25	8	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	0	4
+A006	1093677110	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A007	1093677111	abilities		21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A009	1093677113	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A00B	1093677122	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A00D	1093677124	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A00F	1093677126	abilities		22	0	2	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	4
+A00J	1093677130	abilities		4	3	1	4	2	SetUnitAbilityLevel	0	1
+A00N	1093677134	abilities		56	0	2	42	26	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A00P	1093677136	abilities		50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A00T	1093677140	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A00U	1093677141	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A00V	1093677142	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A00Y	1093677145	abilities	HEL: Wizard (Heal)	14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	7
+A00Z	1093677146	abilities	HEL: Wizard (Lightning)	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A010	1093677360	abilities		25	17	2	23	6	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	0	4
+A012	1093677362	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A018	1093677368	abilities		76	0	3	42	26	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	8
+A01A	1093677377	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A01B	1093677378	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A01F	1093677382	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A01P	1093677392	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A01R	1093677394	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A01U	1093677397	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A01V	1093677398	abilities		21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A02B	1093677634	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A02D	1093677636	abilities	Blast	41	2	3	32	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState,UnitAddAbility	0	6
+A02G	1093677639	abilities	Scroll Heal	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A02H	1093677640	abilities		4	0	1	4	3	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField	2	3
+A02T	1093677652	abilities	NAG: Siren (Purge)	14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	7
+A030	1093677872	abilities	ORC: Serpent Rock	50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A03A	1093677889	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A03B	1093677890	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A03D	1093677892	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A03L	1093677900	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A03Q	1093677905	abilities		39	0	4	28	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+A03R	1093677906	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	6
+A043	1093678131	abilities	NOR: Ice Queen (frost nova)	65	1	3	37	25	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	8
+A04H	1093678152	abilities		50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A04I	1093678153	abilities		8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A05B	1093678402	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	6
+A05D	1093678404	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	6
+A05I	1093678409	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A05J	1093678410	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A06C	1093678659	abilities	QuadDamageAura	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A06D	1093678660	abilities	DoubleDamageAura	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A06E	1093678661	abilities	Rescue Strike Effect	18	0	4	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A06H	1093678664	abilities		14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	7
+A06S	1093678675	abilities		56	0	2	42	26	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	8
+A06T	1093678676	abilities		22	0	2	20	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	7
+A06U	1093678677	abilities		22	0	2	20	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	7
+A06W	1093678679	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A06X	1093678680	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A06Y	1093678681	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A070	1093678896	abilities	Leg-anti-hex	30	1	4	20	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A07A	1093678913	abilities		14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	6
+A07G	1093678919	abilities	Summoned Unit	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A07H	1093678920	abilities	TypeLegendary	15	0	2	15	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	4
+A07I	1093678921	abilities		22	0	2	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	4
+A07J	1093678922	abilities		12	1	1	12	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A07L	1093678924	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A07M	1093678925	abilities		20	2	3	13	12	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A07Q	1093678929	abilities		50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A080	1093679152	abilities	World Freezer Phoenix Fire	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A082	1093679154	abilities		50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A083	1093679155	abilities		50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A084	1093679156	abilities	World Freezer Phoenix Fire -na	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A086	1093679158	abilities		25	17	2	23	6	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	0	4
+A088	1093679160	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A089	1093679161	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A08A	1093679169	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A08C	1093679171	abilities	NEL: Obelisk Of Wilderness (spell resist)	8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A08D	1093679172	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A08F	1093679174	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A08H	1093679176	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A08K	1093679179	abilities	ZZZauberschaden-Reduzierung	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A08L	1093679180	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A08M	1093679181	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A08R	1093679186	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A08U	1093679189	abilities	HEL: Dragonhawk (SolarStrike)	50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A09B	1093679426	abilities		4	3	1	4	2	SetUnitAbilityLevel	0	1
+A09C	1093679427	abilities		4	3	1	4	2	SetUnitAbilityLevel	0	1
+A09E	1093679429	abilities		9	1	1	9	8	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	0	5
+A09H	1093679432	abilities	TypeMurloc	20	0	2	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	2	5
+A09K	1093679435	abilities	MEH: Gobbo Machinist (repair)	14	2	2	13	12	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A09L	1093679436	abilities		37	6	7	19	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	4
+A09M	1093679437	abilities	Stacking Life Bonus	10	1	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	4
+A09P	1093679440	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A09Q	1093679441	abilities		12	1	2	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	4
+A09R	1093679442	abilities		22	1	3	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	5
+A09S	1093679443	abilities	Power Armor	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A09T	1093679444	abilities		25	17	2	23	6	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	0	4
+A09V	1093679446	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0A5	1093681461	abilities	Issue buy order	14	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A0A8	1093681464	abilities	HEL: Sorceress (healing wave)	14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	7
+A0AF	1093681478	abilities		12	0	1	12	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0AH	1093681480	abilities	Spell Resist (legendary)	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0AI	1093681481	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0AK	1093681483	abilities	NOR: Chilling Mushroom	20	0	1	20	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	7
+A0AW	1093681495	abilities	NAT: Furbolg Shaman (rejuvenation)	14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	6
+A0AX	1093681496	abilities	NAT: Furbolg Elder Shaman (rejuvenation)	14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	6
+A0B5	1093681717	abilities		34	17	2	32	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0B6	1093681718	abilities		34	17	2	32	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0B7	1093681719	abilities	NAT: Bear (feral rage)	34	17	2	32	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0B8	1093681720	abilities	NAT: Ancient Bear (feral rage)	34	17	2	32	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0BG	1093681735	abilities		10	0	3	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A0BL	1093681740	abilities	NAT: Banish	76	0	3	42	26	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	8
+A0BS	1093681747	abilities	NAT: Ancient of Wonders (dummy)	2	0	1	2	2	UnitRemoveAbility	1	2
+A0BV	1093681750	abilities	NAT: Ancient Keeper (spell immune)	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0C4	1093681972	abilities		19	1	2	15	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0C5	1093681973	abilities		37	2	3	16	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0C6	1093681974	abilities		25	1	3	16	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0C7	1093681975	abilities		25	1	3	16	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0C8	1093681976	abilities		18	1	2	12	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,UnitAddAbility,UnitRemoveAbility	0	5
+A0C9	1093681977	abilities		8	1	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility	0	4
+A0D0	1093682224	abilities	ELE: Elemental Rain (Meteor Shower)	12	0	1	12	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0D5	1093682229	abilities	ELE: ElectroShieldElemental	8	1	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility	0	4
+A0D7	1093682231	abilities	ELE: Enchant(Haste)	8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A0DA	1093682241	abilities	ELE: Elemental Guard Tower (Shield of Mist)	40	17	2	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	0	3
+A0DC	1093682243	abilities	ELE: Elemental Guard Tower (Boulder)	25	17	2	23	6	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	0	4
+A0DP	1093682256	abilities		21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A0DQ	1093682257	abilities		21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A0DR	1093682258	abilities		21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A0DS	1093682259	abilities	Elemental Building	16	1	2	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	4
+A0DW	1093682263	abilities		10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+A0DX	1093682264	abilities		15	0	1	15	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0DZ	1093682266	abilities		22	1	2	12	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0EK	1093682507	abilities		16	1	2	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	4
+A0EL	1093682508	abilities		60	1	4	41	26	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+A0EN	1093682510	abilities		12	2	1	12	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	4
+A0ES	1093682515	abilities		6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0EU	1093682517	abilities	(Sod) Freezing Breath	7	6	1	7	2	SetUnitAbilityLevel	0	1
+A0EV	1093682518	abilities	ELE: Boulder	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A0EZ	1093682522	abilities		37	0	5	16	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0F1	1093682737	abilities		18	0	3	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+A0F3	1093682739	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A0F4	1093682740	abilities		8	0	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+A0F5	1093682741	abilities	Elemental Unit	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0F9	1093682745	abilities	NOR: Ice Queen (frost nova) warlock	14	0	1	14	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	4
+A0FC	1093682755	abilities	Ensnare (Leg Troll)	50	0	2	36	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	8
+A0FE	1093682757	abilities	( SOD ) damage overtime	7	6	1	7	2	SetUnitAbilityLevel	0	1
+A0FO	1093682767	abilities	TypeTwins	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	2	5
+A0FS	1093682771	abilities	Twins:Thunder Clap	9	1	1	9	8	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	0	5
+A0G4	1093682996	abilities	Sandstorm	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+A0GA	1093683009	abilities	Sandcloud	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+A0GC	1093683011	abilities	SandStorm	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+A0GM	1093683021	abilities	Harpy Swarm	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0GP	1093683024	abilities	PAN: Healing Spray	12	0	1	12	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0GY	1093683033	abilities	Blood Corrosion	10	1	2	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	4
+A0HB	1093683266	abilities	Scroll of Speed	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+A0HI	1093683273	abilities	PAN: Healing Spray 2	12	0	1	12	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+A0HP	1093683280	abilities	Sandcloud2x	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+A0HV	1093683286	abilities	pp spell resist	12	1	2	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	0	4
+A0HY	1093683289	abilities	Coral Armor Aura	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+A0I1	1093683505	abilities	Prayer: heal+mana	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+A0I2	1093683506	abilities	Prayer: +dmg +armor	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+A0I4	1093683508	abilities	Prayer: resurrection	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+AM02	1095577650	abilities		4	0	1	4	4	UnitAddAbility,UnitRemoveAbility	2	3
+AM03	1095577651	abilities		4	0	1	4	4	UnitAddAbility,UnitRemoveAbility	2	3
+AM0z	1095577722	abilities		4	0	1	4	4	UnitAddAbility,UnitRemoveAbility	1	2
+Aall	1096903788	abilities		26	0	1	26	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	6
+Asla	1098083425	abilities		25	1	3	16	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+Ast9	1098085433	abilities		12	0	1	12	10	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+AstB	1098085442	abilities		8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+AstC	1098085443	abilities		8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+Awha	1098344545	abilities		2	0	1	2	2	UnitRemoveAbility	1	2
+B008	1110454328	buffs,destructables	BWALL | Drum'n'Bass Beats	53	0	1	53	30	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	10
+B00H	1110454344	buffs,destructables	Double Damage | LWALL	53	0	1	53	30	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	10
+B00I	1110454345	buffs,destructables	LARCHWAY | Quad Damage	53	0	1	53	30	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	10
+B00L	1110454348	buffs,destructables	Drum'n'Bass Bassline | LWALL	53	0	1	53	30	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	3	10
+B00M	1110454349	buffs,destructables	Frozen | IWALL	2	0	1	2	2	UnitRemoveAbility	1	2
+B01K	1110454603	buffs	Power Armor	22	1	2	12	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+I000	1227894832	items	Gold	58	1	2	54	31	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I001	1227894833	items	Blast Staff	41	2	3	32	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState,UnitAddAbility	0	6
+I002	1227894834	items	Multi Blast Staff	37	2	2	32	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState,UnitAddAbility	0	6
+I003	1227894835	items	Drum'n'Bass Bass Drums	107	1	2	54	31	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I004	1227894836	items	Cheese	107	1	2	54	31	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I006	1227894838	items	Orb of Lightning	58	0	3	27	17	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	2	4
+I007	1227894839	items	Quad Damage	128	1	3	72	33	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I008	1227894840	items	Double Damage	128	1	3	72	33	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I009	1227894841	items	Rune of Repair	107	1	2	54	31	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I00A	1227894849	items	Drum'n'Bass Bassline Generator	107	1	2	54	31	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+I00C	1227894851	items	Explode Mine	107	1	2	54	31	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+X00C	1479553091	units	Human Builder	157	6	6	57	32	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	11
+e000	1697656880	units	Faerie Dragon	41	6	1	41	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	4
+e006	1697656886	units	Dryad	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+e008	1697656888	units	dummy	125	1	7	73	34	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+e009	1697656889	units	Keeper of the Grove	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+e00A	1697656897	units	Avatar of Vengeance	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+e00B	1697656898	units	Avenging Spirit	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+e00C	1697656899	units	Ancient Keeper	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+e00E	1697656901	units	Twins	27	0	1	27	17	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	1	3
+h001	1747988529	units	Artillery	57	3	1	57	32	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	11
+h004	1747988532	units	Weapon Lab	54	0	2	27	17	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	2	4
+h005	1747988533	units	Obelisk of Light	30	0	1	30	20	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState,UnitAddAbility	3	5
+h008	1747988536	units	Treasure Box	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h00G	1747988551	units	Coral Statue	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h00L	1747988556	units	Flower of life	109	6	3	41	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	5
+h00W	1747988567	units	Wizard	29	1	1	29	19	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	4
+h010	1747988784	units	Gjallarhorn	68	6	2	41	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	4
+h01O	1747988815	units	Turret of Souls	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h01U	1747988821	units	Vampire	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h01V	1747988822	units	Lesser Vampire	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h01W	1747988823	units	Eraser (Level 2)	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h01X	1747988824	units	Eraser (Level 3)	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h02D	1747989060	units	Ancient of Wonders	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h02Y	1747989081	units	Greater Elemental Of Water	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+h02Z	1747989082	units	Elemental Of Fire	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	4	6
+h030	1747989296	units	Greater Elemental Of Fire	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	4	6
+h033	1747989299	units	Race Chooser	47	0	2	26	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	3	5
+h03A	1747989313	units	Defender	11	1	2	10	6	SetUnitAbilityLevel,SetUnitState,UnitRemoveAbility	0	3
+h03C	1747989315	units	Paladin	2	1	1	2	2	SetUnitState	0	1
+h03L	1747989324	units	Greater Frost Launcher	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h03O	1747989327	units	World Freezer	41	6	1	41	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	4
+h04X	1747989592	units	RescueDummy	2	0	1	2	2	UnitRemoveAbility	1	2
+h056	1747989814	units	Skull Shrine	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h059	1747989817	units	Golden Shrine of Justice	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h05G	1747989831	units	Heroic Shrine	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h05H	1747989832	units	Vampire Lord	14	1	2	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility	0	4
+h05L	1747989836	units	Energy Tower	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+h05R	1747989842	units	Red Shield Generator	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h060	1747990064	units	Obelisk of Elements	70	1	2	43	23	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	5
+h061	1747990065	units	Elemental Guard Tower	31	0	2	28	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+h063	1747990067	units	Linker	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h069	1747990073	units	Spare Part Heap	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	3	6
+h06B	1747990082	units	Wisp	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+h06C	1747990083	units	SodDummy	7	6	1	7	2	SetUnitAbilityLevel	0	1
+h06E	1747990085	units	Meteor Shower	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h06F	1747990086	units	Elemental Rain	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h06M	1747990093	units	Main Castle	26	0	1	26	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	6
+h06R	1747990098	units	Gyrocopter	34	5	1	34	19	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	4
+h06U	1747990101	units	Mine Layer	39	1	2	34	24	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+h079	1747990329	units	Beacon of the Oasis	41	0	1	41	21	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	1	5
+h07J	1747990346	units	Main Castle	26	0	1	26	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	6
+h07K	1747990347	units	Main Castle	26	0	1	26	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	6
+h07X	1747990360	units	Stasis Totem	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h07Y	1747990361	units	Healing Totem	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h07Z	1747990362	units	Endurance Totem	21	0	1	21	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	1	3
+h08U	1747990613	units	FrostOrbDummy	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	1	4
+h09W	1747990871	units	Race Ban	26	0	1	26	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility,UnitRemoveAbility	3	6
+hcas	1751343475	units	Main Castle	108	2	3	73	34	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	10
+hfoo	1751543663	units	Footman	569	25	19	65	39	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitFacingEx,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitMaxMana,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	11
+hmtm	1752003693	units	Mortar	54	0	2	27	17	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	2	4
+hrif	1752328550	units	Sniper	29	1	1	29	19	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	0	4
+n00V	1848651862	units	Troll Berserker	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+n01O	1848652111	units	Troll Trapper	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+n01S	1848652115	units	Mutation	20	0	1	20	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitFacingEx,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	2	7
+n01T	1848652116	units	Goblin Shredder	9	0	1	9	5	SetUnitAbilityLevel,SetUnitState,UnitRemoveAbility	1	2
+n01U	1848652117	units	Gobbo Machinist	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	3	6
+n022	1848652338	units	Archer	27	0	1	27	17	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitMoveSpeed,SetUnitState	2	4
+n029	1848652345	units	Bear	15	0	1	15	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+n02A	1848652353	units	Emerald Dragon	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+n02B	1848652354	units	Ancient Bear	25	0	2	16	14	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+n02G	1848652359	units	Forest Troll Trapper	83	7	4	39	23	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility	0	5
+n02K	1848652363	units	Twin Weeper	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	2	5
+n02L	1848652364	units	Twin Smiley	37	0	2	33	23	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,BlzSetUnitArmor,BlzSetUnitAttackCooldown,BlzSetUnitBaseDamage,BlzSetUnitDiceNumber,BlzSetUnitDiceSides,BlzSetUnitIntegerField,BlzSetUnitMaxHP,BlzSetUnitRealField,BlzSetUnitWeaponRealField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+n02M	1848652365	units	Goblin Rocketeer	18	1	2	12	11	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitState,UnitAddAbility,UnitRemoveAbility	0	5
+n035	1848652597	units	Monstrous Sandkin	8	0	1	8	7	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitState,UnitAddAbility	2	5
+n03C	1848652611	units	Ghost of Sorrow	9	0	1	9	5	SetUnitAbilityLevel,SetUnitState,UnitRemoveAbility	3	4
+n03R	1848652626	units	Echo Remnant	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+o00E	1865429061	units	Greater Elemental Of Wind	15	0	1	15	13	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,SetUnitMoveSpeed,SetUnitState,UnitAddAbility,UnitRemoveAbility	1	5
+u004	1966092340	units	Ghoul	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+u008	1966092344	units	Greater Ghoul	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+u00D	1966092356	units	Lich King	10	0	1	10	9	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,SetUnitAbilityLevel,UnitAddAbility,UnitRemoveAbility	1	5
+u00E	1966092357	units	Lich Ghoul	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	2	4
+u00F	1966092358	units	Greater Elemental Of Fire	6	0	1	6	5	BlzSetAbilityIntegerLevelField,BlzSetAbilityRealLevelField,UnitAddAbility	4	6
+x001	2016423985	units	Effect Dummy Unit	4	0	1	4	4	UnitAddAbility,UnitRemoveAbility	2	3
+x003	2016423987	units	Dummy Caster	4	0	1	4	4	UnitAddAbility,UnitRemoveAbility	1	2
