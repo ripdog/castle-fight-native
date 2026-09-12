@@ -2,6 +2,9 @@ use bevy_ecs::prelude::Component;
 
 use crate::math::SimPoint;
 
+pub(crate) const MAX_BOUNCE_COUNT: u8 = 8;
+pub(crate) const MAX_BOUNCE_HITS: usize = MAX_BOUNCE_COUNT as usize + 1;
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SimId(pub u64);
 
@@ -27,6 +30,13 @@ pub enum AttackDelivery {
         speed_per_tick: i32,
         impact_radius: i32,
     },
+    Bounce {
+        speed_per_tick: i32,
+        bounce_range: i32,
+        max_bounces: u8,
+        damage_percent_per_bounce: u16,
+        allow_repeat_targets: bool,
+    },
 }
 
 impl AttackDelivery {
@@ -36,6 +46,7 @@ impl AttackDelivery {
             Self::Melee => 0,
             Self::RangedGuaranteedHit { .. } => 1,
             Self::RangedBallistic { .. } => 2,
+            Self::Bounce { .. } => 3,
         }
     }
 }
@@ -83,6 +94,25 @@ pub(crate) struct BallisticProjectile {
     pub impact_radius: i32,
     pub launch_tick: u64,
     pub impact_tick: u64,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BounceProjectile {
+    pub source: SimId,
+    pub source_team: Team,
+    pub target: SimId,
+    pub damage: i32,
+    pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
+    pub speed_per_tick: i32,
+    pub bounce_range: i32,
+    pub remaining_bounces: u8,
+    pub bounce_index: u8,
+    pub damage_percent_per_bounce: u16,
+    pub allow_repeat_targets: bool,
+    pub hit_targets: [SimId; MAX_BOUNCE_HITS],
+    pub hit_count: u8,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]

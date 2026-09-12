@@ -177,6 +177,8 @@ fn deterministic_random(
 
 The random algorithm is part of the simulation version and MUST NOT change silently.
 
+The current verification simulation introduces its first executable keyed-random use for bounce target selection. It uses a SplitMix64-based stateless mixer over the match seed, impact tick, persistent projectile `SimId`, a stable bounce-target purpose discriminator combined with candidate `SimId`, and bounce index. Every valid candidate receives a keyed rank and the minimum `(rank, SimId)` wins. This makes the result independent of candidate enumeration, spatial bucket layout, hash-map iteration, and worker order while avoiding a shared mutable RNG stream.
+
 ## 8. Parallel reductions
 
 Parallel systems MUST avoid non-associative reductions whose grouping can change results.

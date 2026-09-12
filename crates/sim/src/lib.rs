@@ -663,7 +663,9 @@ mod tests {
         assert_eq!(launch.projectiles_launched, 1);
         let destination = match sim.projectiles()[0].kind {
             ProjectileViewKind::Ballistic { destination, .. } => destination,
-            ProjectileViewKind::GuaranteedHit { .. } => panic!("expected ballistic projectile"),
+            ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Bounce { .. } => {
+                panic!("expected ballistic projectile")
+            }
         };
         assert_eq!(destination, SimPoint::new(5 * cell, 0));
         assert!(sim.unit(bystander).unwrap().position.x < before_launch.x);
@@ -682,6 +684,160 @@ mod tests {
             destination.distance_sq(sim.unit(bystander).unwrap().position)
                 <= (i64::from(2 * cell) * i64::from(2 * cell)) as u64
         );
+    }
+
+    #[test]
+    fn bounce_chain_keeps_projectile_identity_avoids_repeats_and_scales_damage() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            match_seed: 0x1234_5678_9abc_def0,
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let source = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Bounce {
+                    speed_per_tick: 10 * cell,
+                    bounce_range: 5 * cell,
+                    max_bounces: 2,
+                    damage_percent_per_bounce: 50,
+                    allow_repeat_targets: false,
+                },
+                damage: 8,
+                range: 10 * cell,
+                acquisition_range: 10 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let first = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 4 * cell)
+        });
+        let second_candidate = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 6 * cell)
+        });
+        let third_candidate = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 8 * cell)
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(first));
+        let launch = sim.step();
+        assert_eq!(launch.projectiles_launched, 1);
+        let projectile = sim.projectiles()[0];
+        let projectile_id = projectile.id;
+        assert!(matches!(
+            projectile.kind,
+            ProjectileViewKind::Bounce {
+                target,
+                bounce_index: 0,
+                remaining_bounces: 2,
+            } if target == first
+        ));
+
+        let first_impact = sim.step();
+        assert_eq!(first_impact.projectile_impacts, 1);
+        assert_eq!(first_impact.projectile_effects, 1);
+        assert_eq!(first_impact.bounce_jumps, 1);
+        assert!(first_impact.bounce_candidate_checks >= 2);
+        assert_eq!(sim.unit(first).unwrap().health, 92);
+        let first_hop = sim.projectiles()[0];
+        assert_eq!(first_hop.id, projectile_id);
+        let second_target = match first_hop.kind {
+            ProjectileViewKind::Bounce {
+                target,
+                bounce_index: 1,
+                remaining_bounces: 1,
+            } => target,
+            _ => panic!("expected first bounce hop"),
+        };
+        assert!(second_target == second_candidate || second_target == third_candidate);
+
+        let second_impact = sim.step();
+        assert_eq!(second_impact.projectile_impacts, 1);
+        assert_eq!(second_impact.projectile_effects, 1);
+        assert_eq!(second_impact.bounce_jumps, 1);
+        assert_eq!(sim.unit(second_target).unwrap().health, 96);
+        let second_hop = sim.projectiles()[0];
+        assert_eq!(second_hop.id, projectile_id);
+        let third_target = match second_hop.kind {
+            ProjectileViewKind::Bounce {
+                target,
+                bounce_index: 2,
+                remaining_bounces: 0,
+            } => target,
+            _ => panic!("expected second bounce hop"),
+        };
+        assert_ne!(third_target, first);
+        assert_ne!(third_target, second_target);
+        assert!(third_target == second_candidate || third_target == third_candidate);
+
+        let third_impact = sim.step();
+        assert_eq!(third_impact.projectile_impacts, 1);
+        assert_eq!(third_impact.projectile_effects, 1);
+        assert_eq!(third_impact.bounce_jumps, 0);
+        assert_eq!(sim.unit(third_target).unwrap().health, 98);
+        assert_eq!(sim.projectile_count(), 0);
+    }
+
+    #[test]
+    fn bounce_chain_is_worker_count_independent() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut expected = None;
+        for workers in [1, 2, 8] {
+            let config = SimulationConfig {
+                match_seed: 0x0ddc_0ffe_e15e_beef,
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            sim.spawn_unit(UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(0, 0),
+                health: 100_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Bounce {
+                        speed_per_tick: 4 * cell,
+                        bounce_range: 8 * cell,
+                        max_bounces: 3,
+                        damage_percent_per_bounce: 75,
+                        allow_repeat_targets: false,
+                    },
+                    damage: 8,
+                    range: 20 * cell,
+                    acquisition_range: 20 * cell,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+            for index in 0..12 {
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new((5 + index % 4) * cell, (index / 4 - 1) * cell),
+                    health: 100_000,
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::Melee,
+                        damage: 0,
+                        range: 0,
+                        acquisition_range: 0,
+                        cooldown_ticks: 1,
+                    },
+                    movement: MovementProfile { speed_per_tick: 0 },
+                });
+            }
+            for _ in 0..30 {
+                sim.step();
+            }
+            match expected {
+                Some(checksum) => assert_eq!(sim.checksum(), checksum, "workers={workers}"),
+                None => expected = Some(sim.checksum()),
+            }
+        }
     }
 
     #[test]

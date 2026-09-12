@@ -6,12 +6,14 @@ use std::{
 use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
+const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
+
 use crate::{
     components::{
-        AttackCooldown, AttackDelivery, AttackProfile, BallisticProjectile, BuildingFootprint,
-        BuildingSpawn, GuaranteedHitProjectile, Health, MovementProfile, Position,
-        ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick, TargetState, Team,
-        UnitSpawn,
+        AttackCooldown, AttackDelivery, AttackProfile, BallisticProjectile, BounceProjectile,
+        BuildingFootprint, BuildingSpawn, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
+        MovementProfile, Position, ProductionProfile, ProductionState, RetaliationState, SimId,
+        SpawnTick, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -20,6 +22,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
+    pub match_seed: u64,
     pub spatial_cell_size: i32,
     pub navigation_cell_size: i32,
     pub navigation_min: NavCell,
@@ -34,6 +37,7 @@ pub struct SimulationConfig {
 impl Default for SimulationConfig {
     fn default() -> Self {
         Self {
+            match_seed: 0,
             spatial_cell_size: 8 * SUBUNITS_PER_WORLD_UNIT,
             navigation_cell_size: SUBUNITS_PER_WORLD_UNIT,
             navigation_min: NavCell::new(0, -64),
@@ -86,6 +90,8 @@ pub struct TickResult {
     pub projectile_effects: usize,
     pub projectile_invalidations: usize,
     pub ballistic_candidate_checks: usize,
+    pub bounce_jumps: usize,
+    pub bounce_candidate_checks: usize,
     pub retained_targets: usize,
     pub target_changes: usize,
     pub ally_defense_queries: usize,
@@ -112,6 +118,11 @@ pub enum ProjectileViewKind {
     Ballistic {
         destination: SimPoint,
         impact_radius: i32,
+    },
+    Bounce {
+        target: SimId,
+        bounce_index: u8,
+        remaining_bounces: u8,
     },
 }
 
@@ -365,12 +376,19 @@ impl Simulation {
         } else {
             Vec::new()
         };
-        let needs_global_unit_grid = units.iter().any(|unit| {
-            matches!(
-                unit.attack.delivery,
-                AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. }
-            )
-        });
+        let has_bounce_projectile = {
+            let mut query = self.world.query::<&BounceProjectile>();
+            query.iter(&self.world).next().is_some()
+        };
+        let needs_global_unit_grid = has_bounce_projectile
+            || units.iter().any(|unit| {
+                matches!(
+                    unit.attack.delivery,
+                    AttackDelivery::RangedGuaranteedHit { .. }
+                        | AttackDelivery::RangedBallistic { .. }
+                        | AttackDelivery::Bounce { .. }
+                )
+            });
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
             units
@@ -452,42 +470,151 @@ impl Simulation {
 
         let phase_start = Instant::now();
         let due_projectiles = self.snapshot_due_projectiles();
+        let due_bounce_projectiles = self.snapshot_due_bounce_projectiles();
         let due_ballistic_projectiles = self.snapshot_due_ballistic_projectiles();
+        let due_target_projectile_count = due_projectiles.len() + due_bounce_projectiles.len();
+        let mut due_target_projectiles = Vec::with_capacity(due_target_projectile_count);
+        due_target_projectiles.extend(
+            due_projectiles
+                .into_iter()
+                .map(DueTargetProjectileSnapshot::GuaranteedHit),
+        );
+        due_target_projectiles.extend(
+            due_bounce_projectiles
+                .into_iter()
+                .map(DueTargetProjectileSnapshot::Bounce),
+        );
+        due_target_projectiles.sort_unstable_by_key(DueTargetProjectileSnapshot::id);
         let mut projectile_entities_to_remove =
-            Vec::with_capacity(due_projectiles.len() + due_ballistic_projectiles.len());
+            Vec::with_capacity(due_target_projectile_count + due_ballistic_projectiles.len());
+        let mut bounce_projectile_updates = Vec::with_capacity(due_target_projectile_count);
         let mut projectile_impacts = 0usize;
         let mut projectile_effects = 0usize;
         let mut projectile_invalidations = 0usize;
         let mut ballistic_candidate_checks = 0usize;
-        for snapshot in due_projectiles {
-            projectile_entities_to_remove.push(snapshot.entity);
-            let Some(target) = find_target_index(&units, &buildings, snapshot.projectile.target)
-            else {
-                projectile_invalidations += 1;
-                continue;
-            };
-            if apply_damage_to_target(
-                target,
-                snapshot.projectile.source,
-                snapshot.projectile.damage,
-                completed_tick,
-                DamageTargetState {
-                    units: &units,
-                    buildings: &buildings,
-                    unit_positions: &positions,
-                    unit_health: &mut unit_health,
-                    building_health: &mut building_health,
-                    attackers_this_tick: &mut attackers_this_tick,
-                    next_defense_alerts: &mut next_defense_alerts,
-                    navigation_cell_size: self.config.navigation_cell_size,
-                },
-            )
-            .is_some()
-            {
-                projectile_impacts += 1;
-                projectile_effects += 1;
-            } else {
-                projectile_invalidations += 1;
+        let mut bounce_jumps = 0usize;
+        let mut bounce_candidate_checks = 0usize;
+        for snapshot in due_target_projectiles {
+            match snapshot {
+                DueTargetProjectileSnapshot::GuaranteedHit(snapshot) => {
+                    projectile_entities_to_remove.push(snapshot.entity);
+                    let Some(target) =
+                        find_target_index(&units, &buildings, snapshot.projectile.target)
+                    else {
+                        projectile_invalidations += 1;
+                        continue;
+                    };
+                    if apply_damage_to_target(
+                        target,
+                        snapshot.projectile.source,
+                        snapshot.projectile.damage,
+                        completed_tick,
+                        DamageTargetState {
+                            units: &units,
+                            buildings: &buildings,
+                            unit_positions: &positions,
+                            unit_health: &mut unit_health,
+                            building_health: &mut building_health,
+                            attackers_this_tick: &mut attackers_this_tick,
+                            next_defense_alerts: &mut next_defense_alerts,
+                            navigation_cell_size: self.config.navigation_cell_size,
+                        },
+                    )
+                    .is_some()
+                    {
+                        projectile_impacts += 1;
+                        projectile_effects += 1;
+                    } else {
+                        projectile_invalidations += 1;
+                    }
+                }
+                DueTargetProjectileSnapshot::Bounce(snapshot) => {
+                    let Some(target) =
+                        find_target_index(&units, &buildings, snapshot.projectile.target)
+                    else {
+                        projectile_entities_to_remove.push(snapshot.entity);
+                        projectile_invalidations += 1;
+                        continue;
+                    };
+                    let Some(impact_position) = apply_damage_to_target(
+                        target,
+                        snapshot.projectile.source,
+                        snapshot.projectile.damage,
+                        completed_tick,
+                        DamageTargetState {
+                            units: &units,
+                            buildings: &buildings,
+                            unit_positions: &positions,
+                            unit_health: &mut unit_health,
+                            building_health: &mut building_health,
+                            attackers_this_tick: &mut attackers_this_tick,
+                            next_defense_alerts: &mut next_defense_alerts,
+                            navigation_cell_size: self.config.navigation_cell_size,
+                        },
+                    ) else {
+                        projectile_entities_to_remove.push(snapshot.entity);
+                        projectile_invalidations += 1;
+                        continue;
+                    };
+                    projectile_impacts += 1;
+                    projectile_effects += 1;
+
+                    if snapshot.projectile.remaining_bounces == 0 {
+                        projectile_entities_to_remove.push(snapshot.entity);
+                        continue;
+                    }
+
+                    let bounce_search = BounceSearchContext {
+                        completed_tick,
+                        units: &units,
+                        unit_health: &unit_health,
+                        grid: &grid,
+                    };
+                    let Some(next_index) = self.select_bounce_target(
+                        snapshot.id,
+                        &snapshot.projectile,
+                        impact_position,
+                        &bounce_search,
+                        &mut bounce_candidate_checks,
+                    ) else {
+                        projectile_entities_to_remove.push(snapshot.entity);
+                        continue;
+                    };
+                    let next_target = units[next_index].id;
+                    let next_position = units[next_index].position;
+                    let mut projectile = snapshot.projectile;
+                    let next_bounce_index = projectile
+                        .bounce_index
+                        .checked_add(1)
+                        .expect("bounce index overflow");
+                    let hit_index = usize::from(projectile.hit_count);
+                    debug_assert!(hit_index < MAX_BOUNCE_HITS);
+                    projectile.hit_targets[hit_index] = next_target;
+                    projectile.hit_count = projectile
+                        .hit_count
+                        .checked_add(1)
+                        .expect("bounce hit count overflow");
+                    projectile.target = next_target;
+                    projectile.damage = scaled_bounce_damage(
+                        projectile.damage,
+                        projectile.damage_percent_per_bounce,
+                    );
+                    projectile.launch_position = impact_position;
+                    projectile.launch_tick = completed_tick;
+                    projectile.impact_tick = completed_tick
+                        .checked_add(projectile_travel_ticks(
+                            impact_position.distance_sq(next_position),
+                            projectile.speed_per_tick,
+                        ))
+                        .expect("bounce impact tick overflow");
+                    projectile.remaining_bounces -= 1;
+                    projectile.bounce_index = next_bounce_index;
+                    bounce_projectile_updates.push(BounceProjectileUpdate {
+                        entity: snapshot.entity,
+                        projectile,
+                    });
+                    bounce_jumps += 1;
+                }
             }
         }
 
@@ -497,6 +624,7 @@ impl Simulation {
         let mut attacks_resolved = 0;
         let mut projectile_launches = Vec::new();
         let mut ballistic_projectile_launches = Vec::new();
+        let mut bounce_projectile_launches = Vec::new();
         for intent in intents {
             if unit_health[intent.source_index] <= 0 {
                 continue;
@@ -566,6 +694,32 @@ impl Simulation {
                         impact_tick,
                     });
                 }
+                AttackDelivery::Bounce {
+                    speed_per_tick,
+                    bounce_range,
+                    max_bounces,
+                    damage_percent_per_bounce,
+                    allow_repeat_targets,
+                } => {
+                    let travel_ticks = projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                    let impact_tick = completed_tick
+                        .checked_add(travel_ticks)
+                        .expect("projectile impact tick overflow");
+                    bounce_projectile_launches.push(BounceProjectileLaunch {
+                        source: intent.source_id,
+                        source_team: source.team,
+                        target: intent.target_id,
+                        damage: intent.damage,
+                        launch_position: source.position,
+                        launch_tick: completed_tick,
+                        impact_tick,
+                        speed_per_tick,
+                        bounce_range,
+                        max_bounces,
+                        damage_percent_per_bounce,
+                        allow_repeat_targets,
+                    });
+                }
             }
             cooldowns[intent.source_index] = intent.cooldown_ticks;
             self.last_attacks.push(AttackEvent {
@@ -577,7 +731,9 @@ impl Simulation {
             });
             attacks_resolved += 1;
         }
-        let projectiles_launched = projectile_launches.len() + ballistic_projectile_launches.len();
+        let projectiles_launched = projectile_launches.len()
+            + ballistic_projectile_launches.len()
+            + bounce_projectile_launches.len();
         let combat = phase_start.elapsed();
 
         let movement = self.resolve_movement(
@@ -674,6 +830,13 @@ impl Simulation {
         for entity in projectile_entities_to_remove {
             self.world.despawn(entity);
         }
+        for update in bounce_projectile_updates {
+            *self
+                .world
+                .entity_mut(update.entity)
+                .get_mut::<BounceProjectile>()
+                .expect("bounce projectile missing during hop update") = update.projectile;
+        }
         for launch in projectile_launches {
             let id = self.allocate_id();
             self.world.spawn((
@@ -701,6 +864,31 @@ impl Simulation {
                     impact_radius: launch.impact_radius,
                     launch_tick: launch.launch_tick,
                     impact_tick: launch.impact_tick,
+                },
+            ));
+        }
+        for launch in bounce_projectile_launches {
+            let id = self.allocate_id();
+            let mut hit_targets = [SimId(0); MAX_BOUNCE_HITS];
+            hit_targets[0] = launch.target;
+            self.world.spawn((
+                id,
+                BounceProjectile {
+                    source: launch.source,
+                    source_team: launch.source_team,
+                    target: launch.target,
+                    damage: launch.damage,
+                    launch_position: launch.launch_position,
+                    launch_tick: launch.launch_tick,
+                    impact_tick: launch.impact_tick,
+                    speed_per_tick: launch.speed_per_tick,
+                    bounce_range: launch.bounce_range,
+                    remaining_bounces: launch.max_bounces,
+                    bounce_index: 0,
+                    damage_percent_per_bounce: launch.damage_percent_per_bounce,
+                    allow_repeat_targets: launch.allow_repeat_targets,
+                    hit_targets,
+                    hit_count: 1,
                 },
             ));
         }
@@ -816,6 +1004,8 @@ impl Simulation {
             projectile_effects,
             projectile_invalidations,
             ballistic_candidate_checks,
+            bounce_jumps,
+            bounce_candidate_checks,
             retained_targets: target_selection.retained_targets,
             target_changes: target_selection.target_changes,
             ally_defense_queries: target_selection.ally_defense_queries,
@@ -861,6 +1051,7 @@ impl Simulation {
             .filter(|entity| {
                 entity.get::<GuaranteedHitProjectile>().is_some()
                     || entity.get::<BallisticProjectile>().is_some()
+                    || entity.get::<BounceProjectile>().is_some()
             })
             .count()
     }
@@ -1146,6 +1337,21 @@ impl Simulation {
         projectiles
     }
 
+    fn snapshot_due_bounce_projectiles(&mut self) -> Vec<BounceProjectileSnapshot> {
+        let mut query = self.world.query::<(Entity, &SimId, &BounceProjectile)>();
+        let mut projectiles: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+            .map(|(entity, id, projectile)| BounceProjectileSnapshot {
+                entity,
+                id: *id,
+                projectile: *projectile,
+            })
+            .collect();
+        projectiles.sort_unstable_by_key(|projectile| projectile.id);
+        projectiles
+    }
+
     fn snapshot_due_ballistic_projectiles(&mut self) -> Vec<BallisticProjectileSnapshot> {
         let mut query = self.world.query::<(Entity, &SimId, &BallisticProjectile)>();
         let mut projectiles: Vec<_> = query
@@ -1293,9 +1499,9 @@ impl Simulation {
             .expect("verification slice supports teams 0 and 1 only");
         let partition = match source.attack.delivery {
             AttackDelivery::Melee => SpatialPartition::new(enemy_team, component),
-            AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. } => {
-                SpatialPartition::global(enemy_team)
-            }
+            AttackDelivery::RangedGuaranteedHit { .. }
+            | AttackDelivery::RangedBallistic { .. }
+            | AttackDelivery::Bounce { .. } => SpatialPartition::global(enemy_team),
         };
         let mut best: Option<(u8, u64, SimId)> = None;
         grid.for_each_candidate(
@@ -1536,6 +1742,56 @@ impl Simulation {
         best
     }
 
+    fn select_bounce_target(
+        &self,
+        projectile_id: SimId,
+        projectile: &BounceProjectile,
+        impact_position: SimPoint,
+        context: &BounceSearchContext<'_>,
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let enemy_team = 1u8
+            .checked_sub(projectile.source_team.0)
+            .expect("verification slice supports teams 0 and 1 only");
+        let range_sq = square_i32(projectile.bounce_range);
+        let hit_count = usize::from(projectile.hit_count);
+        let hit_targets = &projectile.hit_targets[..hit_count];
+        let next_bounce_index = u32::from(projectile.bounce_index) + 1;
+        let mut best: Option<(u64, SimId, usize)> = None;
+        context.grid.for_each_candidate(
+            SpatialPartition::global(enemy_team),
+            impact_position,
+            projectile.bounce_range,
+            |unit_index| {
+                *candidate_checks += 1;
+                if context.unit_health[unit_index] <= 0 {
+                    return;
+                }
+                let candidate = &context.units[unit_index];
+                if candidate.id == projectile.target
+                    || impact_position.distance_sq(candidate.position) > range_sq
+                {
+                    return;
+                }
+                if !projectile.allow_repeat_targets && hit_targets.contains(&candidate.id) {
+                    return;
+                }
+                let rank = deterministic_random(
+                    self.config.match_seed,
+                    context.completed_tick,
+                    projectile_id,
+                    RANDOM_PURPOSE_BOUNCE_TARGET ^ candidate.id.0,
+                    next_bounce_index,
+                );
+                let key = (rank, candidate.id, unit_index);
+                if best.is_none_or(|current| key < current) {
+                    best = Some(key);
+                }
+            },
+        );
+        best.map(|(_, _, unit_index)| unit_index)
+    }
+
     fn target_pursuit_range(&self, source: &UnitSnapshot) -> i32 {
         source
             .attack
@@ -1592,7 +1848,9 @@ impl Simulation {
                     self.topology.cell_of_point(target.position),
                 ) && (in_attack_range || source.movement.speed_per_tick > 0)
             }
-            AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. } => {
+            AttackDelivery::RangedGuaranteedHit { .. }
+            | AttackDelivery::RangedBallistic { .. }
+            | AttackDelivery::Bounce { .. } => {
                 in_attack_range
                     || (source.movement.speed_per_tick > 0
                         && self.topology.same_component(
@@ -1616,7 +1874,9 @@ impl Simulation {
         let in_attack_range = distance_sq <= source.attack.range_sq();
         if matches!(
             source.attack.delivery,
-            AttackDelivery::RangedGuaranteedHit { .. } | AttackDelivery::RangedBallistic { .. }
+            AttackDelivery::RangedGuaranteedHit { .. }
+                | AttackDelivery::RangedBallistic { .. }
+                | AttackDelivery::Bounce { .. }
         ) && in_attack_range
         {
             return true;
@@ -2276,6 +2536,28 @@ struct BallisticProjectileSnapshot {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct BounceProjectileSnapshot {
+    entity: Entity,
+    id: SimId,
+    projectile: BounceProjectile,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DueTargetProjectileSnapshot {
+    GuaranteedHit(ProjectileSnapshot),
+    Bounce(BounceProjectileSnapshot),
+}
+
+impl DueTargetProjectileSnapshot {
+    const fn id(&self) -> SimId {
+        match self {
+            Self::GuaranteedHit(snapshot) => snapshot.id,
+            Self::Bounce(snapshot) => snapshot.id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 struct ProjectileLaunch {
     source: SimId,
     target: SimId,
@@ -2295,6 +2577,35 @@ struct BallisticProjectileLaunch {
     impact_radius: i32,
     launch_tick: u64,
     impact_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BounceProjectileLaunch {
+    source: SimId,
+    source_team: Team,
+    target: SimId,
+    damage: i32,
+    launch_position: SimPoint,
+    launch_tick: u64,
+    impact_tick: u64,
+    speed_per_tick: i32,
+    bounce_range: i32,
+    max_bounces: u8,
+    damage_percent_per_bounce: u16,
+    allow_repeat_targets: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BounceProjectileUpdate {
+    entity: Entity,
+    projectile: BounceProjectile,
+}
+
+struct BounceSearchContext<'a> {
+    completed_tick: u64,
+    units: &'a [UnitSnapshot],
+    unit_health: &'a [i32],
+    grid: &'a SpatialGrid,
 }
 
 struct DamageTargetState<'a> {
@@ -2468,6 +2779,18 @@ fn validate_unit_template(unit: crate::components::UnitTemplate) {
             assert!(speed_per_tick > 0);
             assert!(impact_radius >= 0);
         }
+        AttackDelivery::Bounce {
+            speed_per_tick,
+            bounce_range,
+            max_bounces,
+            damage_percent_per_bounce,
+            allow_repeat_targets: _,
+        } => {
+            assert!(speed_per_tick > 0);
+            assert!(bounce_range >= 0);
+            assert!(usize::from(max_bounces) < MAX_BOUNCE_HITS);
+            assert!((1..=100).contains(&damage_percent_per_bounce));
+        }
     }
     assert!(unit.movement.speed_per_tick >= 0);
 }
@@ -2521,16 +2844,30 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             },
         });
     }
-    let projectile = *entity.get::<BallisticProjectile>()?;
+    if let Some(projectile) = entity.get::<BallisticProjectile>() {
+        return Some(ProjectileView {
+            id,
+            source: projectile.source,
+            launch_position: projectile.launch_position,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::Ballistic {
+                destination: projectile.destination,
+                impact_radius: projectile.impact_radius,
+            },
+        });
+    }
+    let projectile = *entity.get::<BounceProjectile>()?;
     Some(ProjectileView {
         id,
         source: projectile.source,
         launch_position: projectile.launch_position,
         launch_tick: projectile.launch_tick,
         impact_tick: projectile.impact_tick,
-        kind: ProjectileViewKind::Ballistic {
-            destination: projectile.destination,
-            impact_radius: projectile.impact_radius,
+        kind: ProjectileViewKind::Bounce {
+            target: projectile.target,
+            bounce_index: projectile.bounce_index,
+            remaining_bounces: projectile.remaining_bounces,
         },
     })
 }
@@ -2652,6 +2989,26 @@ fn projectile_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
         .max(1)
 }
 
+fn scaled_bounce_damage(damage: i32, percent: u16) -> i32 {
+    debug_assert!((1..=100).contains(&percent));
+    i32::try_from(i64::from(damage) * i64::from(percent) / 100)
+        .expect("bounce damage scaling overflowed validated bounds")
+}
+
+fn deterministic_random(seed: u64, tick: u64, entity: SimId, purpose: u64, index: u32) -> u64 {
+    let state = splitmix64(seed ^ tick.rotate_left(17));
+    let state = splitmix64(state ^ entity.0.rotate_left(31));
+    let state = splitmix64(state ^ purpose);
+    splitmix64(state ^ u64::from(index))
+}
+
+fn splitmix64(input: u64) -> u64 {
+    let mut value = input.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
+}
+
 fn target_is_alive(
     id: SimId,
     units: &[UnitSnapshot],
@@ -2760,6 +3117,14 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
             if let Some(projectile) = entity.get::<BallisticProjectile>() {
                 return Some(CanonicalEntity::BallisticProjectile(
                     CanonicalBallisticProjectile {
+                        id,
+                        projectile: *projectile,
+                    },
+                ));
+            }
+            if let Some(projectile) = entity.get::<BounceProjectile>() {
+                return Some(CanonicalEntity::BounceProjectile(
+                    CanonicalBounceProjectile {
                         id,
                         projectile: *projectile,
                     },
@@ -2877,6 +3242,28 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(projectile.projectile.launch_tick);
                 hash.write_u64(projectile.projectile.impact_tick);
             }
+            CanonicalEntity::BounceProjectile(projectile) => {
+                hash.write_u8(4);
+                hash.write_u64(projectile.id.0);
+                hash.write_u64(projectile.projectile.source.0);
+                hash.write_u8(projectile.projectile.source_team.0);
+                hash.write_u64(projectile.projectile.target.0);
+                hash.write_i32(projectile.projectile.damage);
+                hash.write_i32(projectile.projectile.launch_position.x);
+                hash.write_i32(projectile.projectile.launch_position.y);
+                hash.write_u64(projectile.projectile.launch_tick);
+                hash.write_u64(projectile.projectile.impact_tick);
+                hash.write_i32(projectile.projectile.speed_per_tick);
+                hash.write_i32(projectile.projectile.bounce_range);
+                hash.write_u8(projectile.projectile.remaining_bounces);
+                hash.write_u8(projectile.projectile.bounce_index);
+                hash.write_u16(projectile.projectile.damage_percent_per_bounce);
+                hash.write_u8(u8::from(projectile.projectile.allow_repeat_targets));
+                hash.write_u8(projectile.projectile.hit_count);
+                for target in projectile.projectile.hit_targets {
+                    hash.write_u64(target.0);
+                }
+            }
         }
     }
 
@@ -2909,6 +3296,7 @@ enum CanonicalEntity {
     Building(CanonicalBuilding),
     Projectile(CanonicalProjectile),
     BallisticProjectile(CanonicalBallisticProjectile),
+    BounceProjectile(CanonicalBounceProjectile),
 }
 
 impl CanonicalEntity {
@@ -2918,6 +3306,7 @@ impl CanonicalEntity {
             Self::Building(building) => building.id,
             Self::Projectile(projectile) => projectile.id,
             Self::BallisticProjectile(projectile) => projectile.id,
+            Self::BounceProjectile(projectile) => projectile.id,
         }
     }
 }
@@ -2958,6 +3347,12 @@ struct CanonicalBallisticProjectile {
     projectile: BallisticProjectile,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CanonicalBounceProjectile {
+    id: SimId,
+    projectile: BounceProjectile,
+}
+
 fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
     hash.write_u8(delivery.stable_tag());
     match delivery {
@@ -2971,6 +3366,19 @@ fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
         } => {
             hash.write_i32(speed_per_tick);
             hash.write_i32(impact_radius);
+        }
+        AttackDelivery::Bounce {
+            speed_per_tick,
+            bounce_range,
+            max_bounces,
+            damage_percent_per_bounce,
+            allow_repeat_targets,
+        } => {
+            hash.write_i32(speed_per_tick);
+            hash.write_i32(bounce_range);
+            hash.write_u8(max_bounces);
+            hash.write_u16(damage_percent_per_bounce);
+            hash.write_u8(u8::from(allow_repeat_targets));
         }
     }
 }

@@ -196,19 +196,35 @@ The exact Castle Fight-compatible zone shape, friendly-fire policy, building int
 
 ### 9.4 Bounce
 
-A bounce attack is guaranteed to hit its initial selected target, then performs one or more subsequent jumps to other eligible units.
+A bounce attack is guaranteed to hit its initial selected target, then may perform a bounded number of subsequent guaranteed-hit jumps. The current verification delivery authors positive integer `speed_per_tick`, non-negative `bounce_range`, `max_bounces`, integer `damage_percent_per_bounce` in `1..=100`, and `allow_repeat_targets`. `max_bounces` counts **additional** jumps after the initial selected target; the verifier currently caps it at eight so authoritative hit history fits fixed-size projectile state.
 
-Each bounce defines:
+Launch creates one authoritative persistent bounce projectile with a monotonic `SimId`. That same projectile entity/identity survives across every hop; it stores source identity/team, current target, current damage, launch position/tick, due impact tick, travel speed, range/rules, remaining/indexed bounce count, and bounded hit history. Source death after launch does not cancel the chain. If the current retained hop target has died/disappeared before its due impact, that hop invalidates and the chain ends without retargeting.
 
-- maximum bounce count;
-- candidate range from the previous impact/source;
-- eligibility filters;
-- whether already-hit entities may be selected again;
-- damage/effect scaling per bounce;
-- travel delay between bounces if any;
-- deterministic-random next-target selection policy.
+A successful impact applies the current integer damage before selecting a later hop. If another hop is allowed, the current provisional candidate set contains living hostile **units** within `bounce_range` of the just-hit target's authoritative impact position. The current target is always excluded. Earlier hit targets are also excluded when `allow_repeat_targets == false`; buildings are not subsequent-hop candidates in this verification rule, although an ordinary initial attack may have selected a building. Bounce impacts occur in the same pre-movement persistent-projectile subphase as guaranteed-hit impacts, so candidate positions are the authoritative pre-movement positions for that tick.
 
-Random bounce selection MUST use keyed deterministic RNG and MUST be independent of candidate enumeration or worker order.
+Next-target randomness is keyed and enumeration-order independent. Every valid candidate receives a deterministic random rank derived from:
+
+```text
+match seed
++ current impact tick
++ persistent projectile SimId
++ stable BounceTarget purpose discriminator combined with candidate SimId
++ next bounce index
+```
+
+The candidate with minimum `(random rank, SimId)` wins. The current verifier uses a specified SplitMix64-based keyed mixer; the algorithm and purpose discriminator are simulation-version behavior and MUST NOT change silently. Spatial-grid traversal order, hash-table iteration, and worker completion order therefore cannot choose the next hop.
+
+After choosing the next target, damage is scaled with exact integer floor arithmetic:
+
+```text
+next_damage = current_damage * damage_percent_per_bounce / 100
+```
+
+and travel time uses the same upward-rounded integer distance/speed rule as the other persistent projectile deliveries, minimum one tick. There is no extra implicit hop delay beyond that authored travel time.
+
+Guaranteed-hit and bounce projectiles that become due in the same pre-movement subphase resolve together in ascending projectile `SimId`; ballistic impacts remain a later post-movement subphase by definition.
+
+The exact Castle Fight-compatible bounce range, repeat policy, scaling, building eligibility, maximum chain length, and random-selection distribution remain compatibility-tunable. Any replacement MUST remain explicitly bounded, keyed-deterministic, and independent of candidate enumeration/worker order.
 
 ### 9.5 Authoritative vs presentation projectile state
 

@@ -317,7 +317,7 @@ The initial playable rules are fixed:
 - already-launched persistent projectiles survive source death;
 - ballistic/siege impacts resolve after movement and query post-movement occupants.
 
-The verification implementation now also has provisional executable `RangedGuaranteedHit` and `RangedBallistic` semantics. Guaranteed-hit uses integer launch-distance/speed travel time, retained target identity, source-death independence, and deterministic invalidation when the target has already died/been removed before impact. Ballistic captures a fixed pre-movement destination, uses the same integer travel rule, resolves a hostile circular splash query against post-movement occupants, and canonically orders due projectiles and affected targets by stable `SimId`. These are specified in `15-targeting-combat.md` and remain compatibility-tunable rather than unexamined behavior.
+The verification implementation now also has provisional executable `RangedGuaranteedHit`, `RangedBallistic`, and `Bounce` semantics. Guaranteed-hit uses integer launch-distance/speed travel time, retained target identity, source-death independence, and deterministic invalidation when the target has already died/been removed before impact. Ballistic captures a fixed pre-movement destination, uses the same integer travel rule, resolves a hostile circular splash query against post-movement occupants, and canonically orders due projectiles and affected targets by stable `SimId`. Bounce keeps one persistent projectile identity across a bounded chain, applies integer damage falloff, records bounded hit history, and uses keyed deterministic candidate ranks for subsequent hostile-unit hops. These are specified in `15-targeting-combat.md` and remain compatibility-tunable rather than unexamined behavior.
 
 Compatibility work still needs to establish:
 
@@ -325,7 +325,7 @@ Compatibility work still needs to establish:
 - exact canonical ordering for otherwise simultaneous strikes beyond the stable-ID fallback;
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;
 - whether observed Castle Fight behavior requires revising the provisional ballistic circular-zone, hostile-only splash, building-intersection, or travel rules;
-- bounce candidate range, repeat policy, travel delay, and damage scaling;
+- whether observed Castle Fight behavior requires revising the provisional bounce range, repeat/building eligibility, chain cap, damage falloff, travel, or keyed-random selection rules;
 - target-retention/range hysteresis details;
 - splash/chain ordering;
 - automatic spell cast timing details not already fixed by stun/death precedence;

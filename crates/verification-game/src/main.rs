@@ -202,6 +202,7 @@ fn setup(mut commands: Commands) {
 
 fn verification_config() -> SimulationConfig {
     SimulationConfig {
+        match_seed: 0,
         spatial_cell_size: 40 * SUBUNITS_PER_WORLD_UNIT,
         navigation_cell_size: NAV_CELL_SUBUNITS,
         navigation_min: NavCell::new(0, 0),
@@ -574,6 +575,7 @@ fn draw_attack_traces(mut gizmos: Gizmos, attacks: Res<AttackVisuals>) {
             AttackDelivery::Melee => Color::srgba(1.0, 0.92, 0.62, 0.9),
             AttackDelivery::RangedGuaranteedHit { .. } => Color::srgba(0.72, 0.95, 1.0, 0.95),
             AttackDelivery::RangedBallistic { .. } => Color::srgba(1.0, 0.78, 0.38, 0.95),
+            AttackDelivery::Bounce { .. } => Color::srgba(0.72, 1.0, 0.45, 0.95),
         };
         gizmos.line_2d(trace.start, trace.end, color);
     }
@@ -597,6 +599,16 @@ fn draw_authoritative_projectiles(state: Res<GameState>, mut gizmos: Gizmos) {
                 sim_point_to_world(destination),
                 Color::srgba(1.0, 0.78, 0.38, 0.95),
             ),
+            ProjectileViewKind::Bounce { target, .. } => {
+                let target = if let Some(unit) = state.simulation.unit(target) {
+                    sim_point_to_world(unit.position)
+                } else if let Some(building) = state.simulation.building(target) {
+                    footprint_world_rect(building.footprint).0
+                } else {
+                    continue;
+                };
+                (target, Color::srgba(0.72, 1.0, 0.45, 0.95))
+            }
         };
         let start = sim_point_to_world(projectile.launch_position);
         let travel_ticks = projectile
@@ -751,6 +763,7 @@ fn unit_size(unit: &UnitView) -> Vec2 {
         AttackDelivery::Melee => Vec2::splat(9.0),
         AttackDelivery::RangedGuaranteedHit { .. } => Vec2::splat(7.0),
         AttackDelivery::RangedBallistic { .. } => Vec2::splat(8.0),
+        AttackDelivery::Bounce { .. } => Vec2::splat(7.0),
     }
 }
 

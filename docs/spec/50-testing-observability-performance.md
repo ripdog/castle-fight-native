@@ -231,7 +231,7 @@ A* fallback count/cache-hit count/expanded nodes
 target reacquisitions vs retentions
 ally-defense query/victim/attacker candidate counts
 combat intents/effects
-projectile launches/impacts/effects/invalidations, ballistic impact candidates, and peak live count
+projectile launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, and peak live count
 production attempts/spawns/bounded-search failures
 structural operations
 snapshot generation time/size

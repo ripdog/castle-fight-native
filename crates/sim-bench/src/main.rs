@@ -21,6 +21,7 @@ enum Scenario {
     Production,
     Projectile,
     Ballistic,
+    Bounce,
 }
 
 impl Scenario {
@@ -34,6 +35,7 @@ impl Scenario {
             Self::Production => "production",
             Self::Projectile => "projectile",
             Self::Ballistic => "ballistic",
+            Self::Bounce => "bounce",
         }
     }
 }
@@ -149,7 +151,7 @@ fn main() {
                     || result.projectile_impacts_per_tick > 0.0
                 {
                     println!(
-                        "         projectiles avg-live={:.1} peak-live={} launch/t={:.1} impact/t={:.1} effect/t={:.1} invalid/t={:.1} ballistic-candidates/impact={:.2}",
+                        "         projectiles avg-live={:.1} peak-live={} launch/t={:.1} impact/t={:.1} effect/t={:.1} invalid/t={:.1} ballistic-candidates/impact={:.2} bounce-jump/t={:.1} bounce-candidates/jump={:.2}",
                         result.average_projectiles_alive,
                         result.peak_projectiles_alive,
                         result.projectile_launches_per_tick,
@@ -157,6 +159,8 @@ fn main() {
                         result.projectile_effects_per_tick,
                         result.projectile_invalidations_per_tick,
                         result.ballistic_candidates_per_impact,
+                        result.bounce_jumps_per_tick,
+                        result.bounce_candidates_per_jump,
                     );
                 }
                 if result.ally_defense_queries_per_tick > 0.0
@@ -211,6 +215,8 @@ struct BenchCounters {
     projectile_effects: usize,
     projectile_invalidations: usize,
     ballistic_candidate_checks: usize,
+    bounce_jumps: usize,
+    bounce_candidate_checks: usize,
     retained_targets: usize,
     target_changes: usize,
     ally_defense_queries: usize,
@@ -236,6 +242,8 @@ struct BenchResult {
     projectile_effects_per_tick: f64,
     projectile_invalidations_per_tick: f64,
     ballistic_candidates_per_impact: f64,
+    bounce_jumps_per_tick: f64,
+    bounce_candidates_per_jump: f64,
     retained_targets_per_tick: f64,
     target_changes_per_tick: f64,
     ally_defense_queries_per_tick: f64,
@@ -346,6 +354,12 @@ fn run_case(
         } else {
             counters.ballistic_candidate_checks as f64 / counters.projectile_impacts as f64
         },
+        bounce_jumps_per_tick: counters.bounce_jumps as f64 / ticks as f64,
+        bounce_candidates_per_jump: if counters.bounce_jumps == 0 {
+            0.0
+        } else {
+            counters.bounce_candidate_checks as f64 / counters.bounce_jumps as f64
+        },
         retained_targets_per_tick: counters.retained_targets as f64 / ticks as f64,
         target_changes_per_tick: counters.target_changes as f64 / ticks as f64,
         ally_defense_queries_per_tick: counters.ally_defense_queries as f64 / ticks as f64,
@@ -365,6 +379,9 @@ fn run_case(
 
 fn scenario_config(scenario: Scenario) -> SimulationConfig {
     let mut config = SimulationConfig::default();
+    if scenario == Scenario::Bounce {
+        config.match_seed = 0x5eed_b0ce_2026_0912;
+    }
     if scenario == Scenario::Pathing {
         config
             .static_blockers
@@ -388,6 +405,7 @@ fn populate_scenario(
         Scenario::Production => populate_production_churn(simulation, units),
         Scenario::Projectile => populate_projectile_density_battle(simulation, units),
         Scenario::Ballistic => populate_ballistic_density_battle(simulation, units),
+        Scenario::Bounce => populate_bounce_density_battle(simulation, units),
     }
 
     match scenario {
@@ -508,6 +526,46 @@ fn populate_ballistic_density_battle(simulation: &mut Simulation, total_units: u
     }
 }
 
+fn populate_bounce_density_battle(simulation: &mut Simulation, total_units: usize) {
+    let per_team = total_units / 2;
+    let rows = 100usize.min(per_team.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let attack = AttackProfile {
+        delivery: AttackDelivery::Bounce {
+            speed_per_tick: 4 * SUBUNITS_PER_WORLD_UNIT,
+            bounce_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+            max_bounces: 3,
+            damage_percent_per_bounce: 75,
+            allow_repeat_targets: false,
+        },
+        damage: 8,
+        range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 1,
+    };
+    let movement = MovementProfile { speed_per_tick: 0 };
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                50 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                70 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000_000_000,
+                attack,
+                movement,
+            });
+        }
+    }
+}
+
 fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
     let total_buildings = (scale / 100).clamp(2, 100);
     let per_team = total_buildings.div_ceil(2);
@@ -568,6 +626,8 @@ fn accumulate_counters(result: &TickResult, counters: &mut BenchCounters) {
     counters.projectile_effects += result.projectile_effects;
     counters.projectile_invalidations += result.projectile_invalidations;
     counters.ballistic_candidate_checks += result.ballistic_candidate_checks;
+    counters.bounce_jumps += result.bounce_jumps;
+    counters.bounce_candidate_checks += result.bounce_candidate_checks;
     counters.retained_targets += result.retained_targets;
     counters.target_changes += result.target_changes;
     counters.ally_defense_queries += result.ally_defense_queries;
@@ -633,7 +693,7 @@ fn parse_args() -> Args {
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce"
                 );
                 println!("  --units 1000,5000,10000");
                 println!("  --workers 1,2,4,8");
@@ -666,6 +726,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "production" => Scenario::Production,
             "projectile" => Scenario::Projectile,
             "ballistic" => Scenario::Ballistic,
+            "bounce" => Scenario::Bounce,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()
