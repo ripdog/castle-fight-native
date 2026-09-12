@@ -336,7 +336,7 @@ These should become small executable fixtures as soon as decided.
 
 The initial rules establish that a candidate requiring pursuit is invalid when the attacker has no reachable attack position; a unit that can hit a caged target from its current/reachable position may still select it. Eligible enemy combat units outrank non-attacking buildings for **fresh acquisition**, so an attacker unable to hit units inside a cage may instead attack cage buildings while still preferring reachable enemy units outside it. Stable `SimId` is accepted as the final exact tie-break.
 
-Current-target behavior is now also defined: engagements are sticky. A closer/new enemy does not replace a valid current target. If current target `B` is not attacking `A` and another valid unit `C` actually attacks `A`, then `A` switches to `C` on the next targeting phase. If `B` is attacking `A`, that mutual engagement is retained. Dead, disappeared, invisible, invulnerable, unattackable, unreachable, or sufficiently distant retreating targets are dropped. The verification implementation starts with a provisional three-tile extra pursuit allowance.
+Current-target behavior is now also defined: engagements are sticky. A closer/new enemy does not replace a valid current target. If current target `B` is not attacking `A` and another valid unit `C` actually attacks `A`, then `A` switches to `C` on the next targeting phase. If `B` is attacking `A`, that mutual engagement is retained. Idle units and units whose current target is not fighting them back also respond to actual attacks on nearby allies, switching to a valid attacker of that ally on the next targeting phase. Direct self-retaliation outranks ally defense; passive castles/buildings are defenceless targets for these rules. Dead, disappeared, invisible, invulnerable, unattackable, unreachable, or sufficiently distant retreating targets are dropped. The verification implementation starts with a provisional three-tile extra pursuit allowance.
 
 Compatibility work still needs to investigate/decide:
 
@@ -346,7 +346,7 @@ Compatibility work still needs to investigate/decide:
 - explicit taunt/forced-target mechanics, while preserving the rule that builder-held item damage does not create ordinary retaliation;
 - detailed air/ground/building preferences.
 
-The engine provides deterministic reachability/capability filtering, sticky engagement state, retaliation state, and total ordering; content/game rules fill in the remaining semantic score.
+The engine provides deterministic reachability/capability filtering, sticky engagement state, self-retaliation and nearby-ally defense state, and total ordering; content/game rules fill in the remaining semantic score.
 
 ## 18. Open question — transport
 

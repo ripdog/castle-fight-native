@@ -120,6 +120,7 @@ pub struct Simulation {
     pool: ThreadPool,
     topology: TopologyGrid,
     topology_dirty: bool,
+    defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     next_tick: u64,
     next_id: u64,
@@ -153,6 +154,7 @@ impl Simulation {
             pool,
             topology,
             topology_dirty: false,
+            defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             next_tick: 0,
             next_id: 1,
@@ -319,10 +321,23 @@ impl Simulation {
                     .flatten()
                 }),
         );
+        let alert_grid = SpatialGrid::build(
+            self.config.spatial_cell_size,
+            self.defense_alerts
+                .iter()
+                .enumerate()
+                .map(|(index, alert)| {
+                    (
+                        SpatialPartition::global(alert.victim_team.0),
+                        index,
+                        alert.victim_position,
+                    )
+                }),
+        );
         let snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let choices = self.select_targets(&units, &buildings, &grid);
+        let choices = self.select_targets(&units, &buildings, &grid, &alert_grid);
         for (unit, target) in units.iter_mut().zip(choices) {
             unit.target = target;
         }
@@ -334,6 +349,7 @@ impl Simulation {
         let mut cooldowns: Vec<u16> = units.iter().map(|unit| unit.cooldown_remaining).collect();
         let mut positions: Vec<SimPoint> = units.iter().map(|unit| unit.position).collect();
         let mut attackers_this_tick = vec![None; units.len()];
+        let mut next_defense_alerts = Vec::new();
 
         let phase_start = Instant::now();
         let mut intents = self.attack_intents(&units, &buildings);
@@ -359,6 +375,13 @@ impl Simulation {
                         .checked_sub(intent.damage)
                         .expect("unit damage arithmetic overflowed validated bounds");
                     attackers_this_tick[index].get_or_insert(intent.source_id);
+                    next_defense_alerts.push(DefenseAlert {
+                        victim_id: units[index].id,
+                        victim_team: units[index].team,
+                        victim_position: units[index].position,
+                        attacker_id: intent.source_id,
+                        attacked_tick: completed_tick,
+                    });
                     units[index].position
                 }
                 TargetIndex::Building(index) => {
@@ -452,6 +475,7 @@ impl Simulation {
             self.topology_dirty = true;
         }
 
+        self.defense_alerts = next_defense_alerts;
         self.next_tick = self
             .next_tick
             .checked_add(1)
@@ -459,7 +483,7 @@ impl Simulation {
         let movement_and_commit = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let checksum = canonical_checksum(&self.world, self.next_tick);
+        let checksum = canonical_checksum(&self.world, self.next_tick, &self.defense_alerts);
         let checksum_time = phase_start.elapsed();
         let timings = TickTimings {
             topology_and_timers,
@@ -492,7 +516,7 @@ impl Simulation {
 
     #[must_use]
     pub fn checksum(&self) -> u64 {
-        canonical_checksum(&self.world, self.next_tick)
+        canonical_checksum(&self.world, self.next_tick, &self.defense_alerts)
     }
 
     #[must_use]
@@ -757,6 +781,7 @@ impl Simulation {
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
         grid: &SpatialGrid,
+        alert_grid: &SpatialGrid,
     ) -> Vec<Option<SimId>> {
         self.pool.install(|| {
             units
@@ -770,8 +795,16 @@ impl Simulation {
                     if let Some(current) = current {
                         let current_fights_back = find_unit_index(units, current)
                             .is_some_and(|index| units[index].target == Some(unit.id));
-                        if !current_fights_back
-                            && let Some(attacker) = retaliation
+                        if current_fights_back {
+                            return Some(current);
+                        }
+                        if let Some(attacker) = retaliation
+                            && attacker != current
+                        {
+                            return Some(attacker);
+                        }
+                        if let Some(attacker) =
+                            self.recent_ally_defense_target(unit, units, buildings, alert_grid)
                             && attacker != current
                         {
                             return Some(attacker);
@@ -780,6 +813,11 @@ impl Simulation {
                     }
 
                     if let Some(attacker) = retaliation {
+                        return Some(attacker);
+                    }
+                    if let Some(attacker) =
+                        self.recent_ally_defense_target(unit, units, buildings, alert_grid)
+                    {
                         return Some(attacker);
                     }
 
@@ -867,6 +905,60 @@ impl Simulation {
         let attacker = source.retaliation.attacker?;
         self.target_retainable_for(source, attacker, units, buildings)
             .then_some(attacker)
+    }
+
+    fn recent_ally_defense_target(
+        &self,
+        source: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        alert_grid: &SpatialGrid,
+    ) -> Option<SimId> {
+        let previous_tick = self.next_tick.checked_sub(1)?;
+        let acquisition_range_sq = source.attack.acquisition_range_sq();
+        let mut best: Option<(u64, u64, SimId, SimId)> = None;
+
+        alert_grid.for_each_candidate(
+            SpatialPartition::global(source.team.0),
+            source.position,
+            source.attack.acquisition_range,
+            |alert_index| {
+                let alert = &self.defense_alerts[alert_index];
+                if alert.attacked_tick != previous_tick || alert.victim_id == source.id {
+                    return;
+                }
+                let ally_distance_sq = source.position.distance_sq(alert.victim_position);
+                if ally_distance_sq > acquisition_range_sq
+                    || !self.target_retainable_for(source, alert.attacker_id, units, buildings)
+                {
+                    return;
+                }
+
+                let attacker_distance_sq =
+                    if let Some(index) = find_unit_index(units, alert.attacker_id) {
+                        source.position.distance_sq(units[index].position)
+                    } else if let Some(index) = find_building_index(buildings, alert.attacker_id) {
+                        point_to_footprint_distance_sq(
+                            source.position,
+                            buildings[index].footprint,
+                            self.config.navigation_cell_size,
+                        )
+                    } else {
+                        return;
+                    };
+                let key = (
+                    ally_distance_sq,
+                    attacker_distance_sq,
+                    alert.attacker_id,
+                    alert.victim_id,
+                );
+                if best.is_none_or(|current| key < current) {
+                    best = Some(key);
+                }
+            },
+        );
+
+        best.map(|(_, _, attacker, _)| attacker)
     }
 
     fn target_retainable_for(
@@ -1148,6 +1240,8 @@ impl Simulation {
                         return desired;
                     };
                     let partition = SpatialPartition::new(0, component);
+                    let movement_x = i64::from(desired.x) - i64::from(unit.position.x);
+                    let movement_y = i64::from(desired.y) - i64::from(unit.position.y);
                     let mut push_x = 0_i64;
                     let mut push_y = 0_i64;
                     let mut overlaps = 0_i64;
@@ -1179,6 +1273,25 @@ impl Simulation {
                                 (i64::from(separation_distance) - axis_distance).max(1);
                             push_x += direction_x * penetration;
                             push_y += direction_y * penetration;
+
+                            if movement_x != 0 || movement_y != 0 {
+                                let other_move_x =
+                                    i64::from(other.x) - i64::from(units[other_index].position.x);
+                                let other_move_y =
+                                    i64::from(other.y) - i64::from(units[other_index].position.y);
+                                let to_other_x = i64::from(other.x) - i64::from(unit.position.x);
+                                let to_other_y = i64::from(other.y) - i64::from(unit.position.y);
+                                let other_is_stationary = other_move_x == 0 && other_move_y == 0;
+                                let other_is_ahead =
+                                    movement_x * to_other_x + movement_y * to_other_y > 0;
+                                if other_is_stationary && other_is_ahead {
+                                    let side = i64::from(sidestep_sign(unit.id));
+                                    let perpendicular_x = -movement_y.signum() * side;
+                                    let perpendicular_y = movement_x.signum() * side;
+                                    push_x += perpendicular_x * penetration;
+                                    push_y += perpendicular_y * penetration;
+                                }
+                            }
                             overlaps += 1;
                         },
                     );
@@ -1293,6 +1406,15 @@ struct AttackIntent {
     cooldown_ticks: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DefenseAlert {
+    victim_id: SimId,
+    victim_team: Team,
+    victim_position: SimPoint,
+    attacker_id: SimId,
+    attacked_tick: u64,
+}
+
 fn validate_unit_template(unit: crate::components::UnitTemplate) {
     assert!(unit.health > 0);
     assert!(unit.attack.damage >= 0);
@@ -1399,6 +1521,11 @@ fn exact_overlap_direction(a: SimId, b: SimId) -> (i32, i32) {
     if axis == 0 { (sign, 0) } else { (0, sign) }
 }
 
+fn sidestep_sign(id: SimId) -> i32 {
+    let mixed = id.0 ^ id.0.rotate_left(21) ^ 0x9e37_79b9_7f4a_7c15;
+    if mixed & 1 == 0 { -1 } else { 1 }
+}
+
 fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
     a.min_x <= b.max_x() && a.max_x() >= b.min_x && a.min_y <= b.max_y() && a.max_y() >= b.min_y
 }
@@ -1434,7 +1561,7 @@ fn point_to_footprint_distance_sq(
     point.distance_sq(closest)
 }
 
-fn canonical_checksum(world: &World, next_tick: u64) -> u64 {
+fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAlert]) -> u64 {
     let mut entities: Vec<CanonicalEntity> = world
         .iter_entities()
         .filter_map(|entity| {
@@ -1526,6 +1653,27 @@ fn canonical_checksum(world: &World, next_tick: u64) -> u64 {
                 }
             }
         }
+    }
+
+    let mut alerts = defense_alerts.to_vec();
+    alerts.sort_unstable_by_key(|alert| {
+        (
+            alert.attacked_tick,
+            alert.victim_team.0,
+            alert.victim_id,
+            alert.attacker_id,
+            alert.victim_position.x,
+            alert.victim_position.y,
+        )
+    });
+    hash.write_u64(alerts.len() as u64);
+    for alert in alerts {
+        hash.write_u64(alert.attacked_tick);
+        hash.write_u8(alert.victim_team.0);
+        hash.write_u64(alert.victim_id.0);
+        hash.write_i32(alert.victim_position.x);
+        hash.write_i32(alert.victim_position.y);
+        hash.write_u64(alert.attacker_id.0);
     }
     hash.finish()
 }

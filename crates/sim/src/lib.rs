@@ -434,6 +434,250 @@ mod tests {
     }
 
     #[test]
+    fn attacker_preempts_passive_building_target() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let castle = sim.spawn_building(passive_building(1, BuildingFootprint::new(11, 0, 1, 1)));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(9 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
+    }
+
+    #[test]
+    fn nearby_ally_attack_preempts_defenceless_target() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+            },
+        });
+        let ally = sim.spawn_unit(passive_unit(0, 12 * SUBUNITS_PER_WORLD_UNIT));
+        let castle = sim.spawn_building(passive_building(1, BuildingFootprint::new(11, 0, 1, 1)));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(12 * SUBUNITS_PER_WORLD_UNIT, SUBUNITS_PER_WORLD_UNIT),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(attacker).unwrap().target, Some(ally));
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
+    }
+
+    #[test]
+    fn lethal_hit_still_alerts_nearby_ally() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+            },
+        });
+        let ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(12 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 1,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let castle = sim.spawn_building(passive_building(1, BuildingFootprint::new(11, 0, 1, 1)));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(12 * SUBUNITS_PER_WORLD_UNIT, SUBUNITS_PER_WORLD_UNIT),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert!(sim.unit(ally).is_none());
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
+    }
+
+    #[test]
+    fn mutual_fight_ignores_nearby_ally_defense_alert() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let mutual = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(11 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let ally = sim.spawn_unit(passive_unit(0, 13 * SUBUNITS_PER_WORLD_UNIT));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(mutual));
+        assert_eq!(sim.unit(mutual).unwrap().target, Some(defender));
+
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(13 * SUBUNITS_PER_WORLD_UNIT, SUBUNITS_PER_WORLD_UNIT),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(attacker).unwrap().target, Some(ally));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(mutual));
+    }
+
+    #[test]
+    fn trailing_melee_units_sidestep_around_engaged_frontline() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 4);
+        let moving_melee = |team: u8, x: i32| UnitSpawn {
+            team: Team(team),
+            position: SimPoint::new(x, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+            },
+        };
+        let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+        let front = sim.spawn_unit(moving_melee(0, 20 * SUBUNITS_PER_WORLD_UNIT));
+        let rear_a = sim.spawn_unit(moving_melee(0, 20 * SUBUNITS_PER_WORLD_UNIT - spacing));
+        let rear_b = sim.spawn_unit(moving_melee(0, 20 * SUBUNITS_PER_WORLD_UNIT - 2 * spacing));
+        let enemy_front = sim.spawn_unit(moving_melee(1, 24 * SUBUNITS_PER_WORLD_UNIT));
+        sim.spawn_unit(moving_melee(1, 24 * SUBUNITS_PER_WORLD_UNIT + spacing));
+        sim.spawn_unit(moving_melee(1, 24 * SUBUNITS_PER_WORLD_UNIT + 2 * spacing));
+
+        let mut rear_attacked = false;
+        let mut lateral_displacement = 0_i32;
+        for _ in 0..240 {
+            sim.step();
+            for rear in [rear_a, rear_b] {
+                lateral_displacement =
+                    lateral_displacement.max(sim.unit(rear).unwrap().position.y.abs());
+            }
+            rear_attacked |= sim
+                .attacks_last_tick()
+                .iter()
+                .any(|attack| attack.source == rear_a || attack.source == rear_b);
+            if rear_attacked {
+                break;
+            }
+        }
+
+        assert_eq!(sim.unit(front).unwrap().target, Some(enemy_front));
+        assert!(
+            lateral_displacement >= SUBUNITS_PER_WORLD_UNIT / 8,
+            "rear units never sidestepped around the engaged front"
+        );
+        assert!(rear_attacked, "rear units never reached an attack position");
+    }
+
+    #[test]
     fn worker_count_does_not_change_battle_checksum() {
         let mut expected = None;
         for workers in [1, 2, 4] {

@@ -230,7 +230,9 @@ The game needs deterministic rules for:
 
 The first implementation SHOULD prefer simple, testable steering over physically realistic pushing.
 
-The verification implementation uses a deterministic two-stage crowd pass. Units first compute movement intents from one immutable phase snapshot. A second data-parallel pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps, so worker scheduling and neighbor enumeration order cannot alter results. The final separated position is accepted only if it remains traversable and in the unit's original connected navigation component.
+A combat unit that reaches attack range stops its strategic forward movement to fight. Units queued behind that engagement do **not** treat the engaged unit as permanent topology: when lateral traversable space exists, local steering SHOULD sidestep around the stationary fight and continue toward a reachable attack position. A deterministic `SimId`-derived side preference may break perfectly symmetric congestion. If geometry genuinely leaves no room to pass, ordinary congestion is allowed and no teleport/push-through exception is created.
+
+The verification implementation uses a deterministic two-stage crowd pass. Units first compute movement intents from one immutable phase snapshot. A second data-parallel pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps and symmetric sidestep choices, so worker scheduling and neighbor enumeration order cannot alter results. The final separated position is accepted only if it remains traversable and in the unit's original connected navigation component.
 
 The initial separation distance/strength are verification parameters rather than frozen gameplay constants; they should be tuned from measured congestion/game-feel fixtures.
 
@@ -317,4 +319,5 @@ Spatial/navigation tests MUST eventually include:
 16. builder cannot complete a cage and is absent from ordinary combat target queries;
 17. exact-overlap crowd separation is deterministic across worker counts;
 18. separation cannot move a unit through blocked topology or into another disconnected component;
+19. in a perfectly aligned three-unit melee column meeting a mirrored enemy column, the front engagement stops while rear units deterministically sidestep through available lateral space and eventually reach an attack position;
 19. dense opposing crowds remain benchmarked separately from ordinary lane movement.

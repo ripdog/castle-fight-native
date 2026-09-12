@@ -33,12 +33,18 @@ Each targeting phase conceptually performs:
 
 1. resolve the existing `SimId` target;
 2. drop it if it is dead, disappeared, invisible/untargetable, no longer attackable by any applicable attack, unreachable from any valid attack position, or beyond the pursuit leash;
-3. if the current target is still valid, normally retain it even if a closer/better enemy has appeared;
-4. exception: if the current target is **not** attacking this unit and another valid enemy actually attacked this unit during the preceding combat resolution, switch to that attacker;
-5. if there is no retained target, prefer a recent valid attacker, otherwise query nearby candidates and acquire a fresh target;
-6. store the selected target or `None`.
+3. if the current target is valid and is actively fighting this unit back, retain that mutual engagement unless an explicit forced-target rule overrides it;
+4. otherwise, if another valid enemy actually attacked this unit during the preceding combat resolution, switch to that attacker;
+5. otherwise, if this unit is idle or its current target is not fighting it back and a nearby ally was actually attacked during the preceding combat resolution, switch to a valid attacker of that ally;
+6. otherwise retain the valid current target;
+7. if there is no retained target, prefer a recent valid self-attacker, then a valid nearby ally-defense attacker, otherwise query nearby candidates and acquire a fresh target;
+8. store the selected target or `None`.
 
-An enemy merely selecting, approaching, or standing near a unit does not trigger retaliation. The retaliation rule is caused by an actual resolved attack. In the deterministic phased implementation, an attack received on tick `N` can affect target selection on tick `N+1`.
+An enemy merely selecting, approaching, or standing near a unit does not trigger retaliation or ally defense. Both rules are caused by an actual resolved attack. In the deterministic phased implementation, an attack resolved on tick `N` can affect target selection on tick `N+1`.
+
+The initial ally-defense radius is the defending unit's normal acquisition range around the attacked ally's position. The attacker must itself remain a valid target that the defender can attack or pursue under ordinary reachability/pursuit rules. If several nearby allies were attacked, the initial deterministic ordering is nearest attacked ally, then nearest valid attacker, then stable IDs.
+
+A one-tick canonical defense alert survives the victim dying from the triggering attack, so nearby allies may still react to the killer on the following targeting phase.
 
 A newly visible closer unit MUST NOT cause gratuitous retargeting while the existing engagement remains valid.
 
@@ -96,7 +102,7 @@ If two candidates are otherwise identical, the project explicitly accepts stable
 
 ## 7. Target retention
 
-A valid engagement is retained until a defined break condition occurs or the retaliation exception applies.
+A valid engagement is retained until a defined break condition occurs or a higher-priority self-retaliation/ally-defense rule applies.
 
 A current target is dropped when, as applicable:
 
@@ -109,9 +115,11 @@ A current target is dropped when, as applicable:
 
 A short pursuit leash is part of standard behavior: units chase a retreating target for only a modest distance before giving up. The verification implementation initially uses a **3-tile extra pursuit allowance** beyond ordinary attack range, while never making retention shorter than the unit's normal acquisition range. The exact content-compatible value may be tuned later.
 
-Retaliation has one important guard: if current target `B` is itself attacking `A`, then `A` stays engaged with `B` even if another unit `C` also attacks `A`. `C` only pre-empts `B` when `B` is not fighting back and `C` is a valid target that `A` is capable of attacking.
+Retaliation and ally defense have one important guard: if current target `B` is itself attacking `A`, then `A` stays engaged with `B` even if another unit `C` attacks `A` or a nearby ally. `C` only pre-empts `B` when `B` is not fighting `A` back and `C` is a valid target that `A` is capable of attacking.
 
-Builder-held item damage and other explicitly non-retaliatory effect sources MUST NOT populate this combat-attacker retaliation state.
+A passive castle/building is therefore a defenceless current target for these rules. A unit attacking somebody else is likewise not fighting `A` back, even though it is generally combat-capable.
+
+Builder-held item damage and other explicitly non-retaliatory effect sources MUST NOT populate self-retaliation or nearby-ally defense alerts.
 
 ## 8. Combat intent
 
@@ -362,17 +370,22 @@ The targeting/combat test suite MUST eventually include:
 6. reachable enemy combat unit outside the cage outranks a closer non-attacking cage building;
 7. a valid current target is retained even when a closer non-attacking enemy appears;
 8. when current target `B` is not attacking `A`, a valid unit `C` that actually attacks `A` causes `A` to switch to `C` on the next targeting phase;
-9. when `B` is attacking `A`, another attacker `C` does not break that mutual engagement;
-10. dead/invisible/untargetable/unreachable/out-of-pursuit target triggers deterministic reacquisition;
-11. same battle yields identical checksum at different worker counts;
-12. same-tick multi-attacker damage follows documented canonical/death precedence;
-13. a stun applied before attack resolution cancels the affected source's pending attack;
-14. a unit cannot attack on its spawn tick;
-15. projectile impact timing is identical across runs;
-16. deterministic random proc/crit values do not change with worker count;
-17. attack building performs independent target selection;
-18. melee attack has no authoritative projectile trajectory;
-19. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
-20. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
-21. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
-22. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.
+9. attacking a passive castle/building does not prevent `A` switching to a valid unit that attacks `A`;
+10. an idle unit or a unit fighting a target that is not fighting it back switches to defend a nearby ally from a valid attacker on the next targeting phase;
+11. a mutual engagement is not broken merely because a nearby ally is attacked;
+12. ally-defense alerts still exist for one targeting phase when the triggering attack killed the ally;
+13. when several nearby allies are attacked simultaneously, the documented deterministic alert ordering produces the same target across runs/worker counts;
+14. when `B` is attacking `A`, another attacker `C` does not break that mutual engagement;
+15. dead/invisible/untargetable/unreachable/out-of-pursuit target triggers deterministic reacquisition;
+16. same battle yields identical checksum at different worker counts;
+17. same-tick multi-attacker damage follows documented canonical/death precedence;
+18. a stun applied before attack resolution cancels the affected source's pending attack;
+19. a unit cannot attack on its spawn tick;
+20. projectile impact timing is identical across runs;
+21. deterministic random proc/crit values do not change with worker count;
+22. attack building performs independent target selection;
+23. melee attack has no authoritative projectile trajectory;
+24. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
+25. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
+26. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
+27. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.

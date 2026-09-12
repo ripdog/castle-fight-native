@@ -162,6 +162,22 @@ A later regression sweep after crowd separation was enabled for every combat uni
 
 The cage fixture is now dominated by crowd separation rather than targeting. It remains comfortably inside a 30 Hz tick budget on the eight-worker reference run, but extreme enclosed density is the first place to revisit if richer collision rules materially increase cost.
 
+## Engagement/defense clarification — 2026-09-12
+
+The targeting verification now includes canonical one-tick defense alerts. An actual hit can cause idle nearby allies, or allies fighting a target that is not fighting them back, to switch to the attacker on the following targeting phase. Mutual engagements remain sticky, direct self-retaliation outranks ally defense, passive castles/buildings are defenceless targets, and the alert survives a lethal hit so nearby allies may still react to the killer.
+
+Crowd steering also now adds a deterministic lateral sidestep when a moving unit is queued directly behind a stationary engagement. A mirrored three-on-three melee-column fixture verifies that the front pair remain engaged while rear units leave the centerline and eventually reach attack range rather than forming a permanent queue.
+
+A 10,000-unit regression sweep after these rules were enabled remained worker-count deterministic:
+
+| Scenario | 1 worker | 8 workers |
+| --- | ---: | ---: |
+| lane | 8.011 ms/tick | 5.657 ms/tick |
+| cage | 19.732 ms/tick | 8.543 ms/tick |
+| crowd | 11.486 ms/tick | 6.190 ms/tick |
+
+The defense-alert spatial query is deliberately lazy: units already in a mutual engagement do not query nearby ally alerts. The pathological cage case nevertheless shows a measurable increase because many units are fighting passive/unreciprocating targets; this is recorded as a future optimization target rather than hidden behind additional threading.
+
 ## Current interpretation
 
 The core deterministic architecture remains viable under deliberately hostile topology and crowd workloads. The next meaningful risks are repeated topology mutations, arbitrary-target pursuit/A* fallback frequency, production churn, and attack/projectile/ability density. Each should receive a deliberately adversarial benchmark before broader game content is built.
