@@ -408,8 +408,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["scripted_unit_spell_semantic_rows"], 37)
         self.assertEqual(summary["scripted_unit_spell_semantic_status_counts"], {
             "object-effect-ready": 17,
-            "partial": 3,
-            "script-native-ready": 17,
+            "partial": 1,
+            "script-native-ready": 19,
         })
 
         with (self.resolved / "unit-spell-semantics.tsv").open(encoding="utf-8") as handle:
@@ -417,7 +417,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(rows), 37)
         self.assertEqual(
             {rawcode for rawcode, row in rows.items() if row["normalization_status"] == "partial"},
-            {"e00F", "h03V", "n01W"},
+            {"h03V"},
         )
 
         faerie = rows["e000"]
@@ -481,10 +481,58 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(ogre["random_activation_delay_seconds"], [0.1, 0.3])
         self.assertEqual(ogre["duration_seconds"], 6)
 
-        brood = json.loads(rows["n01W"]["parameters_json"])
+        giant = rows["e00F"]
+        self.assertEqual(giant["normalization_status"], "script-native-ready")
+        giant_params = json.loads(giant["parameters_json"])
+        self.assertEqual(giant_params["immediate_order_id"], 852520)
+        self.assertEqual(giant_params["immediate_order_name"], "taunt")
+        self.assertEqual(giant_params["taunt_ability_rawcode"], "A0BI")
+        self.assertEqual(giant_params["taunt_area"], 350)
+
+        brood_row = rows["n01W"]
+        self.assertEqual(brood_row["normalization_status"], "script-native-ready")
+        brood = json.loads(brood_row["parameters_json"])
         self.assertNotIn("primary_effect_initial_damage", brood)
+        self.assertEqual(brood["primary_effect_spawn_unit_rawcode"], "n00T")
         self.assertEqual(brood["first_followup_order_id"], 852212)
+        self.assertEqual(brood["first_followup_order_name"], "webon")
+        self.assertEqual(brood["first_followup_ability_rawcode"], "A0AS")
         self.assertEqual(brood["second_followup_order_id"], 852602)
+        self.assertEqual(brood["second_followup_order_name"], "parasiteon")
+        self.assertEqual(brood["second_followup_ability_rawcode"], "A0AV")
+
+        master = rows["h03V"]
+        self.assertEqual(master["semantic_kind"], "element-scaled-dual-projectile-system")
+        self.assertEqual(master["normalization_status"], "partial")
+        master_params = json.loads(master["parameters_json"])
+        self.assertEqual(master_params["branch_roll"]["lightning_if_less_than"], 50)
+        self.assertEqual(master_params["lightning"]["projectile_count_formula"], "2 + floor(lightning_building_count / 3)")
+        self.assertEqual(master_params["lightning"]["damage_formula"], "75 * min(1 + fire_building_count, 4)")
+        self.assertEqual(master_params["lightning"]["hit_radius"], 34)
+        self.assertEqual(master_params["frost"]["projectile_count_formula"], "5 + 2 * water_building_count")
+        self.assertEqual(master_params["frost"]["damage_formula"], "75 * min(1 + earth_building_count, 4)")
+        self.assertEqual(master_params["frost"]["frost_nova_level_formula"], "clamp(floor(wind_building_count / 4), 1, 3)")
+        self.assertEqual(master_params["frost"]["hit_radius"], 38)
+        self.assertEqual(master_params["frost"]["target_filter_symbol"], "SX")
+        self.assertEqual(master_params["frost"]["target_filter_status"], "protected-global-filter-not-yet-resolved")
+        self.assertEqual(master_params["normalization_blocker"], "resolve protected global Frost target filter SX")
+
+    def test_element_building_buckets_resolve_master_scaling_inputs(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["element_building_bucket_rows"], 12)
+
+        with (self.resolved / "element-building-buckets.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        by_element: dict[str, set[str]] = {}
+        for row in rows:
+            by_element.setdefault(row["element"], set()).add(row["building_rawcode"])
+        self.assertEqual(by_element, {
+            "fire": {"h045", "h046"},
+            "earth": {"h040", "h041"},
+            "lightning": {"h042", "h044"},
+            "water": {"h03X", "h03Y", "h03Z"},
+            "wind": {"h04A", "h04C", "h04D"},
+        })
 
     def test_scripted_building_spells_recover_handlers_and_mana_timed_cadence(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))

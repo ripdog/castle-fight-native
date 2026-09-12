@@ -1800,6 +1800,45 @@ def main() -> None:
         unit_spell_mechanic_rows,
     )
 
+    element_bucket_path = map_root / "script" / "element-building-buckets.tsv"
+    element_bucket_rows: list[dict[str, str]] = []
+    if element_bucket_path.exists():
+        with element_bucket_path.open(encoding="utf-8", newline="") as handle:
+            element_bucket_rows = list(csv.DictReader(handle, delimiter="\t"))
+    expected_element_buckets = {
+        1: ("fire", {"h045", "h046"}),
+        2: ("earth", {"h040", "h041"}),
+        3: ("lightning", {"h042", "h044"}),
+        4: ("water", {"h03X", "h03Y", "h03Z"}),
+        5: ("wind", {"h04A", "h04C", "h04D"}),
+    }
+    element_buckets_by_number: dict[int, dict[str, Any]] = {}
+    if element_bucket_rows:
+        actual_by_bucket: dict[int, set[str]] = defaultdict(set)
+        for row in element_bucket_rows:
+            actual_by_bucket[int(row["bucket"])].add(row["building_rawcode"])
+        for bucket, (element, expected_rawcodes) in expected_element_buckets.items():
+            actual = actual_by_bucket.get(bucket, set())
+            if actual != expected_rawcodes:
+                raise ValueError(
+                    f"Elemental building bucket {bucket}/{element} changed: expected={sorted(expected_rawcodes)} actual={sorted(actual)}"
+                )
+            element_buckets_by_number[bucket] = {
+                "element": element,
+                "building_rawcodes": sorted(actual),
+            }
+    write_tsv(
+        output / "element-building-buckets.tsv",
+        ["bucket", "element", "building_rawcode", "building_names", "source_function", "byte_offset"],
+        [
+            [
+                row["bucket"], expected_element_buckets[int(row["bucket"])][0], row["building_rawcode"], row["building_names"],
+                row["source_function"], row["byte_offset"],
+            ]
+            for row in element_bucket_rows
+        ],
+    )
+
     def integer_rawcode_text(integer_id: int) -> str:
         if integer_id < 0 or integer_id > 0xFFFFFFFF:
             raise ValueError(f"rawcode integer is outside u32 range: {integer_id}")
@@ -1932,16 +1971,17 @@ def main() -> None:
             ])
         elif unit_rawcode == "e00F":
             require_literals(mechanic, mechanic["handler_function"], ("852520", "0.6"))
-            semantic_kind = "trigger-plus-unresolved-immediate-order"
-            normalization_status = "partial"
+            semantic_kind = "taunt-plus-resume"
+            normalization_status = "script-native-ready"
             effect_rawcodes = ["A0BI"]
             parameters.update({
                 "immediate_order_id": 852520,
-                "candidate_attached_ability_rawcode": "A0BI",
-                "candidate_attached_ability_base": "Atau",
-                "candidate_effect_area": 350,
+                "immediate_order_name": "taunt",
+                "order_mapping_source": "warcraft-standard-order-id",
+                "taunt_ability_rawcode": "A0BI",
+                "taunt_base_ability_rawcode": "Atau",
+                "taunt_area": 350,
                 "resume_attack_delay_seconds": 0.6,
-                "association_status": "strong-unique-attached-immediate-candidate;numeric-order-not-locally-mapped",
             })
         elif unit_rawcode == "h03B":
             require_literals(mechanic, mechanic["handler_function"], ("852066", "1."))
@@ -1993,26 +2033,102 @@ def main() -> None:
                 "resurrection_effect_uses_wc3_corpse_eligibility": True,
             })
             source_functions.extend(["churchSpell", "feralRage", paladin_callback, paladin_filter])
+        elif unit_rawcode == "h03V":
+            if set(element_buckets_by_number) != {1, 2, 3, 4, 5}:
+                raise ValueError("Master of Elements semantics require all five Elemental building buckets")
+            require_literals(mechanic, "onMasterSpell", ("0", "99", "50", "75.", "35.", "70."))
+            require_literals(mechanic, "onLightningBolt", ("30.", "50.", "400.", "03"))
+            require_literals(mechanic, "processMasterLightningBolts", ("20.", "30.", "50.", "400."))
+            require_literals(mechanic, "spawnSnowMissileFanStep", ("26.", "400.", "04"))
+            require_literals(mechanic, "processSnowMissiles", ("26.", "38.", "852226", "1.", "20."))
+            require_literals(mechanic, "findMasterLightningHit", ("34.",))
+            semantic_kind = "element-scaled-dual-projectile-system"
+            normalization_status = "partial"
+            effect_rawcodes = ["h03H", "h068", "A043"]
+            parameters.update({
+                "branch_roll": {"min": 0, "max": 99, "lightning_if_less_than": 50, "frost_otherwise": True},
+                "element_building_buckets": {
+                    info["element"]: {"bucket": bucket, "building_rawcodes": info["building_rawcodes"]}
+                    for bucket, info in sorted(element_buckets_by_number.items())
+                },
+                "lightning": {
+                    "projectile_unit_rawcode": "h03H",
+                    "projectile_count_formula": "2 + floor(lightning_building_count / 3)",
+                    "split_budget_formula": "2 + floor(wind_building_count / 2)",
+                    "damage_formula": "75 * min(1 + fire_building_count, 4)",
+                    "damage_attack_type": "normal",
+                    "damage_type": "lightning",
+                    "initial_segment_budget": 400,
+                    "segment_budget_decrement_per_tick": 20,
+                    "tick_seconds": 0.03,
+                    "movement_per_tick": 20,
+                    "movement_speed_world_units_per_second": 20 / 0.03,
+                    "hit_radius": 34,
+                    "target_predicate": "alive-combat-sapper;enemy;not-previous-hit",
+                    "initial_origin_forward_offset": 30,
+                    "lane_spacing": 50,
+                    "split_angle_degrees": 30,
+                    "split_stub_budget": 50,
+                    "state_machine_source": "processMasterLightningBolts",
+                },
+                "frost": {
+                    "projectile_unit_rawcode": "h068",
+                    "projectile_count_formula": "5 + 2 * water_building_count",
+                    "damage_formula": "75 * min(1 + earth_building_count, 4)",
+                    "frost_nova_level_formula": "clamp(floor(wind_building_count / 4), 1, 3)",
+                    "fan_min_relative_angle_degrees": -35,
+                    "fan_max_relative_angle_degrees": 35,
+                    "spawn_interval_seconds": 0.04,
+                    "tick_seconds": 0.03,
+                    "movement_per_tick": 26,
+                    "movement_speed_world_units_per_second": 26 / 0.03,
+                    "initial_range_budget": 400,
+                    "range_budget_decrement_per_tick": 20,
+                    "maximum_travel_world_units": 520,
+                    "hit_radius": 38,
+                    "direct_damage_attack_type": "normal",
+                    "direct_damage_type": "cold",
+                    "stops_on_first_hit": True,
+                    "frost_nova_ability_rawcode": "A043",
+                    "frost_nova_order_id": 852226,
+                    "frost_nova_order_name": "frostnova",
+                    "frost_nova_dummy_lifetime_seconds": 1,
+                    "frost_nova_only_if_target_survives_direct_hit": True,
+                    "target_filter_symbol": "SX",
+                    "target_filter_status": "protected-global-filter-not-yet-resolved",
+                    "state_machine_source": "processSnowMissiles",
+                },
+                "normalization_blocker": "resolve protected global Frost target filter SX",
+            })
+            source_functions.extend([
+                "onMasterSpell", "onLightningBolt", "processMasterLightningBolts", "findMasterLightningHit",
+                "spawnSnowMissileFanStep", "processSnowMissiles", "CallbackSingle_doAfter_MasterOfElements_call_doAfter_MasterOfElements",
+            ])
         elif unit_rawcode == "n01W":
             require_literals(mechanic, mechanic["handler_function"], ("3.",))
             brood_callback = "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities5"
             brood_callback2 = "CallbackSingle_doAfter_doAfter_RaceNatureAbilities_call_doAfter_doAfter_RaceNatureAbilities2"
             require_literals(mechanic, brood_callback, ("852212", "3."))
             require_literals(mechanic, brood_callback2, ("852602",))
-            semantic_kind = "registered-infest-plus-two-unresolved-orders"
-            normalization_status = "partial"
-            effect_rawcodes = ["A0AV", "A0AS", "A0AU"]
+            semantic_kind = "registered-infest-then-enable-autocasts"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0AV", "A0AS", "n00T"]
             parameters.update({
                 "primary_effect_ability_rawcode": "A0AV",
                 "primary_effect_damage_per_second": 20,
                 "primary_effect_duration_seconds": 10,
                 "primary_effect_spawn_count_on_kill": 2,
+                "primary_effect_spawn_unit_rawcode": "n00T",
                 "first_followup_delay_seconds": 3,
                 "first_followup_order_id": 852212,
+                "first_followup_order_name": "webon",
+                "first_followup_ability_rawcode": "A0AS",
                 "second_followup_delay_seconds": 3,
                 "second_followup_order_id": 852602,
-                "attached_followup_candidates": ["A0AS", "A0AU"],
-                "association_status": "numeric-followup-orders-not-yet-locally-mapped",
+                "second_followup_order_name": "parasiteon",
+                "second_followup_ability_rawcode": "A0AV",
+                "order_mapping_source": "warcraft-standard-order-id",
+                "resume_attack_after_second_followup": True,
             })
             source_functions.extend([brood_callback, brood_callback2])
         elif unit_rawcode == "n02Y":
@@ -2841,6 +2957,7 @@ def main() -> None:
         "scripted_unit_spell_semantic_rows": len(unit_spell_semantic_rows),
         "scripted_unit_spell_semantic_status_counts": dict(sorted(unit_spell_semantic_status_counts.items())),
         "scripted_unit_spell_semantic_kind_counts": dict(sorted(unit_spell_semantic_kind_counts.items())),
+        "element_building_bucket_rows": len(element_bucket_rows),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
@@ -2876,8 +2993,9 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
-            "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when generated closure dispatch is statically exact and the map Lua is never executed",
-            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: every row is explicitly object-effect-ready, script-native-ready or partial, so unfinished state machines cannot be mistaken for fully translated mechanics",
+            "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
+            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: 36/37 rows are implementation-ready; Master of Elements alone remains partial because its full element-scaled projectile state machines are decoded but the shared protected Frost target-filter symbol SX is not yet resolved",
+            "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
             "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",

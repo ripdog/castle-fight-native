@@ -1018,6 +1018,66 @@ def _extract_race_building_semantics(
     return output
 
 
+def _extract_element_building_buckets(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover the Elemental race building-count buckets consumed by Master of Elements.
+
+    The generated Elemental initializer stores a compact per-building bucket in
+    ``vtb[buildingTypeIndex(rawcode)]``. Master of Elements later indexes the
+    corresponding per-player counters in ``wtb``. Keeping this mapping as
+    source evidence avoids exposing anonymous numeric bucket indexes to the
+    native importer.
+    """
+    body = _function_body_tokens(data, functions, "wK")
+    if body is None:
+        return []
+    function_start, tokens = body
+    rows: list[dict[str, object]] = []
+    seen_buildings: set[int] = set()
+    index = 0
+    while index + 8 < len(tokens):
+        if not (
+            tokens[index].kind == "ident"
+            and tokens[index].text == "vtb"
+            and tokens[index + 1].text == "["
+            and tokens[index + 2].kind == "ident"
+            and tokens[index + 2].text == "buildingTypeIndex"
+            and tokens[index + 3].text == "("
+            and tokens[index + 4].kind == "number"
+            and tokens[index + 4].integer_value is not None
+            and tokens[index + 5].text == ")"
+            and tokens[index + 6].text == "]"
+            and tokens[index + 7].text == "="
+            and tokens[index + 8].kind == "number"
+            and tokens[index + 8].integer_value is not None
+        ):
+            index += 1
+            continue
+        building_id = int(tokens[index + 4].integer_value)
+        bucket = int(tokens[index + 8].integer_value)
+        if building_id in seen_buildings:
+            raise ValueError(f"duplicate Elemental building bucket assignment for {building_id}")
+        if bucket < 1 or bucket > 5:
+            raise ValueError(f"unexpected Elemental building bucket {bucket} for {building_id}")
+        seen_buildings.add(building_id)
+        rows.append({
+            "building_id": building_id,
+            "bucket": bucket,
+            "source_function": "wK",
+            "byte_offset": function_start + tokens[index].start,
+        })
+        index += 9
+
+    if rows:
+        counts = Counter(int(row["bucket"]) for row in rows)
+        if len(rows) != 12 or counts != Counter({1: 2, 2: 2, 3: 2, 4: 3, 5: 3}):
+            raise ValueError(f"Elemental building bucket structure changed: rows={len(rows)} counts={dict(counts)}")
+    rows.sort(key=lambda row: (int(row["bucket"]), int(row["building_id"])))
+    return rows
+
+
 def _extract_effective_unit_stats(
     data: bytes,
     functions: list[dict[str, object]],
@@ -1821,8 +1881,17 @@ def _extract_unit_spell_mechanics(
 
     defined = {str(function["name"]) for function in functions}
     calls_by_function: dict[str, list[str]] = defaultdict(list)
+    anonymous_callees_by_parent: dict[str, set[str]] = defaultdict(set)
     for (caller, callee), _count in call_edges.items():
         calls_by_function[caller].append(callee)
+        if caller.startswith("<anonymous@") and caller.endswith(">"):
+            try:
+                anonymous_offset = int(caller[len("<anonymous@"):-1])
+            except ValueError:
+                continue
+            parent = _enclosing_named_function(functions, anonymous_offset)
+            if parent != "<top-level>":
+                anonymous_callees_by_parent[parent].add(callee)
     rawcodes_by_function: dict[str, set[int]] = defaultdict(set)
     for (function_name, integer_id), _count in function_rawcodes.items():
         rawcodes_by_function[function_name].add(int(integer_id))
@@ -1986,7 +2055,7 @@ def _extract_unit_spell_mechanics(
                 continue
             successors = {
                 callee
-                for callee in calls_by_function.get(function_name, [])
+                for callee in (*calls_by_function.get(function_name, []), *anonymous_callees_by_parent.get(function_name, set()))
                 if callee in defined
                 and callee not in infrastructure_calls
                 and not callee.startswith("__wurst_safe_")
@@ -3042,6 +3111,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     race_building_semantics = _extract_race_building_semantics(
         data, functions, race_buildings, income_factor_constants
     )
+    element_building_buckets = _extract_element_building_buckets(data, functions)
     effective_unit_stats = _extract_effective_unit_stats(data, functions)
     protected_unit_stats = _extract_protected_unit_stats(data, functions)
 
@@ -3089,6 +3159,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "race_buildings": race_buildings,
         "income_factor_constants": income_factor_constants,
         "race_building_semantics": race_building_semantics,
+        "element_building_buckets": element_building_buckets,
         "effective_unit_stats": effective_unit_stats,
         "protected_unit_stats": protected_unit_stats,
         "function_aliases": function_aliases,

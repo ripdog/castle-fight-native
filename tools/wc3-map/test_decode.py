@@ -382,6 +382,29 @@ class LuaIndexTests(unittest.TestCase):
             "byte_offset": source.find(b"_I[_d[2]]"),
         }])
 
+    def test_unit_spell_mechanics_follow_named_calls_inside_anonymous_timer_callbacks(self) -> None:
+        source = (
+            "function processor() dummyCastImmediateFrom(nil,1094861636,852096,nil,1.) end "
+            "function helper() TimerStart(nil,0.03,true,function() processor() end) end "
+            "function handler(caster,target) helper() end "
+            "qx.UnitSpellClosure_cast1=handler "
+            "function init() local closure=nil closure=qx:create99() "
+            "_I[_d[2]](1747989334,1093682481,0,852063,closure) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747989334, 1093682481, 1094861636})
+
+        self.assertEqual(len(indexed["unit_spell_mechanics"]), 1)
+        mechanic = indexed["unit_spell_mechanics"][0]
+        paths = {row["rawcode_integer"]: row for row in mechanic["reachable_map_rawcode_paths"]}
+        self.assertEqual(paths[1094861636]["path"], ["handler", "helper", "processor"])
+        self.assertEqual(paths[1094861636]["hops"], 2)
+        effect_sites = [
+            site for site in mechanic["semantic_effect_sites"]
+            if site["function"] == "processor" and site["callee"] == "dummyCastImmediateFrom"
+        ]
+        self.assertEqual(len(effect_sites), 1)
+
     def test_indexes_generated_function_alias_assignments_without_making_call_edges(self) -> None:
         source = (
             "function handler(unit) BlzSetUnitArmor(unit,4.0) end "

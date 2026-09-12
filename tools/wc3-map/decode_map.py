@@ -764,6 +764,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     race_buildings = analysis["race_buildings"]
     income_factor_constants = analysis["income_factor_constants"]
     race_building_semantics = analysis["race_building_semantics"]
+    element_building_buckets = analysis["element_building_buckets"]
     effective_unit_stats = analysis["effective_unit_stats"]
     protected_unit_stats = analysis["protected_unit_stats"]
     function_aliases = analysis["function_aliases"]
@@ -1329,6 +1330,20 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 row["source_function"], row["first_wrapper_byte_offset"],
             ])
 
+    with (script_dir / "element-building-buckets.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "bucket", "building_rawcode", "building_rawcode_integer", "building_names", "source_function", "byte_offset",
+        ])
+        for row in element_building_buckets:
+            building_id = int(row["building_id"])
+            building_rawcode, building_categories, _tables, building_names, _defs = rawcode_metadata(building_id)
+            if building_categories != "units":
+                raise ValueError(f"Elemental bucket building {building_rawcode} does not resolve uniquely to a unit/building object")
+            writer.writerow([
+                row["bucket"], building_rawcode, building_id, building_names, row["source_function"], row["byte_offset"],
+            ])
+
     with (script_dir / "effective-unit-stats.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow([
@@ -1527,6 +1542,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "campaign_only_race_catalogs": len({int(row["race_index"]) for row in race_buildings if bool(row["campaign_only"])}),
         "race_building_semantic_rows": len(race_building_semantics),
         "race_building_precursor_edges": len(semantic_precursor_pairs),
+        "element_building_bucket_rows": len(element_building_buckets),
         "income_factor_constants": dict(sorted(income_factor_constants.items())),
         "effective_unit_stat_rows": len(effective_unit_stats),
         "effective_unit_stat_buildings": len({int(row["building_id"]) for row in effective_unit_stats}),
