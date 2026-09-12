@@ -19,6 +19,8 @@ Implemented:
 - deterministic greedy pursuit with A* fallback around blockers;
 - deterministic crowd steering from immutable movement intents plus a hard non-overlap reservation/commit pass;
 - melee attack cooldown/damage resolution;
+- authoritative `RangedGuaranteedHit` projectiles with integer travel time, retained target identity, source-death independence, and deterministic target-death invalidation;
+- projectile/targeting-density diagnostics including live/peak projectiles, launches/impacts/invalidations, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
 - failed spawn attempts are lost rather than backlogged;
@@ -26,7 +28,7 @@ Implemented:
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, targeting, combat, movement intent, collision/commit, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, and production-churn release benchmarks;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, and projectile-density release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -35,7 +37,7 @@ Not implemented yet:
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
 - building attacks, mana, automatic abilities, or legendary abilities;
-- ranged/ballistic/bounce delivery;
+- ballistic and bounce delivery;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -56,6 +58,11 @@ cargo run --release -p castle-fight-sim-bench -- \
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario pathing,topology,production --units 100,500,1000 \
   --workers 1,8 --warmup 2 --ticks 10
+
+# Guaranteed-hit projectile/targeting density
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario projectile --units 1000,5000,10000 \
+  --workers 1,8 --warmup 2 --ticks 20
 ```
 
 The benchmark exits non-zero if different worker counts produce different final canonical checksums for the same fixture.
@@ -93,13 +100,14 @@ The harness intentionally contains only enough game structure to exercise the si
 - **right click** queues a ranged production building;
 - every player placement is mirrored horizontally into the enemy base;
 - production starts after 10 seconds and repeats every 10 seconds;
-- both unit types have 10 HP and deal exactly 1 damage every 30 simulation ticks (1 DPS at 30 Hz);
-- melee and ranged attacks are shown as short-lived source→target lines;
+- both unit types have 10 HP and launch/deal exactly 1 damage every 30 simulation ticks (1 DPS at 30 Hz before travel delay);
+- melee attacks are shown as short-lived source→target lines;
+- ranged units launch authoritative guaranteed-hit projectiles at 10 world units/tick (300 world units/sec at 30 Hz), and the viewer interpolates the live authoritative projectile population toward each retained target;
 - building/unit art is entirely procedural placeholder geometry.
 
 This is deliberately **not** the production input/game-rule layer. It bypasses the builder, resources, network command scheduling, and normal construction UI so we can rapidly generate symmetric battles and inspect pathing, crowd behavior, targeting, production, and combat. That bypass does not change the normative builder-only control rules in `docs/spec`.
 
-The current ranged verification attack uses the simulation's guaranteed-hit ranged targeting semantics but resolves damage immediately at the attack tick; authoritative projectile travel/interpolation is a later combat-delivery verification slice.
+The ranged verification attack now uses authoritative guaranteed-hit travel. Launch creates canonical projectile state with source/target IDs, damage, launch position, launch tick, and due impact tick. Moving targets remain hit at the scheduled tick; source death does not cancel an already-launched projectile; a target that has already died or been removed before impact causes deterministic projectile invalidation instead of retargeting.
 
 ## Initial baseline — 2026-09-12
 
@@ -272,8 +280,36 @@ The `production` benchmark creates up to 100 production buildings that attempt t
 
 The ordinary 10,000-unit regression remained in its prior performance band after the stronger pursuit rule: lane 9.343/7.715 ms/tick, cage 13.972/8.174 ms/tick, and crowd 9.616/7.560 ms/tick for 1/8 workers respectively, with matching checksums at both worker counts.
 
+## Guaranteed-hit projectile and defense-alert density — 2026-09-12
+
+`RangedGuaranteedHit` now has real authoritative travel rather than immediate damage. Launch distance is converted to integer travel ticks with an upward-rounded Euclidean subunit distance and upward division by positive projectile speed, minimum one tick. Live projectiles retain source/target identity, damage, launch position/tick, and impact tick in canonical ECS/checksum state. A moving target remains guaranteed to be hit on the due tick; source death after launch does not cancel the missile; a target already dead/removed at impact invalidates the projectile without retargeting. Focused regressions cover all three cases, including hitting a target across disconnected cage topology.
+
+The first projectile-density benchmark also exposed a targeting architecture failure before projectile storage itself became expensive. With 5,000 stationary ranged units launching every tick, about 33,550 projectiles were live on average and 38,600 at peak. The initial one-alert-per-hit ally-defense query enumerated dense alert populations inside each defender's large acquisition radius:
+
+| Units | Workers | ms/tick | Targeting ms/tick | Avg live projectiles | Peak live projectiles | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 5,000 | 1 | 487.823 | 477.005 | 33,550 | 38,600 | `f1c6b9556d7a2193` |
+| 5,000 | 8 | 105.984 | 94.971 | 33,550 | 38,600 | `f1c6b9556d7a2193` |
+
+Adding threads was plainly not a solution. The fix preserves the documented ally-defense ordering exactly while changing candidate discovery: one-tick alerts are grouped by attacked victim, attacked victims are traversed in nearest-distance layers, and each victim's actual attacker relation is indexed in a separate derived spatial partition. The resolver therefore evaluates nearest valid attackers only for victims tied at the nearest relevant ally distance rather than scanning every hit/attacker combination. A regression with two attacked allies and multiple attackers verifies the required ordering: nearest attacked ally first, nearest valid attacker second, then stable IDs.
+
+With that architecture, the final density sweep is worker-count deterministic:
+
+| Units | Workers | ms/tick | Targeting ms/tick | Checksum ms/tick | Avg live | Peak live | Launches/tick | Impacts/tick | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1,000 | 1 | 7.377 | 5.237 | 0.997 | 5,340 | 5,800 | 1,000 | 760 | `7bb78283b5d5a389` |
+| 1,000 | 8 | 3.551 | 1.267 | 0.963 | 5,340 | 5,800 | 1,000 | 760 | `7bb78283b5d5a389` |
+| 5,000 | 1 | 49.685 | 37.579 | 6.271 | 33,550 | 38,600 | 5,000 | 3,320 | `f1c6b9556d7a2193` |
+| 5,000 | 8 | 18.609 | 7.560 | 5.792 | 33,550 | 38,600 | 5,000 | 3,320 | `f1c6b9556d7a2193` |
+| 10,000 | 1 | 112.706 | 88.635 | 13.587 | 80,490 | 100,600 | 10,000 | 5,470 | `6fbe379dc6549cac` |
+| 10,000 | 8 | 41.453 | 18.108 | 13.427 | 80,490 | 100,600 | 10,000 | 5,470 | `6fbe379dc6549cac` |
+
+At 5,000 units the final one-worker targeting phase is about **12.7x faster** than the naive defense-alert scan with the same checksum. In the 10,000-unit eight-worker case, the separately timed verification checksum accounts for ~13.4 ms of the 41.5 ms total; the other timed simulation phases sum to roughly 28.0 ms. That is useful architectural evidence, not a 10,000-unit support promise: production checksum cadence may be lower than every tick, while richer projectile/effect behavior will add work that this synthetic guaranteed-hit case does not contain.
+
+Projectile entity count and impact/launch structural work are not the dominant cost in this fixture. Long-range target/defense evaluation remains the largest phase even after removing the pathological alert scan, so future combat-density work should continue reporting candidate counts rather than attributing total cost to projectile count alone. The playable verification game now renders the authoritative in-flight guaranteed-hit population instead of drawing ranged attacks as immediate hit lines.
+
 ## Current interpretation
 
-Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback **was** both a correctness and performance risk; sustained path verification plus exact deterministic fallback caching makes the current architecture viable again, while the new counters make future regressions visible.
+Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback and dense ally-defense alert processing both exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts.
 
-The next high-risk verification slice is authoritative attack-delivery density: implement real `RangedGuaranteedHit` travel/impact timing, count live projectiles and impacts explicitly, and stress projectile-heavy battles before proceeding to ballistic and bounce delivery. Longer playable verification matches should continue in parallel so congestion/topology/targeting failures discovered interactively become focused regressions.
+The next high-risk delivery mechanics are ballistic and bounce attacks. Ballistic work must stress post-movement impact-zone spatial queries and effect density; bounce work must stress deterministic subsequent-target selection without turning chains into candidate-scan explosions. Longer playable verification matches should continue in parallel so congestion, topology, targeting, production, and projectile failures discovered interactively become focused regressions.
