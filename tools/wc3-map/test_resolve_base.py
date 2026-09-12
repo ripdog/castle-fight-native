@@ -324,6 +324,89 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(vessel["cadence_seconds"], "15")
         self.assertIn("VesselOfPurity", vessel["handler_function"])
 
+    def test_scripted_building_spell_mechanics_normalize_all_registered_handlers(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["scripted_building_spell_mechanic_rows"], 15)
+        self.assertEqual(summary["scripted_building_spell_mechanic_rows_with_evidence_disagreement"], 1)
+
+        with (self.resolved / "building-spell-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 15)
+
+        mushroom = rows["h047"]
+        self.assertEqual(mushroom["mechanic_kind"], "dummy-target-ability")
+        self.assertEqual(mushroom["cadence_seconds"], "6")
+        self.assertEqual(mushroom["evidence_disagreements"], "tooltip-spell-damage=150;linked-A0AK-Damage=200")
+        mushroom_effects = {row["rawcode"]: row for row in json.loads(mushroom["effect_objects_json"])}
+        mushroom_ability = mushroom_effects["A0AK"]["ability_level1"]
+        self.assertEqual(json.loads(mushroom_ability["data_fields_labeled_json"])["Damage"], 200)
+        self.assertEqual(mushroom_ability["duration_normal"], "2.5")
+
+        frost = rows["h048"]
+        frost_effects = {row["rawcode"]: row for row in json.loads(frost["effect_objects_json"])}
+        self.assertEqual(frost_effects["h04G"]["protected_unitstat"]["attack1_min"], "50.0")
+        self.assertEqual(frost_effects["h04G"]["protected_unitstat"]["attack1_max"], "50.0")
+        self.assertEqual(frost_effects["A04F"]["ability_level1"]["duration_normal"], "10")
+
+        greater_frost = rows["h03L"]
+        greater_effects = {row["rawcode"]: row for row in json.loads(greater_frost["effect_objects_json"])}
+        self.assertEqual(greater_effects["h04H"]["protected_unitstat"]["attack1_min"], "100.0")
+        self.assertEqual(greater_effects["A04K"]["ability_level1"]["duration_normal"], "12")
+        self.assertEqual(greater_effects["h04H"]["unit_object"]["attack1_full_aoe"], "200")
+
+        world = rows["h03O"]
+        world_params = json.loads(world["parameters_json"])
+        self.assertEqual(world_params["orb_count"], 3)
+        self.assertEqual(world_params["movement_speed_world_units_per_second"], "300")
+        self.assertEqual(world_params["target_check_nominal_seconds"], "2.04")
+        world_effects = {row["rawcode"]: row for row in json.loads(world["effect_objects_json"])}
+        self.assertEqual(json.loads(world_effects["A081"]["ability_level1"]["data_fields_labeled_json"])["Movement Speed Increase (%)"], -0.3)
+        self.assertEqual(json.loads(world_effects["A082"]["ability_level1"]["data_fields_labeled_json"])["Damage"], 125)
+        self.assertEqual(world_effects["A082"]["ability_level1"]["duration_normal"], "8")
+        self.assertEqual(json.loads(world_effects["A04H"]["ability_level1"]["data_fields_labeled_json"])["Damage per Second"], 15)
+        self.assertEqual(world_effects["A04H"]["ability_level1"]["duration_normal"], "15")
+
+        ceremonial = rows["h02R"]
+        ceremonial_params = json.loads(ceremonial["parameters_json"])
+        self.assertEqual(ceremonial_params["option_selection"], "uniform-GetRandomInt(1,3)")
+        self.assertEqual(ceremonial_params["option_weights"], [1, 1, 1])
+        ceremonial_effects = {row["rawcode"]: row for row in json.loads(ceremonial["effect_objects_json"])}
+        self.assertEqual(json.loads(ceremonial_effects["A03D"]["ability_level1"]["data_fields_labeled_json"])["Max Life Gained"], 200)
+        self.assertEqual(json.loads(ceremonial_effects["A08L"]["ability_level1"]["data_fields_labeled_json"])["Defense Bonus"], 3)
+
+        stasis_effects = {row["rawcode"]: row for row in json.loads(rows["h07X"]["effect_objects_json"])}
+        self.assertEqual(json.loads(stasis_effects["Ast9"]["ability_level1"]["data_fields_labeled_json"])["Stun Duration"], 4)
+        healing_effects = {row["rawcode"]: row for row in json.loads(rows["h07Y"]["effect_objects_json"])}
+        self.assertEqual(json.loads(healing_effects["AstB"]["ability_level1"]["data_fields_labeled_json"])["Amount of Hit Points Regenerated"], 20)
+        self.assertEqual(json.loads(rows["h07Y"]["parameters_json"])["carrier_or_dummy_lifetime_seconds"], "8")
+        endurance_effects = {row["rawcode"]: row for row in json.loads(rows["h07Z"]["effect_objects_json"])}
+        self.assertEqual(json.loads(endurance_effects["AstC"]["ability_level1"]["data_fields_labeled_json"])["Attack Speed Increase (%)"], 0.33)
+        self.assertEqual(json.loads(rows["h07Z"]["parameters_json"])["carrier_or_dummy_lifetime_seconds"], "6")
+
+        serpent_effects = {row["rawcode"]: row for row in json.loads(rows["h02N"]["effect_objects_json"])}
+        serpent_data = json.loads(serpent_effects["A030"]["ability_level1"]["data_fields_labeled_json"])
+        self.assertEqual(serpent_data["Primary Damage"], 30)
+        self.assertEqual(serpent_data["Armor Penalty"], 5)
+        self.assertEqual(serpent_effects["A030"]["ability_level1"]["duration_normal"], "5")
+
+        death = json.loads(rows["h00A"]["parameters_json"])
+        self.assertEqual(death["damage"], "50000")
+        self.assertEqual(death["damage_type"], "death")
+
+        snow = json.loads(rows["h07W"]["parameters_json"])
+        self.assertEqual(snow["incoming_damage_reduction_percent"], 20)
+        self.assertEqual(snow["manual_explosion_radius"], "384")
+        self.assertEqual(snow["manual_explosion_damage"], "350")
+        self.assertEqual(rows["h07W"]["evidence_kind"], "script-direct-with-unresolved-target-filter")
+
+        thunder = json.loads(rows["h07R"]["parameters_json"])
+        self.assertEqual(thunder["damage_multiplier"], 2)
+        self.assertEqual(thunder["minimum_damage"], 75)
+        self.assertEqual(thunder["maximum_damage"], 300)
+        self.assertEqual(thunder["effect_radius"], 300)
+        self.assertEqual(thunder["flying_recipient_multiplier"], "0.5")
+        self.assertEqual(thunder["special_source_multiplier"], "0.35")
+
     def test_scripted_corpse_building_mechanics_keep_exact_predicates_and_effects(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["corpse_building_mechanic_rows"], 3)

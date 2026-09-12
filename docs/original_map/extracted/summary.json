@@ -87,6 +87,8 @@
     "function_value_argument_targets": 308,
     "building_spell_registrations": 15,
     "building_spell_handlers": 15,
+    "building_spell_mechanics": 15,
+    "building_spell_mechanics_with_unresolved_target_filter": 1,
     "corpse_building_mechanics": 3,
     "corpse_building_raise_mechanics": 2,
     "readable_function_names": 4910,

@@ -1739,6 +1739,7 @@ def main() -> None:
                     "building_names": registration["building_names"],
                     "ability_name": definition["name"],
                     "ability_tip": definition["tip"],
+                    "ability_ubertip": definition["ubertip"],
                     "cadence_seconds": cadence_text,
                     "cadence_source": "ability-mana-cost/building-mana-regen",
                 }
@@ -1824,6 +1825,102 @@ def main() -> None:
             "summon_outcomes_json", "handler_function", "predicate_function", "effect_function", "byte_offset",
         ],
         corpse_building_rows,
+    )
+
+    building_spell_mechanic_rows: list[list[Any]] = []
+    building_spell_mechanics_path = map_root / "script" / "building-spell-mechanics.tsv"
+    protected_unit_details: dict[str, dict[str, str]] = {}
+    protected_unit_details_path = output / "protected-unit-stats.tsv"
+    if protected_unit_details_path.exists():
+        with protected_unit_details_path.open(encoding="utf-8", newline="") as handle:
+            protected_unit_details = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    if building_spell_mechanics_path.exists():
+        with building_spell_mechanics_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                pair = (mechanic["building_rawcode"], mechanic["ability_rawcode"])
+                spell = building_spell_by_pair.get(pair)
+                if spell is None:
+                    raise ValueError(f"building-spell mechanic has no scripted registration: {pair}")
+                effects = json.loads(mechanic["effect_rawcodes_json"])
+                enriched_effects: list[dict[str, Any]] = []
+                for effect in effects:
+                    rawcode = str(effect["rawcode"])
+                    enriched: dict[str, Any] = dict(effect)
+                    definitions = ability_levels.get(rawcode, [])
+                    definition = next((row for row in definitions if row["level"] == "1"), None)
+                    if definition is None:
+                        definition = inherited_ability_level_one(rawcode)
+                    if definition is not None:
+                        enriched["ability_level1"] = {
+                            "name": definition["name"],
+                            "range": definition["range"],
+                            "area": definition["area"],
+                            "targets": definition["targets"],
+                            "buffs": definition["buffs"],
+                            "duration_normal": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "adur", 1, 0)),
+                            "duration_hero": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "ahdu", 1, 0)),
+                            "data_fields_labeled_json": definition["data_fields_labeled_json"],
+                        }
+                    unit = static_units.get(rawcode)
+                    if unit is not None:
+                        enriched["unit_object"] = {
+                            "name": unit["name"],
+                            "abilities": unit["abilities"],
+                            "attack1_type": unit["attack1_type"],
+                            "attack1_weapon_type": unit["attack1_weapon_type"],
+                            "attack1_targets": unit["attack1_targets"],
+                            "attack1_full_aoe": unit["attack1_full_aoe"],
+                        }
+                    protected_unit = protected_unit_details.get(rawcode)
+                    if protected_unit is not None:
+                        enriched["protected_unitstat"] = {
+                            "attack1_min": protected_unit["unitstat_attack1_min"],
+                            "attack1_max": protected_unit["unitstat_attack1_max"],
+                            "attack1_cooldown": protected_unit["unitstat_attack1_cooldown"],
+                            "attack1_range": protected_unit["unitstat_attack1_range"],
+                            "override_fields": protected_unit["override_fields"],
+                        }
+                    enriched_effects.append(enriched)
+
+                evidence_disagreements: list[str] = []
+                clean_ubertip = re.sub(r"\|c[0-9A-Fa-f]{8}|\|r", "", spell["ability_ubertip"]).replace("|n", " ")
+                tooltip_damage_match = re.search(r"\bdealing\s+(\d+(?:\.\d+)?)\s+spell damage\b", clean_ubertip, re.IGNORECASE)
+                if tooltip_damage_match is not None:
+                    tooltip_damage = float(tooltip_damage_match.group(1))
+                    for enriched in enriched_effects:
+                        ability = enriched.get("ability_level1")
+                        if not isinstance(ability, dict):
+                            continue
+                        labeled = json.loads(str(ability["data_fields_labeled_json"]))
+                        linked_damage = labeled.get("Damage")
+                        if isinstance(linked_damage, (int, float)) and not math.isclose(
+                            tooltip_damage, float(linked_damage), rel_tol=0.0, abs_tol=1e-9
+                        ):
+                            evidence_disagreements.append(
+                                f"tooltip-spell-damage={value_as_text(tooltip_damage)};"
+                                f"linked-{enriched['rawcode']}-Damage={value_as_text(linked_damage)}"
+                            )
+
+                building_spell_mechanic_rows.append([
+                    spell["race_index"], spell["builder_rawcode"], spell["builder_names"], spell["campaign_only"],
+                    mechanic["building_rawcode"], spell["building_names"], mechanic["ability_rawcode"],
+                    spell["ability_name"], spell["ability_tip"], spell["ability_ubertip"],
+                    spell["cadence_seconds"], spell["cadence_source"], mechanic["mechanic_kind"],
+                    mechanic["target_selector"], mechanic["target_predicate"], mechanic["evidence_kind"],
+                    ";".join(evidence_disagreements),
+                    json.dumps(enriched_effects, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+                    mechanic["parameters_json"], mechanic["source_functions"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "building-spell-mechanics.tsv",
+        [
+            "race_index", "builder_rawcode", "builder_names", "campaign_only",
+            "building_rawcode", "building_names", "ability_rawcode", "ability_name", "ability_tip", "ability_ubertip",
+            "cadence_seconds", "cadence_source", "mechanic_kind", "target_selector", "target_predicate", "evidence_kind",
+            "evidence_disagreements", "effect_objects_json", "parameters_json", "source_functions", "byte_offset",
+        ],
+        building_spell_mechanic_rows,
     )
 
     def catalog_income(building_rawcode: str, stack: tuple[str, ...] = ()) -> float:
@@ -2106,6 +2203,10 @@ def main() -> None:
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
         ),
+        "scripted_building_spell_mechanic_rows": len(building_spell_mechanic_rows),
+        "scripted_building_spell_mechanic_rows_with_evidence_disagreement": sum(
+            bool(row[16]) for row in building_spell_mechanic_rows
+        ),
         "corpse_building_mechanic_rows": len(corpse_building_rows),
         "corpse_building_raise_rows": sum(row[12] == "scripted-raise-random" for row in corpse_building_rows),
         "building_catalog_rows": len(production_building_rows),
@@ -2133,6 +2234,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
+            "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",

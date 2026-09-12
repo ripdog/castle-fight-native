@@ -770,6 +770,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_value_arguments = analysis["function_value_arguments"]
     building_spell_registrations = analysis["building_spell_registrations"]
     corpse_building_mechanics = analysis["corpse_building_mechanics"]
+    building_spell_mechanics = analysis["building_spell_mechanics"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
 
     function_names = [str(function["name"]) for function in functions]
@@ -847,6 +848,9 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         if integer_id < 0 or integer_id > 0xFFFFFFFF:
             raise ValueError(f"rawcode integer is outside u32 range: {integer_id}")
         return integer_id.to_bytes(4, "big").decode("latin1")
+
+    def script_json(value: object) -> str:
+        return json.dumps(value, separators=(",", ":"), sort_keys=True, ensure_ascii=False, default=str)
 
     with (script_dir / "building-spell-registrations.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
@@ -932,6 +936,48 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 invulnerable_rawcode, invulnerable_id if invulnerable_id is not None else "",
                 json.dumps(outcomes, separators=(",", ":"), ensure_ascii=False),
                 row["handler_function"], row["predicate_function"], row["effect_function"], row["byte_offset"],
+            ])
+
+    with (script_dir / "building-spell-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "ability_rawcode", "ability_rawcode_integer", "ability_names",
+            "mechanic_kind", "target_selector", "target_predicate", "effect_rawcodes_json",
+            "parameters_json", "source_functions", "evidence_kind", "byte_offset",
+        ])
+        for row in building_spell_mechanics:
+            building_id = int(row["building_id"])
+            ability_id = int(row["ability_id"])
+            building_rawcode, building_categories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            ability_rawcode, ability_categories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
+            if building_categories != "units" or ability_categories != "abilities":
+                raise ValueError(
+                    f"building-spell mechanic does not resolve to building/ability objects: "
+                    f"{building_rawcode}/{ability_rawcode}"
+                )
+            effects: list[dict[str, object]] = []
+            for rawcode_id in row["effect_rawcode_ids"]:
+                integer_id = int(rawcode_id)
+                effect = {
+                    "rawcode": rawcode_text(integer_id),
+                    "rawcode_integer": integer_id,
+                    "categories": "",
+                    "names": "",
+                }
+                if integer_id in object_metadata:
+                    effect_rawcode, categories, _tables, names, _defs = rawcode_metadata(integer_id)
+                    effect["rawcode"] = effect_rawcode
+                    effect["categories"] = categories
+                    effect["names"] = names
+                effects.append(effect)
+            writer.writerow([
+                building_rawcode, building_id, building_names,
+                ability_rawcode, ability_id, ability_names,
+                row["mechanic_kind"], row["target_selector"], row["target_predicate"],
+                script_json(effects), script_json(row["parameters"]),
+                ",".join(str(value) for value in row["source_functions"]),
+                row["evidence_kind"], row["byte_offset"],
             ])
 
     sites_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
@@ -1353,6 +1399,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         }),
         "building_spell_registrations": len(building_spell_registrations),
         "building_spell_handlers": len({str(row["handler_function"]) for row in building_spell_registrations}),
+        "building_spell_mechanics": len(building_spell_mechanics),
+        "building_spell_mechanics_with_unresolved_target_filter": sum(
+            "unresolved" in str(row["evidence_kind"]) for row in building_spell_mechanics
+        ),
         "corpse_building_mechanics": len(corpse_building_mechanics),
         "corpse_building_raise_mechanics": sum(
             str(row["mechanic_kind"]) == "scripted-raise-random" for row in corpse_building_mechanics

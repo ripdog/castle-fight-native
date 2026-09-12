@@ -1771,6 +1771,565 @@ def _extract_corpse_building_mechanics(
     return rows
 
 
+def _extract_building_spell_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    building_spell_registrations: list[dict[str, object]],
+    corpse_building_mechanics: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize concrete mechanics behind generated scripted building spells.
+
+    The output intentionally keeps engine-object effects as rawcode links. Lua
+    is used to prove targeting, delivery, timing, direct damage and branch
+    structure; ability/unit object data remains a separate evidence source that
+    the resolver joins later. This avoids silently treating tooltip prose or a
+    protected object field as script-verified behavior.
+    """
+    if not building_spell_registrations:
+        return []
+    # This normalizer intentionally validates the generated Castle Fight
+    # building-spell catalog as a whole. Tiny synthetic fixtures exercise the
+    # lower-level registration extractor without needing every real-map helper.
+    if len(building_spell_registrations) < 10:
+        return []
+
+    def rawcode(text: str) -> int:
+        encoded = text.encode("latin1")
+        if len(encoded) != 4:
+            raise ValueError(f"expected four-byte rawcode, got {text!r}")
+        return int.from_bytes(encoded, "big")
+
+    def body(name: str) -> tuple[int, list[LuaToken]]:
+        result = _function_body_tokens(data, functions, name)
+        if result is None:
+            raise ValueError(f"building-spell mechanic source function is missing: {name}")
+        return result
+
+    def call_sites(tokens: list[LuaToken], callee: str) -> list[tuple[int, list[list[LuaToken]]]]:
+        sites: list[tuple[int, list[list[LuaToken]]]] = []
+        for index, token in enumerate(tokens):
+            if token.kind != "ident" or token.text != callee:
+                continue
+            try:
+                args, _next = _call_arguments(tokens, index)
+            except ValueError:
+                continue
+            sites.append((index, args))
+        return sites
+
+    def one_call(tokens: list[LuaToken], callee: str) -> tuple[int, list[list[LuaToken]]]:
+        sites = call_sites(tokens, callee)
+        if len(sites) != 1:
+            raise ValueError(f"expected exactly one {callee} call, found {len(sites)}")
+        return sites[0]
+
+    def decimal_argument(argument: list[LuaToken]) -> Decimal:
+        return _decimal_literal_value(argument)
+
+    def integer_argument(argument: list[LuaToken]) -> int:
+        return _integer_literal_value(argument)
+
+    def literal_assignments(function_name: str) -> dict[str, Decimal]:
+        _start, tokens = body(function_name)
+        values: dict[str, Decimal] = {}
+        for index in range(len(tokens) - 2):
+            if tokens[index].kind != "ident" or tokens[index + 1].text != "=":
+                continue
+            rhs = tokens[index + 2 : index + 6]
+            candidates: list[list[LuaToken]] = []
+            if rhs and rhs[0].kind == "number":
+                candidates.append([rhs[0]])
+            if len(rhs) >= 2 and rhs[0].text in {"+", "-"} and rhs[1].kind == "number":
+                candidates.append(rhs[:2])
+            if len(rhs) >= 3 and rhs[0].text == "(" and rhs[2].text == ")" and rhs[1].kind == "number":
+                candidates.append([rhs[1]])
+            if (
+                len(rhs) >= 4
+                and rhs[0].text == "("
+                and rhs[1].text in {"+", "-"}
+                and rhs[2].kind == "number"
+                and rhs[3].text == ")"
+            ):
+                candidates.append(rhs[1:3])
+            if (
+                len(rhs) >= 4
+                and rhs[0].kind == "ident"
+                and rhs[0].text == "__wurst_ensureInt"
+                and rhs[1].text == "("
+                and rhs[2].kind == "number"
+                and rhs[3].text == ")"
+            ):
+                candidates.append([rhs[2]])
+            for candidate in candidates:
+                try:
+                    values[tokens[index].text] = _decimal_literal_value(candidate)
+                    break
+                except ValueError:
+                    continue
+        return values
+
+    registrations_by_building = {
+        int(row["building_id"]): row for row in building_spell_registrations
+    }
+    if len(registrations_by_building) != len(building_spell_registrations):
+        raise ValueError("multiple scripted building-spell registrations share one building rawcode")
+
+    rows: list[dict[str, object]] = []
+
+    def add(
+        building_rawcode: str,
+        mechanic_kind: str,
+        target_selector: str,
+        target_predicate: str,
+        effect_rawcodes: Iterable[int],
+        parameters: dict[str, object],
+        source_functions: Iterable[str],
+        *,
+        evidence_kind: str = "script-direct",
+    ) -> None:
+        building_id = rawcode(building_rawcode)
+        registration = registrations_by_building.get(building_id)
+        if registration is None:
+            return
+        handler = str(registration["handler_function"])
+        handler_body = _function_body_tokens(data, functions, handler)
+        byte_offset = int(registration["byte_offset"])
+        if handler_body is not None:
+            byte_offset = handler_body[0]
+        rows.append({
+            "building_id": building_id,
+            "ability_id": int(registration["ability_id"]),
+            "mechanic_kind": mechanic_kind,
+            "target_selector": target_selector,
+            "target_predicate": target_predicate,
+            "effect_rawcode_ids": tuple(dict.fromkeys(int(value) for value in effect_rawcodes)),
+            "parameters": parameters,
+            "source_functions": tuple(dict.fromkeys((handler, *source_functions))),
+            "evidence_kind": evidence_kind,
+            "byte_offset": byte_offset,
+        })
+
+    # Chilling Mushroom: random eligible flying enemy, shield-gated, delivered
+    # through one dummy Storm Bolt ability. Damage/duration are intentionally
+    # left to the object-data join (the map tooltip disagrees with DataA).
+    mushroom_start, mushroom = body("mushroomSpell")
+    _mushroom_cast_index, mushroom_cast = one_call(mushroom, "dummyCastTargetWithVision")
+    if len(mushroom_cast) != 6:
+        raise ValueError("mushroomSpell dummy cast argument count changed")
+    mushroom_ability = integer_argument(mushroom_cast[1])
+    mushroom_order = integer_argument(mushroom_cast[2])
+    mushroom_dummy_life = decimal_argument(mushroom_cast[5])
+    if len(call_sites(mushroom, "randomFlyingEnemySapper")) != 1 or len(call_sites(mushroom, "checkForShield")) != 1:
+        raise ValueError("mushroomSpell target/shield structure changed")
+    _mushroom_filter_start, mushroom_filter = body(
+        "ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities"
+    )
+    for required in ("isAliveCombatSapper", "unit_isEnemyOf", "unit_isType", "unit_getAbilityLevel"):
+        if len(call_sites(mushroom_filter, required)) != 1:
+            raise ValueError(f"Chilling Mushroom target filter changed: {required}")
+    add(
+        "h047",
+        "dummy-target-ability",
+        "random-battlefield-unit",
+        "alive-combat-sapper;enemy;flying;missing-invulnerable-ability;shield-check-passes",
+        (mushroom_ability, rawcode("Avul")),
+        {
+            "dummy_ability_id": mushroom_ability,
+            "order_id": mushroom_order,
+            "dummy_lifetime_seconds": _decimal_text(mushroom_dummy_life),
+            "effect_parameters_source": "ability-object-data",
+        },
+        ("mushroomSpell", "randomFlyingEnemySapper", "ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities"),
+    )
+
+    # Frost Launchers: random eligible enemy structure; the spawned dummy unit's
+    # protected UnitStat weapon and attached Freezing Breath ability define the
+    # actual impact damage/freeze profile downstream.
+    _frost_start, frost = body("frostLauncherSpell")
+    _timed_index, timed_life = one_call(frost, "__wurst_safe_UnitApplyTimedLife")
+    if len(timed_life) != 3:
+        raise ValueError("frostLauncherSpell timed-life call changed")
+    frost_lifetime = decimal_argument(timed_life[2])
+    _order_start, order_tokens = body("issueFrostLauncherOrder")
+    order_calls = call_sites(order_tokens, "unit_issueTargetOrderById")
+    if not order_calls:
+        raise ValueError("issueFrostLauncherOrder has no target order")
+    order_ids = {integer_argument(args[1]) for _index, args in order_calls if len(args) == 3}
+    if order_ids != {851983}:
+        raise ValueError(f"unexpected Frost Launcher order IDs: {sorted(order_ids)}")
+    _frost_filter_start, frost_filter = body(
+        "ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1"
+    )
+    filter_text = {token.text for token in frost_filter}
+    required_filter_tokens = {"UNIT_TYPE_STRUCTURE", "bj_MAX_PLAYERS"}
+    if not required_filter_tokens <= filter_text:
+        raise ValueError("Frost Launcher structure target filter changed")
+    filter_rawcodes = {
+        int(token.integer_value)
+        for token in frost_filter
+        if token.kind == "number" and token.integer_value is not None and int(token.integer_value) > 0xFFFFFF
+    }
+    expected_filter_rawcodes = {rawcode("hcas"), rawcode("h06M"), rawcode("B01K")}
+    if not expected_filter_rawcodes <= filter_rawcodes:
+        raise ValueError("Frost Launcher exclusions no longer include both castles and Power Armor")
+    for building_code, dummy_code, freeze_ability_code in (("h048", "h04G", "A04F"), ("h03L", "h04H", "A04K")):
+        registration = registrations_by_building.get(rawcode(building_code))
+        if registration is None:
+            continue
+        handler_name = str(registration["handler_function"])
+        _handler_start, handler_tokens = body(handler_name)
+        _call_index, helper_args = one_call(handler_tokens, "frostLauncherSpell")
+        if len(helper_args) != 2 or integer_argument(helper_args[1]) != rawcode(dummy_code):
+            raise ValueError(f"{building_code} no longer launches expected dummy {dummy_code}")
+        add(
+            building_code,
+            "spawn-attack-dummy",
+            "random-battlefield-structure",
+            "alive;enemy;structure;normal-player;not-main-castle;not-alt-castle;missing-power-armor",
+            (rawcode(dummy_code), rawcode(freeze_ability_code), rawcode("B01K")),
+            {
+                "dummy_unit_id": rawcode(dummy_code),
+                "freeze_ability_id": rawcode(freeze_ability_code),
+                "timed_life_seconds": _decimal_text(frost_lifetime),
+                "order_id": 851983,
+                "excluded_unit_ids": [rawcode("hcas"), rawcode("h06M")],
+                "excluded_buff_id": rawcode("B01K"),
+                "effect_parameters_source": "dummy-unit-protected-unitstat-and-object-data",
+            },
+            (handler_name, "frostLauncherSpell", "randomNorthernBuildingTarget", "ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1", "issueFrostLauncherOrder"),
+        )
+
+    # World Freezer: three moving orb dummies. The scripted mover proves motion,
+    # bounce and target cadence; the linked abilities carry slow/damage/freeze.
+    world_registration = registrations_by_building.get(rawcode("h03O"))
+    if world_registration is not None:
+        world_handler = str(world_registration["handler_function"])
+        _world_handler_start, world_handler_tokens = body(world_handler)
+        _world_delay_index, world_delay = one_call(world_handler_tokens, "doAfter")
+        world_spawn_delay = decimal_argument(world_delay[0])
+        _world_callback_start, world_callback = body(
+            "CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1"
+        )
+        create_calls = call_sites(world_callback, "createUnit")
+        if len(create_calls) != 1 or len(create_calls[0][1]) < 2:
+            raise ValueError("World Freezer spawn callback changed")
+        orb_unit = integer_argument(create_calls[0][1][1])
+        process_assignments = literal_assignments("RK")
+        if process_assignments.get("K0") != Decimal(-2000) or process_assignments.get("J0") != Decimal(2000):
+            raise ValueError("World Freezer vertical bounce bounds changed")
+        _add_orb_start, add_orb = body("addWorldFreezerMissile")
+        _timer_index, timer_call = one_call(add_orb, "__wurst_safe_TimerStart")
+        timer_period = decimal_argument(timer_call[1])
+        _process_start, process = body("processWorldFreezerMissiles")
+        process_text = [token.text for token in process]
+        if "12." not in process_text or "700." not in process_text or "50" not in process_text:
+            raise ValueError("World Freezer movement/target constants changed")
+        target_abilities = []
+        for _index, args in call_sites(process, "dummyCastTargetWithVision"):
+            if len(args) >= 2:
+                target_abilities.append(integer_argument(args[1]))
+        expected_target_abilities = [rawcode("A082"), rawcode("A083"), rawcode("A04H")]
+        if target_abilities != expected_target_abilities:
+            raise ValueError(f"World Freezer target ability chain changed: {target_abilities}")
+        add(
+            "h03O",
+            "moving-orb-field",
+            "three-lane-projectiles-with-periodic-random-nearby-target",
+            "orb-aura:enemy;target-selection:alive-enemy-within-700;special-flying-vs-ground-effects",
+            (orb_unit, rawcode("A081"), rawcode("A080"), rawcode("A084"), *target_abilities),
+            {
+                "spawn_delay_seconds": _decimal_text(world_spawn_delay),
+                "orb_count": 3,
+                "angle_offsets_degrees": [-45, 0, 45],
+                "orb_unit_id": orb_unit,
+                "movement_tick_seconds": _decimal_text(timer_period),
+                "movement_step_world_units": 12,
+                "movement_speed_world_units_per_second": _decimal_text(Decimal(12) / timer_period),
+                "vertical_bounds": [-2000, 2000],
+                "target_check_after_ticks_gt": 50,
+                "target_check_nominal_seconds": _decimal_text(timer_period * Decimal(51)),
+                "target_radius": 700,
+                "ambient_slow_ability_id": rawcode("A081"),
+                "ambient_damage_ability_id": rawcode("A080"),
+                "alternate_mode_damage_ability_id": rawcode("A084"),
+                "flying_target_ability_id": rawcode("A082"),
+                "ground_stun_ability_id": rawcode("A083"),
+                "ground_damage_ability_id": rawcode("A04H"),
+                "effect_parameters_source": "linked-ability-object-data",
+            },
+            (world_handler, "CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1", "addWorldFreezerMissile", "processWorldFreezerMissiles"),
+        )
+
+    # Ceremonial Totem: four persistent base bonuses plus one of three equally
+    # likely two-ability option bundles. Target retry semantics are retained
+    # exactly instead of paraphrasing the tooltip's "doesn't already have any".
+    _ceremonial_start, ceremonial = body("ceremonialTotemSpell")
+    random_choices = call_sites(ceremonial, "GetRandomInt")
+    if len(random_choices) != 1 or [integer_argument(arg) for arg in random_choices[0][1]] != [1, 3]:
+        raise ValueError("Ceremonial Totem random option structure changed")
+    added_abilities = [
+        integer_argument(args[1])
+        for _index, args in call_sites(ceremonial, "addProtectedAbility")
+        if len(args) == 2
+    ]
+    expected_added = [
+        rawcode("A03B"), rawcode("A03A"), rawcode("A03D"), rawcode("A08L"),
+        rawcode("A05I"), rawcode("A06W"), rawcode("A08M"), rawcode("A06Y"),
+        rawcode("A08R"), rawcode("A06X"),
+    ]
+    if added_abilities != expected_added:
+        raise ValueError(f"Ceremonial Totem ability bundle changed: {added_abilities}")
+    _ceremonial_predicate_start, ceremonial_predicate = body("isCeremonialTotemTarget")
+    predicate_ability_checks = [
+        integer_argument(args[1])
+        for _index, args in call_sites(ceremonial_predicate, "unit_getAbilityLevel")
+        if len(args) == 2
+    ]
+    if predicate_ability_checks != [rawcode("Avul"), rawcode("A0F1")]:
+        raise ValueError("Ceremonial Totem target-gate abilities changed")
+    add(
+        "h02R",
+        "persistent-random-buff-bundle",
+        "random-battlefield-ally-with-retry",
+        "alive-combat-sapper;ally;missing-invulnerable-ability;first-pass-missing-A0F1;fallback-relaxes-A0F1",
+        (*expected_added, rawcode("Avul"), rawcode("A0F1")),
+        {
+            "always_ability_ids": [rawcode("A03B"), rawcode("A03A"), rawcode("A03D"), rawcode("A08L")],
+            "option_selection": "uniform-GetRandomInt(1,3)",
+            "option_weights": [1, 1, 1],
+            "option_ability_ids": [
+                [rawcode("A05I"), rawcode("A06W")],
+                [rawcode("A08M"), rawcode("A06Y")],
+                [rawcode("A08R"), rawcode("A06X")],
+            ],
+            "duration_seconds": None,
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("ceremonialTotemSpell", "ceremonialPick", "isCeremonialTotemTarget", "passesRetryTargetGate"),
+    )
+
+    # Global Orc totems are direct dummy ability carriers. Their durations are
+    # script literals; effect values/radii come from the linked WC3 abilities.
+    for building_code, expected_ability_code, helper, mechanic, duration in (
+        ("h07X", "Ast9", "dummyCastPointFrom", "global-point-ability", Decimal(1)),
+        ("h07Y", "AstB", "dummyCarrierWithAbility", "global-aura-carrier", Decimal(8)),
+        ("h07Z", "AstC", "dummyCarrierWithAbility", "global-aura-carrier", Decimal(6)),
+    ):
+        registration = registrations_by_building.get(rawcode(building_code))
+        if registration is None:
+            continue
+        handler_name = str(registration["handler_function"])
+        _handler_start, handler_tokens = body(handler_name)
+        _helper_index, helper_args = one_call(handler_tokens, helper)
+        if len(helper_args) < 2 or integer_argument(helper_args[1]) != rawcode(expected_ability_code):
+            raise ValueError(f"{building_code} linked global effect ability changed")
+        actual_duration = decimal_argument(helper_args[-1])
+        if actual_duration != duration:
+            raise ValueError(f"{building_code} global effect duration changed: {actual_duration}")
+        add(
+            building_code,
+            mechanic,
+            "map-wide-via-object-ability",
+            "linked-ability-target-mask",
+            (rawcode(expected_ability_code),),
+            {
+                "effect_ability_id": rawcode(expected_ability_code),
+                "carrier_or_dummy_lifetime_seconds": _decimal_text(actual_duration),
+                "effect_parameters_source": "linked-ability-object-data",
+            },
+            (handler_name,),
+        )
+
+    # Serpent Rock: random live enemy target, delivered as a dummy Acid Bomb.
+    _serpent_start, serpent = body("serpentRockShoot")
+    _serpent_cast_index, serpent_cast = one_call(serpent, "dummyCastTargetWithVision")
+    if len(serpent_cast) != 6:
+        raise ValueError("Serpent Rock dummy cast argument count changed")
+    serpent_ability = integer_argument(serpent_cast[1])
+    if len(call_sites(serpent, "randomAliveEnemy")) != 1:
+        raise ValueError("Serpent Rock no longer selects randomAliveEnemy")
+    add(
+        "h02N",
+        "dummy-target-ability",
+        "random-alive-enemy",
+        "randomAliveEnemy-helper;linked-ability-target-mask",
+        (serpent_ability,),
+        {
+            "dummy_ability_id": serpent_ability,
+            "order_id": integer_argument(serpent_cast[2]),
+            "dummy_lifetime_seconds": _decimal_text(decimal_argument(serpent_cast[5])),
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("serpentRockShoot",),
+    )
+
+    # Death Pit: direct scripted death damage, shield-gated.
+    _death_start, death = body("deathPitSpell")
+    _death_damage_index, death_damage = one_call(death, "__wurst_safe_UnitDamageTarget")
+    if len(death_damage) != 8 or len(call_sites(death, "randomAliveEnemy")) != 1 or len(call_sites(death, "checkForShield")) != 1:
+        raise ValueError("Death Pit selection/damage structure changed")
+    death_text = [token.text for token in death]
+    if "DAMAGE_TYPE_DEATH" not in death_text or "ATTACK_TYPE_NORMAL" not in death_text:
+        raise ValueError("Death Pit attack/damage type assignments changed")
+    add(
+        "h00A",
+        "direct-random-target-damage",
+        "random-alive-enemy",
+        "randomAliveEnemy-helper;shield-check-passes",
+        (),
+        {
+            "damage": _decimal_text(decimal_argument(death_damage[2])),
+            "attack_type": "normal",
+            "damage_type": "death",
+            "attack_flag": True,
+            "ranged_flag": False,
+        },
+        ("deathPitSpell",),
+    )
+
+    # Snowveil Fountain: automatic plus-shaped snow placement and team-owned
+    # 20% incoming-damage reduction. Its same subsystem also exposes the manual
+    # snow detonation constants; the automatic random-target filter SX remains
+    # obfuscated and is explicitly retained as unresolved rather than guessed.
+    snow_constants = literal_assignments("FL")
+    required_snow = {"aW", "bW", "ZV", "YV", "XV", "WV", "VV"}
+    if not required_snow <= snow_constants.keys():
+        raise ValueError(f"Snowveil constants missing: {sorted(required_snow - snow_constants.keys())}")
+    _snow_start, snow = body("createSnowveilSnow")
+    if len(call_sites(snow, "group_getRandom")) != 1 or len(call_sites(snow, "vec2_setSnow")) != 1:
+        raise ValueError("Snowveil automatic placement structure changed")
+    snow_tokens = [token.text for token in snow]
+    if "128." not in snow_tokens:
+        raise ValueError("Snowveil tile spacing changed")
+    _snow_damage_start, snow_damage = body("DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain")
+    if "0.8" not in [token.text for token in snow_damage]:
+        raise ValueError("Snowveil incoming damage multiplier changed")
+    _snow_manual_start, snow_manual = body("damageUnitsOnSnowInArea")
+    _manual_damage_index, manual_damage = one_call(snow_manual, "__wurst_safe_UnitDamageTarget")
+    if not any(token.kind == "ident" and token.text == "DAMAGE_TYPE_UNIVERSAL" for token in manual_damage[6]):
+        raise ValueError("Snowveil detonation damage type changed")
+    add(
+        "h07W",
+        "team-snowfield",
+        "random-unit-from-generated-SX-filter",
+        "SX-filter-unresolved;damage-reduction-applies-when-target-team-owns-snow-tile",
+        (int(snow_constants["bW"]),),
+        {
+            "tile_spacing_world_units": 128,
+            "placement_shape": "center-plus-four-cardinal-neighbors",
+            "placement_tile_count": 5,
+            "incoming_damage_multiplier": "0.8",
+            "incoming_damage_reduction_percent": 20,
+            "manual_explosion_ability_id": int(snow_constants["bW"]),
+            "manual_explosion_radius": _decimal_text(snow_constants["YV"]),
+            "manual_explosion_damage": _decimal_text(snow_constants["XV"]),
+            "manual_explosion_damage_type": "universal",
+            "manual_explosion_normal_cooldown_seconds": _decimal_text(snow_constants["WV"]),
+            "manual_explosion_Pcb_cooldown_seconds": _decimal_text(snow_constants["VV"]),
+            "automatic_target_filter_status": "unresolved-generated-filter-SX",
+        },
+        ("createSnowveilSnow", "vec2_setSnow", "DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain", "damageUnitsOnSnowInArea", "explodeSnowInArea", "FL"),
+        evidence_kind="script-direct-with-unresolved-target-filter",
+    )
+
+    # Thunderpaw: each cast grants one team charge. The next qualifying melee
+    # attack consumes one charge and emits clamped universal AoE damage; flying
+    # recipients take half. A07M is an explicit source-side special modifier.
+    thunder_registration = registrations_by_building.get(rawcode("h07R"))
+    if thunder_registration is not None:
+        thunder_handler = str(thunder_registration["handler_function"])
+        _thunder_start, thunder = body(thunder_handler)
+        if not any(token.kind == "ident" and token.text == "RS" for token in thunder):
+            raise ValueError("Thunderpaw cast no longer increments RS charge state")
+        listener_name = "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire"
+        _listener_start, listener = body(listener_name)
+        listener_text = [token.text for token in listener]
+        for expected in ("128.1", "75.", "300.", "0.35", "0.5"):
+            if expected not in listener_text:
+                raise ValueError(f"Thunderpaw listener constant changed: {expected}")
+        if len(call_sites(listener, "__wurst_safe_BlzGetUnitWeaponRealField")) != 2:
+            raise ValueError("Thunderpaw melee range check changed")
+        _splash_start, splash = body(
+            "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire"
+        )
+        _splash_damage_index, splash_damage = one_call(splash, "__wurst_safe_UnitDamageTarget")
+        if not any(token.kind == "ident" and token.text == "DAMAGE_TYPE_UNIVERSAL" for token in splash_damage[6]):
+            raise ValueError("Thunderpaw splash damage type changed")
+        add(
+            "h07R",
+            "armed-next-melee-attack-splash",
+            "next-qualifying-allied-melee-attack",
+            "team-charge>0;attack-damage-event;source-damage>10;source-not-invulnerable;weapon0-range>1-and<128.1;weapon1-range<128.1",
+            (rawcode("A07M"),),
+            {
+                "charges_granted_per_cast": 1,
+                "charges_consumed_per_proc": 1,
+                "damage_multiplier": 2,
+                "minimum_damage": 75,
+                "maximum_damage": 300,
+                "effect_radius": 300,
+                "flying_recipient_multiplier": "0.5",
+                "special_source_ability_id": rawcode("A07M"),
+                "special_source_multiplier": "0.35",
+                "damage_type": "universal",
+                "attack_type": "normal",
+            },
+            (thunder_handler, listener_name, "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire"),
+        )
+
+    # Fold the already-validated corpse-dependent building mechanics into this
+    # generic catalog so all 15 registrations have one import-facing row.
+    for corpse in corpse_building_mechanics:
+        building_id = int(corpse["building_id"])
+        registration = registrations_by_building.get(building_id)
+        if registration is None:
+            raise ValueError(f"corpse building mechanic lacks registration: {building_id}")
+        effect_ids: list[int] = []
+        if corpse["auxiliary_ability_id"] is not None:
+            effect_ids.append(int(corpse["auxiliary_ability_id"]))
+        if corpse["invulnerable_ability_id"] is not None:
+            effect_ids.append(int(corpse["invulnerable_ability_id"]))
+        effect_ids.extend(int(unit_id) for unit_id, _probability in corpse["summon_outcomes"])
+        rows.append({
+            "building_id": building_id,
+            "ability_id": int(corpse["ability_id"]),
+            "mechanic_kind": str(corpse["mechanic_kind"]),
+            "target_selector": str(corpse["selection_function"]),
+            "target_predicate": str(corpse["selection_predicate"]),
+            "effect_rawcode_ids": tuple(dict.fromkeys(effect_ids)),
+            "parameters": {
+                "corpse_phase": corpse["corpse_phase"],
+                "requires_wc3_can_raise": bool(corpse["requires_wc3_can_raise"]),
+                "consumption_mode": corpse["consumption_mode"],
+                "consume_radius": corpse["consume_radius"],
+                "effect_radius": corpse["effect_radius"],
+                "damage": corpse["damage"],
+                "attack_type": corpse["attack_type"],
+                "damage_type": corpse["damage_type"],
+                "auxiliary_ability_id": corpse["auxiliary_ability_id"],
+                "summon_outcomes": [
+                    {"unit_id": int(unit_id), "probability_percent": int(probability)}
+                    for unit_id, probability in corpse["summon_outcomes"]
+                ],
+            },
+            "source_functions": tuple(dict.fromkeys((
+                str(corpse["handler_function"]), str(corpse["predicate_function"]), str(corpse["effect_function"]),
+            ))),
+            "evidence_kind": "script-direct",
+            "byte_offset": int(corpse["byte_offset"]),
+        })
+
+    rows.sort(key=lambda row: (int(row["building_id"]), int(row["ability_id"])))
+    if len(building_spell_registrations) >= 10:
+        covered = {(int(row["building_id"]), int(row["ability_id"])) for row in rows}
+        registered = {(int(row["building_id"]), int(row["ability_id"])) for row in building_spell_registrations}
+        if covered != registered:
+            missing = sorted(registered - covered)
+            extra = sorted(covered - registered)
+            raise ValueError(f"building-spell mechanic coverage mismatch; missing={missing} extra={extra}")
+    return rows
+
+
 def _enclosing_named_function(
     functions: list[dict[str, object]],
     byte_offset: int,
@@ -1953,6 +2512,9 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     function_aliases, function_value_arguments = _function_value_links(data, functions)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     corpse_building_mechanics = _extract_corpse_building_mechanics(data, functions, building_spell_registrations)
+    building_spell_mechanics = _extract_building_spell_mechanics(
+        data, functions, building_spell_registrations, corpse_building_mechanics
+    )
     for reference in function_value_arguments:
         reference["function"] = _enclosing_named_function(
             functions,
@@ -1982,4 +2544,5 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_value_arguments": function_value_arguments,
         "building_spell_registrations": building_spell_registrations,
         "corpse_building_mechanics": corpse_building_mechanics,
+        "building_spell_mechanics": building_spell_mechanics,
     }
