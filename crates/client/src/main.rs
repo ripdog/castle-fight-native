@@ -4,9 +4,10 @@ mod demo;
 mod presentation;
 
 use bevy::{
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
     time::Fixed,
+    window::PresentMode,
 };
 use castle_fight_sim::Simulation;
 
@@ -26,6 +27,11 @@ fn main() {
     let options = ClientOptions::parse();
     let demo = create_demo_world(default_worker_count(), options.stress_units);
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
+    let present_mode = if options.stress_units.is_some() {
+        PresentMode::AutoNoVsync
+    } else {
+        PresentMode::AutoVsync
+    };
 
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
@@ -39,6 +45,7 @@ fn main() {
             primary_window: Some(Window {
                 title: "Castle Fight Native 3D".into(),
                 resolution: (1440, 900).into(),
+                present_mode,
                 ..default()
             }),
             ..default()
@@ -51,10 +58,42 @@ fn main() {
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
     if options.perf_log {
-        app.add_plugins(LogDiagnosticsPlugin::default());
+        app.insert_resource(PerfTelemetry(Timer::from_seconds(
+            1.0,
+            TimerMode::Repeating,
+        )))
+        .add_systems(Update, print_perf_telemetry);
     }
 
     app.run();
+}
+
+#[derive(Resource)]
+struct PerfTelemetry(Timer);
+
+fn print_perf_telemetry(
+    time: Res<Time>,
+    diagnostics: Res<DiagnosticsStore>,
+    mut telemetry: ResMut<PerfTelemetry>,
+    presentation: Res<PresentationSamples>,
+) {
+    if !telemetry.0.tick(time.delta()).just_finished() {
+        return;
+    }
+    let fps = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|diagnostic| diagnostic.smoothed());
+    let frame_ms = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+        .and_then(|diagnostic| diagnostic.smoothed());
+    println!(
+        "client-perf fps={:.1} frame_ms={:.2} units={} buildings={} projectiles={}",
+        fps.unwrap_or_default(),
+        frame_ms.unwrap_or_default(),
+        presentation.current.units.len(),
+        presentation.current.buildings.len(),
+        presentation.current.projectiles.len(),
+    );
 }
 
 #[derive(Debug, Clone, Copy)]

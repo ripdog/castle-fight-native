@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use bevy::{
+    camera::primitives::{Frustum, Sphere},
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::mouse::MouseWheel,
     prelude::*,
@@ -25,7 +26,6 @@ const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
 const HEALTH_BAR_DEPTH: f32 = 6.0;
-const HEALTH_BAR_LAYERS: usize = 7;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -157,9 +157,9 @@ struct PresentedEntry {
 
 #[derive(Resource, Default)]
 struct RenderMap {
-    units: BTreeMap<SimId, PresentedEntry>,
-    buildings: BTreeMap<SimId, PresentedEntry>,
-    projectiles: BTreeMap<SimId, Entity>,
+    units: HashMap<SimId, PresentedEntry>,
+    buildings: HashMap<SimId, PresentedEntry>,
+    projectiles: HashMap<SimId, Entity>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -196,6 +196,9 @@ struct RtsCamera {
     grab_anchor: Option<Vec3>,
 }
 
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct HealthBarGizmos;
+
 pub struct CastlePresentationPlugin {
     health_bars: bool,
 }
@@ -211,6 +214,7 @@ impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
             .init_resource::<DeathRemnants>()
+            .init_gizmo_group::<HealthBarGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -224,6 +228,7 @@ impl Plugin for CastlePresentationPlugin {
                     sync_render_entities,
                     interpolate_render_transforms,
                     age_death_remnants,
+                    draw_health_bars,
                     draw_presentation_gizmos,
                     update_window_title,
                 )
@@ -237,7 +242,11 @@ fn setup_scene(
     metrics: Res<WorldMetrics>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut gizmo_configs: ResMut<GizmoConfigStore>,
 ) {
+    let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
+    health_bar_config.line.width = 6.0;
+    health_bar_config.line.perspective = false;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
     let ranged_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
     let ballistic_unit_mesh = meshes.add(Cuboid::new(7.0, UNIT_RANGED_HEIGHT, 7.0));
@@ -359,6 +368,10 @@ fn sync_render_entities(
     mut render_map: ResMut<RenderMap>,
     mut remnants: ResMut<DeathRemnants>,
 ) {
+    if !samples.is_changed() {
+        return;
+    }
+
     let stale_units: Vec<_> = render_map
         .units
         .keys()
@@ -496,7 +509,9 @@ fn interpolate_render_transforms(
         let previous = samples.previous.units.get(id).unwrap_or(current);
         let position = sim_point_to_world_lerp(previous.position, current.position, alpha)
             + Vec3::Y * (unit_height(current) * 0.5);
-        if let Ok(mut transform) = transforms.get_mut(entry.entity) {
+        if let Ok(mut transform) = transforms.get_mut(entry.entity)
+            && transform.translation != position
+        {
             transform.translation = position;
         }
     }
@@ -506,8 +521,11 @@ fn interpolate_render_transforms(
             continue;
         };
         let (center, _) = metrics.footprint_center_size(current.footprint);
-        if let Ok(mut transform) = transforms.get_mut(entry.entity) {
-            transform.translation = Vec3::new(center.x, building_height(current) * 0.5, center.z);
+        let position = Vec3::new(center.x, building_height(current) * 0.5, center.z);
+        if let Ok(mut transform) = transforms.get_mut(entry.entity)
+            && transform.translation != position
+        {
+            transform.translation = position;
         }
     }
 
@@ -518,7 +536,9 @@ fn interpolate_render_transforms(
             continue;
         };
         let position = projectile_position(projectile, &samples, &metrics, alpha, render_tick);
-        if let Ok(mut transform) = transforms.get_mut(entity) {
+        if let Ok(mut transform) = transforms.get_mut(entity)
+            && transform.translation != position
+        {
             transform.translation = position;
         }
     }
@@ -580,50 +600,69 @@ fn age_death_remnants(time: Res<Time>, mut remnants: ResMut<DeathRemnants>) {
     remnants.0.retain(|remnant| remnant.remaining > 0.0);
 }
 
-fn draw_presentation_gizmos(
+fn draw_health_bars(
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
     render_map: Res<RenderMap>,
     debug: Res<DebugPresentation>,
+    camera_frustum: Single<&Frustum, With<Camera3d>>,
+    mut health_gizmos: Gizmos<HealthBarGizmos>,
+) {
+    if !debug.health_bars {
+        return;
+    }
+
+    let alpha = fixed_time.overstep_fraction();
+    for (id, unit) in &samples.current.units {
+        let Some(entry) = render_map.units.get(id) else {
+            continue;
+        };
+        let previous = samples.previous.units.get(id).unwrap_or(unit);
+        let position = sim_point_to_world_lerp(previous.position, unit.position, alpha)
+            + Vec3::Y * (unit_height(unit) + 3.0);
+        if !health_bar_visible(&camera_frustum, position, UNIT_HEALTH_BAR_WIDTH) {
+            continue;
+        }
+        draw_health_bar(
+            &mut health_gizmos,
+            position,
+            UNIT_HEALTH_BAR_WIDTH,
+            unit.health,
+            entry.max_health_seen,
+            unit.team,
+        );
+    }
+    for (id, building) in &samples.current.buildings {
+        let Some(entry) = render_map.buildings.get(id) else {
+            continue;
+        };
+        let (center, size) = metrics.footprint_center_size(building.footprint);
+        let position = center + Vec3::Y * (building_height(building) + 4.0);
+        let width = size.x.clamp(24.0, 72.0);
+        if !health_bar_visible(&camera_frustum, position, width) {
+            continue;
+        }
+        draw_health_bar(
+            &mut health_gizmos,
+            position,
+            width,
+            building.health,
+            entry.max_health_seen,
+            building.team,
+        );
+    }
+}
+
+fn draw_presentation_gizmos(
+    fixed_time: Res<Time<Fixed>>,
+    samples: Res<PresentationSamples>,
+    metrics: Res<WorldMetrics>,
+    debug: Res<DebugPresentation>,
     remnants: Res<DeathRemnants>,
     mut gizmos: Gizmos,
 ) {
     let alpha = fixed_time.overstep_fraction();
-
-    if debug.health_bars {
-        for (id, unit) in &samples.current.units {
-            let Some(entry) = render_map.units.get(id) else {
-                continue;
-            };
-            let previous = samples.previous.units.get(id).unwrap_or(unit);
-            let position = sim_point_to_world_lerp(previous.position, unit.position, alpha)
-                + Vec3::Y * (unit_height(unit) + 3.0);
-            draw_health_bar(
-                &mut gizmos,
-                position,
-                UNIT_HEALTH_BAR_WIDTH,
-                unit.health,
-                entry.max_health_seen,
-                unit.team,
-            );
-        }
-        for (id, building) in &samples.current.buildings {
-            let Some(entry) = render_map.buildings.get(id) else {
-                continue;
-            };
-            let (center, size) = metrics.footprint_center_size(building.footprint);
-            let position = center + Vec3::Y * (building_height(building) + 4.0);
-            draw_health_bar(
-                &mut gizmos,
-                position,
-                size.x.clamp(24.0, 72.0),
-                building.health,
-                entry.max_health_seen,
-                building.team,
-            );
-        }
-    }
 
     for remnant in &remnants.0 {
         let life = (remnant.remaining / DEATH_REMAINS_SECONDS).clamp(0.0, 1.0);
@@ -687,8 +726,18 @@ fn draw_presentation_gizmos(
     }
 }
 
+fn health_bar_visible(frustum: &Frustum, center: Vec3, width: f32) -> bool {
+    frustum.intersects_sphere(
+        &Sphere {
+            center: center.into(),
+            radius: width * 0.6,
+        },
+        false,
+    )
+}
+
 fn draw_health_bar(
-    gizmos: &mut Gizmos,
+    gizmos: &mut Gizmos<HealthBarGizmos>,
     center: Vec3,
     width: f32,
     health: i32,
@@ -697,26 +746,19 @@ fn draw_health_bar(
 ) {
     let ratio = (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0);
     let half = width * 0.5;
-    let start_x = center.x - half;
-    let fill_end_x = start_x + width * ratio;
+    let start = center - Vec3::X * half;
+    let end = center + Vec3::X * half;
+    let fill_end = start + Vec3::X * width * ratio;
     let background = Color::srgb(0.085, 0.085, 0.095);
-    let fill = team_color(team);
 
-    for layer in 0..HEALTH_BAR_LAYERS {
-        let t = layer as f32 / (HEALTH_BAR_LAYERS - 1) as f32;
-        let z = center.z + (t - 0.5) * HEALTH_BAR_DEPTH;
+    gizmos.line(start, end, background);
+    if ratio > 0.0 {
+        let foreground_offset = Vec3::new(0.0, 0.04, HEALTH_BAR_DEPTH * 0.02);
         gizmos.line(
-            Vec3::new(start_x - 0.6, center.y, z),
-            Vec3::new(center.x + half + 0.6, center.y, z),
-            background,
+            start + foreground_offset,
+            fill_end + foreground_offset,
+            team_color(team),
         );
-        if ratio > 0.0 {
-            gizmos.line(
-                Vec3::new(start_x, center.y + 0.12, z),
-                Vec3::new(fill_end_x, center.y + 0.12, z),
-                fill,
-            );
-        }
     }
 }
 
