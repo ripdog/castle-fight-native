@@ -1800,6 +1800,490 @@ def main() -> None:
         unit_spell_mechanic_rows,
     )
 
+    def integer_rawcode_text(integer_id: int) -> str:
+        if integer_id < 0 or integer_id > 0xFFFFFFFF:
+            raise ValueError(f"rawcode integer is outside u32 range: {integer_id}")
+        return integer_id.to_bytes(4, "big").decode("latin1")
+
+    def numeric_literals_by_function(mechanic: dict[str, str]) -> dict[str, list[str]]:
+        return {
+            str(row["function"]): [str(value) for value in row["literals"]]
+            for row in json.loads(mechanic["source_numeric_literals_json"])
+        }
+
+    def require_literals(mechanic: dict[str, str], function_name: str, required: Iterable[str]) -> None:
+        literals = numeric_literals_by_function(mechanic).get(function_name, [])
+        missing = [value for value in required if value not in literals]
+        if missing:
+            raise ValueError(
+                f"unit-spell semantic evidence changed for {mechanic['unit_rawcode']} {function_name}: "
+                f"missing literals {missing}"
+            )
+
+    proxy_callee_argument_indexes = {
+        "dummyCastTargetFrom": (1,),
+        "dummyCastTargetFrom1": (1,),
+        "dummyCastTargetWithVision": (1,),
+        "dummyCastPointFrom": (1,),
+        "dummyCastImmediateFrom": (1,),
+        "dummyCastImmediateFrom1": (1,),
+        "dummyCarrierWithAbility": (1,),
+        "dummyCarrierCastImmediate": (1,),
+        "dummyCarrierWithAbilities1": (1, 2, 3),
+    }
+
+    unit_spell_semantic_rows: list[list[Any]] = []
+    unit_spell_semantic_status_counts: Counter[str] = Counter()
+    unit_spell_semantic_kind_counts: Counter[str] = Counter()
+    for mechanic_row in unit_spell_mechanic_rows:
+        mechanic = dict(zip([
+            "unit_rawcode", "unit_name", "production_building_rawcode", "production_building_names",
+            "ability_rawcode", "ability_name", "ability_tip", "ability_ubertip",
+            "effective_mana_cost", "effective_cooldown", "target_mode", "target_mode_label", "base_order",
+            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions", "dynamic_callback_functions",
+            "scheduled_delays_json", "periodic_intervals_json", "random_real_ranges_json",
+            "direct_map_rawcodes", "reachable_map_objects_json", "semantic_effect_sites_json", "source_numeric_literals_json",
+            "handler_function", "evidence_kind", "byte_offset",
+        ], mechanic_row, strict=True))
+        unit_rawcode = mechanic["unit_rawcode"]
+        semantic_sites = json.loads(mechanic["semantic_effect_sites_json"])
+        effect_rawcodes: list[str] = []
+        delivery_sites: list[dict[str, Any]] = []
+        for site in semantic_sites:
+            indexes = proxy_callee_argument_indexes.get(str(site["callee"]))
+            if indexes is None:
+                continue
+            arguments = list(site["arguments"])
+            site_effects: list[str] = []
+            for argument_index in indexes:
+                if argument_index >= len(arguments):
+                    continue
+                argument = str(arguments[argument_index])
+                if not argument.isdigit():
+                    continue
+                rawcode = integer_rawcode_text(int(argument))
+                site_effects.append(rawcode)
+                if rawcode not in effect_rawcodes:
+                    effect_rawcodes.append(rawcode)
+            if site_effects:
+                delivery_sites.append({
+                    "callee": site["callee"],
+                    "function": site["function"],
+                    "effect_rawcodes": site_effects,
+                    "arguments": arguments,
+                })
+
+        semantic_kind = "unexpanded-script"
+        normalization_status = "partial"
+        parameters: dict[str, Any] = {
+            "delivery_sites": delivery_sites,
+        }
+        source_functions: list[str] = [mechanic["handler_function"]]
+        if effect_rawcodes:
+            semantic_kind = "proxy-object-effect" if len(effect_rawcodes) == 1 else "proxy-object-effect-bundle"
+            normalization_status = "object-effect-ready"
+
+        if unit_rawcode == "e000":
+            require_literals(mechanic, mechanic["handler_function"], ("1.2",))
+            semantic_kind = "registered-object-effect-plus-resume"
+            normalization_status = "object-effect-ready"
+            effect_rawcodes = ["A0CG"]
+            parameters.update({
+                "primary_effect_ability_rawcode": "A0CG",
+                "resume_attack_delay_seconds": 1.2,
+                "effect_parameters_source": "registered-ability-object-data",
+            })
+            source_functions.append("CallbackSingle_doAfter_RaceNelfAbilities_call_doAfter_RaceNelfAbilities1")
+        elif unit_rawcode == "e006":
+            require_literals(mechanic, mechanic["handler_function"], ("1095328818", "0.6"))
+            semantic_kind = "registered-heal-plus-permanent-armor"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A004", "AId2"]
+            parameters.update({
+                "primary_effect_ability_rawcode": "A004",
+                "permanent_armor_ability_rawcode": "AId2",
+                "permanent_armor_bonus": 2,
+                "resume_attack_delay_seconds": 0.6,
+            })
+            source_functions.append("CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities2")
+        elif unit_rawcode == "e009":
+            require_literals(mechanic, mechanic["handler_function"], ("1095328819", "0.6"))
+            keeper_callback = "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities3"
+            require_literals(mechanic, keeper_callback, ("852126", "1."))
+            semantic_kind = "registered-heal-armor-plus-summon"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0BT", "AId3", "A0BU", "e00D"]
+            parameters.update({
+                "primary_effect_ability_rawcode": "A0BT",
+                "permanent_armor_ability_rawcode": "AId3",
+                "permanent_armor_bonus": 3,
+                "summon_order_id": 852126,
+                "summon_order_mapping": "AOsf-proven-by-shared-Naga-Siren-order",
+                "summon_ability_rawcode": "A0BU",
+                "summoned_unit_rawcode": "e00D",
+                "summoned_unit_count": 2,
+                "summoned_unit_duration_seconds": 45,
+                "post_heal_delay_seconds": 0.6,
+                "resume_attack_after_summon_seconds": 1,
+            })
+            source_functions.extend([
+                keeper_callback,
+                "CallbackSingle_doAfter_doAfter_RaceNatureAbilities_call_doAfter_doAfter_RaceNatureAbilities",
+            ])
+        elif unit_rawcode == "e00F":
+            require_literals(mechanic, mechanic["handler_function"], ("852520", "0.6"))
+            semantic_kind = "trigger-plus-unresolved-immediate-order"
+            normalization_status = "partial"
+            effect_rawcodes = ["A0BI"]
+            parameters.update({
+                "immediate_order_id": 852520,
+                "candidate_attached_ability_rawcode": "A0BI",
+                "candidate_attached_ability_base": "Atau",
+                "candidate_effect_area": 350,
+                "resume_attack_delay_seconds": 0.6,
+                "association_status": "strong-unique-attached-immediate-candidate;numeric-order-not-locally-mapped",
+            })
+        elif unit_rawcode == "h03B":
+            require_literals(mechanic, mechanic["handler_function"], ("852066", "1."))
+            semantic_kind = "registered-heal-plus-inner-fire"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A03K", "A03M"]
+            parameters.update({
+                "primary_effect_ability_rawcode": "A03K",
+                "primary_heal": 25,
+                "inner_fire_order_id": 852066,
+                "inner_fire_order_mapping": "Ainf-proven-by-feralRage-dynamic-ability-cast",
+                "inner_fire_ability_rawcode": "A03M",
+                "armor_bonus": 6,
+                "life_regen_per_second": 16,
+                "buff_duration_seconds": 10,
+                "resume_attack_delay_seconds": 1,
+            })
+            source_functions.extend([
+                "feralRage",
+                "CallbackSingle_doAfter_RaceHumanAbilities_call_doAfter_RaceHumanAbilities",
+            ])
+        elif unit_rawcode == "h03C":
+            require_literals(mechanic, "churchSpell", ("852066", "0.405", "1."))
+            paladin_callback = "CallbackSingle_doAfter_RaceHumanAbilities_call_doAfter_RaceHumanAbilities1"
+            paladin_filter = "ForGroupCallback_forUnitsInRange_doAfter_RaceHumanAbilities_callback_forUnitsInRange_doAfter_RaceHumanAbilities"
+            require_literals(mechanic, paladin_callback, ("900.", "852094", "1."))
+            semantic_kind = "registered-heal-inner-fire-maxhp-resurrection"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A03K", "A03I", "A03L", "A03H"]
+            parameters.update({
+                "primary_effect_ability_rawcode": "A03K",
+                "primary_heal": 25,
+                "inner_fire_order_id": 852066,
+                "inner_fire_order_mapping": "Ainf-proven-by-feralRage-dynamic-ability-cast",
+                "inner_fire_ability_rawcode": "A03I",
+                "armor_bonus": 9,
+                "life_regen_per_second": 24,
+                "buff_duration_seconds": 10,
+                "permanent_max_hp_bonus_ability_rawcode": "A03L",
+                "permanent_max_hp_bonus": 100,
+                "resurrection_precheck_delay_seconds": 1,
+                "resurrection_precheck_radius": 900,
+                "resurrection_precheck_predicate": "ally;dead;non-mechanical",
+                "resurrection_precheck_checks_wc3_can_raise": False,
+                "resurrection_order_id": 852094,
+                "resurrection_order_mapping": "resurrection-proven-by-Holy-Warrior-A0I4-carrier",
+                "resurrection_ability_rawcode": "A03H",
+                "resurrection_corpses_raised": 1,
+                "resurrection_effect_uses_wc3_corpse_eligibility": True,
+            })
+            source_functions.extend(["churchSpell", "feralRage", paladin_callback, paladin_filter])
+        elif unit_rawcode == "n01W":
+            require_literals(mechanic, mechanic["handler_function"], ("3.",))
+            brood_callback = "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities5"
+            brood_callback2 = "CallbackSingle_doAfter_doAfter_RaceNatureAbilities_call_doAfter_doAfter_RaceNatureAbilities2"
+            require_literals(mechanic, brood_callback, ("852212", "3."))
+            require_literals(mechanic, brood_callback2, ("852602",))
+            semantic_kind = "registered-infest-plus-two-unresolved-orders"
+            normalization_status = "partial"
+            effect_rawcodes = ["A0AV", "A0AS", "A0AU"]
+            parameters.update({
+                "primary_effect_ability_rawcode": "A0AV",
+                "primary_effect_damage_per_second": 20,
+                "primary_effect_duration_seconds": 10,
+                "primary_effect_spawn_count_on_kill": 2,
+                "first_followup_delay_seconds": 3,
+                "first_followup_order_id": 852212,
+                "second_followup_delay_seconds": 3,
+                "second_followup_order_id": 852602,
+                "attached_followup_candidates": ["A0AS", "A0AU"],
+                "association_status": "numeric-followup-orders-not-yet-locally-mapped",
+            })
+            source_functions.extend([brood_callback, brood_callback2])
+        elif unit_rawcode == "n02Y":
+            require_literals(mechanic, mechanic["handler_function"], ("0.1", "0.3"))
+            ogre_callback = "CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities1"
+            require_literals(mechanic, ogre_callback, ("852100", "0.1"))
+            semantic_kind = "delayed-berserk-rage"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0GR"]
+            parameters.update({
+                "random_activation_delay_seconds": [0.1, 0.3],
+                "berserk_order_id": 852100,
+                "berserk_order_mapping": "Absk-proven-by-independent-Troll-Trapper-runtime-order",
+                "berserk_ability_rawcode": "A0GR",
+                "attack_speed_increase": 1.4,
+                "movement_speed_increase": 0.15,
+                "damage_taken_increase": 0.01,
+                "duration_seconds": 6,
+                "resume_attack_delay_seconds": 0.1,
+            })
+            source_functions.append(ogre_callback)
+        elif unit_rawcode == "n02L":
+            require_literals(
+                mechanic,
+                "CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1",
+                ("600.", "100."),
+            )
+            require_literals(mechanic, mechanic["handler_function"], ("700.", "3."))
+            semantic_kind = "projectile-aoe-mana-burn"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0FS"]
+            parameters.update({
+                "impact_radius": 600,
+                "max_mana_burn_per_target": 100,
+                "bonus_damage_equals_mana_burn": True,
+                "projectile_speed": 700,
+                "carrier_timed_life_seconds": 3,
+                "impact_ability_rawcode": "A0FS",
+                "target_predicate": "alive-combat-sapper;enemy;ground;missing-Avul;missing-A08H",
+            })
+            source_functions.extend([
+                "CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1",
+                "ForGroupCallback_forUnitsInRange_doAfter_RaceChaosAbilities_callback_forUnitsInRange_doAfter_RaceChaosAbilities",
+            ])
+        elif unit_rawcode == "z003":
+            require_literals(
+                mechanic,
+                "CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities2",
+                ("300.", "100."),
+            )
+            require_literals(mechanic, mechanic["handler_function"], ("700.", "3."))
+            semantic_kind = "projectile-aoe-mana-burn"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A09E"]
+            parameters.update({
+                "impact_radius": 300,
+                "max_mana_burn_per_target": 100,
+                "bonus_damage_equals_mana_burn": True,
+                "projectile_speed": 700,
+                "carrier_timed_life_seconds": 3,
+                "impact_ability_rawcode": "A09E",
+                "target_predicate": "alive-combat-sapper;enemy;ground;missing-Avul;missing-A08H",
+            })
+            source_functions.extend([
+                "CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities2",
+                "ForGroupCallback_forUnitsInRange_doAfter_RaceMechAbilities_callback_forUnitsInRange_doAfter_RaceMechAbilities",
+            ])
+        elif unit_rawcode == "n032":
+            callback = "CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities2"
+            require_literals(mechanic, callback, ("75.",))
+            semantic_kind = "delayed-life-steal"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = []
+            parameters.update({
+                "maximum_life_stolen": 75,
+                "damage_equals_life_stolen": True,
+                "heal_caster_by_actual_damage": True,
+                "damage_attack_type": "chaos",
+                "damage_type": "normal",
+                "random_delay_seconds": [0.1, 0.6],
+            })
+            source_functions.append(callback)
+        elif unit_rawcode == "h06U":
+            require_literals(mechanic, "mineLayerSpell", ("50.", "220.", "700.", "3."))
+            semantic_kind = "random-offset-landmine-placement"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["n025"]
+            parameters.update({
+                "placement_distance_min": 50,
+                "placement_distance_max": 220,
+                "placement_angle_degrees": [0, 360],
+                "carrier_speed": 700,
+                "carrier_timed_life_seconds": 3,
+                "carrier_unit_rawcode": "h09M",
+                "landmine_unit_rawcode": "n025",
+            })
+            source_functions.extend([
+                "mineLayerSpell",
+                "CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities3",
+            ])
+        elif unit_rawcode == "e00C":
+            require_literals(mechanic, "keeperSpell", ("144.", "160.", "218.", "120.", "3."))
+            require_literals(mechanic, "spawnTreantFromWall", ("112.", "20."))
+            semantic_kind = "five-tree-wall-to-treants"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["YTct", "e00D"]
+            parameters.update({
+                "tree_rawcode": "YTct",
+                "tree_count": 5,
+                "tree_radius": 120,
+                "tree_angles_degrees": [0, 72, 144, 216, 288],
+                "nearby_ground_clearance_radius": 144,
+                "nearby_unit_displacement_radius": [160, 218],
+                "transform_delay_seconds": 3,
+                "treant_rawcode": "e00D",
+                "treant_spawn_radius": 112,
+                "treant_timed_life_seconds": 20,
+            })
+            source_functions.extend([
+                "keeperSpell",
+                "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities4",
+                "spawnTreantFromWall",
+                "CallbackSingle_doAfter_doAfter_RaceNatureAbilities_call_doAfter_doAfter_RaceNatureAbilities1",
+            ])
+        elif unit_rawcode in {"n030", "n035"}:
+            require_literals(mechanic, "spellSandCloud", ("5.7", "1."))
+            require_literals(
+                mechanic,
+                "CallbackPeriodic_doPeriodically_RaceDesertAbilities_call_doPeriodically_RaceDesertAbilities",
+                ("5",),
+            )
+            effect_rawcode = "A0HP" if unit_rawcode == "n035" else "A0GA"
+            semantic_kind = "periodic-sandcloud-carrier"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = [effect_rawcode]
+            parameters.update({
+                "effect_ability_rawcode": effect_rawcode,
+                "carrier_lifetime_seconds": 5.7,
+                "period_seconds": 1,
+                "cast_iterations": 5,
+            })
+            source_functions.extend([
+                "spellSandCloud",
+                "CallbackPeriodic_doPeriodically_RaceDesertAbilities_call_doPeriodically_RaceDesertAbilities",
+            ])
+        elif unit_rawcode == "n01Y":
+            require_literals(mechanic, "solarStrikeSpell", ("400.", "4", "3."))
+            semantic_kind = "bounded-multi-target-proxy"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A08U"]
+            parameters.update({
+                "search_radius": 400,
+                "max_targets": 4,
+                "effect_ability_rawcode": "A08U",
+                "dummy_lifetime_seconds": 3,
+                "target_predicate": "alive-combat-sapper;enemy;flying;missing-Avul",
+            })
+            source_functions.extend([
+                "solarStrikeSpell",
+                "ForGroupCallback_forUnitsInRange_RaceElvenAbilities_callback_forUnitsInRange_RaceElvenAbilities",
+            ])
+        elif unit_rawcode == "n02G":
+            require_literals(mechanic, "forestTrollTrapperSpell", ("800.", "5", "2."))
+            semantic_kind = "bounded-multi-target-proxy"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0FC"]
+            parameters.update({
+                "search_radius": 800,
+                "max_targets": 5,
+                "effect_ability_rawcode": "A0FC",
+                "dummy_lifetime_seconds": 2,
+                "target_predicate": "alive-combat-sapper;enemy;flying",
+            })
+            source_functions.extend([
+                "forestTrollTrapperSpell",
+                "ForGroupCallback_forUnitsInRange_RaceOrcAbilities_callback_forUnitsInRange_RaceOrcAbilities",
+            ])
+        elif unit_rawcode == "n027":
+            require_literals(mechanic, "annihilatorSpell", ("3", "20.", "10.", "10.", "2."))
+            semantic_kind = "four-lane-cone-proxy"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0AF"]
+            parameters.update({
+                "lane_count": 4,
+                "relative_angles_degrees": [-20, -10, 0, 10],
+                "cast_origin_offset": 10,
+                "effect_ability_rawcode": "A0AF",
+                "dummy_lifetime_seconds": 2,
+            })
+            source_functions.append("annihilatorSpell")
+        elif unit_rawcode == "e00J":
+            require_literals(mechanic, "assassinSpell", ("300.", "3", "11."))
+            semantic_kind = "bounded-multi-target-proxy"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A07Q"]
+            parameters.update({
+                "search_radius": 300,
+                "max_targets": 3,
+                "effect_ability_rawcode": "A07Q",
+                "dummy_lifetime_seconds": 11,
+                "selection_policy": "script-priority-list-then-fallback",
+            })
+            source_functions.append("assassinSpell")
+        elif unit_rawcode == "h062":
+            require_literals(mechanic, "improveSpecialBuilding", ("1.", "2"))
+            semantic_kind = "permanent-building-mana-regen-improvement"
+            normalization_status = "script-native-ready"
+            effect_rawcodes = ["A0EL"]
+            parameters.update({
+                "improvement_ability_rawcode": "A0EL",
+                "normal_level": 1,
+                "elemental_level": 2,
+                "normal_mana_regen_bonus": 0.15,
+                "elemental_mana_regen_bonus": 0.30,
+                "elemental_marker_rawcode": "A0DS",
+                "one_generator_per_target": True,
+                "target_requires_mana": True,
+                "target_requires_special_building": True,
+            })
+            source_functions.append("improveSpecialBuilding")
+
+        enriched_effects: list[dict[str, Any]] = []
+        for rawcode in effect_rawcodes:
+            enriched: dict[str, Any] = {"rawcode": rawcode}
+            definitions = ability_levels.get(rawcode, [])
+            definition = next((row for row in definitions if row["level"] == "1"), None)
+            if definition is None:
+                definition = inherited_ability_level_one(rawcode)
+            if definition is not None:
+                enriched["ability_level1"] = {
+                    "name": definition["name"],
+                    "range": definition["range"],
+                    "area": definition["area"],
+                    "targets": definition["targets"],
+                    "buffs": definition["buffs"],
+                    "duration_normal": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "adur", 1, 0)),
+                    "duration_hero": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "ahdu", 1, 0)),
+                    "data_fields_labeled_json": definition["data_fields_labeled_json"],
+                }
+            unit_effect = static_units.get(rawcode)
+            if unit_effect is not None:
+                enriched["unit_object"] = {
+                    "name": unit_effect["name"],
+                    "abilities": unit_effect["abilities"],
+                    "move_speed": unit_effect["move_speed"],
+                }
+            enriched_effects.append(enriched)
+
+        source_functions = list(dict.fromkeys(function for function in source_functions if function))
+        unit_spell_semantic_status_counts[normalization_status] += 1
+        unit_spell_semantic_kind_counts[semantic_kind] += 1
+        unit_spell_semantic_rows.append([
+            unit_rawcode, mechanic["unit_name"], mechanic["production_building_rawcode"], mechanic["production_building_names"],
+            mechanic["ability_rawcode"], mechanic["ability_name"], mechanic["effective_mana_cost"], mechanic["effective_cooldown"],
+            mechanic["target_mode"], mechanic["target_mode_label"], semantic_kind, normalization_status,
+            ",".join(effect_rawcodes),
+            json.dumps(enriched_effects, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+            json.dumps(parameters, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+            ",".join(source_functions), mechanic["evidence_kind"], mechanic["byte_offset"],
+        ])
+    write_tsv(
+        output / "unit-spell-semantics.tsv",
+        [
+            "unit_rawcode", "unit_name", "production_building_rawcode", "production_building_names",
+            "ability_rawcode", "ability_name", "effective_mana_cost", "effective_cooldown",
+            "target_mode", "target_mode_label", "semantic_kind", "normalization_status",
+            "effect_rawcodes", "effect_objects_json", "parameters_json", "source_functions", "evidence_kind", "byte_offset",
+        ],
+        unit_spell_semantic_rows,
+    )
+
     # Join the map's generated UnitObjectMeta table to its complete race
     # partition and authored upgrade graph. This is the preferred native import
     # view for Castle Fight building/production definitions: spawn time and
@@ -2354,6 +2838,9 @@ def main() -> None:
         "scripted_unit_spell_mechanic_kinds": dict(sorted(Counter(row[13] for row in unit_spell_mechanic_rows).items())),
         "scripted_unit_spell_mechanics_with_delayed_callbacks": sum(bool(row[16]) for row in unit_spell_mechanic_rows),
         "scripted_unit_spell_mechanics_with_dynamic_callbacks": sum(bool(row[17]) for row in unit_spell_mechanic_rows),
+        "scripted_unit_spell_semantic_rows": len(unit_spell_semantic_rows),
+        "scripted_unit_spell_semantic_status_counts": dict(sorted(unit_spell_semantic_status_counts.items())),
+        "scripted_unit_spell_semantic_kind_counts": dict(sorted(unit_spell_semantic_kind_counts.items())),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
@@ -2390,6 +2877,7 @@ def main() -> None:
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when generated closure dispatch is statically exact and the map Lua is never executed",
+            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: every row is explicitly object-effect-ready, script-native-ready or partial, so unfinished state machines cannot be mistaken for fully translated mechanics",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
             "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",

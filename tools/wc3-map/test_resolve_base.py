@@ -403,6 +403,89 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(json.loads(giant["scheduled_delays_json"]), ["0.6"])
         self.assertIn("CallbackSingle_doAfter_RaceNatureAbilities", giant["delayed_callback_functions"])
 
+    def test_scripted_unit_spell_semantics_mark_ready_and_partial_rows_explicitly(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["scripted_unit_spell_semantic_rows"], 37)
+        self.assertEqual(summary["scripted_unit_spell_semantic_status_counts"], {
+            "object-effect-ready": 17,
+            "partial": 3,
+            "script-native-ready": 17,
+        })
+
+        with (self.resolved / "unit-spell-semantics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 37)
+        self.assertEqual(
+            {rawcode for rawcode, row in rows.items() if row["normalization_status"] == "partial"},
+            {"e00F", "h03V", "n01W"},
+        )
+
+        faerie = rows["e000"]
+        self.assertEqual(faerie["normalization_status"], "object-effect-ready")
+        faerie_effects = {row["rawcode"]: row for row in json.loads(faerie["effect_objects_json"])}
+        self.assertEqual(
+            json.loads(faerie_effects["A0CG"]["ability_level1"]["data_fields_labeled_json"])["Hit Points Gained"],
+            175,
+        )
+
+        dryad = rows["e006"]
+        dryad_params = json.loads(dryad["parameters_json"])
+        self.assertEqual(dryad_params["primary_effect_ability_rawcode"], "A004")
+        self.assertEqual(dryad_params["permanent_armor_ability_rawcode"], "AId2")
+        self.assertEqual(dryad_params["permanent_armor_bonus"], 2)
+
+        keeper = rows["e009"]
+        keeper_params = json.loads(keeper["parameters_json"])
+        self.assertEqual(keeper_params["permanent_armor_bonus"], 3)
+        self.assertEqual(keeper_params["summon_ability_rawcode"], "A0BU")
+        self.assertEqual(keeper_params["summoned_unit_rawcode"], "e00D")
+        self.assertEqual(keeper_params["summoned_unit_count"], 2)
+        self.assertEqual(keeper_params["summoned_unit_duration_seconds"], 45)
+
+        crusader = json.loads(rows["h03B"]["parameters_json"])
+        self.assertEqual(crusader["primary_heal"], 25)
+        self.assertEqual(crusader["armor_bonus"], 6)
+        self.assertEqual(crusader["life_regen_per_second"], 16)
+        self.assertEqual(crusader["buff_duration_seconds"], 10)
+
+        paladin = json.loads(rows["h03C"]["parameters_json"])
+        self.assertEqual(paladin["armor_bonus"], 9)
+        self.assertEqual(paladin["life_regen_per_second"], 24)
+        self.assertEqual(paladin["permanent_max_hp_bonus"], 100)
+        self.assertEqual(paladin["resurrection_precheck_radius"], 900)
+        self.assertFalse(paladin["resurrection_precheck_checks_wc3_can_raise"])
+        self.assertTrue(paladin["resurrection_effect_uses_wc3_corpse_eligibility"])
+
+        twins = json.loads(rows["n02L"]["parameters_json"])
+        self.assertEqual(twins["impact_radius"], 600)
+        self.assertEqual(twins["max_mana_burn_per_target"], 100)
+        self.assertEqual(twins["projectile_speed"], 700)
+
+        ancient = json.loads(rows["e00C"]["parameters_json"])
+        self.assertEqual(ancient["tree_count"], 5)
+        self.assertEqual(ancient["tree_angles_degrees"], [0, 72, 144, 216, 288])
+        self.assertEqual(ancient["transform_delay_seconds"], 3)
+        self.assertEqual(ancient["treant_timed_life_seconds"], 20)
+
+        sandkin = json.loads(rows["n030"]["parameters_json"])
+        self.assertEqual(sandkin["effect_ability_rawcode"], "A0GA")
+        self.assertEqual(sandkin["period_seconds"], 1)
+        self.assertEqual(sandkin["cast_iterations"], 5)
+
+        mana_generator = json.loads(rows["h062"]["parameters_json"])
+        self.assertEqual(mana_generator["normal_mana_regen_bonus"], 0.15)
+        self.assertEqual(mana_generator["elemental_mana_regen_bonus"], 0.30)
+
+        ogre = json.loads(rows["n02Y"]["parameters_json"])
+        self.assertEqual(ogre["berserk_ability_rawcode"], "A0GR")
+        self.assertEqual(ogre["random_activation_delay_seconds"], [0.1, 0.3])
+        self.assertEqual(ogre["duration_seconds"], 6)
+
+        brood = json.loads(rows["n01W"]["parameters_json"])
+        self.assertNotIn("primary_effect_initial_damage", brood)
+        self.assertEqual(brood["first_followup_order_id"], 852212)
+        self.assertEqual(brood["second_followup_order_id"], 852602)
+
     def test_scripted_building_spells_recover_handlers_and_mana_timed_cadence(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_building_spell_rows"], 15)
