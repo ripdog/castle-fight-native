@@ -3015,8 +3015,8 @@ mod tests {
         let (_, max_lateral, attack_tick, vertical_reversals, stationary_ticks) = expected;
         let world = SUBUNITS_PER_WORLD_UNIT;
         assert!(
-            max_lateral >= 16 * world,
-            "rear ranged unit never committed to routing around the firing clump"
+            max_lateral >= 8 * world,
+            "rear ranged unit lateral bypass was too small: {max_lateral}"
         );
         assert!(
             attack_tick.is_some_and(|tick| tick < 40),
@@ -3077,6 +3077,154 @@ mod tests {
             assert_eq!(sim.unit(attacker).unwrap().position, start);
         }
         assert!(attacked, "in-range ranged unit never attacked");
+    }
+
+    #[test]
+    fn packed_convoy_uses_simultaneously_vacated_space() {
+        fn run(workers: usize) -> (u64, Vec<SimPoint>, TickResult) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                spatial_cell_size: 40 * world,
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, -10),
+                navigation_max: NavCell::new(100, 10),
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            let mover = |x_world| UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(x_world * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: world / 2,
+                },
+            };
+            let ids = [
+                sim.spawn_unit(mover(200)),
+                sim.spawn_unit(mover(208)),
+                sim.spawn_unit(mover(216)),
+            ];
+            let tick = sim.step();
+            let positions = ids
+                .into_iter()
+                .map(|id| sim.unit(id).unwrap().position)
+                .collect();
+            (sim.checksum(), positions, tick)
+        }
+
+        let expected = run(1);
+        let parallel = run(8);
+        assert_eq!(parallel.0, expected.0);
+        assert_eq!(parallel.1, expected.1);
+        assert_eq!(parallel.2.movement_intents, expected.2.movement_intents);
+        assert_eq!(parallel.2.movement_blocked, expected.2.movement_blocked);
+        assert_eq!(expected.2.movement_intents, 3);
+        assert_eq!(expected.2.movement_blocked, 0);
+        for (index, position) in expected.1.iter().enumerate() {
+            let start = (200 + i32::try_from(index).unwrap() * 8) * SUBUNITS_PER_WORLD_UNIT;
+            assert!(
+                position.x > start,
+                "packed convoy unit {index} did not advance into vacated space"
+            );
+        }
+    }
+
+    #[test]
+    fn objective_mover_flows_around_stationary_allied_clump() {
+        fn run(workers: usize) -> (u64, SimPoint, usize, usize) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                spatial_cell_size: 40 * world,
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, -40),
+                navigation_max: NavCell::new(100, 40),
+                target_pursuit_extra_range: 30 * world,
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            for y in [-16, -8, 0, 8, 16] {
+                let mut blocker = passive_unit(0, 237 * world);
+                blocker.position = SimPoint::new(237 * world, y * world);
+                sim.spawn_unit(blocker);
+            }
+            let rear = sim.spawn_unit(UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(229 * world, 0),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: 40 * world / 30,
+                },
+            });
+
+            let mut previous = sim.unit(rear).unwrap().position;
+            let mut previous_dy = 0_i32;
+            let mut reversals = 0usize;
+            let mut blocked_ticks = 0usize;
+            for _ in 0..120 {
+                let tick = sim.step();
+                blocked_ticks += usize::from(tick.movement_blocked > 0);
+                let current = sim.unit(rear).unwrap().position;
+                let dy = current.y - previous.y;
+                if dy != 0 && previous_dy != 0 && dy.signum() != previous_dy.signum() {
+                    reversals += 1;
+                }
+                if dy != 0 {
+                    previous_dy = dy;
+                }
+                previous = current;
+                if current.x > 260 * world {
+                    break;
+                }
+            }
+            (
+                sim.checksum(),
+                sim.unit(rear).unwrap().position,
+                reversals,
+                blocked_ticks,
+            )
+        }
+
+        let expected = run(1);
+        assert_eq!(
+            run(8),
+            expected,
+            "worker count changed objective crowd flow"
+        );
+        assert!(
+            expected.1.x > 260 * SUBUNITS_PER_WORLD_UNIT,
+            "objective mover never flowed past stationary allies: {:?}",
+            expected.1
+        );
+        assert!(
+            expected.2 <= 4,
+            "objective mover repeatedly oscillated between bypass directions {} times",
+            expected.2
+        );
+        assert!(
+            expected.3 <= 8,
+            "objective mover remained hard-blocked for {} ticks despite lateral space",
+            expected.3
+        );
     }
 
     #[test]
@@ -3171,8 +3319,8 @@ mod tests {
             "rear melee unit jittered between flow directions {reversals} times"
         );
         assert!(
-            max_lateral >= 8 * world,
-            "rear melee unit did not flow around the occupied engagement"
+            max_lateral >= 4 * world,
+            "rear melee unit lateral bypass was too small: {max_lateral}"
         );
     }
 

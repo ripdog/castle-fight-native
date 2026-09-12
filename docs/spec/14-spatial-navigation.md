@@ -139,7 +139,7 @@ Optimization MUST preserve the same defined navigation semantics/tie-break rules
 
 ## 10. Deterministic flow/path tie-breaking
 
-Equal-cost routes MUST resolve deterministically.
+Equal-cost routes MUST resolve deterministically, but determinism MUST NOT collapse every unit onto the same arbitrary coordinate side of a symmetric route. For shared objective fields, the executable verifier uses a stable `SimId`-derived two-sided bias when more than one neighboring cell has the same lower integration cost. Roughly half of sequential unit identities prefer the low-coordinate branch and half prefer the high-coordinate branch. The bias is stable for that unit rather than rerolled per tick, so symmetric north/south (or equivalent) capacity is naturally used without scheduler-dependent randomness.
 
 The navigation algorithm MUST define:
 
@@ -147,7 +147,7 @@ The navigation algorithm MUST define:
 - exact integer/fixed-point movement costs;
 - diagonal rules if diagonals exist;
 - corner-cutting rules;
-- tie-break rules for equal integration cost;
+- tie-break rules for equal integration cost, including any stable per-unit distribution rule;
 - treatment of footprint boundaries.
 
 Parallel field construction MUST not expose task completion order to final field values/directions.
@@ -240,9 +240,9 @@ A combat unit that reaches attack range stops its strategic forward movement to 
 
 The verification implementation uses deterministic movement intent plus local crowd resolution. Units first compute movement intents from one immutable phase snapshot. A data-parallel steering pass queries a small local spatial grid around those intended positions, applies hard-overlap repulsion, and also anticipates nearby units ahead when relative movement is closing the gap. Anticipatory pressure bends the mover on a stable tangential side while excluding its retained target from that steering repulsion: the target defines the desired attack envelope rather than acting as an obstacle that must be avoided before reaching legal range. Integer accumulation and stable directions keep worker scheduling and neighbor enumeration order from altering results.
 
-Because a memoryless local field can still alternate between equally legal sides as neighbors move by tiny amounts, each combat unit carries a small authoritative avoidance state while actively bypassing congestion for a retained target. It records the target, current deterministic bypass side, and a bounded count of consecutive clear direct steps. A blocked direct step activates the stable `SimId`-derived side; the resolver keeps flowing on that side until direct progress has remained clear for several consecutive ticks. If the chosen side itself becomes physically unavailable, the canonical hard resolver may use the opposite side and records that new side rather than flipping back on the next tick. Target loss/change, reaching the attack envelope, stun/death, or sufficiently sustained clear progress clears the bypass state. This state is canonical and participates in checksums because it affects later movement.
+Because a memoryless local field can still alternate between equally legal sides as neighbors move by tiny amounts, each combat unit carries a small authoritative avoidance state while actively bypassing congestion. The state identifies the current navigation goal (`Target(SimId)` or the team's `Objective`), the deterministic bypass side, and a bounded count of consecutive clear direct steps. A blocked direct step activates the stable `SimId`-derived side; the resolver keeps flowing on that side until direct progress has remained clear for several consecutive ticks. If the chosen side itself becomes physically unavailable, the canonical hard resolver may use the opposite side and records that new side rather than flipping back on the next tick. Target/goal change, reaching the attack envelope/objective, stun/death, or sufficiently sustained clear progress clears the bypass state. This state is canonical and participates in checksums because it affects later movement.
 
-Soft separation is a steering/game-feel mechanism, **not** the correctness boundary. After steering, a deterministic hard reservation/commit pass MUST reject any proposed final position that would overlap another live collision-enabled combat unit. Physical collision is global and MUST NOT be partitioned by navigation connected-component: topology answers whether a route exists, not whether another physical body exists. The resolver may choose a deterministic alternate position or leave the unit at its previous legal position; it MUST NOT resolve pressure by compressing units into overlapping space or teleporting them through blockers.
+Soft separation is a steering/game-feel mechanism, **not** the correctness boundary. After steering, a deterministic hard reservation/commit pass MUST reject any set of proposed final positions that would overlap live collision-enabled combat units. The pass reasons about units' proposed **final** positions rather than treating every old position as occupied for the entire tick: a packed convoy may therefore translate coherently into spaces that its neighbors are simultaneously vacating. Stationary units still propose their current positions and remain real obstacles. Conflicting proposals are repaired in canonical `SimId` priority while continually updating the reservation grid; the final committed set MUST be globally non-overlapping. Physical collision is global and MUST NOT be partitioned by navigation connected-component: topology answers whether a route exists, not whether another physical body exists. The resolver may choose a deterministic alternate position or leave the unit at its previous legal position; it MUST NOT resolve pressure by compressing units into overlapping space or teleporting them through blockers.
 
 Each combat unit may carry an authoritative circular collision radius. Unit-unit legality uses the sum of the two radii; a small and large unit therefore reserve different center distances rather than sharing one global spacing constant. An explicitly authored radius also applies against map bounds and blocked navigation cells: the unit's complete circle must fit on traversable topology. Radius-aware pursuit uses radius-valid path cells and radius-aware attack-envelope fallback positions. Shared objective navigation may cache one derived distance field per distinct authored radius; those fields preserve the strategic objective while excluding cells through which that radius physically cannot pass.
 
@@ -322,7 +322,7 @@ Spatial/navigation tests MUST eventually include:
 5. ranged enemy targets caged unit when targeting rules prefer it and the attack can genuinely hit it;
 6. unit outside cage does not cross building footprint;
 7. flow field identical across worker counts;
-8. equal-cost route chooses the documented deterministic direction;
+8. equal-cost objective routes use the documented stable per-unit bias so symmetric branches are both exercised without worker-count dependence;
 9. reachable attack-position filtering correctly rejects unreachable melee targets without rejecting valid long-range targets;
 10. disconnected high-density cages do not force melee targeting to enumerate every caged unit; component-partitioned target queries remain bounded by the attacker's reachable component;
 11. target pursuit routes around a simple wall instead of oscillating at a greedy local minimum;
@@ -348,4 +348,6 @@ Spatial/navigation tests MUST eventually include:
 31. mixed unit radii enforce pairwise clearance using the sum of the two radii and remain deterministic across worker counts;
 32. an explicitly authored unit radius cannot clip blocked topology or map bounds merely because its center cell is traversable;
 33. a radius-aware pursuer can route around inflated blocker clearance to an alternate legal attack position for both unit and building targets;
-34. radius-aware objective pursuit can temporarily detour away from the objective and still converge through a physically wide-enough route without oscillating.
+34. radius-aware objective pursuit can temporarily detour away from the objective and still converge through a physically wide-enough route without oscillating;
+35. an objective-following unit blocked by stationary allies preserves a deterministic bypass side and flows around the clump when lateral space exists;
+36. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping.

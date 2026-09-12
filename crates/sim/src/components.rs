@@ -169,9 +169,17 @@ pub struct RetaliationState {
     pub attacked_tick: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum NavigationGoal {
+    #[default]
+    None,
+    Objective(Team),
+    Target(SimId),
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) struct NavigationState {
-    pub avoidance_target: Option<SimId>,
+    pub avoidance_goal: NavigationGoal,
     pub bypass_side: i8,
     pub clear_ticks: u8,
 }

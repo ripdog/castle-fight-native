@@ -213,22 +213,14 @@ impl TopologyGrid {
         true
     }
 
-    #[must_use]
-    pub fn objective_step(&self, team: u8, from: NavCell) -> Option<NavCell> {
+    pub(crate) fn objective_step_with_bias(
+        &self,
+        team: u8,
+        from: NavCell,
+        bias: i32,
+    ) -> Option<NavCell> {
         let field = self.objective_distance.get(usize::from(team))?;
-        let from_index = self.index(from)?;
-        let current = field[from_index];
-        if current == UNREACHABLE || current == 0 {
-            return None;
-        }
-
-        self.neighbors(from)
-            .into_iter()
-            .flatten()
-            .filter_map(|cell| self.index(cell).map(|index| (field[index], cell)))
-            .filter(|(distance, _)| *distance < current)
-            .min_by_key(|(distance, cell)| (*distance, cell.y, cell.x))
-            .map(|(_, cell)| cell)
+        self.step_from_distance_field_with_bias(from, field, bias)
     }
 
     pub(crate) fn objective_distance_field_with_radius(&self, team: u8, radius: i32) -> Vec<u32> {
@@ -315,7 +307,13 @@ impl TopologyGrid {
         result
     }
 
-    pub(crate) fn step_from_distance_field(&self, from: NavCell, field: &[u32]) -> Option<NavCell> {
+    pub(crate) fn step_from_distance_field_with_bias(
+        &self,
+        from: NavCell,
+        field: &[u32],
+        bias: i32,
+    ) -> Option<NavCell> {
+        debug_assert!(bias == -1 || bias == 1);
         let from_index = self.index(from)?;
         let current = *field.get(from_index)?;
         if current == UNREACHABLE || current == 0 {
@@ -326,7 +324,14 @@ impl TopologyGrid {
             .flatten()
             .filter_map(|cell| self.index(cell).map(|index| (field[index], cell)))
             .filter(|(distance, _)| *distance < current)
-            .min_by_key(|(distance, cell)| (*distance, cell.y, cell.x))
+            .min_by_key(|(distance, cell)| {
+                let bias = i64::from(bias);
+                (
+                    *distance,
+                    -bias * i64::from(cell.y),
+                    -bias * i64::from(cell.x),
+                )
+            })
             .map(|(_, cell)| cell)
     }
 
@@ -786,6 +791,78 @@ mod tests {
     use crate::math::SUBUNITS_PER_WORLD_UNIT;
 
     #[test]
+    fn objective_ties_distribute_across_both_lateral_directions() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let grid = TopologyGrid::build(
+            cell,
+            NavCell::new(0, 0),
+            NavCell::new(5, 4),
+            [],
+            [
+                SimPoint::new(4 * cell, 2 * cell),
+                SimPoint::new(cell, 2 * cell),
+            ],
+        );
+
+        let north = NavCell::new(1, 1);
+        assert_eq!(
+            grid.objective_step_with_bias(0, north, -1),
+            Some(NavCell::new(2, 1))
+        );
+        assert_eq!(
+            grid.objective_step_with_bias(0, north, 1),
+            Some(NavCell::new(1, 2))
+        );
+
+        let south = NavCell::new(1, 3);
+        assert_eq!(
+            grid.objective_step_with_bias(0, south, -1),
+            Some(NavCell::new(1, 2))
+        );
+        assert_eq!(
+            grid.objective_step_with_bias(0, south, 1),
+            Some(NavCell::new(2, 3))
+        );
+    }
+
+    #[test]
+    fn opposite_objective_biases_take_opposite_sides_of_symmetric_blocker() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let grid = TopologyGrid::build(
+            cell,
+            NavCell::new(0, 0),
+            NavCell::new(8, 8),
+            [BuildingFootprint::new(4, 3, 1, 3)],
+            [
+                SimPoint::new(8 * cell, 4 * cell),
+                SimPoint::new(0, 4 * cell),
+            ],
+        );
+
+        let trace = |bias| {
+            let mut current = NavCell::new(1, 4);
+            let mut min_y = current.y;
+            let mut max_y = current.y;
+            for _ in 0..24 {
+                let Some(next) = grid.objective_step_with_bias(0, current, bias) else {
+                    break;
+                };
+                current = next;
+                min_y = min_y.min(current.y);
+                max_y = max_y.max(current.y);
+            }
+            (current, min_y, max_y)
+        };
+
+        let lower = trace(-1);
+        let upper = trace(1);
+        assert_eq!(lower.0, NavCell::new(8, 4));
+        assert_eq!(upper.0, NavCell::new(8, 4));
+        assert!(lower.1 <= 2, "low-coordinate bias did not use lower gap");
+        assert!(upper.2 >= 6, "high-coordinate bias did not use upper gap");
+    }
+
+    #[test]
     fn collision_circle_respects_blocked_cell_edges_and_map_bounds() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let grid = TopologyGrid::build(
@@ -850,7 +927,7 @@ mod tests {
 
         let field = grid.objective_distance_field_with_radius(0, radius);
         let first = grid
-            .step_from_distance_field(from, &field)
+            .step_from_distance_field_with_bias(from, &field, -1)
             .expect("radius-aware objective field should provide a detour");
         assert_ne!(first, NavCell::new(3, 3));
 
@@ -861,7 +938,7 @@ mod tests {
                 break;
             }
             current = grid
-                .step_from_distance_field(current, &field)
+                .step_from_distance_field_with_bias(current, &field, -1)
                 .expect("radius-aware objective detour should remain reachable");
             path.push(current);
         }

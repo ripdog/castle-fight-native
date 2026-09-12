@@ -8,7 +8,7 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
-const AVOIDANCE_CLEAR_TICKS: u8 = 3;
+const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 
 use crate::{
     components::{
@@ -17,9 +17,10 @@ use crate::{
         BounceProjectile, BuildingFootprint, BuildingSpawn, CollisionRadius, Corpse,
         CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
         MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
-        NavigationState, Position, ProductionCollisionRadius, ProductionCorpseProfile,
-        ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties, UnitSpawn,
+        NavigationGoal, NavigationState, Position, ProductionCollisionRadius,
+        ProductionCorpseProfile, ProductionProfile, ProductionState, RetaliationState, SimId,
+        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties,
+        UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -91,6 +92,9 @@ pub struct TickResult {
     pub spawn_failures: usize,
     pub topology_rebuilds: usize,
     pub pursuit_steps: usize,
+    pub movement_intents: usize,
+    pub movement_blocked: usize,
+    pub objective_move_intents: usize,
     pub a_star_fallbacks: usize,
     pub a_star_cache_hits: usize,
     pub a_star_expanded_nodes: usize,
@@ -1340,6 +1344,9 @@ impl Simulation {
             spawn_failures,
             topology_rebuilds: usize::from(topology_rebuilt),
             pursuit_steps: movement.pursuit_steps,
+            movement_intents: movement.movement_intents,
+            movement_blocked: movement.movement_blocked,
+            objective_move_intents: movement.objective_move_intents,
             a_star_fallbacks: movement.a_star_fallbacks,
             a_star_cache_hits: movement.a_star_cache_hits,
             a_star_expanded_nodes: movement.a_star_expanded_nodes,
@@ -3031,6 +3038,18 @@ impl Simulation {
             .iter()
             .filter(|decision| decision.pursuit_step)
             .count();
+        let movement_intents = decisions
+            .iter()
+            .zip(units)
+            .filter(|(decision, unit)| decision.position != unit.position)
+            .count();
+        let objective_move_intents = decisions
+            .iter()
+            .zip(units)
+            .filter(|(decision, unit)| {
+                navigation_goal(unit, decision) == NavigationGoal::Objective(unit.team)
+            })
+            .count();
         let a_star_fallbacks = decisions
             .iter()
             .filter(|decision| decision.used_a_star)
@@ -3046,7 +3065,7 @@ impl Simulation {
 
         let separation_start = Instant::now();
         let separated_positions =
-            self.apply_crowd_separation(units, unit_health, &desired_positions);
+            self.apply_crowd_separation(units, unit_health, &decisions, &desired_positions);
         let legal_positions = self.enforce_hard_non_overlap(
             units,
             unit_health,
@@ -3056,11 +3075,22 @@ impl Simulation {
             &separated_positions,
         );
         let crowd_and_collision = separation_start.elapsed();
+        let movement_blocked = decisions
+            .iter()
+            .zip(units)
+            .zip(&legal_positions)
+            .filter(|((decision, unit), legal)| {
+                decision.position != unit.position && **legal == unit.position
+            })
+            .count();
         positions.copy_from_slice(&legal_positions);
         MovementMetrics {
             intent,
             crowd_and_collision,
             pursuit_steps,
+            movement_intents,
+            movement_blocked,
+            objective_move_intents,
             a_star_fallbacks,
             a_star_cache_hits,
             a_star_expanded_nodes,
@@ -3241,14 +3271,17 @@ impl Simulation {
                 }
             }
             None => {
+                let bias = sidestep_sign(unit.id);
                 if let Some(radius) = unit.collision_radius_override {
                     let field = self
                         .radius_objective_fields
                         .get(&(unit.team.0, radius))
                         .expect("radius-aware objective field was not prepared");
-                    self.topology.step_from_distance_field(source_cell, field)
+                    self.topology
+                        .step_from_distance_field_with_bias(source_cell, field, bias)
                 } else {
-                    self.topology.objective_step(unit.team.0, source_cell)
+                    self.topology
+                        .objective_step_with_bias(unit.team.0, source_cell, bias)
                 }
             }
         };
@@ -3296,6 +3329,7 @@ impl Simulation {
         &self,
         units: &[UnitSnapshot],
         unit_health: &[i32],
+        decisions: &[MovementDecision],
         desired_positions: &[SimPoint],
     ) -> Vec<SimPoint> {
         let max_separation = self.config.max_separation_per_tick;
@@ -3404,8 +3438,9 @@ impl Simulation {
                                     let axis_distance = to_other_x.abs().max(to_other_y.abs());
                                     let pressure =
                                         (i64::from(anticipation_distance) - axis_distance).max(1);
-                                    let remembered_side = if unit.navigation.avoidance_target
-                                        == unit.target
+                                    let goal = navigation_goal(unit, &decisions[index]);
+                                    let remembered_side = if unit.navigation.avoidance_goal == goal
+                                        && goal != NavigationGoal::None
                                         && unit.navigation.bypass_side != 0
                                     {
                                         i64::from(unit.navigation.bypass_side)
@@ -3465,7 +3500,11 @@ impl Simulation {
         }
 
         let entries = units.iter().enumerate().filter_map(|(index, unit)| {
-            (unit_health[index] > 0).then_some((index, unit.position, unit.collision_radius))
+            (unit_health[index] > 0).then_some((
+                index,
+                separated_positions[index],
+                unit.collision_radius,
+            ))
         });
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
         let mut reservations = SpatialReservationGrid::build_with_radii(
@@ -3478,7 +3517,8 @@ impl Simulation {
         let mut result: Vec<_> = units.iter().map(|unit| unit.position).collect();
         let lateral = self.config.max_separation_per_tick.max(1);
 
-        for (index, unit) in units.iter().enumerate() {
+        for index in (0..units.len()).rev() {
+            let unit = &units[index];
             if unit_health[index] <= 0 {
                 continue;
             }
@@ -3491,12 +3531,10 @@ impl Simulation {
             let desired = desired_positions[index];
             let separated = separated_positions[index];
             let sidestep_distance = effective_movement_speed(unit).max(lateral).max(1);
-            let pursuing = decisions[index].pursuit_step
-                && decisions[index].pursuit_target.is_some()
-                && desired != unit.position;
-            let pursuit_target = decisions[index].pursuit_target;
+            let goal = navigation_goal(unit, &decisions[index]);
+            let navigating = goal != NavigationGoal::None;
             let navigation = &mut navigation_states[index];
-            if !pursuing || navigation.avoidance_target != pursuit_target {
+            if !navigating || navigation.avoidance_goal != goal {
                 *navigation = NavigationState::default();
             }
 
@@ -3507,18 +3545,16 @@ impl Simulation {
             ) && reservations
                 .is_clear_with_radius(desired, unit.collision_radius);
             let mut avoiding = false;
-            if pursuing {
+            if navigating {
                 if !direct_clear {
-                    navigation.avoidance_target = pursuit_target;
+                    navigation.avoidance_goal = goal;
                     if navigation.bypass_side == 0 {
                         navigation.bypass_side =
                             i8::try_from(sidestep_sign(unit.id)).expect("sidestep sign fits i8");
                     }
                     navigation.clear_ticks = 0;
                     avoiding = true;
-                } else if navigation.avoidance_target == pursuit_target
-                    && navigation.bypass_side != 0
-                {
+                } else if navigation.avoidance_goal == goal && navigation.bypass_side != 0 {
                     navigation.clear_ticks = navigation.clear_ticks.saturating_add(1);
                     if navigation.clear_ticks < AVOIDANCE_CLEAR_TICKS {
                         avoiding = true;
@@ -3564,9 +3600,9 @@ impl Simulation {
                     (preferred_arc, side),
                     (preferred_tangent, side),
                     (preferred_back_arc, side),
+                    (Some(separated), 0),
                     (opposite_arc, -side),
                     (opposite_tangent, -side),
-                    (Some(separated), 0),
                     (Some(desired), 0),
                     (Some(unit.position), side),
                 ];
@@ -3885,11 +3921,24 @@ impl MovementDecision {
     }
 }
 
+fn navigation_goal(unit: &UnitSnapshot, decision: &MovementDecision) -> NavigationGoal {
+    if let Some(target) = decision.pursuit_target {
+        NavigationGoal::Target(target)
+    } else if decision.position != unit.position {
+        NavigationGoal::Objective(unit.team)
+    } else {
+        NavigationGoal::None
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct MovementMetrics {
     intent: Duration,
     crowd_and_collision: Duration,
     pursuit_steps: usize,
+    movement_intents: usize,
+    movement_blocked: usize,
+    objective_move_intents: usize,
     a_star_fallbacks: usize,
     a_star_cache_hits: usize,
     a_star_expanded_nodes: usize,
@@ -5034,11 +5083,14 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
                 hash.write_u64(unit.retaliation.attacked_tick.unwrap_or(u64::MAX));
                 hash_status_state(&mut hash, unit.status);
-                hash.write_u64(
-                    unit.navigation
-                        .avoidance_target
-                        .map_or(0, |target| target.0),
-                );
+                match unit.navigation.avoidance_goal {
+                    NavigationGoal::None => hash.write_u64(0),
+                    NavigationGoal::Target(target) => hash.write_u64(target.0),
+                    NavigationGoal::Objective(team) => {
+                        hash.write_u64(u64::MAX);
+                        hash.write_u8(team.0);
+                    }
+                }
                 hash.write_i32(i32::from(unit.navigation.bypass_side));
                 hash.write_u8(unit.navigation.clear_ticks);
                 hash.write_u64(unit.spawn_tick.0);
