@@ -223,6 +223,7 @@ buildings alive
 projectiles alive
 automatic ability evaluations/casts/effects and target candidates examined
 currently stunned units, plus average/peak stunned units in status stress probes
+active timed stat modifiers, including average/peak movement-modifier instances in modifier stress probes
 active aura sources
 total tick duration
 per-phase duration, including automatic ability evaluation/resolution

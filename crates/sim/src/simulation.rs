@@ -14,9 +14,9 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile,
         BounceProjectile, BuildingFootprint, BuildingSpawn, GuaranteedHitProjectile, Health,
-        MAX_BOUNCE_HITS, ManaState, MovementProfile, Position, ProductionProfile, ProductionState,
-        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
-        UnitSpawn,
+        MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
+        Position, ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick,
+        SpellcastingProfile, StatusState, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -101,6 +101,7 @@ pub struct TickResult {
     pub ability_candidate_checks: usize,
     pub ability_effects: usize,
     pub stunned_units: usize,
+    pub timed_movement_modifiers: usize,
     pub retained_targets: usize,
     pub target_changes: usize,
     pub ally_defense_queries: usize,
@@ -1030,10 +1031,9 @@ impl Simulation {
                 },
                 None => RetaliationState::default(),
             };
-            entity
+            *entity
                 .get_mut::<StatusState>()
-                .expect("unit status state missing")
-                .stunned_until_tick = unit.stunned_until_tick;
+                .expect("unit status state missing") = unit.status;
         }
 
         let mut building_deaths = Vec::new();
@@ -1062,11 +1062,10 @@ impl Simulation {
                     target_state.direct_retaliation_lock = false;
                 }
                 if building.attack.is_some() || building.spellcasting.is_some() {
-                    entity
+                    *entity
                         .get_mut::<StatusState>()
-                        .expect("active building status state missing")
-                        .stunned_until_tick = building
-                        .stunned_until_tick
+                        .expect("active building status state missing") = building
+                        .status
                         .expect("active building snapshot status state missing");
                 }
                 if building.spellcasting.is_some() {
@@ -1151,9 +1150,15 @@ impl Simulation {
                 .iter()
                 .enumerate()
                 .filter(|(index, unit)| {
-                    unit_health[*index] > 0 && completed_tick < unit.stunned_until_tick
+                    unit_health[*index] > 0 && completed_tick < unit.status.stunned_until_tick
                 })
                 .count(),
+            timed_movement_modifiers: units
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| unit_health[*index] > 0)
+                .map(|(_, unit)| usize::from(unit.status.movement_modifier_count))
+                .sum(),
             retained_targets: target_selection.retained_targets
                 + building_target_selection.retained_targets,
             target_changes: target_selection.target_changes
@@ -1323,6 +1328,11 @@ impl Simulation {
             mana.current = i32::try_from(regenerated.min(i64::from(profile.mana.maximum)))
                 .expect("mana regeneration overflowed validated bounds");
         }
+
+        let mut status_query = self.world.query::<&mut StatusState>();
+        for mut status in status_query.iter_mut(&mut self.world) {
+            purge_expired_movement_modifiers(&mut status, self.next_tick);
+        }
     }
 
     fn advance_production(&mut self) -> (usize, usize) {
@@ -1457,7 +1467,7 @@ impl Simulation {
                     target: target.current,
                     direct_retaliation_lock: target.direct_retaliation_lock,
                     retaliation: *retaliation,
-                    stunned_until_tick: status.stunned_until_tick,
+                    status: *status,
                     movement: *movement,
                     spawn_tick: spawn_tick.0,
                 },
@@ -1521,7 +1531,7 @@ impl Simulation {
                         spellcasting: spellcasting.copied(),
                         mana_current: mana.map(|mana| mana.current),
                         ability_state: ability_state.copied(),
-                        stunned_until_tick: status.map(|status| status.stunned_until_tick),
+                        status: status.copied(),
                     }
                 },
             )
@@ -1623,8 +1633,8 @@ impl Simulation {
             if source.health <= 0
                 || source.id != intent.source_id
                 || source
-                    .stunned_until_tick
-                    .is_some_and(|until| self.next_tick < until)
+                    .status
+                    .is_some_and(|status| self.next_tick < status.stunned_until_tick)
             {
                 continue;
             }
@@ -1730,8 +1740,8 @@ impl Simulation {
         };
         if source.health <= 0
             || source
-                .stunned_until_tick
-                .is_some_and(|until| self.next_tick < until)
+                .status
+                .is_some_and(|status| self.next_tick < status.stunned_until_tick)
         {
             return AbilityEvaluation::default();
         }
@@ -1838,7 +1848,7 @@ impl Simulation {
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
     ) -> bool {
-        if unit.health <= 0 || self.next_tick < unit.stunned_until_tick {
+        if unit.health <= 0 || self.next_tick < unit.status.stunned_until_tick {
             return false;
         }
         let current = unit
@@ -1872,7 +1882,7 @@ impl Simulation {
                     let current = unit.target.filter(|target| {
                         self.target_retainable_for(unit, *target, units, buildings)
                     });
-                    if self.next_tick < unit.stunned_until_tick {
+                    if self.next_tick < unit.status.stunned_until_tick {
                         return TargetDecision::without_defense(
                             current,
                             current.is_some() && unit.direct_retaliation_lock,
@@ -1980,8 +1990,8 @@ impl Simulation {
                         self.building_source_target_retainable(building, *target, units, buildings)
                     });
                     if building
-                        .stunned_until_tick
-                        .is_some_and(|until| self.next_tick < until)
+                        .status
+                        .is_some_and(|status| self.next_tick < status.stunned_until_tick)
                     {
                         return current;
                     }
@@ -2537,7 +2547,7 @@ impl Simulation {
                 .filter_map(|(source_index, source)| {
                     if source.spawn_tick == self.next_tick
                         || source.cooldown_remaining != 0
-                        || self.next_tick < source.stunned_until_tick
+                        || self.next_tick < source.status.stunned_until_tick
                     {
                         return None;
                     }
@@ -2584,8 +2594,8 @@ impl Simulation {
                     if source.spawn_tick == Some(self.next_tick)
                         || source.cooldown_remaining.unwrap_or(0) != 0
                         || source
-                            .stunned_until_tick
-                            .is_some_and(|until| self.next_tick < until)
+                            .status
+                            .is_some_and(|status| self.next_tick < status.stunned_until_tick)
                     {
                         return None;
                     }
@@ -2724,9 +2734,10 @@ impl Simulation {
         building_health: &[i32],
     ) -> MovementDecision {
         let current = unit.position;
+        let movement_speed = effective_movement_speed(unit);
         if unit_health[index] <= 0
-            || unit.movement.speed_per_tick == 0
-            || self.next_tick < unit.stunned_until_tick
+            || movement_speed == 0
+            || self.next_tick < unit.status.stunned_until_tick
         {
             return MovementDecision::stationary(current);
         }
@@ -2807,7 +2818,7 @@ impl Simulation {
             };
         };
         let target_position = self.topology.center_of_cell(next_cell);
-        let candidate = current.step_towards(target_position, unit.movement.speed_per_tick);
+        let candidate = current.step_towards(target_position, movement_speed);
         let candidate_cell = self.topology.cell_of_point(candidate);
         let position = if self.topology.is_blocked(candidate_cell)
             || !self.topology.same_component(source_cell, candidate_cell)
@@ -2975,7 +2986,7 @@ impl Simulation {
 
             let desired = desired_positions[index];
             let separated = separated_positions[index];
-            let sidestep_distance = unit.movement.speed_per_tick.max(lateral).max(1);
+            let sidestep_distance = effective_movement_speed(unit).max(lateral).max(1);
             let preferred_side =
                 perpendicular_step(unit.id, unit.position, desired, sidestep_distance);
             let opposite_side = SimPoint::new(-preferred_side.x, -preferred_side.y);
@@ -3246,7 +3257,7 @@ struct UnitSnapshot {
     target: Option<SimId>,
     direct_retaliation_lock: bool,
     retaliation: RetaliationState,
-    stunned_until_tick: u64,
+    status: StatusState,
     movement: MovementProfile,
     spawn_tick: u64,
 }
@@ -3265,7 +3276,7 @@ struct BuildingSnapshot {
     spellcasting: Option<SpellcastingProfile>,
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
-    stunned_until_tick: Option<u64>,
+    status: Option<StatusState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3641,6 +3652,15 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     match spellcasting.ability.effect {
         AbilityEffect::Damage { amount } => assert!(amount >= 0),
         AbilityEffect::Stun { duration_ticks } => assert!(duration_ticks > 0),
+        AbilityEffect::ModifyMovementSpeedPercent {
+            modifier: _,
+            percent_delta,
+            duration_ticks,
+        } => {
+            assert!((-100..=1_000).contains(&percent_delta));
+            assert_ne!(percent_delta, 0);
+            assert!(duration_ticks > 0);
+        }
     }
 }
 
@@ -3870,10 +3890,98 @@ fn apply_ability_effect_to_unit(
             let stunned_until_tick = completed_tick
                 .checked_add(u64::from(duration_ticks))
                 .expect("stun expiry tick overflow");
-            target.stunned_until_tick = target.stunned_until_tick.max(stunned_until_tick);
+            target.status.stunned_until_tick =
+                target.status.stunned_until_tick.max(stunned_until_tick);
+        }
+        AbilityEffect::ModifyMovementSpeedPercent {
+            modifier,
+            percent_delta,
+            duration_ticks,
+        } => {
+            let expires_tick = completed_tick
+                .checked_add(u64::from(duration_ticks))
+                .expect("movement modifier expiry tick overflow");
+            apply_timed_movement_modifier(
+                &mut target.status,
+                modifier,
+                percent_delta,
+                expires_tick,
+            );
         }
     }
     true
+}
+
+fn purge_expired_movement_modifiers(status: &mut StatusState, tick: u64) {
+    let count = usize::from(status.movement_modifier_count);
+    debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
+    let mut write_index = 0usize;
+    for read_index in 0..count {
+        let modifier = status.movement_modifiers[read_index];
+        if tick < modifier.expires_tick {
+            status.movement_modifiers[write_index] = modifier;
+            write_index += 1;
+        }
+    }
+    for slot in &mut status.movement_modifiers[write_index..count] {
+        *slot = Default::default();
+    }
+    status.movement_modifier_count =
+        u8::try_from(write_index).expect("movement modifier count exceeds u8");
+}
+
+fn apply_timed_movement_modifier(
+    status: &mut StatusState,
+    modifier_id: ModifierId,
+    percent_delta: i16,
+    expires_tick: u64,
+) {
+    let count = usize::from(status.movement_modifier_count);
+    debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
+    let active = &status.movement_modifiers[..count];
+    match active.binary_search_by_key(&modifier_id, |modifier| modifier.id) {
+        Ok(index) => {
+            let modifier = &mut status.movement_modifiers[index];
+            assert_eq!(
+                modifier.percent_delta, percent_delta,
+                "same ModifierId authored with conflicting movement percentages"
+            );
+            modifier.expires_tick = modifier.expires_tick.max(expires_tick);
+        }
+        Err(index) => {
+            assert!(
+                count < MAX_TIMED_MOVEMENT_MODIFIERS,
+                "timed movement modifier capacity exceeded"
+            );
+            status
+                .movement_modifiers
+                .copy_within(index..count, index + 1);
+            status.movement_modifiers[index] = crate::components::TimedMovementModifier {
+                id: modifier_id,
+                percent_delta,
+                expires_tick,
+            };
+            status.movement_modifier_count = status
+                .movement_modifier_count
+                .checked_add(1)
+                .expect("movement modifier count overflow");
+        }
+    }
+}
+
+fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
+    let count = usize::from(unit.status.movement_modifier_count);
+    debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
+    let percent = unit.status.movement_modifiers[..count]
+        .iter()
+        .fold(100_i32, |total, modifier| {
+            total
+                .checked_add(i32::from(modifier.percent_delta))
+                .expect("movement percentage overflow")
+        })
+        .clamp(0, 1_000);
+    i32::try_from(i64::from(unit.movement.speed_per_tick) * i64::from(percent) / 100)
+        .expect("effective movement speed overflowed validated bounds")
 }
 
 fn projectile_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
@@ -4149,7 +4257,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u8(u8::from(unit.target.direct_retaliation_lock));
                 hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
                 hash.write_u64(unit.retaliation.attacked_tick.unwrap_or(u64::MAX));
-                hash.write_u64(unit.status.stunned_until_tick);
+                hash_status_state(&mut hash, unit.status);
                 hash.write_u64(unit.spawn_tick.0);
             }
             CanonicalEntity::Building(building) => {
@@ -4212,7 +4320,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 }
                 if let Some(status) = building.status {
                     hash.write_u8(1);
-                    hash.write_u64(status.stunned_until_tick);
+                    hash_status_state(&mut hash, status);
                 } else {
                     hash.write_u8(0);
                 }
@@ -4382,6 +4490,18 @@ struct CanonicalBounceProjectile {
     projectile: BounceProjectile,
 }
 
+fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u64(status.stunned_until_tick);
+    hash.write_u8(status.movement_modifier_count);
+    let count = usize::from(status.movement_modifier_count);
+    debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
+    for modifier in &status.movement_modifiers[..count] {
+        hash.write_u64(u64::from(modifier.id.0));
+        hash.write_i32(i32::from(modifier.percent_delta));
+        hash.write_u64(modifier.expires_tick);
+    }
+}
+
 fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u64(u64::from(ability.id.0));
     hash.write_i32(ability.mana_cost);
@@ -4392,6 +4512,15 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     match ability.effect {
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
+        AbilityEffect::ModifyMovementSpeedPercent {
+            modifier,
+            percent_delta,
+            duration_ticks,
+        } => {
+            hash.write_u64(u64::from(modifier.0));
+            hash.write_i32(i32::from(percent_delta));
+            hash.write_u16(duration_ticks);
+        }
     }
 }
 

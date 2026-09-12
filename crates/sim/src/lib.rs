@@ -7,8 +7,9 @@ mod topology;
 
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, MovementProfile,
-    ProductionProfile, SimId, SpellcastingProfile, StatusState, Team, UnitSpawn, UnitTemplate,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, ModifierId,
+    MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState, Team, UnitSpawn,
+    UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
@@ -110,6 +111,34 @@ mod tests {
                 range: 0,
                 target_policy: AbilityTargetPolicy::AllEnemyUnits,
                 effect: AbilityEffect::Stun { duration_ticks },
+            },
+        }
+    }
+
+    fn global_movement_modifier_spell(
+        ability_id: u32,
+        modifier_id: u32,
+        percent_delta: i16,
+        duration_ticks: u16,
+        cooldown_ticks: u16,
+    ) -> SpellcastingProfile {
+        SpellcastingProfile {
+            mana: ManaProfile {
+                maximum: 1_000,
+                starting: 1_000,
+                regen_per_tick: 0,
+            },
+            ability: AutomaticAbilityProfile {
+                id: AbilityId(ability_id),
+                mana_cost: 1,
+                cooldown_ticks,
+                range: 0,
+                target_policy: AbilityTargetPolicy::AllEnemyUnits,
+                effect: AbilityEffect::ModifyMovementSpeedPercent {
+                    modifier: ModifierId(modifier_id),
+                    percent_delta,
+                    duration_ticks,
+                },
             },
         }
     }
@@ -955,6 +984,169 @@ mod tests {
                         range: 2 * cell,
                         acquisition_range: 12 * cell,
                         cooldown_ticks: 3,
+                    },
+                    movement: MovementProfile {
+                        speed_per_tick: cell / 2,
+                    },
+                });
+            }
+            for _ in 0..30 {
+                sim.step();
+            }
+            sim.checksum()
+        }
+
+        let expected = run(1);
+        assert_eq!(run(2), expected);
+        assert_eq!(run(8), expected);
+    }
+
+    #[test]
+    fn timed_movement_slow_applies_and_expires_exactly() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let start = SimPoint::new(20 * cell + cell / 2, cell / 2);
+        let mover = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: start,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 2,
+            },
+        });
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(30, 10, 1, 1),
+            global_movement_modifier_spell(40, 1, -50, 2, 30),
+        ));
+
+        sim.step();
+        assert_eq!(sim.unit(mover).unwrap().position.x, start.x - cell / 4);
+        sim.step();
+        assert_eq!(sim.unit(mover).unwrap().position.x, start.x - cell / 2);
+        sim.step();
+        assert_eq!(sim.unit(mover).unwrap().position.x, start.x - cell);
+    }
+
+    #[test]
+    fn same_movement_modifier_id_refreshes_without_stacking() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let start = SimPoint::new(20 * cell + cell / 2, cell / 2);
+        let mover = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: start,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 2,
+            },
+        });
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(30, 10, 1, 1),
+            global_movement_modifier_spell(41, 9, -50, 4, 30),
+        ));
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(32, 10, 1, 1),
+            global_movement_modifier_spell(42, 9, -50, 1, 30),
+        ));
+
+        for expected_quarters in 1..=4 {
+            sim.step();
+            assert_eq!(
+                sim.unit(mover).unwrap().position.x,
+                start.x - expected_quarters * (cell / 4)
+            );
+        }
+        sim.step();
+        assert_eq!(sim.unit(mover).unwrap().position.x, start.x - 3 * cell / 2);
+    }
+
+    #[test]
+    fn distinct_movement_modifier_ids_stack_additively() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let start = SimPoint::new(20 * cell + cell / 2, cell / 2);
+        let mover = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: start,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 2,
+            },
+        });
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(30, 10, 1, 1),
+            global_movement_modifier_spell(43, 10, -30, 2, 30),
+        ));
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(32, 10, 1, 1),
+            global_movement_modifier_spell(44, 11, -30, 2, 30),
+        ));
+
+        sim.step();
+        assert_eq!(
+            sim.unit(mover).unwrap().position.x,
+            start.x - (cell / 2) * 40 / 100
+        );
+    }
+
+    #[test]
+    fn timed_movement_modifiers_are_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            let mut sim = Simulation::new(SimulationConfig::default(), workers);
+            for index in 0..4 {
+                sim.spawn_building(spell_building(
+                    0,
+                    BuildingFootprint::new(4 + index * 2, -20, 1, 1),
+                    global_movement_modifier_spell(
+                        50 + index as u32,
+                        20 + (index % 2) as u32,
+                        -15,
+                        3,
+                        4,
+                    ),
+                ));
+            }
+            for index in 0..100 {
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new(
+                        (40 + index % 20) * cell + cell / 2,
+                        (index / 20 - 2) * cell + cell / 2,
+                    ),
+                    health: 100,
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::Melee,
+                        damage: 0,
+                        range: 0,
+                        acquisition_range: 0,
+                        cooldown_ticks: 1,
                     },
                     movement: MovementProfile {
                         speed_per_tick: cell / 2,

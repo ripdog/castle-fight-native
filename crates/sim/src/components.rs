@@ -4,6 +4,7 @@ use crate::math::SimPoint;
 
 pub(crate) const MAX_BOUNCE_COUNT: u8 = 8;
 pub(crate) const MAX_BOUNCE_HITS: usize = MAX_BOUNCE_COUNT as usize + 1;
+pub(crate) const MAX_TIMED_MOVEMENT_MODIFIERS: usize = 8;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SimId(pub u64);
@@ -215,6 +216,9 @@ pub struct ProductionState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AbilityId(pub u32);
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ModifierId(pub u32);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AbilityTargetPolicy {
     RandomEnemyUnit,
@@ -233,8 +237,17 @@ impl AbilityTargetPolicy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AbilityEffect {
-    Damage { amount: i32 },
-    Stun { duration_ticks: u16 },
+    Damage {
+        amount: i32,
+    },
+    Stun {
+        duration_ticks: u16,
+    },
+    ModifyMovementSpeedPercent {
+        modifier: ModifierId,
+        percent_delta: i16,
+        duration_ticks: u16,
+    },
 }
 
 impl AbilityEffect {
@@ -243,6 +256,7 @@ impl AbilityEffect {
         match self {
             Self::Damage { .. } => 0,
             Self::Stun { .. } => 1,
+            Self::ModifyMovementSpeedPercent { .. } => 2,
         }
     }
 }
@@ -281,9 +295,18 @@ pub struct AutomaticAbilityState {
     pub cast_sequence: u64,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TimedMovementModifier {
+    pub id: ModifierId,
+    pub percent_delta: i16,
+    pub expires_tick: u64,
+}
+
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
+    pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
+    pub movement_modifier_count: u8,
 }
 
 impl StatusState {

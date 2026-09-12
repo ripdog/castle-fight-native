@@ -250,6 +250,14 @@ While stunned, a combat unit performs no fresh target acquisition, retaliation/a
 
 Application MUST remain deterministic regardless of entity query order or worker count. Parallel effect execution is permitted only after the affected set and conflict semantics are fixed.
 
+### 14.1 Timed movement-speed modifier verification primitive
+
+The verification implementation also contains one deliberately narrow timed stat-modifier primitive so the engine can exercise canonical modifier storage, refresh, stacking, expiry, and effective-stat derivation without mutating authored unit definitions. `ModifyMovementSpeedPercent` carries a stable `ModifierId`, a signed integer percentage delta, and a positive duration in ticks. The base `MovementProfile` remains immutable authoritative content; each movement step derives an effective speed from the currently active modifiers.
+
+For this provisional primitive, modifiers are stored in stable `ModifierId` order in a fixed-capacity authoritative status array. Reapplying the same `ModifierId` with the same authored percentage refreshes to the later expiry and does not stack another copy. Different IDs stack additively. Effective percent is `clamp(100 + sum(percent_delta), 0, 1000)`, and effective integer speed is `base_speed * percent / 100` with deterministic integer truncation. Expiry uses the same exclusive absolute-tick convention as stun: an entry with `expires_tick == T` is removed during the timer phase for tick `T` before movement is evaluated.
+
+This rule is an executable architecture primitive, **not** a claim that all original Warcraft III buffs/auras use this stacking model. Imported content must still define whether a particular effect refreshes, replaces, stacks by source, stacks by buff identity, is aura-derived, or uses Warcraft-specific movement/attack-speed clamps. The modifier representation and import mapping may be revised when extraction establishes those exact semantics.
+
 ## 15. Ability source and threat semantics
 
 Damage/effects SHOULD carry an explicit source description rather than assuming every source is a targetable attacker.
@@ -354,4 +362,5 @@ The ability test suite MUST eventually include:
 11. rejected manual cast spends no mana/charge and creates no projectile/effect;
 12. replay of the same finalized input stream reproduces all ability outcomes exactly;
 13. two identical item types with different `ItemInstanceId`s do not share RNG/cooldown/effect identity;
-14. recursive effect definitions are rejected or deterministically trip the expansion guard rather than hanging.
+14. recursive effect definitions are rejected or deterministically trip the expansion guard rather than hanging;
+15. timed movement modifiers expire on the exact tick, same-ID reapplication refreshes without duplicate stacking, distinct IDs combine deterministically, and worker count does not alter the resulting state.
