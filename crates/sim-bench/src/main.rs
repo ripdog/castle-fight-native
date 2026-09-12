@@ -265,7 +265,7 @@ struct PhaseMs {
 
 #[derive(Debug, Default)]
 struct BenchCounters {
-    pursuit_steps: usize,
+    navigation_route_steps: usize,
     movement_intents: usize,
     movement_blocked: usize,
     objective_move_intents: usize,
@@ -303,7 +303,7 @@ struct BenchResult {
     ms_per_tick: f64,
     ticks_per_second: f64,
     phase_ms: PhaseMs,
-    pursuit_steps: usize,
+    navigation_route_steps: usize,
     movement_intents_per_tick: f64,
     movement_blocked_per_tick: f64,
     objective_move_intents_per_tick: f64,
@@ -344,10 +344,10 @@ struct BenchResult {
 
 impl BenchResult {
     fn a_star_fallback_percent(&self) -> f64 {
-        if self.pursuit_steps == 0 {
+        if self.navigation_route_steps == 0 {
             0.0
         } else {
-            self.a_star_fallbacks as f64 * 100.0 / self.pursuit_steps as f64
+            self.a_star_fallbacks as f64 * 100.0 / self.navigation_route_steps as f64
         }
     }
 
@@ -449,7 +449,7 @@ fn run_case(
             ticks as f64 / seconds
         },
         phase_ms: average_phase_ms(timings, ticks),
-        pursuit_steps: counters.pursuit_steps,
+        navigation_route_steps: counters.navigation_route_steps,
         movement_intents_per_tick: counters.movement_intents as f64 / ticks as f64,
         movement_blocked_per_tick: counters.movement_blocked as f64 / ticks as f64,
         objective_move_intents_per_tick: counters.objective_move_intents as f64 / ticks as f64,
@@ -1393,7 +1393,7 @@ fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
 }
 
 fn accumulate_counters(result: &TickResult, counters: &mut BenchCounters) {
-    counters.pursuit_steps += result.pursuit_steps;
+    counters.navigation_route_steps += result.navigation_route_steps;
     counters.movement_intents += result.movement_intents;
     counters.movement_blocked += result.movement_blocked;
     counters.objective_move_intents += result.objective_move_intents;
