@@ -1,0 +1,453 @@
+rawcode	rawcode_integer	names	level_index	level	field	runtime_value	static_resolved_value	static_selection	comparison	jass_add_restore	source_function	byte_offset
+A001	1093677105		0	1	cooldown	0.0	99	map	static-differs	0	xD	2010134
+A001	1093677105		0	1	mana_cost	0	9999	map	static-differs	0	xD	2010287
+A004	1093677108	NAT: Dryad (natures touch)	0	1	cooldown	15.0	99	map	static-differs	0	xD	2010440
+A004	1093677108	NAT: Dryad (natures touch)	0	1	mana_cost	35	9999	map	static-differs	0	xD	2010593
+A005	1093677109	Rescue Strike	0	1	cooldown	60.0	99	map	static-differs	1	xD	2010746
+A005	1093677109	Rescue Strike	0	1	mana_cost	0	9999	map	static-differs	1	xD	2010900
+A00B	1093677122		0	1	cooldown	0.0	99	map	static-differs	0	xD	2011053
+A00B	1093677122		0	1	mana_cost	0	9999	map	static-differs	0	xD	2011206
+A00G	1093677127		0	1	cooldown	8.0	99	map	static-differs	0	xD	2011359
+A00G	1093677127		0	1	mana_cost	0	9999	map	static-differs	0	xD	2011512
+A00H	1093677128	TriggerAttack	0	1	cooldown	8.0	99	map	static-differs	0	xD	2011665
+A00H	1093677128	TriggerAttack	0	1	mana_cost	0	9999	map	static-differs	0	xD	2011818
+A00I	1093677129		0	1	cooldown	0.0	99	map	static-differs	0	xD	2011971
+A00I	1093677129		0	1	mana_cost	0	9999	map	static-differs	0	xD	2012124
+A00K	1093677131		0	1	cooldown	12.0	99	map	static-differs	0	xD	2012277
+A00K	1093677131		0	1	mana_cost	35	9999	map	static-differs	0	xD	2012431
+A00L	1093677132		0	1	cooldown	0.0	99	map	static-differs	0	xD	2012585
+A00L	1093677132		0	1	mana_cost	0	9999	map	static-differs	0	xD	2012738
+A00M	1093677133		0	1	cooldown	1.0	99	map	static-differs	0	xD	2012890
+A00M	1093677133		0	1	mana_cost	10	9999	map	static-differs	0	xD	2013043
+A00N	1093677134		0	1	mana_cost	0	9999	map	static-differs	0	xD	2013197
+A00O	1093677135	NAG: Oracle	0	1	cooldown	1.0	99	map	static-differs	0	xD	2013350
+A00O	1093677135	NAG: Oracle	0	1	mana_cost	16	9999	map	static-differs	0	xD	2013503
+A00P	1093677136		0	1	cooldown	0.0	99	map	static-differs	0	xD	2013657
+A00P	1093677136		0	1	mana_cost	0	9999	map	static-differs	0	xD	2013810
+A00W	1093677143		0	1	cooldown	6.0	99	map	static-differs	0	xD	2013963
+A00W	1093677143		0	1	mana_cost	20	9999	map	static-differs	0	xD	2014116
+A00X	1093677144	HEL: Wizard (Heal (dummy))	0	1	cooldown	12.0	99	map	static-differs	0	xD	2014270
+A00X	1093677144	HEL: Wizard (Heal (dummy))	0	1	mana_cost	70	9999	map	static-differs	0	xD	2014424
+A00Y	1093677145	HEL: Wizard (Heal)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2014578
+A00Y	1093677145	HEL: Wizard (Heal)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2014731
+A015	1093677365		0	1	cooldown	0.0	99	map	static-differs	0	xD	2014884
+A016	1093677366	Gjall Horn Buff	0	1	cooldown	0.0	99	map	static-differs	0	xD	2015037
+A016	1093677366	Gjall Horn Buff	0	1	mana_cost	0	9999	map	static-differs	0	xD	2015190
+A017	1093677367		0	1	cooldown	1.0	99	map	static-differs	0	xD	2015343
+A017	1093677367		0	1	mana_cost	10	9999	map	static-differs	0	xD	2015496
+A018	1093677368		0	1	cooldown	0.0	99	map	static-differs	0	xD	2015650
+A018	1093677368		0	1	mana_cost	0	9999	map	static-differs	0	xD	2015803
+A01D	1093677380		0	1	cooldown	0.0	99	map	static-differs	0	xD	2015956
+A01D	1093677380		0	1	mana_cost	0	9999	map	static-differs	0	xD	2016109
+A01E	1093677381		0	1	cooldown	0.0	99	map	static-differs	0	xD	2016262
+A01E	1093677381		0	1	mana_cost	40	9999	map	static-differs	0	xD	2016415
+A01G	1093677383		0	1	cooldown	6.5	99	map	static-differs	0	xD	2016569
+A01G	1093677383		0	1	mana_cost	20	9999	map	static-differs	0	xD	2016722
+A01H	1093677384		0	1	cooldown	0.0	99	map	static-differs	0	xD	2016876
+A01H	1093677384		0	1	mana_cost	0	9999	map	static-differs	0	xD	2017029
+A01I	1093677385		0	1	cooldown	0.0	99	map	static-differs	0	xD	2017181
+A01I	1093677385		0	1	mana_cost	0	9999	map	static-differs	0	xD	2017334
+A01J	1093677386		0	1	cooldown	1.0	99	map	static-differs	0	xD	2017486
+A01J	1093677386		0	1	mana_cost	13	9999	map	static-differs	0	xD	2017639
+A01K	1093677387		0	1	cooldown	1.0	99	map	static-differs	0	xD	2017793
+A01K	1093677387		0	1	mana_cost	7	9999	map	static-differs	0	xD	2017946
+A01M	1093677389		0	1	cooldown	10.0	99	map	static-differs	0	xD	2018098
+A01M	1093677389		0	1	mana_cost	25	9999	map	static-differs	0	xD	2018251
+A01Q	1093677393		0	1	cooldown	1.0	99	map	static-differs	0	xD	2018405
+A01Q	1093677393		0	1	mana_cost	12	9999	map	static-differs	0	xD	2018558
+A01W	1093677399		0	1	cooldown	0.0	99	map	static-differs	0	xD	2018712
+A01W	1093677399		0	1	mana_cost	100	9999	map	static-differs	0	xD	2018865
+A01X	1093677400		0	1	cooldown	0.0	99	map	static-differs	0	xD	2019020
+A01X	1093677400		0	1	mana_cost	0	9999	map	static-differs	0	xD	2019172
+A01Y	1093677401		0	1	cooldown	45.0	99	map	static-differs	0	xD	2019325
+A01Z	1093677402	NAG Winged Snake: Dispel	0	1	mana_cost	50	9999	map	static-differs	0	xD	2019479
+A02G	1093677639	Scroll Heal	0	1	cooldown	60.0	99	map	static-differs	0	xD	2019633
+A02H	1093677640		0	1	cooldown	60.0	99	map	static-differs	0	xD	2019787
+A02I	1093677641		0	1	cooldown	0.0	99	map	static-differs	0	xD	2019941
+A02M	1093677645		0	1	cooldown	6.0	99	map	static-differs	0	xD	2020094
+A02S	1093677651		0	1	cooldown	60.0	99	map	static-differs	0	xD	2020247
+A02S	1093677651		0	1	mana_cost	70	9999	map	static-differs	0	xD	2020401
+A02T	1093677652	NAG: Siren (Purge)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2020555
+A02T	1093677652	NAG: Siren (Purge)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2020708
+A02U	1093677653	NAG: Siren (Purge (cd))	0	1	cooldown	10.0	99	map	static-differs	0	xD	2020861
+A02Z	1093677658	ORC: Serpent Rock	0	1	cooldown	1.0	99	map	static-differs	0	xD	2021015
+A02Z	1093677658	ORC: Serpent Rock	0	1	mana_cost	12	9999	map	static-differs	0	xD	2021168
+A030	1093677872	ORC: Serpent Rock	0	1	cooldown	0.0	99	map	static-differs	0	xD	2021322
+A030	1093677872	ORC: Serpent Rock	0	1	mana_cost	0	9999	map	static-differs	0	xD	2021475
+A031	1093677873		0	1	cooldown	0.0	99	map	static-differs	0	xD	2021627
+A031	1093677873		0	1	mana_cost	0	9999	map	static-differs	0	xD	2021780
+A032	1093677874		0	1	cooldown	1.0	99	map	static-differs	0	xD	2021933
+A032	1093677874		0	1	mana_cost	40	9999	map	static-differs	0	xD	2022086
+A033	1093677875	UND: Death Pit	0	1	cooldown	0.0	99	map	static-differs	0	xD	2022240
+A033	1093677875	UND: Death Pit	0	1	mana_cost	15	9999	map	static-differs	0	xD	2022393
+A039	1093677881	ORC: Ceremonial Totem	0	1	cooldown	1.0	99	map	static-differs	0	xD	2022547
+A039	1093677881	ORC: Ceremonial Totem	0	1	mana_cost	10	9999	map	static-differs	0	xD	2022700
+A03H	1093677896		0	1	cooldown	40.0	99	map	static-differs	0	xD	2022854
+A03H	1093677896		0	1	mana_cost	70	9999	map	static-differs	0	xD	2023008
+A03I	1093677897	HUM: Inner Fire (paladin)	0	1	cooldown	7.0	99	map	static-differs	0	xD	2023162
+A03I	1093677897	HUM: Inner Fire (paladin)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2023315
+A03K	1093677899	HUM: Crusader/Paladin Heal	0	1	cooldown	7.0	99	map	static-differs	0	xD	2023468
+A03K	1093677899	HUM: Crusader/Paladin Heal	0	1	mana_cost	66	9999	map	static-differs	0	xD	2023621
+A03M	1093677901	HUM: Crusader (inner fire)	0	1	cooldown	7.0	99	map	static-differs	0	xD	2023775
+A03M	1093677901	HUM: Crusader (inner fire)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2023928
+A03N	1093677902		0	1	cooldown	0.0	99	map	static-differs	0	xD	2024081
+A03O	1093677903		0	1	cooldown	0.0	99	map	static-differs	0	xD	2024234
+A03R	1093677906		0	1	mana_cost	0	9999	map	static-differs	0	xD	2024387
+A03S	1093677907		0	1	cooldown	30.0	99	map	static-differs	0	xD	2024540
+A03S	1093677907		0	1	mana_cost	0	9999	map	static-differs	0	xD	2024693
+A03W	1093677911		0	1	cooldown	0.0	99	map	static-differs	0	xD	2024846
+A03W	1093677911		0	1	mana_cost	0	9999	map	static-differs	0	xD	2024999
+A03Z	1093677914		0	1	cooldown	8.0	99	map	static-differs	0	xD	2025152
+A03Z	1093677914		0	1	mana_cost	35	9999	map	static-differs	0	xD	2025305
+A040	1093678128		0	1	cooldown	8.0	99	map	static-differs	0	xD	2025459
+A040	1093678128		0	1	mana_cost	35	9999	map	static-differs	0	xD	2025612
+A043	1093678131	NOR: Ice Queen (frost nova)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2025766
+A043	1093678131	NOR: Ice Queen (frost nova)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2025919
+A044	1093678132		0	1	cooldown	10.0	99	map	static-differs	0	xD	2026072
+A044	1093678132		0	1	mana_cost	80	9999	map	static-differs	0	xD	2026226
+A045	1093678133		0	1	cooldown	0.0	99	map	static-differs	0	xD	2026380
+A045	1093678133		0	1	mana_cost	0	9999	map	static-differs	0	xD	2026533
+A047	1093678135		0	1	cooldown	0.0	99	map	static-differs	0	xD	2026686
+A047	1093678135		0	1	mana_cost	0	9999	map	static-differs	0	xD	2026839
+A04G	1093678151		0	1	cooldown	0.0	99	map	static-differs	0	xD	2026992
+A04G	1093678151		0	1	mana_cost	0	9999	map	static-differs	0	xD	2027145
+A04H	1093678152		0	1	cooldown	0.0	99	map	static-differs	0	xD	2027297
+A04H	1093678152		0	1	mana_cost	0	9999	map	static-differs	0	xD	2027450
+A04I	1093678153		0	1	cooldown	1.0	99	map	static-differs	0	xD	2027603
+A04I	1093678153		0	1	mana_cost	35	9999	map	static-differs	0	xD	2027756
+A04J	1093678154		0	1	cooldown	1.0	99	map	static-differs	0	xD	2027910
+A04J	1093678154		0	1	mana_cost	12	9999	map	static-differs	0	xD	2028063
+A04L	1093678156		0	1	cooldown	1.0	99	map	static-differs	0	xD	2028217
+A04L	1093678156		0	1	mana_cost	15	9999	map	static-differs	0	xD	2028370
+A04M	1093678157		0	1	cooldown	0.0	99	map	static-differs	0	xD	2028524
+A04O	1093678159		0	1	cooldown	0.0	99	map	static-differs	0	xD	2028677
+A04O	1093678159		0	1	mana_cost	0	9999	map	static-differs	0	xD	2028830
+A04Q	1093678161		0	1	cooldown	0.0	99	map	static-differs	0	xD	2028982
+A04Q	1093678161		0	1	mana_cost	0	9999	map	static-differs	0	xD	2029135
+A04R	1093678162		0	1	cooldown	1.0	99	map	static-differs	0	xD	2029288
+A04U	1093678165		0	1	cooldown	1.0	99	map	static-differs	0	xD	2029441
+A04U	1093678165		0	1	mana_cost	13	9999	map	static-differs	0	xD	2029593
+A04X	1093678168		0	1	cooldown	0.01	99	map	static-differs	0	xD	2029747
+A04X	1093678168		0	1	mana_cost	0	9999	map	static-differs	0	xD	2029901
+A04Z	1093678170		0	1	mana_cost	20	9999	map	static-differs	0	xD	2030054
+A055	1093678389		0	1	cooldown	0.0	99	map	static-differs	0	xD	2030208
+A055	1093678389		0	1	mana_cost	0	9999	map	static-differs	0	xD	2030361
+A057	1093678391	COR: Well Of Pain	0	1	cooldown	1.0	99	map	static-differs	0	xD	2030514
+A057	1093678391	COR: Well Of Pain	0	1	mana_cost	5	9999	map	static-differs	0	xD	2030666
+A05B	1093678402		0	1	cooldown	0.0	99	map	static-differs	0	xD	2030819
+A05B	1093678402		0	1	mana_cost	0	9999	map	static-differs	0	xD	2030971
+A05C	1093678403		0	1	cooldown	17.0	99	map	static-differs	0	xD	2031124
+A05C	1093678403		0	1	mana_cost	30	9999	map	static-differs	0	xD	2031277
+A05D	1093678404		0	1	cooldown	0.0	99	map	static-differs	0	xD	2031430
+A05D	1093678404		0	1	mana_cost	0	9999	map	static-differs	0	xD	2031583
+A05E	1093678405		0	1	cooldown	12.0	99	map	static-differs	0	xD	2031735
+A05E	1093678405		0	1	mana_cost	25	9999	map	static-differs	0	xD	2031889
+A05H	1093678408		0	1	cooldown	0.0	99	map	static-differs	0	xD	2032043
+A05H	1093678408		0	1	mana_cost	0	9999	map	static-differs	0	xD	2032195
+A05L	1093678412		0	1	cooldown	30.0	99	map	static-differs	0	xD	2032348
+A05M	1093678413		0	1	cooldown	0.0	99	map	static-differs	0	xD	2032502
+A05M	1093678413		0	1	mana_cost	0	9999	map	static-differs	0	xD	2032655
+A05U	1093678421		0	1	cooldown	1.0	99	map	static-differs	0	xD	2032808
+A05U	1093678421		0	1	mana_cost	12	9999	map	static-differs	0	xD	2032961
+A05X	1093678424		0	1	cooldown	0.0	99	map	static-differs	0	xD	2033115
+A05X	1093678424		0	1	mana_cost	0	9999	map	static-differs	0	xD	2033268
+A069	1093678649		0	1	mana_cost	20	9999	map	static-differs	0	xD	2033421
+A06H	1093678664		0	1	cooldown	7.0	99	map	static-differs	0	xD	2033575
+A06I	1093678665		0	1	cooldown	8.0	99	map	static-differs	0	xD	2033728
+A06I	1093678665		0	1	mana_cost	0	9999	map	static-differs	0	xD	2033881
+A06P	1093678672	NOR: Chilling Mushroom	0	1	cooldown	1.0	99	map	static-differs	0	xD	2034033
+A06P	1093678672	NOR: Chilling Mushroom	0	1	mana_cost	6	9999	map	static-differs	0	xD	2034186
+A06Q	1093678673		0	1	cooldown	0.0	99	map	static-differs	0	xD	2034339
+A06R	1093678674		0	1	cooldown	1.0	99	map	static-differs	0	xD	2034492
+A06R	1093678674		0	1	mana_cost	10	9999	map	static-differs	0	xD	2034645
+A06S	1093678675		0	1	cooldown	0.0	99	map	static-differs	0	xD	2034799
+A06S	1093678675		0	1	mana_cost	0	9999	map	static-differs	0	xD	2034952
+A06Z	1093678682		0	1	cooldown	0.01	99	map	static-differs	0	xD	2035105
+A077	1093678903		0	1	cooldown	0.0	99	map	static-differs	0	xD	2035259
+A077	1093678903		0	1	mana_cost	50	9999	map	static-differs	0	xD	2035412
+A078	1093678904		0	1	cooldown	0.0	99	map	static-differs	0	xD	2035566
+A078	1093678904		0	1	mana_cost	50	9999	map	static-differs	0	xD	2035719
+A07A	1093678913		0	1	cooldown	0.0	99	map	static-differs	0	xD	2035873
+A07A	1093678913		0	1	mana_cost	0	9999	map	static-differs	0	xD	2036026
+A07P	1093678928		0	1	cooldown	14.0	99	map	static-differs	0	xD	2036179
+A07P	1093678928		0	1	mana_cost	30	9999	map	static-differs	0	xD	2036333
+A07Q	1093678929		0	1	cooldown	0.0	99	map	static-differs	0	xD	2036487
+A07Q	1093678929		0	1	mana_cost	0	9999	map	static-differs	0	xD	2036640
+A07R	1093678930		0	1	cooldown	14.0	99	map	static-differs	0	xD	2036793
+A07R	1093678930		0	1	mana_cost	35	9999	map	static-differs	0	xD	2036947
+A07T	1093678932	NEL: Starfall	0	1	mana_cost	0	9999	map	static-differs	0	xD	2037101
+A07U	1093678933		0	1	cooldown	1.0	99	map	static-differs	0	xD	2037254
+A07U	1093678933		0	1	mana_cost	30	9999	map	static-differs	0	xD	2037407
+A07X	1093678936	Killzor	0	1	cooldown	0.0	99	map	static-differs	0	xD	2037561
+A07X	1093678936	Killzor	0	1	mana_cost	0	9999	map	static-differs	0	xD	2037714
+A082	1093679154		0	1	cooldown	0.0	99	map	static-differs	0	xD	2037867
+A082	1093679154		0	1	mana_cost	0	9999	map	static-differs	0	xD	2038020
+A083	1093679155		0	1	cooldown	0.0	99	map	static-differs	0	xD	2038173
+A083	1093679155		0	1	mana_cost	0	9999	map	static-differs	0	xD	2038326
+A085	1093679157		0	1	cooldown	25.0	99	map	static-differs	0	xD	2038479
+A085	1093679157		0	1	mana_cost	100	9999	map	static-differs	0	xD	2038633
+A086	1093679158		0	1	cooldown	0.0	99	map	static-differs	1	xD	2038788
+A086	1093679158		0	1	mana_cost	0	9999	map	static-differs	1	xD	2038941
+A08B	1093679170		0	1	cooldown	1.0	99	map	static-differs	0	xD	2039094
+A08B	1093679170		0	1	mana_cost	20	9999	map	static-differs	0	xD	2039247
+A08E	1093679173	NEL: Obelisk of Wilderness	0	1	cooldown	1.0	99	map	static-differs	0	xD	2039401
+A08E	1093679173	NEL: Obelisk of Wilderness	0	1	mana_cost	7	9999	map	static-differs	0	xD	2039554
+A08Q	1093679185	Damage 200	0	1	cooldown	0.0	99	map	static-differs	0	xD	2039706
+A08Q	1093679185	Damage 200	0	1	mana_cost	0	9999	map	static-differs	0	xD	2039858
+A08S	1093679187		0	1	cooldown	0.0	99	map	static-differs	0	xD	2040011
+A08S	1093679187		0	1	mana_cost	0	9999	map	static-differs	0	xD	2040164
+A08T	1093679188	NEL: Starfall (-na)	0	1	mana_cost	20	9999	map	static-differs	0	xD	2040317
+A08U	1093679189	HEL: Dragonhawk (SolarStrike)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2040470
+A08U	1093679189	HEL: Dragonhawk (SolarStrike)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2040623
+A08V	1093679190		0	1	cooldown	14.0	99	map	static-differs	0	xD	2040776
+A08W	1093679191		0	1	cooldown	0.0	99	map	static-differs	0	xD	2040930
+A08W	1093679191		0	1	mana_cost	0	9999	map	static-differs	0	xD	2041083
+A095	1093679413		0	1	cooldown	0.0	99	map	static-differs	0	xD	2041236
+A095	1093679413		0	1	mana_cost	25	9999	map	static-differs	0	xD	2041389
+A096	1093679414	MECCCC	0	1	mana_cost	50	9999	map	static-differs	0	xD	2041543
+A09A	1093679425	Check Range	0	1	cooldown	15.0	99	map	static-differs	0	xD	2041697
+A09D	1093679428		0	1	cooldown	15.0	99	map	static-differs	0	xD	2041850
+A09D	1093679428		0	1	mana_cost	0	9999	map	static-differs	0	xD	2042004
+A09E	1093679429		0	1	cooldown	0.0	99	map	static-differs	0	xD	2042157
+A09E	1093679429		0	1	mana_cost	0	9999	map	static-differs	0	xD	2042310
+A09N	1093679438		0	1	cooldown	1.0	99	map	static-differs	0	xD	2042463
+A09N	1093679438		0	1	mana_cost	7	9999	map	static-differs	0	xD	2042616
+A09O	1093679439		0	1	cooldown	1.0	99	map	static-differs	0	xD	2042769
+A09O	1093679439		0	1	mana_cost	7	9999	map	static-differs	0	xD	2042922
+A09T	1093679444		0	1	cooldown	0.0	99	map	static-differs	1	xD	2043075
+A09T	1093679444		0	1	mana_cost	0	9999	map	static-differs	1	xD	2043227
+A09X	1093679448		0	1	cooldown	15.0	99	map	static-differs	0	xD	2043380
+A09X	1093679448		0	1	mana_cost	0	9999	map	static-differs	0	xD	2043533
+A0A6	1093681462	Infostealer's (spell steal)	0	1	cooldown	10.0	99	map	static-differs	0	xD	2043686
+A0A6	1093681462	Infostealer's (spell steal)	0	1	mana_cost	40	9999	map	static-differs	0	xD	2043840
+A0A7	1093681463		0	1	cooldown	8.0	99	map	static-differs	0	xD	2043994
+A0A7	1093681463		0	1	mana_cost	50	9999	map	static-differs	0	xD	2044147
+A0A8	1093681464	HEL: Sorceress (healing wave)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2044301
+A0A8	1093681464	HEL: Sorceress (healing wave)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2044453
+A0AA	1093681473		0	1	cooldown	0.0	99	map	static-differs	0	xD	2044606
+A0AA	1093681473		0	1	mana_cost	0	9999	map	static-differs	0	xD	2044759
+A0AB	1093681474		0	1	cooldown	0.0	99	map	static-differs	0	xD	2044912
+A0AB	1093681474		0	1	mana_cost	0	9999	map	static-differs	0	xD	2045065
+A0AE	1093681477		0	1	cooldown	15.0	99	map	static-differs	0	xD	2045217
+A0AE	1093681477		0	1	mana_cost	40	9999	map	static-differs	0	xD	2045371
+A0AF	1093681478		0	1	mana_cost	0	9999	map	static-differs	0	xD	2045525
+A0AK	1093681483	NOR: Chilling Mushroom	0	1	cooldown	0.0	99	map	static-differs	0	xD	2045678
+A0AK	1093681483	NOR: Chilling Mushroom	0	1	mana_cost	0	9999	map	static-differs	0	xD	2045831
+A0AR	1093681490	NAT: Giant Spider (Web)	0	1	cooldown	18.0	99	map	static-differs	0	xD	2045984
+A0AS	1093681491	NAT: Brood Mother (Web)	0	1	cooldown	18.0	99	map	static-differs	0	xD	2046138
+A0AV	1093681494	NAT: Brood Mother (infest)	0	1	cooldown	10.0	99	map	static-differs	0	xD	2046292
+A0AW	1093681495	NAT: Furbolg Shaman (rejuvenation)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2046446
+A0AW	1093681495	NAT: Furbolg Shaman (rejuvenation)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2046598
+A0AX	1093681496	NAT: Furbolg Elder Shaman (rejuvenation)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2046751
+A0AX	1093681496	NAT: Furbolg Elder Shaman (rejuvenation)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2046904
+A0B5	1093681717		0	1	mana_cost	0	9999	map	static-differs	1	xD	2047056
+A0B6	1093681718		0	1	mana_cost	0	9999	map	static-differs	1	xD	2047209
+A0B7	1093681719	NAT: Bear (feral rage)	0	1	cooldown	10.0	99	map	static-differs	1	xD	2047362
+A0B7	1093681719	NAT: Bear (feral rage)	0	1	mana_cost	0	9999	map	static-differs	1	xD	2047516
+A0B8	1093681720	NAT: Ancient Bear (feral rage)	0	1	cooldown	10.0	99	map	static-differs	1	xD	2047669
+A0B8	1093681720	NAT: Ancient Bear (feral rage)	0	1	mana_cost	0	9999	map	static-differs	1	xD	2047823
+A0BC	1093681731	NAT: Mounatin Giant (Grab Tree)	0	1	cooldown	1.0	99	map	static-differs	0	xD	2047976
+A0BD	1093681732	NAT: Ancient of Gale	0	1	cooldown	0.0	99	map	static-differs	0	xD	2048129
+A0BD	1093681732	NAT: Ancient of Gale	0	1	mana_cost	0	9999	map	static-differs	0	xD	2048282
+A0BI	1093681737	NAT: Mountain Giant (taunt)	0	1	cooldown	1.0	99	map	static-differs	0	xD	2048435
+A0BJ	1093681738	NAT: Mountain Giant (taunt dummy)	0	1	cooldown	15.0	99	map	static-differs	0	xD	2048588
+A0BJ	1093681738	NAT: Mountain Giant (taunt dummy)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2048742
+A0BL	1093681740	NAT: Banish	0	1	mana_cost	0	9999	map	static-differs	0	xD	2048895
+A0BM	1093681741	NAT: Banish (dummy)	0	1	cooldown	1.0	99	map	static-differs	0	xD	2049048
+A0BM	1093681741	NAT: Banish (dummy)	0	1	mana_cost	12	9999	map	static-differs	0	xD	2049201
+A0BO	1093681743	NAT: Ancient of Gale (dummy)	0	1	cooldown	1.0	99	map	static-differs	0	xD	2049355
+A0BO	1093681743	NAT: Ancient of Gale (dummy)	0	1	mana_cost	14	9999	map	static-differs	0	xD	2049508
+A0BP	1093681744	NAT: Ancient of Gale (dummy, -na)	0	1	cooldown	1.0	99	map	static-differs	0	xD	2049662
+A0BP	1093681744	NAT: Ancient of Gale (dummy, -na)	0	1	mana_cost	14	9999	map	static-differs	0	xD	2049815
+A0BQ	1093681745	NAT: Ancient of Gale (-na)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2049969
+A0BQ	1093681745	NAT: Ancient of Gale (-na)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2050122
+A0BS	1093681747	NAT: Ancient of Wonders (dummy)	0	1	cooldown	2.0	99	map	static-differs	0	xD	2050275
+A0BS	1093681747	NAT: Ancient of Wonders (dummy)	0	1	mana_cost	40	9999	map	static-differs	0	xD	2050428
+A0BT	1093681748	NAT: Keeper of the Groove (natures touch)	0	1	cooldown	8.0	99	map	static-differs	0	xD	2050582
+A0BT	1093681748	NAT: Keeper of the Groove (natures touch)	0	1	mana_cost	25	9999	map	static-differs	0	xD	2050735
+A0BU	1093681749	NAT: Keeper of the Grove (summon treants)	0	1	cooldown	60.0	99	map	static-differs	0	xD	2050889
+A0BU	1093681749	NAT: Keeper of the Grove (summon treants)	0	1	mana_cost	100	9999	map	static-differs	0	xD	2051043
+A0BX	1093681752	NAT: Ancient Keeper (treants sprout)	0	1	cooldown	30.0	99	map	static-differs	0	xD	2051198
+A0BX	1093681752	NAT: Ancient Keeper (treants sprout)	0	1	mana_cost	200	9999	map	static-differs	0	xD	2051352
+A0C0	1093681968	NAT: Furbolg Shaman (rejuvenation (dummy))	0	1	cooldown	16.0	99	map	static-differs	0	xD	2051507
+A0C0	1093681968	NAT: Furbolg Shaman (rejuvenation (dummy))	0	1	mana_cost	50	9999	map	static-differs	0	xD	2051661
+A0C1	1093681969	NAT: Furbolg Elder Shaman (rejuvenation (dummy))	0	1	cooldown	14.0	99	map	static-differs	0	xD	2051815
+A0C1	1093681969	NAT: Furbolg Elder Shaman (rejuvenation (dummy))	0	1	mana_cost	50	9999	map	static-differs	0	xD	2051968
+A0C3	1093681971	NAT: Furbolg Elder Shaman (manaburn)	0	1	cooldown	0.01	99	map	static-differs	0	xD	2052122
+A0C3	1093681971	NAT: Furbolg Elder Shaman (manaburn)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2052276
+A0CG	1093681991	NEL: Faerie Dragon (heal)	0	1	cooldown	6.0	99	map	static-differs	0	xD	2052428
+A0CG	1093681991	NEL: Faerie Dragon (heal)	0	1	mana_cost	20	9999	map	static-differs	0	xD	2052581
+A0CJ	1093681994	ELE: Elemental Of Lightning (forked lightning)	0	1	cooldown	0.1	99	map	static-differs	0	xD	2052735
+A0CJ	1093681994	ELE: Elemental Of Lightning (forked lightning)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2052888
+A0CK	1093681995	ELE: Greater Elemental Of Lightning (forked lightning)	0	1	cooldown	0.1	99	map	static-differs	0	xD	2053041
+A0CK	1093681995	ELE: Greater Elemental Of Lightning (forked lightning)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2053194
+A0CL	1093681996	ELE: Elemental Of Fire (split)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2053347
+A0CN	1093681998	ELE: Greater Elemental Of Fire (firebreath)	0	1	cooldown	0.01	99	map	static-differs	0	xD	2053500
+A0CN	1093681998	ELE: Greater Elemental Of Fire (firebreath)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2053654
+A0CU	1093682005	ELE: Greater Elemental Of Water (illusions)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2053807
+A0CY	1093682009	ELE: Elemental Rain	0	1	cooldown	1.0	99	map	static-differs	0	xD	2053960
+A0CY	1093682009	ELE: Elemental Rain	0	1	mana_cost	14	9999	map	static-differs	0	xD	2054113
+A0CZ	1093682010	ELE: Enchant	0	1	cooldown	1.0	99	map	static-differs	0	xD	2054267
+A0CZ	1093682010	ELE: Enchant	0	1	mana_cost	9	9999	map	static-differs	0	xD	2054420
+A0D0	1093682224	ELE: Elemental Rain (Meteor Shower)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2054573
+A0D0	1093682224	ELE: Elemental Rain (Meteor Shower)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2054726
+A0D1	1093682225	ELE: Elemental Rain (Blizzard)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2054879
+A0D1	1093682225	ELE: Elemental Rain (Blizzard)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2055032
+A0D2	1093682226	ELE: Elemental Rain (Blizzard) (-na)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2055185
+A0D2	1093682226	ELE: Elemental Rain (Blizzard) (-na)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2055338
+A0D3	1093682227	ELE: Elemental Rain (Meteor Shower)	0	1	cooldown	0.0	99	map	static-differs	0	xD	2055491
+A0D3	1093682227	ELE: Elemental Rain (Meteor Shower)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2055644
+A0D5	1093682229	ELE: ElectroShieldElemental	0	1	mana_cost	0	9999	map	static-differs	0	xD	2055797
+A0D5	1093682229	ELE: ElectroShieldElemental	1	2	mana_cost	0	9999	map	static-differs	0	xD	2055950
+A0DA	1093682241	ELE: Elemental Guard Tower (Shield of Mist)	0	1	cooldown	90.0	99	map	static-differs	1	xD	2056102
+A0DA	1093682241	ELE: Elemental Guard Tower (Shield of Mist)	0	1	mana_cost	0	9999	map	static-differs	1	xD	2056256
+A0DC	1093682243	ELE: Elemental Guard Tower (Boulder)	0	1	cooldown	0.1	99	map	static-differs	1	xD	2056409
+A0DC	1093682243	ELE: Elemental Guard Tower (Boulder)	0	1	mana_cost	0	9999	map	static-differs	1	xD	2056562
+A0DT	1093682260	Lesser Water Elemental	0	1	cooldown	1.0	99	map	static-differs	0	xD	2056715
+A0DT	1093682260	Lesser Water Elemental	0	1	mana_cost	24	9999	map	static-differs	0	xD	2056868
+A0DU	1093682261	NAT: Force of Nature	0	1	cooldown	0.01	99	map	static-differs	0	xD	2057022
+A0DU	1093682261	NAT: Force of Nature	0	1	mana_cost	0	9999	map	static-differs	0	xD	2057176
+A0DV	1093682262	ELE: ObeliskOfElements (dummy)	0	1	cooldown	1.0	99	map	static-differs	0	xD	2057329
+A0DV	1093682262	ELE: ObeliskOfElements (dummy)	0	1	mana_cost	11	9999	map	static-differs	0	xD	2057482
+A0DY	1093682265	ELE: Greater Elemental Of Fire (split)	0	1	cooldown	0.1	99	map	static-differs	0	xD	2057636
+A0DY	1093682265	ELE: Greater Elemental Of Fire (split)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2057789
+A0E1	1093682481		0	1	cooldown	8.0	99	map	static-differs	0	xD	2057942
+A0E1	1093682481		0	1	mana_cost	0	9999	map	static-differs	0	xD	2058094
+A0E2	1093682482		0	1	cooldown	0.0	99	map	static-differs	0	xD	2058247
+A0E2	1093682482		1	2	cooldown	0.0	99	map	static-differs	0	xD	2058400
+A0E2	1093682482		2	3	cooldown	0.0	99	map	static-differs	0	xD	2058553
+A0E2	1093682482		0	1	mana_cost	0	9999	map	static-differs	0	xD	2058706
+A0E2	1093682482		1	2	mana_cost	0	9999	map	static-differs	0	xD	2058859
+A0E2	1093682482		2	3	mana_cost	0	9999	map	static-differs	0	xD	2059012
+A0E3	1093682483	ELE: monsoon	0	1	mana_cost	0	9999	map	static-differs	0	xD	2059165
+A0E4	1093682484	ELE: monsoon (-na)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2059318
+A0E5	1093682485	ELE: Elemental of Wind (effect)	0	1	cooldown	0.1	99	map	static-differs	0	xD	2059471
+A0E6	1093682486	ELE: Greater Elemental of Wind (effect)	0	1	cooldown	0.1	99	map	static-differs	0	xD	2059623
+A0E7	1093682487	Water Elemental	0	1	cooldown	1.0	99	map	static-differs	0	xD	2059776
+A0E7	1093682487	Water Elemental	0	1	mana_cost	34	9999	map	static-differs	0	xD	2059929
+A0E8	1093682488	Greater Water Elemental	0	1	cooldown	1.0	99	map	static-differs	0	xD	2060083
+A0E8	1093682488	Greater Water Elemental	0	1	mana_cost	43	9999	map	static-differs	0	xD	2060236
+A0E9	1093682489	Elemental Of Earth	0	1	cooldown	1.0	99	map	static-differs	0	xD	2060390
+A0E9	1093682489	Elemental Of Earth	0	1	mana_cost	27	9999	map	static-differs	0	xD	2060543
+A0EA	1093682497	Greater Elemental Of Earth	0	1	cooldown	1.0	99	map	static-differs	0	xD	2060697
+A0EA	1093682497	Greater Elemental Of Earth	0	1	mana_cost	40	9999	map	static-differs	0	xD	2060850
+A0EB	1093682498	Elemental Of Lightning	0	1	cooldown	1.0	99	map	static-differs	0	xD	2061004
+A0EB	1093682498	Elemental Of Lightning	0	1	mana_cost	29	9999	map	static-differs	0	xD	2061155
+A0EC	1093682499	Greater Elemental Of Lightning	0	1	cooldown	1.0	99	map	static-differs	0	xD	2061309
+A0EC	1093682499	Greater Elemental Of Lightning	0	1	mana_cost	40	9999	map	static-differs	0	xD	2061462
+A0ED	1093682500	Elemental Of Fire	0	1	cooldown	1.0	99	map	static-differs	0	xD	2061616
+A0ED	1093682500	Elemental Of Fire	0	1	mana_cost	27	9999	map	static-differs	0	xD	2061769
+A0EE	1093682501	Greater Elemental Of Fire	0	1	cooldown	1.0	99	map	static-differs	0	xD	2061923
+A0EE	1093682501	Greater Elemental Of Fire	0	1	mana_cost	39	9999	map	static-differs	0	xD	2062076
+A0EF	1093682502	Lesser Elemental Of Wind	0	1	cooldown	1.0	99	map	static-differs	0	xD	2062229
+A0EF	1093682502	Lesser Elemental Of Wind	0	1	mana_cost	23	9999	map	static-differs	0	xD	2062382
+A0EG	1093682503	Elemental Of Wind	0	1	cooldown	1.0	99	map	static-differs	0	xD	2062536
+A0EG	1093682503	Elemental Of Wind	0	1	mana_cost	33	9999	map	static-differs	0	xD	2062689
+A0EH	1093682504	Greater Elemental Of Wind	0	1	cooldown	1.0	99	map	static-differs	0	xD	2062842
+A0EH	1093682504	Greater Elemental Of Wind	0	1	mana_cost	46	9999	map	static-differs	0	xD	2062993
+A0EI	1093682505	ELE: Book of Conjuration	0	1	cooldown	1.0	99	map	static-differs	0	xD	2063147
+A0EI	1093682505	ELE: Book of Conjuration	0	1	mana_cost	15	9999	map	static-differs	0	xD	2063300
+A0EO	1093682511		0	1	cooldown	1.0	99	map	static-differs	0	xD	2063454
+A0EP	1093682512	ELE: Enchant (forged weapon)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2063607
+A0EY	1093682521		0	1	mana_cost	0	9999	map	static-differs	0	xD	2063760
+A0F6	1093682742	ELE: Greater Elemental Of Lightning (forked lightning) buildings	0	1	cooldown	0.1	99	map	static-differs	0	xD	2063913
+A0F6	1093682742	ELE: Greater Elemental Of Lightning (forked lightning) buildings	0	1	mana_cost	0	9999	map	static-differs	0	xD	2064065
+A0F8	1093682744	ELE: Elemental Of Lightning (forked lightning)buildgins	0	1	cooldown	0.1	99	map	static-differs	0	xD	2064218
+A0F8	1093682744	ELE: Elemental Of Lightning (forked lightning)buildgins	0	1	mana_cost	0	9999	map	static-differs	0	xD	2064371
+A0F9	1093682745	NOR: Ice Queen (frost nova) warlock	0	1	cooldown	0.0	99	map	static-differs	0	xD	2064524
+A0F9	1093682745	NOR: Ice Queen (frost nova) warlock	0	1	mana_cost	0	9999	map	static-differs	0	xD	2064677
+A0FB	1093682754	Parasite(leg troll)	0	1	cooldown	8.0	99	map	static-differs	0	xD	2064830
+A0FB	1093682754	Parasite(leg troll)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2064983
+A0FC	1093682755	Ensnare (Leg Troll)	0	1	cooldown	7.0	99	map	static-differs	0	xD	2065136
+A0FF	1093682758	(Sod ) Burning Oil	0	1	cooldown	0.0	99	map	static-differs	0	xD	2065289
+A0FF	1093682758	(Sod ) Burning Oil	0	1	mana_cost	0	9999	map	static-differs	0	xD	2065442
+A0FG	1093682759	ELE: Meteor Shower	0	1	cooldown	1.0	99	map	static-differs	0	xD	2065595
+A0FG	1093682759	ELE: Meteor Shower	0	1	mana_cost	15	9999	map	static-differs	0	xD	2065748
+A0FL	1093682764	Barrage Igloo	0	1	cooldown	0.0	99	map	static-differs	0	xD	2065902
+A0FS	1093682771	Twins:Thunder Clap	0	1	cooldown	0.0	99	map	static-differs	0	xD	2066055
+A0FS	1093682771	Twins:Thunder Clap	0	1	mana_cost	0	9999	map	static-differs	0	xD	2066208
+A0FT	1093682772	Twins:Shockwave	0	1	cooldown	20.0	99	map	static-differs	0	xD	2066361
+A0FT	1093682772	Twins:Shockwave	0	1	mana_cost	0	9999	map	static-differs	0	xD	2066515
+A0FU	1093682773	Parasite(twins)	0	1	cooldown	20.0	99	map	static-differs	0	xD	2066668
+A0FU	1093682773	Parasite(twins)	0	1	mana_cost	0	9999	map	static-differs	0	xD	2066822
+A0FW	1093682775	Life Drain Visioneer	0	1	cooldown	0.5	99	map	static-differs	0	xD	2066975
+A0FW	1093682775	Life Drain Visioneer	0	1	mana_cost	5	9999	map	static-differs	0	xD	2067128
+A0FX	1093682776	Parasite( life drain)	0	1	cooldown	0.1	99	map	static-differs	0	xD	2067281
+A0FX	1093682776	Parasite( life drain)	0	1	mana_cost	5	9999	map	static-differs	0	xD	2067434
+A0I0	1093683504	Prayer	0	1	cooldown	20.0	99	map	static-differs	0	xD	2067587
+A0I0	1093683504	Prayer	0	1	mana_cost	50	9999	map	static-differs	0	xD	2067741
+A0I1	1093683505	Prayer: heal+mana	0	1	cooldown	1.0	99	map	static-differs	0	xD	2067895
+A0I4	1093683508	Prayer: resurrection	0	1	cooldown	1.0	99	map	static-differs	0	xD	2068048
+A0I4	1093683508	Prayer: resurrection	1	2	cooldown	1.0	99	map	static-differs	0	xD	2068201
+A0I4	1093683508	Prayer: resurrection	2	3	cooldown	1.0	99	map	static-differs	0	xD	2068353
+A0I4	1093683508	Prayer: resurrection	0	1	mana_cost	0	9999	map	static-differs	0	xD	2068506
+A0I4	1093683508	Prayer: resurrection	1	2	mana_cost	0	9999	map	static-differs	0	xD	2068659
+A0I4	1093683508	Prayer: resurrection	2	3	mana_cost	0	9999	map	static-differs	0	xD	2068812
+IBA0	1229078832		0	1	cooldown	1.0	99	map	static-differs	0	xD	2068965
+IBA1	1229078833		0	1	cooldown	1.0	99	map	static-differs	0	xD	2069117
+IBA2	1229078834		0	1	cooldown	1.0	99	map	static-differs	0	xD	2069270
+IBA3	1229078835		0	1	cooldown	1.0	99	map	static-differs	0	xD	2069423
+IBA4	1229078836		0	1	cooldown	1.0	99	map	static-differs	0	xD	2069576
+IBA5	1229078837		0	1	cooldown	1.0	99	map	static-differs	0	xD	2069729
+IBA6	1229078838		0	1	cooldown	1.0	99	map	static-differs	0	xD	2069882
+IBA7	1229078839		0	1	cooldown	1.0	99	map	static-differs	0	xD	2070035
+IBA8	1229078840		0	1	cooldown	1.0	99	map	static-differs	0	xD	2070188
+A0HK	1093683275	DST: Gnolls auto	0	1	cooldown	8.0	99	map	static-differs	0	xD	2070340
+A0HK	1093683275	DST: Gnolls auto	0	1	mana_cost	0	9999	map	static-differs	0	xD	2070493
+A0G1	1093682993	Ambush	0	1	cooldown	15.0	99	map	static-differs	0	xD	2070646
+A0G1	1093682993	Ambush	0	1	mana_cost	0	9999	map	static-differs	0	xD	2070800
+A0H1	1093683249	DST: Matriarch auto	0	1	cooldown	16.0	99	map	static-differs	0	xD	2070953
+A0H1	1093683249	DST: Matriarch auto	0	1	mana_cost	0	9999	map	static-differs	0	xD	2071107
+A0G9	1093683001	DST: Harpy auto	0	1	cooldown	14.0	99	map	static-differs	0	xD	2071260
+A0G9	1093683001	DST: Harpy auto	0	1	mana_cost	24	9999	map	static-differs	0	xD	2071414
+A0GR	1093683026	OgreLords rage	0	1	cooldown	12.0	99	map	static-differs	0	xD	2071568
+A0GB	1093683010	DST: Ogre auto	0	1	cooldown	16.0	99	map	static-differs	0	xD	2071722
+A0GB	1093683010	DST: Ogre auto	0	1	mana_cost	0	9999	map	static-differs	0	xD	2071876
+A0G8	1093683000	DST: Sandkin abil	0	1	cooldown	12.0	99	map	static-differs	0	xD	2072029
+A0G8	1093683000	DST: Sandkin abil	0	1	mana_cost	35	9999	map	static-differs	0	xD	2072183
+A0GE	1093683013	Oasis Ability	0	1	cooldown	1.0	99	map	static-differs	0	xD	2072337
+A0GE	1093683013	Oasis Ability	0	1	mana_cost	5	9999	map	static-differs	0	xD	2072490
+A0GF	1093683014	Peyote abil	0	1	cooldown	1.0	99	map	static-differs	0	xD	2072643
+A0GF	1093683014	Peyote abil	0	1	mana_cost	15	9999	map	static-differs	0	xD	2072796
+A0IL	1093683532	succomb	0	1	cooldown	0.0	99	map	static-differs	0	xD	2072950
+A0IL	1093683532	succomb	0	1	mana_cost	0	9999	map	static-differs	0	xD	2073103
+A0JD	1093683780	Peyote	0	1	cooldown	0.0	99	map	static-differs	0	xD	2073256
+A0JD	1093683780	Peyote	0	1	mana_cost	0	9999	map	static-differs	0	xD	2073409
+A0G4	1093682996	Sandstorm	0	1	cooldown	1.0	99	map	static-differs	0	xD	2073561
+A0G4	1093682996	Sandstorm	0	1	mana_cost	0	9999	map	static-differs	0	xD	2073713
+A0HP	1093683280	Sandcloud2x	0	1	cooldown	1.0	99	map	static-differs	0	xD	2073866
+A0HP	1093683280	Sandcloud2x	0	1	mana_cost	0	9999	map	static-differs	0	xD	2074019
+A0GA	1093683009	Sandcloud	0	1	cooldown	1.0	99	map	static-differs	0	xD	2074172
+A0GA	1093683009	Sandcloud	0	1	mana_cost	0	9999	map	static-differs	0	xD	2074325
+A0HW	1093683287	DST: salam burn	0	1	cooldown	2.0	99	map	static-differs	0	xD	2074478
+A0HW	1093683287	DST: salam burn	0	1	mana_cost	0	9999	map	static-differs	0	xD	2074631
+A0GD	1093683012	DST: Blind	0	1	cooldown	0.1	99	map	static-differs	0	xD	2074784
+A0GD	1093683012	DST: Blind	0	1	mana_cost	0	9999	map	static-differs	0	xD	2074937
+A0GK	1093683019	SandStorm abil	0	1	cooldown	8.0	99	map	static-differs	0	xD	2075090
+A0GK	1093683019	SandStorm abil	0	1	mana_cost	40	9999	map	static-differs	0	xD	2075243
+A0GG	1093683015		0	1	mana_cost	10	9999	map	static-differs	0	xD	2075397
+A0GL	1093683020	Razor Spray	0	1	mana_cost	40	9999	map	static-differs	0	xD	2075551
+A0GL	1093683020	Razor Spray	0	1	cooldown	1.0	99	map	static-differs	0	xD	2075705
+A0GM	1093683021	Harpy Swarm	0	1	cooldown	15.0	99	map	static-differs	0	xD	2075858
+A0GM	1093683021	Harpy Swarm	0	1	mana_cost	0	9999	map	static-differs	0	xD	2076012
+A0GN	1093683022	PAN: Panda Monk Heal	0	1	cooldown	11.0	99	map	static-differs	0	xD	2076165
+A0GN	1093683022	PAN: Panda Monk Heal	0	1	mana_cost	30	9999	map	static-differs	0	xD	2076319
+A0GP	1093683024	PAN: Healing Spray	0	1	mana_cost	0	9999	map	static-differs	0	xD	2076473
+A0GT	1093683028		0	1	cooldown	6.0	99	map	static-differs	0	xD	2076625
+A0GW	1093683031	Thunderpaw Spire Ability	0	1	cooldown	1.0	99	map	static-differs	0	xD	2076778
+A0GW	1093683031	Thunderpaw Spire Ability	0	1	mana_cost	15	9999	map	static-differs	0	xD	2076929
+A0H4	1093683252	Echo Blink	0	1	cooldown	20.0	99	map	static-differs	0	xD	2077083
+A0H6	1093683254	PAN: Withering Touch	0	1	cooldown	1.0	99	map	static-differs	0	xD	2077237
+A0H6	1093683254	PAN: Withering Touch	0	1	mana_cost	12	9999	map	static-differs	0	xD	2077390
+A0H9	1093683257	Whirlstone Brew	0	1	mana_cost	50	9999	map	static-differs	0	xD	2077544
+A0HI	1093683273	PAN: Healing Spray 2	0	1	mana_cost	0	9999	map	static-differs	0	xD	2077698
+IBA9	1229078841	Buy Speedscroll	0	1	cooldown	1.0	99	map	static-differs	0	xD	2077851
+A0HN	1093683278		0	1	cooldown	1.0	99	map	static-differs	0	xD	2078004
+A0HN	1093683278		0	1	mana_cost	15	9999	map	static-differs	0	xD	2078157
+A0HO	1093683279		0	1	cooldown	1.0	99	map	static-differs	0	xD	2078311
+A0HO	1093683279		0	1	mana_cost	15	9999	map	static-differs	0	xD	2078464
+A0HS	1093683283	Global Endurance	0	1	cooldown	1.0	99	map	static-differs	0	xD	2078618
+A0HS	1093683283	Global Endurance	0	1	mana_cost	40	9999	map	static-differs	0	xD	2078771
+A0HT	1093683284	Global Healing	0	1	cooldown	1.0	99	map	static-differs	0	xD	2078925
+A0HT	1093683284	Global Healing	0	1	mana_cost	40	9999	map	static-differs	0	xD	2079078
+Agra	1097298529		0	1	cooldown	1.0	99	map	static-differs	0	xD	2079232

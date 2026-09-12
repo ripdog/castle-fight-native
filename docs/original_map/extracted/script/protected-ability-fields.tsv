@@ -1,0 +1,453 @@
+rawcode	rawcode_integer	categories	names	level_index	level	field	runtime_value	source_function	byte_offset	jass_add_restore
+A001	1093677105	abilities		0	1	cooldown	0.0	xD	2010134	0
+A001	1093677105	abilities		0	1	mana_cost	0	xD	2010287	0
+A004	1093677108	abilities	NAT: Dryad (natures touch)	0	1	cooldown	15.0	xD	2010440	0
+A004	1093677108	abilities	NAT: Dryad (natures touch)	0	1	mana_cost	35	xD	2010593	0
+A005	1093677109	abilities	Rescue Strike	0	1	cooldown	60.0	xD	2010746	1
+A005	1093677109	abilities	Rescue Strike	0	1	mana_cost	0	xD	2010900	1
+A00B	1093677122	abilities		0	1	cooldown	0.0	xD	2011053	0
+A00B	1093677122	abilities		0	1	mana_cost	0	xD	2011206	0
+A00G	1093677127	abilities		0	1	cooldown	8.0	xD	2011359	0
+A00G	1093677127	abilities		0	1	mana_cost	0	xD	2011512	0
+A00H	1093677128	abilities	TriggerAttack	0	1	cooldown	8.0	xD	2011665	0
+A00H	1093677128	abilities	TriggerAttack	0	1	mana_cost	0	xD	2011818	0
+A00I	1093677129	abilities		0	1	cooldown	0.0	xD	2011971	0
+A00I	1093677129	abilities		0	1	mana_cost	0	xD	2012124	0
+A00K	1093677131	abilities		0	1	cooldown	12.0	xD	2012277	0
+A00K	1093677131	abilities		0	1	mana_cost	35	xD	2012431	0
+A00L	1093677132	abilities		0	1	cooldown	0.0	xD	2012585	0
+A00L	1093677132	abilities		0	1	mana_cost	0	xD	2012738	0
+A00M	1093677133	abilities		0	1	cooldown	1.0	xD	2012890	0
+A00M	1093677133	abilities		0	1	mana_cost	10	xD	2013043	0
+A00N	1093677134	abilities		0	1	mana_cost	0	xD	2013197	0
+A00O	1093677135	abilities	NAG: Oracle	0	1	cooldown	1.0	xD	2013350	0
+A00O	1093677135	abilities	NAG: Oracle	0	1	mana_cost	16	xD	2013503	0
+A00P	1093677136	abilities		0	1	cooldown	0.0	xD	2013657	0
+A00P	1093677136	abilities		0	1	mana_cost	0	xD	2013810	0
+A00W	1093677143	abilities		0	1	cooldown	6.0	xD	2013963	0
+A00W	1093677143	abilities		0	1	mana_cost	20	xD	2014116	0
+A00X	1093677144	abilities	HEL: Wizard (Heal (dummy))	0	1	cooldown	12.0	xD	2014270	0
+A00X	1093677144	abilities	HEL: Wizard (Heal (dummy))	0	1	mana_cost	70	xD	2014424	0
+A00Y	1093677145	abilities	HEL: Wizard (Heal)	0	1	cooldown	0.0	xD	2014578	0
+A00Y	1093677145	abilities	HEL: Wizard (Heal)	0	1	mana_cost	0	xD	2014731	0
+A015	1093677365	abilities		0	1	cooldown	0.0	xD	2014884	0
+A016	1093677366	abilities	Gjall Horn Buff	0	1	cooldown	0.0	xD	2015037	0
+A016	1093677366	abilities	Gjall Horn Buff	0	1	mana_cost	0	xD	2015190	0
+A017	1093677367	abilities		0	1	cooldown	1.0	xD	2015343	0
+A017	1093677367	abilities		0	1	mana_cost	10	xD	2015496	0
+A018	1093677368	abilities		0	1	cooldown	0.0	xD	2015650	0
+A018	1093677368	abilities		0	1	mana_cost	0	xD	2015803	0
+A01D	1093677380	abilities		0	1	cooldown	0.0	xD	2015956	0
+A01D	1093677380	abilities		0	1	mana_cost	0	xD	2016109	0
+A01E	1093677381	abilities		0	1	cooldown	0.0	xD	2016262	0
+A01E	1093677381	abilities		0	1	mana_cost	40	xD	2016415	0
+A01G	1093677383	abilities		0	1	cooldown	6.5	xD	2016569	0
+A01G	1093677383	abilities		0	1	mana_cost	20	xD	2016722	0
+A01H	1093677384	abilities		0	1	cooldown	0.0	xD	2016876	0
+A01H	1093677384	abilities		0	1	mana_cost	0	xD	2017029	0
+A01I	1093677385	abilities		0	1	cooldown	0.0	xD	2017181	0
+A01I	1093677385	abilities		0	1	mana_cost	0	xD	2017334	0
+A01J	1093677386	abilities		0	1	cooldown	1.0	xD	2017486	0
+A01J	1093677386	abilities		0	1	mana_cost	13	xD	2017639	0
+A01K	1093677387	abilities		0	1	cooldown	1.0	xD	2017793	0
+A01K	1093677387	abilities		0	1	mana_cost	7	xD	2017946	0
+A01M	1093677389	abilities		0	1	cooldown	10.0	xD	2018098	0
+A01M	1093677389	abilities		0	1	mana_cost	25	xD	2018251	0
+A01Q	1093677393	abilities		0	1	cooldown	1.0	xD	2018405	0
+A01Q	1093677393	abilities		0	1	mana_cost	12	xD	2018558	0
+A01W	1093677399	abilities		0	1	cooldown	0.0	xD	2018712	0
+A01W	1093677399	abilities		0	1	mana_cost	100	xD	2018865	0
+A01X	1093677400	abilities		0	1	cooldown	0.0	xD	2019020	0
+A01X	1093677400	abilities		0	1	mana_cost	0	xD	2019172	0
+A01Y	1093677401	abilities		0	1	cooldown	45.0	xD	2019325	0
+A01Z	1093677402	abilities	NAG Winged Snake: Dispel	0	1	mana_cost	50	xD	2019479	0
+A02G	1093677639	abilities	Scroll Heal	0	1	cooldown	60.0	xD	2019633	0
+A02H	1093677640	abilities		0	1	cooldown	60.0	xD	2019787	0
+A02I	1093677641	abilities		0	1	cooldown	0.0	xD	2019941	0
+A02M	1093677645	abilities		0	1	cooldown	6.0	xD	2020094	0
+A02S	1093677651	abilities		0	1	cooldown	60.0	xD	2020247	0
+A02S	1093677651	abilities		0	1	mana_cost	70	xD	2020401	0
+A02T	1093677652	abilities	NAG: Siren (Purge)	0	1	cooldown	0.0	xD	2020555	0
+A02T	1093677652	abilities	NAG: Siren (Purge)	0	1	mana_cost	0	xD	2020708	0
+A02U	1093677653	abilities	NAG: Siren (Purge (cd))	0	1	cooldown	10.0	xD	2020861	0
+A02Z	1093677658	abilities	ORC: Serpent Rock	0	1	cooldown	1.0	xD	2021015	0
+A02Z	1093677658	abilities	ORC: Serpent Rock	0	1	mana_cost	12	xD	2021168	0
+A030	1093677872	abilities	ORC: Serpent Rock	0	1	cooldown	0.0	xD	2021322	0
+A030	1093677872	abilities	ORC: Serpent Rock	0	1	mana_cost	0	xD	2021475	0
+A031	1093677873	abilities		0	1	cooldown	0.0	xD	2021627	0
+A031	1093677873	abilities		0	1	mana_cost	0	xD	2021780	0
+A032	1093677874	abilities		0	1	cooldown	1.0	xD	2021933	0
+A032	1093677874	abilities		0	1	mana_cost	40	xD	2022086	0
+A033	1093677875	abilities	UND: Death Pit	0	1	cooldown	0.0	xD	2022240	0
+A033	1093677875	abilities	UND: Death Pit	0	1	mana_cost	15	xD	2022393	0
+A039	1093677881	abilities	ORC: Ceremonial Totem	0	1	cooldown	1.0	xD	2022547	0
+A039	1093677881	abilities	ORC: Ceremonial Totem	0	1	mana_cost	10	xD	2022700	0
+A03H	1093677896	abilities		0	1	cooldown	40.0	xD	2022854	0
+A03H	1093677896	abilities		0	1	mana_cost	70	xD	2023008	0
+A03I	1093677897	abilities	HUM: Inner Fire (paladin)	0	1	cooldown	7.0	xD	2023162	0
+A03I	1093677897	abilities	HUM: Inner Fire (paladin)	0	1	mana_cost	0	xD	2023315	0
+A03K	1093677899	abilities	HUM: Crusader/Paladin Heal	0	1	cooldown	7.0	xD	2023468	0
+A03K	1093677899	abilities	HUM: Crusader/Paladin Heal	0	1	mana_cost	66	xD	2023621	0
+A03M	1093677901	abilities	HUM: Crusader (inner fire)	0	1	cooldown	7.0	xD	2023775	0
+A03M	1093677901	abilities	HUM: Crusader (inner fire)	0	1	mana_cost	0	xD	2023928	0
+A03N	1093677902	abilities		0	1	cooldown	0.0	xD	2024081	0
+A03O	1093677903	abilities		0	1	cooldown	0.0	xD	2024234	0
+A03R	1093677906	abilities		0	1	mana_cost	0	xD	2024387	0
+A03S	1093677907	abilities		0	1	cooldown	30.0	xD	2024540	0
+A03S	1093677907	abilities		0	1	mana_cost	0	xD	2024693	0
+A03W	1093677911	abilities		0	1	cooldown	0.0	xD	2024846	0
+A03W	1093677911	abilities		0	1	mana_cost	0	xD	2024999	0
+A03Z	1093677914	abilities		0	1	cooldown	8.0	xD	2025152	0
+A03Z	1093677914	abilities		0	1	mana_cost	35	xD	2025305	0
+A040	1093678128	abilities		0	1	cooldown	8.0	xD	2025459	0
+A040	1093678128	abilities		0	1	mana_cost	35	xD	2025612	0
+A043	1093678131	abilities	NOR: Ice Queen (frost nova)	0	1	cooldown	0.0	xD	2025766	0
+A043	1093678131	abilities	NOR: Ice Queen (frost nova)	0	1	mana_cost	0	xD	2025919	0
+A044	1093678132	abilities		0	1	cooldown	10.0	xD	2026072	0
+A044	1093678132	abilities		0	1	mana_cost	80	xD	2026226	0
+A045	1093678133	abilities		0	1	cooldown	0.0	xD	2026380	0
+A045	1093678133	abilities		0	1	mana_cost	0	xD	2026533	0
+A047	1093678135	abilities		0	1	cooldown	0.0	xD	2026686	0
+A047	1093678135	abilities		0	1	mana_cost	0	xD	2026839	0
+A04G	1093678151	abilities		0	1	cooldown	0.0	xD	2026992	0
+A04G	1093678151	abilities		0	1	mana_cost	0	xD	2027145	0
+A04H	1093678152	abilities		0	1	cooldown	0.0	xD	2027297	0
+A04H	1093678152	abilities		0	1	mana_cost	0	xD	2027450	0
+A04I	1093678153	abilities		0	1	cooldown	1.0	xD	2027603	0
+A04I	1093678153	abilities		0	1	mana_cost	35	xD	2027756	0
+A04J	1093678154	abilities		0	1	cooldown	1.0	xD	2027910	0
+A04J	1093678154	abilities		0	1	mana_cost	12	xD	2028063	0
+A04L	1093678156	abilities		0	1	cooldown	1.0	xD	2028217	0
+A04L	1093678156	abilities		0	1	mana_cost	15	xD	2028370	0
+A04M	1093678157	abilities		0	1	cooldown	0.0	xD	2028524	0
+A04O	1093678159	abilities		0	1	cooldown	0.0	xD	2028677	0
+A04O	1093678159	abilities		0	1	mana_cost	0	xD	2028830	0
+A04Q	1093678161	abilities		0	1	cooldown	0.0	xD	2028982	0
+A04Q	1093678161	abilities		0	1	mana_cost	0	xD	2029135	0
+A04R	1093678162	abilities		0	1	cooldown	1.0	xD	2029288	0
+A04U	1093678165	abilities		0	1	cooldown	1.0	xD	2029441	0
+A04U	1093678165	abilities		0	1	mana_cost	13	xD	2029593	0
+A04X	1093678168	abilities		0	1	cooldown	0.01	xD	2029747	0
+A04X	1093678168	abilities		0	1	mana_cost	0	xD	2029901	0
+A04Z	1093678170	abilities		0	1	mana_cost	20	xD	2030054	0
+A055	1093678389	abilities		0	1	cooldown	0.0	xD	2030208	0
+A055	1093678389	abilities		0	1	mana_cost	0	xD	2030361	0
+A057	1093678391	abilities	COR: Well Of Pain	0	1	cooldown	1.0	xD	2030514	0
+A057	1093678391	abilities	COR: Well Of Pain	0	1	mana_cost	5	xD	2030666	0
+A05B	1093678402	abilities		0	1	cooldown	0.0	xD	2030819	0
+A05B	1093678402	abilities		0	1	mana_cost	0	xD	2030971	0
+A05C	1093678403	abilities		0	1	cooldown	17.0	xD	2031124	0
+A05C	1093678403	abilities		0	1	mana_cost	30	xD	2031277	0
+A05D	1093678404	abilities		0	1	cooldown	0.0	xD	2031430	0
+A05D	1093678404	abilities		0	1	mana_cost	0	xD	2031583	0
+A05E	1093678405	abilities		0	1	cooldown	12.0	xD	2031735	0
+A05E	1093678405	abilities		0	1	mana_cost	25	xD	2031889	0
+A05H	1093678408	abilities		0	1	cooldown	0.0	xD	2032043	0
+A05H	1093678408	abilities		0	1	mana_cost	0	xD	2032195	0
+A05L	1093678412	abilities		0	1	cooldown	30.0	xD	2032348	0
+A05M	1093678413	abilities		0	1	cooldown	0.0	xD	2032502	0
+A05M	1093678413	abilities		0	1	mana_cost	0	xD	2032655	0
+A05U	1093678421	abilities		0	1	cooldown	1.0	xD	2032808	0
+A05U	1093678421	abilities		0	1	mana_cost	12	xD	2032961	0
+A05X	1093678424	abilities		0	1	cooldown	0.0	xD	2033115	0
+A05X	1093678424	abilities		0	1	mana_cost	0	xD	2033268	0
+A069	1093678649	abilities		0	1	mana_cost	20	xD	2033421	0
+A06H	1093678664	abilities		0	1	cooldown	7.0	xD	2033575	0
+A06I	1093678665	abilities		0	1	cooldown	8.0	xD	2033728	0
+A06I	1093678665	abilities		0	1	mana_cost	0	xD	2033881	0
+A06P	1093678672	abilities	NOR: Chilling Mushroom	0	1	cooldown	1.0	xD	2034033	0
+A06P	1093678672	abilities	NOR: Chilling Mushroom	0	1	mana_cost	6	xD	2034186	0
+A06Q	1093678673	abilities		0	1	cooldown	0.0	xD	2034339	0
+A06R	1093678674	abilities		0	1	cooldown	1.0	xD	2034492	0
+A06R	1093678674	abilities		0	1	mana_cost	10	xD	2034645	0
+A06S	1093678675	abilities		0	1	cooldown	0.0	xD	2034799	0
+A06S	1093678675	abilities		0	1	mana_cost	0	xD	2034952	0
+A06Z	1093678682	abilities		0	1	cooldown	0.01	xD	2035105	0
+A077	1093678903	abilities		0	1	cooldown	0.0	xD	2035259	0
+A077	1093678903	abilities		0	1	mana_cost	50	xD	2035412	0
+A078	1093678904	abilities		0	1	cooldown	0.0	xD	2035566	0
+A078	1093678904	abilities		0	1	mana_cost	50	xD	2035719	0
+A07A	1093678913	abilities		0	1	cooldown	0.0	xD	2035873	0
+A07A	1093678913	abilities		0	1	mana_cost	0	xD	2036026	0
+A07P	1093678928	abilities		0	1	cooldown	14.0	xD	2036179	0
+A07P	1093678928	abilities		0	1	mana_cost	30	xD	2036333	0
+A07Q	1093678929	abilities		0	1	cooldown	0.0	xD	2036487	0
+A07Q	1093678929	abilities		0	1	mana_cost	0	xD	2036640	0
+A07R	1093678930	abilities		0	1	cooldown	14.0	xD	2036793	0
+A07R	1093678930	abilities		0	1	mana_cost	35	xD	2036947	0
+A07T	1093678932	abilities	NEL: Starfall	0	1	mana_cost	0	xD	2037101	0
+A07U	1093678933	abilities		0	1	cooldown	1.0	xD	2037254	0
+A07U	1093678933	abilities		0	1	mana_cost	30	xD	2037407	0
+A07X	1093678936	abilities	Killzor	0	1	cooldown	0.0	xD	2037561	0
+A07X	1093678936	abilities	Killzor	0	1	mana_cost	0	xD	2037714	0
+A082	1093679154	abilities		0	1	cooldown	0.0	xD	2037867	0
+A082	1093679154	abilities		0	1	mana_cost	0	xD	2038020	0
+A083	1093679155	abilities		0	1	cooldown	0.0	xD	2038173	0
+A083	1093679155	abilities		0	1	mana_cost	0	xD	2038326	0
+A085	1093679157	abilities		0	1	cooldown	25.0	xD	2038479	0
+A085	1093679157	abilities		0	1	mana_cost	100	xD	2038633	0
+A086	1093679158	abilities		0	1	cooldown	0.0	xD	2038788	1
+A086	1093679158	abilities		0	1	mana_cost	0	xD	2038941	1
+A08B	1093679170	abilities		0	1	cooldown	1.0	xD	2039094	0
+A08B	1093679170	abilities		0	1	mana_cost	20	xD	2039247	0
+A08E	1093679173	abilities	NEL: Obelisk of Wilderness	0	1	cooldown	1.0	xD	2039401	0
+A08E	1093679173	abilities	NEL: Obelisk of Wilderness	0	1	mana_cost	7	xD	2039554	0
+A08Q	1093679185	abilities	Damage 200	0	1	cooldown	0.0	xD	2039706	0
+A08Q	1093679185	abilities	Damage 200	0	1	mana_cost	0	xD	2039858	0
+A08S	1093679187	abilities		0	1	cooldown	0.0	xD	2040011	0
+A08S	1093679187	abilities		0	1	mana_cost	0	xD	2040164	0
+A08T	1093679188	abilities	NEL: Starfall (-na)	0	1	mana_cost	20	xD	2040317	0
+A08U	1093679189	abilities	HEL: Dragonhawk (SolarStrike)	0	1	cooldown	0.0	xD	2040470	0
+A08U	1093679189	abilities	HEL: Dragonhawk (SolarStrike)	0	1	mana_cost	0	xD	2040623	0
+A08V	1093679190	abilities		0	1	cooldown	14.0	xD	2040776	0
+A08W	1093679191	abilities		0	1	cooldown	0.0	xD	2040930	0
+A08W	1093679191	abilities		0	1	mana_cost	0	xD	2041083	0
+A095	1093679413	abilities		0	1	cooldown	0.0	xD	2041236	0
+A095	1093679413	abilities		0	1	mana_cost	25	xD	2041389	0
+A096	1093679414	abilities	MECCCC	0	1	mana_cost	50	xD	2041543	0
+A09A	1093679425	abilities	Check Range	0	1	cooldown	15.0	xD	2041697	0
+A09D	1093679428	abilities		0	1	cooldown	15.0	xD	2041850	0
+A09D	1093679428	abilities		0	1	mana_cost	0	xD	2042004	0
+A09E	1093679429	abilities		0	1	cooldown	0.0	xD	2042157	0
+A09E	1093679429	abilities		0	1	mana_cost	0	xD	2042310	0
+A09N	1093679438	abilities		0	1	cooldown	1.0	xD	2042463	0
+A09N	1093679438	abilities		0	1	mana_cost	7	xD	2042616	0
+A09O	1093679439	abilities		0	1	cooldown	1.0	xD	2042769	0
+A09O	1093679439	abilities		0	1	mana_cost	7	xD	2042922	0
+A09T	1093679444	abilities		0	1	cooldown	0.0	xD	2043075	1
+A09T	1093679444	abilities		0	1	mana_cost	0	xD	2043227	1
+A09X	1093679448	abilities		0	1	cooldown	15.0	xD	2043380	0
+A09X	1093679448	abilities		0	1	mana_cost	0	xD	2043533	0
+A0A6	1093681462	abilities	Infostealer's (spell steal)	0	1	cooldown	10.0	xD	2043686	0
+A0A6	1093681462	abilities	Infostealer's (spell steal)	0	1	mana_cost	40	xD	2043840	0
+A0A7	1093681463	abilities		0	1	cooldown	8.0	xD	2043994	0
+A0A7	1093681463	abilities		0	1	mana_cost	50	xD	2044147	0
+A0A8	1093681464	abilities	HEL: Sorceress (healing wave)	0	1	cooldown	0.0	xD	2044301	0
+A0A8	1093681464	abilities	HEL: Sorceress (healing wave)	0	1	mana_cost	0	xD	2044453	0
+A0AA	1093681473	abilities		0	1	cooldown	0.0	xD	2044606	0
+A0AA	1093681473	abilities		0	1	mana_cost	0	xD	2044759	0
+A0AB	1093681474	abilities		0	1	cooldown	0.0	xD	2044912	0
+A0AB	1093681474	abilities		0	1	mana_cost	0	xD	2045065	0
+A0AE	1093681477	abilities		0	1	cooldown	15.0	xD	2045217	0
+A0AE	1093681477	abilities		0	1	mana_cost	40	xD	2045371	0
+A0AF	1093681478	abilities		0	1	mana_cost	0	xD	2045525	0
+A0AK	1093681483	abilities	NOR: Chilling Mushroom	0	1	cooldown	0.0	xD	2045678	0
+A0AK	1093681483	abilities	NOR: Chilling Mushroom	0	1	mana_cost	0	xD	2045831	0
+A0AR	1093681490	abilities	NAT: Giant Spider (Web)	0	1	cooldown	18.0	xD	2045984	0
+A0AS	1093681491	abilities	NAT: Brood Mother (Web)	0	1	cooldown	18.0	xD	2046138	0
+A0AV	1093681494	abilities	NAT: Brood Mother (infest)	0	1	cooldown	10.0	xD	2046292	0
+A0AW	1093681495	abilities	NAT: Furbolg Shaman (rejuvenation)	0	1	cooldown	0.0	xD	2046446	0
+A0AW	1093681495	abilities	NAT: Furbolg Shaman (rejuvenation)	0	1	mana_cost	0	xD	2046598	0
+A0AX	1093681496	abilities	NAT: Furbolg Elder Shaman (rejuvenation)	0	1	cooldown	0.0	xD	2046751	0
+A0AX	1093681496	abilities	NAT: Furbolg Elder Shaman (rejuvenation)	0	1	mana_cost	0	xD	2046904	0
+A0B5	1093681717	abilities		0	1	mana_cost	0	xD	2047056	1
+A0B6	1093681718	abilities		0	1	mana_cost	0	xD	2047209	1
+A0B7	1093681719	abilities	NAT: Bear (feral rage)	0	1	cooldown	10.0	xD	2047362	1
+A0B7	1093681719	abilities	NAT: Bear (feral rage)	0	1	mana_cost	0	xD	2047516	1
+A0B8	1093681720	abilities	NAT: Ancient Bear (feral rage)	0	1	cooldown	10.0	xD	2047669	1
+A0B8	1093681720	abilities	NAT: Ancient Bear (feral rage)	0	1	mana_cost	0	xD	2047823	1
+A0BC	1093681731	abilities	NAT: Mounatin Giant (Grab Tree)	0	1	cooldown	1.0	xD	2047976	0
+A0BD	1093681732	abilities	NAT: Ancient of Gale	0	1	cooldown	0.0	xD	2048129	0
+A0BD	1093681732	abilities	NAT: Ancient of Gale	0	1	mana_cost	0	xD	2048282	0
+A0BI	1093681737	abilities	NAT: Mountain Giant (taunt)	0	1	cooldown	1.0	xD	2048435	0
+A0BJ	1093681738	abilities	NAT: Mountain Giant (taunt dummy)	0	1	cooldown	15.0	xD	2048588	0
+A0BJ	1093681738	abilities	NAT: Mountain Giant (taunt dummy)	0	1	mana_cost	0	xD	2048742	0
+A0BL	1093681740	abilities	NAT: Banish	0	1	mana_cost	0	xD	2048895	0
+A0BM	1093681741	abilities	NAT: Banish (dummy)	0	1	cooldown	1.0	xD	2049048	0
+A0BM	1093681741	abilities	NAT: Banish (dummy)	0	1	mana_cost	12	xD	2049201	0
+A0BO	1093681743	abilities	NAT: Ancient of Gale (dummy)	0	1	cooldown	1.0	xD	2049355	0
+A0BO	1093681743	abilities	NAT: Ancient of Gale (dummy)	0	1	mana_cost	14	xD	2049508	0
+A0BP	1093681744	abilities	NAT: Ancient of Gale (dummy, -na)	0	1	cooldown	1.0	xD	2049662	0
+A0BP	1093681744	abilities	NAT: Ancient of Gale (dummy, -na)	0	1	mana_cost	14	xD	2049815	0
+A0BQ	1093681745	abilities	NAT: Ancient of Gale (-na)	0	1	cooldown	0.0	xD	2049969	0
+A0BQ	1093681745	abilities	NAT: Ancient of Gale (-na)	0	1	mana_cost	0	xD	2050122	0
+A0BS	1093681747	abilities	NAT: Ancient of Wonders (dummy)	0	1	cooldown	2.0	xD	2050275	0
+A0BS	1093681747	abilities	NAT: Ancient of Wonders (dummy)	0	1	mana_cost	40	xD	2050428	0
+A0BT	1093681748	abilities	NAT: Keeper of the Groove (natures touch)	0	1	cooldown	8.0	xD	2050582	0
+A0BT	1093681748	abilities	NAT: Keeper of the Groove (natures touch)	0	1	mana_cost	25	xD	2050735	0
+A0BU	1093681749	abilities	NAT: Keeper of the Grove (summon treants)	0	1	cooldown	60.0	xD	2050889	0
+A0BU	1093681749	abilities	NAT: Keeper of the Grove (summon treants)	0	1	mana_cost	100	xD	2051043	0
+A0BX	1093681752	abilities	NAT: Ancient Keeper (treants sprout)	0	1	cooldown	30.0	xD	2051198	0
+A0BX	1093681752	abilities	NAT: Ancient Keeper (treants sprout)	0	1	mana_cost	200	xD	2051352	0
+A0C0	1093681968	abilities	NAT: Furbolg Shaman (rejuvenation (dummy))	0	1	cooldown	16.0	xD	2051507	0
+A0C0	1093681968	abilities	NAT: Furbolg Shaman (rejuvenation (dummy))	0	1	mana_cost	50	xD	2051661	0
+A0C1	1093681969	abilities	NAT: Furbolg Elder Shaman (rejuvenation (dummy))	0	1	cooldown	14.0	xD	2051815	0
+A0C1	1093681969	abilities	NAT: Furbolg Elder Shaman (rejuvenation (dummy))	0	1	mana_cost	50	xD	2051968	0
+A0C3	1093681971	abilities	NAT: Furbolg Elder Shaman (manaburn)	0	1	cooldown	0.01	xD	2052122	0
+A0C3	1093681971	abilities	NAT: Furbolg Elder Shaman (manaburn)	0	1	mana_cost	0	xD	2052276	0
+A0CG	1093681991	abilities	NEL: Faerie Dragon (heal)	0	1	cooldown	6.0	xD	2052428	0
+A0CG	1093681991	abilities	NEL: Faerie Dragon (heal)	0	1	mana_cost	20	xD	2052581	0
+A0CJ	1093681994	abilities	ELE: Elemental Of Lightning (forked lightning)	0	1	cooldown	0.1	xD	2052735	0
+A0CJ	1093681994	abilities	ELE: Elemental Of Lightning (forked lightning)	0	1	mana_cost	0	xD	2052888	0
+A0CK	1093681995	abilities	ELE: Greater Elemental Of Lightning (forked lightning)	0	1	cooldown	0.1	xD	2053041	0
+A0CK	1093681995	abilities	ELE: Greater Elemental Of Lightning (forked lightning)	0	1	mana_cost	0	xD	2053194	0
+A0CL	1093681996	abilities	ELE: Elemental Of Fire (split)	0	1	mana_cost	0	xD	2053347	0
+A0CN	1093681998	abilities	ELE: Greater Elemental Of Fire (firebreath)	0	1	cooldown	0.01	xD	2053500	0
+A0CN	1093681998	abilities	ELE: Greater Elemental Of Fire (firebreath)	0	1	mana_cost	0	xD	2053654	0
+A0CU	1093682005	abilities	ELE: Greater Elemental Of Water (illusions)	0	1	mana_cost	0	xD	2053807	0
+A0CY	1093682009	abilities	ELE: Elemental Rain	0	1	cooldown	1.0	xD	2053960	0
+A0CY	1093682009	abilities	ELE: Elemental Rain	0	1	mana_cost	14	xD	2054113	0
+A0CZ	1093682010	abilities	ELE: Enchant	0	1	cooldown	1.0	xD	2054267	0
+A0CZ	1093682010	abilities	ELE: Enchant	0	1	mana_cost	9	xD	2054420	0
+A0D0	1093682224	abilities	ELE: Elemental Rain (Meteor Shower)	0	1	cooldown	0.0	xD	2054573	0
+A0D0	1093682224	abilities	ELE: Elemental Rain (Meteor Shower)	0	1	mana_cost	0	xD	2054726	0
+A0D1	1093682225	abilities	ELE: Elemental Rain (Blizzard)	0	1	cooldown	0.0	xD	2054879	0
+A0D1	1093682225	abilities	ELE: Elemental Rain (Blizzard)	0	1	mana_cost	0	xD	2055032	0
+A0D2	1093682226	abilities	ELE: Elemental Rain (Blizzard) (-na)	0	1	cooldown	0.0	xD	2055185	0
+A0D2	1093682226	abilities	ELE: Elemental Rain (Blizzard) (-na)	0	1	mana_cost	0	xD	2055338	0
+A0D3	1093682227	abilities	ELE: Elemental Rain (Meteor Shower)	0	1	cooldown	0.0	xD	2055491	0
+A0D3	1093682227	abilities	ELE: Elemental Rain (Meteor Shower)	0	1	mana_cost	0	xD	2055644	0
+A0D5	1093682229	abilities	ELE: ElectroShieldElemental	0	1	mana_cost	0	xD	2055797	0
+A0D5	1093682229	abilities	ELE: ElectroShieldElemental	1	2	mana_cost	0	xD	2055950	0
+A0DA	1093682241	abilities	ELE: Elemental Guard Tower (Shield of Mist)	0	1	cooldown	90.0	xD	2056102	1
+A0DA	1093682241	abilities	ELE: Elemental Guard Tower (Shield of Mist)	0	1	mana_cost	0	xD	2056256	1
+A0DC	1093682243	abilities	ELE: Elemental Guard Tower (Boulder)	0	1	cooldown	0.1	xD	2056409	1
+A0DC	1093682243	abilities	ELE: Elemental Guard Tower (Boulder)	0	1	mana_cost	0	xD	2056562	1
+A0DT	1093682260	abilities	Lesser Water Elemental	0	1	cooldown	1.0	xD	2056715	0
+A0DT	1093682260	abilities	Lesser Water Elemental	0	1	mana_cost	24	xD	2056868	0
+A0DU	1093682261	abilities	NAT: Force of Nature	0	1	cooldown	0.01	xD	2057022	0
+A0DU	1093682261	abilities	NAT: Force of Nature	0	1	mana_cost	0	xD	2057176	0
+A0DV	1093682262	abilities	ELE: ObeliskOfElements (dummy)	0	1	cooldown	1.0	xD	2057329	0
+A0DV	1093682262	abilities	ELE: ObeliskOfElements (dummy)	0	1	mana_cost	11	xD	2057482	0
+A0DY	1093682265	abilities	ELE: Greater Elemental Of Fire (split)	0	1	cooldown	0.1	xD	2057636	0
+A0DY	1093682265	abilities	ELE: Greater Elemental Of Fire (split)	0	1	mana_cost	0	xD	2057789	0
+A0E1	1093682481	abilities		0	1	cooldown	8.0	xD	2057942	0
+A0E1	1093682481	abilities		0	1	mana_cost	0	xD	2058094	0
+A0E2	1093682482	abilities		0	1	cooldown	0.0	xD	2058247	0
+A0E2	1093682482	abilities		1	2	cooldown	0.0	xD	2058400	0
+A0E2	1093682482	abilities		2	3	cooldown	0.0	xD	2058553	0
+A0E2	1093682482	abilities		0	1	mana_cost	0	xD	2058706	0
+A0E2	1093682482	abilities		1	2	mana_cost	0	xD	2058859	0
+A0E2	1093682482	abilities		2	3	mana_cost	0	xD	2059012	0
+A0E3	1093682483	abilities	ELE: monsoon	0	1	mana_cost	0	xD	2059165	0
+A0E4	1093682484	abilities	ELE: monsoon (-na)	0	1	mana_cost	0	xD	2059318	0
+A0E5	1093682485	abilities	ELE: Elemental of Wind (effect)	0	1	cooldown	0.1	xD	2059471	0
+A0E6	1093682486	abilities	ELE: Greater Elemental of Wind (effect)	0	1	cooldown	0.1	xD	2059623	0
+A0E7	1093682487	abilities	Water Elemental	0	1	cooldown	1.0	xD	2059776	0
+A0E7	1093682487	abilities	Water Elemental	0	1	mana_cost	34	xD	2059929	0
+A0E8	1093682488	abilities	Greater Water Elemental	0	1	cooldown	1.0	xD	2060083	0
+A0E8	1093682488	abilities	Greater Water Elemental	0	1	mana_cost	43	xD	2060236	0
+A0E9	1093682489	abilities	Elemental Of Earth	0	1	cooldown	1.0	xD	2060390	0
+A0E9	1093682489	abilities	Elemental Of Earth	0	1	mana_cost	27	xD	2060543	0
+A0EA	1093682497	abilities	Greater Elemental Of Earth	0	1	cooldown	1.0	xD	2060697	0
+A0EA	1093682497	abilities	Greater Elemental Of Earth	0	1	mana_cost	40	xD	2060850	0
+A0EB	1093682498	abilities	Elemental Of Lightning	0	1	cooldown	1.0	xD	2061004	0
+A0EB	1093682498	abilities	Elemental Of Lightning	0	1	mana_cost	29	xD	2061155	0
+A0EC	1093682499	abilities	Greater Elemental Of Lightning	0	1	cooldown	1.0	xD	2061309	0
+A0EC	1093682499	abilities	Greater Elemental Of Lightning	0	1	mana_cost	40	xD	2061462	0
+A0ED	1093682500	abilities	Elemental Of Fire	0	1	cooldown	1.0	xD	2061616	0
+A0ED	1093682500	abilities	Elemental Of Fire	0	1	mana_cost	27	xD	2061769	0
+A0EE	1093682501	abilities	Greater Elemental Of Fire	0	1	cooldown	1.0	xD	2061923	0
+A0EE	1093682501	abilities	Greater Elemental Of Fire	0	1	mana_cost	39	xD	2062076	0
+A0EF	1093682502	abilities	Lesser Elemental Of Wind	0	1	cooldown	1.0	xD	2062229	0
+A0EF	1093682502	abilities	Lesser Elemental Of Wind	0	1	mana_cost	23	xD	2062382	0
+A0EG	1093682503	abilities	Elemental Of Wind	0	1	cooldown	1.0	xD	2062536	0
+A0EG	1093682503	abilities	Elemental Of Wind	0	1	mana_cost	33	xD	2062689	0
+A0EH	1093682504	abilities	Greater Elemental Of Wind	0	1	cooldown	1.0	xD	2062842	0
+A0EH	1093682504	abilities	Greater Elemental Of Wind	0	1	mana_cost	46	xD	2062993	0
+A0EI	1093682505	abilities	ELE: Book of Conjuration	0	1	cooldown	1.0	xD	2063147	0
+A0EI	1093682505	abilities	ELE: Book of Conjuration	0	1	mana_cost	15	xD	2063300	0
+A0EO	1093682511	abilities		0	1	cooldown	1.0	xD	2063454	0
+A0EP	1093682512	abilities	ELE: Enchant (forged weapon)	0	1	mana_cost	0	xD	2063607	0
+A0EY	1093682521	abilities		0	1	mana_cost	0	xD	2063760	0
+A0F6	1093682742	abilities	ELE: Greater Elemental Of Lightning (forked lightning) buildings	0	1	cooldown	0.1	xD	2063913	0
+A0F6	1093682742	abilities	ELE: Greater Elemental Of Lightning (forked lightning) buildings	0	1	mana_cost	0	xD	2064065	0
+A0F8	1093682744	abilities	ELE: Elemental Of Lightning (forked lightning)buildgins	0	1	cooldown	0.1	xD	2064218	0
+A0F8	1093682744	abilities	ELE: Elemental Of Lightning (forked lightning)buildgins	0	1	mana_cost	0	xD	2064371	0
+A0F9	1093682745	abilities	NOR: Ice Queen (frost nova) warlock	0	1	cooldown	0.0	xD	2064524	0
+A0F9	1093682745	abilities	NOR: Ice Queen (frost nova) warlock	0	1	mana_cost	0	xD	2064677	0
+A0FB	1093682754	abilities	Parasite(leg troll)	0	1	cooldown	8.0	xD	2064830	0
+A0FB	1093682754	abilities	Parasite(leg troll)	0	1	mana_cost	0	xD	2064983	0
+A0FC	1093682755	abilities	Ensnare (Leg Troll)	0	1	cooldown	7.0	xD	2065136	0
+A0FF	1093682758	abilities	(Sod ) Burning Oil	0	1	cooldown	0.0	xD	2065289	0
+A0FF	1093682758	abilities	(Sod ) Burning Oil	0	1	mana_cost	0	xD	2065442	0
+A0FG	1093682759	abilities	ELE: Meteor Shower	0	1	cooldown	1.0	xD	2065595	0
+A0FG	1093682759	abilities	ELE: Meteor Shower	0	1	mana_cost	15	xD	2065748	0
+A0FL	1093682764	abilities	Barrage Igloo	0	1	cooldown	0.0	xD	2065902	0
+A0FS	1093682771	abilities	Twins:Thunder Clap	0	1	cooldown	0.0	xD	2066055	0
+A0FS	1093682771	abilities	Twins:Thunder Clap	0	1	mana_cost	0	xD	2066208	0
+A0FT	1093682772	abilities	Twins:Shockwave	0	1	cooldown	20.0	xD	2066361	0
+A0FT	1093682772	abilities	Twins:Shockwave	0	1	mana_cost	0	xD	2066515	0
+A0FU	1093682773	abilities	Parasite(twins)	0	1	cooldown	20.0	xD	2066668	0
+A0FU	1093682773	abilities	Parasite(twins)	0	1	mana_cost	0	xD	2066822	0
+A0FW	1093682775	abilities	Life Drain Visioneer	0	1	cooldown	0.5	xD	2066975	0
+A0FW	1093682775	abilities	Life Drain Visioneer	0	1	mana_cost	5	xD	2067128	0
+A0FX	1093682776	abilities	Parasite( life drain)	0	1	cooldown	0.1	xD	2067281	0
+A0FX	1093682776	abilities	Parasite( life drain)	0	1	mana_cost	5	xD	2067434	0
+A0I0	1093683504	abilities	Prayer	0	1	cooldown	20.0	xD	2067587	0
+A0I0	1093683504	abilities	Prayer	0	1	mana_cost	50	xD	2067741	0
+A0I1	1093683505	abilities	Prayer: heal+mana	0	1	cooldown	1.0	xD	2067895	0
+A0I4	1093683508	abilities	Prayer: resurrection	0	1	cooldown	1.0	xD	2068048	0
+A0I4	1093683508	abilities	Prayer: resurrection	1	2	cooldown	1.0	xD	2068201	0
+A0I4	1093683508	abilities	Prayer: resurrection	2	3	cooldown	1.0	xD	2068353	0
+A0I4	1093683508	abilities	Prayer: resurrection	0	1	mana_cost	0	xD	2068506	0
+A0I4	1093683508	abilities	Prayer: resurrection	1	2	mana_cost	0	xD	2068659	0
+A0I4	1093683508	abilities	Prayer: resurrection	2	3	mana_cost	0	xD	2068812	0
+IBA0	1229078832	abilities		0	1	cooldown	1.0	xD	2068965	0
+IBA1	1229078833	abilities		0	1	cooldown	1.0	xD	2069117	0
+IBA2	1229078834	abilities		0	1	cooldown	1.0	xD	2069270	0
+IBA3	1229078835	abilities		0	1	cooldown	1.0	xD	2069423	0
+IBA4	1229078836	abilities		0	1	cooldown	1.0	xD	2069576	0
+IBA5	1229078837	abilities		0	1	cooldown	1.0	xD	2069729	0
+IBA6	1229078838	abilities		0	1	cooldown	1.0	xD	2069882	0
+IBA7	1229078839	abilities		0	1	cooldown	1.0	xD	2070035	0
+IBA8	1229078840	abilities		0	1	cooldown	1.0	xD	2070188	0
+A0HK	1093683275	abilities	DST: Gnolls auto	0	1	cooldown	8.0	xD	2070340	0
+A0HK	1093683275	abilities	DST: Gnolls auto	0	1	mana_cost	0	xD	2070493	0
+A0G1	1093682993	abilities	Ambush	0	1	cooldown	15.0	xD	2070646	0
+A0G1	1093682993	abilities	Ambush	0	1	mana_cost	0	xD	2070800	0
+A0H1	1093683249	abilities	DST: Matriarch auto	0	1	cooldown	16.0	xD	2070953	0
+A0H1	1093683249	abilities	DST: Matriarch auto	0	1	mana_cost	0	xD	2071107	0
+A0G9	1093683001	abilities	DST: Harpy auto	0	1	cooldown	14.0	xD	2071260	0
+A0G9	1093683001	abilities	DST: Harpy auto	0	1	mana_cost	24	xD	2071414	0
+A0GR	1093683026	abilities	OgreLords rage	0	1	cooldown	12.0	xD	2071568	0
+A0GB	1093683010	abilities	DST: Ogre auto	0	1	cooldown	16.0	xD	2071722	0
+A0GB	1093683010	abilities	DST: Ogre auto	0	1	mana_cost	0	xD	2071876	0
+A0G8	1093683000	abilities	DST: Sandkin abil	0	1	cooldown	12.0	xD	2072029	0
+A0G8	1093683000	abilities	DST: Sandkin abil	0	1	mana_cost	35	xD	2072183	0
+A0GE	1093683013	abilities	Oasis Ability	0	1	cooldown	1.0	xD	2072337	0
+A0GE	1093683013	abilities	Oasis Ability	0	1	mana_cost	5	xD	2072490	0
+A0GF	1093683014	abilities	Peyote abil	0	1	cooldown	1.0	xD	2072643	0
+A0GF	1093683014	abilities	Peyote abil	0	1	mana_cost	15	xD	2072796	0
+A0IL	1093683532	abilities	succomb	0	1	cooldown	0.0	xD	2072950	0
+A0IL	1093683532	abilities	succomb	0	1	mana_cost	0	xD	2073103	0
+A0JD	1093683780	abilities	Peyote	0	1	cooldown	0.0	xD	2073256	0
+A0JD	1093683780	abilities	Peyote	0	1	mana_cost	0	xD	2073409	0
+A0G4	1093682996	abilities	Sandstorm	0	1	cooldown	1.0	xD	2073561	0
+A0G4	1093682996	abilities	Sandstorm	0	1	mana_cost	0	xD	2073713	0
+A0HP	1093683280	abilities	Sandcloud2x	0	1	cooldown	1.0	xD	2073866	0
+A0HP	1093683280	abilities	Sandcloud2x	0	1	mana_cost	0	xD	2074019	0
+A0GA	1093683009	abilities	Sandcloud	0	1	cooldown	1.0	xD	2074172	0
+A0GA	1093683009	abilities	Sandcloud	0	1	mana_cost	0	xD	2074325	0
+A0HW	1093683287	abilities	DST: salam burn	0	1	cooldown	2.0	xD	2074478	0
+A0HW	1093683287	abilities	DST: salam burn	0	1	mana_cost	0	xD	2074631	0
+A0GD	1093683012	abilities	DST: Blind	0	1	cooldown	0.1	xD	2074784	0
+A0GD	1093683012	abilities	DST: Blind	0	1	mana_cost	0	xD	2074937	0
+A0GK	1093683019	abilities	SandStorm abil	0	1	cooldown	8.0	xD	2075090	0
+A0GK	1093683019	abilities	SandStorm abil	0	1	mana_cost	40	xD	2075243	0
+A0GG	1093683015	abilities		0	1	mana_cost	10	xD	2075397	0
+A0GL	1093683020	abilities	Razor Spray	0	1	mana_cost	40	xD	2075551	0
+A0GL	1093683020	abilities	Razor Spray	0	1	cooldown	1.0	xD	2075705	0
+A0GM	1093683021	abilities	Harpy Swarm	0	1	cooldown	15.0	xD	2075858	0
+A0GM	1093683021	abilities	Harpy Swarm	0	1	mana_cost	0	xD	2076012	0
+A0GN	1093683022	abilities	PAN: Panda Monk Heal	0	1	cooldown	11.0	xD	2076165	0
+A0GN	1093683022	abilities	PAN: Panda Monk Heal	0	1	mana_cost	30	xD	2076319	0
+A0GP	1093683024	abilities	PAN: Healing Spray	0	1	mana_cost	0	xD	2076473	0
+A0GT	1093683028	abilities		0	1	cooldown	6.0	xD	2076625	0
+A0GW	1093683031	abilities	Thunderpaw Spire Ability	0	1	cooldown	1.0	xD	2076778	0
+A0GW	1093683031	abilities	Thunderpaw Spire Ability	0	1	mana_cost	15	xD	2076929	0
+A0H4	1093683252	abilities	Echo Blink	0	1	cooldown	20.0	xD	2077083	0
+A0H6	1093683254	abilities	PAN: Withering Touch	0	1	cooldown	1.0	xD	2077237	0
+A0H6	1093683254	abilities	PAN: Withering Touch	0	1	mana_cost	12	xD	2077390	0
+A0H9	1093683257	abilities	Whirlstone Brew	0	1	mana_cost	50	xD	2077544	0
+A0HI	1093683273	abilities	PAN: Healing Spray 2	0	1	mana_cost	0	xD	2077698	0
+IBA9	1229078841	abilities	Buy Speedscroll	0	1	cooldown	1.0	xD	2077851	0
+A0HN	1093683278	abilities		0	1	cooldown	1.0	xD	2078004	0
+A0HN	1093683278	abilities		0	1	mana_cost	15	xD	2078157	0
+A0HO	1093683279	abilities		0	1	cooldown	1.0	xD	2078311	0
+A0HO	1093683279	abilities		0	1	mana_cost	15	xD	2078464	0
+A0HS	1093683283	abilities	Global Endurance	0	1	cooldown	1.0	xD	2078618	0
+A0HS	1093683283	abilities	Global Endurance	0	1	mana_cost	40	xD	2078771	0
+A0HT	1093683284	abilities	Global Healing	0	1	cooldown	1.0	xD	2078925	0
+A0HT	1093683284	abilities	Global Healing	0	1	mana_cost	40	xD	2079078	0
+Agra	1097298529	abilities		0	1	cooldown	1.0	xD	2079232	0

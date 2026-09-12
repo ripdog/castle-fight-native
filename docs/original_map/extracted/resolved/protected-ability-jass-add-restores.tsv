@@ -1,0 +1,18 @@
+rawcode	rawcode_integer	names	level_index	level	field	runtime_value	static_resolved_value	static_selection	comparison	canonical_relation	source_function	byte_offset
+A005	1093677109	Rescue Strike	0	1	cooldown	60.	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699335
+A005	1093677109	Rescue Strike	0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699407
+A010	1093677360		0	1	cooldown	3.	3	map	static-match	jass-only	applyProtectedAbilityFieldsForJassAdd	1699509
+A086	1093679158		0	1	cooldown	0.	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699608
+A086	1093679158		0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699679
+A09T	1093679444		0	1	cooldown	0.	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699781
+A09T	1093679444		0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699852
+A0B5	1093681717		0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1699954
+A0B6	1093681718		0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700056
+A0B7	1093681719	NAT: Bear (feral rage)	0	1	cooldown	10.	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700158
+A0B7	1093681719	NAT: Bear (feral rage)	0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700230
+A0B8	1093681720	NAT: Ancient Bear (feral rage)	0	1	cooldown	10.	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700332
+A0B8	1093681720	NAT: Ancient Bear (feral rage)	0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700404
+A0DA	1093682241	ELE: Elemental Guard Tower (Shield of Mist)	0	1	cooldown	90.	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700506
+A0DA	1093682241	ELE: Elemental Guard Tower (Shield of Mist)	0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700578
+A0DC	1093682243	ELE: Elemental Guard Tower (Boulder)	0	1	cooldown	.1	99	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700680
+A0DC	1093682243	ELE: Elemental Guard Tower (Boulder)	0	1	mana_cost	0	9999	map	static-differs	canonical-match	applyProtectedAbilityFieldsForJassAdd	1700751

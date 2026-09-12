@@ -90,11 +90,16 @@
     "referenced_map_rawcodes": 1332,
     "known_map_rawcodes": 1461,
     "runtime_mutator_sites": 157,
+    "protected_ability_field_assignments": 452,
+    "protected_ability_rows": 259,
+    "protected_abilities": 254,
+    "protected_ability_jass_add_assignments": 17,
+    "protected_ability_jass_add_only_assignments": 1,
     "runtime_mutator_trace_rows": 6728,
     "rawcodes_with_runtime_mutator_paths": 270,
     "runtime_mutator_sites_with_rawcode_paths": 117,
     "max_runtime_mutator_path_hops": 11,
-    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Function aliases/value arguments are indexed separately from direct calls. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow, virtual dispatch, callback execution, or branch execution."
+    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. The protected ability-field table is parsed structurally from its generated initializer and cross-checked against overlapping JASS-add restores. Function aliases/value arguments are indexed separately from direct calls. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow, virtual dispatch, callback execution, or branch execution."
   },
   "plaintext_members_copied": [
     "war3mapMisc.txt",

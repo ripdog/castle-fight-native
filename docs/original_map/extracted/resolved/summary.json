@@ -32,10 +32,20 @@
   "unknown_map_field_ids": {
     "wurs": 1309
   },
+  "protected_ability_runtime_fields": 452,
+  "protected_ability_runtime_field_comparisons": {
+    "static-differs": 452
+  },
+  "protected_ability_jass_add_fields": 17,
+  "protected_ability_jass_add_field_comparisons": {
+    "static-differs": 16,
+    "static-match": 1
+  },
   "notes": [
     "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
     "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
-    "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns"
+    "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
+    "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source"
   ]
 }
