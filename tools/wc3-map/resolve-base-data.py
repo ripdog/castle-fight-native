@@ -1168,10 +1168,124 @@ def main() -> None:
     effective_unit_comparisons: dict[str, Counter[str]] = {
         field: Counter() for field in ("hp", "armor", "dps", "attack_range", "move_speed")
     }
+    effective_unit_vs_unitstat_comparisons: dict[str, Counter[str]] = {
+        field: Counter() for field in ("hp", "armor", "dps", "attack_range", "move_speed")
+    }
     effective_unit_path = map_root / "script" / "effective-unit-stats.tsv"
     static_units: dict[str, dict[str, str]] = {}
     with (output / "units.tsv").open(encoding="utf-8", newline="") as handle:
         static_units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    protected_unit_rows: list[list[Any]] = []
+    protected_unit_applied: dict[str, dict[str, Any]] = {}
+    protected_unit_path = map_root / "script" / "protected-unit-stats.tsv"
+    protected_unit_override_counts: Counter[str] = Counter()
+
+    def protected_unit_overlay(row: dict[str, str], override_field: str, static_field: str) -> tuple[str, str]:
+        override = row.get(override_field, "")
+        static = static_units.get(row["rawcode"], {}).get(static_field, "")
+        return (override if override != "" else static), ("protected-runtime" if override != "" else "static-resolved")
+
+    if protected_unit_path.exists():
+        with protected_unit_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                static = static_units.get(row["rawcode"])
+                if static is None:
+                    raise ValueError(f"protected UnitStat row has no static unit definition: {row['rawcode']}")
+                field_pairs = [
+                    ("hp", "hp"),
+                    ("armor", "armor"),
+                    ("move_speed", "move_speed"),
+                    ("attack1_base_damage", "attack1_bonus"),
+                    ("attack1_dice_number", "attack1_dice"),
+                    ("attack1_dice_sides", "attack1_sides"),
+                    ("attack1_cooldown", "attack1_cooldown"),
+                    ("attack1_range", "attack1_range"),
+                    ("attack2_base_damage", "attack2_bonus"),
+                    ("attack2_dice_number", "attack2_dice"),
+                    ("attack2_dice_sides", "attack2_sides"),
+                    ("attack2_cooldown", "attack2_cooldown"),
+                    ("attack2_range", "attack2_range"),
+                ]
+                applied: dict[str, str] = {}
+                sources: dict[str, str] = {}
+                override_fields: list[str] = []
+                for override_field, static_field in field_pairs:
+                    applied[override_field], sources[override_field] = protected_unit_overlay(row, override_field, static_field)
+                    if row.get(override_field, "") != "":
+                        protected_unit_override_counts[override_field] += 1
+                        override_fields.append(override_field)
+                if row.get("defense_type", "") != "":
+                    protected_unit_override_counts["defense_type"] += 1
+                    override_fields.append("defense_type")
+
+                def attack_derived(number: int) -> tuple[Any, Any, Any, Any]:
+                    base = numeric(applied[f"attack{number}_base_damage"])
+                    dice = numeric(applied[f"attack{number}_dice_number"])
+                    sides = numeric(applied[f"attack{number}_dice_sides"])
+                    cooldown = numeric(applied[f"attack{number}_cooldown"])
+                    if None in (base, dice, sides):
+                        return None, None, None, None
+                    minimum = base + dice
+                    maximum = base + dice * sides
+                    average = base + dice * (sides + 1.0) / 2.0
+                    dps = average / cooldown if cooldown and cooldown > 0 else None
+                    return minimum, maximum, average, dps
+
+                attack1_min, attack1_max, attack1_avg, attack1_dps = attack_derived(1)
+                attack2_min, attack2_max, attack2_avg, attack2_dps = attack_derived(2)
+                protected_unit_applied[row["rawcode"]] = {
+                    "hp": applied["hp"],
+                    "armor": applied["armor"],
+                    "move_speed": applied["move_speed"],
+                    "attack_range": applied["attack1_range"],
+                    "dps": value_as_text(attack1_dps),
+                }
+                protected_unit_rows.append([
+                    row["rawcode"], row["rawcode_integer"], row["names"], row["source_fingerprint"],
+                    ",".join(override_fields), row["override_field_count"],
+                    static["hp"], row["hp"], applied["hp"], sources["hp"],
+                    static["armor"], row["armor"], applied["armor"], sources["armor"],
+                    static["armor_type"], row["defense_type"],
+                    static["move_speed"], row["move_speed"], applied["move_speed"], sources["move_speed"],
+                    static["attack1_bonus"], row["attack1_base_damage"], applied["attack1_base_damage"], sources["attack1_base_damage"],
+                    static["attack1_dice"], row["attack1_dice_number"], applied["attack1_dice_number"], sources["attack1_dice_number"],
+                    static["attack1_sides"], row["attack1_dice_sides"], applied["attack1_dice_sides"], sources["attack1_dice_sides"],
+                    static["attack1_cooldown"], row["attack1_cooldown"], applied["attack1_cooldown"], sources["attack1_cooldown"],
+                    static["attack1_range"], row["attack1_range"], applied["attack1_range"], sources["attack1_range"],
+                    attack1_min, attack1_max, attack1_avg, attack1_dps,
+                    static["attack2_bonus"], row["attack2_base_damage"], applied["attack2_base_damage"], sources["attack2_base_damage"],
+                    static["attack2_dice"], row["attack2_dice_number"], applied["attack2_dice_number"], sources["attack2_dice_number"],
+                    static["attack2_sides"], row["attack2_dice_sides"], applied["attack2_dice_sides"], sources["attack2_dice_sides"],
+                    static["attack2_cooldown"], row["attack2_cooldown"], applied["attack2_cooldown"], sources["attack2_cooldown"],
+                    static["attack2_range"], row["attack2_range"], applied["attack2_range"], sources["attack2_range"],
+                    attack2_min, attack2_max, attack2_avg, attack2_dps,
+                    row["encoded_values_json"], row["source_function"], row["byte_offset"],
+                ])
+    write_tsv(
+        output / "protected-unit-stats.tsv",
+        [
+            "rawcode", "rawcode_integer", "names", "source_fingerprint", "override_fields", "override_field_count",
+            "static_hp", "override_hp", "unitstat_hp", "hp_source",
+            "static_armor", "override_armor", "unitstat_armor", "armor_source",
+            "static_armor_type", "override_defense_type",
+            "static_move_speed", "override_move_speed", "unitstat_move_speed", "move_speed_source",
+            "static_attack1_base_damage", "override_attack1_base_damage", "unitstat_attack1_base_damage", "attack1_base_damage_source",
+            "static_attack1_dice_number", "override_attack1_dice_number", "unitstat_attack1_dice_number", "attack1_dice_number_source",
+            "static_attack1_dice_sides", "override_attack1_dice_sides", "unitstat_attack1_dice_sides", "attack1_dice_sides_source",
+            "static_attack1_cooldown", "override_attack1_cooldown", "unitstat_attack1_cooldown", "attack1_cooldown_source",
+            "static_attack1_range", "override_attack1_range", "unitstat_attack1_range", "attack1_range_source",
+            "unitstat_attack1_min", "unitstat_attack1_max", "unitstat_attack1_avg", "unitstat_attack1_dps",
+            "static_attack2_base_damage", "override_attack2_base_damage", "unitstat_attack2_base_damage", "attack2_base_damage_source",
+            "static_attack2_dice_number", "override_attack2_dice_number", "unitstat_attack2_dice_number", "attack2_dice_number_source",
+            "static_attack2_dice_sides", "override_attack2_dice_sides", "unitstat_attack2_dice_sides", "attack2_dice_sides_source",
+            "static_attack2_cooldown", "override_attack2_cooldown", "unitstat_attack2_cooldown", "attack2_cooldown_source",
+            "static_attack2_range", "override_attack2_range", "unitstat_attack2_range", "attack2_range_source",
+            "unitstat_attack2_min", "unitstat_attack2_max", "unitstat_attack2_avg", "unitstat_attack2_dps",
+            "encoded_values_json", "source_function", "byte_offset",
+        ],
+        protected_unit_rows,
+    )
 
     def effective_comparison(runtime_value: str, static_value: str, *, tolerance: float = 1e-6) -> str:
         runtime_number = numeric(runtime_value)
@@ -1200,8 +1314,17 @@ def main() -> None:
                     "attack_range": effective_comparison(row["attack_range"], static_values["attack_range"]),
                     "move_speed": effective_comparison(row["move_speed"], static_values["move_speed"]),
                 }
+                unitstat_values = protected_unit_applied.get(row["unit_rawcode"], {})
+                unitstat_comparisons: dict[str, str] = {}
+                for field in ("hp", "armor", "dps", "attack_range", "move_speed"):
+                    candidate = value_as_text(unitstat_values.get(field))
+                    tolerance = 0.011 if field == "dps" else 1e-6
+                    comparison = effective_comparison(row[field], candidate, tolerance=tolerance)
+                    unitstat_comparisons[field] = comparison.replace("static-", "unitstat-")
                 for field, comparison in comparisons.items():
                     effective_unit_comparisons[field][comparison] += 1
+                for field, comparison in unitstat_comparisons.items():
+                    effective_unit_vs_unitstat_comparisons[field][comparison] += 1
                 effective_unit_rows.append([
                     row["building_rawcode"],
                     row["building_names"],
@@ -1210,18 +1333,28 @@ def main() -> None:
                     row["hp"],
                     static_values["hp"],
                     comparisons["hp"],
+                    value_as_text(unitstat_values.get("hp")),
+                    unitstat_comparisons["hp"],
                     row["armor"],
                     static_values["armor"],
                     comparisons["armor"],
+                    value_as_text(unitstat_values.get("armor")),
+                    unitstat_comparisons["armor"],
                     row["dps"],
                     static_values["dps"],
                     comparisons["dps"],
+                    value_as_text(unitstat_values.get("dps")),
+                    unitstat_comparisons["dps"],
                     row["attack_range"],
                     static_values["attack_range"],
                     comparisons["attack_range"],
+                    value_as_text(unitstat_values.get("attack_range")),
+                    unitstat_comparisons["attack_range"],
                     row["move_speed"],
                     static_values["move_speed"],
                     comparisons["move_speed"],
+                    value_as_text(unitstat_values.get("move_speed")),
+                    unitstat_comparisons["move_speed"],
                     row["spawns_per_cycle"],
                     row["can_hit_air"],
                     row["source_function"],
@@ -1231,11 +1364,11 @@ def main() -> None:
         output / "effective-unit-stats.tsv",
         [
             "building_rawcode", "building_names", "unit_rawcode", "unit_names",
-            "effective_hp", "static_hp", "hp_comparison",
-            "effective_armor", "static_armor", "armor_comparison",
-            "effective_dps", "static_attack1_dps", "dps_comparison",
-            "effective_attack_range", "static_attack1_range", "attack_range_comparison",
-            "effective_move_speed", "static_move_speed", "move_speed_comparison",
+            "effective_hp", "static_hp", "hp_comparison", "unitstat_hp", "hp_vs_unitstat",
+            "effective_armor", "static_armor", "armor_comparison", "unitstat_armor", "armor_vs_unitstat",
+            "effective_dps", "static_attack1_dps", "dps_comparison", "unitstat_attack1_dps", "dps_vs_unitstat",
+            "effective_attack_range", "static_attack1_range", "attack_range_comparison", "unitstat_attack1_range", "attack_range_vs_unitstat",
+            "effective_move_speed", "static_move_speed", "move_speed_comparison", "unitstat_move_speed", "move_speed_vs_unitstat",
             "spawns_per_cycle", "can_hit_air", "source_function", "byte_offset",
         ],
         effective_unit_rows,
@@ -1313,9 +1446,15 @@ def main() -> None:
         "protected_ability_runtime_field_comparisons": dict(sorted(protected_comparisons.items())),
         "protected_ability_jass_add_fields": len(protected_jass_rows),
         "protected_ability_jass_add_field_comparisons": dict(sorted(protected_jass_comparisons.items())),
+        "protected_unit_stat_rows": len(protected_unit_rows),
+        "protected_unit_stat_override_assignments": sum(protected_unit_override_counts.values()),
+        "protected_unit_stat_override_counts": dict(sorted(protected_unit_override_counts.items())),
         "effective_unit_stat_rows": len(effective_unit_rows),
         "effective_unit_stat_comparisons": {
             field: dict(sorted(counts.items())) for field, counts in effective_unit_comparisons.items()
+        },
+        "effective_unit_stat_vs_unitstat_comparisons": {
+            field: dict(sorted(counts.items())) for field, counts in effective_unit_vs_unitstat_comparisons.items()
         },
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
@@ -1323,6 +1462,7 @@ def main() -> None:
             "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
             "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
             "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
+            "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
         ],
     }

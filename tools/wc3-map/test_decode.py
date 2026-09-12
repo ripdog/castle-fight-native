@@ -182,6 +182,31 @@ class LuaIndexTests(unittest.TestCase):
         self.assertEqual(row["spawns_per_cycle"], 1)
         self.assertFalse(row["can_hit_air"])
 
+    def test_extracts_and_decodes_protected_unit_stat_row(self) -> None:
+        wizard = int.from_bytes(b"h00W", "big")
+        source = (
+            "function jP()"
+            "_I[_d[1]](1747988567,878085,3432,3941,2147483647,2277,1454,2147483647,3851,1803943,3534,2147483647,2147483647,2147483647,2147483647,2147483647)"
+            "end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {wizard})
+
+        self.assertEqual(len(indexed["protected_unit_stats"]), 1)
+        row = indexed["protected_unit_stats"][0]
+        self.assertEqual(row["unit_id"], wizard)
+        self.assertEqual(row["source_fingerprint"], 878085)
+        self.assertEqual(row["hp"], 850)
+        self.assertEqual(row["armor"], 4)
+        self.assertEqual(row["move_speed"], 290)
+        self.assertEqual(row["attack1_base_damage"], 89)
+        self.assertIsNone(row["attack1_dice_number"])
+        self.assertEqual(row["attack1_dice_sides"], 21)
+        self.assertEqual(row["attack1_cooldown_microseconds"], 1_800_000)
+        self.assertEqual(row["attack1_cooldown"], "1.8")
+        self.assertEqual(row["attack1_range"], 650)
+        self.assertIsNone(row["attack2_base_damage"])
+
     def test_propagates_rawcode_context_to_runtime_mutator_through_named_calls(self) -> None:
         rawcode = int.from_bytes(b"ABCD", "big")
         source = (

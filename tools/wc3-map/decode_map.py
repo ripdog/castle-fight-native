@@ -759,6 +759,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     protected_ability_fields = analysis["protected_ability_fields"]
     jass_add_protected_fields = analysis["jass_add_protected_fields"]
     effective_unit_stats = analysis["effective_unit_stats"]
+    protected_unit_stats = analysis["protected_unit_stats"]
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
@@ -988,6 +989,56 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 row["byte_offset"],
             ])
 
+    with (script_dir / "protected-unit-stats.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "rawcode", "rawcode_integer", "names", "source_fingerprint", "override_field_count",
+            "hp", "armor", "defense_type", "move_speed",
+            "attack1_base_damage", "attack1_dice_number", "attack1_dice_sides",
+            "attack1_cooldown_microseconds", "attack1_cooldown", "attack1_range",
+            "attack2_base_damage", "attack2_dice_number", "attack2_dice_sides",
+            "attack2_cooldown_microseconds", "attack2_cooldown", "attack2_range",
+            "encoded_values_json", "source_function", "byte_offset",
+        ])
+        decoded_fields = [
+            "hp", "armor", "defense_type", "move_speed",
+            "attack1_base_damage", "attack1_dice_number", "attack1_dice_sides",
+            "attack1_cooldown_microseconds", "attack1_range",
+            "attack2_base_damage", "attack2_dice_number", "attack2_dice_sides",
+            "attack2_cooldown_microseconds", "attack2_range",
+        ]
+        for row in protected_unit_stats:
+            integer_id = int(row["unit_id"])
+            rawcode, categories, _tables, names, _definitions = rawcode_metadata(integer_id)
+            if categories != "units":
+                raise ValueError(f"protected UnitStat row {rawcode} does not resolve uniquely to a unit object")
+            writer.writerow([
+                rawcode,
+                integer_id,
+                names,
+                row["source_fingerprint"],
+                sum(row[field] is not None for field in decoded_fields),
+                row["hp"],
+                row["armor"],
+                row["defense_type"],
+                row["move_speed"],
+                row["attack1_base_damage"],
+                row["attack1_dice_number"],
+                row["attack1_dice_sides"],
+                row["attack1_cooldown_microseconds"],
+                row["attack1_cooldown"],
+                row["attack1_range"],
+                row["attack2_base_damage"],
+                row["attack2_dice_number"],
+                row["attack2_dice_sides"],
+                row["attack2_cooldown_microseconds"],
+                row["attack2_cooldown"],
+                row["attack2_range"],
+                json.dumps(row["encoded_values"], separators=(",", ":")),
+                row["source_function"],
+                row["byte_offset"],
+            ])
+
     traces_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
     with (script_dir / "rawcode-mutator-traces.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
@@ -1080,6 +1131,19 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "effective_unit_stat_rows": len(effective_unit_stats),
         "effective_unit_stat_buildings": len({int(row["building_id"]) for row in effective_unit_stats}),
         "effective_unit_stat_units": len({int(row["unit_id"]) for row in effective_unit_stats}),
+        "protected_unit_stat_rows": len(protected_unit_stats),
+        "protected_unit_stat_units": len({int(row["unit_id"]) for row in protected_unit_stats}),
+        "protected_unit_stat_override_assignments": sum(
+            row[field] is not None
+            for row in protected_unit_stats
+            for field in (
+                "hp", "armor", "defense_type", "move_speed",
+                "attack1_base_damage", "attack1_dice_number", "attack1_dice_sides",
+                "attack1_cooldown_microseconds", "attack1_range",
+                "attack2_base_damage", "attack2_dice_number", "attack2_dice_sides",
+                "attack2_cooldown_microseconds", "attack2_range",
+            )
+        ),
         "runtime_mutator_trace_rows": len(rawcode_mutator_traces),
         "rawcodes_with_runtime_mutator_paths": len(traces_by_rawcode),
         "runtime_mutator_sites_with_rawcode_paths": len({

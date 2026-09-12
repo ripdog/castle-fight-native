@@ -229,15 +229,15 @@ def _function_body_tokens(
     return start, list(iter_lua_tokens(data[start:end]))
 
 
-def _call_arguments(tokens: list[LuaToken], callee_index: int) -> tuple[list[list[LuaToken]], int]:
-    if callee_index + 1 >= len(tokens) or tokens[callee_index + 1].text != "(":
-        raise ValueError(f"expected call after {tokens[callee_index].text!r}")
+def _parenthesized_arguments(tokens: list[LuaToken], opening_index: int) -> tuple[list[list[LuaToken]], int]:
+    if opening_index >= len(tokens) or tokens[opening_index].text != "(":
+        raise ValueError("expected Lua opening parenthesis")
     args: list[list[LuaToken]] = []
     current: list[LuaToken] = []
     paren_depth = 1
     bracket_depth = 0
     brace_depth = 0
-    index = callee_index + 2
+    index = opening_index + 1
     while index < len(tokens):
         token = tokens[index]
         if token.kind == "symbol":
@@ -262,10 +262,16 @@ def _call_arguments(tokens: list[LuaToken], callee_index: int) -> tuple[list[lis
                 index += 1
                 continue
         if paren_depth <= 0 or bracket_depth < 0 or brace_depth < 0:
-            raise ValueError(f"malformed Lua call near byte {tokens[callee_index].start}")
+            raise ValueError(f"malformed Lua parenthesized expression near byte {tokens[opening_index].start}")
         current.append(token)
         index += 1
-    raise ValueError(f"unterminated Lua call near byte {tokens[callee_index].start}")
+    raise ValueError(f"unterminated Lua parenthesized expression near byte {tokens[opening_index].start}")
+
+
+def _call_arguments(tokens: list[LuaToken], callee_index: int) -> tuple[list[list[LuaToken]], int]:
+    if callee_index + 1 >= len(tokens) or tokens[callee_index + 1].text != "(":
+        raise ValueError(f"expected call after {tokens[callee_index].text!r}")
+    return _parenthesized_arguments(tokens, callee_index + 1)
 
 
 def _numeric_literal_text(tokens: list[LuaToken]) -> str:
@@ -613,6 +619,125 @@ def _extract_effective_unit_stats(
             "source_function": "xO",
         })
         index = cursor
+
+    return rows
+
+
+UNIT_STAT_SENTINEL = 2_147_483_647
+UNIT_STAT_FIELDS = (
+    "hp",
+    "armor",
+    "defense_type",
+    "move_speed",
+    "attack1_base_damage",
+    "attack1_dice_number",
+    "attack1_dice_sides",
+    "attack1_cooldown_microseconds",
+    "attack1_range",
+    "attack2_base_damage",
+    "attack2_dice_number",
+    "attack2_dice_sides",
+    "attack2_cooldown_microseconds",
+    "attack2_range",
+)
+
+
+def _unit_stat_decode_key(unit_id: int, field_index: int) -> int:
+    """Mirror the visible Wurst cP() key function used by dP()."""
+    return ((unit_id // (field_index + 1) + field_index * 977 + 7331) % 4093) + 101
+
+
+def _extract_protected_unit_stats(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover the protected UnitStat source rows encoded in jP.
+
+    The generated jP initializer calls one protected row-loader through `_I`
+    with sixteen integer arguments: unit rawcode, source fingerprint, then the
+    fourteen UnitStat fields consumed by UnitStat_applyTo. The visible cP/dP
+    helpers define the exact per-unit/per-column encoding. 2147483647 is the
+    encoded "no override" sentinel; cooldown overrides are stored in integer
+    microseconds and converted by the protected loader before application.
+    """
+    body = _function_body_tokens(data, functions, "jP")
+    if body is None:
+        return []
+    function_start, tokens = body
+    rows: list[dict[str, object]] = []
+    seen_units: set[int] = set()
+    index = 0
+
+    while index < len(tokens):
+        token = tokens[index]
+        if token.kind != "ident" or token.text != "_I":
+            index += 1
+            continue
+        if index + 1 >= len(tokens) or tokens[index + 1].text != "[":
+            raise ValueError(f"UnitStat jP registry call missing [ at byte {function_start + token.start}")
+
+        depth = 0
+        cursor = index + 1
+        closing = None
+        while cursor < len(tokens):
+            current = tokens[cursor]
+            if current.text == "[":
+                depth += 1
+            elif current.text == "]":
+                depth -= 1
+                if depth == 0:
+                    closing = cursor
+                    break
+            cursor += 1
+        if closing is None:
+            raise ValueError(f"UnitStat jP registry lookup is unterminated at byte {function_start + token.start}")
+        opening = closing + 1
+        if opening >= len(tokens) or tokens[opening].text != "(":
+            raise ValueError(f"UnitStat jP registry lookup is not called at byte {function_start + token.start}")
+        args, next_index = _parenthesized_arguments(tokens, opening)
+        if len(args) != 16:
+            raise ValueError(f"UnitStat jP row must contain 16 integer arguments, got {len(args)}")
+
+        integers: list[int] = []
+        for arg in args:
+            if len(arg) != 1 or arg[0].kind != "number" or arg[0].integer_value is None:
+                raise ValueError(f"UnitStat jP row contains non-integer argument near byte {function_start + token.start}")
+            integers.append(int(arg[0].integer_value))
+
+        unit_id = integers[0]
+        fingerprint = integers[1]
+        if unit_id <= 0:
+            raise ValueError(f"UnitStat jP row has invalid unit ID {unit_id}")
+        if unit_id in seen_units:
+            raise ValueError(f"duplicate UnitStat jP row for unit ID {unit_id}")
+        seen_units.add(unit_id)
+
+        encoded_values = integers[2:]
+        decoded: dict[str, int | None] = {}
+        for field_index, (field, encoded) in enumerate(zip(UNIT_STAT_FIELDS, encoded_values, strict=True)):
+            decoded[field] = (
+                None
+                if encoded == UNIT_STAT_SENTINEL
+                else encoded - _unit_stat_decode_key(unit_id, field_index)
+            )
+
+        row: dict[str, object] = {
+            "unit_id": unit_id,
+            "source_fingerprint": fingerprint,
+            "encoded_values": encoded_values,
+            "byte_offset": function_start + token.start,
+            "source_function": "jP",
+        }
+        row.update(decoded)
+        for attack in (1, 2):
+            micros = decoded[f"attack{attack}_cooldown_microseconds"]
+            row[f"attack{attack}_cooldown"] = (
+                None
+                if micros is None
+                else _decimal_text(Decimal(micros) / Decimal(1_000_000))
+            )
+        rows.append(row)
+        index = next_index
 
     return rows
 
@@ -984,6 +1109,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     jass_add_protected_fields = _extract_jass_add_protected_fields(data, functions)
     _cross_check_protected_ability_fields(protected_ability_fields, jass_add_protected_fields)
     effective_unit_stats = _extract_effective_unit_stats(data, functions)
+    protected_unit_stats = _extract_protected_unit_stats(data, functions)
 
     rawcode_mutator_traces, resolved_call_edges = _rawcode_mutator_traces(
         functions,
@@ -1010,6 +1136,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "protected_ability_fields": protected_ability_fields,
         "jass_add_protected_fields": jass_add_protected_fields,
         "effective_unit_stats": effective_unit_stats,
+        "protected_unit_stats": protected_unit_stats,
         "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
     }

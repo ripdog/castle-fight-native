@@ -135,6 +135,27 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(barracks["footprint_width_world_units"], "128")
         self.assertEqual(barracks["footprint_hex_rows"], "5555/5555/5555/5555")
 
+    def test_protected_unit_stat_overlay_recovers_attack_primitives(self) -> None:
+        with (self.resolved / "protected-unit-stats.tsv").open(encoding="utf-8") as handle:
+            units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(units), 549)
+        self.assertEqual(units["e000"]["static_hp"], "1")
+        self.assertEqual(units["e000"]["override_hp"], "460")
+        self.assertEqual(units["e000"]["unitstat_hp"], "460")
+        self.assertEqual(units["e000"]["unitstat_attack1_base_damage"], "49")
+        self.assertEqual(units["e000"]["unitstat_attack1_dice_number"], "1")
+        self.assertEqual(units["e000"]["unitstat_attack1_dice_sides"], "1")
+        self.assertEqual(units["e000"]["unitstat_attack1_cooldown"], "1.75")
+        self.assertEqual(units["e000"]["unitstat_attack1_range"], "350")
+        self.assertEqual(units["h00W"]["unitstat_attack1_cooldown"], "1.8")
+        self.assertEqual(units["h00W"]["unitstat_attack1_range"], "650")
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["protected_unit_stat_rows"], 549)
+        self.assertEqual(summary["protected_unit_stat_override_assignments"], 1887)
+        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["armor"], {"unitstat-match": 162})
+        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["hp"]["unitstat-match"], 160)
+        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["dps"]["unitstat-match"], 157)
+
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["unresolved_base_objects"], [])
