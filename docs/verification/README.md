@@ -23,15 +23,16 @@ Implemented:
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
 - authoritative `Bounce` projectiles with persistent chain identity, bounded hit history, integer travel/falloff, and keyed deterministic subsequent-target selection;
 - attack-capable buildings with independent target/cooldown state, footprint-based static acquisition, shared canonical unit/building combat ordering, and ordinary projectile delivery;
-- projectile/targeting-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, target retentions/changes, and ally-defense candidate counts;
+- automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, atomic cast commitment, and immediate non-retaliatory damage effects;
+- projectile/targeting/ability-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, automatic evaluations/casts/effects/candidates, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
 - failed spawn attempts are lost rather than backlogged;
 - dedicated Rayon worker pool configurable per simulation instance;
 - cross-worker determinism tests;
-- phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
+- phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, automatic abilities, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, and long-range attack-building release benchmarks;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, and automatic-spellcasting release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -39,7 +40,7 @@ Not implemented yet:
 
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
-- mana, automatic abilities, or legendary abilities;
+- broader ability/effect vocabulary, statuses/buffs, manual/legendary ability activation, and multi-ability buildings;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -80,6 +81,11 @@ cargo run --release -p castle-fight-sim-bench -- \
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario tower --units 700,1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
+
+# Automatic spellcasting / random-target density
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario ability --units 700,1000,5000,10000 \
+  --workers 1,8 --warmup 2 --ticks 20
 ```
 
 The benchmark exits non-zero if different worker counts produce different final canonical checksums for the same fixture.
@@ -88,7 +94,7 @@ The benchmark exits non-zero if different worker counts produce different final 
 
 The original Castle Fight compatibility target caps total units at **700**, so 700-unit cases are now first-class benchmark points. The 1k/5k/10k workloads remain deliberate architecture stress probes rather than implied gameplay support targets.
 
-On the Ryzen 5 5600 reference machine, the ordinary 700-unit fixtures are far below a 30 Hz tick budget even on one worker: lane `0.782 ms/tick`, cage `1.151 ms/tick`, and crossing crowd `0.864 ms/tick`. The corresponding eight-worker runs are `0.831`, `0.950`, and `1.055 ms/tick`; at this scale thread-pool overhead often outweighs parallel savings. Worker-count checksums match for every fixture.
+On the Ryzen 5 5600 reference machine, the ordinary 700-unit fixtures are far below a 30 Hz tick budget even on one worker: lane `0.732 ms/tick`, cage `0.995 ms/tick`, and crossing crowd `0.686 ms/tick`. The corresponding eight-worker runs are `0.642`, `0.675`, and `0.699 ms/tick`; these phases are so small that worker-count differences should be treated as modest/noisy rather than a requirement for live-match scaling. Worker-count checksums match for every fixture.
 
 The intentionally extreme delivery-density fixtures also have substantial headroom at 700 total units, despite every attacker being allowed to launch every tick:
 
@@ -418,19 +424,40 @@ The `tower` stress fixture uses the requested unit count as the unit population 
 
 | Units | Towers | Workers | ms/tick | Targeting ms/tick | Checksum ms/tick | Peak projectiles | Launches/tick | Final checksum |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 700 | 175 | 1 | 1.241 | 0.391 | 0.328 | 1,005 | 175 | `a615f6ff51dd5ee7` |
-| 700 | 175 | 8 | 1.175 | 0.191 | 0.342 | 1,005 | 175 | `a615f6ff51dd5ee7` |
-| 1,000 | 250 | 1 | 2.121 | 0.782 | 0.506 | 1,427 | 250 | `de0a3f1bdc2cadee` |
-| 1,000 | 250 | 8 | 1.622 | 0.266 | 0.496 | 1,427 | 250 | `de0a3f1bdc2cadee` |
-| 5,000 | 500 | 1 | 12.205 | 7.252 | 1.648 | 2,687 | 500 | `5ab9e3d375a18c38` |
-| 5,000 | 500 | 8 | 6.086 | 1.658 | 1.594 | 2,687 | 500 | `5ab9e3d375a18c38` |
-| 10,000 | 500 | 1 | 22.590 | 13.423 | 2.848 | 2,687 | 500 | `ee22a1ecd70e9250` |
-| 10,000 | 500 | 8 | 11.697 | 3.380 | 2.955 | 2,687 | 500 | `ee22a1ecd70e9250` |
+| 700 | 175 | 1 | 1.179 | 0.351 | 0.333 | 1,005 | 175 | `b8af0d7ccb046cf3` |
+| 700 | 175 | 8 | 0.979 | 0.116 | 0.331 | 1,005 | 175 | `b8af0d7ccb046cf3` |
+| 1,000 | 250 | 1 | 1.970 | 0.665 | 0.496 | 1,427 | 250 | `91ec3c22e5f4377e` |
+| 1,000 | 250 | 8 | 1.539 | 0.258 | 0.500 | 1,427 | 250 | `91ec3c22e5f4377e` |
+| 5,000 | 500 | 1 | 10.757 | 6.095 | 1.618 | 2,687 | 500 | `2990c09fae6fb168` |
+| 5,000 | 500 | 8 | 5.557 | 1.331 | 1.624 | 2,687 | 500 | `2990c09fae6fb168` |
+| 10,000 | 500 | 1 | 20.883 | 12.182 | 2.718 | 2,687 | 500 | `4d78726f1e519e7c` |
+| 10,000 | 500 | 8 | 10.219 | 2.670 | 2.705 | 2,687 | 500 | `4d78726f1e519e7c` |
 
 At the actual 700-unit compatibility ceiling, the tower-heavy fixture is ~1.2 ms/tick including the full checksum. The larger cases expose a predictable targeting cost from thousands of stationary passive units receiving tower hits: because the distant tower is not a valid retaliation/pursuit target for those units, they can perform cheap unsuccessful ally-defense queries. At 10,000 units this becomes the dominant one-worker targeting cost, but it is not material at the compatibility scale and does not justify weakening target semantics. Worker-count checksums match at every scale.
 
+## Automatic spellcasting / mana density — 2026-09-12
+
+The first executable ability slice implements one automatic ability on a spellcasting building. Mana regenerates with deterministic integer arithmetic during the timer phase and clamps at the authored maximum. Eligibility/target evaluation runs before ordinary combat targeting. The initial target policy chooses a random hostile unit within footprint-based range by assigning each eligible candidate a keyed deterministic rank from match seed, caster `SimId`, stable `AbilityId`, cast sequence, and candidate `SimId`; minimum `(rank, SimId)` wins independently of grid enumeration and worker order.
+
+Cast commitment is atomic and canonical. Intents resolve by source `SimId`, ability ID, cast sequence, then target `SimId`; source/resource/readiness and target liveness/team/range are revalidated before mana is spent. A successful cast subtracts mana, sets `ready_tick = cast_tick + cooldown_ticks`, increments cast sequence, then applies the immediate effect. Focused regressions verify exact regen/cost/cooldown cadence, 1/2/8-worker checksum identity, and that an ability-phase lethal hit suppresses the victim's later ordinary attack in the same tick. Building spell damage is deliberately non-retaliatory: it does not populate `last_attacker` or nearby-ally defense alerts, unlike an ordinary attack-building strike.
+
+The `ability` density fixture uses the requested unit count as durable stationary combat units and adds one automatic caster per four units, capped at 500 casters. Every caster is mana-ready, casts every tick, has 100-world-unit range, and chooses among the full hostile unit population. This is deliberately harsher than realistic content frequency and directly exercises deterministic random candidate evaluation.
+
+| Units | Casters | Workers | ms/tick | Ability ms/tick | Evaluations/tick | Casts/tick | Candidates/evaluation | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 700 | 175 | 1 | 2.682 | 1.719 | 175 | 175 | 350.00 | `599654a192e81d81` |
+| 700 | 175 | 8 | 1.145 | 0.381 | 175 | 175 | 350.00 | `599654a192e81d81` |
+| 1,000 | 250 | 1 | 4.507 | 2.909 | 250 | 250 | 500.00 | `b37b601337166f17` |
+| 1,000 | 250 | 8 | 1.663 | 0.584 | 250 | 250 | 500.00 | `b37b601337166f17` |
+| 5,000 | 500 | 1 | 26.752 | 16.639 | 500 | 500 | 2,500.00 | `5a57e2c7cb716dc8` |
+| 5,000 | 500 | 8 | 7.984 | 3.275 | 500 | 500 | 2,500.00 | `5a57e2c7cb716dc8` |
+| 10,000 | 500 | 1 | 46.574 | 27.831 | 500 | 500 | 4,725.00 | `2abd5030f88d220d` |
+| 10,000 | 500 | 8 | 15.175 | 5.306 | 500 | 500 | 4,725.00 | `2abd5030f88d220d` |
+
+At the actual 700-unit compatibility ceiling, even this all-casters-every-tick fixture is only 2.68 ms/tick on one worker and 1.15 ms on eight, including the full canonical checksum. Unlike the smaller ordinary-combat fixtures, this phase contains enough independent candidate-query work to amortize Rayon overhead: eight workers reduce ability evaluation from 1.72 to 0.38 ms at 700 units and from 27.83 to 5.31 ms in the 10k torture case. This validates the intended architecture choice of parallel evaluation plus canonical serial commitment rather than requiring all simulation phases to exhibit multicore speedup.
+
 ## Current interpretation
 
-Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage, ballistic post-movement splash queries, and independently targeted long-range attack buildings also remain viable at the 700-unit compatibility scale. Bounce is functionally/deterministically viable, but extreme simultaneous chain density exposes canonically ordered candidate evaluation as a measurable scaling risk that should be revisited only with realistic content frequency/support targets or an acceleration structure that provably preserves the keyed rule.
+Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage, ballistic post-movement splash queries, independently targeted long-range attack buildings, and automatic mana/random-target casting all remain viable at the 700-unit compatibility scale. Bounce is functionally/deterministically viable, but extreme simultaneous chain density exposes canonically ordered candidate evaluation as a measurable scaling risk that should be revisited only with realistic content frequency/support targets or an acceleration structure that provably preserves the keyed rule.
 
-All four ordinary delivery architecture classes and attack-building source semantics now have executable verification coverage. The next verification work should return to longer realistic playable matches and then stress the next rule-heavy system most likely to affect simulation architecture: deterministic automatic ability/mana scheduling. Production UI/content/networking should still wait until those simulation rules have been exercised.
+All four ordinary delivery architecture classes, attack-building source semantics, and the base automatic ability/mana scheduler now have executable deterministic verification coverage. The automatic-caster probe also shows where multicore execution is materially useful: expensive independent target evaluation scales well while canonical effect commitment remains ordered. The next verification work should return to longer realistic playable matches and then choose the next rule-heavy compatibility slice from observed map behavior—likely status/stun timing or a representative buff/area ability—rather than expanding into production UI/networking prematurely.
