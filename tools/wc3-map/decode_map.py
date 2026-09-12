@@ -920,9 +920,9 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         writer.writerow([
             "unit_rawcode", "unit_rawcode_integer", "unit_names",
             "ability_rawcode", "ability_rawcode_integer", "ability_names",
-            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions",
+            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions", "dynamic_callback_functions",
             "scheduled_delays_json", "periodic_intervals_json", "random_real_ranges_json",
-            "direct_effect_rawcodes", "reachable_effect_paths_json",
+            "direct_map_rawcodes", "reachable_map_rawcode_paths_json", "semantic_effect_sites_json", "source_numeric_literals_json",
             "handler_function", "evidence_kind", "byte_offset",
         ])
         for row in unit_spell_mechanics:
@@ -936,9 +936,9 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             ability_names = ""
             if ability_id in object_metadata:
                 ability_rawcode, _acategories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
-            direct_effect_rawcodes = [rawcode_text(int(value)) for value in row["direct_effect_rawcodes"]]
+            direct_map_rawcodes = [rawcode_text(int(value)) for value in row["direct_map_rawcodes"]]
             reachable_paths = []
-            for path in row["reachable_effect_rawcode_paths"]:
+            for path in row["reachable_map_rawcode_paths"]:
                 integer_id = int(path["rawcode_integer"])
                 rawcode = rawcode_text(integer_id)
                 names = ""
@@ -957,11 +957,11 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 unit_rawcode, unit_id, unit_names,
                 ability_rawcode, ability_id, ability_names,
                 row["mechanic_kind"], ",".join(row["direct_calls"]), ",".join(row["helper_functions"]),
-                ",".join(row["delayed_callback_functions"]),
+                ",".join(row["delayed_callback_functions"]), ",".join(row["dynamic_callback_functions"]),
                 script_json(list(row["scheduled_delays"])), script_json(list(row["periodic_intervals"])),
                 script_json([list(values) for values in row["random_real_ranges"]]),
-                ",".join(direct_effect_rawcodes), script_json(reachable_paths),
-                row["handler_function"], row["evidence_kind"], row["byte_offset"],
+                ",".join(direct_map_rawcodes), script_json(reachable_paths), script_json(list(row["semantic_effect_sites"])),
+                script_json(list(row["source_numeric_literals"])), row["handler_function"], row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "corpse-building-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1492,6 +1492,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "unit_spell_mechanics": len(unit_spell_mechanics),
         "unit_spell_mechanic_kinds": dict(sorted(Counter(str(row["mechanic_kind"]) for row in unit_spell_mechanics).items())),
         "unit_spell_mechanics_with_delayed_callbacks": sum(bool(row["delayed_callback_functions"]) for row in unit_spell_mechanics),
+        "unit_spell_mechanics_with_dynamic_callbacks": sum(bool(row["dynamic_callback_functions"]) for row in unit_spell_mechanics),
         "unit_spell_inlined_registrations": sum(
             str(row["evidence_kind"]) == "inlined-registration" for row in unit_spell_registrations
         ),

@@ -1741,8 +1741,8 @@ def main() -> None:
                 spell = unit_spell_by_pair.get(pair)
                 if spell is None:
                     raise ValueError(f"unit-spell mechanic has no scripted registration: {pair}")
-                reachable = json.loads(mechanic["reachable_effect_paths_json"])
-                enriched_effects: list[dict[str, Any]] = []
+                reachable = json.loads(mechanic["reachable_map_rawcode_paths_json"])
+                enriched_objects: list[dict[str, Any]] = []
                 for effect in reachable:
                     rawcode = str(effect["rawcode"])
                     enriched: dict[str, Any] = dict(effect)
@@ -1771,7 +1771,7 @@ def main() -> None:
                             "attack1_weapon_type": unit_effect["attack1_weapon_type"],
                             "attack1_targets": unit_effect["attack1_targets"],
                         }
-                    enriched_effects.append(enriched)
+                    enriched_objects.append(enriched)
                 unit_spell_mechanic_rows.append([
                     mechanic["unit_rawcode"], spell["unit_name"],
                     spell["production_building_rawcode"], spell["production_building_names"],
@@ -1779,10 +1779,11 @@ def main() -> None:
                     spell["effective_mana_cost"], spell["effective_cooldown"],
                     spell["target_mode"], spell["target_mode_label"], spell["base_order"],
                     mechanic["mechanic_kind"], mechanic["direct_calls"], mechanic["helper_functions"],
-                    mechanic["delayed_callback_functions"], mechanic["scheduled_delays_json"],
+                    mechanic["delayed_callback_functions"], mechanic["dynamic_callback_functions"], mechanic["scheduled_delays_json"],
                     mechanic["periodic_intervals_json"], mechanic["random_real_ranges_json"],
-                    mechanic["direct_effect_rawcodes"],
-                    json.dumps(enriched_effects, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+                    mechanic["direct_map_rawcodes"],
+                    json.dumps(enriched_objects, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+                    mechanic["semantic_effect_sites_json"], mechanic["source_numeric_literals_json"],
                     mechanic["handler_function"], mechanic["evidence_kind"], mechanic["byte_offset"],
                 ])
     write_tsv(
@@ -1791,9 +1792,10 @@ def main() -> None:
             "unit_rawcode", "unit_name", "production_building_rawcode", "production_building_names",
             "ability_rawcode", "ability_name", "ability_tip", "ability_ubertip",
             "effective_mana_cost", "effective_cooldown", "target_mode", "target_mode_label", "base_order",
-            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions",
+            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions", "dynamic_callback_functions",
             "scheduled_delays_json", "periodic_intervals_json", "random_real_ranges_json",
-            "direct_effect_rawcodes", "reachable_effect_objects_json", "handler_function", "evidence_kind", "byte_offset",
+            "direct_map_rawcodes", "reachable_map_objects_json", "semantic_effect_sites_json", "source_numeric_literals_json",
+            "handler_function", "evidence_kind", "byte_offset",
         ],
         unit_spell_mechanic_rows,
     )
@@ -2351,6 +2353,7 @@ def main() -> None:
         "scripted_unit_spell_mechanic_rows": len(unit_spell_mechanic_rows),
         "scripted_unit_spell_mechanic_kinds": dict(sorted(Counter(row[13] for row in unit_spell_mechanic_rows).items())),
         "scripted_unit_spell_mechanics_with_delayed_callbacks": sum(bool(row[16]) for row in unit_spell_mechanic_rows),
+        "scripted_unit_spell_mechanics_with_dynamic_callbacks": sum(bool(row[17]) for row in unit_spell_mechanic_rows),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
@@ -2386,7 +2389,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
-            "unit-spell-mechanics.tsv gives every scripted unit spell a complete first-layer implementation profile: direct primitives/helper calls, exact generated doAfter callback targets, timing literals and bounded named-call rawcode evidence enriched with resolved ability/unit object data; deeper callback state machines remain separate evidence rather than inferred behavior",
+            "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when generated closure dispatch is statically exact and the map Lua is never executed",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
             "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",

@@ -139,7 +139,8 @@
     "unit-immediate-order": 1,
     "unit-target-order": 1
   },
-  "scripted_unit_spell_mechanics_with_delayed_callbacks": 18,
+  "scripted_unit_spell_mechanics_with_delayed_callbacks": 23,
+  "scripted_unit_spell_mechanics_with_dynamic_callbacks": 28,
   "scripted_building_spell_rows": 15,
   "scripted_building_spell_mana_timed_rows": 15,
   "scripted_building_spell_mechanic_rows": 15,
@@ -183,7 +184,7 @@
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
     "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
     "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
-    "unit-spell-mechanics.tsv gives every scripted unit spell a complete first-layer implementation profile: direct primitives/helper calls, exact generated doAfter callback targets, timing literals and bounded named-call rawcode evidence enriched with resolved ability/unit object data; deeper callback state machines remain separate evidence rather than inferred behavior",
+    "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when generated closure dispatch is statically exact and the map Lua is never executed",
     "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
     "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
     "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",

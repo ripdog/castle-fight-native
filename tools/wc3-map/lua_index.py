@@ -1827,19 +1827,30 @@ def _extract_unit_spell_mechanics(
     for (function_name, integer_id), _count in function_rawcodes.items():
         rawcodes_by_function[function_name].add(int(integer_id))
 
-    delayed_callbacks_by_class: dict[str, list[str]] = defaultdict(list)
+    callback_dispatch_by_class: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for alias in function_aliases:
         alias_name = str(alias["alias"])
         if "." not in alias_name:
             continue
         class_name, slot = alias_name.split(".", 1)
         target = str(alias["target_function"])
-        if "CallbackSingle_doAfter" not in slot:
+        if not target.startswith(slot):
             continue
-        if target.startswith(slot):
-            delayed_callbacks_by_class[class_name].append(target)
-    for class_name in delayed_callbacks_by_class:
-        delayed_callbacks_by_class[class_name] = sorted(set(delayed_callbacks_by_class[class_name]))
+        dispatch_kind = ""
+        if "CallbackSingle_doAfter" in slot and "_call" in slot:
+            dispatch_kind = "doAfter"
+        elif "CallbackPeriodic_doPeriodically" in slot and "_call" in slot:
+            dispatch_kind = "doPeriodically"
+        elif "ForGroupCallback_forUnitsInRange" in slot and "_callback" in slot:
+            dispatch_kind = "forUnitsInRange"
+        elif "ForGroupCallback_forUnitsInRect" in slot and "_callback" in slot:
+            dispatch_kind = "forUnitsInRect"
+        elif "ForGroupCallback_forUnitsOfPlayer" in slot and "_callback" in slot:
+            dispatch_kind = "forUnitsOfPlayer"
+        if dispatch_kind:
+            callback_dispatch_by_class[class_name].append((dispatch_kind, target))
+    for class_name in callback_dispatch_by_class:
+        callback_dispatch_by_class[class_name] = sorted(set(callback_dispatch_by_class[class_name]))
 
     primitive_priority = (
         ("dummyCastTargetWithVision", "dummy-target-ability-with-vision"),
@@ -1865,6 +1876,7 @@ def _extract_unit_spell_mechanics(
         "__wurst_safe_DestroyEffect", "__wurst_safe_UnitApplyTimedLife", "__wurst_ensureInt",
         "unit_issueTargetOrderById", "unit_issueImmediateOrderById", "unit_issuePointOrderById",
         "orderCodeAttack", "addProtectedAbility", "unit_removeAbility", "widget_getLife",
+        "forUnitsInRange", "forUnitsInRect", "forUnitsOfPlayer",
     }
 
     def call_arguments(tokens: list[LuaToken], callee: str) -> list[list[list[LuaToken]]]:
@@ -1912,21 +1924,26 @@ def _extract_unit_spell_mechanics(
         if mechanic_kind == "script-handler" and helper_calls:
             mechanic_kind = "delegated-helper"
 
-        callback_classes: set[str] = set()
-        for index in range(len(tokens) - 4):
-            if (
-                tokens[index].kind == "ident"
-                and tokens[index + 1].text == ":"
-                and tokens[index + 2].kind == "ident"
-                and tokens[index + 2].text.startswith("create")
-                and tokens[index + 3].text == "("
-            ):
-                callback_classes.add(tokens[index].text)
-        delayed_callbacks = sorted({
-            callback
-            for class_name in callback_classes
-            for callback in delayed_callbacks_by_class.get(class_name, [])
-        })
+        def dynamic_successors(function_tokens: list[LuaToken]) -> list[tuple[str, str]]:
+            callback_classes: set[str] = set()
+            for index in range(len(function_tokens) - 4):
+                if (
+                    function_tokens[index].kind == "ident"
+                    and function_tokens[index + 1].text == ":"
+                    and function_tokens[index + 2].kind == "ident"
+                    and function_tokens[index + 2].text.startswith("create")
+                    and function_tokens[index + 3].text == "("
+                ):
+                    callback_classes.add(function_tokens[index].text)
+            return sorted({
+                dispatch
+                for class_name in callback_classes
+                for dispatch in callback_dispatch_by_class.get(class_name, [])
+            })
+
+        direct_dynamic_dispatch = dynamic_successors(tokens)
+        delayed_callbacks = sorted(target for kind, target in direct_dynamic_dispatch if kind == "doAfter")
+        dynamic_callbacks = sorted(target for _kind, target in direct_dynamic_dispatch)
 
         scheduled_delays: list[str] = []
         for args in call_arguments(tokens, "doAfter"):
@@ -1950,11 +1967,12 @@ def _extract_unit_spell_mechanics(
 
         direct_rawcodes = sorted(rawcodes_by_function.get(handler, set()))
 
-        # Follow only exact named call edges, plus generated doAfter callback
-        # assignments whose closure class is visible in this handler. Two named
-        # hops are enough to surface the immediate effect objects of the current
-        # map while keeping evidence paths short and auditable.
+        # Follow exact named call edges plus generated doAfter callback dispatch
+        # whose closure class is visible at each visited function. Callback
+        # chains are bounded to four total edges so multi-stage spell state
+        # machines are retained without turning this into unbounded decompilation.
         paths: dict[int, tuple[str, ...]] = {}
+        function_paths: dict[str, tuple[str, ...]] = {handler: (handler,)}
         frontier: list[tuple[str, tuple[str, ...]]] = [(handler, (handler,))]
         seen_depth: dict[str, int] = {handler: 0}
         while frontier:
@@ -1964,18 +1982,94 @@ def _extract_unit_spell_mechanics(
                 prior = paths.get(integer_id)
                 if prior is None or len(path) < len(prior) or (len(path) == len(prior) and path < prior):
                     paths[integer_id] = path
-            if depth >= 2:
+            if depth >= 4:
                 continue
-            successors = sorted({callee for callee in calls_by_function.get(function_name, []) if callee in defined})
-            if function_name == handler:
-                successors.extend(delayed_callbacks)
-                successors = sorted(set(successors))
+            successors = {
+                callee
+                for callee in calls_by_function.get(function_name, [])
+                if callee in defined
+                and callee not in infrastructure_calls
+                and not callee.startswith("__wurst_safe_")
+                and not callee.startswith("dummyCast")
+                and not callee.startswith("dummyCarrier")
+            }
+            function_body = _function_body_tokens(data, functions, function_name)
+            if function_body is not None:
+                dispatch_successors = dynamic_successors(function_body[1])
+                successors.update(target for _kind, target in dispatch_successors)
+                if function_name != handler:
+                    delayed_callbacks.extend(target for kind, target in dispatch_successors if kind == "doAfter")
+                    dynamic_callbacks.extend(target for _kind, target in dispatch_successors)
+            successors = sorted(successors)
             for successor in successors:
                 next_depth = depth + 1
                 if seen_depth.get(successor, 99) < next_depth:
                     continue
                 seen_depth[successor] = next_depth
-                frontier.append((successor, (*path, successor)))
+                next_path = (*path, successor)
+                function_paths[successor] = next_path
+                frontier.append((successor, next_path))
+
+        delayed_callbacks = sorted(set(delayed_callbacks))
+        dynamic_callbacks = sorted(set(dynamic_callbacks))
+
+        semantic_callees = {
+            "__wurst_safe_UnitDamageTarget", "__wurst_safe_SetWidgetLife", "__wurst_safe_SetUnitState",
+            "__wurst_safe_BlzSetUnitMaxHP", "__wurst_safe_SetUnitAbilityLevel",
+            "__wurst_safe_BlzStartUnitAbilityCooldown", "__wurst_safe_UnitApplyTimedLife",
+            "addProtectedAbility", "unit_removeAbility", "createUnit", "CreateDestructable", "RemoveDestructable",
+            "dummyCastTargetFrom", "dummyCastTargetFrom1", "dummyCastTargetWithVision", "dummyCastPointFrom",
+            "dummyCastImmediateFrom", "dummyCastImmediateFrom1", "dummyCarrierWithAbility",
+            "dummyCarrierWithAbilities1", "dummyCarrierCastImmediate", "forUnitsInRange",
+            "doAfter", "doPeriodically", "unit_issueTargetOrderById", "unit_issueImmediateOrderById",
+            "unit_issuePointOrderById", "orderCodeAttack",
+        }
+        semantic_effect_sites: list[dict[str, object]] = []
+        source_numeric_literals: list[dict[str, object]] = []
+        known_referenced_rawcodes = {integer_id for values in rawcodes_by_function.values() for integer_id in values}
+        for function_name, function_path in sorted(function_paths.items(), key=lambda item: (len(item[1]), item[1])):
+            if function_name in semantic_callees or function_name.startswith("__wurst_safe_"):
+                continue
+            function_body = _function_body_tokens(data, functions, function_name)
+            if function_body is None:
+                continue
+            function_start, function_tokens = function_body
+            literals = []
+            for number_token in function_tokens:
+                if number_token.kind != "number":
+                    continue
+                if number_token.integer_value is not None and int(number_token.integer_value) in known_referenced_rawcodes:
+                    continue
+                literals.append(number_token.text)
+            if literals:
+                source_numeric_literals.append({
+                    "function": function_name,
+                    "path": list(function_path),
+                    "hops": len(function_path) - 1,
+                    "literals": literals,
+                })
+            for token_index, token in enumerate(function_tokens):
+                if token.kind != "ident" or token.text not in semantic_callees:
+                    continue
+                try:
+                    args, _next = _call_arguments(function_tokens, token_index)
+                except ValueError:
+                    continue
+                argument_text = ["".join(part.text for part in argument) for argument in args]
+                numeric_literals = [
+                    [part.text for part in argument if part.kind == "number"]
+                    for argument in args
+                ]
+                semantic_effect_sites.append({
+                    "function": function_name,
+                    "path": list(function_path),
+                    "hops": len(function_path) - 1,
+                    "callee": token.text,
+                    "arguments": argument_text,
+                    "numeric_literals": numeric_literals,
+                    "byte_offset": function_start + token.start,
+                })
+        semantic_effect_sites.sort(key=lambda site: (int(site["byte_offset"]), str(site["callee"])))
 
         rawcode_paths = [
             {"rawcode_integer": integer_id, "path": list(path), "hops": len(path) - 1}
@@ -1989,11 +2083,14 @@ def _extract_unit_spell_mechanics(
             "direct_calls": tuple(direct_calls),
             "helper_functions": tuple(helper_calls),
             "delayed_callback_functions": tuple(delayed_callbacks),
+            "dynamic_callback_functions": tuple(dynamic_callbacks),
             "scheduled_delays": tuple(scheduled_delays),
             "periodic_intervals": tuple(periodic_intervals),
             "random_real_ranges": tuple(tuple(values) for values in random_real_ranges),
-            "direct_effect_rawcodes": tuple(direct_rawcodes),
-            "reachable_effect_rawcode_paths": tuple(rawcode_paths),
+            "direct_map_rawcodes": tuple(direct_rawcodes),
+            "reachable_map_rawcode_paths": tuple(rawcode_paths),
+            "semantic_effect_sites": tuple(semantic_effect_sites),
+            "source_numeric_literals": tuple(source_numeric_literals),
             "evidence_kind": "static-named-call-and-dispatch-evidence",
             "byte_offset": handler_start,
         })

@@ -104,7 +104,8 @@
       "unit-immediate-order": 1,
       "unit-target-order": 1
     },
-    "unit_spell_mechanics_with_delayed_callbacks": 18,
+    "unit_spell_mechanics_with_delayed_callbacks": 23,
+    "unit_spell_mechanics_with_dynamic_callbacks": 28,
     "unit_spell_inlined_registrations": 1,
     "building_spell_mechanics": 15,
     "building_spell_mechanics_with_unresolved_target_filter": 1,

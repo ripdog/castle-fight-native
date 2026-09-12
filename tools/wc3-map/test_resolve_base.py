@@ -346,7 +346,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
     def test_scripted_unit_spell_mechanics_profile_all_handlers_and_effect_links(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_unit_spell_mechanic_rows"], 37)
-        self.assertEqual(summary["scripted_unit_spell_mechanics_with_delayed_callbacks"], 18)
+        self.assertEqual(summary["scripted_unit_spell_mechanics_with_delayed_callbacks"], 23)
+        self.assertEqual(summary["scripted_unit_spell_mechanics_with_dynamic_callbacks"], 28)
         self.assertEqual(sum(summary["scripted_unit_spell_mechanic_kinds"].values()), 37)
         self.assertEqual(summary["scripted_unit_spell_mechanic_kinds"]["delegated-helper"], 12)
 
@@ -357,19 +358,43 @@ class ResolvedEvidenceTests(unittest.TestCase):
         monk = rows["n03E"]
         self.assertEqual(monk["mechanic_kind"], "dummy-point-ability")
         self.assertEqual(json.loads(monk["scheduled_delays_json"]), ["0.1"])
-        monk_effects = {row["rawcode"]: row for row in json.loads(monk["reachable_effect_objects_json"])}
+        monk_effects = {row["rawcode"]: row for row in json.loads(monk["reachable_map_objects_json"])}
         self.assertEqual(json.loads(monk_effects["A0GP"]["ability_level1"]["data_fields_labeled_json"])["Damage Amount"], 40)
 
         twins = rows["n02L"]
         self.assertEqual(twins["mechanic_kind"], "spawn-unit")
         self.assertIn("CallbackSingle_doAfter_RaceChaosAbilities", twins["delayed_callback_functions"])
-        twin_effects = {row["rawcode"]: row for row in json.loads(twins["reachable_effect_objects_json"])}
+        self.assertIn("ForGroupCallback_forUnitsInRange_doAfter_RaceChaosAbilities", twins["dynamic_callback_functions"])
+        twin_effects = {row["rawcode"]: row for row in json.loads(twins["reachable_map_objects_json"])}
         self.assertEqual(twin_effects["h06N"]["unit_object"]["name"], "ClapDummy")
         self.assertEqual(json.loads(twin_effects["A0FS"]["ability_level1"]["data_fields_labeled_json"])["AOE Damage"], 20)
+        twin_literals = {row["function"]: row["literals"] for row in json.loads(twins["source_numeric_literals_json"])}
+        self.assertIn("600.", twin_literals["CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1"])
+        self.assertIn("100.", twin_literals["CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1"])
+
+        flamegunner = rows["z003"]
+        flamegunner_literals = {
+            row["function"]: row["literals"] for row in json.loads(flamegunner["source_numeric_literals_json"])
+        }
+        self.assertIn("300.", flamegunner_literals["CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities2"])
+        self.assertIn("100.", flamegunner_literals["CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities2"])
+
+        witch = rows["n032"]
+        witch_literals = {row["function"]: row["literals"] for row in json.loads(witch["source_numeric_literals_json"])}
+        self.assertEqual(
+            witch_literals["CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities2"].count("75."),
+            2,
+        )
+
+        mine_layer = rows["h06U"]
+        mine_literals = {row["function"]: row["literals"] for row in json.loads(mine_layer["source_numeric_literals_json"])}
+        self.assertIn("50.", mine_literals["mineLayerSpell"])
+        self.assertIn("220.", mine_literals["mineLayerSpell"])
+        self.assertIn("700.", mine_literals["mineLayerSpell"])
 
         trapper = rows["n02G"]
         self.assertEqual(trapper["helper_functions"], "forestTrollTrapperSpell")
-        trapper_effects = {row["rawcode"]: row for row in json.loads(trapper["reachable_effect_objects_json"])}
+        trapper_effects = {row["rawcode"]: row for row in json.loads(trapper["reachable_map_objects_json"])}
         self.assertEqual(trapper_effects["A0FC"]["ability_level1"]["range"], "800")
         self.assertEqual(trapper_effects["A0FC"]["ability_level1"]["duration_normal"], "16")
 
