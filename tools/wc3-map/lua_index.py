@@ -1451,6 +1451,114 @@ def _function_value_links(
     return aliases, value_arguments
 
 
+def _extract_building_spell_registrations(
+    data: bytes,
+    functions: list[dict[str, object]],
+    function_aliases: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover generated building-spell registration tuples and concrete handlers.
+
+    Wurst allocates a closure object (`localVar=Class:createNNN()`) and passes it
+    to a protected registry call `_I[...](buildingRawcode, abilityRawcode,
+    localVar)`. The class prototype table separately assigns
+    `Class.BuildingSpellClosure_cast=Concrete_handler`. Joining those two exact
+    lexical facts recovers a building/ability/handler registration without
+    executing the map or guessing virtual dispatch.
+    """
+    handler_by_class: dict[str, str] = {}
+    for alias in function_aliases:
+        alias_name = str(alias["alias"])
+        suffix = ".BuildingSpellClosure_cast"
+        if not alias_name.endswith(suffix):
+            continue
+        class_name = alias_name[: -len(suffix)]
+        target = str(alias["target_function"])
+        prior = handler_by_class.get(class_name)
+        if prior is not None and prior != target:
+            raise ValueError(f"conflicting BuildingSpellClosure_cast handlers for {class_name}: {prior} != {target}")
+        handler_by_class[class_name] = target
+    if not handler_by_class:
+        return []
+
+    rows: list[dict[str, object]] = []
+    for function in functions:
+        function_name = str(function["name"])
+        body = _function_body_tokens(data, functions, function_name)
+        if body is None:
+            continue
+        function_start, tokens = body
+        variable_classes: dict[str, str] = {}
+        integer_variables: dict[str, int] = {}
+
+        # Resolve simple generated integer aliases in source order. Wurst often
+        # hoists a rawcode into one variable and copies it into a local before
+        # the registry call (for example `XQ=1093683278; zis=XQ`).
+        for index in range(len(tokens) - 2):
+            if tokens[index].kind != "ident" or tokens[index + 1].text != "=":
+                continue
+            rhs = tokens[index + 2]
+            if rhs.kind == "number" and rhs.integer_value is not None:
+                integer_variables[tokens[index].text] = int(rhs.integer_value)
+            elif rhs.kind == "ident" and rhs.text in integer_variables:
+                integer_variables[tokens[index].text] = integer_variables[rhs.text]
+
+        for index in range(len(tokens) - 6):
+            if (
+                tokens[index].kind == "ident"
+                and tokens[index + 1].text == "="
+                and tokens[index + 2].kind == "ident"
+                and tokens[index + 2].text in handler_by_class
+                and tokens[index + 3].text == ":"
+                and tokens[index + 4].kind == "ident"
+                and tokens[index + 4].text.startswith("create")
+                and tokens[index + 5].text == "("
+            ):
+                variable_classes[tokens[index].text] = tokens[index + 2].text
+        if not variable_classes:
+            continue
+
+        for index, token in enumerate(tokens):
+            if token.kind != "ident" or token.text != "_I":
+                continue
+            try:
+                args, _next = _wurst_registry_call_arguments(tokens, index)
+            except ValueError:
+                continue
+            if len(args) != 3 or len(args[2]) != 1 or args[2][0].kind != "ident":
+                continue
+            closure_variable = args[2][0].text
+            closure_class = variable_classes.get(closure_variable)
+            if closure_class is None:
+                continue
+            def integer_argument(argument: list[LuaToken]) -> int | None:
+                try:
+                    return _integer_literal_value(argument)
+                except ValueError:
+                    pass
+                if len(argument) == 1 and argument[0].kind == "ident":
+                    return integer_variables.get(argument[0].text)
+                return None
+
+            building_id = integer_argument(args[0])
+            ability_id = integer_argument(args[1])
+            if building_id is None or ability_id is None:
+                continue
+            if building_id <= 0 or ability_id <= 0:
+                continue
+            rows.append({
+                "building_id": building_id,
+                "ability_id": ability_id,
+                "closure_variable": closure_variable,
+                "closure_class": closure_class,
+                "handler_function": handler_by_class[closure_class],
+                "registration_function": function_name,
+                "byte_offset": function_start + token.start,
+            })
+
+    rows.sort(key=lambda row: (int(row["byte_offset"]), int(row["building_id"]), int(row["ability_id"])))
+    return rows
+
+
 def _enclosing_named_function(
     functions: list[dict[str, object]],
     byte_offset: int,
@@ -1631,6 +1739,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_mutators,
     )
     function_aliases, function_value_arguments = _function_value_links(data, functions)
+    building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     for reference in function_value_arguments:
         reference["function"] = _enclosing_named_function(
             functions,
@@ -1658,4 +1767,5 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "protected_unit_stats": protected_unit_stats,
         "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
+        "building_spell_registrations": building_spell_registrations,
     }

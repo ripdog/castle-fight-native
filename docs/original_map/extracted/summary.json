@@ -85,6 +85,8 @@
     "aliased_function_targets": 1886,
     "function_value_arguments": 308,
     "function_value_argument_targets": 308,
+    "building_spell_registrations": 15,
+    "building_spell_handlers": 15,
     "readable_function_names": 4910,
     "direct_map_rawcode_references": 12611,
     "referenced_map_rawcodes": 1332,

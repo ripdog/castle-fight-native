@@ -297,6 +297,33 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(production_rows), 167)
         self.assertEqual({row["static_object_build_time"] for row in production_rows}, {"2"})
 
+    def test_scripted_building_spells_recover_handlers_and_mana_timed_cadence(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["scripted_building_spell_rows"], 15)
+        self.assertEqual(summary["scripted_building_spell_mana_timed_rows"], 15)
+
+        with (self.resolved / "building-spells.tsv").open(encoding="utf-8") as handle:
+            rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 15)
+
+        skull_pile = rows["h01P"]
+        self.assertEqual(skull_pile["ability_rawcode"], "A01Q")
+        self.assertEqual(skull_pile["cadence_seconds"], "12")
+        self.assertEqual(skull_pile["effective_mana_cost"], "12")
+        self.assertEqual(skull_pile["building_mana_regen"], "1")
+        self.assertEqual(skull_pile["effective_wc3_cooldown"], "1.0")
+        self.assertIn("RaceUndeadAbilities", skull_pile["handler_function"])
+
+        death_pit = rows["h00A"]
+        self.assertEqual(death_pit["cadence_seconds"], "15")
+        self.assertEqual(death_pit["effective_mana_cost"], "15")
+        self.assertEqual(death_pit["effective_wc3_cooldown"], "0.0")
+
+        vessel = rows["h07U"]
+        self.assertEqual(vessel["ability_rawcode"], "A0HN")
+        self.assertEqual(vessel["cadence_seconds"], "15")
+        self.assertIn("VesselOfPurity", vessel["handler_function"])
+
     def test_production_corpse_profiles_keep_death_type_capabilities_and_decay_constants(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["production_unit_corpse_rows"], 167)

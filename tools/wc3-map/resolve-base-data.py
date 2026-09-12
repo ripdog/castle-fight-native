@@ -1696,6 +1696,64 @@ def main() -> None:
     if metadata_rows and set(semantics_by_building) != metadata_buildings:
         raise ValueError("race wrapper semantics do not exactly cover UnitObjectMeta buildings")
 
+    building_spell_rows: list[list[Any]] = []
+    building_spell_registration_path = map_root / "script" / "building-spell-registrations.tsv"
+    if building_spell_registration_path.exists():
+        with building_spell_registration_path.open(encoding="utf-8", newline="") as handle:
+            for registration in csv.DictReader(handle, delimiter="\t"):
+                building_rawcode = registration["building_rawcode"]
+                race = race_by_building.get(building_rawcode)
+                if race is None:
+                    raise ValueError(f"scripted building spell references building outside race catalog: {building_rawcode}")
+                ability_rawcode = registration["ability_rawcode"]
+                definitions = ability_levels.get(ability_rawcode, [])
+                definition = next((row for row in definitions if row["level"] == "1"), None)
+                definition_source = "map-resolved"
+                if definition is None:
+                    definition = inherited_ability_level_one(ability_rawcode)
+                    definition_source = "inherited-base"
+                if definition is None:
+                    raise ValueError(f"scripted building spell ability has no resolved definition: {ability_rawcode}")
+                runtime_mana = protected_ability_values.get((ability_rawcode, 1, "mana_cost"))
+                runtime_cooldown = protected_ability_values.get((ability_rawcode, 1, "cooldown"))
+                static_mana = definition["mana_cost"]
+                static_cooldown = definition["cooldown"]
+                effective_mana = runtime_mana if runtime_mana is not None else static_mana
+                effective_wc3_cooldown = runtime_cooldown if runtime_cooldown is not None else static_cooldown
+                building_unit = static_units.get(building_rawcode)
+                if building_unit is None:
+                    raise ValueError(f"scripted building spell has no static unit definition: {building_rawcode}")
+                mana_regen = numeric(building_unit["mana_regen"])
+                mana_cost = numeric(effective_mana)
+                if mana_regen is None or mana_regen <= 0 or mana_cost is None:
+                    raise ValueError(f"scripted building spell lacks numeric mana cadence inputs: {building_rawcode}/{ability_rawcode}")
+                cadence_seconds = mana_cost / mana_regen
+                building_spell_rows.append([
+                    race["race_index"], race["race_function"], race["builder_rawcode"], race["builder_names"], race["campaign_only"],
+                    building_rawcode, registration["building_names"],
+                    ability_rawcode, definition_source, definition["base_rawcode"], definition["name"], definition["tip"], definition["ubertip"],
+                    static_mana, effective_mana,
+                    "protected-runtime" if runtime_mana is not None else "static-resolved",
+                    building_unit["mana_regen"], value_as_text(cadence_seconds), "ability-mana-cost/building-mana-regen",
+                    static_cooldown, effective_wc3_cooldown,
+                    "protected-runtime" if runtime_cooldown is not None else "static-resolved",
+                    definition["range"], definition["area"], definition["targets"], definition["buffs"],
+                    definition["data_fields_json"], definition["data_fields_labeled_json"],
+                    registration["handler_function"], registration["registration_function"], registration["byte_offset"],
+                ])
+    write_tsv(
+        output / "building-spells.tsv",
+        [
+            "race_index", "race_function", "builder_rawcode", "builder_names", "campaign_only",
+            "building_rawcode", "building_names", "ability_rawcode", "definition_source", "base_rawcode",
+            "name", "tip", "ubertip", "static_mana_cost", "effective_mana_cost", "mana_cost_source",
+            "building_mana_regen", "cadence_seconds", "cadence_source",
+            "static_wc3_cooldown", "effective_wc3_cooldown", "wc3_cooldown_source", "range", "area", "targets", "buffs",
+            "data_fields_json", "data_fields_labeled_json", "handler_function", "registration_function", "byte_offset",
+        ],
+        building_spell_rows,
+    )
+
     def catalog_income(building_rawcode: str, stack: tuple[str, ...] = ()) -> float:
         if building_rawcode in stack:
             raise ValueError(f"cycle in CFBuilding precursor income chain: {' -> '.join(stack + (building_rawcode,))}")
@@ -1972,6 +2030,10 @@ def main() -> None:
         "production_unit_unique_abilities": len(production_ability_unique),
         "production_unit_inherited_ability_links": production_ability_inherited_links,
         "production_unit_ability_links_with_protected_runtime_fields": production_ability_runtime_field_links,
+        "scripted_building_spell_rows": len(building_spell_rows),
+        "scripted_building_spell_mana_timed_rows": sum(
+            row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
+        ),
         "building_catalog_rows": len(production_building_rows),
         "building_catalog_production_rows": production_building_count,
         "building_catalog_campaign_production_rows": campaign_production_count,
@@ -1996,6 +2058,7 @@ def main() -> None:
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
+            "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
             "production-unit-corpses.tsv retains Warcraft Death Type capability bits and per-unit Death Time beside the effective flesh/bone decay constants; no-decay removal behavior is not guessed",

@@ -768,6 +768,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     protected_unit_stats = analysis["protected_unit_stats"]
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
+    building_spell_registrations = analysis["building_spell_registrations"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
 
     function_names = [str(function["name"]) for function in functions]
@@ -840,6 +841,30 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         tables = ",".join(sorted({row["table"] for row in rows}))
         names = " | ".join(sorted({row["name"] for row in rows if row["name"]}))
         return rawcode, categories, tables, names, len(rows)
+
+    with (script_dir / "building-spell-registrations.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "ability_rawcode", "ability_rawcode_integer", "ability_names",
+            "handler_function", "closure_class", "closure_variable", "registration_function", "byte_offset",
+        ])
+        for row in building_spell_registrations:
+            building_id = int(row["building_id"])
+            ability_id = int(row["ability_id"])
+            building_rawcode, building_categories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            ability_rawcode, ability_categories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
+            if building_categories != "units" or ability_categories != "abilities":
+                raise ValueError(
+                    f"building-spell registration does not resolve to building/ability objects: "
+                    f"{building_rawcode}/{ability_rawcode}"
+                )
+            writer.writerow([
+                building_rawcode, building_id, building_names,
+                ability_rawcode, ability_id, ability_names,
+                row["handler_function"], row["closure_class"], row["closure_variable"],
+                row["registration_function"], row["byte_offset"],
+            ])
 
     sites_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
     for site in rawcode_sites:
@@ -1258,6 +1283,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "function_value_argument_targets": len({
             str(reference["target_function"]) for reference in function_value_arguments
         }),
+        "building_spell_registrations": len(building_spell_registrations),
+        "building_spell_handlers": len({str(row["handler_function"]) for row in building_spell_registrations}),
         "readable_function_names": len(readable),
         "direct_map_rawcode_references": len(rawcode_sites),
         "referenced_map_rawcodes": len(sites_by_rawcode),

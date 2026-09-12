@@ -336,6 +336,26 @@ class LuaIndexTests(unittest.TestCase):
 
         self.assertEqual(indexed["rawcode_mutator_traces"], [])
 
+    def test_recovers_building_spell_registration_from_closure_dispatch(self) -> None:
+        source = (
+            "function handler(building) return building end "
+            "fy.BuildingSpellClosure_cast=handler "
+            "function bL() local closure=nil local ability=nil ABILITY=1093677393 ability=ABILITY "
+            "closure=fy:create987() _I[_d[1]](1747988816,ability,closure) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747988816, 1093677393})
+
+        self.assertEqual(indexed["building_spell_registrations"], [{
+            "building_id": 1747988816,
+            "ability_id": 1093677393,
+            "closure_variable": "closure",
+            "closure_class": "fy",
+            "handler_function": "handler",
+            "registration_function": "bL",
+            "byte_offset": source.find(b"_I[_d[1]]"),
+        }])
+
     def test_indexes_generated_function_alias_assignments_without_making_call_edges(self) -> None:
         source = (
             "function handler(unit) BlzSetUnitArmor(unit,4.0) end "
