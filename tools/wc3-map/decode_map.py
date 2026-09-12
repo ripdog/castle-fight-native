@@ -769,6 +769,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     building_spell_registrations = analysis["building_spell_registrations"]
+    corpse_building_mechanics = analysis["corpse_building_mechanics"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
 
     function_names = [str(function["name"]) for function in functions]
@@ -842,6 +843,11 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         names = " | ".join(sorted({row["name"] for row in rows if row["name"]}))
         return rawcode, categories, tables, names, len(rows)
 
+    def rawcode_text(integer_id: int) -> str:
+        if integer_id < 0 or integer_id > 0xFFFFFFFF:
+            raise ValueError(f"rawcode integer is outside u32 range: {integer_id}")
+        return integer_id.to_bytes(4, "big").decode("latin1")
+
     with (script_dir / "building-spell-registrations.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow([
@@ -864,6 +870,68 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 ability_rawcode, ability_id, ability_names,
                 row["handler_function"], row["closure_class"], row["closure_variable"],
                 row["registration_function"], row["byte_offset"],
+            ])
+
+    with (script_dir / "corpse-building-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "ability_rawcode", "ability_rawcode_integer", "ability_names",
+            "mechanic_kind", "corpse_phase", "selection_predicate", "selection_rect_symbol",
+            "selection_function", "requires_wc3_can_raise", "consumption_mode", "consume_radius",
+            "effect_radius", "damage", "attack_type", "damage_type",
+            "auxiliary_ability_rawcode", "auxiliary_ability_rawcode_integer", "auxiliary_ability_names",
+            "invulnerable_ability_rawcode", "invulnerable_ability_rawcode_integer",
+            "summon_outcomes_json", "handler_function", "predicate_function", "effect_function", "byte_offset",
+        ])
+        for row in corpse_building_mechanics:
+            building_id = int(row["building_id"])
+            ability_id = int(row["ability_id"])
+            building_rawcode, building_categories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            ability_rawcode, ability_categories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
+            if building_categories != "units" or ability_categories != "abilities":
+                raise ValueError(f"corpse building mechanic has invalid building/ability: {building_rawcode}/{ability_rawcode}")
+
+            auxiliary_id = row["auxiliary_ability_id"]
+            auxiliary_rawcode = ""
+            auxiliary_names = ""
+            if auxiliary_id is not None:
+                auxiliary_id = int(auxiliary_id)
+                auxiliary_rawcode = rawcode_text(auxiliary_id)
+                if auxiliary_id in object_metadata:
+                    _arc, auxiliary_categories, _atables, auxiliary_names, _adefs = rawcode_metadata(auxiliary_id)
+                    if auxiliary_categories != "abilities":
+                        raise ValueError(f"corpse mechanic auxiliary rawcode is not an ability: {auxiliary_rawcode}")
+
+            invulnerable_id = row["invulnerable_ability_id"]
+            invulnerable_rawcode = ""
+            if invulnerable_id is not None:
+                invulnerable_id = int(invulnerable_id)
+                invulnerable_rawcode = rawcode_text(invulnerable_id)
+
+            outcomes: list[dict[str, object]] = []
+            for outcome_id, probability in row["summon_outcomes"]:
+                outcome_id = int(outcome_id)
+                outcome_rawcode, outcome_categories, _otables, outcome_names, _odefs = rawcode_metadata(outcome_id)
+                if outcome_categories != "units":
+                    raise ValueError(f"corpse mechanic summon outcome is not a unit: {outcome_rawcode}")
+                outcomes.append({
+                    "rawcode": outcome_rawcode,
+                    "rawcode_integer": outcome_id,
+                    "names": outcome_names,
+                    "probability_percent": int(probability),
+                })
+
+            writer.writerow([
+                building_rawcode, building_id, building_names,
+                ability_rawcode, ability_id, ability_names,
+                row["mechanic_kind"], row["corpse_phase"], row["selection_predicate"], row["selection_rect_symbol"],
+                row["selection_function"], int(bool(row["requires_wc3_can_raise"])), row["consumption_mode"],
+                row["consume_radius"], row["effect_radius"], row["damage"], row["attack_type"], row["damage_type"],
+                auxiliary_rawcode, auxiliary_id if auxiliary_id is not None else "", auxiliary_names,
+                invulnerable_rawcode, invulnerable_id if invulnerable_id is not None else "",
+                json.dumps(outcomes, separators=(",", ":"), ensure_ascii=False),
+                row["handler_function"], row["predicate_function"], row["effect_function"], row["byte_offset"],
             ])
 
     sites_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
@@ -1285,6 +1353,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         }),
         "building_spell_registrations": len(building_spell_registrations),
         "building_spell_handlers": len({str(row["handler_function"]) for row in building_spell_registrations}),
+        "corpse_building_mechanics": len(corpse_building_mechanics),
+        "corpse_building_raise_mechanics": sum(
+            str(row["mechanic_kind"]) == "scripted-raise-random" for row in corpse_building_mechanics
+        ),
         "readable_function_names": len(readable),
         "direct_map_rawcode_references": len(rawcode_sites),
         "referenced_map_rawcodes": len(sites_by_rawcode),

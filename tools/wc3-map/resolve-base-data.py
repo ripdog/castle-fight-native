@@ -1697,6 +1697,7 @@ def main() -> None:
         raise ValueError("race wrapper semantics do not exactly cover UnitObjectMeta buildings")
 
     building_spell_rows: list[list[Any]] = []
+    building_spell_by_pair: dict[tuple[str, str], dict[str, str]] = {}
     building_spell_registration_path = map_root / "script" / "building-spell-registrations.tsv"
     if building_spell_registration_path.exists():
         with building_spell_registration_path.open(encoding="utf-8", newline="") as handle:
@@ -1728,13 +1729,26 @@ def main() -> None:
                 if mana_regen is None or mana_regen <= 0 or mana_cost is None:
                     raise ValueError(f"scripted building spell lacks numeric mana cadence inputs: {building_rawcode}/{ability_rawcode}")
                 cadence_seconds = mana_cost / mana_regen
+                cadence_text = value_as_text(cadence_seconds)
+                building_spell_by_pair[(building_rawcode, ability_rawcode)] = {
+                    "race_index": race["race_index"],
+                    "race_function": race["race_function"],
+                    "builder_rawcode": race["builder_rawcode"],
+                    "builder_names": race["builder_names"],
+                    "campaign_only": race["campaign_only"],
+                    "building_names": registration["building_names"],
+                    "ability_name": definition["name"],
+                    "ability_tip": definition["tip"],
+                    "cadence_seconds": cadence_text,
+                    "cadence_source": "ability-mana-cost/building-mana-regen",
+                }
                 building_spell_rows.append([
                     race["race_index"], race["race_function"], race["builder_rawcode"], race["builder_names"], race["campaign_only"],
                     building_rawcode, registration["building_names"],
                     ability_rawcode, definition_source, definition["base_rawcode"], definition["name"], definition["tip"], definition["ubertip"],
                     static_mana, effective_mana,
                     "protected-runtime" if runtime_mana is not None else "static-resolved",
-                    building_unit["mana_regen"], value_as_text(cadence_seconds), "ability-mana-cost/building-mana-regen",
+                    building_unit["mana_regen"], cadence_text, "ability-mana-cost/building-mana-regen",
                     static_cooldown, effective_wc3_cooldown,
                     "protected-runtime" if runtime_cooldown is not None else "static-resolved",
                     definition["range"], definition["area"], definition["targets"], definition["buffs"],
@@ -1752,6 +1766,64 @@ def main() -> None:
             "data_fields_json", "data_fields_labeled_json", "handler_function", "registration_function", "byte_offset",
         ],
         building_spell_rows,
+    )
+
+    corpse_building_rows: list[list[Any]] = []
+    corpse_building_path = map_root / "script" / "corpse-building-mechanics.tsv"
+    if corpse_building_path.exists():
+        with corpse_building_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                pair = (mechanic["building_rawcode"], mechanic["ability_rawcode"])
+                spell = building_spell_by_pair.get(pair)
+                if spell is None:
+                    raise ValueError(f"corpse building mechanic has no scripted building-spell registration: {pair}")
+                auxiliary_rawcode = mechanic["auxiliary_ability_rawcode"]
+                auxiliary_name = ""
+                if auxiliary_rawcode:
+                    auxiliary_definition = next(
+                        (row for row in ability_levels.get(auxiliary_rawcode, []) if row["level"] == "1"),
+                        None,
+                    )
+                    if auxiliary_definition is None:
+                        auxiliary_definition = inherited_ability_level_one(auxiliary_rawcode)
+                    if auxiliary_definition is None:
+                        raise ValueError(f"corpse mechanic auxiliary ability has no definition: {auxiliary_rawcode}")
+                    auxiliary_name = auxiliary_definition["name"]
+                invulnerable_rawcode = mechanic["invulnerable_ability_rawcode"]
+                invulnerable_name = ""
+                if invulnerable_rawcode:
+                    invulnerable_definition = inherited_ability_level_one(invulnerable_rawcode)
+                    if invulnerable_definition is None:
+                        invulnerable_definition = next(
+                            (row for row in ability_levels.get(invulnerable_rawcode, []) if row["level"] == "1"),
+                            None,
+                        )
+                    if invulnerable_definition is None:
+                        raise ValueError(f"corpse mechanic exclusion ability has no definition: {invulnerable_rawcode}")
+                    invulnerable_name = invulnerable_definition["name"]
+                corpse_building_rows.append([
+                    spell["race_index"], spell["race_function"], spell["builder_rawcode"], spell["builder_names"], spell["campaign_only"],
+                    mechanic["building_rawcode"], spell["building_names"], mechanic["ability_rawcode"], spell["ability_name"], spell["ability_tip"],
+                    spell["cadence_seconds"], spell["cadence_source"],
+                    mechanic["mechanic_kind"], mechanic["corpse_phase"], mechanic["selection_predicate"],
+                    mechanic["selection_rect_symbol"], mechanic["selection_function"], mechanic["requires_wc3_can_raise"],
+                    mechanic["consumption_mode"], mechanic["consume_radius"], mechanic["effect_radius"], mechanic["damage"],
+                    mechanic["attack_type"], mechanic["damage_type"], auxiliary_rawcode, auxiliary_name,
+                    invulnerable_rawcode, invulnerable_name, mechanic["summon_outcomes_json"],
+                    mechanic["handler_function"], mechanic["predicate_function"], mechanic["effect_function"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "corpse-building-mechanics.tsv",
+        [
+            "race_index", "race_function", "builder_rawcode", "builder_names", "campaign_only",
+            "building_rawcode", "building_names", "ability_rawcode", "ability_name", "ability_tip",
+            "cadence_seconds", "cadence_source", "mechanic_kind", "corpse_phase", "selection_predicate",
+            "selection_rect_symbol", "selection_function", "requires_wc3_can_raise", "consumption_mode",
+            "consume_radius", "effect_radius", "damage", "attack_type", "damage_type",
+            "auxiliary_ability_rawcode", "auxiliary_ability_name", "invulnerable_ability_rawcode", "invulnerable_ability_name",
+            "summon_outcomes_json", "handler_function", "predicate_function", "effect_function", "byte_offset",
+        ],
+        corpse_building_rows,
     )
 
     def catalog_income(building_rawcode: str, stack: tuple[str, ...] = ()) -> float:
@@ -2034,6 +2106,8 @@ def main() -> None:
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
         ),
+        "corpse_building_mechanic_rows": len(corpse_building_rows),
+        "corpse_building_raise_rows": sum(row[12] == "scripted-raise-random" for row in corpse_building_rows),
         "building_catalog_rows": len(production_building_rows),
         "building_catalog_production_rows": production_building_count,
         "building_catalog_campaign_production_rows": campaign_production_count,
@@ -2059,6 +2133,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
+            "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
             "production-unit-corpses.tsv retains Warcraft Death Type capability bits and per-unit Death Time beside the effective flesh/bone decay constants; no-decay removal behavior is not guessed",

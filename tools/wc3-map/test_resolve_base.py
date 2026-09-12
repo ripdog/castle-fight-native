@@ -324,6 +324,46 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(vessel["cadence_seconds"], "15")
         self.assertIn("VesselOfPurity", vessel["handler_function"])
 
+    def test_scripted_corpse_building_mechanics_keep_exact_predicates_and_effects(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["corpse_building_mechanic_rows"], 3)
+        self.assertEqual(summary["corpse_building_raise_rows"], 2)
+
+        with (self.resolved / "corpse-building-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(set(rows), {"h01P", "h056", "h07U"})
+
+        skull_pile = rows["h01P"]
+        self.assertEqual(skull_pile["cadence_seconds"], "12")
+        self.assertEqual(skull_pile["corpse_phase"], "dying")
+        self.assertEqual(skull_pile["requires_wc3_can_raise"], "0")
+        self.assertEqual(skull_pile["invulnerable_ability_rawcode"], "Avul")
+        self.assertEqual(skull_pile["invulnerable_ability_name"], "Invulnerable")
+        outcomes = json.loads(skull_pile["summon_outcomes_json"])
+        self.assertEqual(
+            [(row["rawcode"], row["probability_percent"]) for row in outcomes],
+            [("n00C", 10), ("u002", 30), ("n00D", 30), ("u00A", 30)],
+        )
+
+        shrine = rows["h056"]
+        shrine_outcomes = json.loads(shrine["summon_outcomes_json"])
+        self.assertEqual(
+            [(row["rawcode"], row["probability_percent"]) for row in shrine_outcomes],
+            [("n01M", 10), ("u00B", 30), ("n01L", 30), ("u003", 30)],
+        )
+
+        vessel = rows["h07U"]
+        self.assertEqual(vessel["cadence_seconds"], "15")
+        self.assertEqual(vessel["corpse_phase"], "dead")
+        self.assertEqual(vessel["consumption_mode"], "all-qualifying-within-radius")
+        self.assertEqual(vessel["consume_radius"], "220")
+        self.assertEqual(vessel["effect_radius"], "300")
+        self.assertEqual(vessel["damage"], "150")
+        self.assertEqual(vessel["damage_type"], "universal")
+        self.assertEqual(vessel["auxiliary_ability_rawcode"], "A9FS")
+        self.assertEqual(vessel["auxiliary_ability_name"], "Far Sight")
+        self.assertEqual(vessel["requires_wc3_can_raise"], "0")
+
     def test_production_corpse_profiles_keep_death_type_capabilities_and_decay_constants(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["production_unit_corpse_rows"], 167)

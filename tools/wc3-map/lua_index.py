@@ -1559,6 +1559,218 @@ def _extract_building_spell_registrations(
     return rows
 
 
+def _extract_corpse_building_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    building_spell_registrations: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover the scripted building mechanics that explicitly select/consume corpses.
+
+    This deliberately models only control flow that is visible and rigid in the
+    generated Lua: the two Undead building handlers that call `raiseFromCorpse`
+    and Vessel of Purity's `vesselOfPuritySpell`. Warcraft's ordinary `udea`
+    raise/decay flags are not used by these handlers, so that distinction is
+    retained explicitly for downstream native-content import.
+    """
+
+    def body_tokens(name: str) -> tuple[int, list[LuaToken]]:
+        body = _function_body_tokens(data, functions, name)
+        if body is None:
+            raise ValueError(f"corpse-mechanic source function is missing: {name}")
+        return body
+
+    def calls(tokens: list[LuaToken], callee: str) -> list[tuple[int, list[list[LuaToken]]]]:
+        found: list[tuple[int, list[list[LuaToken]]]] = []
+        for index, token in enumerate(tokens):
+            if token.kind != "ident" or token.text != callee:
+                continue
+            try:
+                args, _next = _call_arguments(tokens, index)
+            except ValueError:
+                continue
+            found.append((index, args))
+        return found
+
+    def has_token_sequence(tokens: list[LuaToken], sequence: tuple[str, ...]) -> bool:
+        texts = [token.text for token in tokens]
+        width = len(sequence)
+        return any(tuple(texts[index:index + width]) == sequence for index in range(len(texts) - width + 1))
+
+    relevant_handlers = {
+        str(row["handler_function"])
+        for row in building_spell_registrations
+        if "RaceUndeadAbilities" in str(row["handler_function"])
+        or "VesselOfPurity" in str(row["handler_function"])
+    }
+    if not relevant_handlers:
+        return []
+
+    # Validate the common Undead corpse-selection predicate and recover the
+    # inherited Invulnerable ability rawcode used as an exclusion marker.
+    undead_filter_name = "ForGroupCallback_forUnitsInRect_RaceUndeadAbilities_callback_forUnitsInRect_RaceUndeadAbilities"
+    _filter_start, undead_filter = body_tokens(undead_filter_name)
+    if len(calls(undead_filter, "isDyingCombatSapper")) != 1:
+        raise ValueError("Undead raise filter no longer has exactly one isDyingCombatSapper predicate")
+    ability_checks = calls(undead_filter, "unit_getAbilityLevel")
+    if len(ability_checks) != 1 or len(ability_checks[0][1]) != 2:
+        raise ValueError("Undead raise filter no longer has exactly one ability-level exclusion")
+    invulnerable_ability_id = _integer_literal_value(ability_checks[0][1][1])
+    if not any(token.kind == "ident" and token.text == "UNIT_TYPE_UNDEAD" for token in undead_filter):
+        raise ValueError("Undead raise filter no longer excludes UNIT_TYPE_UNDEAD")
+
+    random_source_name = "randomDyingSapper"
+    _random_start, random_source = body_tokens(random_source_name)
+    if len(calls(random_source, "__wurst_safe_GroupEnumUnitsInRect")) != 1:
+        raise ValueError("randomDyingSapper no longer enumerates exactly one rect")
+    if not any(token.kind == "ident" and token.text == "uIb" for token in random_source):
+        raise ValueError("randomDyingSapper no longer enumerates the uIb battlefield rect")
+
+    # Validate the exact 10/30/30/30 branch in raiseFromCorpse. The first
+    # supplied unit type wins when a 0..99 roll is below 10; otherwise a 0..2
+    # roll selects one of the remaining three uniformly.
+    raise_start, raise_tokens = body_tokens("raiseFromCorpse")
+    random_calls = calls(raise_tokens, "GetRandomInt")
+    random_ranges = [
+        (_integer_literal_value(args[0]), _integer_literal_value(args[1]))
+        for _index, args in random_calls
+        if len(args) == 2
+    ]
+    if random_ranges != [(0, 99), (0, 2)]:
+        raise ValueError(f"raiseFromCorpse random structure changed: {random_ranges}")
+    if not has_token_sequence(raise_tokens, ("GetRandomInt", "(", "0", ",", "99", ")", ">=", "10")):
+        raise ValueError("raiseFromCorpse no longer uses the expected 10% first-outcome threshold")
+    if len(calls(raise_tokens, "__wurst_safe_RemoveUnit")) != 1:
+        raise ValueError("raiseFromCorpse no longer consumes exactly one selected corpse/unit")
+
+    rows: list[dict[str, object]] = []
+    for registration in building_spell_registrations:
+        handler = str(registration["handler_function"])
+        handler_body = _function_body_tokens(data, functions, handler)
+        if handler_body is None:
+            continue
+        handler_start, handler_tokens = handler_body
+        raise_calls = calls(handler_tokens, "raiseFromCorpse")
+        if not raise_calls:
+            continue
+        if len(raise_calls) != 1 or len(raise_calls[0][1]) != 5:
+            raise ValueError(f"building raise handler {handler} has unexpected raiseFromCorpse call shape")
+        call_index, args = raise_calls[0]
+        outcomes = [_integer_literal_value(argument) for argument in args[1:]]
+        rows.append({
+            "building_id": int(registration["building_id"]),
+            "ability_id": int(registration["ability_id"]),
+            "mechanic_kind": "scripted-raise-random",
+            "corpse_phase": "dying",
+            "selection_predicate": "combat-sapper;life<0.405;not-undead;missing-invulnerable-ability",
+            "selection_rect_symbol": "uIb",
+            "selection_function": random_source_name,
+            "requires_wc3_can_raise": False,
+            "consumption_mode": "selected-only",
+            "consume_radius": None,
+            "effect_radius": None,
+            "damage": None,
+            "attack_type": None,
+            "damage_type": None,
+            "auxiliary_ability_id": None,
+            "invulnerable_ability_id": invulnerable_ability_id,
+            "summon_outcomes": tuple(zip(outcomes, (10, 30, 30, 30), strict=True)),
+            "handler_function": handler,
+            "predicate_function": undead_filter_name,
+            "effect_function": "raiseFromCorpse",
+            "byte_offset": handler_start + handler_tokens[call_index].start,
+        })
+
+    # Vessel of Purity has a separate corpse predicate and consumes all matching
+    # corpses around one randomly selected corpse before applying its AoE.
+    vessel_registrations = [
+        row for row in building_spell_registrations
+        if str(row["handler_function"])
+        == "BuildingSpellClosure_registerBuildingSpell_VesselOfPurity_cast_registerBuildingSpell_VesselOfPurity"
+    ]
+    if vessel_registrations:
+        if len(vessel_registrations) != 1:
+            raise ValueError("Vessel of Purity has multiple building-spell registrations")
+        vessel_registration = vessel_registrations[0]
+        vessel_handler = str(vessel_registration["handler_function"])
+        vessel_handler_start, vessel_handler_tokens = body_tokens(vessel_handler)
+        vessel_calls = calls(vessel_handler_tokens, "vesselOfPuritySpell")
+        if len(vessel_calls) != 1:
+            raise ValueError("Vessel of Purity handler no longer calls vesselOfPuritySpell exactly once")
+
+        _predicate_start, vessel_predicate = body_tokens("isVesselCorpse")
+        for callee in ("widget_isAliveTrick", "isCombatSapper", "isVulnerable", "unit_isType"):
+            if len(calls(vessel_predicate, callee)) != 1:
+                raise ValueError(f"isVesselCorpse no longer has exactly one {callee} predicate")
+        if not any(token.kind == "ident" and token.text == "UNIT_TYPE_UNDEAD" for token in vessel_predicate):
+            raise ValueError("isVesselCorpse no longer excludes UNIT_TYPE_UNDEAD")
+
+        _consume_start, consume_tokens = body_tokens("consumeVesselCorpses")
+        if len(calls(consume_tokens, "forUnitsInRange")) != 1 or len(calls(consume_tokens, "__wurst_safe_RemoveUnit")) != 1:
+            raise ValueError("consumeVesselCorpses no longer enumerates a radius and removes each matched corpse")
+        _find_start, find_tokens = body_tokens("findRandomVesselCorpse")
+        if len(calls(find_tokens, "__wurst_safe_GroupEnumUnitsInRect")) != 1 or not any(
+            token.kind == "ident" and token.text == "uIb" for token in find_tokens
+        ):
+            raise ValueError("findRandomVesselCorpse no longer selects from the uIb battlefield rect")
+
+        # mP initializes the constants consumed by vesselOfPuritySpell and its
+        # callbacks: auxiliary Far Sight, effect radius, consume radius, damage.
+        _initializer_start, initializer = body_tokens("mP")
+        constants: dict[str, int] = {}
+        for index in range(len(initializer) - 2):
+            if initializer[index].kind != "ident" or initializer[index + 1].text != "=":
+                continue
+            value = initializer[index + 2]
+            if value.kind != "number":
+                continue
+            decimal_value = _decimal_literal_value([value])
+            if decimal_value == decimal_value.to_integral_value():
+                constants[initializer[index].text] = int(decimal_value)
+        required_constants = {"WQ", "VQ", "UQ", "TQ"}
+        if not required_constants <= constants.keys():
+            raise ValueError(f"Vessel of Purity constants missing from mP: {sorted(required_constants - constants.keys())}")
+
+        _effect_start, effect_tokens = body_tokens("vesselOfPuritySpell")
+        for callee in ("findRandomVesselCorpse", "consumeVesselCorpses", "InstantDummyCaster_castPoint1", "forUnitsInRange"):
+            if len(calls(effect_tokens, callee)) != 1:
+                raise ValueError(f"vesselOfPuritySpell no longer calls {callee} exactly once")
+        damage_callback_name = "ForGroupCallback_forUnitsInRange_VesselOfPurity_callback_forUnitsInRange_VesselOfPurity1"
+        _damage_start, damage_callback = body_tokens(damage_callback_name)
+        if len(calls(damage_callback, "__wurst_safe_UnitDamageTarget")) != 1:
+            raise ValueError("Vessel of Purity damage callback no longer has exactly one UnitDamageTarget call")
+        for symbol in ("ATTACK_TYPE_NORMAL", "DAMAGE_TYPE_UNIVERSAL"):
+            if not any(token.kind == "ident" and token.text == symbol for token in damage_callback):
+                raise ValueError(f"Vessel of Purity damage callback no longer uses {symbol}")
+
+        call_index, _args = vessel_calls[0]
+        rows.append({
+            "building_id": int(vessel_registration["building_id"]),
+            "ability_id": int(vessel_registration["ability_id"]),
+            "mechanic_kind": "consume-area-and-damage",
+            "corpse_phase": "dead",
+            "selection_predicate": "dead;combat-sapper;vulnerable;not-undead",
+            "selection_rect_symbol": "uIb",
+            "selection_function": "findRandomVesselCorpse",
+            "requires_wc3_can_raise": False,
+            "consumption_mode": "all-qualifying-within-radius",
+            "consume_radius": constants["UQ"],
+            "effect_radius": constants["VQ"],
+            "damage": constants["TQ"],
+            "attack_type": "normal",
+            "damage_type": "universal",
+            "auxiliary_ability_id": constants["WQ"],
+            "invulnerable_ability_id": None,
+            "summon_outcomes": (),
+            "handler_function": vessel_handler,
+            "predicate_function": "isVesselCorpse",
+            "effect_function": "vesselOfPuritySpell",
+            "byte_offset": vessel_handler_start + vessel_handler_tokens[call_index].start,
+        })
+
+    rows.sort(key=lambda row: (int(row["building_id"]), int(row["ability_id"]), str(row["mechanic_kind"])))
+    return rows
+
+
 def _enclosing_named_function(
     functions: list[dict[str, object]],
     byte_offset: int,
@@ -1740,6 +1952,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     )
     function_aliases, function_value_arguments = _function_value_links(data, functions)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
+    corpse_building_mechanics = _extract_corpse_building_mechanics(data, functions, building_spell_registrations)
     for reference in function_value_arguments:
         reference["function"] = _enclosing_named_function(
             functions,
@@ -1768,4 +1981,5 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
         "building_spell_registrations": building_spell_registrations,
+        "corpse_building_mechanics": corpse_building_mechanics,
     }

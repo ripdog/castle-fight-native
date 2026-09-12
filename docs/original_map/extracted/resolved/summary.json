@@ -116,6 +116,8 @@
   "production_unit_ability_links_with_protected_runtime_fields": 77,
   "scripted_building_spell_rows": 15,
   "scripted_building_spell_mana_timed_rows": 15,
+  "corpse_building_mechanic_rows": 3,
+  "corpse_building_raise_rows": 2,
   "building_catalog_rows": 240,
   "building_catalog_production_rows": 167,
   "building_catalog_campaign_production_rows": 5,
@@ -153,6 +155,7 @@
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
     "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
     "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
+    "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
     "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
     "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
     "production-unit-corpses.tsv retains Warcraft Death Type capability bits and per-unit Death Time beside the effective flesh/bone decay constants; no-decay removal behavior is not guessed"
