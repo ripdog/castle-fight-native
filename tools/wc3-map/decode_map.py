@@ -1,0 +1,834 @@
+#!/usr/bin/env python3
+"""Decode extracted Warcraft III map members into diffable plaintext.
+
+The heavy binary translators are source-built separately. This script fills the
+remaining format gaps, resolves trigger strings, emits flat catalogs, and
+indexes protected/obfuscated Lua without executing it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import re
+import shutil
+import struct
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+
+TRIGSTR_RE = re.compile(r"^TRIGSTR_(\d+)$")
+FUNCTION_RE = re.compile(r"\b(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+CALL_RE = re.compile(r"(?<![A-Za-z0-9_\.])([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+class Reader:
+    def __init__(self, data: bytes):
+        self.data = data
+        self.offset = 0
+
+    @property
+    def remaining(self) -> int:
+        return len(self.data) - self.offset
+
+    def _take(self, size: int) -> bytes:
+        end = self.offset + size
+        if end > len(self.data):
+            raise ValueError(f"unexpected EOF at {self.offset}, need {size} bytes")
+        value = self.data[self.offset:end]
+        self.offset = end
+        return value
+
+    def u8(self) -> int:
+        return self._take(1)[0]
+
+    def u32(self) -> int:
+        return struct.unpack("<I", self._take(4))[0]
+
+    def i32(self) -> int:
+        return struct.unpack("<i", self._take(4))[0]
+
+    def f32(self) -> float:
+        return struct.unpack("<f", self._take(4))[0]
+
+    def rawcode(self) -> str | None:
+        raw = self._take(4)
+        if raw == b"\0\0\0\0":
+            return None
+        return raw.decode("latin1")
+
+    def cstr(self) -> str:
+        end = self.data.find(b"\0", self.offset)
+        if end < 0:
+            raise ValueError(f"unterminated string at {self.offset}")
+        raw = self.data[self.offset:end]
+        self.offset = end + 1
+        return raw.decode("utf-8", errors="replace")
+
+
+MAP_FLAGS = {
+    0x000001: "hide_minimap_on_preview",
+    0x000002: "modify_ally_priorities",
+    0x000004: "melee_map",
+    0x000008: "custom_terrain_tileset",
+    0x000010: "masked_areas_partially_visible",
+    0x000020: "fixed_player_parameters",
+    0x000040: "custom_forces",
+    0x000080: "custom_tech_tree",
+    0x000100: "custom_abilities",
+    0x000200: "custom_upgrades",
+    0x000400: "map_properties_seen",
+    0x000800: "water_waves_cliff_shores",
+    0x001000: "water_waves_rolling_shores",
+    0x002000: "terrain_fog",
+    0x004000: "requires_expansion",
+    0x008000: "item_classification",
+    0x010000: "custom_water_tint",
+    0x020000: "accurate_probability",
+    0x040000: "custom_ability_skins",
+}
+
+FORCE_FLAGS = {
+    0x0001: "allied",
+    0x0002: "allied_victory",
+    0x0004: "unknown_0x4",
+    0x0008: "shared_vision",
+    0x0010: "shared_control",
+    0x0020: "shared_advanced_control",
+}
+
+PATHING_FLAGS = {
+    0x01: "unused_0x01",
+    0x02: "no_walk",
+    0x04: "no_fly",
+    0x08: "no_build",
+    0x10: "unused_0x10",
+    0x20: "blight",
+    0x40: "no_water",
+    0x80: "unknown_0x80",
+}
+
+PLAYER_TYPES = {1: "human", 2: "computer", 3: "neutral", 4: "reserved"}
+PLAYER_RACES = {0: "random", 1: "human", 2: "orc", 3: "undead", 4: "night_elf"}
+SCRIPT_LANGUAGES = {0: "jass", 1: "lua"}
+GRAPHICS_MODES = {1: "sd", 2: "hd", 3: "sd+hd"}
+GAME_DATA_VERSIONS = {0: "roc", 1: "tft"}
+
+
+def flags_to_names(value: int, table: dict[int, str]) -> list[str]:
+    return [name for bit, name in table.items() if value & bit]
+
+
+def read_rgba(r: Reader) -> dict[str, int]:
+    return {"r": r.u8(), "g": r.u8(), "b": r.u8(), "a": r.u8()}
+
+
+def parse_w3i(path: Path) -> dict[str, Any]:
+    r = Reader(path.read_bytes())
+    version = r.u32()
+    result: dict[str, Any] = {"format_version": version}
+
+    if version >= 16:
+        result["number_of_saves"] = r.u32()
+        result["world_editor_version"] = r.u32()
+    if version >= 27:
+        game_version = [r.u32(), r.u32(), r.u32(), r.u32()]
+        result["game_version"] = {
+            "major": game_version[0],
+            "minor": game_version[1],
+            "patch": game_version[2],
+            "build": game_version[3],
+            "display": ".".join(str(v) for v in game_version),
+        }
+
+    result["name"] = r.cstr()
+    result["author"] = r.cstr()
+    result["description"] = r.cstr()
+    if version >= 8:
+        result["recommended_players"] = r.cstr()
+
+    if version <= 3:
+        result["legacy_unknown_before_camera"] = r._take(8).hex()
+    elif version <= 8:
+        result["legacy_unknown_before_camera"] = {
+            "float1": r.f32(),
+            "int1": r.i32(),
+            "float2": r.f32(),
+            "float3": r.f32(),
+            "float4": r.f32(),
+            "int2": r.i32(),
+        }
+
+    camera = [r.f32() for _ in range(8)]
+    result["camera_bounds"] = {
+        "left_bottom": camera[0:2],
+        "right_top": camera[2:4],
+        "left_top": camera[4:6],
+        "right_bottom": camera[6:8],
+        "raw": camera,
+    }
+
+    if version >= 14:
+        complements = [r.i32() for _ in range(4)]
+        result["unplayable_border_tiles"] = {
+            "left": complements[0],
+            "right": complements[1],
+            "bottom": complements[2],
+            "top": complements[3],
+            "raw": complements,
+        }
+    else:
+        complements = [0, 0, 0, 0]
+
+    if version >= 1:
+        width = r.i32()
+        height = r.i32()
+        result["playable_size_tiles"] = {"width": width, "height": height}
+        result["total_size_tiles"] = {
+            "width": complements[0] + width + complements[1],
+            "height": complements[2] + height + complements[3],
+        }
+
+    if version >= 2:
+        if version <= 8:
+            result["legacy_unknown_before_flags"] = r.i32()
+        flags = r.u32()
+        result["flags"] = {"raw": flags, "hex": f"0x{flags:08x}", "set": flags_to_names(flags, MAP_FLAGS)}
+
+    if version >= 8:
+        result["main_tileset"] = chr(r.u8())
+
+    if version >= 17:
+        result["loading_screen_preset"] = r.i32()
+    if version >= 10 and version not in (18, 19):
+        result["loading_screen_path"] = r.cstr()
+    if version >= 10:
+        result["loading_screen_text"] = r.cstr()
+        if version >= 11:
+            result["loading_screen_title"] = r.cstr()
+            result["loading_screen_subtitle"] = r.cstr()
+    if version >= 17:
+        result["game_data_set_version"] = r.i32()
+    if version >= 13 and version not in (18, 19):
+        result["prologue_path"] = r.cstr()
+    if version >= 13:
+        result["prologue_text"] = r.cstr()
+        result["prologue_title"] = r.cstr()
+        result["prologue_subtitle"] = r.cstr()
+    if version >= 19:
+        result["fog"] = {
+            "type": r.i32(),
+            "start_z": r.f32(),
+            "end_z": r.f32(),
+            "density": r.f32(),
+            "color": read_rgba(r),
+        }
+    if version >= 21:
+        result["global_weather_rawcode"] = r.rawcode()
+    if version >= 22:
+        result["sound_environment"] = r.cstr()
+    if version >= 23:
+        result["light_environment"] = chr(r.u8())
+    if version >= 25:
+        result["water_tint"] = read_rgba(r)
+    if version >= 28:
+        lang = r.i32()
+        result["scripting_language"] = {"raw": lang, "name": SCRIPT_LANGUAGES.get(lang, "unknown")}
+    if version >= 29:
+        graphics = r.i32()
+        result["supported_graphics"] = {"raw": graphics, "name": GRAPHICS_MODES.get(graphics, "unknown")}
+    if version >= 30:
+        data_version = r.i32()
+        result["game_data_version"] = {"raw": data_version, "name": GAME_DATA_VERSIONS.get(data_version, "unknown")}
+    if version >= 32:
+        result["forced_default_camera_zoom"] = r.i32()
+        result["forced_max_camera_zoom"] = r.i32()
+    if version >= 33:
+        result["forced_min_camera_zoom"] = r.i32()
+
+    if r.remaining >= 4:
+        players = []
+        for _ in range(r.i32()):
+            slot = r.i32()
+            player_type = r.i32()
+            race = r.i32()
+            fixed = r.u32()
+            p: dict[str, Any] = {
+                "slot": slot,
+                "type": {"raw": player_type, "name": PLAYER_TYPES.get(player_type, "unknown")},
+                "race": {"raw": race, "name": PLAYER_RACES.get(race, "unknown")},
+                "fixed_start_position": bool(fixed & 1),
+                "flags_raw": fixed,
+                "name": r.cstr(),
+                "start": {"x": r.f32(), "y": r.f32()},
+            }
+            if version >= 5:
+                p["ally_priority_low"] = r.u32()
+                p["ally_priority_high"] = r.u32()
+            if version >= 31:
+                p["enemy_priority_low"] = r.u32()
+                p["enemy_priority_high"] = r.u32()
+            players.append(p)
+        result["players"] = players
+
+    if r.remaining >= 4:
+        forces = []
+        for _ in range(r.i32()):
+            force_flags = r.u32()
+            players_mask = r.u32()
+            forces.append({
+                "flags": {
+                    "raw": force_flags,
+                    "hex": f"0x{force_flags:08x}",
+                    "set": flags_to_names(force_flags, FORCE_FLAGS),
+                },
+                "players_mask": players_mask,
+                "players": [i for i in range(32) if players_mask & (1 << i)],
+                "name": r.cstr(),
+            })
+        result["forces"] = forces
+
+    if r.remaining >= 4 and version >= 6:
+        upgrades = []
+        for _ in range(r.i32()):
+            upgrades.append({
+                "players_mask": r.u32(),
+                "rawcode": r.rawcode(),
+                "level": r.i32(),
+                "availability": r.i32(),
+            })
+        result["custom_upgrades"] = upgrades
+
+    if r.remaining >= 4 and version >= 7:
+        tech = []
+        for _ in range(r.i32()):
+            tech.append({"players_mask": r.u32(), "rawcode": r.rawcode()})
+        result["custom_tech"] = tech
+
+    if r.remaining >= 4 and version >= 12:
+        tables = []
+        for _ in range(r.i32()):
+            table_number = r.i32()
+            name = r.cstr()
+            columns = r.i32()
+            column_types = [r.i32() for _ in range(columns)]
+            rows = []
+            for _ in range(r.i32()):
+                rows.append({
+                    "chance": r.i32(),
+                    "rawcodes": [r.rawcode() for _ in range(columns)],
+                })
+            tables.append({
+                "number": table_number,
+                "name": name,
+                "column_types": column_types,
+                "rows": rows,
+            })
+        result["random_unit_tables"] = tables
+
+    if r.remaining >= 4 and version >= 24:
+        tables = []
+        for _ in range(r.i32()):
+            table_number = r.i32()
+            name = r.cstr()
+            sets = []
+            for _ in range(r.i32()):
+                items = []
+                for _ in range(r.i32()):
+                    items.append({"chance": r.i32(), "rawcode": r.rawcode()})
+                sets.append(items)
+            tables.append({"number": table_number, "name": name, "sets": sets})
+        result["random_item_tables"] = tables
+
+    if version in (26, 27) and r.remaining >= 4:
+        lang = r.i32()
+        result["trailing_scripting_language"] = {"raw": lang, "name": SCRIPT_LANGUAGES.get(lang, "unknown")}
+
+    result["parse"] = {"bytes_total": len(r.data), "bytes_consumed": r.offset, "bytes_remaining": r.remaining}
+    if r.remaining:
+        result["parse"]["trailing_hex"] = r._take(r.remaining).hex()
+    return result
+
+
+def parse_wpm(path: Path, output: Path) -> dict[str, Any]:
+    r = Reader(path.read_bytes())
+    signature = r._take(4).decode("ascii", errors="replace")
+    version = r.u32()
+    width = r.u32()
+    height = r.u32()
+    cells = r._take(width * height)
+    if r.remaining:
+        raise ValueError(f"war3map.wpm has {r.remaining} unexpected trailing bytes")
+
+    histogram = Counter(cells)
+    bit_counts = {name: sum(1 for value in cells if value & bit) for bit, name in PATHING_FLAGS.items()}
+    summary = {
+        "signature": signature,
+        "version": version,
+        "width_cells": width,
+        "height_cells": height,
+        "cells_per_terrain_tile": 4,
+        "bytes": len(cells),
+        "flag_semantics": {f"0x{bit:02x}": name for bit, name in PATHING_FLAGS.items()},
+        "flag_counts": bit_counts,
+        "value_histogram": {f"0x{value:02x}": count for value, count in sorted(histogram.items())},
+    }
+
+    hex_lines = []
+    walk_lines = []
+    build_lines = []
+    for y in range(height):
+        row = cells[y * width:(y + 1) * width]
+        hex_lines.append(" ".join(f"{value:02x}" for value in row))
+        walk_lines.append("".join("#" if value & 0x02 else "." for value in row))
+        build_lines.append("".join("#" if value & 0x08 else "." for value in row))
+    (output / "pathing-grid.hex.txt").write_text("\n".join(hex_lines) + "\n", encoding="utf-8")
+    (output / "walkability.txt").write_text("\n".join(walk_lines) + "\n", encoding="utf-8")
+    (output / "buildability.txt").write_text("\n".join(build_lines) + "\n", encoding="utf-8")
+    return summary
+
+
+def parse_shadow(path: Path, width: int, height: int, output: Path) -> dict[str, Any]:
+    data = path.read_bytes()
+    expected = width * height
+    summary: dict[str, Any] = {
+        "bytes": len(data),
+        "expected_from_pathing_dimensions": expected,
+        "matches_pathing_dimensions": len(data) == expected,
+        "value_histogram": {f"0x{k:02x}": v for k, v in sorted(Counter(data).items())},
+    }
+    if len(data) == expected:
+        lines = []
+        for y in range(height):
+            row = data[y * width:(y + 1) * width]
+            lines.append(" ".join(f"{value:02x}" for value in row))
+        (output / "shadow-grid.hex.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return summary
+
+
+def parse_mmp(path: Path) -> dict[str, Any]:
+    r = Reader(path.read_bytes())
+    version = r.u32()
+    count = r.u32()
+    icons = []
+    for _ in range(count):
+        icons.append({
+            "type": r.i32(),
+            "x": r.i32(),
+            "y": r.i32(),
+            "color": read_rgba(r),
+        })
+    return {
+        "version": version,
+        "count": count,
+        "icons": icons,
+        "parse": {"bytes_total": len(r.data), "bytes_consumed": r.offset, "bytes_remaining": r.remaining},
+    }
+
+
+def map_archive_header(path: Path) -> dict[str, Any]:
+    data = path.read_bytes()
+    mpq_offset = data.find(b"MPQ\x1a")
+    name_end = data.find(b"\0", 8, max(mpq_offset, 8))
+    name = None
+    if name_end >= 0:
+        name = data[8:name_end].decode("utf-8", errors="replace")
+    result = {
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": len(data),
+        "header_signature": data[:4].decode("ascii", errors="replace"),
+        "header_value_at_0x04": struct.unpack_from("<I", data, 4)[0] if len(data) >= 8 else None,
+        "header_map_name": name,
+        "mpq_offset": mpq_offset,
+    }
+    return result
+
+
+def parse_wts(path: Path) -> dict[str, dict[str, str]]:
+    """Parse Warcraft trigger strings without recoding their UTF-8 payload."""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    entries: dict[str, dict[str, str]] = {}
+    index = 0
+    header = re.compile(r"^\s*STRING\s+(\d+)(?:\s*//\s*(.*))?\s*$")
+
+    while index < len(lines):
+        match = header.match(lines[index])
+        if not match:
+            index += 1
+            continue
+
+        string_id = str(int(match.group(1)))
+        comment = match.group(2)
+        index += 1
+        while index < len(lines) and not lines[index].strip():
+            index += 1
+        if index >= len(lines) or lines[index].strip() != "{":
+            raise ValueError(f"STRING {string_id} is missing an opening brace")
+        index += 1
+
+        value_lines: list[str] = []
+        while index < len(lines) and lines[index].strip() != "}":
+            value_lines.append(lines[index])
+            index += 1
+        if index >= len(lines):
+            raise ValueError(f"STRING {string_id} is missing a closing brace")
+        index += 1
+
+        if string_id in entries:
+            raise ValueError(f"duplicate trigger string id {string_id}")
+        entry = {"value": "\n".join(value_lines)}
+        if comment:
+            entry["comment"] = comment
+        entries[string_id] = entry
+
+    return entries
+
+
+def repair_translator_text(value: Any) -> Any:
+    """Repair UTF-8 bytes that WC3MapTranslator exposed as Latin-1 text.
+
+    Only strings containing common UTF-8-as-Latin-1 markers are considered,
+    and the conversion is accepted only when the resulting byte sequence is
+    valid UTF-8. Legacy single-byte strings therefore remain untouched.
+    """
+    if isinstance(value, list):
+        return [repair_translator_text(item) for item in value]
+    if isinstance(value, dict):
+        return {key: repair_translator_text(item) for key, item in value.items()}
+    if not isinstance(value, str) or not any(marker in value for marker in ("Ã", "Â", "â", "Ð", "Ñ")):
+        return value
+    try:
+        repaired = value.encode("latin1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+    old_markers = sum(value.count(marker) for marker in ("Ã", "Â", "â", "Ð", "Ñ"))
+    new_markers = sum(repaired.count(marker) for marker in ("Ã", "Â", "â", "Ð", "Ñ"))
+    return repaired if new_markers < old_markers else value
+
+
+def resolve_trigger_string(value: Any, strings: dict[str, str]) -> Any:
+    value = repair_translator_text(value)
+    if not isinstance(value, str):
+        return value
+    match = TRIGSTR_RE.fullmatch(value)
+    if not match:
+        return value
+    return strings.get(str(int(match.group(1))), value)
+
+
+def split_object_key(key: str, table: str) -> tuple[str, str | None]:
+    if table == "custom" and ":" in key:
+        new_id, base_id = key.split(":", 1)
+        return new_id, base_id
+    return key, None
+
+
+def write_object_catalog(translated: Path, output: Path, strings: dict[str, str]) -> dict[str, Any]:
+    object_files = {
+        "units": "obj-units.json",
+        "items": "obj-items.json",
+        "abilities": "obj-abilities.json",
+        "buffs": "obj-buffs.json",
+        "destructables": "obj-destructables.json",
+        "doodads": "obj-doodads.json",
+    }
+    catalog_dir = output / "catalog"
+    catalog_dir.mkdir(parents=True, exist_ok=True)
+
+    summary: dict[str, Any] = {}
+    field_rows: list[list[Any]] = []
+    index_rows: list[list[Any]] = []
+
+    # Useful rawcode fields for a concise index. The full field table remains authoritative.
+    name_fields = {
+        "units": "unam",
+        "items": "unam",
+        "abilities": "anam",
+        "buffs": "ftip",
+        "destructables": "bnam",
+        "doodads": "dnam",
+    }
+
+    selected_unit_fields = [
+        "unam", "utip", "utub", "ubld", "uhpm", "umpm", "umvs", "uspe", "ucol", "uacq",
+        "udef", "udty", "uabi", "utyp", "upat", "uubs", "ugol", "ulum", "ufoo",
+        "ua1b", "ua1d", "ua1s", "ua1c", "ua1r", "ua1t", "ua1w", "ua1g", "ua1m", "ua1z",
+        "ua2b", "ua2d", "ua2s", "ua2c", "ua2r", "ua2t", "ua2w", "ua2g", "ua2m", "ua2z",
+    ]
+    unit_rows: list[list[Any]] = []
+    building_rows: list[list[Any]] = []
+    ability_rows: list[list[Any]] = []
+
+    selected_building_fields = [
+        "unam", "utip", "utub", "uhpm", "umpm", "ucol", "usca", "umdl", "upat", "uabi",
+        "ugol", "ulum", "ufoo", "ubld", "udef", "udty", "uacq",
+    ]
+
+    def field_variants(modifications: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        variants: dict[str, list[dict[str, Any]]] = {}
+        for mod in modifications:
+            variants.setdefault(mod["id"], []).append({
+                "level": mod.get("level", 0),
+                "column": mod.get("column", 0),
+                "type": mod.get("type", ""),
+                "value": resolve_trigger_string(mod.get("value"), strings),
+            })
+        return variants
+
+    def compact_variant(variants: dict[str, list[dict[str, Any]]], field: str) -> Any:
+        values = variants.get(field, [])
+        if not values:
+            return ""
+        if len(values) == 1:
+            return values[0]["value"]
+        return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+
+    def footprint_hint(pathing_texture: Any) -> str:
+        if not isinstance(pathing_texture, str):
+            return ""
+        match = re.search(r"(?i)(\d+)x(\d+)", pathing_texture)
+        return f"{match.group(1)}x{match.group(2)}" if match else ""
+
+    for category, filename in object_files.items():
+        source = translated / filename
+        if not source.exists():
+            continue
+        data = repair_translator_text(json.loads(source.read_text(encoding="utf-8")))
+        (output / filename).write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        counts = {table: len(objects) for table, objects in data.items()}
+        summary[category] = counts
+
+        for table, objects in data.items():
+            for key, modifications in objects.items():
+                rawcode, base_rawcode = split_object_key(key, table)
+                fields: dict[str, Any] = {}
+                for mod in modifications:
+                    raw_value = mod.get("value")
+                    resolved = resolve_trigger_string(raw_value, strings)
+                    fields[mod["id"]] = resolved
+                    field_rows.append([
+                        category,
+                        table,
+                        rawcode,
+                        base_rawcode or "",
+                        mod["id"],
+                        mod.get("type", ""),
+                        mod.get("level", 0),
+                        mod.get("column", 0),
+                        json.dumps(raw_value, ensure_ascii=False),
+                        json.dumps(resolved, ensure_ascii=False),
+                    ])
+                name = fields.get(name_fields[category], "")
+                index_rows.append([category, table, rawcode, base_rawcode or "", name, len(modifications)])
+                variants = field_variants(modifications)
+                if category == "units":
+                    unit_rows.append([
+                        table,
+                        rawcode,
+                        base_rawcode or "",
+                        *[fields.get(field, "") for field in selected_unit_fields],
+                    ])
+                    pathing_texture = fields.get("upat", "")
+                    if fields.get("ubld") == 1 or pathing_texture:
+                        building_rows.append([
+                            table,
+                            rawcode,
+                            base_rawcode or "",
+                            footprint_hint(pathing_texture),
+                            *[fields.get(field, "") for field in selected_building_fields],
+                        ])
+                elif category == "abilities":
+                    ability_rows.append([
+                        table,
+                        rawcode,
+                        base_rawcode or "",
+                        compact_variant(variants, "anam"),
+                        compact_variant(variants, "alev"),
+                        compact_variant(variants, "amcs"),
+                        compact_variant(variants, "acdn"),
+                        compact_variant(variants, "aran"),
+                        compact_variant(variants, "aare"),
+                        compact_variant(variants, "atar"),
+                        compact_variant(variants, "abuf"),
+                        compact_variant(variants, "aeff"),
+                        compact_variant(variants, "atp1"),
+                        compact_variant(variants, "aub1"),
+                        json.dumps(variants, ensure_ascii=False, separators=(",", ":")),
+                    ])
+
+    with (catalog_dir / "object-fields.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["category", "table", "rawcode", "base_rawcode", "field_id", "type", "level", "column", "raw_value", "resolved_value"])
+        writer.writerows(field_rows)
+
+    with (catalog_dir / "objects.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["category", "table", "rawcode", "base_rawcode", "name", "modification_count"])
+        writer.writerows(index_rows)
+
+    with (catalog_dir / "units.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["table", "rawcode", "base_rawcode", *selected_unit_fields])
+        writer.writerows(unit_rows)
+
+    with (catalog_dir / "buildings.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["table", "rawcode", "base_rawcode", "pathing_size_hint", *selected_building_fields])
+        writer.writerows(building_rows)
+
+    with (catalog_dir / "abilities.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "table", "rawcode", "base_rawcode", "anam", "alev", "amcs", "acdn", "aran", "aare",
+            "atar", "abuf", "aeff", "atp1", "aub1", "all_fields_json",
+        ])
+        writer.writerows(ability_rows)
+
+    return summary
+
+
+def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
+    script_dir = output / "script"
+    script_dir.mkdir(parents=True, exist_ok=True)
+    destination = script_dir / "war3map.lua"
+    shutil.copyfile(lua_path, destination)
+
+    text = lua_path.read_text(encoding="utf-8", errors="replace")
+    function_matches = list(FUNCTION_RE.finditer(text))
+    function_names = [match.group(1) for match in function_matches]
+    definitions = Counter(function_names)
+    calls = Counter(CALL_RE.findall(text))
+
+    with (script_dir / "functions.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["name", "definition_count", "first_byte_offset"])
+        first: dict[str, int] = {}
+        for match in function_matches:
+            first.setdefault(match.group(1), match.start())
+        for name in sorted(definitions):
+            writer.writerow([name, definitions[name], first[name]])
+
+    with (script_dir / "calls.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["callee", "count"])
+        for name, count in sorted(calls.items(), key=lambda item: (-item[1], item[0])):
+            writer.writerow([name, count])
+
+    readable = sorted({
+        name for name in function_names
+        if len(name) >= 5 and ("_" in name or any(ch.isupper() for ch in name[1:]))
+    })
+    (script_dir / "readable-function-names.txt").write_text("\n".join(readable) + "\n", encoding="utf-8")
+
+    return {
+        "bytes": lua_path.stat().st_size,
+        "line_count": text.count("\n") + 1,
+        "w3p_marker": text.startswith("--W3P"),
+        "function_definitions": len(function_matches),
+        "unique_function_names": len(definitions),
+        "unique_call_tokens": len(calls),
+        "readable_function_names": len(readable),
+        "note": "The source is retained verbatim but is W3P-obfuscated; indexes are static and do not execute map code.",
+    }
+
+
+def copy_plaintext(raw: Path, output: Path) -> list[str]:
+    copied = []
+    for filename in ("war3mapMisc.txt", "war3mapSkin.txt", "war3map.wts"):
+        source = raw / filename
+        if source.exists():
+            shutil.copyfile(source, output / filename)
+            copied.append(filename)
+    return copied
+
+
+def write_archive_manifest(raw: Path, output: Path) -> list[dict[str, Any]]:
+    rows = []
+    for path in sorted(raw.iterdir()):
+        if not path.is_file() or path.name.startswith("File") or path.name.startswith("obj-"):
+            continue
+        data = path.read_bytes()
+        rows.append({
+            "name": path.name,
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        })
+    (output / "archive-members.json").write_text(json.dumps(rows, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return rows
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--map", type=Path, required=True)
+    parser.add_argument("--raw", type=Path, required=True)
+    parser.add_argument("--translated", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+
+    args.output.mkdir(parents=True, exist_ok=True)
+
+    wts_entries = parse_wts(args.raw / "war3map.wts")
+    strings = {key: entry["value"] for key, entry in wts_entries.items()}
+    (args.output / "strings.json").write_text(
+        json.dumps(wts_entries, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    terrain_path = args.translated / "terrain.json"
+    if terrain_path.exists():
+        terrain = repair_translator_text(json.loads(terrain_path.read_text(encoding="utf-8")))
+        (args.output / "terrain.json").write_text(json.dumps(terrain, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    doodads_path = args.translated / "doodads.json"
+    if doodads_path.exists():
+        doodads = repair_translator_text(json.loads(doodads_path.read_text(encoding="utf-8")))
+        (args.output / "doodads.json").write_text(json.dumps(doodads, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    map_info = parse_w3i(args.raw / "war3map.w3i")
+    (args.output / "map-info.json").write_text(json.dumps(map_info, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    pathing = parse_wpm(args.raw / "war3map.wpm", args.output)
+    (args.output / "pathing.json").write_text(json.dumps(pathing, indent=2) + "\n", encoding="utf-8")
+
+    shadow = parse_shadow(args.raw / "war3map.shd", pathing["width_cells"], pathing["height_cells"], args.output)
+    (args.output / "shadow.json").write_text(json.dumps(shadow, indent=2) + "\n", encoding="utf-8")
+
+    minimap = parse_mmp(args.raw / "war3map.mmp")
+    (args.output / "minimap-icons.json").write_text(json.dumps(minimap, indent=2) + "\n", encoding="utf-8")
+
+    object_summary = write_object_catalog(args.translated, args.output, strings)
+    script_summary = write_script_index(args.raw / "war3map.lua", args.output)
+    copied_text = copy_plaintext(args.raw, args.output)
+    members = write_archive_manifest(args.raw, args.output)
+    archive_header = map_archive_header(args.map)
+
+    summary = {
+        "source_map": str(args.map.resolve().relative_to(Path.cwd().resolve())) if args.map.resolve().is_relative_to(Path.cwd().resolve()) else str(args.map),
+        "archive": archive_header,
+        "canonical_members": len(members),
+        "map_info": {
+            "name": map_info.get("name"),
+            "author": map_info.get("author"),
+            "format_version": map_info.get("format_version"),
+            "game_version": map_info.get("game_version"),
+            "playable_size_tiles": map_info.get("playable_size_tiles"),
+            "total_size_tiles": map_info.get("total_size_tiles"),
+            "player_count": len(map_info.get("players", [])),
+            "force_count": len(map_info.get("forces", [])),
+        },
+        "pathing": {
+            "width_cells": pathing["width_cells"],
+            "height_cells": pathing["height_cells"],
+            "flag_counts": pathing["flag_counts"],
+        },
+        "objects": object_summary,
+        "script": script_summary,
+        "plaintext_members_copied": copied_text,
+    }
+    (args.output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()

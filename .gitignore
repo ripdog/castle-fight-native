@@ -1,1 +1,6 @@
 /target/
+/.local-tools/
+/.map-work/
+
+__pycache__/
+*.pyc
