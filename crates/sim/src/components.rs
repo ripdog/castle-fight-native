@@ -20,7 +20,7 @@ pub struct Health {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AttackDelivery {
     Melee,
-    RangedGuaranteedHit,
+    RangedGuaranteedHit { speed_per_tick: i32 },
 }
 
 impl AttackDelivery {
@@ -28,7 +28,7 @@ impl AttackDelivery {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::Melee => 0,
-            Self::RangedGuaranteedHit => 1,
+            Self::RangedGuaranteedHit { .. } => 1,
         }
     }
 }
@@ -54,6 +54,16 @@ impl AttackProfile {
         let range = i64::from(self.acquisition_range);
         (range * range) as u64
     }
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GuaranteedHitProjectile {
+    pub source: SimId,
+    pub target: SimId,
+    pub damage: i32,
+    pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]

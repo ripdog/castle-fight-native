@@ -23,6 +23,7 @@ const LANE_MAX_Y: i32 = 54;
 const PRODUCTION_BUILDING_SIZE: u16 = 4;
 const PRODUCTION_INTERVAL_TICKS: u16 = 300;
 const ATTACK_COOLDOWN_TICKS: u16 = 30;
+const RANGED_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
 const ATTACK_TRACE_SECONDS: f32 = 0.18;
 const PLAYER_CASTLE: BuildingFootprint = BuildingFootprint::new(30, 34, 7, 7);
 const ENEMY_CASTLE: BuildingFootprint = BuildingFootprint::new(163, 34, 7, 7);
@@ -157,7 +158,7 @@ fn main() {
             ),
         )
         .add_systems(Update, age_attack_traces.before(draw_attack_traces))
-        .add_systems(Update, draw_attack_traces)
+        .add_systems(Update, (draw_attack_traces, draw_authoritative_projectiles))
         .run();
 }
 
@@ -419,6 +420,7 @@ fn apply_placements_and_step(
             .attacks_last_tick()
             .iter()
             .copied()
+            .filter(|event| matches!(event.delivery, AttackDelivery::Melee))
             .map(|event| AttackTrace {
                 start: sim_point_to_world(event.source_position),
                 end: sim_point_to_world(event.target_position),
@@ -468,7 +470,11 @@ fn unit_template(kind: ProductionKind) -> UnitTemplate {
         ProductionKind::Ranged => UnitTemplate {
             health: 10,
             attack: castle_fight_sim::AttackProfile {
-                delivery: AttackDelivery::RangedGuaranteedHit,
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: RANGED_PROJECTILE_SPEED_WORLD_PER_SECOND
+                        * SUBUNITS_PER_WORLD_UNIT
+                        / SIMULATION_HZ_I32,
+                },
                 damage: 1,
                 range: 120 * SUBUNITS_PER_WORLD_UNIT,
                 acquisition_range: 180 * SUBUNITS_PER_WORLD_UNIT,
@@ -566,9 +572,39 @@ fn draw_attack_traces(mut gizmos: Gizmos, attacks: Res<AttackVisuals>) {
     for trace in &attacks.0 {
         let color = match trace.delivery {
             AttackDelivery::Melee => Color::srgba(1.0, 0.92, 0.62, 0.9),
-            AttackDelivery::RangedGuaranteedHit => Color::srgba(0.72, 0.95, 1.0, 0.95),
+            AttackDelivery::RangedGuaranteedHit { .. } => Color::srgba(0.72, 0.95, 1.0, 0.95),
         };
         gizmos.line_2d(trace.start, trace.end, color);
+    }
+}
+
+fn draw_authoritative_projectiles(state: Res<GameState>, mut gizmos: Gizmos) {
+    let tick = state.simulation.tick();
+    for projectile in state.simulation.projectiles() {
+        let target = if let Some(unit) = state.simulation.unit(projectile.target) {
+            sim_point_to_world(unit.position)
+        } else if let Some(building) = state.simulation.building(projectile.target) {
+            footprint_world_rect(building.footprint).0
+        } else {
+            continue;
+        };
+        let start = sim_point_to_world(projectile.launch_position);
+        let travel_ticks = projectile
+            .impact_tick
+            .saturating_sub(projectile.launch_tick)
+            .max(1);
+        let elapsed_ticks = tick
+            .saturating_sub(projectile.launch_tick)
+            .min(travel_ticks);
+        let progress = elapsed_ticks as f32 / travel_ticks as f32;
+        let position = start.lerp(target, progress);
+        let direction = (target - start).normalize_or_zero();
+        let half_length = 3.0;
+        gizmos.line_2d(
+            position - direction * half_length,
+            position + direction * half_length,
+            Color::srgba(0.72, 0.95, 1.0, 0.95),
+        );
     }
 }
 
@@ -693,9 +729,9 @@ fn footprint_world_rect(footprint: BuildingFootprint) -> (Vec2, Vec2) {
 fn unit_color(unit: &UnitView) -> Color {
     match (unit.team.0, unit.attack_delivery) {
         (0, AttackDelivery::Melee) => Color::srgb(0.22, 0.55, 1.0),
-        (0, AttackDelivery::RangedGuaranteedHit) => Color::srgb(0.42, 0.88, 1.0),
+        (0, AttackDelivery::RangedGuaranteedHit { .. }) => Color::srgb(0.42, 0.88, 1.0),
         (1, AttackDelivery::Melee) => Color::srgb(1.0, 0.30, 0.26),
-        (1, AttackDelivery::RangedGuaranteedHit) => Color::srgb(1.0, 0.60, 0.32),
+        (1, AttackDelivery::RangedGuaranteedHit { .. }) => Color::srgb(1.0, 0.60, 0.32),
         _ => Color::WHITE,
     }
 }
@@ -703,7 +739,7 @@ fn unit_color(unit: &UnitView) -> Color {
 fn unit_size(unit: &UnitView) -> Vec2 {
     match unit.attack_delivery {
         AttackDelivery::Melee => Vec2::splat(9.0),
-        AttackDelivery::RangedGuaranteedHit => Vec2::splat(7.0),
+        AttackDelivery::RangedGuaranteedHit { .. } => Vec2::splat(7.0),
     }
 }
 
@@ -717,9 +753,9 @@ fn building_color(building: &BuildingView) -> Color {
         (0, None) => Color::srgb(0.45, 0.70, 1.0),
         (1, None) => Color::srgb(1.0, 0.48, 0.42),
         (0, Some(AttackDelivery::Melee)) => Color::srgb(0.12, 0.36, 0.72),
-        (0, Some(AttackDelivery::RangedGuaranteedHit)) => Color::srgb(0.20, 0.62, 0.78),
+        (0, Some(AttackDelivery::RangedGuaranteedHit { .. })) => Color::srgb(0.20, 0.62, 0.78),
         (1, Some(AttackDelivery::Melee)) => Color::srgb(0.72, 0.18, 0.16),
-        (1, Some(AttackDelivery::RangedGuaranteedHit)) => Color::srgb(0.82, 0.40, 0.16),
+        (1, Some(AttackDelivery::RangedGuaranteedHit { .. })) => Color::srgb(0.82, 0.40, 0.16),
         _ => Color::srgb(0.6, 0.6, 0.6),
     }
 }
@@ -761,6 +797,13 @@ mod tests {
             assert_eq!(unit.attack.damage, 1);
             assert_eq!(unit.attack.cooldown_ticks, 30);
         }
+        assert_eq!(
+            unit_template(ProductionKind::Ranged).attack.delivery,
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: RANGED_PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                    / SIMULATION_HZ_I32,
+            }
+        );
     }
 
     #[test]

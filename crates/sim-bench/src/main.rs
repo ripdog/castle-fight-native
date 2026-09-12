@@ -19,6 +19,7 @@ enum Scenario {
     Pathing,
     Topology,
     Production,
+    Projectile,
 }
 
 impl Scenario {
@@ -30,6 +31,7 @@ impl Scenario {
             Self::Pathing => "pathing",
             Self::Topology => "topology",
             Self::Production => "production",
+            Self::Projectile => "projectile",
         }
     }
 }
@@ -138,6 +140,31 @@ fn main() {
                         "  MISMATCH"
                     },
                 );
+                if result.peak_projectiles_alive > 0
+                    || result.projectile_launches_per_tick > 0.0
+                    || result.projectile_impacts_per_tick > 0.0
+                {
+                    println!(
+                        "         projectiles avg-live={:.1} peak-live={} launch/t={:.1} impact/t={:.1} invalid/t={:.1}",
+                        result.average_projectiles_alive,
+                        result.peak_projectiles_alive,
+                        result.projectile_launches_per_tick,
+                        result.projectile_impacts_per_tick,
+                        result.projectile_invalidations_per_tick,
+                    );
+                }
+                if result.ally_defense_queries_per_tick > 0.0
+                    || result.target_changes_per_tick > 0.0
+                {
+                    println!(
+                        "         targeting retained/t={:.1} changes/t={:.1} defense-q/t={:.1} victims/q={:.2} attackers/q={:.2}",
+                        result.retained_targets_per_tick,
+                        result.target_changes_per_tick,
+                        result.ally_defense_queries_per_tick,
+                        result.ally_defense_victims_per_query,
+                        result.ally_defense_attackers_per_query,
+                    );
+                }
             }
         }
     }
@@ -162,6 +189,26 @@ struct PhaseMs {
     checksum: f64,
 }
 
+#[derive(Debug, Default)]
+struct BenchCounters {
+    pursuit_steps: usize,
+    a_star_fallbacks: usize,
+    a_star_cache_hits: usize,
+    a_star_expanded_nodes: usize,
+    units_spawned: usize,
+    spawn_failures: usize,
+    projectile_live_sum: usize,
+    peak_projectiles_alive: usize,
+    projectiles_launched: usize,
+    projectile_impacts: usize,
+    projectile_invalidations: usize,
+    retained_targets: usize,
+    target_changes: usize,
+    ally_defense_queries: usize,
+    ally_defense_victim_candidates: usize,
+    ally_defense_attacker_candidates: usize,
+}
+
 #[derive(Debug)]
 struct BenchResult {
     ms_per_tick: f64,
@@ -173,6 +220,16 @@ struct BenchResult {
     a_star_nodes_per_tick: f64,
     spawns_per_tick: f64,
     spawn_failures_per_tick: f64,
+    average_projectiles_alive: f64,
+    peak_projectiles_alive: usize,
+    projectile_launches_per_tick: f64,
+    projectile_impacts_per_tick: f64,
+    projectile_invalidations_per_tick: f64,
+    retained_targets_per_tick: f64,
+    target_changes_per_tick: f64,
+    ally_defense_queries_per_tick: f64,
+    ally_defense_victims_per_query: f64,
+    ally_defense_attackers_per_query: f64,
     checksum: u64,
 }
 
@@ -243,25 +300,12 @@ fn run_case(
 
     let start = Instant::now();
     let mut timings = TickTimings::default();
-    let mut pursuit_steps = 0usize;
-    let mut a_star_fallbacks = 0usize;
-    let mut a_star_cache_hits = 0usize;
-    let mut a_star_expanded_nodes = 0usize;
-    let mut units_spawned = 0usize;
-    let mut spawn_failures = 0usize;
+    let mut counters = BenchCounters::default();
     for _ in 0..ticks {
         state.before_tick(&mut simulation);
         let result = simulation.step();
         accumulate_timings(&mut timings, result.timings);
-        accumulate_counters(
-            &result,
-            &mut pursuit_steps,
-            &mut a_star_fallbacks,
-            &mut a_star_cache_hits,
-            &mut a_star_expanded_nodes,
-            &mut units_spawned,
-            &mut spawn_failures,
-        );
+        accumulate_counters(&result, &mut counters);
     }
     let elapsed = start.elapsed();
 
@@ -274,12 +318,30 @@ fn run_case(
             ticks as f64 / seconds
         },
         phase_ms: average_phase_ms(timings, ticks),
-        pursuit_steps,
-        a_star_fallbacks,
-        a_star_cache_hits,
-        a_star_nodes_per_tick: a_star_expanded_nodes as f64 / ticks as f64,
-        spawns_per_tick: units_spawned as f64 / ticks as f64,
-        spawn_failures_per_tick: spawn_failures as f64 / ticks as f64,
+        pursuit_steps: counters.pursuit_steps,
+        a_star_fallbacks: counters.a_star_fallbacks,
+        a_star_cache_hits: counters.a_star_cache_hits,
+        a_star_nodes_per_tick: counters.a_star_expanded_nodes as f64 / ticks as f64,
+        spawns_per_tick: counters.units_spawned as f64 / ticks as f64,
+        spawn_failures_per_tick: counters.spawn_failures as f64 / ticks as f64,
+        average_projectiles_alive: counters.projectile_live_sum as f64 / ticks as f64,
+        peak_projectiles_alive: counters.peak_projectiles_alive,
+        projectile_launches_per_tick: counters.projectiles_launched as f64 / ticks as f64,
+        projectile_impacts_per_tick: counters.projectile_impacts as f64 / ticks as f64,
+        projectile_invalidations_per_tick: counters.projectile_invalidations as f64 / ticks as f64,
+        retained_targets_per_tick: counters.retained_targets as f64 / ticks as f64,
+        target_changes_per_tick: counters.target_changes as f64 / ticks as f64,
+        ally_defense_queries_per_tick: counters.ally_defense_queries as f64 / ticks as f64,
+        ally_defense_victims_per_query: if counters.ally_defense_queries == 0 {
+            0.0
+        } else {
+            counters.ally_defense_victim_candidates as f64 / counters.ally_defense_queries as f64
+        },
+        ally_defense_attackers_per_query: if counters.ally_defense_queries == 0 {
+            0.0
+        } else {
+            counters.ally_defense_attacker_candidates as f64 / counters.ally_defense_queries as f64
+        },
         checksum: simulation.checksum(),
     }
 }
@@ -307,6 +369,7 @@ fn populate_scenario(
         Scenario::Pathing => populate_pathing_wall_battle(simulation, units),
         Scenario::Topology => populate_lane_battle(simulation, units),
         Scenario::Production => populate_production_churn(simulation, units),
+        Scenario::Projectile => populate_projectile_density_battle(simulation, units),
     }
 
     match scenario {
@@ -347,6 +410,42 @@ fn populate_pathing_wall_battle(simulation: &mut Simulation, total_units: usize)
                 team: Team(team),
                 position: SimPoint::new(x, y),
                 health: 100_000,
+                attack,
+                movement,
+            });
+        }
+    }
+}
+
+fn populate_projectile_density_battle(simulation: &mut Simulation, total_units: usize) {
+    let per_team = total_units / 2;
+    let rows = 100usize.min(per_team.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let attack = AttackProfile {
+        delivery: AttackDelivery::RangedGuaranteedHit {
+            speed_per_tick: 4 * SUBUNITS_PER_WORLD_UNIT,
+        },
+        damage: 1,
+        range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 1,
+    };
+    let movement = MovementProfile { speed_per_tick: 0 };
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                50 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                70 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000_000,
                 attack,
                 movement,
             });
@@ -398,21 +497,25 @@ fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
     }
 }
 
-fn accumulate_counters(
-    result: &TickResult,
-    pursuit_steps: &mut usize,
-    a_star_fallbacks: &mut usize,
-    a_star_cache_hits: &mut usize,
-    a_star_expanded_nodes: &mut usize,
-    units_spawned: &mut usize,
-    spawn_failures: &mut usize,
-) {
-    *pursuit_steps += result.pursuit_steps;
-    *a_star_fallbacks += result.a_star_fallbacks;
-    *a_star_cache_hits += result.a_star_cache_hits;
-    *a_star_expanded_nodes += result.a_star_expanded_nodes;
-    *units_spawned += result.units_spawned;
-    *spawn_failures += result.spawn_failures;
+fn accumulate_counters(result: &TickResult, counters: &mut BenchCounters) {
+    counters.pursuit_steps += result.pursuit_steps;
+    counters.a_star_fallbacks += result.a_star_fallbacks;
+    counters.a_star_cache_hits += result.a_star_cache_hits;
+    counters.a_star_expanded_nodes += result.a_star_expanded_nodes;
+    counters.units_spawned += result.units_spawned;
+    counters.spawn_failures += result.spawn_failures;
+    counters.projectile_live_sum += result.projectiles_alive;
+    counters.peak_projectiles_alive = counters
+        .peak_projectiles_alive
+        .max(result.projectiles_alive);
+    counters.projectiles_launched += result.projectiles_launched;
+    counters.projectile_impacts += result.projectile_impacts;
+    counters.projectile_invalidations += result.projectile_invalidations;
+    counters.retained_targets += result.retained_targets;
+    counters.target_changes += result.target_changes;
+    counters.ally_defense_queries += result.ally_defense_queries;
+    counters.ally_defense_victim_candidates += result.ally_defense_victim_candidates;
+    counters.ally_defense_attacker_candidates += result.ally_defense_attacker_candidates;
 }
 
 fn accumulate_timings(total: &mut TickTimings, tick: TickTimings) {
@@ -470,7 +573,7 @@ fn parse_args() -> Args {
             }
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
-                println!("  --scenario lane,cage,crowd,pathing,topology,production");
+                println!("  --scenario lane,cage,crowd,pathing,topology,production,projectile");
                 println!("  --units 1000,5000,10000");
                 println!("  --workers 1,2,4,8");
                 println!("  --ticks 200");
@@ -500,6 +603,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "pathing" => Scenario::Pathing,
             "topology" => Scenario::Topology,
             "production" => Scenario::Production,
+            "projectile" => Scenario::Projectile,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()

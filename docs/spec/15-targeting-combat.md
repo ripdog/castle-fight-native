@@ -44,6 +44,8 @@ An enemy merely selecting, approaching, or standing near a unit does not trigger
 
 The initial ally-defense radius is the defending unit's normal acquisition range around the attacked ally's position. The attacker must itself remain a valid target that the defender can attack or pursue under ordinary reachability/pursuit rules. If several nearby allies were attacked, the initial deterministic ordering is nearest attacked ally, then nearest valid attacker, then stable IDs.
 
+The verification implementation accelerates this exact ordering with derived one-tick indexes: resolved alerts are grouped by attacked victim, attacked victims are queried in nearest-distance layers, and each victim's actual attacker relation has its own spatial partition for nearest-valid-attacker lookup. These indexes are acceleration structures only. They MUST NOT discard a valid alert, change the nearest-ally/nearest-attacker ordering, or make result ordering depend on hash/grid traversal.
+
 A one-tick canonical defense alert survives the victim dying from the triggering attack, so nearby allies may still react to the killer on the following targeting phase.
 
 A newly visible closer unit MUST NOT cause gratuitous retargeting while the existing engagement remains valid.
@@ -160,13 +162,13 @@ It has no gameplay projectile. Animation may show weapon travel, but presentatio
 
 ### 9.2 Ranged guaranteed-hit
 
-A ranged attack launches a missile toward a specific target and is guaranteed to hit that target once the attack has successfully launched, subject only to explicitly documented invalidation rules such as target removal/death if Castle Fight compatibility requires them.
+A ranged attack launches a missile toward a specific target and is guaranteed to hit that target once the attack has successfully launched while that target remains a live authoritative entity through the impact subphase. The current verification rule invalidates the impact if the retained target identity has already died or been removed before the due impact resolves; the missile does not retarget another entity.
 
-The projectile's travel time is derived deterministically from attack/target distance and projectile speed/time rules. Its rendered position is interpolated over that travel interval.
+The verification travel-time rule is deterministic and integer-only. At launch, use the same authoritative source-to-target distance used by the attack-range calculation, round Euclidean subunit distance upward to the next integer subunit, divide that distance upward by the authored positive `speed_per_tick`, and clamp the result to at least one tick. The resulting due impact tick is `launch_tick + travel_ticks`. This exact rule is provisional compatibility behavior, but any replacement MUST remain explicit and deterministic.
 
-This delivery retains the target entity identity and may visually follow/interpolate toward the target as it moves. It MUST NOT accidentally become missable merely because the target changed position after launch.
+The projectile retains the target `SimId`, source `SimId`, damage, launch position, launch tick, and impact tick as authoritative state. Target movement after launch does not make the projectile miss or change its due tick. Presentation may visually follow/interpolate toward the target's current render position during that interval.
 
-Because impact time can affect damage ordering, the authoritative simulation MUST retain enough projectile/impact state to apply the hit on the correct tick even if the visual projectile itself is presentation-derived.
+A successfully launched projectile is independent of its source. Source death after launch MUST NOT cancel the projectile. Because impact time can affect damage/death ordering, live guaranteed-hit projectiles participate in canonical state/checksums until they impact or invalidate.
 
 ### 9.3 Ranged ballistic projectile
 
@@ -300,7 +302,7 @@ Movement/combat interaction follows these initial rules:
 - melee and other range-limited attackers pursue a reachable attack position for their selected target rather than steering blindly at the target through blockers;
 - if no attack position is reachable, the target is invalid and is dropped/reacquired.
 
-Windup/backswing, range hysteresis, and exact guaranteed-hit target-removal semantics remain compatibility details, but they must fit these precedence rules.
+Windup/backswing and range hysteresis remain compatibility details. Guaranteed-hit target-removal behavior and the initial integer travel-time rule are defined provisionally in §9.2 and may be revised only as an explicit simulation/gameplay rule change.
 
 ## 16. Attack buildings
 

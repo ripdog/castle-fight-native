@@ -95,6 +95,129 @@ impl SpatialGrid {
             }
         }
     }
+
+    pub fn for_each_candidate_nearest_cells(
+        &self,
+        partition: SpatialPartition,
+        center: SimPoint,
+        radius: i32,
+        mut max_distance_sq: u64,
+        mut f: impl FnMut(usize) -> Option<u64>,
+    ) {
+        debug_assert!(radius >= 0);
+        let min = SimPoint::new(center.x - radius, center.y - radius);
+        let max = SimPoint::new(center.x + radius, center.y + radius);
+        let (min_x, min_y) = cell_of(min, self.cell_size);
+        let (max_x, max_y) = cell_of(max, self.cell_size);
+        let (center_x, center_y) = cell_of(center, self.cell_size);
+        let max_ring = (center_x - min_x)
+            .max(max_x - center_x)
+            .max(center_y - min_y)
+            .max(max_y - center_y);
+
+        for ring in 0..=max_ring {
+            if ring == 0 {
+                self.visit_pruned_cell(
+                    partition,
+                    center,
+                    (center_x, center_y),
+                    &mut max_distance_sq,
+                    &mut f,
+                );
+                continue;
+            }
+
+            let left = center_x - ring;
+            let right = center_x + ring;
+            let top = center_y - ring;
+            let bottom = center_y + ring;
+
+            for x in left..=right {
+                if x >= min_x && x <= max_x && top >= min_y && top <= max_y {
+                    self.visit_pruned_cell(
+                        partition,
+                        center,
+                        (x, top),
+                        &mut max_distance_sq,
+                        &mut f,
+                    );
+                }
+            }
+            for y in top + 1..=bottom {
+                if right >= min_x && right <= max_x && y >= min_y && y <= max_y {
+                    self.visit_pruned_cell(
+                        partition,
+                        center,
+                        (right, y),
+                        &mut max_distance_sq,
+                        &mut f,
+                    );
+                }
+            }
+            if bottom >= min_y && bottom <= max_y {
+                for x in (left..right).rev() {
+                    if x >= min_x && x <= max_x {
+                        self.visit_pruned_cell(
+                            partition,
+                            center,
+                            (x, bottom),
+                            &mut max_distance_sq,
+                            &mut f,
+                        );
+                    }
+                }
+            }
+            if left >= min_x && left <= max_x {
+                for y in (top + 1..bottom).rev() {
+                    if y >= min_y && y <= max_y {
+                        self.visit_pruned_cell(
+                            partition,
+                            center,
+                            (left, y),
+                            &mut max_distance_sq,
+                            &mut f,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn visit_pruned_cell(
+        &self,
+        partition: SpatialPartition,
+        center: SimPoint,
+        cell: (i32, i32),
+        max_distance_sq: &mut u64,
+        f: &mut impl FnMut(usize) -> Option<u64>,
+    ) {
+        let (cell_x, cell_y) = cell;
+        if cell_min_distance_sq(center, cell_x, cell_y, self.cell_size) > *max_distance_sq {
+            return;
+        }
+        let Some(bucket) = self.buckets.get(&(partition, cell_x, cell_y)) else {
+            return;
+        };
+        for &index in bucket {
+            if let Some(tighter) = f(index) {
+                *max_distance_sq = (*max_distance_sq).min(tighter);
+            }
+        }
+    }
+}
+
+fn cell_min_distance_sq(center: SimPoint, cell_x: i32, cell_y: i32, cell_size: i32) -> u64 {
+    let min_x = i64::from(cell_x) * i64::from(cell_size);
+    let min_y = i64::from(cell_y) * i64::from(cell_size);
+    let max_x = min_x + i64::from(cell_size);
+    let max_y = min_y + i64::from(cell_size);
+    let center_x = i64::from(center.x);
+    let center_y = i64::from(center.y);
+    let closest_x = center_x.clamp(min_x, max_x);
+    let closest_y = center_y.clamp(min_y, max_y);
+    let dx = center_x - closest_x;
+    let dy = center_y - closest_y;
+    (dx * dx + dy * dy) as u64
 }
 
 impl SpatialReservationGrid {
@@ -266,6 +389,41 @@ mod tests {
         let mut found = Vec::new();
         grid.for_each_candidate(wanted, SimPoint::new(5, 5), 10, |index| found.push(index));
         assert_eq!(found, vec![1]);
+    }
+
+    #[test]
+    fn nearest_cell_query_prunes_without_changing_nearest_choice() {
+        let partition = SpatialPartition::global(0);
+        let positions = [
+            SimPoint::new(95, 0),
+            SimPoint::new(12, 0),
+            SimPoint::new(35, 0),
+            SimPoint::new(-18, 0),
+        ];
+        let grid = SpatialGrid::build(
+            10,
+            positions
+                .iter()
+                .enumerate()
+                .map(|(index, position)| (partition, index, *position)),
+        );
+        let center = SimPoint::new(0, 0);
+        let mut best: Option<(u64, usize)> = None;
+        let mut visited = 0usize;
+        grid.for_each_candidate_nearest_cells(partition, center, 100, 10_000, |index| {
+            visited += 1;
+            let distance_sq = center.distance_sq(positions[index]);
+            let key = (distance_sq, index);
+            if best.is_none_or(|current| key < current) {
+                best = Some(key);
+                Some(distance_sq)
+            } else {
+                None
+            }
+        });
+
+        assert_eq!(best, Some((144, 1)));
+        assert!(visited < positions.len());
     }
 
     #[test]

@@ -12,8 +12,8 @@ pub use components::{
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
-    AttackEvent, BuildingPlacementError, BuildingView, Simulation, SimulationConfig, TickResult,
-    TickTimings, UnitView,
+    AttackEvent, BuildingPlacementError, BuildingView, ProjectileView, Simulation,
+    SimulationConfig, TickResult, TickTimings, UnitView,
 };
 pub use topology::NavCell;
 
@@ -482,14 +482,16 @@ mod tests {
     }
 
     #[test]
-    fn ranged_unit_can_attack_across_disconnected_cage_wall() {
+    fn ranged_guaranteed_hit_crosses_cage_with_authoritative_travel_time() {
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let source = sim.spawn_unit(UnitSpawn {
             team: Team(0),
             position: SimPoint::new(6 * SUBUNITS_PER_WORLD_UNIT, 0),
             health: 100,
             attack: AttackProfile {
-                delivery: AttackDelivery::RangedGuaranteedHit,
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: SUBUNITS_PER_WORLD_UNIT,
+                },
                 damage: 1,
                 range: 8 * SUBUNITS_PER_WORLD_UNIT,
                 acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
@@ -509,9 +511,140 @@ mod tests {
 
         sim.step();
         assert_eq!(sim.unit(source).unwrap().target, Some(caged));
-        sim.step();
-        assert_eq!(sim.unit(caged).unwrap().health, 9_999);
+        let launch = sim.step();
+        assert_eq!(launch.completed_tick, 1);
+        assert_eq!(launch.projectiles_launched, 1);
+        assert_eq!(launch.projectiles_alive, 1);
+        assert_eq!(launch.projectile_impacts, 0);
+        assert_eq!(sim.unit(caged).unwrap().health, 10_000);
         assert_eq!(sim.attacks_last_tick().len(), 1);
+        let projectile = sim.projectiles()[0];
+        assert_eq!(projectile.launch_tick, 1);
+        assert_eq!(projectile.impact_tick, 5);
+        assert_eq!(projectile.source, source);
+        assert_eq!(projectile.target, caged);
+
+        for expected_tick in 2..5 {
+            let in_flight = sim.step();
+            assert_eq!(in_flight.completed_tick, expected_tick);
+            assert_eq!(in_flight.projectile_impacts, 0);
+            assert_eq!(in_flight.projectiles_alive, 1);
+            assert_eq!(sim.unit(caged).unwrap().health, 10_000);
+        }
+
+        let impact = sim.step();
+        assert_eq!(impact.completed_tick, 5);
+        assert_eq!(impact.projectile_impacts, 1);
+        assert_eq!(impact.projectile_invalidations, 0);
+        assert_eq!(impact.projectiles_alive, 0);
+        assert_eq!(sim.unit(caged).unwrap().health, 9_999);
+    }
+
+    #[test]
+    fn guaranteed_hit_projectile_survives_source_death() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let source = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 10,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: SUBUNITS_PER_WORLD_UNIT,
+                },
+                damage: 1,
+                range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let target = sim.spawn_unit(passive_unit(1, 6 * SUBUNITS_PER_WORLD_UNIT));
+
+        sim.step();
+        let launch = sim.step();
+        assert_eq!(launch.projectiles_launched, 1);
+        assert_eq!(sim.projectiles()[0].impact_tick, 7);
+
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 10,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert!(sim.unit(source).is_none());
+        assert_eq!(sim.projectile_count(), 1);
+
+        while sim.tick() <= 7 {
+            let result = sim.step();
+            if result.completed_tick == 7 {
+                assert_eq!(result.projectile_impacts, 1);
+            }
+        }
+        assert_eq!(sim.unit(target).unwrap().health, 9_999);
+        assert_eq!(sim.projectile_count(), 0);
+    }
+
+    #[test]
+    fn guaranteed_hit_projectile_invalidates_if_target_dies_before_impact() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: SUBUNITS_PER_WORLD_UNIT,
+                },
+                damage: 1,
+                range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let target = sim.spawn_unit(UnitSpawn {
+            health: 1,
+            ..passive_unit(1, 4 * SUBUNITS_PER_WORLD_UNIT)
+        });
+
+        sim.step();
+        let launch = sim.step();
+        assert_eq!(launch.projectiles_launched, 1);
+        assert_eq!(sim.projectiles()[0].impact_tick, 5);
+
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(3 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert!(sim.unit(target).is_none());
+        assert_eq!(sim.projectile_count(), 1);
+
+        sim.step();
+        let invalidated = sim.step();
+        assert_eq!(invalidated.completed_tick, 5);
+        assert_eq!(invalidated.projectile_impacts, 0);
+        assert_eq!(invalidated.projectile_invalidations, 1);
+        assert_eq!(invalidated.projectiles_alive, 0);
     }
 
     #[test]
@@ -787,6 +920,100 @@ mod tests {
         assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
         sim.step();
         assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
+    }
+
+    #[test]
+    fn ally_defense_orders_nearest_ally_then_nearest_attacker() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 4);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        });
+        let near_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 2 * cell),
+            ..passive_unit(0, 0)
+        });
+        let far_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(13 * cell, 0),
+            ..passive_unit(0, 0)
+        });
+        let castle = sim.spawn_building(passive_building(1, BuildingFootprint::new(11, 0, 1, 1)));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+
+        let attacker_for_near_ally_farther = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(10 * cell, 4 * cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let attacker_for_near_ally_closer = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(11 * cell, 2 * cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let attacker_for_far_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(12 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        sim.step();
+        assert_eq!(
+            sim.unit(attacker_for_near_ally_farther).unwrap().target,
+            Some(near_ally)
+        );
+        assert_eq!(
+            sim.unit(attacker_for_near_ally_closer).unwrap().target,
+            Some(near_ally)
+        );
+        assert_eq!(
+            sim.unit(attacker_for_far_ally).unwrap().target,
+            Some(far_ally)
+        );
+        sim.step();
+        assert_eq!(
+            sim.unit(defender).unwrap().target,
+            Some(attacker_for_near_ally_closer)
+        );
     }
 
     #[test]

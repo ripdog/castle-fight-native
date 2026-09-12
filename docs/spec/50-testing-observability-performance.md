@@ -227,8 +227,12 @@ total tick duration
 per-phase duration
 spatial candidate queries/counts
 navigation rebuild count/duration
+A* fallback count/cache-hit count/expanded nodes
 target reacquisitions vs retentions
+ally-defense query/victim/attacker candidate counts
 combat intents/effects
+projectile launches/impacts/invalidations and peak live count
+production attempts/spawns/bounded-search failures
 structural operations
 snapshot generation time/size
 replay/catch-up ticks per second

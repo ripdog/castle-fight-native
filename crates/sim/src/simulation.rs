@@ -8,9 +8,9 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 use crate::{
     components::{
-        AttackCooldown, AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, Health,
-        MovementProfile, Position, ProductionProfile, ProductionState, RetaliationState, SimId,
-        SpawnTick, TargetState, Team, UnitSpawn,
+        AttackCooldown, AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn,
+        GuaranteedHitProjectile, Health, MovementProfile, Position, ProductionProfile,
+        ProductionState, RetaliationState, SimId, SpawnTick, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -78,6 +78,15 @@ pub struct TickResult {
     pub a_star_fallbacks: usize,
     pub a_star_cache_hits: usize,
     pub a_star_expanded_nodes: usize,
+    pub projectiles_alive: usize,
+    pub projectiles_launched: usize,
+    pub projectile_impacts: usize,
+    pub projectile_invalidations: usize,
+    pub retained_targets: usize,
+    pub target_changes: usize,
+    pub ally_defense_queries: usize,
+    pub ally_defense_victim_candidates: usize,
+    pub ally_defense_attacker_candidates: usize,
     pub checksum: u64,
     pub timings: TickTimings,
 }
@@ -89,6 +98,16 @@ pub struct AttackEvent {
     pub source_position: SimPoint,
     pub target_position: SimPoint,
     pub delivery: AttackDelivery,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectileView {
+    pub id: SimId,
+    pub source: SimId,
+    pub target: SimId,
+    pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -320,9 +339,13 @@ impl Simulation {
         let phase_start = Instant::now();
         let mut units = self.snapshot_units();
         let buildings = self.snapshot_buildings();
-        let has_ranged = units
-            .iter()
-            .any(|unit| unit.attack.delivery == AttackDelivery::RangedGuaranteedHit);
+        let defense_victims = grouped_defense_victims(&self.defense_alerts, &units, &buildings);
+        let needs_global_unit_grid = units.iter().any(|unit| {
+            matches!(
+                unit.attack.delivery,
+                AttackDelivery::RangedGuaranteedHit { .. }
+            )
+        });
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
             units
@@ -340,7 +363,7 @@ impl Simulation {
                             index,
                             unit.position,
                         )),
-                        has_ranged.then_some((
+                        needs_global_unit_grid.then_some((
                             SpatialPartition::global(unit.team.0),
                             index,
                             unit.position,
@@ -352,23 +375,44 @@ impl Simulation {
         );
         let alert_grid = SpatialGrid::build(
             self.config.spatial_cell_size,
-            self.defense_alerts
+            defense_victims.iter().enumerate().map(|(index, victim)| {
+                (
+                    SpatialPartition::global(victim.victim_team.0),
+                    index,
+                    victim.victim_position,
+                )
+            }),
+        );
+        let unit_snapshots = units.as_slice();
+        let defense_attacker_grid = SpatialGrid::build(
+            self.config.spatial_cell_size,
+            defense_victims
                 .iter()
                 .enumerate()
-                .map(|(index, alert)| {
-                    (
-                        SpatialPartition::global(alert.victim_team.0),
-                        index,
-                        alert.victim_position,
-                    )
+                .flat_map(|(victim_index, victim)| {
+                    let partition = defense_attacker_partition(victim_index);
+                    victim
+                        .unit_attackers
+                        .iter()
+                        .copied()
+                        .map(move |unit_index| {
+                            (partition, unit_index, unit_snapshots[unit_index].position)
+                        })
                 }),
         );
         let snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let choices = self.select_targets(&units, &buildings, &grid, &alert_grid);
-        for (unit, target) in units.iter_mut().zip(choices) {
-            unit.target = target;
+        let target_selection = self.select_targets(
+            &units,
+            &buildings,
+            &grid,
+            &defense_victims,
+            &alert_grid,
+            &defense_attacker_grid,
+        );
+        for (unit, decision) in units.iter_mut().zip(&target_selection.decisions) {
+            unit.target = decision.target;
         }
         let targeting = phase_start.elapsed();
 
@@ -381,58 +425,107 @@ impl Simulation {
         let mut next_defense_alerts = Vec::new();
 
         let phase_start = Instant::now();
+        let due_projectiles = self.snapshot_due_projectiles();
+        let mut projectile_entities_to_remove = Vec::with_capacity(due_projectiles.len());
+        let mut projectile_impacts = 0usize;
+        let mut projectile_invalidations = 0usize;
+        for snapshot in due_projectiles {
+            projectile_entities_to_remove.push(snapshot.entity);
+            let Some(target) = find_target_index(&units, &buildings, snapshot.projectile.target)
+            else {
+                projectile_invalidations += 1;
+                continue;
+            };
+            if apply_damage_to_target(
+                target,
+                snapshot.projectile.source,
+                snapshot.projectile.damage,
+                completed_tick,
+                DamageTargetState {
+                    units: &units,
+                    buildings: &buildings,
+                    unit_health: &mut unit_health,
+                    building_health: &mut building_health,
+                    attackers_this_tick: &mut attackers_this_tick,
+                    next_defense_alerts: &mut next_defense_alerts,
+                    navigation_cell_size: self.config.navigation_cell_size,
+                },
+            )
+            .is_some()
+            {
+                projectile_impacts += 1;
+            } else {
+                projectile_invalidations += 1;
+            }
+        }
+
         let mut intents = self.attack_intents(&units, &buildings);
         intents.sort_unstable_by_key(|intent| (intent.source_id, intent.target_id));
 
         let mut attacks_resolved = 0;
+        let mut projectile_launches = Vec::new();
         for intent in intents {
             if unit_health[intent.source_index] <= 0 {
                 continue;
             }
-
-            let target_alive = match intent.target {
-                TargetIndex::Unit(index) => unit_health[index] > 0,
-                TargetIndex::Building(index) => building_health[index] > 0,
-            };
-            if !target_alive {
+            let Some(target_position) = live_target_position(
+                intent.target,
+                &units,
+                &buildings,
+                &unit_health,
+                &building_health,
+                self.config.navigation_cell_size,
+            ) else {
                 continue;
-            }
-
-            let target_position = match intent.target {
-                TargetIndex::Unit(index) => {
-                    unit_health[index] = unit_health[index]
-                        .checked_sub(intent.damage)
-                        .expect("unit damage arithmetic overflowed validated bounds");
-                    attackers_this_tick[index].get_or_insert(intent.source_id);
-                    next_defense_alerts.push(DefenseAlert {
-                        victim_id: units[index].id,
-                        victim_team: units[index].team,
-                        victim_position: units[index].position,
-                        attacker_id: intent.source_id,
-                        attacked_tick: completed_tick,
-                    });
-                    units[index].position
-                }
-                TargetIndex::Building(index) => {
-                    building_health[index] = building_health[index]
-                        .checked_sub(intent.damage)
-                        .expect("building damage arithmetic overflowed validated bounds");
-                    footprint_center_point(
-                        buildings[index].footprint,
-                        self.config.navigation_cell_size,
-                    )
-                }
             };
+
+            let source = &units[intent.source_index];
+            match source.attack.delivery {
+                AttackDelivery::Melee => {
+                    let applied = apply_damage_to_target(
+                        intent.target,
+                        intent.source_id,
+                        intent.damage,
+                        completed_tick,
+                        DamageTargetState {
+                            units: &units,
+                            buildings: &buildings,
+                            unit_health: &mut unit_health,
+                            building_health: &mut building_health,
+                            attackers_this_tick: &mut attackers_this_tick,
+                            next_defense_alerts: &mut next_defense_alerts,
+                            navigation_cell_size: self.config.navigation_cell_size,
+                        },
+                    );
+                    debug_assert!(applied.is_some());
+                }
+                AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
+                    let travel_ticks =
+                        guaranteed_hit_travel_ticks(intent.distance_sq, speed_per_tick);
+                    let impact_tick = completed_tick
+                        .checked_add(travel_ticks)
+                        .expect("projectile impact tick overflow");
+                    projectile_launches.push(ProjectileLaunch {
+                        source: intent.source_id,
+                        target: intent.target_id,
+                        damage: intent.damage,
+                        launch_position: source.position,
+                        launch_tick: completed_tick,
+                        impact_tick,
+                    });
+                }
+            }
             cooldowns[intent.source_index] = intent.cooldown_ticks;
             self.last_attacks.push(AttackEvent {
                 source: intent.source_id,
                 target: intent.target_id,
-                source_position: units[intent.source_index].position,
+                source_position: source.position,
                 target_position,
-                delivery: units[intent.source_index].attack.delivery,
+                delivery: source.attack.delivery,
             });
             attacks_resolved += 1;
         }
+        let projectiles_launched = projectile_launches.len();
         let combat = phase_start.elapsed();
 
         let movement = self.resolve_movement(
@@ -444,6 +537,24 @@ impl Simulation {
         );
 
         let phase_start = Instant::now();
+        for entity in projectile_entities_to_remove {
+            self.world.despawn(entity);
+        }
+        for launch in projectile_launches {
+            let id = self.allocate_id();
+            self.world.spawn((
+                id,
+                GuaranteedHitProjectile {
+                    source: launch.source,
+                    target: launch.target,
+                    damage: launch.damage,
+                    launch_position: launch.launch_position,
+                    launch_tick: launch.launch_tick,
+                    impact_tick: launch.impact_tick,
+                },
+            ));
+        }
+
         let mut deaths = 0;
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
@@ -505,6 +616,7 @@ impl Simulation {
         }
 
         self.defense_alerts = next_defense_alerts;
+        let projectiles_alive = self.projectile_count();
         self.next_tick = self
             .next_tick
             .checked_add(1)
@@ -545,6 +657,15 @@ impl Simulation {
             a_star_fallbacks: movement.a_star_fallbacks,
             a_star_cache_hits: movement.a_star_cache_hits,
             a_star_expanded_nodes: movement.a_star_expanded_nodes,
+            projectiles_alive,
+            projectiles_launched,
+            projectile_impacts,
+            projectile_invalidations,
+            retained_targets: target_selection.retained_targets,
+            target_changes: target_selection.target_changes,
+            ally_defense_queries: target_selection.ally_defense_queries,
+            ally_defense_victim_candidates: target_selection.ally_defense_victim_candidates,
+            ally_defense_attacker_candidates: target_selection.ally_defense_attacker_candidates,
             checksum,
             timings,
         }
@@ -576,6 +697,25 @@ impl Simulation {
             .iter_entities()
             .filter(|entity| entity.get::<BuildingFootprint>().is_some())
             .count()
+    }
+
+    #[must_use]
+    pub fn projectile_count(&self) -> usize {
+        self.world
+            .iter_entities()
+            .filter(|entity| entity.get::<GuaranteedHitProjectile>().is_some())
+            .count()
+    }
+
+    #[must_use]
+    pub fn projectiles(&self) -> Vec<ProjectileView> {
+        let mut projectiles: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(projectile_view_from_entity)
+            .collect();
+        projectiles.sort_unstable_by_key(|projectile| projectile.id);
+        projectiles
     }
 
     #[must_use]
@@ -830,14 +970,33 @@ impl Simulation {
         buildings
     }
 
+    fn snapshot_due_projectiles(&mut self) -> Vec<ProjectileSnapshot> {
+        let mut query = self
+            .world
+            .query::<(Entity, &SimId, &GuaranteedHitProjectile)>();
+        let mut projectiles: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+            .map(|(entity, id, projectile)| ProjectileSnapshot {
+                entity,
+                id: *id,
+                projectile: *projectile,
+            })
+            .collect();
+        projectiles.sort_unstable_by_key(|projectile| projectile.id);
+        projectiles
+    }
+
     fn select_targets(
         &self,
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
         grid: &SpatialGrid,
+        defense_victims: &[DefenseVictim],
         alert_grid: &SpatialGrid,
-    ) -> Vec<Option<SimId>> {
-        self.pool.install(|| {
+        defense_attacker_grid: &SpatialGrid,
+    ) -> TargetSelectionResult {
+        let decisions: Vec<_> = self.pool.install(|| {
             units
                 .par_iter()
                 .map(|unit| {
@@ -850,35 +1009,79 @@ impl Simulation {
                         let current_fights_back = find_unit_index(units, current)
                             .is_some_and(|index| units[index].target == Some(unit.id));
                         if current_fights_back {
-                            return Some(current);
+                            return TargetDecision::without_defense(Some(current));
                         }
                         if let Some(attacker) = retaliation
                             && attacker != current
                         {
-                            return Some(attacker);
+                            return TargetDecision::without_defense(Some(attacker));
                         }
-                        if let Some(attacker) =
-                            self.recent_ally_defense_target(unit, units, buildings, alert_grid)
+                        let defense = self.recent_ally_defense_target(
+                            unit,
+                            units,
+                            buildings,
+                            defense_attacker_grid,
+                            defense_victims,
+                            alert_grid,
+                        );
+                        if let Some(attacker) = defense.target
                             && attacker != current
                         {
-                            return Some(attacker);
+                            return TargetDecision::with_defense(Some(attacker), defense);
                         }
-                        return Some(current);
+                        return TargetDecision::with_defense(Some(current), defense);
                     }
 
                     if let Some(attacker) = retaliation {
-                        return Some(attacker);
+                        return TargetDecision::without_defense(Some(attacker));
                     }
-                    if let Some(attacker) =
-                        self.recent_ally_defense_target(unit, units, buildings, alert_grid)
-                    {
-                        return Some(attacker);
+                    let defense = self.recent_ally_defense_target(
+                        unit,
+                        units,
+                        buildings,
+                        defense_attacker_grid,
+                        defense_victims,
+                        alert_grid,
+                    );
+                    if let Some(attacker) = defense.target {
+                        return TargetDecision::with_defense(Some(attacker), defense);
                     }
 
-                    self.acquire_target(unit, units, buildings, grid)
+                    TargetDecision::with_defense(
+                        self.acquire_target(unit, units, buildings, grid),
+                        defense,
+                    )
                 })
                 .collect()
-        })
+        });
+
+        let retained_targets = units
+            .iter()
+            .zip(&decisions)
+            .filter(|(unit, decision)| unit.target.is_some() && unit.target == decision.target)
+            .count();
+        let target_changes = units
+            .iter()
+            .zip(&decisions)
+            .filter(|(unit, decision)| unit.target != decision.target)
+            .count();
+        TargetSelectionResult {
+            ally_defense_queries: decisions
+                .iter()
+                .filter(|decision| decision.defense_query.queried)
+                .count(),
+            ally_defense_victim_candidates: decisions
+                .iter()
+                .map(|decision| decision.defense_query.victim_candidates)
+                .sum(),
+            ally_defense_attacker_candidates: decisions
+                .iter()
+                .map(|decision| decision.defense_query.attacker_candidates)
+                .sum(),
+            decisions,
+            retained_targets,
+            target_changes,
+        }
     }
 
     fn acquire_target(
@@ -895,7 +1098,7 @@ impl Simulation {
             .expect("verification slice supports teams 0 and 1 only");
         let partition = match source.attack.delivery {
             AttackDelivery::Melee => SpatialPartition::new(enemy_team, component),
-            AttackDelivery::RangedGuaranteedHit => SpatialPartition::global(enemy_team),
+            AttackDelivery::RangedGuaranteedHit { .. } => SpatialPartition::global(enemy_team),
         };
         let mut best: Option<(u8, u64, SimId)> = None;
         grid.for_each_candidate(
@@ -966,53 +1169,183 @@ impl Simulation {
         source: &UnitSnapshot,
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
+        defense_attacker_grid: &SpatialGrid,
+        defense_victims: &[DefenseVictim],
         alert_grid: &SpatialGrid,
-    ) -> Option<SimId> {
-        let previous_tick = self.next_tick.checked_sub(1)?;
-        let acquisition_range_sq = source.attack.acquisition_range_sq();
-        let mut best: Option<(u64, u64, SimId, SimId)> = None;
+    ) -> DefenseTargetSearch {
+        if defense_victims.is_empty() {
+            return DefenseTargetSearch::default();
+        }
+        let Some(previous_tick) = self.next_tick.checked_sub(1) else {
+            return DefenseTargetSearch::default();
+        };
+        let mut search = DefenseTargetSearch {
+            queried: true,
+            ..DefenseTargetSearch::default()
+        };
+        let context = DefenseSearchContext {
+            units,
+            buildings,
+            attacker_grid: defense_attacker_grid,
+        };
+        let mut rejected_through_distance = None;
 
-        alert_grid.for_each_candidate(
-            SpatialPartition::global(source.team.0),
-            source.position,
-            source.attack.acquisition_range,
-            |alert_index| {
-                let alert = &self.defense_alerts[alert_index];
-                if alert.attacked_tick != previous_tick || alert.victim_id == source.id {
-                    return;
-                }
-                let ally_distance_sq = source.position.distance_sq(alert.victim_position);
-                if ally_distance_sq > acquisition_range_sq
-                    || !self.target_retainable_for(source, alert.attacker_id, units, buildings)
-                {
-                    return;
-                }
+        loop {
+            let Some((ally_distance_sq, victim_indices)) = self.nearest_defense_victim_layer(
+                source,
+                previous_tick,
+                rejected_through_distance,
+                defense_victims,
+                alert_grid,
+                &mut search.victim_candidates,
+            ) else {
+                return search;
+            };
 
-                let attacker_distance_sq =
-                    if let Some(index) = find_unit_index(units, alert.attacker_id) {
-                        source.position.distance_sq(units[index].position)
-                    } else if let Some(index) = find_building_index(buildings, alert.attacker_id) {
-                        point_to_footprint_distance_sq(
-                            source.position,
-                            buildings[index].footprint,
-                            self.config.navigation_cell_size,
-                        )
-                    } else {
-                        return;
-                    };
-                let key = (
-                    ally_distance_sq,
-                    attacker_distance_sq,
-                    alert.attacker_id,
-                    alert.victim_id,
-                );
+            let mut best: Option<(u64, SimId, SimId)> = None;
+            for victim_index in victim_indices {
+                let victim = &defense_victims[victim_index];
+                let Some((attacker_distance_sq, attacker_id)) = self
+                    .nearest_valid_defense_attacker(
+                        source,
+                        victim,
+                        &context,
+                        victim_index,
+                        &mut search.attacker_candidates,
+                    )
+                else {
+                    continue;
+                };
+                let key = (attacker_distance_sq, attacker_id, victim.victim_id);
                 if best.is_none_or(|current| key < current) {
                     best = Some(key);
                 }
+            }
+
+            if let Some((_, attacker, _)) = best {
+                search.target = Some(attacker);
+                return search;
+            }
+            rejected_through_distance = Some(ally_distance_sq);
+        }
+    }
+
+    fn nearest_defense_victim_layer(
+        &self,
+        source: &UnitSnapshot,
+        previous_tick: u64,
+        rejected_through_distance: Option<u64>,
+        defense_victims: &[DefenseVictim],
+        alert_grid: &SpatialGrid,
+        victim_candidates: &mut usize,
+    ) -> Option<(u64, Vec<usize>)> {
+        let acquisition_range_sq = source.attack.acquisition_range_sq();
+        let mut best_distance = None;
+        let mut nearest = Vec::new();
+        alert_grid.for_each_candidate_nearest_cells(
+            SpatialPartition::global(source.team.0),
+            source.position,
+            source.attack.acquisition_range,
+            acquisition_range_sq,
+            |victim_index| {
+                *victim_candidates += 1;
+                let victim = &defense_victims[victim_index];
+                if victim.attacked_tick != previous_tick || victim.victim_id == source.id {
+                    return None;
+                }
+                let distance_sq = source.position.distance_sq(victim.victim_position);
+                if distance_sq > acquisition_range_sq
+                    || rejected_through_distance.is_some_and(|rejected| distance_sq <= rejected)
+                {
+                    return None;
+                }
+
+                match best_distance {
+                    None => {
+                        best_distance = Some(distance_sq);
+                        nearest.push(victim_index);
+                        Some(distance_sq)
+                    }
+                    Some(current) if distance_sq < current => {
+                        best_distance = Some(distance_sq);
+                        nearest.clear();
+                        nearest.push(victim_index);
+                        Some(distance_sq)
+                    }
+                    Some(current) if distance_sq == current => {
+                        nearest.push(victim_index);
+                        None
+                    }
+                    Some(_) => None,
+                }
             },
         );
+        best_distance.map(|distance| (distance, nearest))
+    }
 
-        best.map(|(_, _, attacker, _)| attacker)
+    fn nearest_valid_defense_attacker(
+        &self,
+        source: &UnitSnapshot,
+        victim: &DefenseVictim,
+        context: &DefenseSearchContext<'_>,
+        victim_index: usize,
+        attacker_candidates: &mut usize,
+    ) -> Option<(u64, SimId)> {
+        let pursuit_range = self.target_pursuit_range(source);
+        let pursuit_range_sq = square_i32(pursuit_range);
+        let mut best: Option<(u64, SimId)> = None;
+
+        if !victim.unit_attackers.is_empty() {
+            context.attacker_grid.for_each_candidate_nearest_cells(
+                defense_attacker_partition(victim_index),
+                source.position,
+                pursuit_range,
+                pursuit_range_sq,
+                |unit_index| {
+                    *attacker_candidates += 1;
+                    let candidate = &context.units[unit_index];
+                    let distance_sq = source.position.distance_sq(candidate.position);
+                    if !self.unit_target_reachable(source, candidate, distance_sq, pursuit_range_sq)
+                    {
+                        return None;
+                    }
+                    let key = (distance_sq, candidate.id);
+                    if best.is_none_or(|current| key < current) {
+                        best = Some(key);
+                        Some(distance_sq)
+                    } else {
+                        None
+                    }
+                },
+            );
+        }
+
+        for &building_index in &victim.building_attackers {
+            *attacker_candidates += 1;
+            let target = &context.buildings[building_index];
+            let distance_sq = point_to_footprint_distance_sq(
+                source.position,
+                target.footprint,
+                self.config.navigation_cell_size,
+            );
+            if !self.building_target_reachable(source, target, distance_sq, pursuit_range_sq) {
+                continue;
+            }
+            let key = (distance_sq, target.id);
+            if best.is_none_or(|current| key < current) {
+                best = Some(key);
+            }
+        }
+        best
+    }
+
+    fn target_pursuit_range(&self, source: &UnitSnapshot) -> i32 {
+        source
+            .attack
+            .range
+            .checked_add(self.config.target_pursuit_extra_range)
+            .expect("pursuit range overflowed validated coordinate bounds")
+            .max(source.attack.acquisition_range)
     }
 
     fn target_retainable_for(
@@ -1022,14 +1355,7 @@ impl Simulation {
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
     ) -> bool {
-        let pursuit_range = source
-            .attack
-            .range
-            .checked_add(self.config.target_pursuit_extra_range)
-            .expect("pursuit range overflowed validated coordinate bounds")
-            .max(source.attack.acquisition_range);
-        let pursuit_range = i64::from(pursuit_range);
-        let pursuit_range_sq = (pursuit_range * pursuit_range) as u64;
+        let pursuit_range_sq = square_i32(self.target_pursuit_range(source));
         if let Some(index) = find_unit_index(units, target_id) {
             let target = &units[index];
             let distance_sq = source.position.distance_sq(target.position);
@@ -1069,7 +1395,7 @@ impl Simulation {
                     self.topology.cell_of_point(target.position),
                 ) && (in_attack_range || source.movement.speed_per_tick > 0)
             }
-            AttackDelivery::RangedGuaranteedHit => {
+            AttackDelivery::RangedGuaranteedHit { .. } => {
                 in_attack_range
                     || (source.movement.speed_per_tick > 0
                         && self.topology.same_component(
@@ -1091,7 +1417,11 @@ impl Simulation {
             return false;
         }
         let in_attack_range = distance_sq <= source.attack.range_sq();
-        if source.attack.delivery == AttackDelivery::RangedGuaranteedHit && in_attack_range {
+        if matches!(
+            source.attack.delivery,
+            AttackDelivery::RangedGuaranteedHit { .. }
+        ) && in_attack_range
+        {
             return true;
         }
         (in_attack_range || source.movement.speed_per_tick > 0)
@@ -1145,6 +1475,7 @@ impl Simulation {
                         target_id,
                         damage: source.attack.damage,
                         cooldown_ticks: source.attack.cooldown_ticks,
+                        distance_sq,
                     })
                 })
                 .collect()
@@ -1729,6 +2060,34 @@ struct AttackIntent {
     target_id: SimId,
     damage: i32,
     cooldown_ticks: u16,
+    distance_sq: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProjectileSnapshot {
+    entity: Entity,
+    id: SimId,
+    projectile: GuaranteedHitProjectile,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProjectileLaunch {
+    source: SimId,
+    target: SimId,
+    damage: i32,
+    launch_position: SimPoint,
+    launch_tick: u64,
+    impact_tick: u64,
+}
+
+struct DamageTargetState<'a> {
+    units: &'a [UnitSnapshot],
+    buildings: &'a [BuildingSnapshot],
+    unit_health: &'a mut [i32],
+    building_health: &'a mut [i32],
+    attackers_this_tick: &'a mut [Option<SimId>],
+    next_defense_alerts: &'a mut Vec<DefenseAlert>,
+    navigation_cell_size: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1740,11 +2099,141 @@ struct DefenseAlert {
     attacked_tick: u64,
 }
 
+#[derive(Debug)]
+struct DefenseVictim {
+    victim_id: SimId,
+    victim_team: Team,
+    victim_position: SimPoint,
+    attacked_tick: u64,
+    unit_attackers: Vec<usize>,
+    building_attackers: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct DefenseTargetSearch {
+    target: Option<SimId>,
+    queried: bool,
+    victim_candidates: usize,
+    attacker_candidates: usize,
+}
+
+struct DefenseSearchContext<'a> {
+    units: &'a [UnitSnapshot],
+    buildings: &'a [BuildingSnapshot],
+    attacker_grid: &'a SpatialGrid,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TargetDecision {
+    target: Option<SimId>,
+    defense_query: DefenseTargetSearch,
+}
+
+impl TargetDecision {
+    const fn without_defense(target: Option<SimId>) -> Self {
+        Self {
+            target,
+            defense_query: DefenseTargetSearch {
+                target: None,
+                queried: false,
+                victim_candidates: 0,
+                attacker_candidates: 0,
+            },
+        }
+    }
+
+    const fn with_defense(target: Option<SimId>, defense_query: DefenseTargetSearch) -> Self {
+        Self {
+            target,
+            defense_query,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TargetSelectionResult {
+    decisions: Vec<TargetDecision>,
+    retained_targets: usize,
+    target_changes: usize,
+    ally_defense_queries: usize,
+    ally_defense_victim_candidates: usize,
+    ally_defense_attacker_candidates: usize,
+}
+
+fn defense_attacker_partition(victim_index: usize) -> SpatialPartition {
+    let component = u32::try_from(victim_index).expect("too many defense-victim groups");
+    assert_ne!(
+        component,
+        SpatialPartition::GLOBAL_COMPONENT,
+        "defense-victim index exhausted reserved spatial partition"
+    );
+    SpatialPartition::new(0, component)
+}
+
+fn grouped_defense_victims(
+    alerts: &[DefenseAlert],
+    units: &[UnitSnapshot],
+    buildings: &[BuildingSnapshot],
+) -> Vec<DefenseVictim> {
+    let mut alerts = alerts.to_vec();
+    alerts.sort_unstable_by_key(|alert| {
+        (
+            alert.attacked_tick,
+            alert.victim_team.0,
+            alert.victim_id,
+            alert.victim_position.x,
+            alert.victim_position.y,
+            alert.attacker_id,
+        )
+    });
+
+    let mut victims: Vec<DefenseVictim> = Vec::new();
+    for alert in alerts {
+        let can_merge = victims.last().is_some_and(|victim| {
+            victim.attacked_tick == alert.attacked_tick
+                && victim.victim_team == alert.victim_team
+                && victim.victim_id == alert.victim_id
+                && victim.victim_position == alert.victim_position
+        });
+        let attacker_unit_index = find_unit_index(units, alert.attacker_id);
+        let attacker_building_index = find_building_index(buildings, alert.attacker_id);
+        if attacker_unit_index.is_none() && attacker_building_index.is_none() {
+            continue;
+        }
+
+        if can_merge {
+            let victim = victims.last_mut().expect("checked defense victim missing");
+            if let Some(index) = attacker_unit_index {
+                if victim.unit_attackers.last().copied() != Some(index) {
+                    victim.unit_attackers.push(index);
+                }
+            } else if let Some(index) = attacker_building_index
+                && victim.building_attackers.last().copied() != Some(index)
+            {
+                victim.building_attackers.push(index);
+            }
+        } else {
+            victims.push(DefenseVictim {
+                victim_id: alert.victim_id,
+                victim_team: alert.victim_team,
+                victim_position: alert.victim_position,
+                attacked_tick: alert.attacked_tick,
+                unit_attackers: attacker_unit_index.into_iter().collect(),
+                building_attackers: attacker_building_index.into_iter().collect(),
+            });
+        }
+    }
+    victims
+}
+
 fn validate_unit_template(unit: crate::components::UnitTemplate) {
     assert!(unit.health > 0);
     assert!(unit.attack.damage >= 0);
     assert!(unit.attack.range >= 0);
     assert!(unit.attack.acquisition_range >= unit.attack.range);
+    if let AttackDelivery::RangedGuaranteedHit { speed_per_tick } = unit.attack.delivery {
+        assert!(speed_per_tick > 0);
+    }
     assert!(unit.movement.speed_per_tick >= 0);
 }
 
@@ -1783,6 +2272,19 @@ fn spiral_cells(center: NavCell, radius: u16) -> impl Iterator<Item = NavCell> {
     }))
 }
 
+fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<ProjectileView> {
+    let id = *entity.get::<SimId>()?;
+    let projectile = *entity.get::<GuaranteedHitProjectile>()?;
+    Some(ProjectileView {
+        id,
+        source: projectile.source,
+        target: projectile.target,
+        launch_position: projectile.launch_position,
+        launch_tick: projectile.launch_tick,
+        impact_tick: projectile.impact_tick,
+    })
+}
+
 fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitView> {
     if entity.get::<BuildingFootprint>().is_some() {
         return None;
@@ -1811,6 +2313,82 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
             .get::<ProductionState>()
             .map(|state| state.next_spawn_tick),
     })
+}
+
+fn find_target_index(
+    units: &[UnitSnapshot],
+    buildings: &[BuildingSnapshot],
+    id: SimId,
+) -> Option<TargetIndex> {
+    find_unit_index(units, id)
+        .map(TargetIndex::Unit)
+        .or_else(|| find_building_index(buildings, id).map(TargetIndex::Building))
+}
+
+fn live_target_position(
+    target: TargetIndex,
+    units: &[UnitSnapshot],
+    buildings: &[BuildingSnapshot],
+    unit_health: &[i32],
+    building_health: &[i32],
+    navigation_cell_size: i32,
+) -> Option<SimPoint> {
+    match target {
+        TargetIndex::Unit(index) => (unit_health[index] > 0).then_some(units[index].position),
+        TargetIndex::Building(index) => (building_health[index] > 0)
+            .then(|| footprint_center_point(buildings[index].footprint, navigation_cell_size)),
+    }
+}
+
+fn apply_damage_to_target(
+    target: TargetIndex,
+    source_id: SimId,
+    damage: i32,
+    completed_tick: u64,
+    state: DamageTargetState<'_>,
+) -> Option<SimPoint> {
+    match target {
+        TargetIndex::Unit(index) => {
+            if state.unit_health[index] <= 0 {
+                return None;
+            }
+            state.unit_health[index] = state.unit_health[index]
+                .checked_sub(damage)
+                .expect("unit damage arithmetic overflowed validated bounds");
+            state.attackers_this_tick[index].get_or_insert(source_id);
+            state.next_defense_alerts.push(DefenseAlert {
+                victim_id: state.units[index].id,
+                victim_team: state.units[index].team,
+                victim_position: state.units[index].position,
+                attacker_id: source_id,
+                attacked_tick: completed_tick,
+            });
+            Some(state.units[index].position)
+        }
+        TargetIndex::Building(index) => {
+            if state.building_health[index] <= 0 {
+                return None;
+            }
+            state.building_health[index] = state.building_health[index]
+                .checked_sub(damage)
+                .expect("building damage arithmetic overflowed validated bounds");
+            Some(footprint_center_point(
+                state.buildings[index].footprint,
+                state.navigation_cell_size,
+            ))
+        }
+    }
+}
+
+fn guaranteed_hit_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
+    debug_assert!(speed_per_tick > 0);
+    let floor_distance = distance_sq.isqrt();
+    let distance = floor_distance + u64::from(floor_distance * floor_distance < distance_sq);
+    distance
+        .div_ceil(
+            u64::try_from(speed_per_tick).expect("validated projectile speed must be positive"),
+        )
+        .max(1)
 }
 
 fn target_is_alive(
@@ -1912,6 +2490,12 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
         .iter_entities()
         .filter_map(|entity| {
             let id = *entity.get::<SimId>()?;
+            if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
+                return Some(CanonicalEntity::Projectile(CanonicalProjectile {
+                    id,
+                    projectile: *projectile,
+                }));
+            }
             let team = *entity.get::<Team>()?;
             let health = *entity.get::<Health>()?;
             if let Some(position) = entity.get::<Position>() {
@@ -1954,7 +2538,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_i32(unit.position.y);
                 hash.write_i32(unit.health.current);
                 hash.write_i32(unit.health.max);
-                hash.write_u8(unit.attack.delivery.stable_tag());
+                hash_attack_delivery(&mut hash, unit.attack.delivery);
                 hash.write_i32(unit.attack.damage);
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
@@ -1982,7 +2566,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u16(profile.interval_ticks);
                     hash.write_u16(profile.search_radius_cells);
                     hash.write_i32(profile.unit.health);
-                    hash.write_u8(profile.unit.attack.delivery.stable_tag());
+                    hash_attack_delivery(&mut hash, profile.unit.attack.delivery);
                     hash.write_i32(profile.unit.attack.damage);
                     hash.write_i32(profile.unit.attack.range);
                     hash.write_i32(profile.unit.attack.acquisition_range);
@@ -1997,6 +2581,17 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 } else {
                     hash.write_u8(0);
                 }
+            }
+            CanonicalEntity::Projectile(projectile) => {
+                hash.write_u8(2);
+                hash.write_u64(projectile.id.0);
+                hash.write_u64(projectile.projectile.source.0);
+                hash.write_u64(projectile.projectile.target.0);
+                hash.write_i32(projectile.projectile.damage);
+                hash.write_i32(projectile.projectile.launch_position.x);
+                hash.write_i32(projectile.projectile.launch_position.y);
+                hash.write_u64(projectile.projectile.launch_tick);
+                hash.write_u64(projectile.projectile.impact_tick);
             }
         }
     }
@@ -2028,6 +2623,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
 enum CanonicalEntity {
     Unit(CanonicalUnit),
     Building(CanonicalBuilding),
+    Projectile(CanonicalProjectile),
 }
 
 impl CanonicalEntity {
@@ -2035,6 +2631,7 @@ impl CanonicalEntity {
         match self {
             Self::Unit(unit) => unit.id,
             Self::Building(building) => building.id,
+            Self::Projectile(projectile) => projectile.id,
         }
     }
 }
@@ -2061,6 +2658,19 @@ struct CanonicalBuilding {
     health: Health,
     production: Option<ProductionProfile>,
     production_state: Option<ProductionState>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CanonicalProjectile {
+    id: SimId,
+    projectile: GuaranteedHitProjectile,
+}
+
+fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
+    hash.write_u8(delivery.stable_tag());
+    if let AttackDelivery::RangedGuaranteedHit { speed_per_tick } = delivery {
+        hash.write_i32(speed_per_tick);
+    }
 }
 
 struct Fnv64(u64);
