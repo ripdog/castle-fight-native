@@ -75,11 +75,16 @@
     "bytes": 11811705,
     "line_count": 2,
     "w3p_marker": true,
-    "function_definitions": 5708,
-    "unique_function_names": 5708,
-    "unique_call_tokens": 7688,
-    "readable_function_names": 4810,
-    "note": "The source is retained verbatim but is W3P-obfuscated; indexes are static and do not execute map code."
+    "function_definitions": 6879,
+    "unique_function_names": 6879,
+    "unique_call_tokens": 5723,
+    "call_graph_edges": 29478,
+    "readable_function_names": 4910,
+    "direct_map_rawcode_references": 12611,
+    "referenced_map_rawcodes": 1332,
+    "known_map_rawcodes": 1461,
+    "runtime_mutator_sites": 157,
+    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code."
   },
   "plaintext_members_copied": [
     "war3mapMisc.txt",

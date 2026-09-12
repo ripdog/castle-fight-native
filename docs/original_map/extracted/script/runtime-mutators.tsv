@@ -1,0 +1,158 @@
+callee	normalized_callee	byte_offset	function	direct_map_rawcodes	direct_map_object_names
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	457356	AbilityLevelFields_AbilityLevelFields_applyTo		
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	457535	AbilityLevelFields_AbilityLevelFields_applyTo		
+__wurst_safe_BlzSetUnitIntegerField	BlzSetUnitIntegerField	529296	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E6	hfoo	Footman
+__wurst_safe_SetUnitState	SetUnitState	988975	ArgHandler_addCommand_Commands_handleArgs_addCommand_Commands32		
+__wurst_safe_SetUnitState	SetUnitState	1187755	DummyCaster_DummyCaster_prepare		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1187836	DummyCaster_DummyCaster_prepare		
+BlzSetAbilityTooltip	BlzSetAbilityTooltip	1195788	File_File_readPreload		
+__wurst_safe_SetUnitState	SetUnitState	1421421	CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1	A0FS	Twins:Thunder Clap
+__wurst_safe_SetUnitState	SetUnitState	1430599	CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities2		
+__wurst_safe_SetUnitState	SetUnitState	1457125	CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities2	A09E	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1651159	DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood	n02G	Forest Troll Trapper
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1651336	DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood	n02G	Forest Troll Trapper
+__wurst_safe_BlzSetUnitWeaponRealField	BlzSetUnitWeaponRealField	1658158	UnitStat_UnitStat_applyAttack0Range		
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	1659005	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitArmor	BlzSetUnitArmor	1659103	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitIntegerField	BlzSetUnitIntegerField	1659216	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitRealField	BlzSetUnitRealField	1659377	UnitStat_UnitStat_applyTo		
+__wurst_safe_SetUnitMoveSpeed	SetUnitMoveSpeed	1659463	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	1659668	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitDiceNumber	BlzSetUnitDiceNumber	1659761	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitDiceSides	BlzSetUnitDiceSides	1659878	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitAttackCooldown	BlzSetUnitAttackCooldown	1659990	UnitStat_UnitStat_applyTo		
+__wurst_safe_BlzSetUnitWeaponRealField	BlzSetUnitWeaponRealField	1660195	UnitStat_UnitStat_applyTo		
+__wurst_safe_UnitAddAbility	UnitAddAbility	1694957	safeUnitAddAbility		
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1699335	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1699407	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1699509	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1699608	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1699679	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1699781	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1699852	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1699954	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1700056	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1700158	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1700230	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1700332	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1700404	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1700506	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1700578	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	1700680	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	1700751	applyProtectedAbilityFieldsForJassAdd	A005,A010,A086,A09T,A0B5,A0B6,A0B7,A0B8,A0DA,A0DC	ELE: Elemental Guard Tower (Boulder) | ELE: Elemental Guard Tower (Shield of Mist) | NAT: Ancient Bear (feral rage) | NAT: Bear (feral rage) | Rescue Strike
+__wurst_safe_UnitRemoveAbility	UnitRemoveAbility	1720505	nd	A09L	
+__wurst_safe_UnitRemoveAbility	UnitRemoveAbility	1720556	nd	A09L	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1720863	Vd	A09L	
+__wurst_safe_SetUnitState	SetUnitState	1720913	Vd	A09L	
+__wurst_safe_UnitRemoveAbility	UnitRemoveAbility	1721019	Vd	A09L	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1721302	Ed	A00J,A09B,A09C	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1721354	Ed	A00J,A09B,A09C	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	1721406	Ed	A00J,A09B,A09C	
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2377373	runPickupAndPassiveItemProbes	I000,I003,I004,I007,I008,I009,I00A,I00C,X00C,hcas,hfoo	Cheese | Double Damage | Drum'n'Bass Bass Drums | Drum'n'Bass Bassline Generator | Explode Mine | Footman | Gold | Human Builder | Main Castle | Quad Damage | Rune of Repair
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2380400	runSequentialPointItemProbe	X00C,h001,hfoo	Artillery | Footman | Human Builder
+__wurst_safe_BlzSetUnitMaxMana	BlzSetUnitMaxMana	2380438	runSequentialPointItemProbe	X00C,h001,hfoo	Artillery | Footman | Human Builder
+__wurst_safe_SetUnitState	SetUnitState	2380557	runSequentialPointItemProbe	X00C,h001,hfoo	Artillery | Footman | Human Builder
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2383251	runSequentialBuildingSpellProbe	e000,h00L,h010,h03O,hfoo	Faerie Dragon | Flower of life | Footman | Gjallarhorn | World Freezer
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2383363	runSequentialBuildingSpellProbe	e000,h00L,h010,h03O,hfoo	Faerie Dragon | Flower of life | Footman | Gjallarhorn | World Freezer
+__wurst_safe_BlzSetUnitMaxMana	BlzSetUnitMaxMana	2383403	runSequentialBuildingSpellProbe	e000,h00L,h010,h03O,hfoo	Faerie Dragon | Flower of life | Footman | Gjallarhorn | World Freezer
+__wurst_safe_SetUnitState	SetUnitState	2383526	runSequentialBuildingSpellProbe	e000,h00L,h010,h03O,hfoo	Faerie Dragon | Flower of life | Footman | Gjallarhorn | World Freezer
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2383592	runSequentialBuildingSpellProbe	e000,h00L,h010,h03O,hfoo	Faerie Dragon | Flower of life | Footman | Gjallarhorn | World Freezer
+__wurst_safe_SetUnitState	SetUnitState	2384357	runSequentialBuildingSpellProbe	e000,h00L,h010,h03O,hfoo	Faerie Dragon | Flower of life | Footman | Gjallarhorn | World Freezer
+__wurst_safe_SetUnitState	SetUnitState	2402217	runPerkDamageProbes	hcas,hfoo	Footman | Main Castle
+__wurst_safe_SetUnitState	SetUnitState	2408520	runCurrentUnitPerkProbes	h00W,h060,hfoo,hrif	Footman | Obelisk of Elements | Sniper | Wizard
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2409825	runFeatheredFriendGrantProbe	hfoo	Footman
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2415902	runBlastStaffPhoenixFireBehaviorProbe	A02D,I001,I002,X00C,hfoo	Blast | Blast Staff | Footman | Human Builder | Multi Blast Staff
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2415989	runBlastStaffPhoenixFireBehaviorProbe	A02D,I001,I002,X00C,hfoo	Blast | Blast Staff | Footman | Human Builder | Multi Blast Staff
+__wurst_safe_SetUnitState	SetUnitState	2420806	runSequentialUnitSpellProbe	h06R,hfoo,n02G	Footman | Forest Troll Trapper | Gyrocopter
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2420880	runSequentialUnitSpellProbe	h06R,hfoo,n02G	Footman | Forest Troll Trapper | Gyrocopter
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2420971	runSequentialUnitSpellProbe	h06R,hfoo,n02G	Footman | Forest Troll Trapper | Gyrocopter
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2421104	runSequentialUnitSpellProbe	h06R,hfoo,n02G	Footman | Forest Troll Trapper | Gyrocopter
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2421217	runSequentialUnitSpellProbe	h06R,hfoo,n02G	Footman | Forest Troll Trapper | Gyrocopter
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2431358	runLinkerHealProbe	hfoo	Footman
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2431396	runLinkerHealProbe	hfoo	Footman
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2438465	runTeammateLinkerHealProbe	hfoo	Footman
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	2438503	runTeammateLinkerHealProbe	hfoo	Footman
+__wurst_safe_SetUnitState	SetUnitState	2476372	runUpgradeCancelProbe		
+__wurst_safe_SetUnitState	SetUnitState	2479486	beginUpgradeIncomeCheck		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3022641	tornadoStackProc	A0C9	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3025040	castLightningShield	A0D5,e008	ELE: ElectroShieldElemental | dummy
+__wurst_safe_SetUnitMoveSpeed	SetUnitMoveSpeed	3025491	vampireCharge	A0C5,A0EN	
+__wurst_safe_SetUnitState	SetUnitState	3025646	vampireCharge	A0C5,A0EN	
+__wurst_safe_SetUnitMoveSpeed	SetUnitMoveSpeed	3026403	startBearSleep	A0C6,A0C7,A0C8,Asla	
+__wurst_safe_SetUnitMoveSpeed	SetUnitMoveSpeed	3026903	startBearHibernate	A0C4	
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3030284	applyVampireArmorReduction	A0GY,h05H	Blood Corrosion | Vampire Lord
+BlzSetAbilityTooltip	BlzSetAbilityTooltip	3132919	configureReminderAbilityFromPerk		
+BlzSetAbilityExtendedTooltip	BlzSetAbilityExtendedTooltip	3132997	configureReminderAbilityFromPerk		
+BlzSetAbilityIcon	BlzSetAbilityIcon	3133172	configureReminderAbilityFromPerk		
+__wurst_safe_BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	3133791	addPerkReminderToBuilder		
+__wurst_safe_SetUnitState	SetUnitState	3232985	InstantDummyCaster_prepare		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3233286	InstantDummyCaster_prepare		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3285987	processSnowMissiles	A043	NOR: Ice Queen (frost nova)
+__wurst_safe_SetUnitState	SetUnitState	3437250	spellWitheringTouch		
+__wurst_safe_SetUnitState	SetUnitState	3439062	applyArcaneOverchargeTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3443211	scaleUnitBaseDamage		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3443362	scaleUnitBaseDamage		
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	3443646	scaleUnitMaxHp		
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	3454130	applyBulwarkMarchTo		
+__wurst_safe_SetUnitMoveSpeed	SetUnitMoveSpeed	3454242	applyBulwarkMarchTo		
+__wurst_safe_BlzSetUnitAttackCooldown	BlzSetUnitAttackCooldown	3454379	applyBulwarkMarchTo		
+__wurst_safe_BlzSetUnitAttackCooldown	BlzSetUnitAttackCooldown	3454499	applyBulwarkMarchTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3455909	applyCagedDamagePenalty		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3456028	applyCagedDamagePenalty		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3463542	applyFeatheredFriendDamageScaling		
+__wurst_safe_BlzSetUnitMaxHP	BlzSetUnitMaxHP	3472425	applyGlassCannonTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3472603	applyGlassCannonTo		
+__wurst_safe_BlzSetUnitWeaponRealField	BlzSetUnitWeaponRealField	3482544	setUnitAttackRangeFixed		
+__wurst_safe_BlzSetUnitAttackCooldown	BlzSetUnitAttackCooldown	3483074	applyLonglineFormationTo		
+__wurst_safe_BlzSetUnitAttackCooldown	BlzSetUnitAttackCooldown	3483194	applyLonglineFormationTo		
+__wurst_safe_SetUnitState	SetUnitState	3484930	applyManaShield		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3486750	applyRampantGrowthTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3486891	applyRampantGrowthTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3491743	applyStormchaserSiegePenalty		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3491884	applyStormchaserSiegePenalty		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3492824	applyTranscendentBladesTo		
+__wurst_safe_BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	3492943	applyTranscendentBladesTo		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3527525	shrineOfDestructionSpell	A0EU,A0FE,h06C	( SOD ) damage overtime | (Sod) Freezing Breath | SodDummy
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3527583	shrineOfDestructionSpell	A0EU,A0FE,h06C	( SOD ) damage overtime | (Sod) Freezing Breath | SodDummy
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3527660	shrineOfDestructionSpell	A0EU,A0FE,h06C	( SOD ) damage overtime | (Sod) Freezing Breath | SodDummy
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3527718	shrineOfDestructionSpell	A0EU,A0FE,h06C	( SOD ) damage overtime | (Sod) Freezing Breath | SodDummy
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3527795	shrineOfDestructionSpell	A0EU,A0FE,h06C	( SOD ) damage overtime | (Sod) Freezing Breath | SodDummy
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3527853	shrineOfDestructionSpell	A0EU,A0FE,h06C	( SOD ) damage overtime | (Sod) Freezing Breath | SodDummy
+__wurst_safe_SetUnitState	SetUnitState	3553064	spellReplenish		
+__wurst_safe_SetUnitState	SetUnitState	3553172	spellReplenish		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3565448	improveSpecialBuilding	A0DS,A0EK,A0EL	Elemental Building
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3590960	redShieldSpell	A09L	
+__wurst_safe_SetUnitState	SetUnitState	3754401	dummyCastTargetFrom2		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	3754519	dummyCastTargetFrom2		
+__wurst_safe_BlzSetUnitFacingEx	BlzSetUnitFacingEx	3754640	dummyCastTargetFrom2		
+__wurst_safe_SetUnitState	SetUnitState	3756419	dummyCastPointFrom		
+__wurst_safe_BlzSetUnitFacingEx	BlzSetUnitFacingEx	3756567	dummyCastPointFrom		
+__wurst_safe_SetUnitState	SetUnitState	3757421	dummyCastImmediateFrom1		
+__wurst_safe_SetUnitState	SetUnitState	3758252	createSpellCarrier		
+__wurst_safe_SetUnitState	SetUnitState	3777411	onSummonedUnit	A07M,A09K,h03A,h03C	Defender | MEH: Gobbo Machinist (repair) | Paladin
+__wurst_safe_SetUnitState	SetUnitState	4245562	applyUnitStatAtLifeFraction		
+__wurst_safe_SetUnitState	SetUnitState	4246234	TO		
+__wurst_safe_SetUnitAbilityLevel	SetUnitAbilityLevel	4393840	applyPowerArmor	A09M,A09Q,A09R,A0HV	Stacking Life Bonus | pp spell resist
+__wurst_safe_SetUnitState	SetUnitState	4395962	onUnitTrained	A070,A07J,A07M,A09K,A0DZ,B01K,h06U,n02M	Goblin Rocketeer | Leg-anti-hex | MEH: Gobbo Machinist (repair) | Mine Layer | Power Armor
+__wurst_safe_UnitAddAbility	UnitAddAbility	4397250	unit_addAbility		
+__wurst_safe_UnitRemoveAbility	UnitRemoveAbility	4400498	unit_removeAbility		
+__wurst_safe_BlzSetUnitRealField	BlzSetUnitRealField	4401640	unit_setField		
+SetUnitAbilityLevel	SetUnitAbilityLevel	4435594	__wurst_safe_SetUnitAbilityLevel		
+UnitRemoveAbility	UnitRemoveAbility	4435838	__wurst_safe_UnitRemoveAbility		
+SetUnitState	SetUnitState	4440458	__wurst_safe_SetUnitState		
+UnitAddAbility	UnitAddAbility	4443118	__wurst_safe_UnitAddAbility		
+BlzSetAbilityIntegerLevelField	BlzSetAbilityIntegerLevelField	4464937	__wurst_safe_BlzSetAbilityIntegerLevelField		
+BlzSetAbilityRealLevelField	BlzSetAbilityRealLevelField	4465129	__wurst_safe_BlzSetAbilityRealLevelField		
+BlzSetUnitIntegerField	BlzSetUnitIntegerField	4465309	__wurst_safe_BlzSetUnitIntegerField		
+BlzSetUnitRealField	BlzSetUnitRealField	4465477	__wurst_safe_BlzSetUnitRealField		
+BlzSetUnitWeaponRealField	BlzSetUnitWeaponRealField	4465652	__wurst_safe_BlzSetUnitWeaponRealField		
+BlzSetUnitMaxHP	BlzSetUnitMaxHP	4471881	__wurst_safe_BlzSetUnitMaxHP		
+BlzSetUnitMaxMana	BlzSetUnitMaxMana	4471989	__wurst_safe_BlzSetUnitMaxMana		
+__wurst_safe_SetUnitState	SetUnitState	4481720	AQ		
+SetUnitMoveSpeed	SetUnitMoveSpeed	4482056	__wurst_safe_SetUnitMoveSpeed		
+BlzSetUnitAttackCooldown	BlzSetUnitAttackCooldown	4482176	__wurst_safe_BlzSetUnitAttackCooldown		
+BlzSetUnitBaseDamage	BlzSetUnitBaseDamage	4485951	__wurst_safe_BlzSetUnitBaseDamage		
+BlzSetUnitDiceNumber	BlzSetUnitDiceNumber	4486196	__wurst_safe_BlzSetUnitDiceNumber		
+BlzSetUnitDiceSides	BlzSetUnitDiceSides	4486438	__wurst_safe_BlzSetUnitDiceSides		
+BlzSetUnitArmor	BlzSetUnitArmor	4486552	__wurst_safe_BlzSetUnitArmor		
+BlzSetUnitFacingEx	BlzSetUnitFacingEx	4487047	__wurst_safe_BlzSetUnitFacingEx		

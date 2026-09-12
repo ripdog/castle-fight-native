@@ -1,3 +1,5 @@
+AA:create1087
+AB:create1125
 ALItrClosure_ALItrClosure_run
 ALItrClosure_destroyALItrClosure
 ALItrClosure_forEach_BuildingModeAvailability_run_forEach_BuildingModeAvailability
@@ -239,6 +241,8 @@ ArrayList_construct_ArrayList2
 ArrayList_destroyArrayList
 ArrayList_new_ArrayList
 ArrayList_new_ArrayList1
+BA:create1088
+BB:create1126
 BlueBar_BlueBar_getActiveTexture
 BotCard_BotCard_build
 BotCard_BotCard_clickForE2e
@@ -398,6 +402,8 @@ BuiltBuildingsSnapshot_BuiltBuildingsSnapshot_readyUpgradeableLineCount
 BuiltBuildingsSnapshot_construct_BuiltBuildingsSnapshot
 BuiltBuildingsSnapshot_destroyBuiltBuildingsSnapshot
 BuiltBuildingsSnapshot_new_BuiltBuildingsSnapshot
+CA:create1089
+CB:create1127
 CFBuilding_CFBuilding_addExtraTag
 CFBuilding_CFBuilding_addOverrideTag
 CFBuilding_CFBuilding_addTag
@@ -989,6 +995,8 @@ Computed_Computed_onDependencyChanged
 Computed_Computed_recompute
 Computed_Computed_subscribe
 Computed_Computed_unsubscribe
+DA:create1090
+DB:create1128
 DamageCoverageAspect_DamageCoverageAspect_calculateScore
 DamageCoverageAspect_DamageCoverageAspect_deltaForBuilding
 DamageCoverageAspect_DamageCoverageAspect_getDebugName
@@ -1176,6 +1184,8 @@ E2E_recordEvent
 E2E_recordMetric
 E2E_resultPayload
 E2E_startSuite
+EA:create1091
+EB:create1129
 EVPacks_new_EVPacks
 EventCounter_new_EventCounter
 EventData_getAbilityTargetPos
@@ -1261,6 +1271,8 @@ EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_s
 EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment4
 EventListener_perkListen_setCleanup_PerkExecutionOrder_onEvent_perkListen_setCleanup_PerkExecutionOrder
 EventListener_perkListen_setCleanup_PerkLastWallProtocol_onEvent_perkListen_setCleanup_PerkLastWallProtocol
+FA:create1092
+FB:create1130
 FSM_FSM_changeState
 FSM_FSM_onDestroy
 FSM_FSM_setDestroyStatesOnDestroy
@@ -1403,6 +1415,8 @@ FrameHandleListener_onClick_withParent_CampaignUI_CampaignUI_onEvent_onClick_wit
 FrameHandleListener_onEditboxChange_CampaignAntiCheat_onEvent_onEditboxChange_CampaignAntiCheat
 FrameHandleListener_onEditboxEnter_CampaignAntiCheat_onEvent_onEditboxEnter_CampaignAntiCheat
 FrameHandleListener_onSliderValueChange_CampaignUI_CampaignUI_onEvent_onSliderValueChange_CampaignUI_CampaignUI
+GA:create1093
+GB:create1131
 GameMode_GameMode_getId
 GjallPattern_getLength
 GjallPattern_getPosition
@@ -1414,6 +1428,7 @@ GroupIterator_GroupIterator_hasNext
 GroupIterator_GroupIterator_next
 GroupIterator_destroyGroupIterator
 GroupIterator_new_GroupIterator
+HB:create1132
 HashList_HashList_add
 HashList_HashList_clear
 HashList_HashList_count
@@ -1438,6 +1453,8 @@ HittabilityAspect_HittabilityAspect_calculateScore
 HittabilityAspect_HittabilityAspect_deltaForBuilding
 HittabilityAspect_HittabilityAspect_getDebugName
 HittabilityAspect_HittabilityAspect_setBeforeScore
+IA:create1094
+IB:create1133
 IMItrClosure_destroyIMItrClosure
 IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData
 IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData1
@@ -1507,6 +1524,11 @@ IterableMap_IterableMap_remove
 IterableMap_IterableMap_size
 IterableMap_destroyIterableMap
 IterableMap_new_IterableMap
+JB:create1134
+KA:create1095
+KB:create1135
+LA:create1096
+LB:create1136
 LLBackIterator_LLBackIterator_hasNext
 LLBackIterator_LLBackIterator_next
 LLBackIterator_LLBackIterator_reset
@@ -1617,6 +1639,8 @@ LinkedList_joinBy
 LinkedList_new_LinkedList
 LoadListener_loadData_CampaignSaveData_onLoad_loadData_CampaignSaveData
 Loglevel_getTag
+MA:create1097
+MB:create1137
 MMD_flagPlayer
 MapClosure_destroyMapClosure
 MapClosure_map_filter_joinBy_DisplayTimedTextToPlayer_addCommand_WurstCommand_run_map_filter_joinBy_DisplayTimedTextToPlayer_addCommand_WurstCommand
@@ -1671,10 +1695,13 @@ ModeParser_startModeSelectionTimerInternal
 ModeParser_startModeSelectionTimer__w3p_vmProtect
 ModeParser_startSelectedModesOrDefault__w3p_vmProtect
 MultiboardLayoutBuilder_attachTableLayoutToMultiboard_ReactivePlayerMultiboard_PlayerMultiboard_build_attachTableLayoutToMultiboard_ReactivePlayerMultiboard_PlayerMultiboard
+NA:create1098
+NB:create1138
 NoOpState_NoOpState_enter
 NoOpState_NoOpState_exit
 NoOpState_NoOpState_update
 NoOpState_destroyNoOpState
+OA:create1099
 Observer_Observer_cleanupSources
 Observer_Observer_destroySources
 Observer_Observer_disposeInternal
@@ -1712,6 +1739,8 @@ OnWarmupReadyUpdate_onWarmupReadyUpdate_DraftUIScreen_DraftUI_call_onWarmupReady
 OnWarmupReady_onWarmupReady_DraftController_DraftData_call_onWarmupReady_DraftController_DraftData
 OnWarmupStart_onWarmupStart_DraftUIScreen_DraftUI_call_onWarmupStart_DraftUIScreen_DraftUI
 OnWarmupTick_onWarmupTick_DraftUIScreen_DraftUI_call_onWarmupTick_DraftUIScreen_DraftUI
+PA:create1100
+PB:create1139
 PackSupplier_PackSupplier_getPackCount
 PackSupplier_PackSupplier_getRoundLabel
 PackSupplier_PackSupplier_makePair
@@ -1808,6 +1837,7 @@ PowerPlant434SupportPattern_getLength
 PowerPlant434SupportPattern_getPosition
 ProductionEnchantmentState_ProductionEnchantmentState_reset
 ProductionEnchantmentState_new_ProductionEnchantmentState
+QB:create1140
 QueueNode_QueueNode_send
 QueueNode_destroyQueueNode
 QueueNode_new_QueueNode
@@ -1816,6 +1846,7 @@ QueueTask_destroyQueueTask
 QuickBuild_QuickBuild_enter
 QuickBuild_QuickBuild_update
 QuickBuild_destroyQuickBuild
+RB:create1141
 ReactivePlayerMultiboard_ReactivePlayerMultiboard_addLocalResourceRow
 ReactivePlayerMultiboard_ReactivePlayerMultiboard_buildContent
 ReactivePlayerMultiboard_ReactivePlayerMultiboard_rebuildLocalResourceRows
@@ -1847,6 +1878,7 @@ Row_Row_layout
 Row_Row_onDestroy
 Row_destroyRow
 Row_new_Row
+SB:create1142
 ScanCursor_ScanCursor_ensureInitialized
 ScanCursor_ScanCursor_nextCandidate
 ScanCursor_ScanCursor_reset
@@ -1931,6 +1963,7 @@ SyncData_SyncData_onDestroy
 SyncData_destroySyncData
 SyncData_new_SyncData
 SyncMsg_destroySyncMsg
+TB:create1143
 TableLayout_TableLayout_add
 TableLayout_TableLayout_applyTo
 TableLayout_TableLayout_center
@@ -2007,6 +2040,7 @@ TowerPattern_getPosition
 TryUpgrade_TryUpgrade_enter
 TryUpgrade_TryUpgrade_update
 TryUpgrade_destroyTryUpgrade
+UB:create1144
 UIBar_UIBar_applyValue
 UIBar_UIBar_create
 UIBar_UIBar_getActiveTexture
@@ -2105,6 +2139,8 @@ UnitStat_UnitStat_speed
 UnitStat_UnitStat_usesAttack0RangeCompensation
 UnwantedCageRejector_UnwantedCageRejector_shouldReject
 UnwantedCageRejector_new_UnwantedCageRejector
+VA:create5
+VB:create1145
 ValueMode_ValueMode_execute
 ValueMode_ValueMode_isValidValue
 ValueMode_new_ValueMode
@@ -2136,6 +2172,10 @@ Watcher_Watcher_onDestroy
 Watcher_Watcher_runObserver
 Watcher_destroyWatcher
 Watcher_new_Watcher
+XA:create1101
+XB:create1146
+YB:create1147
+ZB:create1148
 __wurst_EnumDestructablesInRect
 __wurst_EnumItemsInRect
 __wurst_FlushChildHashtable
@@ -2506,6 +2546,9 @@ __wurst_safe_UnitUseItemTarget
 __wurst_stringConcat
 __wurst_stringFromIndex
 __wurst_stringToIndex
+aA:create1072
+aB:create1102
+aC:create1149
 abilityFieldMicros
 abilityFieldMix
 absReal
@@ -2717,6 +2760,7 @@ awaitShrineEffects
 awaitShrineProbeBuild
 awaitStatefulConstructed
 awaitUpgraded
+bC:create1150
 banishGuardianSpell
 beginCFRaceBuildingRegistration__w3p_vmProtect
 beginCampaignMissionChallenge__w3p_vmProtect
@@ -2762,6 +2806,9 @@ bumpStamp
 buyCastleItem
 bwShiftl32
 bwShiftr32
+cA:create1073
+cB:create1103
+cC:create1151
 cageProbeResultAt
 cageProbeStampAt
 calcTreasureBoxMultiplier
@@ -3112,6 +3159,9 @@ createVision
 createWatermark__w3p_vmProtect
 currentCallbackD
 currentLifeFraction
+dA:create1074
+dB:create1104
+dC:create1152
 damageUnitsOnSnowInArea
 deathPactEmergency
 deathPitSpell
@@ -3169,6 +3219,8 @@ dumpUnitStatsToE2e
 e2eCommandDebug
 e2eRaw
 e2eRawcode
+eA:create1075
+eC:create1153
 effectiveIndex
 eleBucketOf
 eleBuildingBucketForE2e
@@ -3250,6 +3302,9 @@ expectsDeathRelease
 expiryKeyY
 explodeNukeSpecialUnit
 explodeSnowInArea
+fA:create1076
+fB:create1105
+fC:create1154
 factorBonusPercent
 factorPenaltyPercent
 failCampaignChallenge
@@ -3359,6 +3414,8 @@ framehandle_withTooltip
 friendlyBotById
 frostLauncherSpell
 frostSpell
+gA:create1077
+gC:create1155
 galeSpell
 gamecache_hasInt
 gamecache_loadInt
@@ -3568,6 +3625,9 @@ group_next
 group_remove
 group_size
 h05LAttackProc
+hA:create1078
+hB:create1106
+hC:create1156
 handleCommand
 handleFanOfKnives
 handleLastWallCastleRectEvent
@@ -3626,6 +3686,9 @@ holyPick
 holyShrineSpell
 hotkeyToTier
 hpThresholdPercent
+iA:create1079
+iB:create1107
+iC:create1157
 image_hideForPlayer
 image_showForPlayer
 imgBtn
@@ -3801,12 +3864,18 @@ item_getPos
 item_getTypeId
 item_getX
 item_getY
+jB:create1108
+jC:create1158
 joinCampaignCheatToken
+kB:create1109
+kC:create1159
 keeperDispelProc
 keeperSpell
 killEasternCastleForModeRound
 killEleBuildingAndCheck
 killSecondEleBuildingAndCheck
+lB:create1110
+lC:create1160
 laneBridgeY
 laneRouteSourceY
 launchCampaignMission__w3p_vmProtect
@@ -3847,6 +3916,9 @@ logRescueStrikeUse
 logSpellDebug
 logSpellDebug1
 logTimelineSnapshot
+mA:create1080
+mB:create1111
+mC:create1161
 magicRuinSpell
 makeAffordanceIndependentDebugInfo
 makeAiInfoFrame
@@ -3892,6 +3964,9 @@ multiboard_maximize
 multiboard_minimize
 multiboard_show
 mushroomSpell
+nA:create1081
+nB:create1112
+nC:create1162
 nagaSpellTargetName
 namedChild
 nextFeatheredFriendFoodDelay
@@ -3920,6 +3995,9 @@ nthNonHumanInForce
 nukeMap
 nukeSapperUnit
 nullTimer
+oA:create1082
+oB:create1113
+oC:create1163
 objectiveTextWidth
 on1beforeLimitReached
 on3beforeLimitReached
@@ -3956,6 +4034,8 @@ orderCodeAttack
 orderCodeAttackIfAllowed
 orderGoboW
 orderShrineProbeBuild
+pB:create1114
+pC:create1164
 padding_getHeight
 padding_getWidth
 paintFx
@@ -4058,9 +4138,14 @@ publishRescueStrikeEvents
 publishRoundBoardSignalsFromGame
 punishSelectedLocalControllers
 pyramidSpell
+qA:create1083
+qB:create1115
+qC:create1165
 queueCampaignMissionStartFinalization
 queueNextRound
 quitCampaignMission__w3p_vmProtect
+rB:create1116
+rC:create1166
 raceBuilderIdForBuilding
 raceChooserAbilityCount
 raceChooserAbilityIdAt
@@ -4330,6 +4415,8 @@ run_wrapper9
 runtimeCurrentObserver
 runtimeEnqueue
 runtimeFlush
+sB:create1117
+sC:create1167
 safeB64Char
 safeDestroyEffect
 safeUnitAddAbility
@@ -4592,6 +4679,9 @@ syncPlayerState
 syncedCompanionInvocationsForE2e
 syncedCompanionRollsForE2e
 syncedCompanionSpawnsForE2e
+tA:create1084
+tB:create1118
+tC:create1168
 taxedIncomeForPlayer
 taxedIncomeRealForPlayer
 teamOf
@@ -4670,6 +4760,7 @@ tupleCopy6
 tupleCopy7
 tupleCopy8
 tupleCopy9
+uB:create1119
 unitIncomeIndex
 unitObjectMetaBool
 unitObjectMetaFingerprintForTests
@@ -4754,6 +4845,9 @@ updatePlayerAlliances
 updateStatsOnBuild
 updateStrategicSignalForTeam
 upgradeCheckPosition
+vA:create1085
+vB:create1120
+vC:create1169
 validPid
 validPid1
 validateRegisteredPerkCount__w3p_vmProtect
@@ -4792,6 +4886,7 @@ volcanoSpell
 voteForDraw
 voteForGameDraw
 voteForNuke
+wB:create1121
 wantedCode
 warlockSpell
 warnAfkPlayers
@@ -4808,3 +4903,8 @@ winnerColor
 winnerTitle
 wouldPlacementCreateNewCageAt
 wrapCampaignSaveData
+xA:create1086
+xB:create1122
+xC:create1170
+yB:create1123
+zB:create1124

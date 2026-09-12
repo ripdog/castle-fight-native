@@ -1,0 +1,1462 @@
+rawcode	rawcode_integer	categories	tables	names	definition_count	reference_count	function_count	functions	first_byte_offset
+A0-1	1093676337	abilities	custom	Blink	1	4	2	H,uL	370922
+A000	1093677104	abilities	custom	HEL: Obelisk of Light	1	5	3	H,TI,runObeliskPhoenixFireBehaviorProbe	373082
+A001	1093677105	abilities	custom		1	6	3	H,completeRoundStart,xD	373154
+A002	1093677106	abilities	custom	Death	1	3	1	H	373226
+A003	1093677107	abilities	custom		1	3	1	H	373298
+A004	1093677108	abilities	custom	NAT: Dryad (natures touch)	1	6	3	H,JK,xD	373370
+A005	1093677109	abilities	custom	Rescue Strike	1	24	16	Action_batch_MultiboardEventHooks_run_batch_MultiboardEventHooks2,CallbackSingle_doAfter_MMDData_call_doAfter_MMDData3,H,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime,applyCampaignEnemyRescueStrikes,applyProtectedAbilityFieldsForJassAdd,checkRuntimeProtectedAbilityAdd,completeRoundStart,finishRescueStrike,gL,hasAvailableAiRescueStrikeCaster,main,onAttackStrikeCheck,removeLeavingBuilder,startRescueStrikeCooldown,xD	373442
+A006	1093677110	abilities	custom		1	4	2	H,randomizeBloodFiend	373514
+A007	1093677111	abilities	custom		1	4	2	H,iD	373586
+A008	1093677112	abilities	custom		1	3	1	H	373658
+A009	1093677113	abilities	custom		1	4	2	H,randomizeBloodFiend	373730
+A00A	1093677121	abilities	custom		1	3	1	H	373802
+A00B	1093677122	abilities	custom		1	6	3	H,pyramidSpell,xD	373874
+A00C	1093677123	abilities	custom		1	3	1	H	373946
+A00D	1093677124	abilities	custom		1	4	2	H,randomizeBloodFiend	374018
+A00E	1093677125	abilities	custom	Kills	1	3	1	H	374090
+A00F	1093677126	abilities	custom		1	7	4	CallbackSingle_doAfter_doAfter_RaceHumanAbilities_call_doAfter_doAfter_RaceHumanAbilities1,CallbackSingle_doAfter_doAfter_doAfter_RaceHumanAbilities_call_doAfter_doAfter_doAfter_RaceHumanAbilities,H,warlockSpell	374162
+A00G	1093677127	abilities	custom		1	5	2	H,xD	374234
+A00H	1093677128	abilities	custom	TriggerAttack	1	5	2	H,xD	374306
+A00I	1093677129	abilities	custom		1	5	2	H,xD	374378
+A00J	1093677130	abilities	custom		1	4	2	Ed,H	374450
+A00K	1093677131	abilities	custom		1	6	3	DK,H,xD	374522
+A00L	1093677132	abilities	custom		1	5	2	H,xD	374594
+A00M	1093677133	abilities	custom		1	7	3	H,HK,xD	374666
+A00N	1093677134	abilities	custom		1	6	4	H,checkAllMigratedVisionDummyOrders,oracleSpell,xD	374738
+A00O	1093677135	abilities	custom	NAG: Oracle	1	7	3	H,HK,xD	374810
+A00P	1093677136	abilities	custom		1	7	4	H,checkAllMigratedVisionDummyOrders,tidalSpell,xD	374882
+A00Q	1093677137	abilities	custom		1	3	1	H	374954
+A00R	1093677138	abilities	custom		1	3	1	H	375026
+A00S	1093677139	abilities	custom	Killer Strike	1	3	1	H	375098
+A00T	1093677140	abilities	custom		1	4	2	H,randomizeBloodFiend	375170
+A00U	1093677141	abilities	custom		1	4	2	H,randomizeBloodFiend	375242
+A00V	1093677142	abilities	custom		1	4	2	H,randomizeBloodFiend	375314
+A00W	1093677143	abilities	custom		1	5	2	H,xD	375386
+A00X	1093677144	abilities	custom	HEL: Wizard (Heal (dummy))	1	6	3	BK,H,xD	375458
+A00Y	1093677145	abilities	custom	HEL: Wizard (Heal)	1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceElvenAbilities_cast_registerUnitSpellWithTargetOrder_RaceElvenAbilities2,xD	375530
+A00Z	1093677146	abilities	custom	HEL: Wizard (Lightning)	1	4	2	H,randomizeBloodFiend	375602
+A010	1093677360	abilities	custom		1	5	3	H,applyProtectedAbilityFieldsForJassAdd,randomizeBloodFiend	375674
+A011	1093677361	abilities	custom		1	3	1	H	375746
+A012	1093677362	abilities	custom		1	4	2	H,randomizeBloodFiend	375818
+A013	1093677363	abilities	custom		1	3	1	H	375890
+A014	1093677364	abilities	custom		1	3	1	H	375962
+A015	1093677365	abilities	custom		1	4	2	H,xD	376034
+A016	1093677366	abilities	custom	Gjall Horn Buff	1	6	3	ForGroupCallback_forUnitsInRange_GjallarHorn_callback_forUnitsInRange_GjallarHorn,H,xD	376106
+A017	1093677367	abilities	custom		1	7	3	BK,H,xD	376178
+A018	1093677368	abilities	custom		1	8	5	H,checkAllMigratedVisionDummyOrders,hexSpell,magicRuinSpell,xD	376250
+A019	1093677369	abilities	custom		1	3	1	H	376322
+A01A	1093677377	abilities	custom		1	4	2	H,randomizeBloodFiend	376394
+A01B	1093677378	abilities	custom		1	4	2	H,randomizeBloodFiend	376466
+A01C	1093677379	abilities	custom	NAG: Dragon Turtle (spiked shell)	1	3	1	H	376538
+A01D	1093677380	abilities	custom		1	5	2	H,xD	376610
+A01E	1093677381	abilities	custom		1	7	3	H,lK,xD	376682
+A01F	1093677382	abilities	custom		1	4	2	H,randomizeBloodFiend	376754
+A01G	1093677383	abilities	custom		1	5	2	H,xD	376826
+A01H	1093677384	abilities	custom		1	5	2	H,xD	376898
+A01I	1093677385	abilities	custom		1	7	4	H,kE,setArtilleryModeAbilityIds,xD	376970
+A01J	1093677386	abilities	custom		1	7	3	H,lK,xD	377042
+A01K	1093677387	abilities	custom		1	7	3	H,mH,xD	377114
+A01L	1093677388	abilities	custom		1	3	1	H	377186
+A01M	1093677389	abilities	custom		1	5	2	H,xD	377258
+A01N	1093677390	abilities	custom		1	3	1	H	377330
+A01O	1093677391	abilities	custom		1	3	1	H	377402
+A01P	1093677392	abilities	custom		1	4	2	H,randomizeBloodFiend	377474
+A01Q	1093677393	abilities	custom		1	6	3	H,bL,xD	377546
+A01R	1093677394	abilities	custom		1	4	2	H,randomizeBloodFiend	377618
+A01S	1093677395	abilities	custom		1	3	1	H	377690
+A01T	1093677396	abilities	custom	UND: City Of Decay	1	3	1	H	377762
+A01U	1093677397	abilities	custom		1	4	2	H,randomizeBloodFiend	377834
+A01V	1093677398	abilities	custom		1	4	2	H,iD	377906
+A01W	1093677399	abilities	custom		1	11	3	H,lK,xD	377978
+A01X	1093677400	abilities	custom		1	5	2	H,xD	378050
+A01Y	1093677401	abilities	custom		1	4	2	H,xD	378122
+A01Z	1093677402	abilities	custom	NAG Winged Snake: Dispel	1	4	2	H,xD	378194
+A020	1093677616	abilities	custom		1	3	1	H	378266
+A021	1093677617	abilities	custom		1	3	1	H	378338
+A022	1093677618	abilities	custom		1	3	1	H	378410
+A023	1093677619	abilities	custom		1	3	1	H	378482
+A024	1093677620	abilities	custom		1	3	1	H	378554
+A025	1093677621	abilities	custom		1	3	1	H	378626
+A026	1093677622	abilities	custom		1	3	1	H	378698
+A027	1093677623	abilities	custom		1	3	1	H	378770
+A028	1093677624	abilities	custom		1	3	1	H	378842
+A029	1093677625	abilities	custom		1	3	1	H	378914
+A02A	1093677633	abilities	custom		1	3	1	H	378986
+A02B	1093677634	abilities	custom		1	4	2	H,randomizeBloodFiend	379058
+A02C	1093677635	abilities	custom	COR: Eey Of Corruption (permanent)	1	3	1	H	379130
+A02D	1093677636	abilities	custom	Blast	1	8	4	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E15,H,checkProtectedItemAbilityFields,runBlastStaffPhoenixFireBehaviorProbe	379202
+A02E	1093677637	abilities	custom		1	4	2	H,pL	379274
+A02F	1093677638	abilities	custom	Damage Add	1	3	1	H	379346
+A02G	1093677639	abilities	custom	Scroll Heal	1	5	3	H,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime1,xD	379418
+A02H	1093677640	abilities	custom		1	6	4	H,checkProtectedItemAbilityFields,iJ,xD	379490
+A02I	1093677641	abilities	custom		1	4	2	H,xD	379562
+A02J	1093677642	abilities	custom		1	3	1	H	379634
+A02K	1093677643	abilities	custom		1	3	1	H	379706
+A02L	1093677644	abilities	custom		1	3	1	H	379778
+A02M	1093677645	abilities	custom		1	4	2	H,xD	379850
+A02N	1093677646	abilities	custom		1	3	1	H	379922
+A02O	1093677647	abilities	custom		1	3	1	H	379994
+A02P	1093677648	abilities	custom		1	3	1	H	380066
+A02Q	1093677649	abilities	custom		1	3	1	H	380138
+A02R	1093677650	abilities	custom		1	3	1	H	380210
+A02S	1093677651	abilities	custom		1	5	2	H,xD	380282
+A02T	1093677652	abilities	custom	NAG: Siren (Purge)	1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNagaAbilities_cast_registerUnitSpellWithTargetOrder_RaceNagaAbilities,xD	380354
+A02U	1093677653	abilities	custom	NAG: Siren (Purge (cd))	1	5	3	H,HK,xD	380426
+A02V	1093677654	abilities	custom		1	3	1	H	380498
+A02W	1093677655	abilities	custom		1	3	1	H	380570
+A02X	1093677656	abilities	custom	NAG: RG (Cleaving Attack)	1	3	1	H	380642
+A02Y	1093677657	abilities	custom		1	3	1	H	380714
+A02Z	1093677658	abilities	custom	ORC: Serpent Rock	1	6	3	H,VK,xD	380786
+A030	1093677872	abilities	custom	ORC: Serpent Rock	1	7	4	H,checkAllMigratedVisionDummyOrders,serpentRockShoot,xD	380858
+A031	1093677873	abilities	custom		1	5	2	H,xD	380930
+A032	1093677874	abilities	custom		1	6	3	H,VK,xD	381002
+A033	1093677875	abilities	custom	UND: Death Pit	1	6	3	H,bL,xD	381074
+A034	1093677876	abilities	custom	ORC: Defensive Kodo (defensive aura)	1	3	1	H	381146
+A035	1093677877	abilities	custom	ORC: Offensive Kodo (damage aura)	1	3	1	H	381218
+A036	1093677878	abilities	custom		1	3	1	H	381290
+A037	1093677879	abilities	custom		1	3	1	H	381362
+A038	1093677880	abilities	custom		1	3	1	H	381434
+A039	1093677881	abilities	custom	ORC: Ceremonial Totem	1	6	3	H,VK,xD	381506
+A03A	1093677889	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	381578
+A03B	1093677890	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	381650
+A03C	1093677891	abilities	custom		1	3	1	H	381722
+A03D	1093677892	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	381794
+A03E	1093677893	abilities	custom	Quad Damage	1	3	1	H	381866
+A03F	1093677894	abilities	custom	Double Damage	1	3	1	H	381938
+A03G	1093677895	abilities	custom		1	3	1	H	382010
+A03H	1093677896	abilities	custom		1	5	2	H,xD	382082
+A03I	1093677897	abilities	custom	HUM: Inner Fire (paladin)	1	5	2	H,xD	382154
+A03J	1093677898	abilities	custom		1	3	1	H	382226
+A03K	1093677899	abilities	custom	HUM: Crusader/Paladin Heal	1	7	3	DK,H,xD	382298
+A03L	1093677900	abilities	custom		1	4	2	H,churchSpell	382370
+A03M	1093677901	abilities	custom	HUM: Crusader (inner fire)	1	5	2	H,xD	382442
+A03N	1093677902	abilities	custom		1	4	2	H,xD	382514
+A03O	1093677903	abilities	custom		1	4	2	H,xD	382586
+A03P	1093677904	abilities	custom		1	3	1	H	382658
+A03Q	1093677905	abilities	custom		1	7	5	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,handleSourceDamageEffects,holyShrineSpell,iD	382730
+A03R	1093677906	abilities	custom		1	5	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceChaosAbilities_cast_registerUnitSpellWithTargetOrder_RaceChaosAbilities,xD	382802
+A03S	1093677907	abilities	custom		1	6	3	H,lK,xD	382874
+A03T	1093677908	abilities	custom		1	3	1	H	382946
+A03U	1093677909	abilities	custom		1	3	1	H	383018
+A03V	1093677910	abilities	custom		1	3	1	H	383090
+A03W	1093677911	abilities	custom		1	5	2	H,xD	383162
+A03X	1093677912	abilities	custom		1	3	1	H	383234
+A03Y	1093677913	abilities	custom		1	3	1	H	383306
+A03Z	1093677914	abilities	custom		1	5	2	H,xD	383378
+A040	1093678128	abilities	custom		1	5	2	H,xD	383450
+A041	1093678129	abilities	custom		1	3	1	H	383522
+A042	1093678130	abilities	custom		1	3	1	H	383594
+A043	1093678131	abilities	custom	NOR: Ice Queen (frost nova)	1	9	5	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNorthernAbilities_cast_registerUnitSpellWithTargetOrder_RaceNorthernAbilities2,checkAllMigratedVisionDummyOrders,processSnowMissiles,xD	383666
+A044	1093678132	abilities	custom		1	6	3	H,RK,xD	383738
+A045	1093678133	abilities	custom		1	5	2	H,xD	383810
+A046	1093678134	abilities	custom		1	3	1	H	383882
+A047	1093678135	abilities	custom		1	5	2	H,xD	383954
+A048	1093678136	abilities	custom		1	3	1	H	384026
+A049	1093678137	abilities	custom		1	3	1	H	384098
+A04A	1093678145	abilities	custom		1	3	1	H	384170
+A04B	1093678146	abilities	custom		1	3	1	H	384242
+A04C	1093678147	abilities	custom		1	3	1	H	384314
+A04D	1093678148	abilities	custom		1	3	1	H	384386
+A04E	1093678149	abilities	custom		1	3	1	H	384458
+A04F	1093678150	abilities	custom		1	3	1	H	384530
+A04G	1093678151	abilities	custom		1	5	2	H,xD	384602
+A04H	1093678152	abilities	custom		1	7	4	H,checkAllMigratedVisionDummyOrders,processWorldFreezerMissiles,xD	384674
+A04I	1093678153	abilities	custom		1	7	4	CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1,H,RK,xD	384746
+A04J	1093678154	abilities	custom		1	6	3	H,RK,xD	384818
+A04K	1093678155	abilities	custom		1	3	1	H	384890
+A04L	1093678156	abilities	custom		1	6	3	H,RK,xD	384962
+A04M	1093678157	abilities	custom		1	4	2	H,xD	385034
+A04N	1093678158	abilities	custom		1	3	1	H	385106
+A04O	1093678159	abilities	custom		1	5	2	H,xD	385178
+A04P	1093678160	abilities	custom		1	3	1	H	385250
+A04Q	1093678161	abilities	custom		1	5	2	H,xD	385322
+A04R	1093678162	abilities	custom		1	4	2	H,xD	385394
+A04S	1093678163	abilities	custom	COR: Eye of Corruption	1	3	1	H	385466
+A04T	1093678164	abilities	custom		1	3	1	H	385538
+A04U	1093678165	abilities	custom		1	7	3	H,oK,xD	385610
+A04V	1093678166	abilities	custom		1	3	1	H	385682
+A04W	1093678167	abilities	custom		1	3	1	H	385754
+A04X	1093678168	abilities	custom		1	5	2	H,xD	385826
+A04Y	1093678169	abilities	custom		1	3	1	H	385898
+A04Z	1093678170	abilities	custom		1	4	2	H,xD	385970
+A050	1093678384	abilities	custom		1	3	1	H	386042
+A051	1093678385	abilities	custom		1	3	1	H	386114
+A052	1093678386	abilities	custom	COR: Shadow Dragon (Damage Reflect)	1	3	1	H	386186
+A053	1093678387	abilities	custom		1	3	1	H	386258
+A054	1093678388	abilities	custom		1	3	1	H	386330
+A055	1093678389	abilities	custom		1	5	2	H,xD	386402
+A056	1093678390	abilities	custom	Corrupted: Void Walker	1	3	1	H	386474
+A057	1093678391	abilities	custom	COR: Well Of Pain	1	7	3	H,oK,xD	386546
+A058	1093678392	abilities	custom		1	3	1	H	386618
+A059	1093678393	abilities	custom		1	3	1	H	386690
+A05A	1093678401	abilities	custom		1	3	1	H	386762
+A05B	1093678402	abilities	custom		1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNorthernAbilities_cast_registerUnitSpellWithTargetOrder_RaceNorthernAbilities1,xD	386834
+A05C	1093678403	abilities	custom		1	6	3	H,RK,xD	386906
+A05D	1093678404	abilities	custom		1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNorthernAbilities_cast_registerUnitSpellWithTargetOrder_RaceNorthernAbilities,xD	386978
+A05E	1093678405	abilities	custom		1	6	3	H,RK,xD	387050
+A05F	1093678406	abilities	custom		1	3	1	H	387122
+A05G	1093678407	abilities	custom		1	3	1	H	387194
+A05H	1093678408	abilities	custom		1	6	3	H,setArtilleryModeAbilityIds,xD	387266
+A05I	1093678409	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	387338
+A05J	1093678410	abilities	custom		1	4	2	H,randomizeBloodFiend	387410
+A05K	1093678411	abilities	custom		1	3	1	H	387482
+A05L	1093678412	abilities	custom		1	4	2	H,xD	387554
+A05M	1093678413	abilities	custom		1	5	2	H,xD	387626
+A05N	1093678414	abilities	custom	UND: Mighty Necromancer (carrion swarm)	1	3	1	H	387698
+A05O	1093678415	abilities	custom		1	3	1	H	387770
+A05P	1093678416	abilities	custom		1	3	1	H	387842
+A05Q	1093678417	abilities	custom		1	3	1	H	387914
+A05R	1093678418	abilities	custom		1	3	1	H	387986
+A05S	1093678419	abilities	custom		1	3	1	H	388058
+A05T	1093678420	abilities	custom		1	3	1	H	388130
+A05U	1093678421	abilities	custom		1	6	3	H,bL,xD	388202
+A05V	1093678422	abilities	custom	CHA: Quill Demon (thorns aura)	1	3	1	H	388274
+A05W	1093678423	abilities	custom		1	3	1	H	388346
+A05X	1093678424	abilities	custom		1	5	2	H,xD	388418
+A05Y	1093678425	abilities	custom		1	3	1	H	388490
+A05Z	1093678426	abilities	custom		1	3	1	H	388562
+A060	1093678640	abilities	custom		1	3	1	H	388634
+A061	1093678641	abilities	custom		1	3	1	H	388706
+A062	1093678642	abilities	custom		1	3	1	H	388778
+A063	1093678643	abilities	custom		1	3	1	H	388850
+A064	1093678644	abilities	custom		1	3	1	H	388922
+A065	1093678645	abilities	custom		1	3	1	H	388994
+A066	1093678646	abilities	custom		1	3	1	H	389066
+A067	1093678647	abilities	custom		1	3	1	H	389138
+A068	1093678648	abilities	custom		1	3	1	H	389210
+A069	1093678649	abilities	custom		1	4	2	H,xD	389282
+A06A	1093678657	abilities	custom		1	3	1	H	389354
+A06B	1093678658	abilities	custom		1	3	1	H	389426
+A06C	1093678659	abilities	custom	QuadDamageAura	1	4	2	H,ZH	389498
+A06D	1093678660	abilities	custom	DoubleDamageAura	1	4	2	H,ZH	389570
+A06E	1093678661	abilities	custom	Rescue Strike Effect	1	8	6	CallbackSingle_doAfter_MMDData_call_doAfter_MMDData3,H,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime,applyCampaignEnemyRescueStrikes,completeRoundStart,finishRescueStrike	389642
+A06F	1093678662	abilities	custom		1	3	1	H	389714
+A06G	1093678663	abilities	custom		1	3	1	H	389786
+A06H	1093678664	abilities	custom		1	5	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceOrcAbilities_cast_registerUnitSpellWithTargetOrder_RaceOrcAbilities,xD	389858
+A06I	1093678665	abilities	custom		1	6	3	H,VK,xD	389930
+A06J	1093678666	abilities	custom		1	3	1	H	390002
+A06K	1093678667	abilities	custom		1	3	1	H	390074
+A06L	1093678668	abilities	custom		1	3	1	H	390146
+A06M	1093678669	abilities	custom		1	3	1	H	390218
+A06N	1093678670	abilities	custom	UND: Greater Vampir (vampiric aura)	1	3	1	H	390290
+A06O	1093678671	abilities	custom		1	3	1	H	390362
+A06P	1093678672	abilities	custom	NOR: Chilling Mushroom	1	6	3	H,RK,xD	390434
+A06Q	1093678673	abilities	custom		1	4	2	H,xD	390506
+A06R	1093678674	abilities	custom		1	7	3	H,lK,xD	390578
+A06S	1093678675	abilities	custom		1	7	4	H,checkAllMigratedVisionDummyOrders,magicRuinSpell,xD	390650
+A06T	1093678676	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,magicRuinSpell	390722
+A06U	1093678677	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,magicRuinSpell	390794
+A06V	1093678678	abilities	custom	Legendary Unit	1	5	3	ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities1,ForGroupCallback_forUnitsInRect_RaceCorruptedAbilities_callback_forUnitsInRect_RaceCorruptedAbilities,H	390866
+A06W	1093678679	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	390938
+A06X	1093678680	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	391010
+A06Y	1093678681	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	391082
+A06Z	1093678682	abilities	custom		1	4	2	H,xD	391154
+A070	1093678896	abilities	custom	Leg-anti-hex	1	7	5	ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities,H,devourAttackProc,hasShield,onUnitTrained	391226
+A071	1093678897	abilities	custom		1	3	1	H	391298
+A073	1093678899	abilities	custom		1	3	1	H	391370
+A074	1093678900	abilities	custom		1	3	1	H	391442
+A075	1093678901	abilities	custom		1	3	1	H	391514
+A076	1093678902	abilities	custom		1	3	1	H	391586
+A077	1093678903	abilities	custom		1	5	2	H,xD	391658
+A078	1093678904	abilities	custom		1	5	2	H,xD	391730
+A079	1093678905	abilities	custom	NEL: Druid (Heal Rain)	1	3	1	H	391802
+A07A	1093678913	abilities	custom		1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNelfAbilities_cast_registerUnitSpellWithTargetOrder_RaceNelfAbilities,xD	391874
+A07B	1093678914	abilities	custom		1	3	1	H	391946
+A07C	1093678915	abilities	custom		1	3	1	H	392018
+A07D	1093678916	abilities	custom		1	3	1	H	392090
+A07E	1093678917	abilities	custom		1	3	1	H	392162
+A07F	1093678918	abilities	custom		1	3	1	H	392234
+A07G	1093678919	abilities	custom	Summoned Unit	1	4	2	H,fJ	392306
+A07H	1093678920	abilities	custom	TypeLegendary	1	5	3	H,fJ,mJ	392378
+A07I	1093678921	abilities	custom		1	6	4	CallbackSingle_doAfter_doAfter_doAfter_RaceHumanAbilities_call_doAfter_doAfter_doAfter_RaceHumanAbilities,H,isIdleAttackUnit,warlockSpell	392450
+A07J	1093678922	abilities	custom		1	5	3	H,KE,onUnitTrained	392522
+A07K	1093678923	abilities	custom	Channel(troll)	1	3	1	H	392594
+A07L	1093678924	abilities	custom		1	4	2	H,randomizeBloodFiend	392666
+A07M	1093678925	abilities	custom		1	18	14	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,checkForWrongOrder,fJ,isAssassinSupportUnit,isIdleAttackUnit,isSupportOrderUnit,onSummonedUnit,onUnitTrained,orderCodeAttackIfAllowed,restoreExpectedOrderAfterExternalOrder,shouldApplyGobboTimedLife,wM,xM	392738
+A07N	1093678926	abilities	custom		1	3	1	H	392810
+A07O	1093678927	abilities	custom		1	3	1	H	392882
+A07P	1093678928	abilities	custom		1	6	3	H,LK,xD	392954
+A07Q	1093678929	abilities	custom		1	7	4	H,assassinSpell,checkAllMigratedVisionDummyOrders,xD	393026
+A07R	1093678930	abilities	custom		1	6	3	H,LK,xD	393098
+A07T	1093678932	abilities	custom	NEL: Starfall	1	6	4	H,kE,setArtilleryModeAbilityIds,xD	393170
+A07U	1093678933	abilities	custom		1	7	3	H,LK,xD	393242
+A07V	1093678934	abilities	custom		1	3	1	H	393314
+A07W	1093678935	abilities	custom		1	3	1	H	393386
+A07X	1093678936	abilities	custom	Killzor	1	5	2	H,xD	393458
+A07Y	1093678937	abilities	custom		1	3	1	H	393530
+A07Z	1093678938	abilities	custom		1	3	1	H	393602
+A080	1093679152	abilities	custom	World Freezer Phoenix Fire	1	4	2	CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1,H	393674
+A081	1093679153	abilities	custom	freezer orb slow	1	3	1	H	393746
+A082	1093679154	abilities	custom		1	7	4	H,checkAllMigratedVisionDummyOrders,processWorldFreezerMissiles,xD	393818
+A083	1093679155	abilities	custom		1	7	4	H,checkAllMigratedVisionDummyOrders,processWorldFreezerMissiles,xD	393890
+A084	1093679156	abilities	custom	World Freezer Phoenix Fire -na	1	4	2	CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1,H	393962
+A085	1093679157	abilities	custom		1	5	2	H,xD	394034
+A086	1093679158	abilities	custom		1	7	4	H,applyProtectedAbilityFieldsForJassAdd,devourAttackProc,xD	394106
+A087	1093679159	abilities	custom	UND Lich King: Death Pact	1	3	1	H	394178
+A088	1093679160	abilities	custom		1	4	2	H,onChaosPortalUnitSummoned	394250
+A089	1093679161	abilities	custom		1	4	2	H,onChaosPortalUnitSummoned	394322
+A08A	1093679169	abilities	custom		1	4	2	H,PK	394394
+A08B	1093679170	abilities	custom		1	7	3	H,LK,xD	394466
+A08C	1093679171	abilities	custom	NEL: Obelisk Of Wilderness (spell resist)	1	6	4	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,applyWildernessObeliskBuff,hasWildernessObeliskBuff	394538
+A08D	1093679172	abilities	custom		1	6	4	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,applyWildernessObeliskBuff,hasWildernessObeliskBuff	394610
+A08E	1093679173	abilities	custom	NEL: Obelisk of Wilderness	1	7	3	H,LK,xD	394682
+A08F	1093679174	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,applyWildernessObeliskBuff	394754
+A08G	1093679175	abilities	custom		1	3	1	H	394826
+A08H	1093679176	abilities	custom		1	14	12	ForGroupCallback_forUnitsInRange_RaceElementalAbilities_callback_forUnitsInRange_RaceElementalAbilities,ForGroupCallback_forUnitsInRange_RaceNelfAbilities_callback_forUnitsInRange_RaceNelfAbilities,ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities,ForGroupCallback_forUnitsInRange_doAfter_RaceChaosAbilities_callback_forUnitsInRange_doAfter_RaceChaosAbilities,ForGroupCallback_forUnitsInRange_doAfter_RaceMechAbilities_callback_forUnitsInRange_doAfter_RaceMechAbilities,ForGroupCallback_forUnitsInRect_RaceCorruptedAbilities_callback_forUnitsInRect_RaceCorruptedAbilities,ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers,ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers1,H,PK,isDispellableEnemyOf,isNotTentacle	394898
+A08I	1093679177	abilities	custom		1	3	1	H	394970
+A08J	1093679178	abilities	custom		1	3	1	H	395042
+A08K	1093679179	abilities	custom	ZZZauberschaden-Reduzierung	1	5	3	H,applyWildernessObeliskBuff,hasNoPowerArmorExclusion	395114
+A08L	1093679180	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	395186
+A08M	1093679181	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	395258
+A08N	1093679182	abilities	custom		1	3	1	H	395330
+A08O	1093679183	abilities	custom		1	4	2	H,hasNoPowerArmorExclusion	395402
+A08P	1093679184	abilities	custom		1	3	1	H	395474
+A08Q	1093679185	abilities	custom	Damage 200	1	5	2	H,xD	395546
+A08R	1093679186	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,ceremonialTotemSpell	395618
+A08S	1093679187	abilities	custom		1	5	2	H,xD	395690
+A08T	1093679188	abilities	custom	NEL: Starfall (-na)	1	5	3	H,setArtilleryModeAbilityIds,xD	395762
+A08U	1093679189	abilities	custom	HEL: Dragonhawk (SolarStrike)	1	7	4	H,checkAllMigratedVisionDummyOrders,solarStrikeSpell,xD	395834
+A08V	1093679190	abilities	custom		1	5	3	BK,H,xD	395906
+A08W	1093679191	abilities	custom		1	5	2	H,xD	395978
+A08X	1093679192	abilities	custom		1	3	1	H	396050
+A08Y	1093679193	abilities	custom	Scroll of Stone Trigger	1	6	4	EventListener_add_BuildingCatalogE2E_onEvent_add_BuildingCatalogE2E11,H,buildingCatalogPointItemAbilityId,gL	396122
+A08Z	1093679194	abilities	custom	MEH: Iron Golem (bash)	1	3	1	H	396194
+A090	1093679408	abilities	custom	Bash 2	1	3	1	H	396266
+A091	1093679409	abilities	custom		1	3	1	H	396338
+A092	1093679410	abilities	custom		1	3	1	H	396410
+A093	1093679411	abilities	custom		1	4	2	H,hasNoPowerArmorExclusion	396482
+A094	1093679412	abilities	custom		1	3	1	H	396554
+A095	1093679413	abilities	custom		1	8	3	FK,H,xD	396626
+A096	1093679414	abilities	custom	MECCCC	1	4	2	H,xD	396698
+A097	1093679415	abilities	custom		1	3	1	H	396770
+A098	1093679416	abilities	custom		1	3	1	H	396842
+A099	1093679417	abilities	custom		1	3	1	H	396914
+A09A	1093679425	abilities	custom	Check Range	1	5	3	AN,H,xD	396986
+A09B	1093679426	abilities	custom		1	4	2	Ed,H	397058
+A09C	1093679427	abilities	custom		1	5	2	Ed,H	397130
+A09D	1093679428	abilities	custom		1	6	3	FK,H,xD	397202
+A09E	1093679429	abilities	custom		1	6	3	CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities2,H,xD	421322
+A09F	1093679430	abilities	custom	MEH: Rocket Tank (rockets)	1	3	1	H	397274
+A09G	1093679431	abilities	custom	Gold Coin Trigger	1	3	1	H	397346
+A09H	1093679432	abilities	custom	TypeMurloc	1	6	4	EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning,H,dE,spawnSyncedCompanions	397418
+A09I	1093679433	abilities	custom		1	3	1	H	397490
+A09J	1093679434	abilities	custom		1	3	1	H	397562
+A09K	1093679435	abilities	custom	MEH: Gobbo Machinist (repair)	1	5	3	H,onSummonedUnit,onUnitTrained	397634
+A09L	1093679436	abilities	custom		1	16	9	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,ForGroupCallback_forUnitsInRect_RaceMechAbilities_callback_forUnitsInRect_RaceMechAbilities,H,Od,Vd,blueShieldSpell,hasShield,nd,redShieldSpell	397706
+A09M	1093679437	abilities	custom	Stacking Life Bonus	1	6	2	H,applyPowerArmor	397778
+A09N	1093679438	abilities	custom		1	7	3	FK,H,xD	397850
+A09O	1093679439	abilities	custom		1	7	3	FK,H,xD	397922
+A09P	1093679440	abilities	custom		1	4	2	H,registerPowerPlant	397994
+A09Q	1093679441	abilities	custom		1	6	4	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,KE,applyPowerArmor	398066
+A09R	1093679442	abilities	custom		1	7	5	CallbackSingle_doAfter_add_FireElemental_call_doAfter_add_FireElemental,DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,KE,applyPowerArmor	398138
+A09S	1093679443	abilities	custom	Power Armor	1	4	2	H,registerPowerPlant	398210
+A09T	1093679444	abilities	custom		1	7	4	H,applyProtectedAbilityFieldsForJassAdd,h05LAttackProc,xD	398282
+A09U	1093679445	abilities	custom		1	3	1	H	398354
+A09V	1093679446	abilities	custom		1	4	2	H,registerPowerPlant	398426
+A09W	1093679447	abilities	custom		1	3	1	H	398498
+A09X	1093679448	abilities	custom		1	7	3	H,HK,xD	398570
+A09Y	1093679449	abilities	custom		1	3	1	H	398642
+A09Z	1093679450	abilities	custom		1	3	1	H	398714
+A0A0	1093681456	abilities	custom		1	3	1	H	398786
+A0A1	1093681457	abilities	custom		1	3	1	H	398858
+A0A2	1093681458	abilities	custom		1	3	1	H	398930
+A0A3	1093681459	abilities	custom		1	3	1	H	399002
+A0A4	1093681460	abilities	custom		1	3	1	H	399074
+A0A5	1093681461	abilities	custom	Issue buy order	1	9	5	BD,H,completeRoundStart,main,markBuilderSharedControl	399146
+A0A6	1093681462	abilities	custom	Infostealer's (spell steal)	1	5	2	H,xD	399218
+A0A7	1093681463	abilities	custom		1	6	3	BK,H,xD	399290
+A0A8	1093681464	abilities	custom	HEL: Sorceress (healing wave)	1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceElvenAbilities_cast_registerUnitSpellWithTargetOrder_RaceElvenAbilities1,xD	399362
+A0A9	1093681465	abilities	custom		1	3	1	H	399434
+A0AA	1093681473	abilities	custom		1	5	2	H,xD	399506
+A0AB	1093681474	abilities	custom		1	5	2	H,xD	399578
+A0AC	1093681475	abilities	custom		1	3	1	H	399650
+A0AD	1093681476	abilities	custom		1	3	1	H	399722
+A0AE	1093681477	abilities	custom		1	6	3	H,oK,xD	399794
+A0AF	1093681478	abilities	custom		1	5	3	H,annihilatorSpell,xD	399866
+A0AG	1093681479	abilities	custom		1	3	1	H	399938
+A0AH	1093681480	abilities	custom	Spell Resist (legendary)	1	5	3	H,applyWildernessObeliskBuff,hasNoPowerArmorExclusion	400010
+A0AI	1093681481	abilities	custom		1	5	3	H,applyWildernessObeliskBuff,hasNoPowerArmorExclusion	400082
+A0AJ	1093681482	abilities	custom		1	3	1	H	400154
+A0AK	1093681483	abilities	custom	NOR: Chilling Mushroom	1	6	3	H,mushroomSpell,xD	400226
+A0AL	1093681484	abilities	custom	HEL: Blademaster (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	400298
+A0AN	1093681486	abilities	custom	HEL: Elder Blademaster (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	400370
+A0AO	1093681487	abilities	custom	NAT: Black Spider (slow poison)	1	3	1	H	400442
+A0AP	1093681488	abilities	custom	NAT: Giant Spider (slow poison)	1	3	1	H	400514
+A0AQ	1093681489	abilities	custom	NAT: Giant Spider (spawn forest spiders)	1	3	1	H	400586
+A0AR	1093681490	abilities	custom	NAT: Giant Spider (Web)	1	4	2	H,xD	400658
+A0AS	1093681491	abilities	custom	NAT: Brood Mother (Web)	1	4	2	H,xD	400730
+A0AT	1093681492	abilities	custom	NAT: Brood Mother (slow poison)	1	3	1	H	400802
+A0AU	1093681493	abilities	custom	NAT: Brood Mother (spawn giant spiders)	1	3	1	H	400874
+A0AV	1093681494	abilities	custom	NAT: Brood Mother (infest)	1	5	3	H,JK,xD	400946
+A0AW	1093681495	abilities	custom	NAT: Furbolg Shaman (rejuvenation)	1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNatureAbilities_cast_registerUnitSpellWithTargetOrder_RaceNatureAbilities,xD	401018
+A0AX	1093681496	abilities	custom	NAT: Furbolg Elder Shaman (rejuvenation)	1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNatureAbilities_cast_registerUnitSpellWithTargetOrder_RaceNatureAbilities1,xD	401090
+A0AY	1093681497	abilities	custom	NAT: Dryad (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	401162
+A0AZ	1093681498	abilities	custom	NAT: Keeper of the Groove (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	401234
+A0B0	1093681712	abilities	custom	NAT: Ancient Keeper (natures aura)	1	3	1	H	401306
+A0B1	1093681713	abilities	custom	NAT: Bear (bash)	1	3	1	H	401378
+A0B2	1093681714	abilities	custom	NAT: Ancient Bear (bash)	1	3	1	H	401450
+A0B3	1093681715	abilities	custom	NAT: Bear (critical strike)	1	3	1	H	401522
+A0B4	1093681716	abilities	custom	NAT: Ancient Bear (critical strike)	1	3	1	H	401594
+A0B5	1093681717	abilities	custom		1	6	4	H,applyProtectedAbilityFieldsForJassAdd,handleTargetDamageEffects,xD	401666
+A0B6	1093681718	abilities	custom		1	6	4	H,applyProtectedAbilityFieldsForJassAdd,handleTargetDamageEffects,xD	401738
+A0B7	1093681719	abilities	custom	NAT: Bear (feral rage)	1	7	4	H,applyProtectedAbilityFieldsForJassAdd,handleTargetDamageEffects,xD	401810
+A0B8	1093681720	abilities	custom	NAT: Ancient Bear (feral rage)	1	7	4	H,applyProtectedAbilityFieldsForJassAdd,handleTargetDamageEffects,xD	401882
+A0B9	1093681721	abilities	custom	COR: Void Keeper (Incinerate)	1	3	1	H	401954
+A0BA	1093681729	abilities	custom	NAT: Emerald Dragon (corrosive breath (poison))	1	3	1	H	402026
+A0BB	1093681730	abilities	custom	NAT: Emerald Dragon (armor reduce)	1	3	1	H	402098
+A0BC	1093681731	abilities	custom	NAT: Mounatin Giant (Grab Tree)	1	4	2	H,xD	402170
+A0BD	1093681732	abilities	custom	NAT: Ancient of Gale	1	7	4	H,kE,setArtilleryModeAbilityIds,xD	402242
+A0BE	1093681733	abilities	custom	NAT: Mountain Giant (hardened skin)	1	3	1	H	402314
+A0BF	1093681734	abilities	custom	NAT: Mountain Giant (damage reduce %)	1	3	1	H	402386
+A0BG	1093681735	abilities	custom		1	7	5	EC,H,checkCagedPathingMarker,checkUncagedPathingPulse,trackTrainedUnitPathing	402458
+A0BH	1093681736	abilities	custom	NAT: Mountain Giant (pulverize)	1	3	1	H	402530
+A0BI	1093681737	abilities	custom	NAT: Mountain Giant (taunt)	1	4	2	H,xD	402602
+A0BJ	1093681738	abilities	custom	NAT: Mountain Giant (taunt dummy)	1	6	3	H,JK,xD	402674
+A0BK	1093681739	abilities	custom	NAT: Treant (thorns)	1	3	1	H	402746
+A0BL	1093681740	abilities	custom	NAT: Banish	1	7	5	H,banishGuardianSpell,checkAllMigratedVisionDummyOrders,magicRuinSpell,xD	402818
+A0BM	1093681741	abilities	custom	NAT: Banish (dummy)	1	7	3	H,JK,xD	402890
+A0BN	1093681742	abilities	custom	NAT: Ancient protector (bash)	1	3	1	H	402962
+A0BO	1093681743	abilities	custom	NAT: Ancient of Gale (dummy)	1	7	3	H,JK,xD	403034
+A0BP	1093681744	abilities	custom	NAT: Ancient of Gale (dummy, -na)	1	5	2	H,xD	403106
+A0BQ	1093681745	abilities	custom	NAT: Ancient of Gale (-na)	1	6	3	H,setArtilleryModeAbilityIds,xD	403178
+A0BR	1093681746	abilities	custom	NAT: Curse of Nature	1	3	1	H	403250
+A0BS	1093681747	abilities	custom	NAT: Ancient of Wonders (dummy)	1	8	4	CallbackPeriodic_doPeriodically_RaceNatureAbilities_call_doPeriodically_RaceNatureAbilities,H,JK,xD	403322
+A0BT	1093681748	abilities	custom	NAT: Keeper of the Groove (natures touch)	1	6	3	H,JK,xD	403394
+A0BU	1093681749	abilities	custom	NAT: Keeper of the Grove (summon treants)	1	5	2	H,xD	403466
+A0BV	1093681750	abilities	custom	NAT: Ancient Keeper (spell immune)	1	5	3	H,applyWildernessObeliskBuff,hasNoPowerArmorExclusion	403538
+A0BW	1093681751	abilities	custom	NAT: Ancient Keeper (incorporeal)	1	3	1	H	403610
+A0BX	1093681752	abilities	custom	NAT: Ancient Keeper (treants sprout)	1	6	3	H,JK,xD	403682
+A0BY	1093681753	abilities	custom	NAT: Bear (cleaving attack)	1	3	1	H	403754
+A0BZ	1093681754	abilities	custom	NAT: Ancient Bear (cleaving attack)	1	3	1	H	403826
+A0C0	1093681968	abilities	custom	NAT: Furbolg Shaman (rejuvenation (dummy))	1	6	3	H,JK,xD	403898
+A0C1	1093681969	abilities	custom	NAT: Furbolg Elder Shaman (rejuvenation (dummy))	1	6	3	H,JK,xD	403970
+A0C2	1093681970	abilities	custom	NAT: Furbolg Elder Shaman (manaburn orb)	1	3	1	H	404042
+A0C3	1093681971	abilities	custom	NAT: Furbolg Elder Shaman (manaburn)	1	5	2	H,xD	404114
+A0C4	1093681972	abilities	custom		1	6	3	H,handleTargetDamageEffects,startBearHibernate	404186
+A0C5	1093681973	abilities	custom		1	6	4	H,handleTargetDamageEffects,setupUnit,vampireCharge	404258
+A0C6	1093681974	abilities	custom		1	6	4	H,finishBearHibernate,handleTargetDamageEffects,startBearSleep	404330
+A0C7	1093681975	abilities	custom		1	6	4	H,finishBearHibernate,handleTargetDamageEffects,startBearSleep	404402
+A0C8	1093681976	abilities	custom		1	5	3	H,handleSourceDamageEffects,startBearSleep	404474
+A0C9	1093681977	abilities	custom		1	6	2	H,tornadoStackProc	404546
+A0CA	1093681985	abilities	custom		1	3	1	H	404618
+A0CB	1093681986	abilities	custom		1	3	1	H	404690
+A0CC	1093681987	abilities	custom		1	3	1	H	404762
+A0CD	1093681988	abilities	custom		1	3	1	H	404834
+A0CE	1093681989	abilities	custom	Tornado (Unit Damage Aura)	1	3	1	H	404906
+A0CF	1093681990	abilities	custom	NAT: Mountain Giant (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	404978
+A0CG	1093681991	abilities	custom	NEL: Faerie Dragon (heal)	1	6	3	H,LK,xD	405050
+A0CH	1093681992	abilities	custom	ELE: Elemental Of Lightning (orb)	1	3	1	H	405122
+A0CI	1093681993	abilities	custom	ELE: Greater Elemental Of Lightning (orb)	1	3	1	H	405194
+A0CJ	1093681994	abilities	custom	ELE: Elemental Of Lightning (forked lightning)	1	5	2	H,xD	405266
+A0CK	1093681995	abilities	custom	ELE: Greater Elemental Of Lightning (forked lightning)	1	5	2	H,xD	405338
+A0CL	1093681996	abilities	custom	ELE: Elemental Of Fire (split)	1	4	2	H,xD	405410
+A0CM	1093681997	abilities	custom	ELE: Greater Elemental Of Fire (firebreath orb)	1	3	1	H	405482
+A0CN	1093681998	abilities	custom	ELE: Greater Elemental Of Fire (firebreath)	1	5	2	H,xD	405554
+A0CO	1093681999	abilities	custom	ELE: Elemental Of Earth	1	3	1	H	405626
+A0CP	1093682000	abilities	custom	ELE: Greater Elemental Of Earth	1	3	1	H	405698
+A0CQ	1093682001	abilities	custom	ELE: Elemental Of Wind (slow aura)	1	3	1	H	405770
+A0CR	1093682002	abilities	custom	ELE: Greater Elemental Of Wind (slow aura)	1	3	1	H	405842
+A0CS	1093682003	abilities	custom	ELE: Lesser Elemental Of Water (evasion)	1	3	1	H	405914
+A0CT	1093682004	abilities	custom	ELE: Elemental Of Water (evasion)	1	3	1	H	405986
+A0CU	1093682005	abilities	custom	ELE: Greater Elemental Of Water (illusions)	1	4	2	H,xD	406058
+A0CV	1093682006	abilities	custom	Channel ( Assasin Target )	1	3	1	H	406130
+A0CW	1093682007	abilities	custom	ELE: Onis Alis	1	3	1	H	406202
+A0CX	1093682008	abilities	custom	ELE: Onis Coruscus	1	3	1	H	406274
+A0CY	1093682009	abilities	custom	ELE: Elemental Rain	1	5	2	H,xD	406346
+A0CZ	1093682010	abilities	custom	ELE: Enchant	1	5	2	H,xD	406418
+A0D0	1093682224	abilities	custom	ELE: Elemental Rain (Meteor Shower)	1	6	3	H,frostSpell,xD	406490
+A0D1	1093682225	abilities	custom	ELE: Elemental Rain (Blizzard)	1	7	4	H,kE,setArtilleryModeAbilityIds,xD	406562
+A0D2	1093682226	abilities	custom	ELE: Elemental Rain (Blizzard) (-na)	1	6	3	H,setArtilleryModeAbilityIds,xD	406634
+A0D3	1093682227	abilities	custom	ELE: Elemental Rain (Meteor Shower)	1	5	2	H,xD	406706
+A0D4	1093682228	abilities	custom	ELE: Enchant(Forge Weapon)	1	3	1	H	406778
+A0D5	1093682229	abilities	custom	ELE: ElectroShieldElemental	1	7	3	H,castLightningShield,xD	406850
+A0D6	1093682230	abilities	custom	ELE: Enchant(Rock Shield)	1	3	1	H	406922
+A0D7	1093682231	abilities	custom	ELE: Enchant(Haste)	1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,holyShrineSpell	406994
+A0D8	1093682232	abilities	custom	ELE: Elemental Guard Tower (Immolation)	1	3	1	H	407066
+A0D9	1093682233	abilities	custom	ELE: Elemental Guard Tower (Discharge)	1	3	1	H	407138
+A0DA	1093682241	abilities	custom	ELE: Elemental Guard Tower (Shield of Mist)	1	7	4	H,PC,applyProtectedAbilityFieldsForJassAdd,xD	407210
+A0DB	1093682242	abilities	custom	ELE: Elemental Guard Tower	1	3	1	H	407282
+A0DC	1093682243	abilities	custom	ELE: Elemental Guard Tower (Boulder)	1	7	4	H,applyProtectedAbilityFieldsForJassAdd,boulderAttackProc,xD	407354
+A0DD	1093682244	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407426
+A0DE	1093682245	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407498
+A0DF	1093682246	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407570
+A0DG	1093682247	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407642
+A0DH	1093682248	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407714
+A0DI	1093682249	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407786
+A0DJ	1093682250	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407858
+A0DK	1093682251	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	407930
+A0DL	1093682252	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	408002
+A0DM	1093682253	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	408074
+A0DN	1093682254	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	408146
+A0DO	1093682255	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	408218
+A0DP	1093682256	abilities	custom		1	7	5	BC,H,aN,mK,vN	408290
+A0DQ	1093682257	abilities	custom		1	7	5	BC,H,aN,mK,vN	408362
+A0DR	1093682258	abilities	custom		1	6	4	BC,H,mK,vN	408434
+A0DS	1093682259	abilities	custom	Elemental Building	1	7	5	H,KE,fJ,improveSpecialBuilding,onBuildingFinished	408506
+A0DT	1093682260	abilities	custom	Lesser Water Elemental	1	5	2	H,xD	408578
+A0DU	1093682261	abilities	custom	NAT: Force of Nature	1	5	2	H,xD	408650
+A0DV	1093682262	abilities	custom	ELE: ObeliskOfElements (dummy)	1	7	3	H,xD,xK	408722
+A0DW	1093682263	abilities	custom		1	4	2	H,handleSourceDamageEffects	408794
+A0DX	1093682264	abilities	custom		1	4	2	H,handleTargetDamageEffects	408866
+A0DY	1093682265	abilities	custom	ELE: Greater Elemental Of Fire (split)	1	5	2	H,xD	408938
+A0DZ	1093682266	abilities	custom		1	6	4	H,KE,onUnitTrained,setupUnit	409010
+A0E0	1093682480	abilities	custom		1	3	1	H	409082
+A0E1	1093682481	abilities	custom		1	6	3	CI,H,xD	409154
+A0E2	1093682482	abilities	custom		1	9	2	H,xD	409226
+A0E3	1093682483	abilities	custom	ELE: monsoon	1	6	4	H,kE,setArtilleryModeAbilityIds,xD	409298
+A0E4	1093682484	abilities	custom	ELE: monsoon (-na)	1	5	3	H,setArtilleryModeAbilityIds,xD	409370
+A0E5	1093682485	abilities	custom	ELE: Elemental of Wind (effect)	1	5	3	H,onUnitEnteredMap,xD	409442
+A0E6	1093682486	abilities	custom	ELE: Greater Elemental of Wind (effect)	1	4	2	H,xD	409514
+A0E7	1093682487	abilities	custom	Water Elemental	1	5	2	H,xD	409586
+A0E8	1093682488	abilities	custom	Greater Water Elemental	1	5	2	H,xD	409658
+A0E9	1093682489	abilities	custom	Elemental Of Earth	1	5	2	H,xD	409730
+A0EA	1093682497	abilities	custom	Greater Elemental Of Earth	1	5	2	H,xD	409802
+A0EB	1093682498	abilities	custom	Elemental Of Lightning	1	5	2	H,xD	409874
+A0EC	1093682499	abilities	custom	Greater Elemental Of Lightning	1	5	2	H,xD	409946
+A0ED	1093682500	abilities	custom	Elemental Of Fire	1	5	2	H,xD	410018
+A0EE	1093682501	abilities	custom	Greater Elemental Of Fire	1	5	2	H,xD	410090
+A0EF	1093682502	abilities	custom	Lesser Elemental Of Wind	1	5	2	H,xD	410162
+A0EG	1093682503	abilities	custom	Elemental Of Wind	1	5	2	H,xD	410234
+A0EH	1093682504	abilities	custom	Greater Elemental Of Wind	1	5	2	H,xD	410306
+A0EI	1093682505	abilities	custom	ELE: Book of Conjuration	1	7	3	H,xD,xK	410378
+A0EJ	1093682506	abilities	custom	NAT: Wisp explosion	1	3	1	H	410450
+A0EK	1093682507	abilities	custom		1	10	4	H,improveSpecialBuilding,xK,yK	410522
+A0EL	1093682508	abilities	custom		1	10	5	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E19,H,fJ,improveSpecialBuilding,setupUnit	410594
+A0EM	1093682509	abilities	custom	NAT: Wisp (stun)	1	3	1	H	410666
+A0EN	1093682510	abilities	custom		1	4	2	H,vampireCharge	410738
+A0EO	1093682511	abilities	custom		1	4	2	H,xD	410810
+A0EP	1093682512	abilities	custom	ELE: Enchant (forged weapon)	1	4	2	H,xD	410882
+A0EQ	1093682513	abilities	custom	NOT WORKING	1	3	1	H	410954
+A0ER	1093682514	abilities	custom		1	3	1	H	411026
+A0ES	1093682515	abilities	custom		1	4	2	H,fJ	411098
+A0ET	1093682516	abilities	custom	ELE: Linker	1	3	1	H	411170
+A0EU	1093682517	abilities	custom	(Sod) Freezing Breath	1	6	2	H,shrineOfDestructionSpell	411242
+A0EV	1093682518	abilities	custom	ELE: Boulder	1	4	2	H,iD	411314
+A0EW	1093682519	abilities	custom	ELE: Shield of Mist	1	3	1	H	411386
+A0EX	1093682520	abilities	custom	ELE: Discharge	1	3	1	H	411458
+A0EY	1093682521	abilities	custom		1	4	2	H,xD	411530
+A0EZ	1093682522	abilities	custom		1	9	6	CallbackSingle_doAfter_doAfter_doAfter_RaceHumanAbilities_call_doAfter_doAfter_doAfter_RaceHumanAbilities,H,NL,deathPactEmergency,handleTargetDamageEffects,setupUnit	411602
+A0F0	1093682736	abilities	custom	ELE: Greater Elemental Of Lightning (orb)buildings	1	3	1	H	411674
+A0F1	1093682737	abilities	custom		1	7	5	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,handleSourceDamageEffects,holyShrineSpell,isCeremonialTotemTarget	411746
+A0F2	1093682738	abilities	custom		1	3	1	H	411818
+A0F3	1093682739	abilities	custom		1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,holyShrineSpell	411890
+A0F4	1093682740	abilities	custom		1	6	4	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,holyShrineSpell,isHolyShrineTarget	411962
+A0F5	1093682741	abilities	custom	Elemental Unit	1	4	2	H,fJ	412034
+A0F6	1093682742	abilities	custom	ELE: Greater Elemental Of Lightning (forked lightning) buildings	1	5	2	H,xD	412106
+A0F7	1093682743	abilities	custom	ELE: Elemental Of Lightning (orb)buildings	1	3	1	H	412178
+A0F8	1093682744	abilities	custom	ELE: Elemental Of Lightning (forked lightning)buildgins	1	5	2	H,xD	412250
+A0F9	1093682745	abilities	custom	NOR: Ice Queen (frost nova) warlock	1	6	3	H,warlockSpell,xD	412322
+A0FA	1093682753	abilities	custom	ELE: Elemental Of Water Greater (evasion)	1	3	1	H	412394
+A0FB	1093682754	abilities	custom	Parasite(leg troll)	1	6	3	H,VK,xD	412466
+A0FC	1093682755	abilities	custom	Ensnare (Leg Troll)	1	6	4	H,checkAllMigratedVisionDummyOrders,forestTrollTrapperSpell,xD	412538
+A0FD	1093682756	abilities	custom	Liquid Fire ( Sod )	1	3	1	H	412610
+A0FE	1093682757	abilities	custom	( SOD ) damage overtime	1	6	2	H,shrineOfDestructionSpell	412682
+A0FF	1093682758	abilities	custom	(Sod ) Burning Oil	1	5	2	H,xD	412754
+A0FG	1093682759	abilities	custom	ELE: Meteor Shower	1	7	3	H,xD,xK	412826
+A0FH	1093682760	abilities	custom	water lesser(spell resist)	1	4	2	H,hasNoPowerArmorExclusion	412898
+A0FI	1093682761	abilities	custom	water (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	412970
+A0FJ	1093682762	abilities	custom	water greater (spell resist)	1	4	2	H,hasNoPowerArmorExclusion	413042
+A0FK	1093682763	abilities	custom	Channel ( Assasin NotTarget )	1	3	1	H	413114
+A0FL	1093682764	abilities	custom	Barrage Igloo	1	4	2	H,xD	413186
+A0FM	1093682765	abilities	custom	Igloo frost chance	1	3	1	H	413258
+A0FN	1093682766	abilities	custom	spell resist 50%	1	4	2	H,hasNoPowerArmorExclusion	413330
+A0FO	1093682767	abilities	custom	TypeTwins	1	4	2	EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning,H	413402
+A0FP	1093682768	abilities	custom	Critical Strike(twins)	1	3	1	H	413474
+A0FQ	1093682769	abilities	custom	Cleaving Attack Twins	1	3	1	H	413546
+A0FR	1093682770	abilities	custom	Twin: Smile and Cry	1	3	1	H	413618
+A0FS	1093682771	abilities	custom	Twins:Thunder Clap	1	6	3	CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1,H,xD	413690
+A0FT	1093682772	abilities	custom	Twins:Shockwave	1	5	2	H,xD	413762
+A0FU	1093682773	abilities	custom	Parasite(twins)	1	6	3	H,lK,xD	413834
+A0FV	1093682774	abilities	custom	Demolisher	1	3	1	H	413906
+A0FW	1093682775	abilities	custom	Life Drain Visioneer	1	5	2	H,xD	413978
+A0FX	1093682776	abilities	custom	Parasite( life drain)	1	5	2	H,xD	414050
+A0FY	1093682777	abilities	custom		1	5	3	H,ZK,mK	414122
+A0FZ	1093682778	abilities	custom		1	3	1	H	415274
+A0G0	1093682992	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	415346
+A0G1	1093682993	abilities	custom	Ambush	1	5	2	H,xD	415706
+A0G2	1093682994	abilities	custom	Heavy Bolt	1	3	1	H	415634
+A0G3	1093682995	abilities	custom		1	3	1	H	415778
+A0G4	1093682996	abilities	custom	Sandstorm	1	6	3	BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities2,H,xD	417290
+A0G5	1093682997	abilities	custom	DST: Blind 16%	1	3	1	H	416138
+A0G6	1093682998	abilities	custom	DST: Thorns	1	3	1	H	415418
+A0G7	1093682999	abilities	custom	DST: Thorns 70%	1	3	1	H	416786
+A0G8	1093683000	abilities	custom	DST: Sandkin abil	1	7	3	H,rK,xD	416714
+A0G9	1093683001	abilities	custom	DST: Harpy auto	1	6	3	H,rK,xD	416066
+A0GA	1093683009	abilities	custom	Sandcloud	1	6	3	H,spellSandCloud,xD	417506
+A0GB	1093683010	abilities	custom	DST: Ogre auto	1	6	3	H,rK,xD	416498
+A0GC	1093683011	abilities	custom	SandStorm	1	4	2	BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities2,H	417362
+A0GD	1093683012	abilities	custom	DST: Blind	1	5	2	H,xD	417650
+A0GE	1093683013	abilities	custom	Oasis Ability	1	7	3	H,rK,xD	416930
+A0GF	1093683014	abilities	custom	Peyote abil	1	7	3	H,rK,xD	417002
+A0GG	1093683015	abilities	custom		1	4	2	H,xD	417794
+A0GH	1093683016	abilities	custom	Quick Sand M	1	3	1	H	417866
+A0GI	1093683017	abilities	custom	Quick Sand S	1	3	1	H	417938
+A0GJ	1093683018	abilities	custom	Sand Replenish	1	3	1	H	418010
+A0GK	1093683019	abilities	custom	SandStorm abil	1	7	3	H,rK,xD	417722
+A0GL	1093683020	abilities	custom	Razor Spray	1	8	3	H,handleFanOfKnives,xD	418082
+A0GM	1093683021	abilities	custom	Harpy Swarm	1	6	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceDesertAbilities_cast_registerUnitSpellWithTargetOrder_RaceDesertAbilities3,xD	418154
+A0GN	1093683022	abilities	custom	PAN: Panda Monk Heal	1	7	3	H,NI,xD	418226
+A0GO	1093683023	abilities	custom		1	5	3	H,ZK,raceChooserAbilityIdAt	418298
+A0GP	1093683024	abilities	custom	PAN: Healing Spray	1	5	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_MonkHeal_cast_registerUnitSpellWithTargetOrder_MonkHeal,xD	418370
+A0GQ	1093683025	abilities	custom	PAN: Drunk	1	3	1	H	418442
+A0GR	1093683026	abilities	custom	OgreLords rage	1	4	2	H,xD	416426
+A0GS	1093683027	abilities	custom	PAN: Drunk resistance	1	3	1	H	418514
+A0GT	1093683028	abilities	custom		1	4	2	H,xD	418586
+A0GU	1093683029	abilities	custom		1	3	1	H	416570
+A0GV	1093683030	abilities	custom		1	4	2	H,hasNoPowerArmorExclusion	420026
+A0GW	1093683031	abilities	custom	Thunderpaw Spire Ability	1	6	3	H,wN,xD	418658
+A0GX	1093683032	abilities	custom	Blood Corrosion	1	3	1	H	418730
+A0GY	1093683033	abilities	custom	Blood Corrosion	1	7	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,applyVampireArmorReduction	418802
+A0GZ	1093683034	abilities	custom	Cloud Ship Multishot	1	3	1	H	418874
+A0H0	1093683248	abilities	custom	spell resist 20%	1	4	2	H,hasNoPowerArmorExclusion	420098
+A0H1	1093683249	abilities	custom	DST: Matriarch auto	1	6	3	H,rK,xD	415994
+A0H2	1093683250	abilities	custom	PAN: Zen Field Aura	1	3	1	H	418946
+A0H3	1093683251	abilities	custom	Matriarchs visual	1	3	1	H	415922
+A0H4	1093683252	abilities	custom	Echo Blink	1	6	3	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,xD	419018
+A0H5	1093683253	abilities	custom	QuickSand L	1	3	1	H	417074
+A0H6	1093683254	abilities	custom	PAN: Withering Touch	1	7	3	H,pJ,xD	419090
+A0H7	1093683255	abilities	custom	PAN: Drunk resistance 2	1	3	1	H	419162
+A0H8	1093683256	abilities	custom	PAN: Drunk 2	1	3	1	H	419234
+A0H9	1093683257	abilities	custom	Whirlstone Brew	1	4	2	H,xD	419306
+A0HA	1093683265	abilities	custom	PAN: Drunk 3	1	3	1	H	419378
+A0HB	1093683266	abilities	custom	Scroll of Speed	1	4	2	H,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime2	420170
+A0HC	1093683267	abilities	custom	PAN: Drunk resistance 3	1	3	1	H	419450
+A0HD	1093683268	abilities	custom	Static Remnant Explosion	1	3	1	H	419594
+A0HE	1093683269	abilities	custom	AOE damage upon death remnant	1	3	1	H	419666
+A0HF	1093683270	abilities	custom		1	3	1	H	419738
+A0HG	1093683271	abilities	custom	PAN: Whirlwind	1	4	2	H,qP	419810
+A0HH	1093683272	abilities	custom	PAN: Brewcommand Aura	1	3	1	H	419882
+A0HI	1093683273	abilities	custom	PAN: Healing Spray 2	1	5	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_MonkHeal_cast_registerUnitSpellWithTargetOrder_MonkHeal1,xD	419954
+A0HJ	1093683274	abilities	custom	Scroll of Speed Trigger	1	6	4	EventListener_add_BuildingCatalogE2E_onEvent_add_BuildingCatalogE2E11,H,buildingCatalogPointItemAbilityId,gL	420242
+A0HK	1093683275	abilities	custom	DST: Gnolls auto	1	5	2	H,xD	415562
+A0HL	1093683276	abilities	custom	Fowlhunter 3x	1	3	1	H	415490
+A0HM	1093683277	abilities	custom	Fowlhunter 2x	1	3	1	H	415850
+A0HN	1093683278	abilities	custom		1	6	3	H,mP,xD	420386
+A0HO	1093683279	abilities	custom		1	6	3	FL,H,xD	420458
+A0HP	1093683280	abilities	custom	Sandcloud2x	1	6	3	H,spellSandCloud,xD	417434
+A0HQ	1093683281	abilities	custom	Sandshield	1	3	1	H	416642
+A0HR	1093683282	abilities	custom	Troll Damage Bonus	1	4	2	H,IN	420530
+A0HS	1093683283	abilities	custom	Global Endurance	1	6	3	H,VK,xD	420602
+A0HT	1093683284	abilities	custom	Global Healing	1	6	3	H,VK,xD	420674
+A0HU	1093683285	abilities	custom	GlobalHealWard	1	3	1	H	420746
+A0HV	1093683286	abilities	custom	pp spell resist	1	5	3	DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight,H,applyPowerArmor	420818
+A0HW	1093683287	abilities	custom	DST: salam burn	1	5	2	H,xD	417578
+A0HX	1093683288	abilities	custom	DST: salamanders	1	3	1	H	416858
+A0HY	1093683289	abilities	custom	Coral Armor Aura	1	4	2	H,iD	420890
+A0HZ	1093683290	abilities	custom	+9arm 400aoe	1	3	1	H	414194
+A0I0	1093683504	abilities	custom	Prayer	1	6	3	DK,H,xD	414266
+A0I1	1093683505	abilities	custom	Prayer: heal+mana	1	5	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceHumanAbilities_cast_registerUnitSpellWithTargetOrder_RaceHumanAbilities3,xD	414338
+A0I2	1093683506	abilities	custom	Prayer: +dmg +armor	1	4	2	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceHumanAbilities_cast_registerUnitSpellWithTargetOrder_RaceHumanAbilities3	414410
+A0I3	1093683507	abilities	custom		1	3	1	H	414482
+A0I4	1093683508	abilities	custom	Prayer: resurrection	1	10	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceHumanAbilities_cast_registerUnitSpellWithTargetOrder_RaceHumanAbilities3,xD	414554
+A0I5	1093683509	abilities	custom	AA Crit 1.45x	1	3	1	H	420962
+A0IL	1093683532	abilities	custom	succomb	1	5	2	H,xD	417146
+A0J6	1093683766	abilities	custom	DST: Pulverize	1	3	1	H	416282
+A0J7	1093683767	abilities	custom	DST: Pulverize2	1	3	1	H	416354
+A0JD	1093683780	abilities	custom	Peyote	1	5	2	H,xD	417218
+A0KB	1093684034	abilities	custom	Life Steal	1	3	1	H	416210
+A0Z1	1093687857	abilities	custom	Carapace Aura	1	3	1	H	421034
+A9FS	1094272595	abilities	custom		1	4	2	H,mP	421250
+ACrj	1094939242	abilities	original		1	0	0		
+AM01	1095577649	abilities	custom	Leave Detect	1	4	2	H,hJ	370634
+AM02	1095577650	abilities	custom		1	4	2	H,QG	370706
+AM03	1095577651	abilities	custom		1	4	2	H,QG	370778
+AM04	1095577652	abilities	custom		1	4	2	CJ,H	370994
+AM05	1095577653	abilities	custom	Multi Shot	1	4	2	CJ,H	371066
+AM06	1095577654	abilities	custom	Combat Stance: Execute	1	4	2	AJ,H	371138
+AM07	1095577655	abilities	custom	Combat Stance: Open Fire	1	4	2	AJ,H	371210
+AM08	1095577656	abilities	custom		1	4	2	H,HJ	371282
+AM09	1095577657	abilities	custom		1	4	2	H,HJ	371354
+AM0a	1095577697	abilities	custom	Production Enchantment	1	4	2	H,vJ	371426
+AM0b	1095577698	abilities	custom		1	4	2	H,vJ	371570
+AM0c	1095577699	abilities	custom		1	4	2	H,vJ	371642
+AM0d	1095577700	abilities	custom	Spell Enchantment	1	4	2	H,vJ	371498
+AM0e	1095577701	abilities	custom		1	4	2	H,vJ	371714
+AM0f	1095577702	abilities	custom		1	4	2	H,LG	371786
+AM0g	1095577703	abilities	custom		1	4	2	H,LG	371858
+AM0h	1095577704	abilities	custom		1	4	2	H,LG	371930
+AM0i	1095577705	abilities	custom		1	4	2	H,LG	372002
+AM0j	1095577706	abilities	custom		1	4	2	H,LG	372074
+AM0k	1095577707	abilities	custom		1	4	2	H,LG	372146
+AM0l	1095577708	abilities	custom		1	4	2	H,LG	372218
+AM0m	1095577709	abilities	custom		1	4	2	H,LG	372290
+AM0o	1095577711	abilities	custom		1	4	2	H,LG	372362
+AM0p	1095577712	abilities	custom		1	4	2	H,LG	372434
+AM0q	1095577713	abilities	custom		1	4	2	H,LG	372506
+AM0r	1095577714	abilities	custom		1	4	2	H,LG	372578
+AM0t	1095577716	abilities	custom		1	4	2	H,LG	372650
+AM0u	1095577717	abilities	custom		1	4	2	H,LG	372722
+AM0w	1095577719	abilities	custom		1	4	2	H,LG	372794
+AM0x	1095577720	abilities	custom		1	4	2	H,LG	372866
+AM0y	1095577721	abilities	custom		1	4	2	H,rK	421106
+AM0z	1095577722	abilities	custom		1	4	2	H,MH	421178
+AM0{	1095577723	abilities	custom	Explode Snow	1	4	2	FL,H	421394
+ANic	1095657827	abilities	original	COR: Void Walker (Incinerate)	1	0	0		
+ARal	1095917932	abilities	original	Sync	1	0	0		
+AUbu	1096114805	abilities	original		1	0	0		
+Aall	1096903788	abilities	original		1	2	1	createRoundCastlesAndContinue	3377449
+Aasl	1096905580	abilities	original		1	0	0		
+AcfS	1097033299	abilities	custom		1	4	2	H,OJ	370850
+Adtg	1097102439	abilities	original		1	0	0		
+Agra	1097298529	abilities	original		1	1	1	xD	2079367
+Ahrp	1097364080	abilities	original		1	0	0		
+Ahsb	1097364322	abilities	original		1	0	0		
+Ane2	1097753906	abilities	original		1	0	0		
+Asla	1098083425	abilities	original		1	4	3	finishBearHibernate,handleTargetDamageEffects,startBearSleep	3026093
+Ast9	1098085433	abilities	custom		1	4	2	BuildingSpellClosure_registerBuildingSpell_RaceOrcAbilities_cast_registerBuildingSpell_RaceOrcAbilities1,H	421466
+AstB	1098085442	abilities	custom		1	4	2	BuildingSpellClosure_registerBuildingSpell_RaceOrcAbilities_cast_registerBuildingSpell_RaceOrcAbilities2,H	421538
+AstC	1098085443	abilities	custom		1	4	2	BuildingSpellClosure_registerBuildingSpell_RaceOrcAbilities_cast_registerBuildingSpell_RaceOrcAbilities3,H	421610
+Atdg	1098146919	abilities	original		1	0	0		
+Awha	1098344545	abilities	original		1	1	1	CallbackPeriodic_doPeriodically_RaceNatureAbilities_call_doPeriodically_RaceNatureAbilities	1467376
+B000	1110454320	buffs,destructables	custom	Holy Power	2	5	5	ForGroupCallbackD_forDestructablesInRect_CampaignEnvironment_callback_forDestructablesInRect_CampaignEnvironment,KE,KN,TA,getTreeReplacement	655834
+B001	1110454321	buffs,destructables	custom	Rot	2	4	4	ForGroupCallbackD_forDestructablesInRect_CampaignEnvironment_callback_forDestructablesInRect_CampaignEnvironment,KN,TA,getTreeReplacement	655814
+B002	1110454322	buffs,destructables	custom	Fear of the Banshee | WALL -|	2	0	0		
+B003	1110454323	buffs,destructables	custom	Plague | WALL |-|	2	0	0		
+B004	1110454324	buffs,destructables	custom	WALL -| | Weaken Soul	2	0	0		
+B005	1110454325	buffs,destructables	custom	Soul Taken | WALL |-|	2	0	0		
+B006	1110454326	buffs,destructables	custom	ARCHWAY	2	0	0		
+B007	1110454327	buffs,destructables	custom	BWALL | Berserk	2	0	0		
+B008	1110454328	buffs,destructables	custom	BWALL | Drum'n'Bass Beats	2	2	1	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E	519446
+B009	1110454329	buffs,destructables	custom	BWALL | Shaman's Buff	2	0	0		
+B00A	1110454337	buffs,destructables	custom	BWALL | Summoned Lobster	2	0	0		
+B00B	1110454338	buffs,destructables	custom	Dummy insta kill | SWALL	2	0	0		
+B00C	1110454339	buffs,destructables	custom	SWALL | Serpent Rock Poison	2	0	0		
+B00D	1110454340	buffs,destructables	custom	SWALL | Stasis	2	0	0		
+B00E	1110454341	buffs,destructables	custom	SWALL | Song of Shields	2	0	0		
+B00F	1110454342	buffs,destructables	custom	Aggressive Warsong | SARCHWAY	2	0	0		
+B00G	1110454343	buffs,destructables	custom	BARCHWAY | Poison	2	0	0		
+B00H	1110454344	buffs,destructables	custom	Double Damage | LWALL	2	2	1	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E	520104
+B00I	1110454345	buffs,destructables	custom	LARCHWAY | Quad Damage	2	2	1	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E	519868
+B00J	1110454346	buffs,destructables	custom	Blessing | LWALL	2	0	0		
+B00K	1110454347	buffs,destructables	custom	Battle Cry | LWALL	2	0	0		
+B00L	1110454348	buffs,destructables	custom	Drum'n'Bass Bassline | LWALL	2	2	1	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E	519646
+B00M	1110454349	buffs,destructables	custom	Frozen | IWALL	2	3	2	ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime,ForGroupCallback_forUnitsInRange_RaceNelfAbilities_callback_forUnitsInRange_RaceNelfAbilities	1416210
+B00N	1110454350	buffs,destructables	custom	Crystal Aura | IWALL	2	0	0		
+B00O	1110454351	buffs,destructables	custom	Burning Soul | IWALL	2	0	0		
+B00P	1110454352	buffs,destructables	custom	Corrupted Speed | IWALL	2	0	0		
+B00Q	1110454353	buffs	custom	|c00ff0000Corrupt Armor|r	1	1	1	nK	3530784
+B00R	1110454354	buffs	custom	Broken Weapon	1	0	0		
+B00S	1110454355	buffs	custom		1	0	0		
+B00T	1110454356	buffs	custom	Nothing	1	0	0		
+B00U	1110454357	buffs	custom	Greater Plague	1	0	0		
+B00V	1110454358	buffs	custom	Quill Aura	1	0	0		
+B00W	1110454359	buffs	custom	Inner Void	1	0	0		
+B00X	1110454360	buffs	custom	Frozen	1	0	0		
+B00Y	1110454361	buffs	custom	Tribal Blessing: Demolish	1	0	0		
+B00Z	1110454362	buffs	custom	Tribal Blessing: Critical Strike	1	0	0		
+B010	1110454576	buffs	custom	Tribal Blessing: Evasion	1	0	0		
+B011	1110454577	buffs	custom	Chamber of Darkness	1	0	0		
+B012	1110454578	buffs	custom	Stealth	1	3	3	QC,isCloaked,isValidAssassinTarget	1718427
+B013	1110454579	buffs	custom	Vitality Aura	1	0	0		
+B014	1110454580	buffs	custom	Freezing Cold	1	0	0		
+B015	1110454581	buffs	custom	Frozen	1	0	0		
+B016	1110454582	buffs	custom	Elune's Protection	1	0	0		
+B017	1110454583	buffs	custom	Blessing of the Wilderness	1	0	0		
+B018	1110454584	buffs	custom	Solar Attack	1	0	0		
+B019	1110454585	buffs	custom	Targeted	1	0	0		
+B01A	1110454593	buffs	custom	Nothing	1	0	0		
+B01B	1110454594	buffs	custom		1	0	0		
+B01C	1110454595	buffs	custom	Scroll of Stone	1	0	0		
+B01D	1110454596	buffs	custom	Firebolt	1	0	0		
+B01E	1110454597	buffs	custom	Lightning	1	0	0		
+B01F	1110454598	buffs	custom	Spell Protection	1	0	0		
+B01G	1110454599	buffs	custom	Red Energy Shield	1	0	0		
+B01H	1110454600	buffs	custom	Energy Shield	1	0	0		
+B01I	1110454601	buffs	custom	Powered	1	1	1	KE	2333315
+B01J	1110454602	buffs	custom	Empowered	1	0	0		
+B01K	1110454603	buffs	custom	Power Armor	1	4	4	ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,KE,onUnitTrained,setupUnit	1486034
+B01L	1110454604	buffs	custom	Power Ammo	1	1	1	KE	2333300
+B01M	1110454605	buffs	custom	Ray of Light	1	0	0		
+B01N	1110454606	buffs	custom	Rocket	1	0	0		
+B01O	1110454607	buffs	custom	Blasted	1	0	0		
+B01P	1110454608	buffs	custom	Astral Chains	1	0	0		
+B01Q	1110454609	buffs	custom	Fragrance of Shadows	1	0	0		
+B01R	1110454610	buffs	custom	Howl	1	0	0		
+B01S	1110454611	buffs	custom		1	0	0		
+B01T	1110454612	buffs	custom	Targeted	1	0	0		
+B01U	1110454613	buffs	custom	Explosive Shells	1	0	0		
+B01V	1110454614	buffs	custom	Nothing	1	0	0		
+B01W	1110454615	buffs	custom	Earthquake	1	0	0		
+B01X	1110454616	buffs	custom	Nothing	1	0	0		
+B01Y	1110454617	buffs	custom	Astral Grenade	1	0	0		
+B01Z	1110454618	buffs	custom	Cyclone	1	0	0		
+B020	1110454832	buffs	custom	Curse of Nature	1	0	0		
+B021	1110454833	buffs	custom	Summoned Treant	1	1	1	spawnTreantFromWall	3609660
+B022	1110454834	buffs	custom		1	0	0		
+B023	1110454835	buffs	custom	Corrosive Breath	1	0	0		
+B024	1110454836	buffs	custom	Natures Aura	1	0	0		
+B025	1110454837	buffs	custom	Nothing	1	0	0		
+B026	1110454838	buffs	custom	Squall	1	0	0		
+B027	1110454839	buffs	custom	Haste	1	0	0		
+B028	1110454840	buffs	custom	Lightning Shield	1	0	0		
+B029	1110454841	buffs	custom		1	0	0		
+B02A	1110454849	buffs	custom	|cff00ff00Forged Weapon|r	1	0	0		
+B02B	1110454850	buffs	custom	Haste	1	0	0		
+B02C	1110454851	buffs	custom	|cff00ff00Rock Shield|r	1	0	0		
+B02D	1110454852	buffs	custom	Wisp Strike	1	0	0		
+B02E	1110454853	buffs	custom	|cffd45e19Zen Field|r	1	0	0		
+B02F	1110454854	buffs	custom		1	0	0		
+B02G	1110454855	buffs	custom		1	0	0		
+B02O	1110454863	buffs	custom	Blind	1	0	0		
+B02Q	1110454865	buffs	custom	Salamanders poison	1	0	0		
+B02R	1110454866	buffs	custom	Sandstorm	1	0	0		
+B02S	1110454867	buffs	custom		1	0	0		
+B02T	1110454868	buffs	custom	Ogre's rage	1	0	0		
+B02U	1110454869	buffs	custom	Quicksand	1	0	0		
+B02W	1110454871	buffs	custom	Slowed by sandshield	1	0	0		
+BNic	1112435043	buffs	original		1	0	0		
+Bbof	1113747302	buffs	original	Burning	1	0	0		
+Bweb	1115120994	buffs	original		1	0	0		
+D000	1144008752	doodads	custom	Wall Hori -|	1	0	0		
+D001	1144008753	doodads	custom	Wall Hori |-|	1	0	0		
+D002	1144008754	doodads	custom	Wall Vert -|	1	0	0		
+D003	1144008755	doodads	custom	Wall Vert |-|	1	0	0		
+I000	1227894832	items	custom	Gold	1	8	5	TH,buildingCatalogItemId,createCoins,runPickupAndPassiveItemProbes,runTreasureBoxConsumer	1704288
+I001	1227894833	items	custom	Blast Staff	1	11	8	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E15,EventListener_add_BuildingCatalogE2E_onEvent_add_BuildingCatalogE2E8,TH,buildingCatalogItemId,castleItemIdForSlot,checkProtectedItemAbilityFields,finishPerkAbilityProbes,runBlastStaffPhoenixFireBehaviorProbe	549364
+I002	1227894834	items	custom	Multi Blast Staff	1	4	4	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E15,TH,buildingCatalogItemId,runBlastStaffPhoenixFireBehaviorProbe	549487
+I003	1227894835	items	custom	Drum'n'Bass Bass Drums	1	8	8	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,UH,buildingCatalogItemId,castleItemIdForSlot,ensureCFItems,getStrategicAuraItemIndex,runAi3v3E2eWithMode,runPickupAndPassiveItemProbes	519380
+I004	1227894836	items	custom	Cheese	1	5	5	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,TH,buildingCatalogItemId,castleItemIdForSlot,runPickupAndPassiveItemProbes	519138
+I005	1227894837	items	custom	Scroll of Stone	1	4	4	UH,buildingCatalogItemId,buildingCatalogPointItemId,castleItemIdForSlot	2335926
+I006	1227894838	items	custom	Orb of Lightning	1	6	6	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E13,buildingCatalogItemId,castleItemIdForSlot,checkProtectedItemAbilityFields,itemTypeHasProtectedAbilityFields,runOrbOfLightningBehaviorProbe	547238
+I007	1227894839	items	custom	Quad Damage	1	7	6	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,UH,ZH,buildingCatalogItemId,castleItemIdForSlot,runPickupAndPassiveItemProbes	519776
+I008	1227894840	items	custom	Double Damage	1	7	6	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,UH,ZH,buildingCatalogItemId,castleItemIdForSlot,runPickupAndPassiveItemProbes	520012
+I009	1227894841	items	custom	Rune of Repair	1	5	5	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,UH,buildingCatalogItemId,castleItemIdForSlot,runPickupAndPassiveItemProbes	520248
+I00A	1227894849	items	custom	Drum'n'Bass Bassline Generator	1	8	8	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,UH,buildingCatalogItemId,castleItemIdForSlot,ensureCFItems,getStrategicAuraItemIndex,runAi3v3E2eWithMode,runPickupAndPassiveItemProbes	519576
+I00C	1227894851	items	custom	Explode Mine	1	3	3	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,buildingCatalogItemId,runPickupAndPassiveItemProbes	520754
+I00F	1227894854	items	custom	Scroll of Speed	1	3	3	buildingCatalogItemId,buildingCatalogPointItemId,castleItemIdForSlot	2336188
+IBA0	1229078832	abilities	custom		1	5	3	H,gL,xD	414626
+IBA1	1229078833	abilities	custom		1	5	3	H,gL,xD	414698
+IBA2	1229078834	abilities	custom		1	5	3	H,gL,xD	414770
+IBA3	1229078835	abilities	custom		1	5	3	H,gL,xD	414842
+IBA4	1229078836	abilities	custom		1	5	3	H,gL,xD	414914
+IBA5	1229078837	abilities	custom		1	5	3	H,gL,xD	414986
+IBA6	1229078838	abilities	custom		1	5	3	H,gL,xD	415058
+IBA7	1229078839	abilities	custom		1	5	3	H,gL,xD	415130
+IBA8	1229078840	abilities	custom		1	5	3	H,gL,xD	415202
+IBA9	1229078841	abilities	custom	Buy Speedscroll	1	5	3	H,gL,xD	420314
+IM01	1229795377	items	custom	Bird Food	1	1	1	BJ	3461616
+IM02	1229795378	items	custom	Towerless Token	1	1	1	CJ	3469964
+IcfS	1231251027	items	custom	Portable Cloud Machine	1	1	1	OJ	3490799
+S000	1395666992	abilities	custom	PAN: Breath Aura	1	3	1	H	419522
+X006	1479553078	units	custom	Corrupted Builder	1	14	8	H,TD,ZK,applyWestRaces,getCampaignTowerIdForBuilder,jP,nK,runAi3v3E2eWithMode	158450
+X00C	1479553091	units	custom	Human Builder	1	35	22	CK,H,KE,TD,ZK,applyCampaignHumanRaces__w3p_vmProtect,applyConfiguredRaces,applyWestRaces,buildSmokeFixture,checkProtectedItemAbilityFields,completeRoundStart,getCampaignTowerIdForBuilder,jP,replacePerkProbeBuilder,resolveControlledSlotBuilderId,runAi3v3E2eWithMode,runBlastStaffPhoenixFireBehaviorProbe,runModeRuntimeRoundtripE2e,runOrbOfLightningBehaviorProbe,runPerkAbilityProbes,runPickupAndPassiveItemProbes,runSequentialPointItemProbe	212381
+X00E	1479553093	units	custom	Naga Builder	1	15	7	GK,H,TD,ZK,applyWestRaces,jP,runAi3v3E2eWithMode	242334
+X00O	1479553103	units	custom	Chaos Builder	1	13	5	H,TD,ZK,jP,kK	145296
+X00P	1479553104	units	custom	Elf Builder	1	16	7	AK,H,TD,ZK,getCampaignTowerIdForBuilder,jP,runAi3v3E2eWithMode	201428
+X017	1479553335	units	custom	Northern Builder	1	17	7	H,QK,TD,ZK,getCampaignTowerIdForBuilder,jP,runAi3v3E2eWithMode	286069
+X018	1479553336	units	custom	Undead Builder	1	16	8	H,TD,ZK,aL,buildChapterTwoSmokeFixture,getCampaignTowerIdForBuilder,jP,runAi3v3E2eWithMode	370055
+X019	1479553337	units	custom	Orc Builder	1	17	7	H,TD,UK,ZK,getCampaignTowerIdForBuilder,jP,runAi3v3E2eWithMode	301765
+X01A	1479553345	units	custom	Nature Builder	1	15	7	H,IK,TD,ZK,applyWestRaces,getCampaignTowerIdForBuilder,jP	259128
+X051	1479554353	units	custom	Elemental Builder	1	17	9	H,TD,ZK,applyWestRaces,getCampaignTowerIdForBuilder,hasEleBuildingAccess,jP,runAi3v3E2eWithMode,wK	189414
+X06P	1479554640	units	custom	Mechanical Builder	1	16	8	Dd,EK,H,TD,ZK,getCampaignTowerIdForBuilder,jP,runAi3v3E2eWithMode	230114
+X075	1479554869	units	custom	Ultimate Builder	1	17	9	Dd,H,ZK,aD,applyUltimateRaces,bD,cF,hasEleBuildingAccess,jP	357256
+X078	1479554872	units	custom	Desert Builder	1	15	7	H,TD,ZK,applyWestRaces,getCampaignTowerIdForBuilder,jP,qK	176194
+X07P	1479554896	units	custom	Pandaren Builder	1	14	6	H,TD,WK,ZK,getCampaignTowerIdForBuilder,jP	305369
+X089	1479555129	units	custom	Night Elf Builder	1	18	8	Dd,H,KK,TD,ZK,getCampaignTowerIdForBuilder,jP,runAi3v3E2eWithMode	271933
+X0Z0	1479563824	units	custom	Critter Builder	1	11	3	H,jP,pK	159257
+Xbdt	1482843252	buffs	original		1	0	0		
+YOlb	1498377314	doodads	original		1	0	0		
+ZE2E	1514484293	abilities	custom		1	4	2	H,dH	372938
+ZObz	1515151994	doodads	original		1	0	0		
+ZSas	1515413875	doodads	original		1	0	0		
+ZTw0	1515484976	destructables	original		1	0	0		
+ZTw2	1515484978	destructables	original		1	0	0		
+cfOL	1667649356	abilities	custom		1	4	2	H,iJ	373010
+e000	1697656880	units	custom	Faerie Dragon	1	22	7	H,KK,LK,ensureUnitObjectMetadataRegistered,jP,runSequentialBuildingSpellProbe,xO	259475
+e001	1697656881	units	custom	Huntress	1	23	5	H,KK,ensureUnitObjectMetadataRegistered,jP,xO	260074
+e002	1697656882	units	custom	Glaive Thrower	1	23	5	H,KK,ensureUnitObjectMetadataRegistered,jP,xO	260790
+e003	1697656883	units	custom	Ranger	1	23	5	H,KK,ensureUnitObjectMetadataRegistered,jP,xO	261506
+e004	1697656884	units	custom	Amazon	1	23	5	H,KK,ensureUnitObjectMetadataRegistered,jP,xO	262222
+e005	1697656885	units	custom	Ballista	1	23	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	189755
+e006	1697656886	units	custom	Dryad	1	25	7	H,IK,JK,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP,xO	243651
+e007	1697656887	units	custom	Druid	1	24	6	H,KK,LK,ensureUnitObjectMetadataRegistered,jP,xO	262938
+e008	1697656888	units	custom	dummy	1	16	10	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E,H,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime1,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime2,PC,QL,ZH,castLightningShield,handleSourceDamageEffects,jP	313909
+e009	1697656889	units	custom	Keeper of the Grove	1	25	7	H,IK,JK,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP,xO	244367
+e00A	1697656897	units	custom	Avatar of Vengeance	1	16	6	H,KK,ensureUnitObjectMetadataRegistered,fJ,jP,xO	263654
+e00B	1697656898	units	custom	Avenging Spirit	1	15	6	H,KK,ensureUnitObjectMetadataRegistered,fJ,jP,xO	264013
+e00C	1697656899	units	custom	Ancient Keeper	1	25	7	H,IK,JK,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP,xO	245083
+e00D	1697656900	units	custom	Treant	1	11	3	H,jP,spawnTreantFromWall	245799
+e00E	1697656901	units	custom	Twins	1	15	6	H,checkBuilding,ensureUnitObjectMetadataRegistered,jP,kK,xO	125529
+e00F	1697656902	units	custom	Mountain Giant	1	26	8	H,IK,JK,checkForWrongOrder,ensureUnitObjectMetadataRegistered,jP,onUnitEnteredMap,xO	246158
+e00G	1697656903	units	custom	Visioneer	1	23	5	H,IK,ensureUnitObjectMetadataRegistered,jP,xO	246874
+e00I	1697656905	units	custom	quicksand	1	7	2	H,jP	357024
+e00J	1697656906	units	custom	Sage Druid	1	24	6	H,KK,LK,ensureUnitObjectMetadataRegistered,jP,xO	264372
+e00M	1697656909	units	custom	PROGR dummy	1	13	2	H,jP	314139
+h000	1747988528	units	custom	Barracks	1	14	7	CK,H,KE,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	201769
+h001	1747988529	units	custom	Artillery	1	21	9	AH,CK,H,LE,ensureUnitObjectMetadataRegistered,isSweepCriticalPath,jP,runSequentialPointItemProbe,syncArtilleryModeAvailability	202009
+h002	1747988530	units	custom	Spider Egg Clutch	1	18	7	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	247590
+h003	1747988531	units	custom	Sniper Nest	1	12	6	CK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	202489
+h004	1747988532	units	custom	Weapon Lab	1	16	7	CK,CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E5,CallbackSingle_doAfter_doAfter_doAfter_doAfter_BuildingCatalogE2E_call_doAfter_doAfter_doAfter_doAfter_BuildingCatalogE2E,H,ensureUnitObjectMetadataRegistered,jP,xO	202614
+h005	1747988533	units	custom	Obelisk of Light	1	16	7	AK,H,TI,ensureUnitObjectMetadataRegistered,isSweepCriticalPath,jP,runObeliskPhoenixFireBehaviorProbe	190459
+h006	1747988534	units	custom	Watch Tower	1	17	5	CK,H,LE,ensureUnitObjectMetadataRegistered,jP	202979
+h007	1747988535	units	custom	Demon Gate	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	125862
+h008	1747988536	units	custom	Treasure Box	1	21	12	H,JC,applyTreasureBoxModeEnabled,chooseBestBuildingInternal,expectsDeathRelease,fJ,isBuildingAllowedForCurrentModes,jP,onBuildingFinished,pO,statefulProbeId,updateAiChoiceInfoFrame	314611
+h009	1747988537	units	custom	Dragon Nest	1	15	6	H,ensureUnitObjectMetadataRegistered,jP,kK,xF,xO	126221
+h00A	1747988545	units	custom	Death Pit	1	14	5	H,aL,bL,ensureUnitObjectMetadataRegistered,jP	357603
+h00B	1747988546	units	custom	Fountain of Wonders	1	15	6	H,KK,ensureUnitObjectMetadataRegistered,jP,xF,xO	265088
+h00C	1747988547	units	custom	Human Builder	1	10	2	H,jP	314984
+h00D	1747988548	units	custom	Dummy	1	7	2	H,jP	315331
+h00E	1747988549	units	custom	Naga Builder	1	10	2	H,jP	315573
+h00F	1747988550	units	custom	Spawning Grounds	1	17	7	GK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	230455
+h00G	1747988551	units	custom	Coral Statue	1	15	5	GK,H,ensureUnitObjectMetadataRegistered,iD,jP	230820
+h00I	1747988553	units	custom	Ancient Pyramide	1	15	5	GK,H,HK,ensureUnitObjectMetadataRegistered,jP	231187
+h00J	1747988554	units	custom	Swamp Well	1	12	5	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	231554
+h00K	1747988555	units	custom	Hjordhejmen	1	15	6	CK,H,LE,ensureUnitObjectMetadataRegistered,jP,xO	203459
+h00L	1747988556	units	custom	Flower of life	1	6	5	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E18,XC,createNativeSpellTarget,registeredUnitSpellTargetMatchesForE2e,runSequentialBuildingSpellProbe	553319
+h00M	1747988557	units	custom	Oracle of Sirens	1	16	6	GK,H,HK,LE,ensureUnitObjectMetadataRegistered,jP	231794
+h00N	1747988558	units	custom	Tidal Guardian	1	22	6	GK,H,HK,KE,ensureUnitObjectMetadataRegistered,jP	232161
+h00O	1747988559	units	custom	Chaos Builder	1	10	2	H,jP	315920
+h00P	1747988560	units	custom	Elf Builder	1	10	2	H,jP	316267
+h00Q	1747988561	units	custom	Spider Egg Nest	1	19	6	H,IK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	247961
+h00R	1747988562	units	custom	Spider Egg Hatchery	1	17	6	H,IK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	248332
+h00S	1747988563	units	custom	Hunter's Hall	1	13	6	H,KK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	265459
+h00T	1747988564	units	custom	Hall of Honor	1	16	6	AK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	190826
+h00U	1747988565	units	custom	Bloodthirster	1	20	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	191191
+h00V	1747988566	units	custom	Bloodelf War Academy	1	14	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	191780
+h00W	1747988567	units	custom	Wizard	1	26	7	AK,BK,H,ensureUnitObjectMetadataRegistered,jP,runCurrentUnitPerkProbes,xO	192145
+h00X	1747988568	units	custom	Tower of Supreme Magic	1	19	6	AK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	192849
+h00Y	1747988569	units	custom	Furbolg Hut	1	15	6	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	248703
+h00Z	1747988570	units	custom	City of Magic	1	16	6	AK,BK,H,LE,ensureUnitObjectMetadataRegistered,jP	193329
+h010	1747988784	units	custom	Gjallarhorn	1	21	9	CK,EventListener_add_GjallarHorn_onEvent_add_GjallarHorn,H,KE,createNativeSpellTarget,ensureUnitObjectMetadataRegistered,jP,mH,runSequentialBuildingSpellProbe	203824
+h011	1747988785	units	custom	Nightelf Siege Factory	1	14	5	H,KK,ensureUnitObjectMetadataRegistered,jP,xO	265703
+h012	1747988786	units	custom	Furbolg Abode	1	18	7	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	248947
+h013	1747988787	units	custom	Ancient of Growth	1	17	7	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	249318
+h014	1747988788	units	custom	Arcane Tower	1	17	5	AK,H,LE,ensureUnitObjectMetadataRegistered,jP	193696
+h015	1747988789	units	custom	Gryphon Rock	1	15	6	CK,H,LE,ensureUnitObjectMetadataRegistered,jP,xO	204191
+h016	1747988790	units	custom	Gryphon Rider	1	17	5	CK,H,ensureUnitObjectMetadataRegistered,jP,xO	204556
+h017	1747988791	units	custom	Northern Builder	1	10	2	H,jP	316614
+h018	1747988792	units	custom	Undead Builder	1	10	2	H,jP	316961
+h019	1747988793	units	custom	Orc Builder	1	10	2	H,jP	317308
+h01A	1747988801	units	custom	Nature Builder	1	10	2	H,jP	317655
+h01B	1747988802	units	custom	Reptile Pool	1	15	6	GK,H,LE,ensureUnitObjectMetadataRegistered,jP,xO	232755
+h01C	1747988803	units	custom	Altar of Greed	1	15	6	H,ensureUnitObjectMetadataRegistered,jP,kK,xF,xO	126580
+h01D	1747988804	units	custom	Chaos Citadel	1	13	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,kK,xF,xO	126939
+h01E	1747988805	units	custom	Shrine of Destruction	1	19	6	H,ensureUnitObjectMetadataRegistered,jP,kK,lK,syncArtilleryModeAvailability	127175
+h01F	1747988806	units	custom	Volcano	1	15	5	H,ensureUnitObjectMetadataRegistered,jP,kK,lK	127648
+h01G	1747988807	units	custom	DemolishDummy	1	7	2	H,jP	318002
+h01H	1747988808	units	custom	Ancient of Life	1	18	6	H,IK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	249689
+h01I	1747988809	units	custom	Lesser Demon Cage	1	13	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,kK,xF,xO	128009
+h01J	1747988810	units	custom	Ancient of Eternity	1	19	6	H,IK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	250060
+h01K	1747988811	units	custom	Temple of Bone	1	16	6	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	357976
+h01L	1747988812	units	custom	Haunted Mine	1	14	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	358347
+h01M	1747988813	units	custom	Eraser (Level 1)	1	21	7	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,kK,lK,xF	128245
+h01N	1747988814	units	custom	Crypt	1	17	7	H,LE,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	358718
+h01O	1747988815	units	custom	Turret of Souls	1	18	6	H,LE,aL,ensureUnitObjectMetadataRegistered,iD,jP	359089
+h01P	1747988816	units	custom	Skull Pile	1	12	5	H,aL,bL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered	359577
+h01Q	1747988817	units	custom	City of Decay	1	16	4	H,aL,ensureUnitObjectMetadataRegistered,jP	359821
+h01R	1747988818	units	custom	Rotting Hay Cart	1	12	5	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	360310
+h01S	1747988819	units	custom	Dragon Cemetery	1	14	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	360554
+h01T	1747988820	units	custom	Slaughter House	1	14	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	360925
+h01U	1747988821	units	custom	Vampire	1	19	6	H,aL,ensureUnitObjectMetadataRegistered,fJ,jP,xO	361296
+h01V	1747988822	units	custom	Lesser Vampire	1	14	3	H,fJ,jP	318244
+h01W	1747988823	units	custom	Eraser (Level 2)	1	23	7	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,jP,kK,lK	128718
+h01X	1747988824	units	custom	Eraser (Level 3)	1	21	7	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,jP,kK,lK	129192
+h01Y	1747988825	units	custom	Temple of Snakes	1	16	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	233120
+h01Z	1747988826	units	custom	Naga Spring	1	15	6	GK,H,LE,ensureUnitObjectMetadataRegistered,jP,xO	233485
+h020	1747989040	units	custom	Murloc Camp	1	16	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	233850
+h021	1747989041	units	custom	Murloc Village	1	18	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	234215
+h022	1747989042	units	custom	Murloc Fortress	1	16	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	234580
+h023	1747989043	units	custom	Ancient of Slumber	1	17	7	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	250548
+h024	1747989044	units	custom	Ancient of Hibernation	1	18	7	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	250919
+h025	1747989045	units	custom	Fountain of Blood	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	129672
+h026	1747989046	units	custom	Greater Demon Cage	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,kK,xO	130037
+h027	1747989047	units	custom	Emerald Dragon Roost	1	14	5	H,IK,ensureUnitObjectMetadataRegistered,jP,xO	251290
+h028	1747989048	units	custom	Monolith	1	15	5	H,IK,ensureUnitObjectMetadataRegistered,jP,xO	251661
+h029	1747989049	units	custom	Fighters' Hall	1	13	6	H,LE,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	286416
+h02A	1747989057	units	custom	Ancient of Gale	1	15	5	H,IK,JK,ensureUnitObjectMetadataRegistered,jP	252032
+h02B	1747989058	units	custom	Shamanic Tent	1	14	5	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	286660
+h02C	1747989059	units	custom	Ancient Guardian	1	15	5	H,IK,JK,ensureUnitObjectMetadataRegistered,jP	252405
+h02D	1747989060	units	custom	Ancient of Wonders	1	20	7	H,IK,JK,LE,ensureUnitObjectMetadataRegistered,iD,jP	252778
+h02E	1747989061	units	custom	Spider Egg Sack: Web	1	10	2	H,jP	318716
+h02F	1747989062	units	custom	Spider Egg Nest: Bones	1	10	2	H,jP	319085
+h02G	1747989063	units	custom	Spider Egg Nest: Wood	1	10	2	H,jP	319454
+h02H	1747989064	units	custom	Troll Hut	1	16	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	286904
+h02I	1747989065	units	custom	Orcish Siege Factory	1	14	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	287275
+h02J	1747989066	units	custom	Spider Egg: Rock Base	1	10	2	H,jP	319823
+h02K	1747989067	units	custom	Kodo Farm	1	20	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	287646
+h02L	1747989068	units	custom	Ancient of Hibernation: Roots	1	10	2	H,jP	320192
+h02M	1747989069	units	custom	Ancient of Hibernation: Owl	1	10	2	H,jP	320561
+h02N	1747989070	units	custom	Serpent Rock	1	14	5	H,UK,VK,ensureUnitObjectMetadataRegistered,jP	288017
+h02O	1747989071	units	custom	Legendary Totem	1	22	5	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP	288390
+h02P	1747989072	units	custom	Falcon-Clan Encampment	1	15	6	H,LE,UK,ensureUnitObjectMetadataRegistered,jP,xO	288879
+h02Q	1747989073	units	custom	Furbolg Hut	1	10	2	H,jP	320930
+h02R	1747989074	units	custom	Ceremonial Totem	1	14	5	H,UK,VK,ensureUnitObjectMetadataRegistered,jP	289250
+h02S	1747989075	units	custom	Monolith: Bush	1	10	2	H,jP	321299
+h02T	1747989076	units	custom	Monolith: Rocks	1	10	2	H,jP	321668
+h02U	1747989077	units	custom	Advanced Fighters' Hall	1	19	7	H,LE,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	289623
+h02V	1747989078	units	custom		1	10	2	H,jP	322037
+h02W	1747989079	units	custom	Lesser Elemental Of Water	1	15	6	CallbackSingle_doAfter_doAfter_BuildingCatalogE2E_call_doAfter_doAfter_BuildingCatalogE2E3,H,ensureUnitObjectMetadataRegistered,jP,wK,xO	176535
+h02X	1747989080	units	custom	Elemental Of Water	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xO	176888
+h02Y	1747989081	units	custom	Greater Elemental Of Water	1	15	6	H,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP,wK,xO	177241
+h02Z	1747989082	units	custom	Elemental Of Fire	1	16	7	EventListener_add_FireElemental_onEvent_add_FireElemental,H,KE,ensureUnitObjectMetadataRegistered,jP,wK,xO	177594
+h030	1747989296	units	custom	Greater Elemental Of Fire	1	13	4	EventListener_add_FireElemental_onEvent_add_FireElemental,EventListener_add_PerkUtils_onEvent_add_PerkUtils,H,jP	322406
+h031	1747989297	units	custom	Superior Fighters' Hall	1	17	7	H,LE,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	289994
+h032	1747989298	units	custom	Royal Spawning Grounds	1	16	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	234945
+h033	1747989299	units	custom	Race Chooser	1	10	5	H,advanceDraftRaceSelection,jP,mK,runPickRaceSelection	322765
+h034	1747989300	units	custom	Elemental Of Earth	1	12	6	H,KE,ensureUnitObjectMetadataRegistered,jP,wK,xO	177947
+h035	1747989301	units	custom	Melee Kodo Farm	1	17	7	H,LE,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	290365
+h036	1747989302	units	custom	Defensive Kodo Farm	1	17	7	H,LE,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	290736
+h037	1747989303	units	custom	Chapel	1	17	7	CK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	205032
+h038	1747989304	units	custom	Church	1	18	6	CK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	205397
+h039	1747989305	units	custom	Stronghold	1	17	7	CK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	205762
+h03A	1747989313	units	custom	Defender	1	24	9	CK,CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime,EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend,H,ensureUnitObjectMetadataRegistered,jP,mJ,onSummonedUnit,xO	206127
+h03B	1747989314	units	custom	Crusader	1	24	6	CK,DK,H,ensureUnitObjectMetadataRegistered,jP,xO	206706
+h03C	1747989315	units	custom	Paladin	1	25	7	CK,DK,H,ensureUnitObjectMetadataRegistered,jP,onSummonedUnit,xO	207410
+h03D	1747989316	units	custom	Ranger's Hall	1	19	7	H,KK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	266074
+h03E	1747989317	units	custom	Amazon's Hall	1	19	6	H,KK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	266445
+h03F	1747989318	units	custom	Hall of the Eldest	1	16	6	AK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	194176
+h03G	1747989319	units	custom	Greater Chaos Citadel	1	17	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,kK,xO	130402
+h03H	1747989320	units	custom		1	5	3	H,onLightningBolt,processMasterLightningBolts	178175
+h03I	1747989321	units	custom	Azure Nest	1	15	6	H,QK,ensureUnitObjectMetadataRegistered,jP,xF,xO	272280
+h03J	1747989322	units	custom	Ice Troll Voodoo Lounge	1	16	6	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	272651
+h03K	1747989323	units	custom	Ice Troll Hut	1	12	5	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	273022
+h03L	1747989324	units	custom	Greater Frost Launcher	1	13	6	H,QK,RK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD	273266
+h03M	1747989325	units	custom	Defiled Granary	1	16	6	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	361768
+h03N	1747989326	units	custom	Greater Elemental Of Earth	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xO	178288
+h03O	1747989327	units	custom	World Freezer	1	18	6	H,QK,RK,ensureUnitObjectMetadataRegistered,jP,runSequentialBuildingSpellProbe	273512
+h03P	1747989328	units	custom	Elemental Of Lightning	1	11	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xO	178641
+h03Q	1747989329	units	custom	Icy Tower	1	18	6	H,QK,ensureUnitObjectMetadataRegistered,getCampaignTowerIdForBuilder,jP,xF	274001
+h03R	1747989330	units	custom	Greater Elemental Of Lightning	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xO	178869
+h03S	1747989331	units	custom	Crystal Palace	1	15	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	274489
+h03T	1747989332	units	custom	Ice Claws	1	16	6	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	274860
+h03U	1747989333	units	custom	Igloo	1	12	5	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	275231
+h03V	1747989334	units	custom	Master Of Elements	1	15	6	CI,H,ensureUnitObjectMetadataRegistered,jP,wK,xO	179222
+h03W	1747989335	units	custom	Glacier	1	16	6	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	275475
+h03X	1747989336	units	custom	Water Spring	1	14	8	CallbackSingle_doAfter_doAfter_doAfter_doAfter_BuildingCatalogE2E_call_doAfter_doAfter_doAfter_doAfter_BuildingCatalogE2E1,H,KE,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,wK,xO	179575
+h03Y	1747989337	units	custom	Golden Fountain	1	20	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	179700
+h03Z	1747989338	units	custom	Spellbound Fountain	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	180065
+h040	1747989552	units	custom	Rock Pile	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	180430
+h041	1747989553	units	custom	Greater Fissure	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	180795
+h042	1747989554	units	custom	Pillar of Globe-Lightning	1	19	7	H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	181160
+h043	1747989555	units	custom	Frost Claws	1	16	6	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	275846
+h044	1747989556	units	custom	Pillar of St. Elmo's Fire	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	181525
+h045	1747989557	units	custom	Altar of Fire	1	16	7	H,KE,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,wK,xO	181890
+h046	1747989558	units	custom	Altar of Blaze	1	21	7	H,KE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	182130
+h047	1747989559	units	custom	Chilling Mushroom	1	14	5	H,QK,RK,ensureUnitObjectMetadataRegistered,jP	276217
+h048	1747989560	units	custom	Frost Launcher	1	18	8	H,QK,RK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,syncArtilleryModeAvailability,xF	276590
+h049	1747989561	units	custom	Snowy Rocks	1	13	6	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xF,xO	276963
+h04A	1747989569	units	custom	Trapped Gale	1	14	5	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,wK,xO	182495
+h04B	1747989570	units	custom	Temple of Necromancy	1	18	6	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	362139
+h04C	1747989571	units	custom	Monument of Wind Stream	1	20	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	182735
+h04D	1747989572	units	custom	Zephyros Memorial	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	183100
+h04E	1747989573	units	custom	Tower of Elder Knowledge	1	21	7	H,KE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK,xO	183465
+h04F	1747989574	units	custom	Icy Rocks	1	18	6	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	277207
+h04G	1747989575	units	custom	FreezeDummy	1	11	3	BuildingSpellClosure_registerBuildingSpellWithEffect_RaceNorthernAbilities_cast_registerBuildingSpellWithEffect_RaceNorthernAbilities1,H,jP	277578
+h04H	1747989576	units	custom	AdvancedFreezeDummy	1	11	3	BuildingSpellClosure_registerBuildingSpellWithEffect_RaceNorthernAbilities_cast_registerBuildingSpellWithEffect_RaceNorthernAbilities2,H,jP	277935
+h04I	1747989577	units	custom	Incubus	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	145887
+h04J	1747989578	units	custom	Demonic Statue	1	10	2	H,jP	322995
+h04K	1747989579	units	custom	Well of Pain	1	16	5	H,ensureUnitObjectMetadataRegistered,jP,nK,oK	146466
+h04L	1747989580	units	custom	Void Portal	1	12	5	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,nK,xO	146833
+h04M	1747989581	units	custom	Shadow Ancient	1	17	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xO	147073
+h04N	1747989582	units	custom	Portal of the Abyss	1	16	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xO	147438
+h04O	1747989583	units	custom	Nether Ancient	1	17	7	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xF,xO	147803
+h04P	1747989584	units	custom	Hell's Portal	1	16	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xO	148168
+h04Q	1747989585	units	custom	Hell's Gate	1	16	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xO	148533
+h04R	1747989586	units	custom	Forgotten One	1	15	5	H,ensureUnitObjectMetadataRegistered,jP,nK,oK	148898
+h04S	1747989587	units	custom	Felhound Shrine	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	149265
+h04T	1747989588	units	custom	Eye of Corruption	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,nK	149630
+h04U	1747989589	units	custom	Demonic Statue	1	15	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	150111
+h04V	1747989590	units	custom	Ancient of Battle	1	12	5	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,nK,xO	150476
+h04W	1747989591	units	custom	Corrupted Ancient of War	1	18	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xO	150716
+h04X	1747989592	units	custom	RescueDummy	1	8	3	H,OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime,jP	323364
+h04Y	1747989593	units	custom	Column	1	10	2	H,jP	323606
+h04Z	1747989594	units	custom	Tainted Farm	1	18	6	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	362510
+h050	1747989808	units	custom	Column Ruined	1	10	2	H,jP	323975
+h051	1747989809	units	custom	Elemental Builder	1	10	2	H,jP	324344
+h052	1747989810	units	custom	Lightning (Alis)	1	10	2	H,jP	324691
+h053	1747989811	units	custom	Lightning (Coruscus)	1	10	2	H,jP	325060
+h054	1747989812	units	custom	Graveyard	1	16	6	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	362881
+h055	1747989813	units	custom	High Citadel of Necromancy	1	19	6	H,aL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	363252
+h056	1747989814	units	custom	Skull Shrine	1	14	7	H,aL,bL,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,jP	363740
+h057	1747989815	units	custom	Fire Pillar (Coruscus)	1	10	2	H,jP	325429
+h058	1747989816	units	custom	Fissure (Coruscus)	1	10	2	H,jP	325798
+h059	1747989817	units	custom	Golden Shrine of Justice	1	21	9	AK,H,KE,ensureUnitObjectMetadataRegistered,expectsDeathRelease,fJ,jP,onBuildingFinished,statefulProbeId	194541
+h05A	1747989825	units	custom	HandOfJusticeDummy	1	7	2	H,jP	326167
+h05B	1747989826	units	custom	Tornado (Atrium)	1	10	2	H,jP	326409
+h05C	1747989827	units	custom	Marksman	1	23	5	CK,H,ensureUnitObjectMetadataRegistered,jP,xO	208114
+h05D	1747989828	units	custom	Gunner's Hall	1	16	6	CK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	208818
+h05E	1747989829	units	custom	Trapper's Hut	1	18	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	291107
+h05F	1747989830	units	custom	Lernaean Fountain	1	19	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	235310
+h05G	1747989831	units	custom	Heroic Shrine	1	21	9	CK,H,KE,ensureUnitObjectMetadataRegistered,expectsDeathRelease,fJ,jP,onBuildingFinished,statefulProbeId	209183
+h05H	1747989832	units	custom	Vampire Lord	1	22	7	H,aL,applyVampireArmorReduction,ensureUnitObjectMetadataRegistered,fJ,jP,xO	363996
+h05I	1747989833	units	custom	Magic Ruin	1	15	5	H,ensureUnitObjectMetadataRegistered,jP,kK,lK	130767
+h05J	1747989834	units	custom	Aircraft Factory	1	12	5	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	213089
+h05K	1747989835	units	custom	Tornado (Thalamus)	1	10	2	H,jP	326778
+h05L	1747989836	units	custom	Energy Tower	1	19	6	EK,H,LE,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP	213329
+h05M	1747989837	units	custom	Demolition Lab	1	17	7	EK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	213809
+h05N	1747989838	units	custom	Anima	1	10	2	H,jP	327147
+h05O	1747989839	units	custom	Fontis Oris	1	10	2	H,jP	327516
+h05P	1747989840	units	custom	Ignis-fluus	1	10	2	H,jP	327885
+h05Q	1747989841	units	custom	FireOrb	1	10	2	H,jP	328254
+h05R	1747989842	units	custom	Red Shield Generator	1	15	7	EK,FK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,jP	214174
+h05S	1747989843	units	custom	LightningOrb	1	10	2	H,jP	328623
+h05T	1747989844	units	custom	Gun Smith	1	16	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	214426
+h05U	1747989845	units	custom	Lumber Mill	1	17	7	EK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	214791
+h05V	1747989846	units	custom	Golem Factory	1	17	7	EK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	215156
+h05W	1747989847	units	custom	LandEffect	1	10	2	H,jP	328992
+h05X	1747989848	units	custom	Tank Factory	1	17	6	EK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	215521
+h05Y	1747989849	units	custom	WindOrb	1	10	2	H,jP	329361
+h05Z	1747989850	units	custom	Books of Conjuration	1	19	7	CallbackSingle_doAfter_doAfter_doAfter_BuildingCatalogE2E_call_doAfter_doAfter_doAfter_BuildingCatalogE2E1,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,wK	183945
+h060	1747990064	units	custom	Obelisk of Elements	1	20	8	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E18,CallbackSingle_doAfter_doAfter_doAfter_BuildingCatalogE2E_call_doAfter_doAfter_doAfter_BuildingCatalogE2E1,H,ensureUnitObjectMetadataRegistered,jP,runCurrentUnitPerkProbes,wK,xK	184312
+h061	1747990065	units	custom	Elemental Guard Tower	1	20	7	H,LE,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,iD,jP,wK	184679
+h062	1747990066	units	custom	Mana Generator	1	14	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xK	185159
+h063	1747990067	units	custom	Linker	1	21	8	H,KE,ensureUnitObjectMetadataRegistered,expectsDeathRelease,fJ,jP,onBuildingFinished,wK	185526
+h064	1747990068	units	custom	Linker	1	10	2	H,jP	329730
+h065	1747990069	units	custom	Obelisk of Elements	1	10	2	H,jP	330099
+h066	1747990070	units	custom	Book of Conjuration	1	10	2	H,jP	330468
+h067	1747990071	units	custom	Elemental Guard Tower	1	10	2	H,jP	330837
+h068	1747990072	units	custom		1	4	2	H,spawnSnowMissileFanStep	186007
+h069	1747990073	units	custom	Spare Part Heap	1	18	8	EK,EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight,H,LE,ensureUnitObjectMetadataRegistered,isSweepCriticalPath,jP,xO	195022
+h06A	1747990081	units	custom		1	3	1	H	331206
+h06B	1747990082	units	custom	Wisp	1	21	10	ForGroupCallback_forUnitsInRange_RaceElementalAbilities_callback_forUnitsInRange_RaceElementalAbilities,ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities,ForGroupCallback_forUnitsInRect_RaceCorruptedAbilities_callback_forUnitsInRect_RaceCorruptedAbilities,ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers,H,MC,UC,fJ,isDispellableEnemyOf,jP	151081
+h06C	1747990083	units	custom	SodDummy	1	11	3	H,jP,shrineOfDestructionSpell	131134
+h06D	1747990084	units	custom	Forest Trapper's Hole	1	19	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	291477
+h06E	1747990085	units	custom	Meteor Shower	1	20	8	H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,jP,wK,xK	186120
+h06F	1747990086	units	custom	Elemental Rain	1	20	8	H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,jP,wK,xK	186483
+h06G	1747990087	units	custom	Book of Conjuration 2	1	10	2	H,jP	331321
+h06H	1747990088	units	custom	Skull Shrine2	1	7	2	H,jP	331690
+h06I	1747990089	units	custom	Infostealer's Place	1	17	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	291965
+h06J	1747990090	units	custom	Blue Shield Generator	1	17	6	EK,FK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP	215761
+h06L	1747990092	units	custom	Modern Igloo	1	20	7	H,QK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xF,xO	278292
+h06M	1747990093	units	custom	Main Castle	1	8	5	ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities1,ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,H,createRoundCastlesAndContinue,jP	131485
+h06N	1747990094	units	custom	ClapDummy	1	11	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceChaosAbilities_cast_registerUnitSpellWithTargetOrder_RaceChaosAbilities1,jP	131610
+h06O	1747990095	units	custom	Serenity	1	19	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,kK,xO	131961
+h06P	1747990096	units	custom	Mechanical Builder	1	10	2	H,jP	331944
+h06Q	1747990097	units	custom	Roterothopter	1	20	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	216128
+h06R	1747990098	units	custom	Gyrocopter	1	21	6	EK,H,ensureUnitObjectMetadataRegistered,jP,runSequentialUnitSpellProbe,xO	216717
+h06S	1747990099	units	custom	Heavy Tank	1	23	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	217306
+h06T	1747990100	units	custom	Light Tank	1	23	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	218010
+h06U	1747990101	units	custom	Mine Layer	1	27	8	EK,FK,H,createNativeSpellTarget,ensureUnitObjectMetadataRegistered,jP,onUnitTrained,xO	218714
+h06V	1747990102	units	custom	Nuke Dummy	1	10	2	H,jP	332291
+h06W	1747990103	units	custom	Nuke Explosion Dummy	1	7	2	H,jP	332650
+h06X	1747990104	units	custom	Nuke Start Dummy	1	7	2	H,jP	332892
+h06Y	1747990105	units	custom	Dragonhawk Portal	1	14	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	195389
+h06Z	1747990106	units	custom	Protection Center	1	19	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	219418
+h070	1747990320	units	custom	Highelf Siege Factory	1	14	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	195754
+h071	1747990321	units	custom	Enigma	1	17	7	H,IK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	253267
+h072	1747990322	units	custom	Holy Altar	1	19	6	CK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	209664
+h073	1747990323	units	custom	Elune's Lantern	1	17	5	H,KK,LE,ensureUnitObjectMetadataRegistered,jP	266933
+h074	1747990324	units	custom	Holy Warrior	1	24	6	CK,DK,H,ensureUnitObjectMetadataRegistered,jP,xO	210144
+h075	1747990325	units	custom	Ultimate Builder	1	10	2	H,jP	333134
+h076	1747990326	units	custom	Discharge Tower	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,wK	186846
+h077	1747990327	units	custom	Rocket Lab	1	14	7	EK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	229864
+h078	1747990328	units	custom	Desert Builder	1	10	2	H,jP	356193
+h079	1747990329	units	custom	Beacon of the Oasis	1	17	7	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E18,EG,H,ensureUnitObjectMetadataRegistered,jP,qK,rK	171379
+h07A	1747990337	units	custom	Sacred Peyote	1	16	6	EG,H,ensureUnitObjectMetadataRegistered,jP,qK,rK	171746
+h07B	1747990338	units	custom	Sorceress	1	24	6	AK,BK,H,ensureUnitObjectMetadataRegistered,jP,xO	196119
+h07C	1747990339	units	custom	Bloodmage	1	19	2	H,jP	333481
+h07D	1747990340	units	custom	Moon Altar	1	18	7	H,KK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	267421
+h07E	1747990341	units	custom	Ballista Tower	1	18	6	EG,H,LE,ensureUnitObjectMetadataRegistered,jP,qK	172113
+h07F	1747990342	units	custom	Matriarchs	1	7	2	H,jP	356540
+h07G	1747990343	units	custom	AltarOfSand: Cloud	1	7	2	H,jP	356782
+h07H	1747990344	units	custom	Obelisk of Wilderness	1	17	6	H,KK,LE,LK,ensureUnitObjectMetadataRegistered,jP	267792
+h07I	1747990345	units	custom	Starfall Obelisk	1	15	4	H,KK,LK,ensureUnitObjectMetadataRegistered	268165
+h07J	1747990346	units	custom	Main Castle	1	7	4	ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities1,H,createRoundCastlesAndContinue,jP	145637
+h07K	1747990347	units	custom	Main Castle	1	7	4	ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities1,H,createRoundCastlesAndContinue,jP	145762
+h07L	1747990348	units	custom	Guild of Shadows	1	17	6	H,KK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	268527
+h07M	1747990349	units	custom	House of Shadows	1	18	7	H,KK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	268898
+h07N	1747990350	units	custom	Scorched Mansion	1	17	6	H,KK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	269269
+h07O	1747990351	units	custom	Pillaged Hut	1	17	6	H,KK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	269640
+h07P	1747990352	units	custom	Poof Tower	1	17	5	H,LE,WK,ensureUnitObjectMetadataRegistered,jP	308588
+h07Q	1747990353	units	custom	Blood Shaman Tent	1	16	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	302711
+h07R	1747990354	units	custom	Thunderpaw Spire	1	16	7	H,LE,WK,ensureUnitObjectMetadataRegistered,jP,pJ,wN	310996
+h07S	1747990355	units	custom	Cloud Ship	1	23	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	311613
+h07T	1747990356	units	custom	Withering Hall	1	15	5	H,WK,ensureUnitObjectMetadataRegistered,jP,pJ	312329
+h07U	1747990357	units	custom	Vessel of Purity	1	15	6	CK,H,ensureUnitObjectMetadataRegistered,jP,mP,syncArtilleryModeAvailability	212722
+h07V	1747990358	units	custom	Celestial Chi Tower	1	20	5	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,WK,ensureUnitObjectMetadataRegistered,jP	312702
+h07W	1747990359	units	custom	Snowveil Fountain	1	15	6	FL,H,QK,ensureUnitObjectMetadataRegistered,jP,syncArtilleryModeAvailability	123883
+h07X	1747990360	units	custom	Stasis Totem	1	22	9	CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap,H,UK,VK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,isSingleLimitBuilding,jP	303082
+h07Y	1747990361	units	custom	Healing Totem	1	22	9	CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap,H,UK,VK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,isSingleLimitBuilding,jP	303566
+h07Z	1747990362	units	custom	Endurance Totem	1	22	9	CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap,H,UK,VK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,iD,isSingleLimitBuilding,jP	304050
+h080	1747990576	units	custom	Temple of Riptide	1	16	6	GK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	243280
+h081	1747990577	units	custom	Tiny Watch Tower	1	16	6	CJ,CK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP	124806
+h082	1747990578	units	custom	Tiny Multishot Tower	1	14	4	CK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered	125165
+h088	1747990584	units	custom	Moon Shrine	1	14	6	H,KK,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	270011
+h089	1747990585	units	custom	Night Elf Builder	1	10	2	H,jP	334197
+h08A	1747990593	units	custom	Teleport	1	10	2	H,jP	334544
+h08B	1747990594	units	custom	Luna Beam	1	10	2	H,jP	334913
+h08C	1747990595	units	custom	Star Fall	1	10	2	H,jP	335282
+h08D	1747990596	units	custom	Orb1	1	10	2	H,jP	335651
+h08E	1747990597	units	custom	Orb2	1	10	2	H,jP	336020
+h08F	1747990598	units	custom	Orb3	1	10	2	H,jP	336389
+h08G	1747990599	units	custom	Orb4	1	10	2	H,jP	336758
+h08H	1747990600	units	custom	Orb5	1	10	2	H,jP	337127
+h08I	1747990601	units	custom	Orb6	1	10	2	H,jP	337496
+h08J	1747990602	units	custom	Orb7	1	10	2	H,jP	337865
+h08K	1747990603	units	custom	Orb8	1	10	2	H,jP	338234
+h08L	1747990604	units	custom	Entangle	1	10	2	H,jP	338603
+h08M	1747990605	units	custom	Orb2High	1	10	2	H,jP	338972
+h08N	1747990606	units	custom	plant	1	10	2	H,jP	339341
+h08O	1747990607	units	custom	plant2	1	10	2	H,jP	339710
+h08P	1747990608	units	custom	Silver Glade	1	17	6	H,KK,LE,LK,ensureUnitObjectMetadataRegistered,jP	270255
+h08Q	1747990609	units	custom	Fire	1	10	2	H,jP	340079
+h08R	1747990610	units	custom	Fire Small	1	10	2	H,jP	340448
+h08S	1747990611	units	custom	Orb3 BIG	1	10	2	H,jP	340817
+h08T	1747990612	units	custom	Orb9	1	10	2	H,jP	341186
+h08U	1747990613	units	custom	FrostOrbDummy	1	8	3	CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1,H,jP	278780
+h08V	1747990614	units	custom	Orb18	1	10	2	H,jP	341555
+h08W	1747990615	units	custom	Tower	1	10	2	H,jP	341924
+h08X	1747990616	units	custom	Archery Range	1	13	5	AK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,xO	196823
+h08Y	1747990617	units	custom	Archery Tower	1	17	6	AK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	197063
+h08Z	1747990618	units	custom	Archery Target	1	10	2	H,jP	342293
+h090	1747990832	units	custom	Elf Build	1	10	2	H,jP	342662
+h091	1747990833	units	custom	Elf Build2	1	10	2	H,jP	343031
+h092	1747990834	units	custom	Spellbreaker Kodo Farm	1	16	6	H,UK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	292336
+h093	1747990835	units	custom	Citadel Effect	1	10	2	H,jP	343400
+h094	1747990836	units	custom	Citadel Effect 2	1	10	2	H,jP	343769
+h096	1747990838	units	custom	Golem Factory: Gold	1	10	2	H,jP	344138
+h097	1747990839	units	custom	Precious Golem Factory	1	20	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	219898
+h098	1747990840	units	custom	Rocket Tank	1	23	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	220378
+h099	1747990841	units	custom	Assault Tank	1	20	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	221082
+h09A	1747990849	units	custom	Tank Factory: Big Mine	1	10	2	H,jP	344507
+h09B	1747990850	units	custom	Heavy Tank Factory	1	19	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	221661
+h09C	1747990851	units	custom	Tank Factory: Brazier	1	10	2	H,jP	344876
+h09D	1747990852	units	custom	Tank Factory: Runes1	1	10	2	H,jP	345245
+h09E	1747990853	units	custom	Tank Factory: Furnace Fire	1	10	2	H,jP	345614
+h09F	1747990854	units	custom	Tank Factory: Mine	1	10	2	H,jP	345983
+h09G	1747990855	units	custom	Tank Factory: Runes2	1	10	2	H,jP	346352
+h09H	1747990856	units	custom	Rocket Tank Factory	1	17	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	222026
+h09I	1747990857	units	custom	Assault Tank Factory	1	17	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	222391
+h09J	1747990858	units	custom	Mine Layer Factory	1	18	7	EK,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	222756
+h09K	1747990859	units	custom	Aircraft: Fence	1	10	2	H,jP	346721
+h09L	1747990860	units	custom	Bomber Factory	1	17	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	223121
+h09M	1747990861	units	custom	MineDummy	1	13	4	FK,H,jP,mineLayerSpell	223486
+h09N	1747990862	units	custom	Arsenal: Trash1	1	10	2	H,jP	347090
+h09O	1747990863	units	custom	Arsenal: Trash2	1	10	2	H,jP	347459
+h09P	1747990864	units	custom	Arsenal	1	14	6	EK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	223837
+h09Q	1747990865	units	custom	GrenadeDummy	1	11	3	H,UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceMechAbilities_cast_registerUnitSpellWithTargetOrder_RaceMechAbilities,jP	224087
+h09R	1747990866	units	custom	Spare Part Heap: Gobbo	1	10	2	H,jP	347828
+h09T	1747990868	units	custom	Power Plant	1	20	9	AiExecutor_AiExecutor_hasReadyPowerPlant434Center,EK,H,KE,LE,dK,ensureUnitObjectMetadataRegistered,isSweepCriticalPath,jP	224438
+h09U	1747990869	units	custom	Power Plant: Fence	1	10	2	H,jP	348197
+h09V	1747990870	units	custom	Power Plant: Teleport	1	10	2	H,jP	348566
+h09W	1747990871	units	custom	Race Ban	1	8	3	H,advanceManualRaceBan,jP	348935
+h09X	1747990872	units	custom	School of Wizardry	1	16	6	AK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	197428
+h09Y	1747990873	units	custom	Corrupted Ancient of Annihilation	1	20	6	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,nK,xO	151547
+h09Z	1747990874	units	custom	Corrupted	1	10	2	H,jP	349165
+h0A0	1747992880	units	custom	Human BUild	1	10	2	H,jP	349534
+h0A1	1747992881	units	custom	Marksmen's Encampment	1	17	6	CK,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	210848
+h0A2	1747992882	units	custom	Heavy Gunner	1	20	5	CK,H,ensureUnitObjectMetadataRegistered,jP,xO	211213
+h0Z1	1747999281	units	custom	Mudcrab Burrow	1	15	5	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,pK	159608
+h0Z2	1747999282	units	custom	Rockcrab Burrow	1	15	5	H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,pK	160437
+h0Z3	1747999283	units	custom	Spinecrab Tidepool	1	13	4	H,ensureUnitObjectMetadataRegistered,jP,pK	161266
+h0Z4	1747999284	units	custom	Hermit Mound	1	13	4	H,ensureUnitObjectMetadataRegistered,jP,pK	162095
+h0Z5	1747999285	units	custom	Tidal Cairn	1	13	4	H,ensureUnitObjectMetadataRegistered,jP,pK	162924
+h0Z6	1747999286	units	custom	Coral Spire	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	163289
+h0Z7	1747999287	units	custom	Reef Guardian	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	163767
+hcas	1751343475	units	original	Main Castle	1	8	7	ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities1,ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,createRoundCastlesAndContinue,jP,runPerkAbilityProbes,runPerkDamageProbes,runPickupAndPassiveItemProbes	1420054
+hfoo	1751543663	units	original	Footman	1	38	26	ArgHandler_addCommand_Commands_handleArgs_addCommand_Commands35,CK,CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E13,CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E6,CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E7,KE,checkAllProtectedAbilityAdds,checkRuntimeProtectedAbilityAdd,createNativeSpellTarget,ensureUnitObjectMetadataRegistered,jH,jP,runBlastStaffPhoenixFireBehaviorProbe,runCurrentUnitPerkProbes,runFeatheredFriendGrantProbe,runLinkerHealProbe,runObeliskPhoenixFireBehaviorProbe,runOrbOfLightningBehaviorProbe,runPerkDamageProbes,runPickupAndPassiveItemProbes,runRestoredAttackBehaviorProbe,runSequentialBuildingSpellProbe,runSequentialPointItemProbe,runSequentialUnitSpellProbe,runTeammateLinkerHealProbe,xO	529186
+hmtm	1752003693	units	original	Mortar	1	7	6	CK,CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E5,CallbackSingle_doAfter_doAfter_doAfter_doAfter_BuildingCatalogE2E_call_doAfter_doAfter_doAfter_doAfter_BuildingCatalogE2E,ensureUnitObjectMetadataRegistered,jP,xO	527923
+hrif	1752328550	units	original	Sniper	1	6	5	CK,ensureUnitObjectMetadataRegistered,jP,runCurrentUnitPerkProbes,xO	2405905
+n000	1848651824	units	custom	Infernal	1	23	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	132442
+n001	1848651825	units	custom	Red Dragon	1	23	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	133146
+n002	1848651826	units	custom	Naga Guardian	1	23	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	235791
+n003	1848651827	units	custom	Murloc	1	16	2	H,jP	349903
+n004	1848651828	units	custom	Suumpmolk	1	23	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	236505
+n005	1848651829	units	custom	Warlock	1	21	6	CK,DK,H,ensureUnitObjectMetadataRegistered,jP,xO	211802
+n006	1848651830	units	custom	Blademaster	1	23	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	197793
+n007	1848651831	units	custom	Dragon Turtle	1	20	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	237221
+n008	1848651832	units	custom	Succubus	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	133850
+n009	1848651833	units	custom	Chaos Warrior	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	134439
+n00A	1848651841	units	custom	Satyr	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	135018
+n00B	1848651842	units	custom	Zombie	1	20	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	364585
+n00C	1848651843	units	custom	Skeletal Hero	1	9	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities,H,cG,jP	135597
+n00D	1848651844	units	custom	Skeleton Archer	1	12	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities,H,cG,jP	135823
+n00E	1848651845	units	custom	Flesh Golem	1	23	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	365174
+n00F	1848651846	units	custom	Sheep	1	4	2	H,jP	350492
+n00G	1848651847	units	custom	Flying Sheep	1	0	0		
+n00H	1848651848	units	custom	Winged Serpent	1	20	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	237820
+n00I	1848651849	units	custom	Murloc Warrior	1	20	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	238419
+n00J	1848651850	units	custom	Murloc Champion	1	20	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	239008
+n00K	1848651851	units	custom	Murloc Assassin	1	20	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	239597
+n00L	1848651852	units	custom	Blood Fiend	1	23	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	136174
+n00M	1848651853	units	custom	Blood Fiend	1	20	3	EE,H,jP	136878
+n00N	1848651854	units	custom	Blood Fiend	1	20	3	EE,H,jP	137582
+n00O	1848651855	units	custom	Blood Fiend	1	20	3	EE,H,jP	138286
+n00P	1848651856	units	custom	Blood Fiend	1	20	3	EE,H,jP	138990
+n00Q	1848651857	units	custom	Blood Fiend	1	20	3	EE,H,jP	139694
+n00R	1848651858	units	custom	Blood Fiend	1	20	3	EE,H,jP	140398
+n00S	1848651859	units	custom	Naga Siren	1	24	6	GK,H,HK,ensureUnitObjectMetadataRegistered,jP,xO	240186
+n00T	1848651860	units	custom	Forest Spider	1	16	2	H,jP	350608
+n00U	1848651861	units	custom	Black Spider	1	20	5	H,IK,ensureUnitObjectMetadataRegistered,jP,xO	253638
+n00V	1848651862	units	custom	Troll Berserker	1	18	6	H,UK,ensureUnitObjectMetadataRegistered,fJ,jP,xO	292707
+n00W	1848651863	units	custom	Summoned Lobster	1	16	2	H,jP	351197
+n00X	1848651864	units	custom	Naga Royal Guard	1	23	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	240902
+n00Y	1848651865	units	custom	Elder Blademaster	1	23	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	198497
+n00Z	1848651866	units	custom	Chaos Champion	1	21	6	H,ensureUnitObjectMetadataRegistered,jP,kK,lK,xO	141102
+n010	1848652080	units	custom	Azure Drake	1	20	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	279022
+n011	1848652081	units	custom	Hrimthrusa	1	23	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	279621
+n012	1848652082	units	custom	Wandigoo	1	20	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	280337
+n013	1848652083	units	custom	Ancient Wandigoo	1	21	6	H,QK,RK,ensureUnitObjectMetadataRegistered,jP,xO	280936
+n014	1848652084	units	custom	Ice Queen	1	24	6	H,QK,RK,ensureUnitObjectMetadataRegistered,jP,xO	281535
+n015	1848652085	units	custom	Ice Troll Shadow Priest	1	20	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	282251
+n016	1848652086	units	custom	Magnataur	1	24	6	H,QK,RK,ensureUnitObjectMetadataRegistered,jP,xO	282850
+n017	1848652087	units	custom	Frost Wolf	1	23	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	283566
+n018	1848652088	units	custom	Polar Bear	1	20	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	284282
+n019	1848652089	units	custom	Void Walker	1	17	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	152027
+n01A	1848652097	units	custom	Void Keeper	1	17	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	152491
+n01B	1848652098	units	custom	Shadow Drake	1	21	6	H,ensureUnitObjectMetadataRegistered,jP,nK,onUnitEnteredMap,xO	152955
+n01C	1848652099	units	custom	Raised Tentacle	1	9	4	H,jP,kE,setArtilleryModeAbilityIds	351786
+n01D	1848652100	units	custom	Nether Drake	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	153544
+n01E	1848652101	units	custom	Infernal Tank	1	23	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	154133
+n01F	1848652102	units	custom		1	23	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	154837
+n01G	1848652103	units	custom	Felhound	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	155541
+n01H	1848652104	units	custom	Corrupted Treant	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	156120
+n01I	1848652105	units	custom	Corrupted Ent	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,nK,xO	156699
+n01J	1848652106	units	custom	Corrupted Protector	1	20	5	H,ensureUnitObjectMetadataRegistered,getCampaignTowerIdForBuilder,jP,nK	157278
+n01K	1848652107	units	custom	Suffocated Zombie	1	20	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	365890
+n01L	1848652108	units	custom	Greater Skeleton Archer	1	12	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities1,H,cG,jP	141681
+n01M	1848652109	units	custom	Skeletal General	1	12	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities1,H,cG,jP	142032
+n01N	1848652110	units	custom	Giant Spider	1	23	5	H,IK,ensureUnitObjectMetadataRegistered,jP,xO	254227
+n01O	1848652111	units	custom	Troll Trapper	1	22	7	H,UK,VK,ensureUnitObjectMetadataRegistered,fJ,jP,xO	293179
+n01P	1848652112	units	custom	Ancient Hydra	1	23	5	GK,H,ensureUnitObjectMetadataRegistered,jP,xO	241618
+n01Q	1848652113	units	custom	Hydra	1	19	2	H,jP	352028
+n01R	1848652114	units	custom	Lesser Hydra	1	19	2	H,jP	352744
+n01S	1848652115	units	custom	Mutation	1	14	3	H,jP,magicRuinSpell	142383
+n01T	1848652116	units	custom	Goblin Shredder	1	24	6	EK,H,ensureUnitObjectMetadataRegistered,hasShield,jP,xO	224805
+n01U	1848652117	units	custom	Gobbo Machinist	1	11	8	EK,EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight,H,ensureUnitObjectMetadataRegistered,jP,nH,sH,xO	199201
+n01V	1848652118	units	custom	Lunatic Goblin	1	20	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	225509
+n01W	1848652119	units	custom	Brood Mother	1	24	6	H,IK,JK,ensureUnitObjectMetadataRegistered,jP,xO	254943
+n01X	1848652120	units	custom	Iron Golem	1	20	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	226100
+n01Y	1848652121	units	custom	Dragonhawk Rider	1	24	6	AK,BK,H,ensureUnitObjectMetadataRegistered,jP,xO	199316
+n01Z	1848652122	units	custom	Assassin	1	23	8	H,KK,YN,ensureUnitObjectMetadataRegistered,jP,lE,xO,zN	270628
+n020	1848652336	units	custom	Royal Assassin	1	26	8	H,KK,YN,ensureUnitObjectMetadataRegistered,jP,lE,xO,zN	271217
+n021	1848652337	units	custom	Raised Tentacle	1	8	3	H,jP,setArtilleryModeAbilityIds	353460
+n022	1848652338	units	custom	Archer	1	24	6	AK,H,ensureUnitObjectMetadataRegistered,jP,runRestoredAttackBehaviorProbe,xO	200020
+n023	1848652339	units	custom	Master Archer	1	23	5	AK,H,ensureUnitObjectMetadataRegistered,jP,xO	200724
+n024	1848652340	units	custom	Adamant Golem	1	20	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	226689
+n025	1848652341	units	custom	Landmine	1	2	2	CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities3,explodeNukeSpecialUnit	1458162
+n026	1848652342	units	custom	Furbolg Shaman	1	24	6	H,IK,JK,ensureUnitObjectMetadataRegistered,jP,xO	255659
+n027	1848652343	units	custom	Corrupted Annihilator	1	21	6	H,ensureUnitObjectMetadataRegistered,jP,nK,oK,xO	157871
+n028	1848652344	units	custom	Furbolg Elder Shaman	1	24	6	H,IK,JK,ensureUnitObjectMetadataRegistered,jP,xO	256375
+n029	1848652345	units	custom	Bear	1	15	6	H,IK,ensureUnitObjectMetadataRegistered,handleTargetDamageEffects,jP,xO	257091
+n02A	1848652353	units	custom	Emerald Dragon	1	24	6	H,IK,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP,xO	257450
+n02B	1848652354	units	custom	Ancient Bear	1	16	7	H,IK,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,handleTargetDamageEffects,jP,xO	258166
+n02D	1848652356	units	custom	Ancient Protector	1	21	6	H,IK,KE,LE,ensureUnitObjectMetadataRegistered,jP	258525
+n02E	1848652357	units	custom	Tornado	1	4	2	H,jP	353702
+n02F	1848652358	units	custom	Tornado (-na)	1	4	2	H,jP	353817
+n02G	1848652359	units	custom	Forest Troll Trapper	1	26	10	CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E19,DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood,H,UK,VK,ensureUnitObjectMetadataRegistered,fJ,jP,runSequentialUnitSpellProbe,xO	293778
+n02H	1848652360	units	custom	testing	1	0	0		
+n02I	1848652361	units	custom	Angry Hrimthrusa	1	20	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	284871
+n02J	1848652362	units	custom	Goliath	1	23	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	227278
+n02K	1848652363	units	custom	Twin Weeper	1	17	3	EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning,H,jP	353932
+n02L	1848652364	units	custom	Twin Smiley	1	19	5	EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning,H,checkBuilding,jP,lK	142847
+n02M	1848652365	units	custom	Goblin Rocketeer	1	25	7	EK,H,ensureUnitObjectMetadataRegistered,fJ,jP,onUnitTrained,xO	229160
+n02N	1848652366	units	custom	Fire Gnoll Hut	1	14	7	EG,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	172593
+n02O	1848652367	units	custom	Den of the Ogre Lord	1	15	8	EG,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	172833
+n02P	1848652368	units	custom	Gnoll Tent	1	14	7	EG,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	173073
+n02Q	1848652369	units	custom	Harpy Nest	1	15	8	EG,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	173313
+n02R	1848652370	units	custom	Monstrous Sandkin Burrow	1	15	8	EG,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	173553
+n02S	1848652371	units	custom	Gnoll	1	22	7	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,checkForWrongOrder,ensureUnitObjectMetadataRegistered,jP,qK,xO	165414
+n02T	1848652372	units	custom	Fire Gnoll	1	22	7	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,checkForWrongOrder,ensureUnitObjectMetadataRegistered,jP,qK,xO	165993
+n02U	1848652373	units	custom	Razormane	1	18	6	H,ensureUnitObjectMetadataRegistered,handleFanOfKnives,jP,qK,xO	164950
+n02V	1848652374	units	custom	Quillboar	1	11	5	H,ensureUnitObjectMetadataRegistered,jP,qK,xO	164712
+n02W	1848652375	units	custom	Harpy	1	23	5	H,ensureUnitObjectMetadataRegistered,jP,qK,xO	167286
+n02X	1848652376	units	custom	Ogre	1	17	5	H,ensureUnitObjectMetadataRegistered,jP,qK,xO	168694
+n02Y	1848652377	units	custom	Ogre Lord	1	24	6	H,ensureUnitObjectMetadataRegistered,jP,qK,rK,xO	169158
+n02Z	1848652378	units	custom	Salamander	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,qK,xO	170790
+n030	1848652592	units	custom	Sandkin	1	18	6	H,ensureUnitObjectMetadataRegistered,jP,qK,rK,xO	170326
+n031	1848652593	units	custom	Nest of Harpy Matriarch	1	20	7	EG,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	173793
+n032	1848652594	units	custom	Harpy Witch	1	24	6	H,ensureUnitObjectMetadataRegistered,jP,qK,rK,xO	167990
+n033	1848652595	units	custom	Ogre Den	1	15	8	EG,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	174273
+n034	1848652596	units	custom	Harpies' Matriarch	1	24	6	H,ensureUnitObjectMetadataRegistered,jP,qK,rK,xO	166582
+n035	1848652597	units	custom	Monstrous Sandkin	1	19	7	H,ensureUnitObjectMetadataRegistered,jP,qK,rK,spellSandCloud,xO	169862
+n036	1848652598	units	custom	Quillboar Yard	1	14	7	EG,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	174513
+n037	1848652599	units	custom	Razormane Abode	1	15	8	EG,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	174753
+n038	1848652600	units	custom	Salamander Hatchery	1	12	6	EG,H,ensureUnitObjectMetadataRegistered,jP,qK,xO	174993
+n039	1848652601	units	custom	Sandkin Burrow	1	15	8	EG,H,LE,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	175233
+n03A	1848652609	units	custom	Temple of Storm	1	19	6	EG,H,ensureUnitObjectMetadataRegistered,jP,qK,rK	175473
+n03B	1848652610	units	custom	Nest of Harpy Witch	1	16	7	EG,H,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,qK,xO	175954
+n03C	1848652611	units	custom	Ghost of Sorrow	1	17	3	H,jP,wellOfPainSpell	158678
+n03D	1848652612	units	custom	Bamboo Dojo	1	14	7	H,LE,WK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	304766
+n03E	1848652613	units	custom	Sagepaw Monk	1	15	6	H,NI,WK,ensureUnitObjectMetadataRegistered,jP,xO	305010
+n03F	1848652614	units	custom	Brew Hut	1	14	7	H,LE,WK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	305716
+n03G	1848652615	units	custom	Ironpaw Militia	1	20	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	305960
+n03H	1848652616	units	custom	Temple of the Wandering Spark	1	11	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	306549
+n03I	1848652617	units	custom	Echofoot Mystic	1	15	6	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,WK,ensureUnitObjectMetadataRegistered,jP,xO	306793
+n03J	1848652618	units	custom	Ironpaw Guardian	1	20	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	307152
+n03K	1848652619	units	custom	Fighting Tavern	1	15	6	H,WK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	307741
+n03L	1848652620	units	custom	Jade Shrine	1	11	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	307985
+n03M	1848652621	units	custom	Jade Elder	1	14	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	308229
+n03N	1848652622	units	custom	Pandaren Siege Workshop	1	11	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	309675
+n03O	1848652623	units	custom	Drunken Brewmaster	1	20	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	309919
+n03P	1848652624	units	custom	Temple of Ten Thousand Drinks	1	19	6	H,WK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	310508
+n03Q	1848652625	units	custom	Cloud Hangar	1	11	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	311369
+n03R	1848652626	units	custom	Echo Remnant	1	2	2	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,fJ	1645416
+n03S	1848652627	units	custom	Sagepaw Sanctum	1	13	6	H,WK,ensureUnitObjectMetadataRegistered,ensureUnitObjectUpgradeMetadataRegistered,jP,xO	313306
+n03T	1848652628	units	custom	Sagepaw Soulkeeper	1	15	6	H,NI,WK,ensureUnitObjectMetadataRegistered,jP,xO	313550
+n03U	1848652629	units	custom	Winged Riptide Serpent	1	21	6	GK,H,ensureUnitObjectMetadataRegistered,hL,jP,xO	242681
+n0Z1	1848662577	units	custom	Mudcrab	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	159973
+n0Z2	1848662578	units	custom	Rock Crab	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	160802
+n0Z3	1848662579	units	custom	Spiny Crab	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	161631
+n0Z4	1848662580	units	custom	Hermit Crab	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	162460
+n0Z7	1848662583	units	custom	Giant Reef Crab	1	16	4	H,ensureUnitObjectMetadataRegistered,jP,pK	164248
+nalb	1851878498	units	original		1	0	0		
+ncp2	1852010546	units	original		1	2	1	setupDominationMode	1689119
+ncrb	1852011106	units	original		1	0	0		
+nder	1852073330	units	original		1	0	0		
+ndog	1852075879	units	original		1	0	0		
+ndwm	1852077933	units	original		1	0	0		
+nech	1852138344	units	original		1	0	0		
+necr	1852138354	units	original		1	0	0		
+nfbr	1852203634	units	original		1	1	1	bD	1732905
+nfro	1852207727	units	original		1	0	0		
+nhmc	1852337507	units	original		1	0	0		
+nmrk	1852666475	units	original		1	0	0		
+npig	1852860775	units	original		1	0	0		
+npng	1852862055	units	original		1	0	0		
+npnw	1852862071	units	original		1	0	0		
+nrac	1852989795	units	original		1	0	0		
+nrat	1852989812	units	original		1	0	0		
+nsea	1853056353	units	original		1	0	0		
+nshe	1853057125	units	original		1	0	0		
+nshp	1853057136	units	original		1	0	0		
+nskk	1853057899	units	original		1	0	0		
+nsno	1853058671	units	original		1	0	0		
+nvul	1853257068	units	original		1	0	0		
+o000	1865429040	units	custom	Anti Air Tower	1	17	5	H,LE,UK,ensureUnitObjectMetadataRegistered,jP	294377
+o001	1865429041	units	custom	Catapult	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	294865
+o002	1865429042	units	custom	Grunt	1	17	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	295464
+o003	1865429043	units	custom	Shaman	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	295936
+o004	1865429044	units	custom	Veteran Grunt	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	296535
+o005	1865429045	units	custom	Axemaster	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	297124
+o006	1865429046	units	custom	Defensive Kodo Rider	1	23	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	297713
+o007	1865429047	units	custom	Kodo	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	298429
+o008	1865429048	units	custom	Melee Kodo Rider	1	23	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	299018
+o009	1865429049	units	custom	Wyvern Rider	1	23	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	299734
+o00A	1865429057	units	custom	Ice Troll Witch Doctor	1	20	5	H,QK,ensureUnitObjectMetadataRegistered,jP,xO	285470
+o00B	1865429058	units	custom	Spellbreaker Kodo Rider	1	23	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	300450
+o00C	1865429059	units	custom	Lesser Elemental Of Wind	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xO	187326
+o00D	1865429060	units	custom	Elemental Of Wind	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,wK,xO	187905
+o00E	1865429061	units	custom	Greater Elemental Of Wind	1	21	6	H,ensureUnitObjectMetadataRegistered,handleTargetDamageEffects,jP,wK,xO	188484
+o00F	1865429062	units	custom	Infostealer	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	301166
+o00G	1865429063	units	custom	Blood Shaman	1	20	5	H,UK,ensureUnitObjectMetadataRegistered,jP,xO	302112
+o00H	1865429064	units	custom	Brewshock Catapult	1	20	5	H,WK,ensureUnitObjectMetadataRegistered,jP,xO	309076
+otot	1869901684	units	original		1	2	2	BO,jP	3939482
+tec1	1952801585	units	custom	Tech Level 1	1	7	2	H,jP	354521
+tec2	1952801586	units	custom	Tech Level 2	1	7	2	H,jP	354763
+tec3	1952801587	units	custom	Tech Level 3	1	7	2	H,jP	355005
+u000	1966092336	units	custom	Frost Wyrm	1	20	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	366479
+u001	1966092337	units	custom	Banshee	1	17	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	367078
+u002	1966092338	units	custom	Skeleton Warrior	1	9	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities,H,cG,jP	143426
+u003	1966092339	units	custom	Greater Skeletal Mage	1	9	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities1,H,cG,jP	143664
+u004	1966092340	units	custom	Ghoul	1	4	2	H,onChaosPortalUnitSummoned	143902
+u005	1966092341	units	custom	Necromancer	1	20	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	367550
+u006	1966092342	units	custom	Corrupted Builder	1	7	2	H,jP	355247
+u007	1966092343	units	custom	Plague Bearer	1	23	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	368149
+u008	1966092344	units	custom	Greater Ghoul	1	4	2	H,onChaosPortalUnitSummoned	144015
+u009	1966092345	units	custom	Mighty Necromancer	1	17	5	H,aL,ensureUnitObjectMetadataRegistered,jP,xO	368865
+u00A	1966092353	units	custom	Skeletal Mage	1	9	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities,H,cG,jP	144128
+u00B	1966092354	units	custom	Greater Skeleton Warrior	1	9	4	BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities1,H,cG,jP	144366
+u00C	1966092355	units	custom	Ghoul	1	3	1	H	355479
+u00D	1966092356	units	custom	Lich King	1	24	6	H,aL,ensureUnitObjectMetadataRegistered,handleSourceDamageEffects,jP,xO	369339
+u00E	1966092357	units	custom	Lich Ghoul	1	4	2	H,onChaosPortalUnitSummoned	144604
+u00F	1966092358	units	custom	Greater Elemental Of Fire	1	16	7	EventListener_add_FireElemental_onEvent_add_FireElemental,EventListener_add_PerkUtils_onEvent_add_PerkUtils,H,ensureUnitObjectMetadataRegistered,jP,wK,xO	189063
+u00G	1966092359	units	custom	Locust Harpy	1	8	3	DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,H,jP	304534
+x001	2016423985	units	custom	Effect Dummy Unit	1	10	2	H,QG	124246
+x002	2016423986	units	custom	Feathered Friend	1	8	3	BJ,H,pL	124583
+x003	2016423987	units	custom	Dummy Caster	1	7	2	H,MH	370402
+z000	2049978416	units	custom	Quill Demon	1	20	5	H,ensureUnitObjectMetadataRegistered,jP,kK,xO	144717
+z001	2049978417	units	custom	Flamegunner Sergeant	1	16	2	H,jP	355594
+z002	2049978418	units	custom	Flamegunner	1	20	5	EK,H,ensureUnitObjectMetadataRegistered,jP,xO	227982
+z003	2049978419	units	custom	Flamegunner Sergeant	1	21	6	EK,FK,H,ensureUnitObjectMetadataRegistered,jP,xO	228571
