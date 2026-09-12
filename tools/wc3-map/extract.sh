@@ -54,4 +54,13 @@ python "$repo_root/tools/wc3-map/decode_map.py" \
     --translated "$translated_dir" \
     --output "$output_dir"
 
+if [[ -f "$repo_root/.wc3-base/source/install/.build.info" ]]; then
+    python "$repo_root/tools/wc3-map/resolve-base-data.py" \
+        --base "$repo_root/.wc3-base/source" \
+        --map-extracted "$output_dir" \
+        --output "$output_dir/resolved"
+else
+    echo "base-data cache not found; run tools/wc3-map/extract-base-data.sh to enable inherited object resolution" >&2
+fi
+
 echo "decoded original map to $output_dir"

@@ -15,7 +15,7 @@ import json
 import re
 import shutil
 import struct
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -567,14 +567,32 @@ def write_object_catalog(translated: Path, output: Path, strings: dict[str, str]
         "ugol", "ulum", "ufoo", "ubld", "udef", "udty", "uacq",
     ]
 
+    def choose_map_value(values: list[Any]) -> Any:
+        if not values:
+            return ""
+        first = values[0]
+        if all(value == first for value in values[1:]):
+            return first
+        if isinstance(first, (int, float)) and not isinstance(first, bool) and abs(float(first)) > 1:
+            if all(isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) in (0.0, 1.0) for value in values[1:]):
+                return first
+        # Conflicting strings/non-sentinel values retain ordinary last-write
+        # semantics. The resolved/base-data catalog records this ambiguity.
+        return values[-1]
+
     def field_variants(modifications: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-        variants: dict[str, list[dict[str, Any]]] = {}
+        grouped: dict[tuple[str, int, int], list[dict[str, Any]]] = {}
         for mod in modifications:
-            variants.setdefault(mod["id"], []).append({
-                "level": mod.get("level", 0),
-                "column": mod.get("column", 0),
-                "type": mod.get("type", ""),
-                "value": resolve_trigger_string(mod.get("value"), strings),
+            key = (mod["id"].rstrip("\0"), mod.get("level", 0), mod.get("column", 0))
+            grouped.setdefault(key, []).append(mod)
+        variants: dict[str, list[dict[str, Any]]] = {}
+        for (field_id, level, column), group in grouped.items():
+            values = [resolve_trigger_string(mod.get("value"), strings) for mod in group]
+            variants.setdefault(field_id, []).append({
+                "level": level,
+                "column": column,
+                "type": group[0].get("type", ""),
+                "value": choose_map_value(values),
             })
         return variants
 
@@ -605,19 +623,36 @@ def write_object_catalog(translated: Path, output: Path, strings: dict[str, str]
             for key, modifications in objects.items():
                 rawcode, base_rawcode = split_object_key(key, table)
                 fields: dict[str, Any] = {}
+                grouped_values: dict[tuple[str, int, int], list[Any]] = defaultdict(list)
+                occurrence_counts: Counter[tuple[str, int, int]] = Counter()
                 for mod in modifications:
+                    key = (mod["id"].rstrip("\0"), mod.get("level", 0), mod.get("column", 0))
+                    grouped_values[key].append(resolve_trigger_string(mod.get("value"), strings))
+                    occurrence_counts[key] += 1
+                seen_counts: Counter[tuple[str, int, int]] = Counter()
+                for modification_index, mod in enumerate(modifications):
                     raw_value = mod.get("value")
                     resolved = resolve_trigger_string(raw_value, strings)
-                    fields[mod["id"]] = resolved
+                    field_id = mod["id"].rstrip("\0")
+                    key = (field_id, mod.get("level", 0), mod.get("column", 0))
+                    seen_counts[key] += 1
+                    values = grouped_values[key]
+                    conflict = len(values) > 1 and any(value != values[0] for value in values[1:])
+                    if key[1] == 0 and key[2] == 0:
+                        fields[field_id] = choose_map_value(values)
                     field_rows.append([
                         category,
                         table,
                         rawcode,
                         base_rawcode or "",
-                        mod["id"],
+                        field_id,
                         mod.get("type", ""),
                         mod.get("level", 0),
                         mod.get("column", 0),
+                        modification_index,
+                        seen_counts[key],
+                        occurrence_counts[key],
+                        int(conflict),
                         json.dumps(raw_value, ensure_ascii=False),
                         json.dumps(resolved, ensure_ascii=False),
                     ])
@@ -661,7 +696,10 @@ def write_object_catalog(translated: Path, output: Path, strings: dict[str, str]
 
     with (catalog_dir / "object-fields.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
-        writer.writerow(["category", "table", "rawcode", "base_rawcode", "field_id", "type", "level", "column", "raw_value", "resolved_value"])
+        writer.writerow([
+            "category", "table", "rawcode", "base_rawcode", "field_id", "type", "level", "column",
+            "modification_index", "duplicate_ordinal", "duplicate_count", "conflicting_duplicate", "raw_value", "resolved_value",
+        ])
         writer.writerows(field_rows)
 
     with (catalog_dir / "objects.tsv").open("w", encoding="utf-8", newline="") as f:
