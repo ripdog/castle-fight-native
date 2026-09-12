@@ -130,6 +130,7 @@
     "campaign_only_race_catalogs": 1,
     "race_building_semantic_rows": 240,
     "race_building_precursor_edges": 90,
+    "element_building_bucket_rows": 12,
     "income_factor_constants": {
       "cvb": "0.04",
       "dvb": "0.09",

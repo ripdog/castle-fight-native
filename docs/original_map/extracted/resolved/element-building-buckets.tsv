@@ -1,0 +1,13 @@
+bucket	element	building_rawcode	building_names	source_function	byte_offset
+1	fire	h045	Altar of Fire	wK	3561312
+1	fire	h046	Altar of Blaze	wK	3561349
+2	earth	h040	Rock Pile	wK	3561164
+2	earth	h041	Greater Fissure	wK	3561201
+3	lightning	h042	Pillar of Globe-Lightning	wK	3561238
+3	lightning	h044	Pillar of St. Elmo's Fire	wK	3561275
+4	water	h03X	Water Spring	wK	3561053
+4	water	h03Y	Golden Fountain	wK	3561090
+4	water	h03Z	Spellbound Fountain	wK	3561127
+5	wind	h04A	Trapped Gale	wK	3561386
+5	wind	h04C	Monument of Wind Stream	wK	3561423
+5	wind	h04D	Zephyros Memorial	wK	3561460

@@ -144,13 +144,14 @@
   "scripted_unit_spell_semantic_rows": 37,
   "scripted_unit_spell_semantic_status_counts": {
     "object-effect-ready": 17,
-    "partial": 3,
-    "script-native-ready": 17
+    "partial": 1,
+    "script-native-ready": 19
   },
   "scripted_unit_spell_semantic_kind_counts": {
     "bounded-multi-target-proxy": 3,
     "delayed-berserk-rage": 1,
     "delayed-life-steal": 1,
+    "element-scaled-dual-projectile-system": 1,
     "five-tree-wall-to-treants": 1,
     "four-lane-cone-proxy": 1,
     "periodic-sandcloud-carrier": 2,
@@ -163,11 +164,11 @@
     "registered-heal-inner-fire-maxhp-resurrection": 1,
     "registered-heal-plus-inner-fire": 1,
     "registered-heal-plus-permanent-armor": 1,
-    "registered-infest-plus-two-unresolved-orders": 1,
+    "registered-infest-then-enable-autocasts": 1,
     "registered-object-effect-plus-resume": 1,
-    "trigger-plus-unresolved-immediate-order": 1,
-    "unexpanded-script": 1
+    "taunt-plus-resume": 1
   },
+  "element_building_bucket_rows": 12,
   "scripted_building_spell_rows": 15,
   "scripted_building_spell_mana_timed_rows": 15,
   "scripted_building_spell_mechanic_rows": 15,
@@ -211,8 +212,9 @@
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
     "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
     "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
-    "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when generated closure dispatch is statically exact and the map Lua is never executed",
-    "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: every row is explicitly object-effect-ready, script-native-ready or partial, so unfinished state machines cannot be mistaken for fully translated mechanics",
+    "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
+    "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: 36/37 rows are implementation-ready; Master of Elements alone remains partial because its full element-scaled projectile state machines are decoded but the shared protected Frost target-filter symbol SX is not yet resolved",
+    "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
     "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
     "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
     "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
