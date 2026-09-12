@@ -79,7 +79,7 @@ The decision may consider:
 
 If legal, the caster chooses the target according to the ability's deterministic target policy and emits a cast intent.
 
-The current verification slice makes one automatic ability per spellcasting building executable. This is deliberately narrower than the eventual content model, but it fixes the scheduler architecture: integer mana regeneration happens in the timer phase before automatic eligibility; mana is clamped to the authored maximum; ability evaluation then reads an immutable post-production/pre-targeting snapshot; committed ability effects are visible to combat target acquisition and ordinary attacks later in the same tick. A unit killed by an automatic ability therefore cannot acquire a target, move, or perform an ordinary attack later that tick.
+The current verification slice makes one automatic ability per spellcasting building executable. This is deliberately narrower than the eventual content model, but it fixes the scheduler architecture: integer mana regeneration happens in the timer phase before automatic eligibility; mana is clamped to the authored maximum; ability evaluation then reads an immutable post-production/pre-targeting snapshot; committed ability effects are visible to combat target acquisition and ordinary attacks later in the same tick. A unit killed by an automatic ability therefore cannot acquire a target, move, or perform an ordinary attack later that tick. A stunned spellcasting source is ineligible to cast until the stun has expired; mana regeneration and absolute cooldown readiness continue while stunned.
 
 Automatic casting MUST continue through an individual player's disconnect while the match is still running. If an entire team disconnects and the match enters the canonical reconnect pause, simulation casting pauses with the rest of the simulation.
 
@@ -102,7 +102,7 @@ map-wide team set
 
 All non-random ties require a canonical final tie-break such as `SimId`.
 
-The executable verification target policy is currently `RandomEnemyUnit` within an authored finite range measured from the caster building's authoritative footprint. Every eligible candidate receives an order-independent keyed random rank and minimum `(rank, SimId)` wins, so spatial-grid enumeration and worker completion order cannot affect the selected target.
+The executable verification target policies are currently `RandomEnemyUnit`, within an authored finite range measured from the caster building's authoritative footprint, and `AllEnemyUnits` for map-wide hostile-unit effects. Every random eligible candidate receives an order-independent keyed random rank and minimum `(rank, SimId)` wins, so spatial-grid enumeration and worker completion order cannot affect the selected target. `AllEnemyUnits` uses authored range `0` as an explicit sentinel because range is not consulted for a global effect; the affected unit set resolves in stable `SimId` order.
 
 Random target selection uses keyed deterministic RNG. A suitable key is:
 
@@ -140,7 +140,7 @@ pub enum AbilityTarget {
 
 At deterministic resolution the simulation validates any rules that must still hold, spends mana/charge, begins cooldown, and emits canonical effects/projectiles.
 
-The current implementation makes cast commitment atomic in one ability-resolution subphase. Automatic intents are canonically ordered by source `SimId`, ability ID, cast sequence, then target `SimId`. Resolution revalidates source state, mana, readiness, target liveness/team/range, and rejects the cast without spending mana or starting cooldown if those conditions no longer hold. A successful cast subtracts mana, sets `ready_tick = cast_tick + cooldown_ticks`, increments the authoritative cast sequence, then applies its effect. Mana profile/state and ability ready/cast-sequence state participate in canonical checksums.
+The current implementation makes cast commitment atomic in one ability-resolution subphase. Automatic intents are canonically ordered by source `SimId`, ability ID, cast sequence, then a stable target-kind/target-identity key. Resolution revalidates source active/stun state, mana, readiness, and applicable target liveness/team/range rules, and rejects the cast without spending mana or starting cooldown if those conditions no longer hold. A successful cast subtracts mana, sets `ready_tick = cast_tick + cooldown_ticks`, increments the authoritative cast sequence, then applies its effect. Mana profile/state, ability ready/cast-sequence state, and timed stun state participate in canonical checksums.
 
 Whether resources are reserved at intent creation or charged at resolution MUST remain explicit for later activation modes; the verification rule above is the initial ordinary automatic-cast behavior.
 
@@ -158,9 +158,13 @@ The constrained effect vocabulary should support at least:
 - spawn authoritative projectile;
 - spawn wave/beam-like deterministic attack;
 - aura activation;
-- resource/mana modification where content requires it.
+- resource/mana modification where content requires it;
+- corpse query/selection;
+- consume corpse;
+- corpse-driven area damage (for example corpse explosion);
+- corpse-driven unit spawning/transformation (for example raise dead).
 
-Effects reuse the deterministic resolution rules in `15-targeting-combat.md`.
+Effects reuse the deterministic resolution rules in `15-targeting-combat.md`. Corpse-targeted abilities operate on authoritative corpse entities rather than presentation objects. They MUST revalidate corpse existence/eligibility at resolution, use canonical ordering/tie-breaking when selecting among multiple corpses, and atomically consume a corpse when the effect definition says it is spent so one corpse cannot satisfy multiple competing casts nondeterministically.
 
 ## 9. Buffing spell buildings
 
@@ -238,13 +242,13 @@ This is distinct from the guaranteed-hit ranged attack mode in `15-targeting-com
 
 ## 14. Global stun example
 
-A global stun ability conceptually obtains the canonical set of eligible enemy combat units at cast resolution and applies a timed stun to each.
+A global stun ability obtains the canonical set of live eligible enemy combat units at cast resolution and applies a timed stun to each in stable `SimId` order. The current executable slice targets combat units only; passive geometry/builders are not included merely because they belong to the opposing team.
 
-The duration is expressed in ticks.
+Stun duration is expressed in ticks with an exclusive absolute expiry. A stun committed during tick `T` for positive duration `D` stores `stunned_until_tick = T + D` and the entity is stunned while `current_tick < stunned_until_tick`. Thus duration `1` suppresses actions during the cast tick and expires before tick `T + 1`; duration `2` suppresses ticks `T` and `T + 1`. Reapplication uses the later expiry (`max(old, new)`), so a shorter stun cannot truncate a longer existing stun.
 
-Application MUST be deterministic regardless of entity query order. If the status is independent per target, execution may be parallelized after the eligible set/effect semantics are fixed.
+While stunned, a combat unit performs no fresh target acquisition, retaliation/ally-defense target switch, ordinary attack, or intentional movement. A still-valid pre-stun target is retained rather than cleared. Attack/spell buildings with status state likewise do not retarget, attack, or cast while stunned. Cooldowns and mana regeneration continue according to their normal absolute/timer rules. Receiving an ordinary attack while stunned does not create a delayed retaliation beyond the normal one-tick retaliation memory; an attack on the final stunned tick may therefore be consumed on the next active targeting phase, while older attacks are not queued indefinitely.
 
-The builder and other explicitly non-combat entities are not included merely because they belong to the opposing team.
+Application MUST remain deterministic regardless of entity query order or worker count. Parallel effect execution is permitted only after the affected set and conflict semantics are fixed.
 
 ## 15. Ability source and threat semantics
 

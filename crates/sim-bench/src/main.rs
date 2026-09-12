@@ -25,6 +25,7 @@ enum Scenario {
     Bounce,
     Tower,
     Ability,
+    Stun,
     Mixed,
 }
 
@@ -42,6 +43,7 @@ impl Scenario {
             Self::Bounce => "bounce",
             Self::Tower => "tower",
             Self::Ability => "ability",
+            Self::Stun => "stun",
             Self::Mixed => "mixed",
         }
     }
@@ -174,11 +176,13 @@ fn main() {
                 }
                 if result.ability_evaluations_per_tick > 0.0 {
                     println!(
-                        "         abilities eval/t={:.1} cast/t={:.1} effect/t={:.1} candidates/eval={:.2}",
+                        "         abilities eval/t={:.1} cast/t={:.1} effect/t={:.1} candidates/eval={:.2} stunned avg={:.1} peak={}",
                         result.ability_evaluations_per_tick,
                         result.ability_casts_per_tick,
                         result.ability_effects_per_tick,
                         result.ability_candidates_per_evaluation,
+                        result.average_stunned_units,
+                        result.peak_stunned_units,
                     );
                 }
                 if scenario == Scenario::Mixed {
@@ -246,6 +250,8 @@ struct BenchCounters {
     ability_casts: usize,
     ability_candidate_checks: usize,
     ability_effects: usize,
+    stunned_unit_sum: usize,
+    peak_stunned_units: usize,
     retained_targets: usize,
     target_changes: usize,
     ally_defense_queries: usize,
@@ -277,6 +283,8 @@ struct BenchResult {
     ability_casts_per_tick: f64,
     ability_candidates_per_evaluation: f64,
     ability_effects_per_tick: f64,
+    average_stunned_units: f64,
+    peak_stunned_units: usize,
     retained_targets_per_tick: f64,
     target_changes_per_tick: f64,
     ally_defense_queries_per_tick: f64,
@@ -405,6 +413,8 @@ fn run_case(
             counters.ability_candidate_checks as f64 / counters.ability_evaluations as f64
         },
         ability_effects_per_tick: counters.ability_effects as f64 / ticks as f64,
+        average_stunned_units: counters.stunned_unit_sum as f64 / ticks as f64,
+        peak_stunned_units: counters.peak_stunned_units,
         retained_targets_per_tick: counters.retained_targets as f64 / ticks as f64,
         target_changes_per_tick: counters.target_changes as f64 / ticks as f64,
         ally_defense_queries_per_tick: counters.ally_defense_queries as f64 / ticks as f64,
@@ -461,6 +471,7 @@ fn populate_scenario(
         Scenario::Bounce => populate_bounce_density_battle(simulation, units),
         Scenario::Tower => populate_attack_building_density(simulation, units),
         Scenario::Ability => populate_automatic_ability_density(simulation, units),
+        Scenario::Stun => populate_global_stun_density(simulation, units),
         Scenario::Mixed => populate_mixed_battle(simulation, units),
     }
 
@@ -758,6 +769,80 @@ fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: 
     }
 }
 
+fn populate_global_stun_density(simulation: &mut Simulation, total_units: usize) {
+    let caster_count = (total_units / 40).clamp(2, 64);
+    let per_team_casters = caster_count.div_ceil(2);
+    let spellcasting = SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 1_000_000_000,
+            starting: 1_000_000_000,
+            regen_per_tick: 0,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(2),
+            mana_cost: 1,
+            cooldown_ticks: 3,
+            range: 0,
+            target_policy: AbilityTargetPolicy::AllEnemyUnits,
+            effect: AbilityEffect::Stun { duration_ticks: 2 },
+        },
+    };
+    for team in 0..2u8 {
+        for index in 0..per_team_casters {
+            if team == 1 && per_team_casters + index >= caster_count {
+                break;
+            }
+            let column = (index % 10) as i32;
+            let row = (index / 10) as i32;
+            let x = if team == 0 {
+                5 + column * 2
+            } else {
+                115 - column * 2
+            };
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, -55 + row * 2, 1, 1),
+                health: 1_000_000_000,
+                production: None,
+                attack: None,
+                spellcasting: Some(spellcasting),
+            });
+        }
+    }
+
+    let per_team_units = total_units / 2;
+    let rows = 100usize.min(per_team_units.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
+        damage: 0,
+        range: 2 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 3,
+    };
+    for team in 0..2u8 {
+        for index in 0..per_team_units {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                40 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                80 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000_000,
+                attack,
+                movement: MovementProfile {
+                    speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 2,
+                },
+            });
+        }
+    }
+}
+
 fn populate_mixed_battle(simulation: &mut Simulation, total_units: usize) {
     const RESERVED_PRODUCTION_SPAWNS: usize = 4;
     assert!(
@@ -850,6 +935,21 @@ fn populate_mixed_battle(simulation: &mut Simulation, total_units: usize) {
             effect: AbilityEffect::Damage { amount: 5 },
         },
     };
+    let global_stun = SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 100,
+            starting: 100,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(3),
+            mana_cost: 20,
+            cooldown_ticks: 150,
+            range: 0,
+            target_policy: AbilityTargetPolicy::AllEnemyUnits,
+            effect: AbilityEffect::Stun { duration_ticks: 15 },
+        },
+    };
     let production = ProductionProfile {
         initial_delay_ticks: 300,
         interval_ticks: u16::MAX,
@@ -890,7 +990,11 @@ fn populate_mixed_battle(simulation: &mut Simulation, total_units: usize) {
                 health: 100_000,
                 production: None,
                 attack: None,
-                spellcasting: Some(spellcasting),
+                spellcasting: Some(if index == 0 {
+                    global_stun
+                } else {
+                    spellcasting
+                }),
             });
         }
         for index in 0..2 {
@@ -976,6 +1080,8 @@ fn accumulate_counters(result: &TickResult, counters: &mut BenchCounters) {
     counters.ability_casts += result.ability_casts;
     counters.ability_candidate_checks += result.ability_candidate_checks;
     counters.ability_effects += result.ability_effects;
+    counters.stunned_unit_sum += result.stunned_units;
+    counters.peak_stunned_units = counters.peak_stunned_units.max(result.stunned_units);
     counters.retained_targets += result.retained_targets;
     counters.target_changes += result.target_changes;
     counters.ally_defense_queries += result.ally_defense_queries;
@@ -1043,7 +1149,7 @@ fn parse_args() -> Args {
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,mixed"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,stun,mixed"
                 );
                 println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
@@ -1079,6 +1185,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "bounce" => Scenario::Bounce,
             "tower" => Scenario::Tower,
             "ability" => Scenario::Ability,
+            "stun" => Scenario::Stun,
             "mixed" => Scenario::Mixed,
             other => panic!("unknown scenario: {other}"),
         })

@@ -218,6 +218,7 @@ pub struct AbilityId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AbilityTargetPolicy {
     RandomEnemyUnit,
+    AllEnemyUnits,
 }
 
 impl AbilityTargetPolicy {
@@ -225,6 +226,7 @@ impl AbilityTargetPolicy {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::RandomEnemyUnit => 0,
+            Self::AllEnemyUnits => 1,
         }
     }
 }
@@ -232,6 +234,7 @@ impl AbilityTargetPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AbilityEffect {
     Damage { amount: i32 },
+    Stun { duration_ticks: u16 },
 }
 
 impl AbilityEffect {
@@ -239,6 +242,7 @@ impl AbilityEffect {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::Damage { .. } => 0,
+            Self::Stun { .. } => 1,
         }
     }
 }
@@ -275,6 +279,18 @@ pub struct ManaState {
 pub struct AutomaticAbilityState {
     pub ready_tick: u64,
     pub cast_sequence: u64,
+}
+
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StatusState {
+    pub stunned_until_tick: u64,
+}
+
+impl StatusState {
+    #[must_use]
+    pub const fn is_stunned(self, tick: u64) -> bool {
+        tick < self.stunned_until_tick
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

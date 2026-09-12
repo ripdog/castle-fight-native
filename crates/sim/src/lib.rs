@@ -8,13 +8,14 @@ mod topology;
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
     AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, MovementProfile,
-    ProductionProfile, SimId, SpellcastingProfile, Team, UnitSpawn, UnitTemplate,
+    ProductionProfile, SimId, SpellcastingProfile, StatusState, Team, UnitSpawn, UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
-    AbilityCastEvent, AttackEvent, BuildingPlacementError, BuildingView, ProjectileView,
-    ProjectileViewKind, Simulation, SimulationConfig, TickResult, TickTimings, UnitView,
+    AbilityCastEvent, AbilityCastTarget, AttackEvent, BuildingPlacementError, BuildingView,
+    ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TickResult, TickTimings,
+    UnitView,
 };
 pub use topology::NavCell;
 
@@ -92,6 +93,24 @@ mod tests {
             production: None,
             attack: None,
             spellcasting: Some(spellcasting),
+        }
+    }
+
+    fn global_stun_spell(id: u32, duration_ticks: u16, cooldown_ticks: u16) -> SpellcastingProfile {
+        SpellcastingProfile {
+            mana: ManaProfile {
+                maximum: 1_000,
+                starting: 1_000,
+                regen_per_tick: 0,
+            },
+            ability: AutomaticAbilityProfile {
+                id: AbilityId(id),
+                mana_cost: 1,
+                cooldown_ticks,
+                range: 0,
+                target_policy: AbilityTargetPolicy::AllEnemyUnits,
+                effect: AbilityEffect::Stun { duration_ticks },
+            },
         }
     }
 
@@ -681,7 +700,7 @@ mod tests {
             &[AbilityCastEvent {
                 source: caster,
                 ability: AbilityId(7),
-                target,
+                target: AbilityCastTarget::Unit(target),
                 effect: AbilityEffect::Damage { amount: 1 },
             }]
         );
@@ -738,7 +757,10 @@ mod tests {
         let cast = sim.step();
         assert_eq!(cast.ability_casts, 1);
         assert_eq!(sim.ability_casts_last_tick()[0].source, caster);
-        assert_eq!(sim.ability_casts_last_tick()[0].target, victim);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].target,
+            AbilityCastTarget::Unit(victim)
+        );
         assert_eq!(sim.unit(victim).unwrap().health, 99);
         assert_eq!(sim.unit(victim).unwrap().last_attacker, None);
         assert_eq!(sim.unit(victim).unwrap().target, Some(decoy));
@@ -796,6 +818,158 @@ mod tests {
         assert_eq!(result.attacks_resolved, 0);
         assert!(sim.unit(attacker).is_none());
         assert_eq!(sim.unit(victim).unwrap().health, 10_000);
+    }
+
+    #[test]
+    fn one_tick_global_stun_cancels_existing_attack_then_expires() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let victim = sim.spawn_unit(passive_unit(0, 10 * cell));
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(12 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 5,
+                range: 4 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(attacker).unwrap().target, Some(victim));
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(20, 0, 1, 1),
+            global_stun_spell(21, 1, 30),
+        ));
+
+        let stunned = sim.step();
+        assert_eq!(stunned.completed_tick, 1);
+        assert_eq!(stunned.ability_casts, 1);
+        assert_eq!(stunned.ability_effects, 1);
+        assert_eq!(stunned.attacks_resolved, 0);
+        let attacker_view = sim.unit(attacker).unwrap();
+        assert_eq!(attacker_view.stunned_until_tick, 2);
+        assert_eq!(attacker_view.target, Some(victim));
+        assert_eq!(sim.unit(victim).unwrap().health, 10_000);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].target,
+            AbilityCastTarget::AllEnemyUnits
+        );
+
+        let recovered = sim.step();
+        assert_eq!(recovered.completed_tick, 2);
+        assert_eq!(recovered.attacks_resolved, 1);
+        assert_eq!(sim.unit(victim).unwrap().health, 9_995);
+    }
+
+    #[test]
+    fn two_tick_global_stun_suppresses_acquisition_and_movement_exactly() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let target = sim.spawn_unit(passive_unit(0, 10 * cell));
+        let mover = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(20 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: cell,
+                acquisition_range: 20 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell,
+            },
+        });
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(30, 0, 1, 1),
+            global_stun_spell(22, 2, 30),
+        ));
+        let initial = sim.unit(mover).unwrap().position;
+
+        let tick0 = sim.step();
+        assert_eq!(tick0.ability_casts, 1);
+        assert_eq!(sim.unit(mover).unwrap().stunned_until_tick, 2);
+        assert_eq!(sim.unit(mover).unwrap().target, None);
+        assert_eq!(sim.unit(mover).unwrap().position, initial);
+
+        sim.step();
+        assert_eq!(sim.unit(mover).unwrap().target, None);
+        assert_eq!(sim.unit(mover).unwrap().position, initial);
+
+        let recovered = sim.step();
+        assert_eq!(recovered.completed_tick, 2);
+        assert_eq!(sim.unit(mover).unwrap().target, Some(target));
+        assert_ne!(sim.unit(mover).unwrap().position, initial);
+    }
+
+    #[test]
+    fn shorter_stun_does_not_truncate_longer_stun() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let victim = sim.spawn_unit(passive_unit(1, 20 * cell));
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(4, 0, 1, 1),
+            global_stun_spell(23, 4, 30),
+        ));
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(6, 0, 1, 1),
+            global_stun_spell(24, 1, 30),
+        ));
+
+        let result = sim.step();
+        assert_eq!(result.ability_casts, 2);
+        assert_eq!(result.ability_effects, 2);
+        assert_eq!(sim.unit(victim).unwrap().stunned_until_tick, 4);
+    }
+
+    #[test]
+    fn global_stun_is_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            let mut sim = Simulation::new(SimulationConfig::default(), workers);
+            for index in 0..4 {
+                sim.spawn_building(spell_building(
+                    0,
+                    BuildingFootprint::new(4 + index * 2, -20, 1, 1),
+                    global_stun_spell(30 + index as u32, 2, 3),
+                ));
+            }
+            for index in 0..100 {
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new((40 + index % 20) * cell, (index / 20 - 2) * cell),
+                    health: 100,
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::Melee,
+                        damage: 1,
+                        range: 2 * cell,
+                        acquisition_range: 12 * cell,
+                        cooldown_ticks: 3,
+                    },
+                    movement: MovementProfile {
+                        speed_per_tick: cell / 2,
+                    },
+                });
+            }
+            for _ in 0..30 {
+                sim.step();
+            }
+            sim.checksum()
+        }
+
+        let expected = run(1);
+        assert_eq!(run(2), expected);
+        assert_eq!(run(8), expected);
     }
 
     #[test]

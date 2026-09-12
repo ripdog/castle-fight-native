@@ -83,7 +83,7 @@ Tick N state
 Tick N+1 state
 ```
 
-This order encodes the initial gameplay rules: a newly spawned unit cannot attack on its spawn tick; a stun/disable that becomes active before an ordinary attack resolves suppresses that attack even if an intent was already prepared; once an entity is dead it performs no later action in that tick; and ballistic/siege impacts query positions after movement. Already-launched persistent projectiles are independent entities and are not retroactively removed merely because their source later dies.
+This order encodes the initial gameplay rules: a newly spawned unit cannot attack on its spawn tick; a stun/disable that becomes active in the pre-combat ability phase suppresses target reevaluation, ordinary attacks, and intentional movement for that tick even if an attack would otherwise have been legal; once an entity is dead it performs no later action in that tick; and ballistic/siege impacts query positions after movement. Already-launched persistent projectiles are independent entities and are not retroactively removed merely because their source later dies. Timed stun uses an exclusive absolute expiry (`current_tick < stunned_until_tick`), so duration accounting does not depend on decrement order.
 
 The current automatic-spell verification slice makes phase 6/7 concrete: integer mana regeneration is applied during timer advancement before ability eligibility, automatic cast intents are evaluated from the resulting immutable snapshot, and successful immediate ability effects/deaths are visible to target acquisition in phase 9. Ability damage that is explicitly non-retaliatory does not create ordinary combat retaliation/ally-defense alerts even though its health mutation is authoritative immediately.
 

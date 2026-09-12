@@ -328,7 +328,7 @@ Parallel execution order MUST NOT consume or shift another entity's random seque
 The initial rules are explicit:
 
 1. **death wins over every later action** — once health reaches the death threshold, that entity may not resolve any later attack, cast, or movement in the tick;
-2. **stun/disable wins over an ordinary attack** — if the disabling status becomes active before that attack resolves, the attack is canceled even if its intent was prepared earlier;
+2. **stun/disable wins over ordinary autonomous actions** — if the disabling status becomes active in the pre-combat ability phase, the affected entity performs no fresh targeting/retaliation switch, ordinary attack, or intentional movement while the stun is active; a still-valid pre-stun target may remain retained;
 3. structural despawn still occurs at the normal commit point so references/effects can resolve deterministically;
 4. already-launched persistent projectiles remain independent authoritative state and are not canceled merely because their source subsequently dies.
 
@@ -341,7 +341,7 @@ Movement/combat interaction follows these initial rules:
 - a unit spawned on the current tick cannot attack until a later tick;
 - ordinary attack intent/resolution occurs before that tick's movement;
 - an entity killed before movement does not move;
-- a stunned/disabled entity does not resolve an ordinary attack after the disable becomes active;
+- a stunned/disabled entity does not perform fresh target acquisition, resolve an ordinary attack, or intentionally move while the disable is active; timed stun uses the exclusive absolute-expiry rule defined in `16-abilities-spellcasting.md`;
 - due ballistic/siege impacts resolve after movement and use post-movement positions;
 - melee and other range-limited attackers pursue a reachable attack position for their selected target rather than steering blindly at the target through blockers;
 - if no attack position is reachable, the target is invalid and is dropped/reacquired.
