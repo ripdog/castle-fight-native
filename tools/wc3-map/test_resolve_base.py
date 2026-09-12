@@ -214,6 +214,38 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(rotero_building["dps"], "20.0")
         self.assertEqual(rotero_building["xo_range_relation"], "xo-two-profile-sum-minus-one")
 
+    def test_production_unit_abilities_keep_runtime_fields_and_inherited_base_links(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["production_unit_ability_links"], 481)
+        self.assertEqual(summary["production_unit_unique_abilities"], 291)
+        self.assertEqual(summary["production_unit_inherited_ability_links"], 6)
+        self.assertEqual(summary["production_unit_ability_links_with_protected_runtime_fields"], 77)
+
+        with (self.resolved / "production-unit-abilities.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(rows), 481)
+        indexed = {(row["unit_rawcode"], row["ability_rawcode"]): row for row in rows}
+
+        grab_tree = indexed[("e00F", "A0BC")]
+        self.assertEqual(grab_tree["base_rawcode"], "Agra")
+        self.assertEqual(grab_tree["static_cooldown"], "99")
+        self.assertEqual(grab_tree["effective_cooldown"], "1.0")
+        self.assertEqual(grab_tree["cooldown_source"], "protected-runtime")
+        self.assertIn('"Maximum Attacks":10', grab_tree["data_fields_labeled_json"])
+        self.assertEqual(grab_tree["script_reference_count"], "4")
+
+        rotero_bash = indexed[("h06Q", "A09I")]
+        self.assertEqual(rotero_bash["base_rawcode"], "ACbh")
+        self.assertEqual(rotero_bash["targets"], "air")
+        self.assertIn('"Chance to Bash":30', rotero_bash["data_fields_labeled_json"])
+        self.assertIn('"Damage Bonus":40', rotero_bash["data_fields_labeled_json"])
+
+        inherited = {row["ability_rawcode"]: row for row in rows if row["definition_source"] == "inherited-base"}
+        self.assertEqual(set(inherited), {"Aeth", "Aloc", "Avul"})
+        self.assertEqual(inherited["Aeth"]["name"], "Ghost")
+        self.assertEqual(inherited["Aloc"]["name"], "Locust")
+        self.assertEqual(inherited["Avul"]["name"], "Invulnerable")
+
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["unresolved_base_objects"], [])

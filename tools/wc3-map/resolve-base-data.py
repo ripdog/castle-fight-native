@@ -1522,6 +1522,125 @@ def main() -> None:
         production_attack_rows,
     )
 
+    # Normalize every ability initially attached to a production unit. Most are
+    # map objects, but a few are unmodified Blizzard utility abilities (Ghost,
+    # Locust, Invulnerable); keep those links explicitly instead of dropping
+    # rawcodes that do not appear in the map's ability-object delta table.
+    ability_levels: dict[str, list[dict[str, str]]] = defaultdict(list)
+    with (output / "abilities.tsv").open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            ability_levels[row["rawcode"]].append(row)
+
+    protected_ability_values: dict[tuple[str, int, str], str] = {}
+    with (output / "protected-ability-fields.tsv").open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            protected_ability_values[(row["rawcode"], int(row["level"]), row["field"])] = row["runtime_value"]
+
+    script_rawcode_summary: dict[str, dict[str, str]] = {}
+    script_rawcode_summary_path = map_root / "script" / "rawcode-summary.tsv"
+    if script_rawcode_summary_path.exists():
+        with script_rawcode_summary_path.open(encoding="utf-8", newline="") as handle:
+            script_rawcode_summary = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    ability_metadata = load_metadata("abilities", source_root, tables)
+
+    def inherited_ability_level_one(rawcode: str) -> dict[str, str] | None:
+        if table_row(tables, "AbilityData", rawcode) is None:
+            return None
+
+        def base_field(field_id: str) -> str:
+            meta = ability_metadata.get(field_id)
+            if meta is None:
+                return ""
+            value, _, _ = base_value_for_metadata(
+                meta, rawcode, 1, 1, tables, profile, data_selection.profile_variant
+            )
+            value = resolve_string_key(value, editor_strings)
+            return value_as_text(value)
+
+        levels_value = base_field("alev")
+        return {
+            "table": "inherited",
+            "rawcode": rawcode,
+            "base_rawcode": rawcode,
+            "level": "1",
+            "level_count": levels_value or "1",
+            "name": base_field("anam"),
+            "tip": base_field("atp1"),
+            "ubertip": base_field("aub1"),
+            "mana_cost": base_field("amcs"),
+            "cooldown": base_field("acdn"),
+            "range": base_field("aran"),
+            "area": base_field("aare"),
+            "targets": base_field("atar"),
+            "buffs": base_field("abuf"),
+            "data_fields_json": "{}",
+            "data_fields_labeled_json": "{}",
+        }
+
+    production_ability_rows: list[list[Any]] = []
+    production_ability_unique: set[str] = set()
+    production_ability_inherited_links = 0
+    production_ability_runtime_field_links = 0
+    if effective_unit_path.exists():
+        with effective_unit_path.open(encoding="utf-8", newline="") as handle:
+            for catalog in csv.DictReader(handle, delimiter="\t"):
+                unit = static_units.get(catalog["unit_rawcode"])
+                if unit is None:
+                    raise ValueError(f"production unit has no resolved unit definition: {catalog['unit_rawcode']}")
+                ability_rawcodes = [part.strip() for part in unit["abilities"].split(",") if part.strip() and part.strip() != "_"]
+                for slot, ability_rawcode in enumerate(ability_rawcodes, start=1):
+                    definitions = ability_levels.get(ability_rawcode, [])
+                    definition = next((row for row in definitions if row["level"] == "1"), None)
+                    definition_source = "map-resolved"
+                    if definition is None:
+                        definition = inherited_ability_level_one(ability_rawcode)
+                        definition_source = "inherited-base"
+                        production_ability_inherited_links += 1
+                    if definition is None:
+                        raise ValueError(
+                            f"production unit ability has no map or inherited definition: {catalog['unit_rawcode']} {ability_rawcode}"
+                        )
+
+                    level_count = len(definitions) if definitions else int(definition.get("level_count", "1") or 1)
+                    static_mana = definition["mana_cost"]
+                    static_cooldown = definition["cooldown"]
+                    runtime_mana = protected_ability_values.get((ability_rawcode, 1, "mana_cost"))
+                    runtime_cooldown = protected_ability_values.get((ability_rawcode, 1, "cooldown"))
+                    if runtime_mana is not None or runtime_cooldown is not None:
+                        production_ability_runtime_field_links += 1
+                    effective_mana = runtime_mana if runtime_mana is not None else static_mana
+                    effective_cooldown = runtime_cooldown if runtime_cooldown is not None else static_cooldown
+                    mana_source = "protected-runtime" if runtime_mana is not None else "static-resolved"
+                    cooldown_source = "protected-runtime" if runtime_cooldown is not None else "static-resolved"
+
+                    script = script_rawcode_summary.get(ability_rawcode, {})
+                    production_ability_unique.add(ability_rawcode)
+                    production_ability_rows.append([
+                        catalog["building_rawcode"], catalog["building_names"],
+                        catalog["unit_rawcode"], catalog["unit_names"], slot,
+                        ability_rawcode, definition_source, definition["base_rawcode"], 1, level_count,
+                        definition["name"], definition["tip"], definition["ubertip"],
+                        static_mana, effective_mana, mana_source,
+                        static_cooldown, effective_cooldown, cooldown_source,
+                        definition["range"], definition["area"], definition["targets"], definition["buffs"],
+                        definition["data_fields_json"], definition["data_fields_labeled_json"],
+                        script.get("reference_count", "0"), script.get("function_count", "0"), script.get("functions", ""),
+                    ])
+    write_tsv(
+        output / "production-unit-abilities.tsv",
+        [
+            "building_rawcode", "building_names", "unit_rawcode", "unit_names", "ability_slot",
+            "ability_rawcode", "definition_source", "base_rawcode", "initial_level", "level_count",
+            "name", "tip", "ubertip",
+            "static_mana_cost", "effective_mana_cost", "mana_cost_source",
+            "static_cooldown", "effective_cooldown", "cooldown_source",
+            "range", "area", "targets", "buffs", "data_fields_json", "data_fields_labeled_json",
+            "script_reference_count", "script_function_count", "script_functions",
+        ],
+        production_ability_rows,
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -1611,6 +1730,10 @@ def main() -> None:
         "production_unit_available_attack_profiles": production_attack_profiles,
         "production_unit_conditional_attack_profiles": conditional_attack_profiles,
         "production_unit_two_profile_sum_patterns": two_profile_sum_patterns,
+        "production_unit_ability_links": len(production_ability_rows),
+        "production_unit_unique_abilities": len(production_ability_unique),
+        "production_unit_inherited_ability_links": production_ability_inherited_links,
+        "production_unit_ability_links_with_protected_runtime_fields": production_ability_runtime_field_links,
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -1620,6 +1743,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
+            "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
