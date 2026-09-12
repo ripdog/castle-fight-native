@@ -1559,6 +1559,247 @@ def _extract_building_spell_registrations(
     return rows
 
 
+def _extract_unit_spell_registrations(
+    data: bytes,
+    functions: list[dict[str, object]],
+    function_aliases: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover generated scripted unit-spell registrations without executing Lua.
+
+    The protected map routes unit spells through a generated five-argument
+    registry helper whose fields are exposed by the map's own E2E arrays:
+    unit rawcode, ability rawcode, target-mode enum, order ID/expression and a
+    UnitSpellClosure callback. One special registration is emitted inline and
+    additionally records an expected immediate unit rawcode. Prototype aliases
+    provide the concrete closure handler exactly as with building spells.
+    """
+    handler_by_class: dict[str, str] = {}
+    for alias in function_aliases:
+        alias_name = str(alias["alias"])
+        suffix = ".UnitSpellClosure_cast1"
+        if not alias_name.endswith(suffix):
+            continue
+        class_name = alias_name[: -len(suffix)]
+        target = str(alias["target_function"])
+        prior = handler_by_class.get(class_name)
+        if prior is not None and prior != target:
+            raise ValueError(f"conflicting UnitSpellClosure_cast1 handlers for {class_name}: {prior} != {target}")
+        handler_by_class[class_name] = target
+    if not handler_by_class:
+        return []
+
+    target_modes = {
+        "Tsb": (0, "enemy-ground-combat-sapper"),
+        "Ssb": (1, "enemy-flying-combat-sapper"),
+        "Rsb": (2, "ally-ground"),
+        "Qsb": (3, "ally-structure"),
+        "Psb": (4, "enemy-structure"),
+        "Osb": (5, "enemy-mechanical"),
+        "Nsb": (6, "immediate-enemy-special-unit"),
+        "Msb": (7, "ally-any"),
+    }
+    mode_labels = {value: label for value, label in target_modes.values()}
+
+    rows: list[dict[str, object]] = []
+    seen_registration_keys: set[tuple[int, int, str, int]] = set()
+
+    def add_row(
+        *,
+        function_name: str,
+        function_start: int,
+        byte_offset: int,
+        unit_id: int,
+        ability_id: int,
+        target_mode: int,
+        order_id: int | None,
+        order_expression_kind: str,
+        expected_immediate_unit_id: int,
+        closure_variable: str,
+        closure_class: str,
+        evidence_kind: str,
+    ) -> None:
+        if unit_id <= 0 or ability_id <= 0:
+            return
+        if target_mode not in mode_labels:
+            raise ValueError(
+                f"unit-spell registration has unknown target mode {target_mode} "
+                f"at byte {function_start + byte_offset}"
+            )
+        key = (unit_id, ability_id, closure_class, function_start + byte_offset)
+        if key in seen_registration_keys:
+            raise ValueError(f"duplicate unit-spell registration evidence at {key}")
+        seen_registration_keys.add(key)
+        rows.append({
+            "unit_id": unit_id,
+            "ability_id": ability_id,
+            "target_mode": target_mode,
+            "target_mode_label": mode_labels[target_mode],
+            "order_id": order_id,
+            "order_expression_kind": order_expression_kind,
+            "expected_immediate_unit_id": expected_immediate_unit_id,
+            "closure_variable": closure_variable,
+            "closure_class": closure_class,
+            "handler_function": handler_by_class[closure_class],
+            "registration_function": function_name,
+            "evidence_kind": evidence_kind,
+            "byte_offset": function_start + byte_offset,
+        })
+
+    for function in functions:
+        function_name = str(function["name"])
+        body = _function_body_tokens(data, functions, function_name)
+        if body is None:
+            continue
+        function_start, tokens = body
+        variable_classes: dict[str, str] = {}
+        integer_variables: dict[str, int] = {name: value for name, (value, _label) in target_modes.items()}
+        used_closures: set[str] = set()
+        array_slots: dict[str, dict[str, int]] = defaultdict(dict)
+        array_offsets: dict[str, int] = {}
+        listener_slots: dict[str, str] = {}
+        listener_closures: dict[str, str] = {}
+
+        def integer_argument(argument: list[LuaToken]) -> int | None:
+            try:
+                return _integer_literal_value(argument)
+            except ValueError:
+                pass
+            if len(argument) == 1 and argument[0].kind == "ident":
+                return integer_variables.get(argument[0].text)
+            return None
+
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+
+            if token.kind == "ident" and index + 2 < len(tokens) and tokens[index + 1].text == "=":
+                rhs = tokens[index + 2]
+                if rhs.kind == "number" and rhs.integer_value is not None:
+                    integer_variables[token.text] = int(rhs.integer_value)
+                elif rhs.kind == "ident" and rhs.text in integer_variables:
+                    integer_variables[token.text] = integer_variables[rhs.text]
+                elif (
+                    rhs.kind == "ident"
+                    and rhs.text == "__wurst_ensureInt"
+                    and index + 5 < len(tokens)
+                    and tokens[index + 3].text == "("
+                    and tokens[index + 4].kind == "number"
+                    and tokens[index + 4].integer_value is not None
+                    and tokens[index + 5].text == ")"
+                ):
+                    integer_variables[token.text] = int(tokens[index + 4].integer_value)
+
+                if (
+                    rhs.kind == "ident"
+                    and rhs.text in handler_by_class
+                    and index + 5 < len(tokens)
+                    and tokens[index + 3].text == ":"
+                    and tokens[index + 4].kind == "ident"
+                    and tokens[index + 4].text.startswith("create")
+                    and tokens[index + 5].text == "("
+                ):
+                    variable_classes[token.text] = rhs.text
+
+            if token.kind == "ident" and token.text == "_I":
+                try:
+                    args, next_index = _wurst_registry_call_arguments(tokens, index)
+                except ValueError:
+                    args = []
+                    next_index = index + 1
+                if len(args) == 5 and len(args[4]) == 1 and args[4][0].kind == "ident":
+                    closure_variable = args[4][0].text
+                    closure_class = variable_classes.get(closure_variable)
+                    if closure_class is not None:
+                        unit_id = integer_argument(args[0])
+                        ability_id = integer_argument(args[1])
+                        target_mode = integer_argument(args[2])
+                        if unit_id is not None and ability_id is not None and target_mode is not None:
+                            order_id = integer_argument(args[3])
+                            add_row(
+                                function_name=function_name,
+                                function_start=function_start,
+                                byte_offset=token.start,
+                                unit_id=unit_id,
+                                ability_id=ability_id,
+                                target_mode=target_mode,
+                                order_id=order_id,
+                                order_expression_kind="integer" if order_id is not None else "protected-order-expression",
+                                expected_immediate_unit_id=0,
+                                closure_variable=closure_variable,
+                                closure_class=closure_class,
+                                evidence_kind="protected-registry-call",
+                            )
+                            used_closures.add(closure_variable)
+                index = max(index + 1, next_index)
+                continue
+
+            if (
+                token.kind == "ident"
+                and token.text in {"usb", "tsb", "ssb", "rsb", "qsb"}
+                and index + 5 < len(tokens)
+                and tokens[index + 1].text == "["
+                and tokens[index + 2].kind == "ident"
+                and tokens[index + 3].text == "]"
+                and tokens[index + 4].text == "="
+            ):
+                slot_variable = tokens[index + 2].text
+                value_token = tokens[index + 5]
+                value: int | None = None
+                if value_token.kind == "number" and value_token.integer_value is not None:
+                    value = int(value_token.integer_value)
+                elif value_token.kind == "ident":
+                    value = integer_variables.get(value_token.text)
+                if value is not None:
+                    array_slots[slot_variable][token.text] = value
+                    array_offsets.setdefault(slot_variable, token.start)
+
+            if (
+                token.kind == "ident"
+                and index + 4 < len(tokens)
+                and tokens[index + 1].text == "."
+                and tokens[index + 2].kind == "ident"
+                and tokens[index + 3].text == "="
+                and tokens[index + 4].kind == "ident"
+            ):
+                listener = token.text
+                member = tokens[index + 2].text
+                value = tokens[index + 4].text
+                if member == "slot":
+                    listener_slots[listener] = value
+                elif member == "cb":
+                    listener_closures[listener] = value
+
+            index += 1
+
+        for listener, closure_variable in listener_closures.items():
+            if closure_variable in used_closures:
+                continue
+            closure_class = variable_classes.get(closure_variable)
+            slot_variable = listener_slots.get(listener)
+            if closure_class is None or slot_variable is None:
+                continue
+            fields = array_slots.get(slot_variable, {})
+            if not {"usb", "tsb", "ssb", "rsb"} <= fields.keys():
+                continue
+            add_row(
+                function_name=function_name,
+                function_start=function_start,
+                byte_offset=array_offsets.get(slot_variable, 0),
+                unit_id=fields["usb"],
+                ability_id=fields["tsb"],
+                target_mode=fields["ssb"],
+                order_id=fields["rsb"],
+                order_expression_kind="integer",
+                expected_immediate_unit_id=fields.get("qsb", 0),
+                closure_variable=closure_variable,
+                closure_class=closure_class,
+                evidence_kind="inlined-registration",
+            )
+
+    rows.sort(key=lambda row: (int(row["byte_offset"]), int(row["unit_id"]), int(row["ability_id"])))
+    return rows
+
+
 def _extract_corpse_building_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
@@ -2511,6 +2752,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     )
     function_aliases, function_value_arguments = _function_value_links(data, functions)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
+    unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
     corpse_building_mechanics = _extract_corpse_building_mechanics(data, functions, building_spell_registrations)
     building_spell_mechanics = _extract_building_spell_mechanics(
         data, functions, building_spell_registrations, corpse_building_mechanics
@@ -2543,6 +2785,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
         "building_spell_registrations": building_spell_registrations,
+        "unit_spell_registrations": unit_spell_registrations,
         "corpse_building_mechanics": corpse_building_mechanics,
         "building_spell_mechanics": building_spell_mechanics,
     }

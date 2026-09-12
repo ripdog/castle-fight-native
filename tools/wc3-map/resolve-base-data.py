@@ -1652,6 +1652,72 @@ def main() -> None:
         production_ability_rows,
     )
 
+    unit_spell_rows: list[list[Any]] = []
+    unit_spell_production_rows = 0
+    unit_spell_registration_path = map_root / "script" / "unit-spell-registrations.tsv"
+    production_source_by_unit: dict[str, dict[str, str]] = {}
+    if effective_unit_path.exists():
+        with effective_unit_path.open(encoding="utf-8", newline="") as handle:
+            production_source_by_unit = {
+                row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")
+            }
+    if unit_spell_registration_path.exists():
+        with unit_spell_registration_path.open(encoding="utf-8", newline="") as handle:
+            for registration in csv.DictReader(handle, delimiter="\t"):
+                unit_rawcode = registration["unit_rawcode"]
+                ability_rawcode = registration["ability_rawcode"]
+                unit = static_units.get(unit_rawcode)
+                if unit is None:
+                    raise ValueError(f"scripted unit-spell registration has no resolved unit definition: {unit_rawcode}")
+                definitions = ability_levels.get(ability_rawcode, [])
+                definition = next((row for row in definitions if row["level"] == "1"), None)
+                definition_source = "map-resolved"
+                if definition is None:
+                    definition = inherited_ability_level_one(ability_rawcode)
+                    definition_source = "inherited-base"
+                if definition is None:
+                    raise ValueError(f"scripted unit-spell registration has no ability definition: {ability_rawcode}")
+                runtime_mana = protected_ability_values.get((ability_rawcode, 1, "mana_cost"))
+                runtime_cooldown = protected_ability_values.get((ability_rawcode, 1, "cooldown"))
+                effective_mana = runtime_mana if runtime_mana is not None else definition["mana_cost"]
+                effective_cooldown = runtime_cooldown if runtime_cooldown is not None else definition["cooldown"]
+                production = production_source_by_unit.get(unit_rawcode)
+                if production is not None:
+                    unit_spell_production_rows += 1
+                expected_rawcode = registration["expected_immediate_unit_rawcode"]
+                expected_name = ""
+                if expected_rawcode:
+                    expected = static_units.get(expected_rawcode)
+                    expected_name = expected["name"] if expected is not None else registration["expected_immediate_unit_names"]
+                base_order = value_as_text(field_lookup(rows_by_object, "abilities", ability_rawcode, "aord", 0, 0))
+                unit_spell_rows.append([
+                    unit_rawcode, unit["name"],
+                    production["building_rawcode"] if production is not None else "",
+                    production["building_names"] if production is not None else "",
+                    ability_rawcode, definition_source, definition["base_rawcode"], definition["name"], definition["tip"], definition["ubertip"],
+                    definition["mana_cost"], effective_mana, "protected-runtime" if runtime_mana is not None else "static-resolved",
+                    definition["cooldown"], effective_cooldown, "protected-runtime" if runtime_cooldown is not None else "static-resolved",
+                    base_order, definition["range"], definition["area"], definition["targets"], definition["buffs"],
+                    definition["data_fields_json"], definition["data_fields_labeled_json"],
+                    registration["target_mode"], registration["target_mode_label"], registration["order_id"], registration["order_expression_kind"],
+                    expected_rawcode, expected_name,
+                    registration["handler_function"], registration["registration_function"], registration["evidence_kind"], registration["byte_offset"],
+                ])
+    write_tsv(
+        output / "unit-spells.tsv",
+        [
+            "unit_rawcode", "unit_names", "production_building_rawcode", "production_building_names",
+            "ability_rawcode", "definition_source", "base_rawcode", "ability_name", "ability_tip", "ability_ubertip",
+            "static_mana_cost", "effective_mana_cost", "mana_cost_source",
+            "static_cooldown", "effective_cooldown", "cooldown_source",
+            "base_order", "range", "area", "targets", "buffs", "data_fields_json", "data_fields_labeled_json",
+            "target_mode", "target_mode_label", "registered_order_id", "order_expression_kind",
+            "expected_immediate_unit_rawcode", "expected_immediate_unit_name",
+            "handler_function", "registration_function", "evidence_kind", "byte_offset",
+        ],
+        unit_spell_rows,
+    )
+
     # Join the map's generated UnitObjectMeta table to its complete race
     # partition and authored upgrade graph. This is the preferred native import
     # view for Castle Fight building/production definitions: spawn time and
@@ -2199,6 +2265,9 @@ def main() -> None:
         "production_unit_unique_abilities": len(production_ability_unique),
         "production_unit_inherited_ability_links": production_ability_inherited_links,
         "production_unit_ability_links_with_protected_runtime_fields": production_ability_runtime_field_links,
+        "scripted_unit_spell_rows": len(unit_spell_rows),
+        "scripted_unit_spell_production_rows": unit_spell_production_rows,
+        "scripted_unit_spell_target_modes": dict(sorted(Counter(row[24] for row in unit_spell_rows).items())),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
@@ -2233,6 +2302,7 @@ def main() -> None:
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
+            "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
             "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",

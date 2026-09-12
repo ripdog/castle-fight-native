@@ -297,6 +297,52 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(production_rows), 167)
         self.assertEqual({row["static_object_build_time"] for row in production_rows}, {"2"})
 
+    def test_scripted_unit_spell_registry_links_units_abilities_and_target_modes(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["scripted_unit_spell_rows"], 37)
+        self.assertEqual(summary["scripted_unit_spell_production_rows"], 35)
+        self.assertEqual(summary["scripted_unit_spell_target_modes"], {
+            "ally-any": 2,
+            "ally-ground": 10,
+            "ally-structure": 1,
+            "enemy-flying-combat-sapper": 3,
+            "enemy-ground-combat-sapper": 20,
+            "immediate-enemy-special-unit": 1,
+        })
+
+        with (self.resolved / "unit-spells.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 37)
+
+        giant = rows["e00F"]
+        self.assertEqual(giant["unit_names"], "Mountain Giant")
+        self.assertEqual(giant["production_building_names"], "Monolith")
+        self.assertEqual(giant["ability_rawcode"], "A0BJ")
+        self.assertEqual(giant["target_mode_label"], "enemy-ground-combat-sapper")
+        self.assertEqual(giant["base_order"], "parasite")
+        self.assertEqual(giant["effective_cooldown"], "15.0")
+        self.assertEqual(giant["cooldown_source"], "protected-runtime")
+
+        mine_layer = rows["h06U"]
+        self.assertEqual(mine_layer["target_mode_label"], "immediate-enemy-special-unit")
+        self.assertEqual(mine_layer["expected_immediate_unit_rawcode"], "h09M")
+        self.assertEqual(mine_layer["expected_immediate_unit_name"], "MineDummy")
+        self.assertEqual(mine_layer["evidence_kind"], "inlined-registration")
+
+        monk = rows["n03E"]
+        self.assertEqual(monk["target_mode_label"], "ally-any")
+        self.assertEqual(monk["base_order"], "heal")
+        self.assertEqual(monk["production_building_names"], "Bamboo Dojo")
+
+        mana_generator = rows["h062"]
+        self.assertEqual(mana_generator["target_mode_label"], "ally-structure")
+        self.assertEqual(mana_generator["base_order"], "absorb")
+        self.assertEqual(mana_generator["production_building_rawcode"], "")
+
+        twins = rows["n02L"]
+        self.assertEqual(twins["unit_names"], "Twin Smiley")
+        self.assertEqual(twins["production_building_rawcode"], "")
+
     def test_scripted_building_spells_recover_handlers_and_mana_timed_cadence(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_building_spell_rows"], 15)

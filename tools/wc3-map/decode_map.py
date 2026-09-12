@@ -769,6 +769,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     building_spell_registrations = analysis["building_spell_registrations"]
+    unit_spell_registrations = analysis["unit_spell_registrations"]
     corpse_building_mechanics = analysis["corpse_building_mechanics"]
     building_spell_mechanics = analysis["building_spell_mechanics"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
@@ -874,6 +875,43 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 ability_rawcode, ability_id, ability_names,
                 row["handler_function"], row["closure_class"], row["closure_variable"],
                 row["registration_function"], row["byte_offset"],
+            ])
+
+    with (script_dir / "unit-spell-registrations.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "unit_rawcode", "unit_rawcode_integer", "unit_names", "unit_categories",
+            "ability_rawcode", "ability_rawcode_integer", "ability_names", "ability_categories",
+            "target_mode", "target_mode_label", "order_id", "order_expression_kind",
+            "expected_immediate_unit_rawcode", "expected_immediate_unit_rawcode_integer", "expected_immediate_unit_names",
+            "handler_function", "closure_class", "closure_variable", "registration_function", "evidence_kind", "byte_offset",
+        ])
+        for row in unit_spell_registrations:
+            unit_id = int(row["unit_id"])
+            ability_id = int(row["ability_id"])
+            unit_rawcode = rawcode_text(unit_id)
+            unit_names = ""
+            unit_categories = ""
+            if unit_id in object_metadata:
+                unit_rawcode, unit_categories, _utables, unit_names, _udefs = rawcode_metadata(unit_id)
+            ability_rawcode = rawcode_text(ability_id)
+            ability_names = ""
+            ability_categories = ""
+            if ability_id in object_metadata:
+                ability_rawcode, ability_categories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
+            expected_id = int(row["expected_immediate_unit_id"])
+            expected_rawcode = rawcode_text(expected_id) if expected_id else ""
+            expected_names = ""
+            if expected_id and expected_id in object_metadata:
+                expected_rawcode, _ecategories, _etables, expected_names, _edefs = rawcode_metadata(expected_id)
+            writer.writerow([
+                unit_rawcode, unit_id, unit_names, unit_categories,
+                ability_rawcode, ability_id, ability_names, ability_categories,
+                row["target_mode"], row["target_mode_label"],
+                row["order_id"] if row["order_id"] is not None else "", row["order_expression_kind"],
+                expected_rawcode, expected_id if expected_id else "", expected_names,
+                row["handler_function"], row["closure_class"], row["closure_variable"],
+                row["registration_function"], row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "corpse-building-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1399,6 +1437,11 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         }),
         "building_spell_registrations": len(building_spell_registrations),
         "building_spell_handlers": len({str(row["handler_function"]) for row in building_spell_registrations}),
+        "unit_spell_registrations": len(unit_spell_registrations),
+        "unit_spell_handlers": len({str(row["handler_function"]) for row in unit_spell_registrations}),
+        "unit_spell_inlined_registrations": sum(
+            str(row["evidence_kind"]) == "inlined-registration" for row in unit_spell_registrations
+        ),
         "building_spell_mechanics": len(building_spell_mechanics),
         "building_spell_mechanics_with_unresolved_target_filter": sum(
             "unresolved" in str(row["evidence_kind"]) for row in building_spell_mechanics

@@ -356,6 +356,32 @@ class LuaIndexTests(unittest.TestCase):
             "byte_offset": source.find(b"_I[_d[1]]"),
         }])
 
+    def test_recovers_unit_spell_registration_from_closure_dispatch(self) -> None:
+        source = (
+            "function handler(caster,target) return target end "
+            "qx.UnitSpellClosure_cast1=handler "
+            "function init() local closure=nil closure=qx:create99() "
+            "_I[_d[2]](1747989334,1093682481,2,852063,closure) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747989334, 1093682481})
+
+        self.assertEqual(indexed["unit_spell_registrations"], [{
+            "unit_id": 1747989334,
+            "ability_id": 1093682481,
+            "target_mode": 2,
+            "target_mode_label": "ally-ground",
+            "order_id": 852063,
+            "order_expression_kind": "integer",
+            "expected_immediate_unit_id": 0,
+            "closure_variable": "closure",
+            "closure_class": "qx",
+            "handler_function": "handler",
+            "registration_function": "init",
+            "evidence_kind": "protected-registry-call",
+            "byte_offset": source.find(b"_I[_d[2]]"),
+        }])
+
     def test_indexes_generated_function_alias_assignments_without_making_call_edges(self) -> None:
         source = (
             "function handler(unit) BlzSetUnitArmor(unit,4.0) end "
