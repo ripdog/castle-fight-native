@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::math::SimPoint;
 
+const NONE: usize = usize::MAX;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SpatialPartition {
     pub team: u8,
@@ -29,6 +31,26 @@ impl SpatialPartition {
 pub struct SpatialGrid {
     cell_size: i32,
     buckets: HashMap<(SpatialPartition, i32, i32), Vec<usize>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ReservationEntry {
+    component: u32,
+    position: SimPoint,
+    bucket: usize,
+}
+
+#[derive(Debug)]
+pub struct SpatialReservationGrid {
+    cell_size: i32,
+    min_cell_x: i32,
+    min_cell_y: i32,
+    width: usize,
+    height: usize,
+    heads: Vec<usize>,
+    next: Vec<usize>,
+    prev: Vec<usize>,
+    entries: Vec<Option<ReservationEntry>>,
 }
 
 impl SpatialGrid {
@@ -76,6 +98,149 @@ impl SpatialGrid {
     }
 }
 
+impl SpatialReservationGrid {
+    #[must_use]
+    pub fn build(
+        cell_size: i32,
+        bounds_min: SimPoint,
+        bounds_max: SimPoint,
+        entry_capacity: usize,
+        entries: impl IntoIterator<Item = (u32, usize, SimPoint)>,
+    ) -> Self {
+        assert!(cell_size > 0);
+        assert!(bounds_max.x >= bounds_min.x && bounds_max.y >= bounds_min.y);
+        let (min_cell_x, min_cell_y) = cell_of(bounds_min, cell_size);
+        let (max_cell_x, max_cell_y) = cell_of(bounds_max, cell_size);
+        let width =
+            usize::try_from(max_cell_x - min_cell_x + 1).expect("reservation grid width overflow");
+        let height =
+            usize::try_from(max_cell_y - min_cell_y + 1).expect("reservation grid height overflow");
+        let bucket_count = width
+            .checked_mul(height)
+            .expect("reservation grid too large");
+        let mut grid = Self {
+            cell_size,
+            min_cell_x,
+            min_cell_y,
+            width,
+            height,
+            heads: vec![NONE; bucket_count],
+            next: vec![NONE; entry_capacity],
+            prev: vec![NONE; entry_capacity],
+            entries: vec![None; entry_capacity],
+        };
+        for (component, index, position) in entries {
+            grid.insert(component, index, position);
+        }
+        grid
+    }
+
+    pub fn remove(&mut self, index: usize) {
+        let Some(entry) = self.entries.get_mut(index).and_then(Option::take) else {
+            return;
+        };
+        let previous = self.prev[index];
+        let next = self.next[index];
+        if previous == NONE {
+            self.heads[entry.bucket] = next;
+        } else {
+            self.next[previous] = next;
+        }
+        if next != NONE {
+            self.prev[next] = previous;
+        }
+        self.prev[index] = NONE;
+        self.next[index] = NONE;
+    }
+
+    pub fn insert(&mut self, component: u32, index: usize, position: SimPoint) {
+        assert!(
+            index < self.entries.len(),
+            "reservation index out of bounds"
+        );
+        assert!(
+            self.entries[index].is_none(),
+            "reservation already occupied"
+        );
+        let bucket = self
+            .bucket_index(position)
+            .expect("reservation position outside configured bounds");
+        let head = self.heads[bucket];
+        self.heads[bucket] = index;
+        self.next[index] = head;
+        self.prev[index] = NONE;
+        if head != NONE {
+            self.prev[head] = index;
+        }
+        self.entries[index] = Some(ReservationEntry {
+            component,
+            position,
+            bucket,
+        });
+    }
+
+    #[must_use]
+    pub fn is_clear(&self, component: u32, position: SimPoint, minimum_distance: i32) -> bool {
+        debug_assert!(minimum_distance >= 0);
+        let minimum_distance_sq = {
+            let distance = i64::from(minimum_distance);
+            (distance * distance) as u64
+        };
+        let min = SimPoint::new(position.x - minimum_distance, position.y - minimum_distance);
+        let max = SimPoint::new(position.x + minimum_distance, position.y + minimum_distance);
+        let (mut min_x, mut min_y) = cell_of(min, self.cell_size);
+        let (mut max_x, mut max_y) = cell_of(max, self.cell_size);
+        let grid_max_x = self.min_cell_x + self.width as i32 - 1;
+        let grid_max_y = self.min_cell_y + self.height as i32 - 1;
+        min_x = min_x.max(self.min_cell_x);
+        min_y = min_y.max(self.min_cell_y);
+        max_x = max_x.min(grid_max_x);
+        max_y = max_y.min(grid_max_y);
+        if min_x > max_x || min_y > max_y {
+            return true;
+        }
+
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let bucket = self.bucket_index_from_cell(x, y);
+                let mut index = self.heads[bucket];
+                while index != NONE {
+                    let entry =
+                        self.entries[index].expect("reservation list referenced missing entry");
+                    if entry.component == component
+                        && position.distance_sq(entry.position) < minimum_distance_sq
+                    {
+                        return false;
+                    }
+                    index = self.next[index];
+                }
+            }
+        }
+        true
+    }
+
+    fn bucket_index(&self, position: SimPoint) -> Option<usize> {
+        let (x, y) = cell_of(position, self.cell_size);
+        if x < self.min_cell_x || y < self.min_cell_y {
+            return None;
+        }
+        let local_x = usize::try_from(x - self.min_cell_x).ok()?;
+        let local_y = usize::try_from(y - self.min_cell_y).ok()?;
+        if local_x >= self.width || local_y >= self.height {
+            return None;
+        }
+        local_y.checked_mul(self.width)?.checked_add(local_x)
+    }
+
+    fn bucket_index_from_cell(&self, x: i32, y: i32) -> usize {
+        let local_x = usize::try_from(x - self.min_cell_x)
+            .expect("reservation x cell below configured bounds");
+        let local_y = usize::try_from(y - self.min_cell_y)
+            .expect("reservation y cell below configured bounds");
+        local_y * self.width + local_x
+    }
+}
+
 fn cell_of(point: SimPoint, cell_size: i32) -> (i32, i32) {
     (point.x.div_euclid(cell_size), point.y.div_euclid(cell_size))
 }
@@ -108,5 +273,23 @@ mod tests {
         let mut found = Vec::new();
         grid.for_each_candidate(wanted, SimPoint::new(5, 5), 10, |index| found.push(index));
         assert_eq!(found, vec![1]);
+    }
+
+    #[test]
+    fn reservation_grid_moves_entries_without_losing_neighbors() {
+        let mut grid = SpatialReservationGrid::build(
+            10,
+            SimPoint::new(0, 0),
+            SimPoint::new(99, 99),
+            2,
+            [(7, 0, SimPoint::new(10, 10)), (7, 1, SimPoint::new(30, 10))],
+        );
+        assert!(!grid.is_clear(7, SimPoint::new(12, 10), 5));
+        assert!(grid.is_clear(7, SimPoint::new(20, 10), 5));
+
+        grid.remove(0);
+        assert!(grid.is_clear(7, SimPoint::new(12, 10), 5));
+        grid.insert(7, 0, SimPoint::new(50, 10));
+        assert!(!grid.is_clear(7, SimPoint::new(48, 10), 5));
     }
 }

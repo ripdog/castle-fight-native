@@ -232,7 +232,11 @@ The first implementation SHOULD prefer simple, testable steering over physically
 
 A combat unit that reaches attack range stops its strategic forward movement to fight. Units queued behind that engagement do **not** treat the engaged unit as permanent topology: when lateral traversable space exists, local steering SHOULD sidestep around the stationary fight and continue toward a reachable attack position. A deterministic `SimId`-derived side preference may break perfectly symmetric congestion. If geometry genuinely leaves no room to pass, ordinary congestion is allowed and no teleport/push-through exception is created.
 
-The verification implementation uses a deterministic two-stage crowd pass. Units first compute movement intents from one immutable phase snapshot. A second data-parallel pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps and symmetric sidestep choices, so worker scheduling and neighbor enumeration order cannot alter results. The final separated position is accepted only if it remains traversable and in the unit's original connected navigation component.
+The verification implementation uses deterministic movement intent plus local crowd resolution. Units first compute movement intents from one immutable phase snapshot. A data-parallel steering pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps and symmetric sidestep choices, so worker scheduling and neighbor enumeration order cannot alter results.
+
+Soft separation is a steering/game-feel mechanism, **not** the correctness boundary. After steering, a deterministic hard reservation/commit pass MUST reject any proposed final position that would overlap another live collision-enabled combat unit in the same traversable component. It may choose a bounded local alternate position or leave the unit at its previous legal position; it MUST NOT resolve pressure by compressing units into overlapping space or teleporting them through blockers.
+
+After a completed movement commit, two ordinary collision-enabled combat units MUST NOT occupy overlapping authoritative collision footprints. Production and building placement SHOULD prevent impossible overpacked states from being created in the first place; when there is no legal movement space, units queue or flow around one another rather than violating the collision invariant.
 
 The initial separation distance/strength are verification parameters rather than frozen gameplay constants; they should be tuned from measured congestion/game-feel fixtures.
 
@@ -319,5 +323,7 @@ Spatial/navigation tests MUST eventually include:
 16. builder cannot complete a cage and is absent from ordinary combat target queries;
 17. exact-overlap crowd separation is deterministic across worker counts;
 18. separation cannot move a unit through blocked topology or into another disconnected component;
-19. in a perfectly aligned three-unit melee column meeting a mirrored enemy column, the front engagement stops while rear units deterministically sidestep through available lateral space and eventually reach an attack position;
-19. dense opposing crowds remain benchmarked separately from ordinary lane movement.
+19. sustained convergence on one destination never commits overlapping live unit collision footprints;
+20. in a perfectly aligned three-unit melee column meeting a mirrored enemy column, the front engagement stops while rear units deterministically sidestep through available lateral space and eventually reach an attack position;
+21. when no legal lateral/forward position exists, trailing units remain queued rather than compressing through the frontline;
+22. dense opposing crowds remain benchmarked separately from ordinary lane movement.

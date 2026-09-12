@@ -16,7 +16,7 @@ pub fn populate_lane_battle(simulation: &mut Simulation, total_units: usize) {
 
     let per_team = total_units / 2;
     let columns = 32usize;
-    let spacing = SUBUNITS_PER_WORLD_UNIT / 2;
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
     let front_left = 48 * SUBUNITS_PER_WORLD_UNIT;
     let front_right = 72 * SUBUNITS_PER_WORLD_UNIT;
 
@@ -57,8 +57,8 @@ pub fn populate_crossing_crowd(simulation: &mut Simulation, total_units: usize) 
     assert!(total_units >= 2 && total_units.is_multiple_of(2));
 
     let per_team = total_units / 2;
-    let columns = 100usize;
-    let spacing = SUBUNITS_PER_WORLD_UNIT / 3;
+    let columns = 50usize;
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
     let center_x = 60 * SUBUNITS_PER_WORLD_UNIT;
     let attack = AttackProfile {
         delivery: AttackDelivery::Melee,
@@ -75,12 +75,11 @@ pub fn populate_crossing_crowd(simulation: &mut Simulation, total_units: usize) 
         for index in 0..per_team {
             let column = (index % columns) as i32;
             let row = (index / columns) as i32;
-            let x_offset = (column - columns as i32 / 2) * spacing;
             let y = (row - per_team.div_ceil(columns) as i32 / 2) * spacing;
             let x = if team == 0 {
-                center_x - 2 * SUBUNITS_PER_WORLD_UNIT + x_offset
+                center_x - 4 * SUBUNITS_PER_WORLD_UNIT - column * spacing
             } else {
-                center_x + 2 * SUBUNITS_PER_WORLD_UNIT - x_offset
+                center_x + 4 * SUBUNITS_PER_WORLD_UNIT + column * spacing
             };
             simulation.spawn_unit(UnitSpawn {
                 team: Team(team),
@@ -102,10 +101,10 @@ pub fn populate_dense_cage_battle(simulation: &mut Simulation, total_units: usiz
 
     let cage_team = Team(1);
     for footprint in [
-        BuildingFootprint::new(59, -9, 1, 19),
-        BuildingFootprint::new(68, -9, 1, 19),
-        BuildingFootprint::new(60, -9, 8, 1),
-        BuildingFootprint::new(60, 9, 8, 1),
+        BuildingFootprint::new(55, -58, 1, 117),
+        BuildingFootprint::new(112, -58, 1, 117),
+        BuildingFootprint::new(56, -58, 56, 1),
+        BuildingFootprint::new(56, 58, 56, 1),
     ] {
         simulation.spawn_building(BuildingSpawn {
             team: cage_team,
@@ -127,14 +126,16 @@ pub fn populate_dense_cage_battle(simulation: &mut Simulation, total_units: usiz
     };
     let per_team = total_units / 2;
 
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let outside_columns = 48usize;
     for index in 0..per_team {
-        let column = (index % 16) as i32;
-        let row = (index / 16) as i32;
+        let column = (index % outside_columns) as i32;
+        let row = (index / outside_columns) as i32;
         simulation.spawn_unit(UnitSpawn {
             team: Team(0),
             position: SimPoint::new(
-                (58 * SUBUNITS_PER_WORLD_UNIT) - column * (SUBUNITS_PER_WORLD_UNIT / 3),
-                ((row % 48) - 24) * (SUBUNITS_PER_WORLD_UNIT / 3),
+                54 * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 2 - column * spacing,
+                (row - per_team.div_ceil(outside_columns) as i32 / 2) * spacing,
             ),
             health: 10_000,
             attack,
@@ -142,17 +143,15 @@ pub fn populate_dense_cage_battle(simulation: &mut Simulation, total_units: usiz
         });
     }
 
+    let inside_columns = 64usize;
     for index in 0..per_team {
-        let cell_x = 60 + (index % 8) as i32;
-        let cell_y = -8 + ((index / 8) % 17) as i32;
-        let subcell = (index / (8 * 17)) as i32;
-        let jitter_x = (subcell % 8) * (SUBUNITS_PER_WORLD_UNIT / 16);
-        let jitter_y = ((subcell / 8) % 8) * (SUBUNITS_PER_WORLD_UNIT / 16);
+        let column = (index % inside_columns) as i32;
+        let row = (index / inside_columns) as i32;
         simulation.spawn_unit(UnitSpawn {
             team: cage_team,
             position: SimPoint::new(
-                cell_x * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 4 + jitter_x,
-                cell_y * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 4 + jitter_y,
+                56 * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 2 + column * spacing,
+                (row - per_team.div_ceil(inside_columns) as i32 / 2) * spacing,
             ),
             health: 10_000,
             attack,

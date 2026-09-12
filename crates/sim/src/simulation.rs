@@ -13,7 +13,7 @@ use crate::{
         SpawnTick, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
-    spatial::{SpatialGrid, SpatialPartition},
+    spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
     topology::{NavCell, TopologyGrid},
 };
 
@@ -1125,8 +1125,14 @@ impl Simulation {
         let separation_start = Instant::now();
         let separated_positions =
             self.apply_crowd_separation(units, unit_health, &desired_positions);
+        let legal_positions = self.enforce_hard_non_overlap(
+            units,
+            unit_health,
+            &desired_positions,
+            &separated_positions,
+        );
         let crowd_separation = separation_start.elapsed();
-        positions.copy_from_slice(&separated_positions);
+        positions.copy_from_slice(&legal_positions);
         crowd_separation
     }
 
@@ -1310,6 +1316,154 @@ impl Simulation {
                 })
                 .collect()
         })
+    }
+
+    fn enforce_hard_non_overlap(
+        &self,
+        units: &[UnitSnapshot],
+        unit_health: &[i32],
+        desired_positions: &[SimPoint],
+        separated_positions: &[SimPoint],
+    ) -> Vec<SimPoint> {
+        let minimum_distance = self.config.unit_separation_distance;
+        if minimum_distance == 0 {
+            return separated_positions.to_vec();
+        }
+
+        let entries = units.iter().enumerate().filter_map(|(index, unit)| {
+            if unit_health[index] <= 0 {
+                return None;
+            }
+            let component = self
+                .topology
+                .component_id(self.topology.cell_of_point(unit.position))?;
+            Some((component, index, unit.position))
+        });
+        let (bounds_min, bounds_max) = self.navigation_world_bounds();
+        let mut reservations = SpatialReservationGrid::build(
+            minimum_distance.max(1),
+            bounds_min,
+            bounds_max,
+            units.len(),
+            entries,
+        );
+        let mut result: Vec<_> = units.iter().map(|unit| unit.position).collect();
+        let lateral = self.config.max_separation_per_tick.max(1);
+
+        for (index, unit) in units.iter().enumerate() {
+            if unit_health[index] <= 0 {
+                continue;
+            }
+            let original_cell = self.topology.cell_of_point(unit.position);
+            let Some(component) = self.topology.component_id(original_cell) else {
+                continue;
+            };
+            reservations.remove(index);
+
+            let desired = desired_positions[index];
+            let separated = separated_positions[index];
+            let sidestep_distance = unit.movement.speed_per_tick.max(lateral).max(1);
+            let preferred_side =
+                perpendicular_step(unit.id, unit.position, desired, sidestep_distance);
+            let opposite_side = SimPoint::new(-preferred_side.x, -preferred_side.y);
+            let candidates = [
+                Some(separated),
+                Some(desired),
+                offset_point(unit.position, preferred_side.x, preferred_side.y),
+                offset_point(unit.position, opposite_side.x, opposite_side.y),
+                Some(unit.position),
+            ];
+
+            let chosen = candidates
+                .into_iter()
+                .flatten()
+                .find(|candidate| {
+                    self.position_is_traversable_from(original_cell, *candidate)
+                        && reservations.is_clear(component, *candidate, minimum_distance)
+                })
+                .or_else(|| {
+                    self.find_local_non_overlap_position(
+                        unit.position,
+                        original_cell,
+                        component,
+                        minimum_distance,
+                        &reservations,
+                    )
+                })
+                .expect("legal simulation state had no non-overlapping unit position");
+
+            reservations.insert(component, index, chosen);
+            result[index] = chosen;
+        }
+
+        result
+    }
+
+    fn find_local_non_overlap_position(
+        &self,
+        origin: SimPoint,
+        original_cell: NavCell,
+        component: u32,
+        minimum_distance: i32,
+        reservations: &SpatialReservationGrid,
+    ) -> Option<SimPoint> {
+        let step = (minimum_distance / 2).max(1);
+        let max_radius = self.config.navigation_cell_size.max(step);
+        let max_ring = (max_radius + step - 1) / step;
+
+        for ring in 1..=max_ring {
+            let distance = ring.checked_mul(step)?;
+            for x_step in -ring..=ring {
+                let x = x_step.checked_mul(step)?;
+                for y in [-distance, distance] {
+                    let Some(candidate) = offset_point(origin, x, y) else {
+                        continue;
+                    };
+                    if self.position_is_traversable_from(original_cell, candidate)
+                        && reservations.is_clear(component, candidate, minimum_distance)
+                    {
+                        return Some(candidate);
+                    }
+                }
+            }
+            for y_step in (-ring + 1)..=(ring - 1) {
+                let y = y_step.checked_mul(step)?;
+                for x in [-distance, distance] {
+                    let Some(candidate) = offset_point(origin, x, y) else {
+                        continue;
+                    };
+                    if self.position_is_traversable_from(original_cell, candidate)
+                        && reservations.is_clear(component, candidate, minimum_distance)
+                    {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn navigation_world_bounds(&self) -> (SimPoint, SimPoint) {
+        let cell_size = i64::from(self.config.navigation_cell_size);
+        let min_x = i64::from(self.config.navigation_min.x) * cell_size;
+        let min_y = i64::from(self.config.navigation_min.y) * cell_size;
+        let max_x = (i64::from(self.config.navigation_max.x) + 1) * cell_size - 1;
+        let max_y = (i64::from(self.config.navigation_max.y) + 1) * cell_size - 1;
+        (
+            SimPoint::new(
+                i32::try_from(min_x).expect("navigation minimum x overflow"),
+                i32::try_from(min_y).expect("navigation minimum y overflow"),
+            ),
+            SimPoint::new(
+                i32::try_from(max_x).expect("navigation maximum x overflow"),
+                i32::try_from(max_y).expect("navigation maximum y overflow"),
+            ),
+        )
+    }
+
+    fn position_is_traversable_from(&self, original_cell: NavCell, candidate: SimPoint) -> bool {
+        let cell = self.topology.cell_of_point(candidate);
+        !self.topology.is_blocked(cell) && self.topology.same_component(original_cell, cell)
     }
 
     fn valid_separated_position(
@@ -1514,6 +1668,13 @@ fn square_i32(value: i32) -> u64 {
     (value * value) as u64
 }
 
+fn offset_point(point: SimPoint, x: i32, y: i32) -> Option<SimPoint> {
+    Some(SimPoint::new(
+        point.x.checked_add(x)?,
+        point.y.checked_add(y)?,
+    ))
+}
+
 fn exact_overlap_direction(a: SimId, b: SimId) -> (i32, i32) {
     debug_assert_ne!(a, b);
     let (low, high, sign) = if a < b { (a.0, b.0, -1) } else { (b.0, a.0, 1) };
@@ -1524,6 +1685,20 @@ fn exact_overlap_direction(a: SimId, b: SimId) -> (i32, i32) {
 fn sidestep_sign(id: SimId) -> i32 {
     let mixed = id.0 ^ id.0.rotate_left(21) ^ 0x9e37_79b9_7f4a_7c15;
     if mixed & 1 == 0 { -1 } else { 1 }
+}
+
+fn perpendicular_step(id: SimId, from: SimPoint, toward: SimPoint, distance: i32) -> SimPoint {
+    let dx = i64::from(toward.x) - i64::from(from.x);
+    let dy = i64::from(toward.y) - i64::from(from.y);
+    if dx == 0 && dy == 0 {
+        return SimPoint::new(0, sidestep_sign(id) * distance);
+    }
+    let side = i64::from(sidestep_sign(id));
+    let raw = SimPoint::new(
+        i32::try_from(-dy * side).expect("sidestep x overflow"),
+        i32::try_from(dx * side).expect("sidestep y overflow"),
+    );
+    SimPoint::new(0, 0).step_towards(raw, distance)
 }
 
 fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {

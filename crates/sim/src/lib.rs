@@ -417,6 +417,66 @@ mod tests {
     }
 
     #[test]
+    fn converging_crowd_never_commits_overlapping_units() {
+        let mut config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(40, 20),
+            team_objective: [
+                SimPoint::new(40 * SUBUNITS_PER_WORLD_UNIT, 10 * SUBUNITS_PER_WORLD_UNIT),
+                SimPoint::new(0, 10 * SUBUNITS_PER_WORLD_UNIT),
+            ],
+            ..SimulationConfig::default()
+        };
+        config.unit_separation_distance = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+        let minimum_distance_sq = {
+            let distance = i64::from(config.unit_separation_distance);
+            (distance * distance) as u64
+        };
+        let mut sim = Simulation::new(config, 4);
+        let template = UnitTemplate {
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 4,
+            },
+        };
+
+        for y in 1..=10 {
+            for x in 1..=10 {
+                sim.spawn_unit(UnitSpawn::from_template(
+                    Team(0),
+                    SimPoint::new(x * SUBUNITS_PER_WORLD_UNIT, y * SUBUNITS_PER_WORLD_UNIT),
+                    template,
+                ));
+            }
+        }
+
+        for _ in 0..300 {
+            sim.step();
+            let units = sim.units();
+            for (index, unit) in units.iter().enumerate() {
+                for other in &units[index + 1..] {
+                    assert!(
+                        unit.position.distance_sq(other.position) >= minimum_distance_sq,
+                        "units {:?} and {:?} overlap at tick {}: {:?} vs {:?}",
+                        unit.id,
+                        other.id,
+                        sim.tick(),
+                        unit.position,
+                        other.position,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn crowd_separation_is_worker_count_independent() {
         let mut expected = None;
         for workers in [1, 2, 4, 8] {

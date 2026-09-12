@@ -62,7 +62,9 @@ Examples:
 - builder-held offensive item does not provoke targeting of builder;
 - map-wide aura item survives snapshot/reload;
 - 10,000-unit synthetic lane battle;
-- high-density pile/congestion case.
+- high-density pile/congestion case;
+- sustained many-unit convergence on one destination with no committed collision overlap;
+- terminal victory state does not advance further production/movement/combat ticks.
 
 Golden hashes may be updated only when an intentional simulation-compatible break/rules change is reviewed and documented.
 
@@ -77,6 +79,7 @@ Examples:
 - spatial grid result set equals brute-force result set;
 - snapshot encode/decode preserves canonical state;
 - `SimId` allocation never duplicates;
+- every completed movement commit preserves the configured live-unit non-overlap invariant;
 - building placement/occupancy round-trip agrees;
 - deterministic RNG returns same value independent of call order;
 - ordinary combat entities cannot be the subject of a player-order command;
