@@ -470,6 +470,153 @@ def _cross_check_protected_ability_fields(
         jass_row["canonical_relation"] = "canonical-match"
 
 
+def _decimal_text(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _expect_token(tokens: list[LuaToken], index: int, text: str) -> LuaToken:
+    if index >= len(tokens) or tokens[index].text != text:
+        actual = tokens[index].text if index < len(tokens) else "<eof>"
+        raise ValueError(f"expected Lua token {text!r}, got {actual!r}")
+    return tokens[index]
+
+
+def _parse_int_to_real(tokens: list[LuaToken], index: int) -> tuple[Decimal, int]:
+    _expect_token(tokens, index, "int_toReal")
+    _expect_token(tokens, index + 1, "(")
+    value = tokens[index + 2]
+    if value.kind != "number" or value.integer_value is None:
+        raise ValueError("int_toReal effective-stat source must use an integer literal")
+    _expect_token(tokens, index + 3, ")")
+    return Decimal(int(value.integer_value)), index + 4
+
+
+def _parse_scaled_int_to_real(tokens: list[LuaToken], index: int) -> tuple[Decimal, int]:
+    _expect_token(tokens, index, "(")
+    numerator, next_index = _parse_int_to_real(tokens, index + 1)
+    _expect_token(tokens, next_index, "/")
+    denominator_tokens = [tokens[next_index + 1]]
+    denominator = Decimal(_numeric_literal_text(denominator_tokens))
+    if denominator == 0:
+        raise ValueError("effective-stat scale denominator must be nonzero")
+    _expect_token(tokens, next_index + 2, ")")
+    return numerator / denominator, next_index + 3
+
+
+def _extract_effective_unit_stats(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover Wurst's generated building→spawned-unit effective stat catalog."""
+    body = _function_body_tokens(data, functions, "xO")
+    if body is None:
+        return []
+    function_start, tokens = body
+    rows: list[dict[str, object]] = []
+    seen_buildings: set[int] = set()
+    seen_units: set[int] = set()
+    index = 0
+
+    def assignment_prefix(at: int, variable: str, field: str) -> int:
+        _expect_token(tokens, at, variable)
+        _expect_token(tokens, at + 1, ".")
+        _expect_token(tokens, at + 2, field)
+        _expect_token(tokens, at + 3, "=")
+        return at + 4
+
+    while index + 6 < len(tokens):
+        token = tokens[index]
+        if not (
+            token.kind == "ident"
+            and tokens[index + 1].text == "="
+            and tokens[index + 2].text == "PB"
+            and tokens[index + 3].text == ":"
+            and tokens[index + 4].text == "create1139"
+            and tokens[index + 5].text == "("
+            and tokens[index + 6].text == ")"
+        ):
+            index += 1
+            continue
+
+        variable = token.text
+        cursor = index + 7
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_unitId")
+        unit_token = tokens[cursor]
+        if unit_token.kind != "number" or unit_token.integer_value is None:
+            raise ValueError("effective unit stat unitId must be an integer literal")
+        unit_id = int(unit_token.integer_value)
+        cursor += 1
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_hp")
+        hp, cursor = _parse_int_to_real(tokens, cursor)
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_armor")
+        armor, cursor = _parse_scaled_int_to_real(tokens, cursor)
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_dps")
+        dps, cursor = _parse_scaled_int_to_real(tokens, cursor)
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_attackRange")
+        attack_range, cursor = _parse_int_to_real(tokens, cursor)
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_moveSpeed")
+        move_speed, cursor = _parse_int_to_real(tokens, cursor)
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_spawnsPerCycle")
+        spawn_token = tokens[cursor]
+        if spawn_token.kind != "number" or spawn_token.integer_value is None:
+            raise ValueError("effective unit stat spawnsPerCycle must be an integer literal")
+        spawns_per_cycle = int(spawn_token.integer_value)
+        cursor += 1
+
+        cursor = assignment_prefix(cursor, variable, "UnitEffectiveStat_canHitAir")
+        air_token = tokens[cursor]
+        if air_token.kind != "ident" or air_token.text not in {"true", "false"}:
+            raise ValueError("effective unit stat canHitAir must be a boolean literal")
+        can_hit_air = air_token.text == "true"
+        cursor += 1
+
+        _expect_token(tokens, cursor, "ZR")
+        _expect_token(tokens, cursor + 1, ":")
+        _expect_token(tokens, cursor + 2, "HashMap_put")
+        _expect_token(tokens, cursor + 3, "(")
+        building_token = tokens[cursor + 4]
+        if building_token.kind != "number" or building_token.integer_value is None:
+            raise ValueError("effective unit stat building ID must be an integer literal")
+        building_id = int(building_token.integer_value)
+        _expect_token(tokens, cursor + 5, ",")
+        _expect_token(tokens, cursor + 6, variable)
+        _expect_token(tokens, cursor + 7, ")")
+        cursor += 8
+
+        if building_id in seen_buildings:
+            raise ValueError(f"duplicate effective stat building ID in xO: {building_id}")
+        if unit_id in seen_units:
+            raise ValueError(f"duplicate effective stat unit ID in xO: {unit_id}")
+        seen_buildings.add(building_id)
+        seen_units.add(unit_id)
+        rows.append({
+            "building_id": building_id,
+            "unit_id": unit_id,
+            "hp": _decimal_text(hp),
+            "armor": _decimal_text(armor),
+            "dps": _decimal_text(dps),
+            "attack_range": _decimal_text(attack_range),
+            "move_speed": _decimal_text(move_speed),
+            "spawns_per_cycle": spawns_per_cycle,
+            "can_hit_air": can_hit_air,
+            "byte_offset": function_start + token.start,
+            "source_function": "xO",
+        })
+        index = cursor
+
+    return rows
+
+
 def _rawcode_mutator_traces(
     functions: list[dict[str, object]],
     call_edges: Counter[tuple[str, str]],
@@ -836,6 +983,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     protected_ability_fields = _extract_protected_ability_fields(data, functions)
     jass_add_protected_fields = _extract_jass_add_protected_fields(data, functions)
     _cross_check_protected_ability_fields(protected_ability_fields, jass_add_protected_fields)
+    effective_unit_stats = _extract_effective_unit_stats(data, functions)
 
     rawcode_mutator_traces, resolved_call_edges = _rawcode_mutator_traces(
         functions,
@@ -861,6 +1009,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "rawcode_mutator_traces": rawcode_mutator_traces,
         "protected_ability_fields": protected_ability_fields,
         "jass_add_protected_fields": jass_add_protected_fields,
+        "effective_unit_stats": effective_unit_stats,
         "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
     }

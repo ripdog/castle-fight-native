@@ -1164,6 +1164,83 @@ def main() -> None:
         protected_jass_rows,
     )
 
+    effective_unit_rows: list[list[Any]] = []
+    effective_unit_comparisons: dict[str, Counter[str]] = {
+        field: Counter() for field in ("hp", "armor", "dps", "attack_range", "move_speed")
+    }
+    effective_unit_path = map_root / "script" / "effective-unit-stats.tsv"
+    static_units: dict[str, dict[str, str]] = {}
+    with (output / "units.tsv").open(encoding="utf-8", newline="") as handle:
+        static_units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    def effective_comparison(runtime_value: str, static_value: str, *, tolerance: float = 1e-6) -> str:
+        runtime_number = numeric(runtime_value)
+        static_number = numeric(static_value)
+        if runtime_number is None or static_number is None:
+            return "static-missing"
+        return "static-match" if math.isclose(runtime_number, static_number, rel_tol=0.0, abs_tol=tolerance) else "static-differs"
+
+    if effective_unit_path.exists():
+        with effective_unit_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                static = static_units.get(row["unit_rawcode"], {})
+                static_values = {
+                    "hp": static.get("hp", ""),
+                    "armor": static.get("armor", ""),
+                    "dps": static.get("attack1_dps", ""),
+                    "attack_range": static.get("attack1_range", ""),
+                    "move_speed": static.get("move_speed", ""),
+                }
+                comparisons = {
+                    "hp": effective_comparison(row["hp"], static_values["hp"]),
+                    "armor": effective_comparison(row["armor"], static_values["armor"]),
+                    # xO stores DPS at hundredths precision, so treat the
+                    # corresponding quantization band as an exact catalog match.
+                    "dps": effective_comparison(row["dps"], static_values["dps"], tolerance=0.011),
+                    "attack_range": effective_comparison(row["attack_range"], static_values["attack_range"]),
+                    "move_speed": effective_comparison(row["move_speed"], static_values["move_speed"]),
+                }
+                for field, comparison in comparisons.items():
+                    effective_unit_comparisons[field][comparison] += 1
+                effective_unit_rows.append([
+                    row["building_rawcode"],
+                    row["building_names"],
+                    row["unit_rawcode"],
+                    row["unit_names"],
+                    row["hp"],
+                    static_values["hp"],
+                    comparisons["hp"],
+                    row["armor"],
+                    static_values["armor"],
+                    comparisons["armor"],
+                    row["dps"],
+                    static_values["dps"],
+                    comparisons["dps"],
+                    row["attack_range"],
+                    static_values["attack_range"],
+                    comparisons["attack_range"],
+                    row["move_speed"],
+                    static_values["move_speed"],
+                    comparisons["move_speed"],
+                    row["spawns_per_cycle"],
+                    row["can_hit_air"],
+                    row["source_function"],
+                    row["byte_offset"],
+                ])
+    write_tsv(
+        output / "effective-unit-stats.tsv",
+        [
+            "building_rawcode", "building_names", "unit_rawcode", "unit_names",
+            "effective_hp", "static_hp", "hp_comparison",
+            "effective_armor", "static_armor", "armor_comparison",
+            "effective_dps", "static_attack1_dps", "dps_comparison",
+            "effective_attack_range", "static_attack1_range", "attack_range_comparison",
+            "effective_move_speed", "static_move_speed", "move_speed_comparison",
+            "spawns_per_cycle", "can_hit_air", "source_function", "byte_offset",
+        ],
+        effective_unit_rows,
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -1236,12 +1313,17 @@ def main() -> None:
         "protected_ability_runtime_field_comparisons": dict(sorted(protected_comparisons.items())),
         "protected_ability_jass_add_fields": len(protected_jass_rows),
         "protected_ability_jass_add_field_comparisons": dict(sorted(protected_jass_comparisons.items())),
+        "effective_unit_stat_rows": len(effective_unit_rows),
+        "effective_unit_stat_comparisons": {
+            field: dict(sorted(counts.items())) for field, counts in effective_unit_comparisons.items()
+        },
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
             "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
             "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
             "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
+            "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

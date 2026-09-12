@@ -170,6 +170,33 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(jass_only[0]["static_resolved_value"], "3")
         self.assertEqual(jass_only[0]["comparison"], "static-match")
 
+    def test_effective_unit_catalog_exposes_poisoned_static_stats(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["effective_unit_stat_rows"], 162)
+        self.assertEqual(summary["effective_unit_stat_comparisons"]["hp"], {
+            "static-differs": 154,
+            "static-match": 8,
+        })
+        self.assertEqual(summary["effective_unit_stat_comparisons"]["move_speed"], {
+            "static-differs": 7,
+            "static-match": 155,
+        })
+
+        with (self.resolved / "effective-unit-stats.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        faerie = rows["e000"]
+        self.assertEqual(faerie["building_rawcode"], "h00B")
+        self.assertEqual(faerie["effective_hp"], "460")
+        self.assertEqual(faerie["static_hp"], "1")
+        self.assertEqual(faerie["effective_attack_range"], "350")
+        self.assertEqual(faerie["static_attack1_range"], "1")
+        self.assertEqual(faerie["hp_comparison"], "static-differs")
+
+        footman = rows["hfoo"]
+        self.assertEqual(footman["effective_hp"], "250")
+        self.assertEqual(footman["static_hp"], "250")
+        self.assertEqual(footman["dps_comparison"], "static-match")
+
 
 if __name__ == "__main__":
     unittest.main()

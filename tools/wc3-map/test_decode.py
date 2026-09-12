@@ -153,6 +153,35 @@ class LuaIndexTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disagrees with xD table"):
             DECODE.analyze_lua(source, set())
 
+    def test_extracts_effective_unit_stat_catalog(self) -> None:
+        source = (
+            "function xO()local dcs=nil "
+            "dcs=PB:create1139()"
+            "dcs.UnitEffectiveStat_unitId=1751543663 "
+            "dcs.UnitEffectiveStat_hp=int_toReal(250)"
+            "dcs.UnitEffectiveStat_armor=(int_toReal(400)/100.)"
+            "dcs.UnitEffectiveStat_dps=(int_toReal(1888)/100.)"
+            "dcs.UnitEffectiveStat_attackRange=int_toReal(90)"
+            "dcs.UnitEffectiveStat_moveSpeed=int_toReal(270)"
+            "dcs.UnitEffectiveStat_spawnsPerCycle=1 "
+            "dcs.UnitEffectiveStat_canHitAir=false "
+            "ZR:HashMap_put(1747988528,dcs) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1751543663, 1747988528})
+
+        self.assertEqual(len(indexed["effective_unit_stats"]), 1)
+        row = indexed["effective_unit_stats"][0]
+        self.assertEqual(row["unit_id"], 1751543663)
+        self.assertEqual(row["building_id"], 1747988528)
+        self.assertEqual(row["hp"], "250")
+        self.assertEqual(row["armor"], "4")
+        self.assertEqual(row["dps"], "18.88")
+        self.assertEqual(row["attack_range"], "90")
+        self.assertEqual(row["move_speed"], "270")
+        self.assertEqual(row["spawns_per_cycle"], 1)
+        self.assertFalse(row["can_hit_air"])
+
     def test_propagates_rawcode_context_to_runtime_mutator_through_named_calls(self) -> None:
         rawcode = int.from_bytes(b"ABCD", "big")
         source = (

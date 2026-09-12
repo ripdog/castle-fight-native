@@ -758,6 +758,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     rawcode_mutator_traces = analysis["rawcode_mutator_traces"]
     protected_ability_fields = analysis["protected_ability_fields"]
     jass_add_protected_fields = analysis["jass_add_protected_fields"]
+    effective_unit_stats = analysis["effective_unit_stats"]
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
@@ -956,6 +957,37 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 row["byte_offset"],
             ])
 
+    with (script_dir / "effective-unit-stats.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "unit_rawcode", "unit_rawcode_integer", "unit_names",
+            "hp", "armor", "dps", "attack_range", "move_speed", "spawns_per_cycle",
+            "can_hit_air", "source_function", "byte_offset",
+        ])
+        for row in effective_unit_stats:
+            building_id = int(row["building_id"])
+            unit_id = int(row["unit_id"])
+            building_rawcode, _bcategories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            unit_rawcode, _ucategories, _utables, unit_names, _udefs = rawcode_metadata(unit_id)
+            writer.writerow([
+                building_rawcode,
+                building_id,
+                building_names,
+                unit_rawcode,
+                unit_id,
+                unit_names,
+                row["hp"],
+                row["armor"],
+                row["dps"],
+                row["attack_range"],
+                row["move_speed"],
+                row["spawns_per_cycle"],
+                int(bool(row["can_hit_air"])),
+                row["source_function"],
+                row["byte_offset"],
+            ])
+
     traces_by_rawcode: dict[int, list[dict[str, object]]] = defaultdict(list)
     with (script_dir / "rawcode-mutator-traces.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
@@ -1045,6 +1077,9 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "protected_ability_jass_add_only_assignments": sum(
             str(row["canonical_relation"]) == "jass-only" for row in jass_add_protected_fields
         ),
+        "effective_unit_stat_rows": len(effective_unit_stats),
+        "effective_unit_stat_buildings": len({int(row["building_id"]) for row in effective_unit_stats}),
+        "effective_unit_stat_units": len({int(row["unit_id"]) for row in effective_unit_stats}),
         "runtime_mutator_trace_rows": len(rawcode_mutator_traces),
         "rawcodes_with_runtime_mutator_paths": len(traces_by_rawcode),
         "runtime_mutator_sites_with_rawcode_paths": len({
