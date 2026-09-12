@@ -23,6 +23,9 @@ const BUILDING_HEIGHT: f32 = 18.0;
 const STATIC_BLOCKER_HEIGHT: f32 = 5.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
 const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
+const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
+const PROJECTILE_IMPACT_SECONDS: f32 = 0.22;
+const PROJECTILE_IMPACT_RADIUS: f32 = 8.0;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
 const HEALTH_BAR_DEPTH: f32 = 6.0;
@@ -116,7 +119,9 @@ struct PresentationAssets {
     gun_barrel_mesh: Handle<Mesh>,
     gun_grip_mesh: Handle<Mesh>,
     building_mesh: Handle<Mesh>,
-    projectile_mesh: Handle<Mesh>,
+    guaranteed_projectile_mesh: Handle<Mesh>,
+    ballistic_projectile_mesh: Handle<Mesh>,
+    bounce_projectile_mesh: Handle<Mesh>,
     corpse_mesh: Handle<Mesh>,
     unit_materials: [Handle<StandardMaterial>; 2],
     building_materials: [Handle<StandardMaterial>; 2],
@@ -168,6 +173,14 @@ impl PresentationAssets {
             .unwrap_or_else(|| self.neutral_corpse_material.clone())
     }
 
+    fn projectile_mesh(&self, projectile: &ProjectileView) -> Handle<Mesh> {
+        match projectile.kind {
+            ProjectileViewKind::GuaranteedHit { .. } => self.guaranteed_projectile_mesh.clone(),
+            ProjectileViewKind::Ballistic { .. } => self.ballistic_projectile_mesh.clone(),
+            ProjectileViewKind::Bounce { .. } => self.bounce_projectile_mesh.clone(),
+        }
+    }
+
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
             ProjectileViewKind::GuaranteedHit { .. } => 0,
@@ -188,12 +201,18 @@ struct PresentedEntry {
     max_health_seen: i32,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PresentedProjectile {
+    entity: Entity,
+    last_position: Vec3,
+}
+
 #[derive(Resource, Default)]
 struct RenderMap {
     units: HashMap<SimId, PresentedEntry>,
     buildings: HashMap<SimId, PresentedEntry>,
     corpses: HashMap<SimId, Entity>,
-    projectiles: HashMap<SimId, Entity>,
+    projectiles: HashMap<SimId, PresentedProjectile>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -206,6 +225,16 @@ struct DeathRemnant {
 
 #[derive(Resource, Default)]
 struct DeathRemnants(Vec<DeathRemnant>);
+
+#[derive(Debug, Clone, Copy)]
+struct ProjectileImpact {
+    position: Vec3,
+    kind: ProjectileViewKind,
+    remaining: f32,
+}
+
+#[derive(Resource, Default)]
+struct ProjectileImpacts(Vec<ProjectileImpact>);
 
 #[derive(Resource)]
 struct DebugPresentation {
@@ -245,6 +274,9 @@ struct WeaponPresentation {
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct HealthBarGizmos;
 
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct ProjectileEffectGizmos;
+
 pub struct CastlePresentationPlugin {
     health_bars: bool,
 }
@@ -260,7 +292,9 @@ impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
             .init_resource::<DeathRemnants>()
+            .init_resource::<ProjectileImpacts>()
             .init_gizmo_group::<HealthBarGizmos>()
+            .init_gizmo_group::<ProjectileEffectGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -276,6 +310,8 @@ impl Plugin for CastlePresentationPlugin {
                     interpolate_render_transforms,
                     animate_unit_weapons,
                     age_death_remnants,
+                    age_projectile_impacts,
+                    draw_projectile_effects,
                     draw_health_bars,
                     draw_presentation_gizmos,
                     update_window_title,
@@ -295,6 +331,8 @@ fn setup_scene(
     let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
     health_bar_config.line.width = 6.0;
     health_bar_config.line.perspective = false;
+    let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
+    projectile_effect_config.line.width = 3.0;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
     let ranged_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
     let ballistic_unit_mesh = meshes.add(Cuboid::new(7.0, UNIT_RANGED_HEIGHT, 7.0));
@@ -305,7 +343,9 @@ fn setup_scene(
     let gun_barrel_mesh = meshes.add(Cuboid::new(0.8, 0.8, 4.0));
     let gun_grip_mesh = meshes.add(Cuboid::new(1.1, 2.2, 1.1));
     let building_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let projectile_mesh = meshes.add(Cuboid::new(3.0, 3.0, 3.0));
+    let guaranteed_projectile_mesh = meshes.add(Cuboid::new(1.3, 1.3, 5.5));
+    let ballistic_projectile_mesh = meshes.add(Cuboid::new(3.8, 3.8, 3.8));
+    let bounce_projectile_mesh = meshes.add(Cuboid::new(2.1, 2.1, 4.8));
     let corpse_mesh = meshes.add(Cuboid::new(CORPSE_SIZE, CORPSE_THICKNESS, CORPSE_SIZE));
 
     let unit_materials = [
@@ -397,7 +437,9 @@ fn setup_scene(
         gun_barrel_mesh,
         gun_grip_mesh,
         building_mesh: building_mesh.clone(),
-        projectile_mesh,
+        guaranteed_projectile_mesh,
+        ballistic_projectile_mesh,
+        bounce_projectile_mesh,
         corpse_mesh,
         unit_materials,
         building_materials,
@@ -722,6 +764,7 @@ fn sync_render_entities(
     assets: Res<PresentationAssets>,
     mut render_map: ResMut<RenderMap>,
     mut remnants: ResMut<DeathRemnants>,
+    mut projectile_impacts: ResMut<ProjectileImpacts>,
 ) {
     if !samples.is_changed() {
         return;
@@ -796,8 +839,15 @@ fn sync_render_entities(
         .filter(|id| !samples.current.projectiles.contains_key(id))
         .collect();
     for id in stale_projectiles {
-        if let Some(entity) = render_map.projectiles.remove(&id) {
-            commands.entity(entity).despawn();
+        if let Some(projectile_entry) = render_map.projectiles.remove(&id) {
+            commands.entity(projectile_entry.entity).despawn();
+            if let Some(projectile) = samples.previous.projectiles.get(&id) {
+                projectile_impacts.0.push(ProjectileImpact {
+                    position: projectile_entry.last_position,
+                    kind: projectile.kind,
+                    remaining: PROJECTILE_IMPACT_SECONDS,
+                });
+            }
         }
     }
 
@@ -875,14 +925,21 @@ fn sync_render_entities(
         if render_map.projectiles.contains_key(&projectile.id) {
             continue;
         }
+        let position = sim_point_to_world(projectile.launch_position) + Vec3::Y * PROJECTILE_HEIGHT;
         let entity = commands
             .spawn((
-                Mesh3d(assets.projectile_mesh.clone()),
+                Mesh3d(assets.projectile_mesh(projectile)),
                 MeshMaterial3d(assets.projectile_material(projectile)),
-                Transform::from_translation(sim_point_to_world(projectile.launch_position)),
+                Transform::from_translation(position),
             ))
             .id();
-        render_map.projectiles.insert(projectile.id, entity);
+        render_map.projectiles.insert(
+            projectile.id,
+            PresentedProjectile {
+                entity,
+                last_position: position,
+            },
+        );
     }
 }
 
@@ -891,7 +948,7 @@ fn interpolate_render_transforms(
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
-    render_map: Res<RenderMap>,
+    mut render_map: ResMut<RenderMap>,
     mut transforms: Query<&mut Transform>,
 ) {
     let alpha = fixed_time.overstep_fraction();
@@ -933,38 +990,82 @@ fn interpolate_render_transforms(
     }
 
     for (id, projectile) in &samples.current.projectiles {
-        let Some(&entity) = render_map.projectiles.get(id) else {
+        let Some(projectile_entry) = render_map.projectiles.get_mut(id) else {
             continue;
         };
-        let position = projectile_position(projectile, &samples, &metrics, alpha, render_tick);
-        if let Ok(mut transform) = transforms.get_mut(entity)
-            && transform.translation != position
-        {
-            transform.translation = position;
+        let (position, rotation) =
+            projectile_pose(projectile, &samples, &metrics, alpha, render_tick);
+        projectile_entry.last_position = position;
+        if let Ok(mut transform) = transforms.get_mut(projectile_entry.entity) {
+            if transform.translation != position {
+                transform.translation = position;
+            }
+            transform.rotation = rotation;
         }
     }
 }
 
-fn projectile_position(
+fn projectile_pose(
     projectile: &ProjectileView,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
     alpha: f32,
     render_tick: f32,
-) -> Vec3 {
+) -> (Vec3, Quat) {
     let start = sim_point_to_world(projectile.launch_position);
-    let target = match projectile.kind {
-        ProjectileViewKind::GuaranteedHit { target }
-        | ProjectileViewKind::Bounce { target, .. } => {
-            entity_render_position(target, samples, metrics, alpha).unwrap_or(start)
-        }
-        ProjectileViewKind::Ballistic { destination, .. } => sim_point_to_world(destination),
-    };
+    let target = projectile_target(projectile, samples, metrics, alpha, start);
     let travel_ticks = projectile
         .impact_tick
         .saturating_sub(projectile.launch_tick)
         .max(1) as f32;
     let progress = ((render_tick - projectile.launch_tick as f32) / travel_ticks).clamp(0.0, 1.0);
+    let position = projectile_position_at_progress(projectile, start, target, progress);
+    let tangent_progress = if progress < 0.98 {
+        (progress + 0.02).min(1.0)
+    } else {
+        (progress - 0.02).max(0.0)
+    };
+    let tangent_position =
+        projectile_position_at_progress(projectile, start, target, tangent_progress);
+    let rotation = projectile_rotation(position, tangent_position, progress < 0.98);
+    (position, rotation)
+}
+
+fn projectile_rotation(position: Vec3, tangent_position: Vec3, samples_forward: bool) -> Quat {
+    let direction = if samples_forward {
+        tangent_position - position
+    } else {
+        position - tangent_position
+    };
+    if direction.length_squared() > 0.0001 {
+        Quat::from_rotation_arc(Vec3::Z, direction.normalize())
+    } else {
+        Quat::IDENTITY
+    }
+}
+
+fn projectile_target(
+    projectile: &ProjectileView,
+    samples: &PresentationSamples,
+    metrics: &WorldMetrics,
+    alpha: f32,
+    fallback: Vec3,
+) -> Vec3 {
+    match projectile.kind {
+        ProjectileViewKind::GuaranteedHit { target }
+        | ProjectileViewKind::Bounce { target, .. } => {
+            entity_render_position(target, samples, metrics, alpha).unwrap_or(fallback)
+        }
+        ProjectileViewKind::Ballistic { destination, .. } => sim_point_to_world(destination),
+    }
+}
+
+fn projectile_position_at_progress(
+    projectile: &ProjectileView,
+    start: Vec3,
+    target: Vec3,
+    progress: f32,
+) -> Vec3 {
     let mut position = start.lerp(target, progress);
     position.y = PROJECTILE_HEIGHT;
     if matches!(projectile.kind, ProjectileViewKind::Ballistic { .. }) {
@@ -1032,6 +1133,48 @@ fn age_death_remnants(time: Res<Time>, mut remnants: ResMut<DeathRemnants>) {
         remnant.remaining -= delta;
     }
     remnants.0.retain(|remnant| remnant.remaining > 0.0);
+}
+
+fn age_projectile_impacts(time: Res<Time>, mut impacts: ResMut<ProjectileImpacts>) {
+    let delta = time.delta_secs();
+    for impact in &mut impacts.0 {
+        impact.remaining -= delta;
+    }
+    impacts.0.retain(|impact| impact.remaining > 0.0);
+}
+
+fn draw_projectile_effects(
+    samples: Res<PresentationSamples>,
+    render_map: Res<RenderMap>,
+    transforms: Query<&Transform>,
+    impacts: Res<ProjectileImpacts>,
+    mut gizmos: Gizmos<ProjectileEffectGizmos>,
+) {
+    for (id, projectile) in &samples.current.projectiles {
+        let Some(entry) = render_map.projectiles.get(id) else {
+            continue;
+        };
+        let Ok(transform) = transforms.get(entry.entity) else {
+            continue;
+        };
+        let forward = transform.rotation * Vec3::Z;
+        let color = projectile_effect_color(projectile.kind);
+        gizmos.line(
+            transform.translation,
+            transform.translation - forward * PROJECTILE_TRAIL_LENGTH,
+            color.with_alpha(0.58),
+        );
+    }
+
+    for impact in &impacts.0 {
+        let life = (impact.remaining / PROJECTILE_IMPACT_SECONDS).clamp(0.0, 1.0);
+        let radius = PROJECTILE_IMPACT_RADIUS * (1.0 + (1.0 - life) * 0.75);
+        gizmos.circle(
+            Isometry3d::new(impact.position, Quat::from_rotation_arc(Vec3::Z, Vec3::Y)),
+            radius,
+            projectile_effect_color(impact.kind).with_alpha(life * 0.85),
+        );
+    }
 }
 
 fn draw_health_bars(
@@ -1394,6 +1537,17 @@ fn building_height(building: &BuildingSample) -> f32 {
     }
 }
 
+fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
+    match kind {
+        ProjectileViewKind::GuaranteedHit { .. } => Color::srgb(0.48, 0.90, 1.0),
+        ProjectileViewKind::Ballistic { .. } => Color::srgb(1.0, 0.56, 0.12),
+        ProjectileViewKind::Bounce { bounce_index, .. } if bounce_index % 2 == 0 => {
+            Color::srgb(0.58, 1.0, 0.26)
+        }
+        ProjectileViewKind::Bounce { .. } => Color::srgb(0.92, 1.0, 0.34),
+    }
+}
+
 fn team_color(team: Team) -> Color {
     match team.0 {
         0 => Color::srgb(0.20, 0.58, 1.0),
@@ -1453,6 +1607,49 @@ mod tests {
         assert_eq!(walk_bob(SimId(7), 42.5, false), 0.0);
         let bob = walk_bob(SimId(7), 42.5, true);
         assert!((0.0..=UNIT_WALK_BOB_HEIGHT).contains(&bob));
+    }
+
+    #[test]
+    fn guaranteed_projectile_points_along_travel_direction() {
+        let projectile = ProjectileView {
+            id: SimId(1),
+            source: SimId(2),
+            launch_position: SimPoint::new(0, 0),
+            launch_tick: 0,
+            impact_tick: 10,
+            kind: ProjectileViewKind::GuaranteedHit { target: SimId(3) },
+        };
+        let start = Vec3::ZERO;
+        let target = Vec3::new(100.0, 0.0, 0.0);
+        let position = projectile_position_at_progress(&projectile, start, target, 0.40);
+        let tangent = projectile_position_at_progress(&projectile, start, target, 0.42);
+        let rotation = projectile_rotation(position, tangent, true);
+        assert!((rotation * Vec3::Z - Vec3::X).length() < 1e-5);
+    }
+
+    #[test]
+    fn ballistic_projectile_follows_and_pitches_with_arc() {
+        let projectile = ProjectileView {
+            id: SimId(1),
+            source: SimId(2),
+            launch_position: SimPoint::new(0, 0),
+            launch_tick: 0,
+            impact_tick: 10,
+            kind: ProjectileViewKind::Ballistic {
+                destination: SimPoint::new(100 * SUBUNITS_PER_WORLD_UNIT, 0),
+                impact_radius: 0,
+            },
+        };
+        let start = Vec3::ZERO;
+        let target = Vec3::new(100.0, 0.0, 0.0);
+        let rising = projectile_position_at_progress(&projectile, start, target, 0.25);
+        let rising_next = projectile_position_at_progress(&projectile, start, target, 0.27);
+        let falling = projectile_position_at_progress(&projectile, start, target, 0.75);
+        let falling_next = projectile_position_at_progress(&projectile, start, target, 0.77);
+        assert!(rising_next.y > rising.y);
+        assert!(falling_next.y < falling.y);
+        assert!((projectile_rotation(rising, rising_next, true) * Vec3::Z).y > 0.0);
+        assert!((projectile_rotation(falling, falling_next, true) * Vec3::Z).y < 0.0);
     }
 
     #[test]
