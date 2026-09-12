@@ -1,7 +1,4 @@
-use std::{
-    collections::HashSet,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
@@ -664,31 +661,47 @@ impl Simulation {
             return (0, 0);
         }
 
-        let mut occupied: HashSet<NavCell> = self
-            .units()
-            .into_iter()
-            .map(|unit| self.topology.cell_of_point(unit.position))
-            .collect();
+        let units = self.units();
+        let (bounds_min, bounds_max) = self.navigation_world_bounds();
+        let reservation_capacity = units
+            .len()
+            .checked_add(attempts.len())
+            .expect("production reservation capacity overflow");
+        let mut reservations = SpatialReservationGrid::build(
+            self.config.unit_separation_distance.max(1),
+            bounds_min,
+            bounds_max,
+            reservation_capacity,
+            units
+                .iter()
+                .enumerate()
+                .map(|(index, unit)| (index, unit.position)),
+        );
+        let mut next_reservation_index = units.len();
         let mut spawned = 0;
         let mut failed = 0;
 
         for attempt in attempts {
             let preferred = preferred_spawn_cell(attempt.team, attempt.footprint);
-            let spawn_cell =
-                spiral_cells(preferred, attempt.profile.search_radius_cells).find(|cell| {
-                    self.topology.contains(*cell)
-                        && !self.topology.is_blocked(*cell)
-                        && !occupied.contains(cell)
+            let spawn =
+                spiral_cells(preferred, attempt.profile.search_radius_cells).find_map(|cell| {
+                    if !self.topology.contains(cell) || self.topology.is_blocked(cell) {
+                        return None;
+                    }
+                    let position = self.topology.center_of_cell(cell);
+                    reservations
+                        .is_clear(position, self.config.unit_separation_distance)
+                        .then_some((cell, position))
                 });
 
-            if let Some(cell) = spawn_cell {
-                let position = self.topology.center_of_cell(cell);
+            if let Some((_cell, position)) = spawn {
                 self.spawn_unit_unchecked(UnitSpawn::from_template(
                     attempt.team,
                     position,
                     attempt.profile.unit,
                 ));
-                occupied.insert(cell);
+                reservations.insert(next_reservation_index, position);
+                next_reservation_index += 1;
                 spawned += 1;
             } else {
                 failed += 1;
@@ -1217,18 +1230,14 @@ impl Simulation {
             return desired_positions.to_vec();
         }
 
+        let collision_partition = SpatialPartition::global(0);
         let collision_grid = SpatialGrid::build(
             separation_distance.max(1),
             desired_positions
                 .iter()
                 .enumerate()
                 .filter(|(index, _)| unit_health[*index] > 0)
-                .filter_map(|(index, position)| {
-                    let component = self
-                        .topology
-                        .component_id(self.topology.cell_of_point(*position))?;
-                    Some((SpatialPartition::new(0, component), index, *position))
-                }),
+                .map(|(index, position)| (collision_partition, index, *position)),
         );
         let separation_sq = square_i32(separation_distance);
 
@@ -1242,10 +1251,9 @@ impl Simulation {
                     }
                     let desired = desired_positions[index];
                     let current_cell = self.topology.cell_of_point(unit.position);
-                    let Some(component) = self.topology.component_id(current_cell) else {
+                    if self.topology.component_id(current_cell).is_none() {
                         return desired;
-                    };
-                    let partition = SpatialPartition::new(0, component);
+                    }
                     let movement_x = i64::from(desired.x) - i64::from(unit.position.x);
                     let movement_y = i64::from(desired.y) - i64::from(unit.position.y);
                     let mut push_x = 0_i64;
@@ -1253,7 +1261,7 @@ impl Simulation {
                     let mut overlaps = 0_i64;
 
                     collision_grid.for_each_candidate(
-                        partition,
+                        collision_partition,
                         desired,
                         separation_distance,
                         |other_index| {
@@ -1330,15 +1338,10 @@ impl Simulation {
             return separated_positions.to_vec();
         }
 
-        let entries = units.iter().enumerate().filter_map(|(index, unit)| {
-            if unit_health[index] <= 0 {
-                return None;
-            }
-            let component = self
-                .topology
-                .component_id(self.topology.cell_of_point(unit.position))?;
-            Some((component, index, unit.position))
-        });
+        let entries = units
+            .iter()
+            .enumerate()
+            .filter_map(|(index, unit)| (unit_health[index] > 0).then_some((index, unit.position)));
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
         let mut reservations = SpatialReservationGrid::build(
             minimum_distance.max(1),
@@ -1355,9 +1358,9 @@ impl Simulation {
                 continue;
             }
             let original_cell = self.topology.cell_of_point(unit.position);
-            let Some(component) = self.topology.component_id(original_cell) else {
+            if self.topology.component_id(original_cell).is_none() {
                 continue;
-            };
+            }
             reservations.remove(index);
 
             let desired = desired_positions[index];
@@ -1379,20 +1382,19 @@ impl Simulation {
                 .flatten()
                 .find(|candidate| {
                     self.position_is_traversable_from(original_cell, *candidate)
-                        && reservations.is_clear(component, *candidate, minimum_distance)
+                        && reservations.is_clear(*candidate, minimum_distance)
                 })
                 .or_else(|| {
                     self.find_local_non_overlap_position(
                         unit.position,
                         original_cell,
-                        component,
                         minimum_distance,
                         &reservations,
                     )
                 })
-                .expect("legal simulation state had no non-overlapping unit position");
+                .unwrap_or(unit.position);
 
-            reservations.insert(component, index, chosen);
+            reservations.insert(index, chosen);
             result[index] = chosen;
         }
 
@@ -1403,12 +1405,21 @@ impl Simulation {
         &self,
         origin: SimPoint,
         original_cell: NavCell,
-        component: u32,
         minimum_distance: i32,
         reservations: &SpatialReservationGrid,
     ) -> Option<SimPoint> {
         let step = (minimum_distance / 2).max(1);
-        let max_radius = self.config.navigation_cell_size.max(step);
+        let (bounds_min, bounds_max) = self.navigation_world_bounds();
+        let max_radius = [
+            origin.x.saturating_sub(bounds_min.x).abs(),
+            bounds_max.x.saturating_sub(origin.x).abs(),
+            origin.y.saturating_sub(bounds_min.y).abs(),
+            bounds_max.y.saturating_sub(origin.y).abs(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(step)
+        .max(step);
         let max_ring = (max_radius + step - 1) / step;
 
         for ring in 1..=max_ring {
@@ -1420,7 +1431,7 @@ impl Simulation {
                         continue;
                     };
                     if self.position_is_traversable_from(original_cell, candidate)
-                        && reservations.is_clear(component, candidate, minimum_distance)
+                        && reservations.is_clear(candidate, minimum_distance)
                     {
                         return Some(candidate);
                     }
@@ -1433,7 +1444,7 @@ impl Simulation {
                         continue;
                     };
                     if self.position_is_traversable_from(original_cell, candidate)
-                        && reservations.is_clear(component, candidate, minimum_distance)
+                        && reservations.is_clear(candidate, minimum_distance)
                     {
                         return Some(candidate);
                     }

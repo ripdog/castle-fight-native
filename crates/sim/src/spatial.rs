@@ -35,7 +35,6 @@ pub struct SpatialGrid {
 
 #[derive(Debug, Clone, Copy)]
 struct ReservationEntry {
-    component: u32,
     position: SimPoint,
     bucket: usize,
 }
@@ -105,7 +104,7 @@ impl SpatialReservationGrid {
         bounds_min: SimPoint,
         bounds_max: SimPoint,
         entry_capacity: usize,
-        entries: impl IntoIterator<Item = (u32, usize, SimPoint)>,
+        entries: impl IntoIterator<Item = (usize, SimPoint)>,
     ) -> Self {
         assert!(cell_size > 0);
         assert!(bounds_max.x >= bounds_min.x && bounds_max.y >= bounds_min.y);
@@ -129,8 +128,8 @@ impl SpatialReservationGrid {
             prev: vec![NONE; entry_capacity],
             entries: vec![None; entry_capacity],
         };
-        for (component, index, position) in entries {
-            grid.insert(component, index, position);
+        for (index, position) in entries {
+            grid.insert(index, position);
         }
         grid
     }
@@ -153,7 +152,7 @@ impl SpatialReservationGrid {
         self.next[index] = NONE;
     }
 
-    pub fn insert(&mut self, component: u32, index: usize, position: SimPoint) {
+    pub fn insert(&mut self, index: usize, position: SimPoint) {
         assert!(
             index < self.entries.len(),
             "reservation index out of bounds"
@@ -172,15 +171,11 @@ impl SpatialReservationGrid {
         if head != NONE {
             self.prev[head] = index;
         }
-        self.entries[index] = Some(ReservationEntry {
-            component,
-            position,
-            bucket,
-        });
+        self.entries[index] = Some(ReservationEntry { position, bucket });
     }
 
     #[must_use]
-    pub fn is_clear(&self, component: u32, position: SimPoint, minimum_distance: i32) -> bool {
+    pub fn is_clear(&self, position: SimPoint, minimum_distance: i32) -> bool {
         debug_assert!(minimum_distance >= 0);
         let minimum_distance_sq = {
             let distance = i64::from(minimum_distance);
@@ -207,9 +202,7 @@ impl SpatialReservationGrid {
                 while index != NONE {
                     let entry =
                         self.entries[index].expect("reservation list referenced missing entry");
-                    if entry.component == component
-                        && position.distance_sq(entry.position) < minimum_distance_sq
-                    {
+                    if position.distance_sq(entry.position) < minimum_distance_sq {
                         return false;
                     }
                     index = self.next[index];
@@ -282,14 +275,14 @@ mod tests {
             SimPoint::new(0, 0),
             SimPoint::new(99, 99),
             2,
-            [(7, 0, SimPoint::new(10, 10)), (7, 1, SimPoint::new(30, 10))],
+            [(0, SimPoint::new(10, 10)), (1, SimPoint::new(30, 10))],
         );
-        assert!(!grid.is_clear(7, SimPoint::new(12, 10), 5));
-        assert!(grid.is_clear(7, SimPoint::new(20, 10), 5));
+        assert!(!grid.is_clear(SimPoint::new(12, 10), 5));
+        assert!(grid.is_clear(SimPoint::new(20, 10), 5));
 
         grid.remove(0);
-        assert!(grid.is_clear(7, SimPoint::new(12, 10), 5));
-        grid.insert(7, 0, SimPoint::new(50, 10));
-        assert!(!grid.is_clear(7, SimPoint::new(48, 10), 5));
+        assert!(grid.is_clear(SimPoint::new(12, 10), 5));
+        grid.insert(0, SimPoint::new(50, 10));
+        assert!(!grid.is_clear(SimPoint::new(48, 10), 5));
     }
 }

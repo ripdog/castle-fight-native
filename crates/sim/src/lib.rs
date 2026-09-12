@@ -318,6 +318,50 @@ mod tests {
     }
 
     #[test]
+    fn production_spawn_respects_collision_radius_across_neighbor_cells() {
+        let config = SimulationConfig::default();
+        let minimum_distance = config.unit_separation_distance;
+        let mut sim = Simulation::new(config, 2);
+        let footprint = BuildingFootprint::new(20, 0, 1, 1);
+        let preferred = SimPoint::new(
+            21 * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 2,
+            SUBUNITS_PER_WORLD_UNIT / 2,
+        );
+        let nearby = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(
+                22 * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 100,
+                SUBUNITS_PER_WORLD_UNIT / 2,
+            ),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.spawn_building(production_building(0, footprint, 1));
+
+        let result = sim.step();
+        assert_eq!(result.units_spawned, 1);
+        let spawned = sim
+            .units()
+            .into_iter()
+            .find(|unit| unit.id != nearby)
+            .expect("production unit missing");
+        assert_ne!(spawned.position, preferred);
+        assert!(
+            spawned
+                .position
+                .distance_sq(sim.unit(nearby).unwrap().position)
+                >= (i64::from(minimum_distance) * i64::from(minimum_distance)) as u64
+        );
+    }
+
+    #[test]
     fn ranged_unit_can_attack_across_disconnected_cage_wall() {
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let source = sim.spawn_unit(UnitSpawn {
@@ -414,6 +458,54 @@ mod tests {
             sim.unit(first).unwrap().position,
             sim.unit(second).unwrap().position
         );
+    }
+
+    #[test]
+    fn collision_is_global_across_disconnected_navigation_components() {
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(2, 2),
+            static_blockers: vec![
+                BuildingFootprint::new(1, 0, 1, 1),
+                BuildingFootprint::new(0, 1, 1, 1),
+            ],
+            team_objective: [
+                SimPoint::new(2 * SUBUNITS_PER_WORLD_UNIT, 2 * SUBUNITS_PER_WORLD_UNIT),
+                SimPoint::new(0, 0),
+            ],
+            ..SimulationConfig::default()
+        };
+        let minimum_distance = config.unit_separation_distance;
+        let mut sim = Simulation::new(config, 2);
+        let spawn = |position| UnitSpawn {
+            team: Team(0),
+            position,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let first = sim.spawn_unit(spawn(SimPoint::new(
+            SUBUNITS_PER_WORLD_UNIT - 16,
+            SUBUNITS_PER_WORLD_UNIT - 16,
+        )));
+        let second = sim.spawn_unit(spawn(SimPoint::new(
+            SUBUNITS_PER_WORLD_UNIT + 16,
+            SUBUNITS_PER_WORLD_UNIT + 16,
+        )));
+
+        sim.step();
+        let distance_sq = sim
+            .unit(first)
+            .unwrap()
+            .position
+            .distance_sq(sim.unit(second).unwrap().position);
+        assert!(distance_sq >= (i64::from(minimum_distance) * i64::from(minimum_distance)) as u64);
     }
 
     #[test]

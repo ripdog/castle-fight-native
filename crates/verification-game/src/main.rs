@@ -778,6 +778,42 @@ mod tests {
     }
 
     #[test]
+    fn long_running_production_congestion_remains_non_overlapping() {
+        let config = verification_config();
+        let minimum_distance = config.unit_separation_distance;
+        let minimum_distance_sq =
+            (i64::from(minimum_distance) * i64::from(minimum_distance)) as u64;
+        let mut simulation = Simulation::new(config, 4);
+
+        for row in 0..5 {
+            for column in 0..10 {
+                simulation.spawn_building(production_building(
+                    Team(0),
+                    BuildingFootprint::new(2 + column * 6, 2 + row * 6, 4, 4),
+                    ProductionKind::Melee,
+                ));
+            }
+        }
+
+        for _ in 0..1_800 {
+            simulation.step();
+        }
+
+        let units = simulation.units();
+        assert!(units.len() >= 200, "stress fixture produced too few units");
+        for (index, unit) in units.iter().enumerate() {
+            for other in &units[index + 1..] {
+                assert!(
+                    unit.position.distance_sq(other.position) >= minimum_distance_sq,
+                    "units {:?} and {:?} overlap after long-running production",
+                    unit.id,
+                    other.id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn terminal_match_does_not_advance_after_victory() {
         let mut simulation = Simulation::new(SimulationConfig::default(), 1);
         let player_castle = simulation.spawn_building(BuildingSpawn {

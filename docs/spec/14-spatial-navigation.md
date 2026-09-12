@@ -234,7 +234,7 @@ A combat unit that reaches attack range stops its strategic forward movement to 
 
 The verification implementation uses deterministic movement intent plus local crowd resolution. Units first compute movement intents from one immutable phase snapshot. A data-parallel steering pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps and symmetric sidestep choices, so worker scheduling and neighbor enumeration order cannot alter results.
 
-Soft separation is a steering/game-feel mechanism, **not** the correctness boundary. After steering, a deterministic hard reservation/commit pass MUST reject any proposed final position that would overlap another live collision-enabled combat unit in the same traversable component. It may choose a bounded local alternate position or leave the unit at its previous legal position; it MUST NOT resolve pressure by compressing units into overlapping space or teleporting them through blockers.
+Soft separation is a steering/game-feel mechanism, **not** the correctness boundary. After steering, a deterministic hard reservation/commit pass MUST reject any proposed final position that would overlap another live collision-enabled combat unit. Physical collision is global and MUST NOT be partitioned by navigation connected-component: topology answers whether a route exists, not whether another physical body exists. The resolver may choose a deterministic alternate position or leave the unit at its previous legal position; it MUST NOT resolve pressure by compressing units into overlapping space or teleporting them through blockers.
 
 After a completed movement commit, two ordinary collision-enabled combat units MUST NOT occupy overlapping authoritative collision footprints. Production and building placement SHOULD prevent impossible overpacked states from being created in the first place; when there is no legal movement space, units queue or flow around one another rather than violating the collision invariant.
 
@@ -256,7 +256,7 @@ For each production attempt:
 
 1. start at the building's authored preferred spawn point;
 2. enumerate candidate positions in a fixed expanding spiral/order;
-3. choose the first position where the unit's authoritative footprint fits on valid traversable space without overlapping a blocking building or another combat unit;
+3. choose the first position where the unit's authoritative footprint fits on valid traversable space without overlapping a blocking building or another combat unit; this requires an actual collision-radius/footprint query against nearby units, not merely checking whether the candidate navigation cell is empty;
 4. stop after a configured deterministic candidate/radius limit;
 5. if no candidate succeeds, the unit is not spawned and that production attempt is lost; no backlog is created by the core rules.
 
@@ -326,4 +326,7 @@ Spatial/navigation tests MUST eventually include:
 19. sustained convergence on one destination never commits overlapping live unit collision footprints;
 20. in a perfectly aligned three-unit melee column meeting a mirrored enemy column, the front engagement stops while rear units deterministically sidestep through available lateral space and eventually reach an attack position;
 21. when no legal lateral/forward position exists, trailing units remain queued rather than compressing through the frontline;
-22. dense opposing crowds remain benchmarked separately from ordinary lane movement.
+22. production rejects a candidate spawn point that is in an empty navigation cell but lies within another unit's collision radius in a neighboring cell;
+23. collision remains global across disconnected navigation components, including units approaching opposite sides/corners of blocking topology;
+24. long-running production/convergence with hundreds of units does not panic and never commits overlapping collision footprints;
+25. dense opposing crowds remain benchmarked separately from ordinary lane movement.

@@ -198,6 +198,22 @@ After replacing an initial hash-map reservation prototype (~15–23 ms/tick of c
 
 The hard collision commit is intentionally canonical and currently sequential, so it reduces worker scaling compared with pure soft steering. It costs roughly a few milliseconds at 10,000 units on the reference machine while enforcing a gameplay invariant that soft repulsion cannot guarantee. This is acceptable for the verification stage but remains a clear optimization target if realistic matches approach these densities.
 
+### Production/congestion panic regression
+
+A later long-running playable match exposed a panic in the hard commit (`legal simulation state had no non-overlapping unit position`). The root cause was production placement: it rejected only an occupied **navigation cell**, so a spawn at the center of an empty cell could still be inside the collision radius of a unit standing near the edge of a neighboring cell. Dense production could therefore inject an already-invalid position into the movement phase. Collision was also unnecessarily partitioned by navigation component, even though physical bodies exist regardless of path connectivity.
+
+The fix makes production use the same real collision-distance reservation test as movement, makes physical unit collision global across navigation components, and lets emergency collision repair search the reachable map rather than assuming a free point exists within one navigation cell. The dense reservation grid was simplified accordingly so its hot path no longer stores or compares component IDs.
+
+Regression coverage now includes the neighboring-cell spawn case, collision across disconnected topology, and a verification-game stress run with 50 production buildings for 1,800 ticks. That run builds a few hundred units converging on one objective and finishes without a panic or pairwise collision violation.
+
+The 10,000-unit regression after this fix remains worker-count deterministic:
+
+| Scenario | 1 worker | 8 workers |
+| --- | ---: | ---: |
+| lane | 9.812 ms/tick | 8.105 ms/tick |
+| cage | 13.796 ms/tick | 7.828 ms/tick |
+| crowd | 9.556 ms/tick | 7.360 ms/tick |
+
 ## Current interpretation
 
 The core deterministic architecture remains viable under deliberately hostile topology and crowd workloads. The next meaningful risks are repeated topology mutations, arbitrary-target pursuit/A* fallback frequency, production churn, and attack/projectile/ability density. Each should receive a deliberately adversarial benchmark before broader game content is built.
