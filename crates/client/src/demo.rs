@@ -1,7 +1,7 @@
 use castle_fight_sim::{
     AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, NavCell,
     ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig, Team,
-    UnitTemplate,
+    UnitSpawn, UnitTemplate,
 };
 
 use crate::presentation::WorldMetrics;
@@ -30,7 +30,7 @@ pub struct DemoWorld {
 }
 
 #[must_use]
-pub fn create_demo_world(workers: usize) -> DemoWorld {
+pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWorld {
     let config = demo_config();
     let metrics = WorldMetrics::from_simulation_config(&config);
     let mut simulation = Simulation::new(config, workers);
@@ -38,25 +38,66 @@ pub fn create_demo_world(workers: usize) -> DemoWorld {
     simulation.spawn_building(passive_structure(Team(0), PLAYER_CASTLE, CASTLE_HEALTH));
     simulation.spawn_building(passive_structure(Team(1), ENEMY_CASTLE, CASTLE_HEALTH));
 
-    for (team, melee, ranged) in [
-        (
-            Team(0),
-            BuildingFootprint::new(49, 27, 4, 4),
-            BuildingFootprint::new(49, 44, 4, 4),
-        ),
-        (
-            Team(1),
-            BuildingFootprint::new(147, 27, 4, 4),
-            BuildingFootprint::new(147, 44, 4, 4),
-        ),
-    ] {
-        simulation.spawn_building(production_structure(team, melee, BuildKind::Melee));
-        simulation.spawn_building(production_structure(team, ranged, BuildKind::Ranged));
+    if let Some(unit_count) = stress_units {
+        populate_render_stress_units(&mut simulation, unit_count);
+    } else {
+        for (team, melee, ranged) in [
+            (
+                Team(0),
+                BuildingFootprint::new(49, 27, 4, 4),
+                BuildingFootprint::new(49, 44, 4, 4),
+            ),
+            (
+                Team(1),
+                BuildingFootprint::new(147, 27, 4, 4),
+                BuildingFootprint::new(147, 44, 4, 4),
+            ),
+        ] {
+            simulation.spawn_building(production_structure(team, melee, BuildKind::Melee));
+            simulation.spawn_building(production_structure(team, ranged, BuildKind::Ranged));
+        }
     }
 
     DemoWorld {
         simulation,
         metrics,
+    }
+}
+
+fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) {
+    const COLUMNS: usize = 120;
+    const SPACING_WORLD: i32 = 10;
+    const START_X_WORLD: i32 = 400;
+    const START_Y_WORLD: i32 = 215;
+
+    for index in 0..unit_count {
+        let column = index % COLUMNS;
+        let row = index / COLUMNS;
+        let position = SimPoint::new(
+            (START_X_WORLD + column as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
+            (START_Y_WORLD + row as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
+        );
+        let delivery = if index % 2 == 0 {
+            AttackDelivery::Melee
+        } else {
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                    / SIMULATION_HZ_I32,
+            }
+        };
+        simulation.spawn_unit(UnitSpawn {
+            team: Team((index & 1) as u8),
+            position,
+            health: 100,
+            attack: AttackProfile {
+                delivery,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
     }
 }
 

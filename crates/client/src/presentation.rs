@@ -1,6 +1,12 @@
 use std::collections::BTreeMap;
 
-use bevy::{input::mouse::MouseWheel, prelude::*, time::Fixed, window::PrimaryWindow};
+use bevy::{
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    input::mouse::MouseWheel,
+    prelude::*,
+    time::Fixed,
+    window::PrimaryWindow,
+};
 use castle_fight_sim::{
     BuildingFootprint, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId,
     SimPoint, SimulationConfig, Team,
@@ -190,13 +196,25 @@ struct RtsCamera {
     grab_anchor: Option<Vec3>,
 }
 
-pub struct CastlePresentationPlugin;
+pub struct CastlePresentationPlugin {
+    health_bars: bool,
+}
+
+impl CastlePresentationPlugin {
+    #[must_use]
+    pub const fn new(health_bars: bool) -> Self {
+        Self { health_bars }
+    }
+}
 
 impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
             .init_resource::<DeathRemnants>()
-            .init_resource::<DebugPresentation>()
+            .insert_resource(DebugPresentation {
+                health_bars: self.health_bars,
+                ..default()
+            })
             .add_systems(Startup, setup_scene)
             .add_systems(
                 Update,
@@ -847,10 +865,15 @@ fn camera_transform(rig: &RtsCamera) -> Transform {
 fn update_window_title(
     samples: Res<PresentationSamples>,
     debug: Res<DebugPresentation>,
+    diagnostics: Res<DiagnosticsStore>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
+    let fps = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|diagnostic| diagnostic.smoothed())
+        .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
     window.title = format!(
-        "Castle Fight Native 3D | tick {} | units {} | buildings {} | projectiles {} | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
+        "Castle Fight Native 3D | {fps} FPS | tick {} | units {} | buildings {} | projectiles {} | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
         samples.current.tick,
         samples.current.units.len(),
         samples.current.buildings.len(),
