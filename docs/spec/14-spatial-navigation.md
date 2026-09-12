@@ -189,9 +189,11 @@ Strategic navigation provides a preferred direction toward the objective. When a
 
 Target pursuit MUST respect topology. If no valid attack position is reachable for any applicable attack, that target is invalid for this attacker and targeting must select something else.
 
-The verification implementation uses a cheap deterministic greedy step while it makes progress toward the selected attack position. If a blocker creates a local minimum (for example a straight wall directly between attacker and target), it falls back to deterministic A* and takes the first step of the resulting route. This avoids paying full pathfinding cost on ordinary open-lane movement while still routing around real building obstacles instead of oscillating against them.
+The verification implementation first proves that repeated deterministic greedy descent from the current navigation cell reaches the selected attack-position cell. When such a monotonic greedy route exists, the unit takes its first step without a global search. If the greedy route reaches a local minimum (for example a straight wall directly between attacker and target), pursuit falls back to deterministic A*. Merely taking one A* step and resuming naive greedy pursuit is insufficient: that can backtrack on the following tick and oscillate at the blocker.
 
-This algorithm is provisional and must be profiled under realistic obstacle density. Cached target fields, bounded/local path search, or another deterministic strategy may replace it if A* fallback frequency becomes expensive.
+Exact A* fallback results MAY be cached as a deterministic derived navigation cache keyed by the exact `(source cell, target cell)` pair. Reusing such an entry MUST return the same next cell as a fresh canonical search, MUST NOT enter checksums/snapshots as authoritative state, and MUST be invalidated when navigation topology changes. Cache capacity/eviction is therefore performance-only and MUST NOT affect outcomes.
+
+This algorithm remains provisional and must be profiled under realistic obstacle density. Fallback frequency, cache-hit rate, and expanded-node count should be measured separately; cached target fields, bounded/local path search, or another deterministic strategy may replace exact-pair caching if adversarial maps still make fallback work expensive.
 
 Units then apply local movement rules.
 

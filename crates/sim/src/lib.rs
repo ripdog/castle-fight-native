@@ -91,6 +91,126 @@ mod tests {
     }
 
     #[test]
+    fn topology_metrics_report_cage_opening_rebuild_and_group_release() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(15, 11),
+            team_objective: [
+                SimPoint::new(15 * cell + cell / 2, 5 * cell + cell / 2),
+                SimPoint::new(cell / 2, 5 * cell + cell / 2),
+            ],
+            ..SimulationConfig::default()
+        };
+        config.static_blockers.clear();
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_building(passive_building(1, BuildingFootprint::new(8, 0, 1, 5)));
+        let gate = sim.spawn_building(passive_building(1, BuildingFootprint::new(8, 5, 1, 1)));
+        sim.spawn_building(passive_building(1, BuildingFootprint::new(8, 6, 1, 6)));
+
+        let mut trapped = Vec::new();
+        for y in 2..8 {
+            for x in 2..6 {
+                trapped.push(sim.spawn_unit(UnitSpawn {
+                    team: Team(0),
+                    position: SimPoint::new(x * cell + cell / 2, y * cell + cell / 2),
+                    health: 100,
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::Melee,
+                        damage: 0,
+                        range: 0,
+                        acquisition_range: 0,
+                        cooldown_ticks: 1,
+                    },
+                    movement: MovementProfile {
+                        speed_per_tick: cell / 4,
+                    },
+                }));
+            }
+        }
+
+        let initial_positions: Vec<_> = trapped
+            .iter()
+            .map(|id| sim.unit(*id).unwrap().position)
+            .collect();
+        let closed = sim.step();
+        assert_eq!(closed.topology_rebuilds, 1);
+        assert!(
+            trapped
+                .iter()
+                .zip(&initial_positions)
+                .all(|(id, position)| {
+                    sim.unit(*id).is_some_and(|unit| unit.position == *position)
+                })
+        );
+
+        assert!(sim.remove_building(gate));
+        let opened = sim.step();
+        assert_eq!(opened.topology_rebuilds, 1);
+        let moved = trapped
+            .iter()
+            .zip(&initial_positions)
+            .filter(|(id, position)| {
+                sim.unit(**id)
+                    .is_some_and(|unit| unit.position != **position)
+            })
+            .count();
+        assert!(
+            moved >= trapped.len() / 2,
+            "opened cage should release the crowd"
+        );
+    }
+
+    #[test]
+    fn pursuit_metrics_count_a_star_fallback_work() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(6, 4),
+            static_blockers: vec![BuildingFootprint::new(3, 0, 1, 3)],
+            team_objective: [
+                SimPoint::new(6 * cell, 2 * cell),
+                SimPoint::new(0, 2 * cell),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(2 * cell + cell / 2, cell + cell / 2),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: cell / 2,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 4,
+            },
+        });
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(4 * cell + cell / 2, cell + cell / 2),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        let result = sim.step();
+        assert_eq!(result.pursuit_steps, 1);
+        assert_eq!(result.a_star_fallbacks, 1);
+        assert!(result.a_star_expanded_nodes > 0);
+    }
+
+    #[test]
     fn units_do_not_attack_on_spawn_tick() {
         let mut sim = Simulation::new(SimulationConfig::default(), 1);
         let a = sim.spawn_unit(duel_unit(0, 0, 10, 100));

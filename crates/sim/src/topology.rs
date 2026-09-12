@@ -20,6 +20,14 @@ impl NavCell {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PursuitStep {
+    pub next_cell: Option<NavCell>,
+    pub used_a_star: bool,
+    pub a_star_cache_hit: bool,
+    pub a_star_expanded_nodes: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct TopologyGrid {
     cell_size: i32,
@@ -182,32 +190,81 @@ impl TopologyGrid {
     }
 
     #[must_use]
-    pub fn pursuit_step(&self, from: NavCell, target: NavCell) -> Option<NavCell> {
+    pub fn pursuit_step(
+        &self,
+        from: NavCell,
+        target: NavCell,
+        cached_fallback: Option<NavCell>,
+    ) -> PursuitStep {
         if !self.same_component(from, target) {
-            return None;
+            return PursuitStep {
+                next_cell: None,
+                used_a_star: false,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+            };
         }
         if from == target {
-            return Some(from);
+            return PursuitStep {
+                next_cell: Some(from),
+                used_a_star: false,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+            };
         }
 
-        let current_distance = cell_distance_sq(from, target);
-        if let Some(greedy) = self
-            .neighbors(from)
-            .into_iter()
-            .flatten()
-            .filter(|cell| self.same_component(from, *cell))
-            .min_by_key(|cell| (cell_distance_sq(*cell, target), cell.y, cell.x))
-            .filter(|cell| cell_distance_sq(*cell, target) < current_distance)
-        {
-            return Some(greedy);
+        if let Some(greedy) = self.greedy_route_first_step(from, target) {
+            return PursuitStep {
+                next_cell: Some(greedy),
+                used_a_star: false,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+            };
         }
 
-        self.a_star_first_step(from, target)
+        if let Some(next_cell) = cached_fallback {
+            return PursuitStep {
+                next_cell: Some(next_cell),
+                used_a_star: true,
+                a_star_cache_hit: true,
+                a_star_expanded_nodes: 0,
+            };
+        }
+
+        let (next_cell, a_star_expanded_nodes) = self.a_star_first_step(from, target);
+        PursuitStep {
+            next_cell,
+            used_a_star: true,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes,
+        }
     }
 
-    fn a_star_first_step(&self, from: NavCell, target: NavCell) -> Option<NavCell> {
-        let start = self.index(from)?;
-        let goal = self.index(target)?;
+    fn greedy_route_first_step(&self, from: NavCell, target: NavCell) -> Option<NavCell> {
+        let mut current = from;
+        let mut first = None;
+        while current != target {
+            let current_distance = cell_distance_sq(current, target);
+            let next = self
+                .neighbors(current)
+                .into_iter()
+                .flatten()
+                .filter(|cell| self.same_component(from, *cell))
+                .min_by_key(|cell| (cell_distance_sq(*cell, target), cell.y, cell.x))
+                .filter(|cell| cell_distance_sq(*cell, target) < current_distance)?;
+            first.get_or_insert(next);
+            current = next;
+        }
+        first
+    }
+
+    fn a_star_first_step(&self, from: NavCell, target: NavCell) -> (Option<NavCell>, usize) {
+        let Some(start) = self.index(from) else {
+            return (None, 0);
+        };
+        let Some(goal) = self.index(target) else {
+            return (None, 0);
+        };
         let mut g_score = vec![u32::MAX; self.blocked.len()];
         let mut came_from = vec![usize::MAX; self.blocked.len()];
         let mut open = BinaryHeap::new();
@@ -221,20 +278,22 @@ impl TopologyGrid {
             start,
         )));
 
+        let mut expanded_nodes = 0usize;
         while let Some(Reverse((_, cost, _, _, current))) = open.pop() {
             if cost != g_score[current] {
                 continue;
             }
+            expanded_nodes += 1;
             if current == goal {
                 let mut step = goal;
                 while came_from[step] != start {
                     let parent = came_from[step];
                     if parent == usize::MAX {
-                        return None;
+                        return (None, expanded_nodes);
                     }
                     step = parent;
                 }
-                return Some(self.cell_from_index(step));
+                return (Some(self.cell_from_index(step)), expanded_nodes);
             }
 
             let cell = self.cell_from_index(current);
@@ -259,7 +318,7 @@ impl TopologyGrid {
             }
         }
 
-        None
+        (None, expanded_nodes)
     }
 
     fn rebuild_components(&mut self) {
@@ -384,9 +443,42 @@ mod tests {
             ],
         );
 
-        assert_eq!(
-            grid.pursuit_step(NavCell::new(2, 1), NavCell::new(4, 1)),
-            Some(NavCell::new(2, 2))
+        let result = grid.pursuit_step(NavCell::new(2, 1), NavCell::new(4, 1), None);
+        assert_eq!(result.next_cell, Some(NavCell::new(2, 2)));
+        assert!(result.used_a_star);
+        assert!(result.a_star_expanded_nodes > 0);
+    }
+
+    #[test]
+    fn pursuit_keeps_following_detour_instead_of_greedy_backtracking() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let grid = TopologyGrid::build(
+            cell,
+            NavCell::new(0, 0),
+            NavCell::new(6, 4),
+            [BuildingFootprint::new(3, 0, 1, 3)],
+            [
+                SimPoint::new(6 * cell, 2 * cell),
+                SimPoint::new(0, 2 * cell),
+            ],
+        );
+        let target = NavCell::new(4, 1);
+        let mut current = NavCell::new(2, 1);
+        let mut fallback_count = 0;
+
+        for _ in 0..8 {
+            if current == target {
+                break;
+            }
+            let result = grid.pursuit_step(current, target, None);
+            fallback_count += usize::from(result.used_a_star);
+            current = result.next_cell.expect("detour should remain reachable");
+        }
+
+        assert_eq!(current, target);
+        assert!(
+            fallback_count >= 2,
+            "wall detour should require sustained fallback"
         );
     }
 

@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
@@ -48,13 +51,15 @@ impl Default for SimulationConfig {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TickTimings {
-    pub topology_and_timers: Duration,
+    pub topology: Duration,
+    pub timers: Duration,
     pub production: Duration,
     pub snapshot_and_spatial: Duration,
     pub targeting: Duration,
     pub combat: Duration,
-    pub crowd_separation: Duration,
-    pub movement_and_commit: Duration,
+    pub movement_intent: Duration,
+    pub crowd_and_collision: Duration,
+    pub structural_commit: Duration,
     pub checksum: Duration,
     pub total: Duration,
 }
@@ -68,6 +73,11 @@ pub struct TickResult {
     pub deaths: usize,
     pub units_spawned: usize,
     pub spawn_failures: usize,
+    pub topology_rebuilds: usize,
+    pub pursuit_steps: usize,
+    pub a_star_fallbacks: usize,
+    pub a_star_cache_hits: usize,
+    pub a_star_expanded_nodes: usize,
     pub checksum: u64,
     pub timings: TickTimings,
 }
@@ -111,12 +121,15 @@ pub enum BuildingPlacementError {
     UnitOccupied,
 }
 
+const PURSUIT_CACHE_CAPACITY: usize = 65_536;
+
 pub struct Simulation {
     world: World,
     config: SimulationConfig,
     pool: ThreadPool,
     topology: TopologyGrid,
     topology_dirty: bool,
+    pursuit_cache: BTreeMap<(NavCell, NavCell), NavCell>,
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     next_tick: u64,
@@ -151,6 +164,7 @@ impl Simulation {
             pool,
             topology,
             topology_dirty: false,
+            pursuit_cache: BTreeMap::new(),
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             next_tick: 0,
@@ -236,6 +250,21 @@ impl Simulation {
     }
 
     #[must_use]
+    pub fn remove_building(&mut self, id: SimId) -> bool {
+        let entity = self.world.iter_entities().find_map(|entity| {
+            (entity.get::<SimId>().copied() == Some(id)
+                && entity.get::<BuildingFootprint>().is_some())
+            .then_some(entity.id())
+        });
+        let Some(entity) = entity else {
+            return false;
+        };
+        self.world.despawn(entity);
+        self.topology_dirty = true;
+        true
+    }
+
+    #[must_use]
     pub fn can_place_building(&self, footprint: BuildingFootprint) -> bool {
         self.footprint_inside_navigation(footprint)
             && !self
@@ -277,9 +306,12 @@ impl Simulation {
         let completed_tick = self.next_tick;
 
         let phase_start = Instant::now();
-        self.refresh_topology_if_dirty();
+        let topology_rebuilt = self.refresh_topology_if_dirty();
+        let topology = phase_start.elapsed();
+
+        let phase_start = Instant::now();
         self.advance_cooldowns();
-        let topology_and_timers = phase_start.elapsed();
+        let timers = phase_start.elapsed();
 
         let phase_start = Instant::now();
         let (units_spawned, spawn_failures) = self.advance_production();
@@ -403,8 +435,7 @@ impl Simulation {
         }
         let combat = phase_start.elapsed();
 
-        let phase_start = Instant::now();
-        let crowd_separation = self.resolve_movement(
+        let movement = self.resolve_movement(
             &units,
             &buildings,
             &unit_health,
@@ -412,6 +443,7 @@ impl Simulation {
             &mut positions,
         );
 
+        let phase_start = Instant::now();
         let mut deaths = 0;
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
@@ -477,19 +509,21 @@ impl Simulation {
             .next_tick
             .checked_add(1)
             .expect("tick counter exhausted");
-        let movement_and_commit = phase_start.elapsed();
+        let structural_commit = phase_start.elapsed();
 
         let phase_start = Instant::now();
         let checksum = canonical_checksum(&self.world, self.next_tick, &self.defense_alerts);
         let checksum_time = phase_start.elapsed();
         let timings = TickTimings {
-            topology_and_timers,
+            topology,
+            timers,
             production,
             snapshot_and_spatial,
             targeting,
             combat,
-            crowd_separation,
-            movement_and_commit,
+            movement_intent: movement.intent,
+            crowd_and_collision: movement.crowd_and_collision,
+            structural_commit,
             checksum: checksum_time,
             total: tick_start.elapsed(),
         };
@@ -506,6 +540,11 @@ impl Simulation {
             deaths,
             units_spawned,
             spawn_failures,
+            topology_rebuilds: usize::from(topology_rebuilt),
+            pursuit_steps: movement.pursuit_steps,
+            a_star_fallbacks: movement.a_star_fallbacks,
+            a_star_cache_hits: movement.a_star_cache_hits,
+            a_star_expanded_nodes: movement.a_star_expanded_nodes,
             checksum,
             timings,
         }
@@ -603,9 +642,9 @@ impl Simulation {
         id
     }
 
-    fn refresh_topology_if_dirty(&mut self) {
+    fn refresh_topology_if_dirty(&mut self) -> bool {
         if !self.topology_dirty {
-            return;
+            return false;
         }
         let mut query = self.world.query::<&BuildingFootprint>();
         let building_footprints: Vec<_> = query.iter(&self.world).copied().collect();
@@ -623,6 +662,8 @@ impl Simulation {
             self.config.team_objective,
         );
         self.topology_dirty = false;
+        self.pursuit_cache.clear();
+        true
     }
 
     fn advance_cooldowns(&mut self) {
@@ -1111,14 +1152,15 @@ impl Simulation {
     }
 
     fn resolve_movement(
-        &self,
+        &mut self,
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
         unit_health: &[i32],
         building_health: &[i32],
         positions: &mut [SimPoint],
-    ) -> Duration {
-        let desired_positions: Vec<_> = self.pool.install(|| {
+    ) -> MovementMetrics {
+        let intent_start = Instant::now();
+        let decisions: Vec<_> = self.pool.install(|| {
             units
                 .par_iter()
                 .enumerate()
@@ -1134,6 +1176,37 @@ impl Simulation {
                 })
                 .collect()
         });
+        for decision in &decisions {
+            let Some(entry) = decision.cache_insert else {
+                continue;
+            };
+            if self.pursuit_cache.len() >= PURSUIT_CACHE_CAPACITY
+                && !self.pursuit_cache.contains_key(&(entry.from, entry.target))
+            {
+                self.pursuit_cache.clear();
+            }
+            self.pursuit_cache
+                .insert((entry.from, entry.target), entry.next);
+        }
+        let intent = intent_start.elapsed();
+        let desired_positions: Vec<_> =
+            decisions.iter().map(|decision| decision.position).collect();
+        let pursuit_steps = decisions
+            .iter()
+            .filter(|decision| decision.pursuit_step)
+            .count();
+        let a_star_fallbacks = decisions
+            .iter()
+            .filter(|decision| decision.used_a_star)
+            .count();
+        let a_star_cache_hits = decisions
+            .iter()
+            .filter(|decision| decision.a_star_cache_hit)
+            .count();
+        let a_star_expanded_nodes = decisions
+            .iter()
+            .map(|decision| decision.a_star_expanded_nodes)
+            .sum();
 
         let separation_start = Instant::now();
         let separated_positions =
@@ -1144,9 +1217,16 @@ impl Simulation {
             &desired_positions,
             &separated_positions,
         );
-        let crowd_separation = separation_start.elapsed();
+        let crowd_and_collision = separation_start.elapsed();
         positions.copy_from_slice(&legal_positions);
-        crowd_separation
+        MovementMetrics {
+            intent,
+            crowd_and_collision,
+            pursuit_steps,
+            a_star_fallbacks,
+            a_star_cache_hits,
+            a_star_expanded_nodes,
+        }
     }
 
     fn desired_position(
@@ -1157,10 +1237,10 @@ impl Simulation {
         buildings: &[BuildingSnapshot],
         unit_health: &[i32],
         building_health: &[i32],
-    ) -> SimPoint {
+    ) -> MovementDecision {
         let current = unit.position;
         if unit_health[index] <= 0 || unit.movement.speed_per_tick == 0 {
-            return current;
+            return MovementDecision::stationary(current);
         }
         let source_cell = self.topology.cell_of_point(current);
 
@@ -1198,23 +1278,63 @@ impl Simulation {
             }
         });
 
+        let mut pursuit_step = false;
+        let mut used_a_star = false;
+        let mut a_star_cache_hit = false;
+        let mut a_star_expanded_nodes = 0;
+        let mut cache_insert = None;
         let next_cell = match target_cell {
-            Some(cell) if cell == source_cell => return current,
-            Some(cell) => self.topology.pursuit_step(source_cell, cell),
+            Some(cell) if cell == source_cell => return MovementDecision::stationary(current),
+            Some(cell) => {
+                pursuit_step = true;
+                let cached_fallback = self.pursuit_cache.get(&(source_cell, cell)).copied();
+                let result = self
+                    .topology
+                    .pursuit_step(source_cell, cell, cached_fallback);
+                used_a_star = result.used_a_star;
+                a_star_cache_hit = result.a_star_cache_hit;
+                a_star_expanded_nodes = result.a_star_expanded_nodes;
+                if result.used_a_star
+                    && !result.a_star_cache_hit
+                    && let Some(next) = result.next_cell
+                {
+                    cache_insert = Some(PursuitCacheInsert {
+                        from: source_cell,
+                        target: cell,
+                        next,
+                    });
+                }
+                result.next_cell
+            }
             None => self.topology.objective_step(unit.team.0, source_cell),
         };
         let Some(next_cell) = next_cell else {
-            return current;
+            return MovementDecision {
+                position: current,
+                pursuit_step,
+                used_a_star,
+                a_star_cache_hit,
+                a_star_expanded_nodes,
+                cache_insert,
+            };
         };
         let target_position = self.topology.center_of_cell(next_cell);
         let candidate = current.step_towards(target_position, unit.movement.speed_per_tick);
         let candidate_cell = self.topology.cell_of_point(candidate);
-        if self.topology.is_blocked(candidate_cell)
+        let position = if self.topology.is_blocked(candidate_cell)
             || !self.topology.same_component(source_cell, candidate_cell)
         {
             current
         } else {
             candidate
+        };
+        MovementDecision {
+            position,
+            pursuit_step,
+            used_a_star,
+            a_star_cache_hit,
+            a_star_expanded_nodes,
+            cache_insert,
         }
     }
 
@@ -1519,6 +1639,46 @@ impl Simulation {
             })
             .unwrap_or(desired)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PursuitCacheInsert {
+    from: NavCell,
+    target: NavCell,
+    next: NavCell,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MovementDecision {
+    position: SimPoint,
+    pursuit_step: bool,
+    used_a_star: bool,
+    a_star_cache_hit: bool,
+    a_star_expanded_nodes: usize,
+    cache_insert: Option<PursuitCacheInsert>,
+}
+
+impl MovementDecision {
+    const fn stationary(position: SimPoint) -> Self {
+        Self {
+            position,
+            pursuit_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct MovementMetrics {
+    intent: Duration,
+    crowd_and_collision: Duration,
+    pursuit_steps: usize,
+    a_star_fallbacks: usize,
+    a_star_cache_hits: usize,
+    a_star_expanded_nodes: usize,
 }
 
 #[derive(Debug, Clone, Copy)]

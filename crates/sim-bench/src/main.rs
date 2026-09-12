@@ -5,8 +5,10 @@ use std::{
 };
 
 use castle_fight_sim::{
-    Simulation, SimulationConfig, TickTimings, populate_crossing_crowd, populate_dense_cage_battle,
-    populate_lane_battle,
+    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile,
+    ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
+    Team, TickResult, TickTimings, UnitSpawn, UnitTemplate, populate_crossing_crowd,
+    populate_dense_cage_battle, populate_lane_battle,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -14,6 +16,9 @@ enum Scenario {
     Lane,
     Cage,
     Crowd,
+    Pathing,
+    Topology,
+    Production,
 }
 
 impl Scenario {
@@ -22,6 +27,9 @@ impl Scenario {
             Self::Lane => "lane",
             Self::Cage => "cage",
             Self::Crowd => "crowd",
+            Self::Pathing => "pathing",
+            Self::Topology => "topology",
+            Self::Production => "production",
         }
     }
 }
@@ -62,18 +70,26 @@ fn main() {
         println!();
         println!("scenario={}", scenario.name());
         println!(
-            "{:>8} {:>7} {:>9} {:>9} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>18}",
+            "{:>8} {:>7} {:>9} {:>9} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>10} {:>8} {:>8} {:>18}",
             "units",
             "workers",
             "ms/tick",
             "ticks/s",
             "topo",
+            "timer",
+            "prod",
             "spatial",
             "target",
             "combat",
-            "crowd",
-            "move",
-            "checksum",
+            "intent",
+            "collide",
+            "commit",
+            "hash",
+            "astar%",
+            "cache%",
+            "nodes/tick",
+            "spawn/t",
+            "fail/t",
             "state-hash",
         );
 
@@ -95,18 +111,26 @@ fn main() {
                 }
 
                 println!(
-                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>18x}{}",
+                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.2} {:>7.2} {:>10.1} {:>8.2} {:>8.2} {:>18x}{}",
                     units,
                     workers,
                     result.ms_per_tick,
                     result.ticks_per_second,
-                    result.phase_ms.topology_and_timers,
+                    result.phase_ms.topology,
+                    result.phase_ms.timers,
+                    result.phase_ms.production,
                     result.phase_ms.snapshot_and_spatial,
                     result.phase_ms.targeting,
                     result.phase_ms.combat,
-                    result.phase_ms.crowd_separation,
-                    result.phase_ms.movement_and_commit,
+                    result.phase_ms.movement_intent,
+                    result.phase_ms.crowd_and_collision,
+                    result.phase_ms.structural_commit,
                     result.phase_ms.checksum,
+                    result.a_star_fallback_percent(),
+                    result.a_star_cache_hit_percent(),
+                    result.a_star_nodes_per_tick,
+                    result.spawns_per_tick,
+                    result.spawn_failures_per_tick,
                     result.checksum,
                     if *expected == result.checksum {
                         ""
@@ -126,12 +150,15 @@ fn main() {
 
 #[derive(Debug, Default)]
 struct PhaseMs {
-    topology_and_timers: f64,
+    topology: f64,
+    timers: f64,
+    production: f64,
     snapshot_and_spatial: f64,
     targeting: f64,
     combat: f64,
-    crowd_separation: f64,
-    movement_and_commit: f64,
+    movement_intent: f64,
+    crowd_and_collision: f64,
+    structural_commit: f64,
     checksum: f64,
 }
 
@@ -140,7 +167,63 @@ struct BenchResult {
     ms_per_tick: f64,
     ticks_per_second: f64,
     phase_ms: PhaseMs,
+    pursuit_steps: usize,
+    a_star_fallbacks: usize,
+    a_star_cache_hits: usize,
+    a_star_nodes_per_tick: f64,
+    spawns_per_tick: f64,
+    spawn_failures_per_tick: f64,
     checksum: u64,
+}
+
+impl BenchResult {
+    fn a_star_fallback_percent(&self) -> f64 {
+        if self.pursuit_steps == 0 {
+            0.0
+        } else {
+            self.a_star_fallbacks as f64 * 100.0 / self.pursuit_steps as f64
+        }
+    }
+
+    fn a_star_cache_hit_percent(&self) -> f64 {
+        if self.a_star_fallbacks == 0 {
+            0.0
+        } else {
+            self.a_star_cache_hits as f64 * 100.0 / self.a_star_fallbacks as f64
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ScenarioState {
+    Static,
+    TopologyToggle {
+        building: Option<SimId>,
+        footprint: BuildingFootprint,
+    },
+}
+
+impl ScenarioState {
+    fn before_tick(&mut self, simulation: &mut Simulation) {
+        match self {
+            Self::Static => {}
+            Self::TopologyToggle {
+                building,
+                footprint,
+            } => {
+                if let Some(id) = building.take() {
+                    assert!(simulation.remove_building(id));
+                } else {
+                    *building = Some(simulation.spawn_building(BuildingSpawn {
+                        team: Team(0),
+                        footprint: *footprint,
+                        health: 1_000_000,
+                        production: None,
+                    }));
+                }
+            }
+        }
+    }
 }
 
 fn run_case(
@@ -150,22 +233,35 @@ fn run_case(
     warmup: u64,
     ticks: u64,
 ) -> BenchResult {
-    let mut simulation = Simulation::new(SimulationConfig::default(), workers);
-    match scenario {
-        Scenario::Lane => populate_lane_battle(&mut simulation, units),
-        Scenario::Cage => populate_dense_cage_battle(&mut simulation, units),
-        Scenario::Crowd => populate_crossing_crowd(&mut simulation, units),
-    }
+    let mut simulation = Simulation::new(scenario_config(scenario), workers);
+    let mut state = populate_scenario(scenario, &mut simulation, units);
 
     for _ in 0..warmup {
+        state.before_tick(&mut simulation);
         simulation.step();
     }
 
     let start = Instant::now();
     let mut timings = TickTimings::default();
+    let mut pursuit_steps = 0usize;
+    let mut a_star_fallbacks = 0usize;
+    let mut a_star_cache_hits = 0usize;
+    let mut a_star_expanded_nodes = 0usize;
+    let mut units_spawned = 0usize;
+    let mut spawn_failures = 0usize;
     for _ in 0..ticks {
+        state.before_tick(&mut simulation);
         let result = simulation.step();
         accumulate_timings(&mut timings, result.timings);
+        accumulate_counters(
+            &result,
+            &mut pursuit_steps,
+            &mut a_star_fallbacks,
+            &mut a_star_cache_hits,
+            &mut a_star_expanded_nodes,
+            &mut units_spawned,
+            &mut spawn_failures,
+        );
     }
     let elapsed = start.elapsed();
 
@@ -178,30 +274,172 @@ fn run_case(
             ticks as f64 / seconds
         },
         phase_ms: average_phase_ms(timings, ticks),
+        pursuit_steps,
+        a_star_fallbacks,
+        a_star_cache_hits,
+        a_star_nodes_per_tick: a_star_expanded_nodes as f64 / ticks as f64,
+        spawns_per_tick: units_spawned as f64 / ticks as f64,
+        spawn_failures_per_tick: spawn_failures as f64 / ticks as f64,
         checksum: simulation.checksum(),
     }
 }
 
+fn scenario_config(scenario: Scenario) -> SimulationConfig {
+    let mut config = SimulationConfig::default();
+    if scenario == Scenario::Pathing {
+        config
+            .static_blockers
+            .push(BuildingFootprint::new(60, -48, 1, 97));
+        config.target_pursuit_extra_range = 64 * SUBUNITS_PER_WORLD_UNIT;
+    }
+    config
+}
+
+fn populate_scenario(
+    scenario: Scenario,
+    simulation: &mut Simulation,
+    units: usize,
+) -> ScenarioState {
+    match scenario {
+        Scenario::Lane => populate_lane_battle(simulation, units),
+        Scenario::Cage => populate_dense_cage_battle(simulation, units),
+        Scenario::Crowd => populate_crossing_crowd(simulation, units),
+        Scenario::Pathing => populate_pathing_wall_battle(simulation, units),
+        Scenario::Topology => populate_lane_battle(simulation, units),
+        Scenario::Production => populate_production_churn(simulation, units),
+    }
+
+    match scenario {
+        Scenario::Topology => ScenarioState::TopologyToggle {
+            building: None,
+            footprint: BuildingFootprint::new(118, 63, 1, 1),
+        },
+        _ => ScenarioState::Static,
+    }
+}
+
+fn populate_pathing_wall_battle(simulation: &mut Simulation, total_units: usize) {
+    let per_team = total_units / 2;
+    let rows = 100usize.min(per_team.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
+        damage: 0,
+        range: SUBUNITS_PER_WORLD_UNIT / 2,
+        acquisition_range: 64 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 30,
+    };
+    let movement = MovementProfile {
+        speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+    };
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                59 * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 2 - column * spacing
+            } else {
+                61 * SUBUNITS_PER_WORLD_UNIT + SUBUNITS_PER_WORLD_UNIT / 2 + column * spacing
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 100_000,
+                attack,
+                movement,
+            });
+        }
+    }
+}
+
+fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
+    let total_buildings = (scale / 100).clamp(2, 100);
+    let per_team = total_buildings.div_ceil(2);
+    let template = UnitTemplate {
+        health: 100,
+        attack: AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 0,
+            range: 0,
+            acquisition_range: 0,
+            cooldown_ticks: 1,
+        },
+        movement: MovementProfile { speed_per_tick: 0 },
+    };
+    let production = ProductionProfile {
+        initial_delay_ticks: 0,
+        interval_ticks: 1,
+        search_radius_cells: 2,
+        unit: template,
+    };
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            if team == 1 && per_team + index >= total_buildings {
+                break;
+            }
+            let column = (index % 10) as i32;
+            let row = (index / 10) as i32;
+            let x = if team == 0 {
+                8 + column * 3
+            } else {
+                112 - column * 3
+            };
+            let y = -30 + row * 3;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 1, 1),
+                health: 1_000_000,
+                production: Some(production),
+            });
+        }
+    }
+}
+
+fn accumulate_counters(
+    result: &TickResult,
+    pursuit_steps: &mut usize,
+    a_star_fallbacks: &mut usize,
+    a_star_cache_hits: &mut usize,
+    a_star_expanded_nodes: &mut usize,
+    units_spawned: &mut usize,
+    spawn_failures: &mut usize,
+) {
+    *pursuit_steps += result.pursuit_steps;
+    *a_star_fallbacks += result.a_star_fallbacks;
+    *a_star_cache_hits += result.a_star_cache_hits;
+    *a_star_expanded_nodes += result.a_star_expanded_nodes;
+    *units_spawned += result.units_spawned;
+    *spawn_failures += result.spawn_failures;
+}
+
 fn accumulate_timings(total: &mut TickTimings, tick: TickTimings) {
-    total.topology_and_timers += tick.topology_and_timers;
+    total.topology += tick.topology;
+    total.timers += tick.timers;
     total.production += tick.production;
     total.snapshot_and_spatial += tick.snapshot_and_spatial;
     total.targeting += tick.targeting;
     total.combat += tick.combat;
-    total.crowd_separation += tick.crowd_separation;
-    total.movement_and_commit += tick.movement_and_commit;
+    total.movement_intent += tick.movement_intent;
+    total.crowd_and_collision += tick.crowd_and_collision;
+    total.structural_commit += tick.structural_commit;
     total.checksum += tick.checksum;
     total.total += tick.total;
 }
 
 fn average_phase_ms(total: TickTimings, ticks: u64) -> PhaseMs {
     PhaseMs {
-        topology_and_timers: ms_per_tick(total.topology_and_timers, ticks),
+        topology: ms_per_tick(total.topology, ticks),
+        timers: ms_per_tick(total.timers, ticks),
+        production: ms_per_tick(total.production, ticks),
         snapshot_and_spatial: ms_per_tick(total.snapshot_and_spatial, ticks),
         targeting: ms_per_tick(total.targeting, ticks),
         combat: ms_per_tick(total.combat, ticks),
-        crowd_separation: ms_per_tick(total.crowd_separation, ticks),
-        movement_and_commit: ms_per_tick(total.movement_and_commit, ticks),
+        movement_intent: ms_per_tick(total.movement_intent, ticks),
+        crowd_and_collision: ms_per_tick(total.crowd_and_collision, ticks),
+        structural_commit: ms_per_tick(total.structural_commit, ticks),
         checksum: ms_per_tick(total.checksum, ticks),
     }
 }
@@ -232,11 +470,12 @@ fn parse_args() -> Args {
             }
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
-                println!("  --scenario lane,cage,crowd");
+                println!("  --scenario lane,cage,crowd,pathing,topology,production");
                 println!("  --units 1000,5000,10000");
                 println!("  --workers 1,2,4,8");
                 println!("  --ticks 200");
                 println!("  --warmup 20");
+                println!("Pathing is intentionally adversarial; start with smaller unit counts.");
                 std::process::exit(0);
             }
             other => panic!("unknown argument: {other}"),
@@ -258,6 +497,9 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "lane" => Scenario::Lane,
             "cage" => Scenario::Cage,
             "crowd" => Scenario::Crowd,
+            "pathing" => Scenario::Pathing,
+            "topology" => Scenario::Topology,
+            "production" => Scenario::Production,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()
