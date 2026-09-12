@@ -112,7 +112,7 @@ The benchmark exits non-zero if different worker counts produce different final 
 
 The original Castle Fight compatibility target caps total units at **700**, so 700-unit cases are now first-class benchmark points. The 1k/5k/10k workloads remain deliberate architecture stress probes rather than implied gameplay support targets.
 
-On the Ryzen 5 5600 reference machine, the current attack-envelope/crowd-flow solver keeps the ordinary 700-unit fixtures far below a 30 Hz tick budget even on one worker: lane `0.980 ms/tick`, cage `1.184 ms/tick`, and crossing crowd `0.985 ms/tick`. The corresponding eight-worker runs are `0.831`, `0.861`, and `0.904 ms/tick`. These numbers include the full canonical checksum every tick. Relative-closing anticipation and canonical bypass continuity add roughly a few tenths of a millisecond versus the earlier overlap-only solver at this scale, which is accepted for the materially better congestion behavior. Worker-count checksums match for every fixture (`4ab212ca5cf02fb1`, `ec58f65e7f4dfd3`, and `61c87ff7b92653b1` respectively).
+On the Ryzen 5 5600 reference machine, the current attack-envelope/objective-flow solver keeps the ordinary 700-unit fixtures far below a 30 Hz tick budget even on one worker: lane `1.187 ms/tick`, cage `1.230 ms/tick`, and crossing crowd `1.149 ms/tick`. The corresponding eight-worker runs are `0.979`, `1.010`, and `0.993 ms/tick`. These numbers include the full canonical checksum every tick. Hard collision rejects only `0.26%`, `0.05%`, and `0.14%` of movement intents respectively. The current per-unit objective tie distribution and proposed-final collision commitment intentionally change authoritative movement outcomes, and worker-count checksums match for every fixture (`0286150dd84dff49`, `1c8ca2c16f869459`, and `a7fdc182ca65fd23` respectively).
 
 Focused client-scale regressions now cover the observed 3D movement failures. A ranged unit entering behind an occupied firing line reaches range without repeated side-to-side reversal; the same continuity rule applies to melee congestion. A 12-unit melee group converging on one unit target produces the same result on one/eight workers while filling multiple sides of the legal attack region. A 24-unit melee group approaching a 7×7-cell building gets at least 20 distinct units into legal attack positions across at least three building faces, with no perimeter-slot assignment. A ranged unit spawned well inside its maximum range remains at that closer legal distance and attacks rather than backing away to the outer boundary.
 
@@ -522,10 +522,10 @@ The standard long-run probe uses 30 warmup ticks plus 3,600 measured ticks, equi
 
 | Units ceiling | Workers | ms/tick | Avg live projectiles | Peak projectiles | Launches/tick | Impacts/tick | Effects/tick | Bounce jumps/tick | Ability casts/tick | Avg / peak stunned | Final live units | Final buildings | Final checksum |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 700 | 1 | 1.310 | 94.7 | 424 | 20.5 | 31.6 | 53.1 | 11.2 | 0.2 | 54.9 / 696 | 341 | 24 | `782fb1e4ffda765b` |
-| 700 | 8 | 1.407 | 94.7 | 424 | 20.5 | 31.6 | 53.1 | 11.2 | 0.2 | 54.9 / 696 | 341 | 24 | `782fb1e4ffda765b` |
+| 700 | 1 | 0.963 | 95.1 | 502 | 22.2 | 33.7 | 47.0 | 11.6 | 0.2 | 52.6 / 697 | 309 | 24 | `48e744f0c5315c58` |
+| 700 | 8 | 0.965 | 95.1 | 502 | 22.2 | 33.7 | 47.0 | 11.6 | 0.2 | 52.6 / 697 | 309 | 24 | `48e744f0c5315c58` |
 
-With attack-envelope pursuit and anticipatory crowd flow enabled, the run averages 540.7 retained targets/tick with only 1.5 target changes/tick while processing 11.7 ally-defense queries/tick. More units successfully reach useful combat positions than under the earlier tail-prone crowd solver, so sustained combat is denser: projectile/impact rates rise and the two-minute fixture ends with 341 live units rather than the earlier 448. Periodic global stuns still reach 696 simultaneous disabled units without stale-target churn, overlap failure, or worker-count divergence. The entire mixed simulation remains around 1.3–1.4 ms/tick including the full checksum, leaving very large headroom against a 30 Hz budget at the original unit ceiling; this particular mixed workload is too small/sequential for eight workers to improve wall time.
+With the current attack-envelope, objective-flow, and proposed-final collision commit enabled, the run averages 524.8 retained targets/tick with only 1.4 target changes/tick while processing 6.4 ally-defense queries/tick. It averages 55.2 movement intents/tick, including 17.2 objective-following intents, and only 1.1 movement intents/tick are rejected by the hard collision pass (1.91%). Periodic global stuns still reach 697 simultaneous disabled units without stale-target churn, overlap failure, or worker-count divergence. The entire mixed simulation remains below 1 ms/tick including the full checksum on the reference run, leaving very large headroom against a 30 Hz budget at the original unit ceiling; this particular mixed workload remains too small/sequential for eight workers to improve wall time.
 
 ## Mixed collision-radius verification — 2026-09-12
 
@@ -539,6 +539,21 @@ The `radius` fixture drives 700 units using representative extracted Warcraft co
 | 700 | 8 | 1.246 | 0.063 | 0.622 | `d6e517a1eb84cc3a` |
 
 The ordinary 700-unit lane/cage/crowd fixtures still retain their pre-radius hashes when no explicit radius is authored, confirming that the imported-geometry path is opt-in rather than a silent rules change for verification placeholders.
+
+## High-density traffic-flow verification — 2026-09-12
+
+A playable ~2,000-unit stalemate exposed two distinct movement failures that smaller fixtures did not reveal. First, equal-cost objective-field choices used coordinate ordering, so symmetric route choices consistently favored one side of the lane and accumulated a macroscopic one-sided traffic bias. Second, the hard collision pass initially reserved every unit's old position before considering movement, so a packed convoy could not advance into space that the unit ahead was simultaneously vacating. Under sustained compression that rejection propagated all the way back toward production buildings.
+
+Objective following now resolves equal-cost downhill choices with a stable per-unit lateral preference derived from `SimId`, while retaining the same integration cost as the primary rule. Local bypass continuity also applies to objective movement, not only retained combat targets. The hard non-overlap pass begins from proposed final positions and canonically repairs only actual final-position conflicts, allowing coherent rows/columns to translate together while preserving the no-overlap invariant. Focused regressions cover two-sided objective tie distribution, symmetric blocker routing, objective movers flowing around stationary allies, and packed convoys using simultaneously vacated space.
+
+The client-scale `traffic` fixture places 2,000 units into a symmetric wide-lane stalemate. Before the proposed-final commit, the fixture averaged about 1,924 movement intents/tick but rejected about 1,681 of them in hard collision (`87.35%`). With the current solver the 240-tick post-warmup run is:
+
+| Units | Workers | ms/tick | Movement intents/tick | Objective intents/tick | Hard-blocked/tick | Blocked % | Final lower / upper lane halves | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 2,000 | 1 | 4.439 | 1649.1 | 4.7 | 7.6 | 0.46% | 1090 / 910 | `045f0928ef8201f4` |
+| 2,000 | 8 | 3.774 | 1649.1 | 4.7 | 7.6 | 0.46% | 1090 / 910 | `045f0928ef8201f4` |
+
+The later 1090/910 split occurs after almost the entire population is mutually target-locked, so it is dominated by combat packing rather than objective routing. A 25-tick approach-phase sample remains close to symmetric at 1017/983 while rejecting only 0.55% of movement intents, confirming that the previous coordinate-driven one-sided objective bias is gone. The traffic fixture is intentionally above the original 700-unit compatibility ceiling and exists to catch emergent macroscopic flow failures.
 
 ## Current interpretation
 

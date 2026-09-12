@@ -28,6 +28,7 @@ enum Scenario {
     Stun,
     Slow,
     Radius,
+    Traffic,
     Mixed,
 }
 
@@ -48,6 +49,7 @@ impl Scenario {
             Self::Stun => "stun",
             Self::Slow => "slow",
             Self::Radius => "radius",
+            Self::Traffic => "traffic",
             Self::Mixed => "mixed",
         }
     }
@@ -161,6 +163,25 @@ fn main() {
                         "  MISMATCH"
                     },
                 );
+                if result.movement_intents_per_tick > 0.0 {
+                    println!(
+                        "         movement intent/t={:.1} objective/t={:.1} hard-blocked/t={:.1} blocked={:.2}%",
+                        result.movement_intents_per_tick,
+                        result.objective_move_intents_per_tick,
+                        result.movement_blocked_per_tick,
+                        result.movement_blocked_percent,
+                    );
+                }
+                if scenario == Scenario::Traffic {
+                    println!(
+                        "         traffic lower-half={} upper-half={} center-line={}",
+                        result.traffic_lower_half_units,
+                        result.traffic_upper_half_units,
+                        result.final_units_alive
+                            - result.traffic_lower_half_units
+                            - result.traffic_upper_half_units,
+                    );
+                }
                 if result.peak_projectiles_alive > 0
                     || result.projectile_launches_per_tick > 0.0
                     || result.projectile_impacts_per_tick > 0.0
@@ -238,6 +259,9 @@ struct PhaseMs {
 #[derive(Debug, Default)]
 struct BenchCounters {
     pursuit_steps: usize,
+    movement_intents: usize,
+    movement_blocked: usize,
+    objective_move_intents: usize,
     a_star_fallbacks: usize,
     a_star_cache_hits: usize,
     a_star_expanded_nodes: usize,
@@ -273,6 +297,10 @@ struct BenchResult {
     ticks_per_second: f64,
     phase_ms: PhaseMs,
     pursuit_steps: usize,
+    movement_intents_per_tick: f64,
+    movement_blocked_per_tick: f64,
+    objective_move_intents_per_tick: f64,
+    movement_blocked_percent: f64,
     a_star_fallbacks: usize,
     a_star_cache_hits: usize,
     a_star_nodes_per_tick: f64,
@@ -302,6 +330,8 @@ struct BenchResult {
     ally_defense_attackers_per_query: f64,
     final_units_alive: usize,
     final_buildings_alive: usize,
+    traffic_lower_half_units: usize,
+    traffic_upper_half_units: usize,
     checksum: u64,
 }
 
@@ -383,6 +413,23 @@ fn run_case(
     }
     let elapsed = start.elapsed();
 
+    let (traffic_lower_half_units, traffic_upper_half_units) = if scenario == Scenario::Traffic {
+        let center_y = 375 * SUBUNITS_PER_WORLD_UNIT;
+        simulation
+            .units()
+            .into_iter()
+            .fold((0, 0), |(lower, upper), unit| {
+                if unit.position.y < center_y {
+                    (lower + 1, upper)
+                } else if unit.position.y > center_y {
+                    (lower, upper + 1)
+                } else {
+                    (lower, upper)
+                }
+            })
+    } else {
+        (0, 0)
+    };
     let seconds = elapsed.as_secs_f64();
     BenchResult {
         ms_per_tick: duration_per_tick(elapsed, ticks).as_secs_f64() * 1_000.0,
@@ -393,6 +440,14 @@ fn run_case(
         },
         phase_ms: average_phase_ms(timings, ticks),
         pursuit_steps: counters.pursuit_steps,
+        movement_intents_per_tick: counters.movement_intents as f64 / ticks as f64,
+        movement_blocked_per_tick: counters.movement_blocked as f64 / ticks as f64,
+        objective_move_intents_per_tick: counters.objective_move_intents as f64 / ticks as f64,
+        movement_blocked_percent: if counters.movement_intents == 0 {
+            0.0
+        } else {
+            counters.movement_blocked as f64 * 100.0 / counters.movement_intents as f64
+        },
         a_star_fallbacks: counters.a_star_fallbacks,
         a_star_cache_hits: counters.a_star_cache_hits,
         a_star_nodes_per_tick: counters.a_star_expanded_nodes as f64 / ticks as f64,
@@ -442,6 +497,8 @@ fn run_case(
         },
         final_units_alive: simulation.unit_count(),
         final_buildings_alive: simulation.building_count(),
+        traffic_lower_half_units,
+        traffic_upper_half_units,
         checksum: simulation.checksum(),
     }
 }
@@ -476,6 +533,24 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
             SimPoint::new(100 * world, 0),
         ];
     }
+    if scenario == Scenario::Traffic {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        config.spatial_cell_size = 40 * world;
+        config.navigation_cell_size = 10 * world;
+        config.navigation_min = castle_fight_sim::NavCell::new(0, 0);
+        config.navigation_max = castle_fight_sim::NavCell::new(199, 74);
+        config.target_pursuit_extra_range = 30 * world;
+        config.unit_separation_distance = 8 * world;
+        config.max_separation_per_tick = world;
+        config.static_blockers = vec![
+            BuildingFootprint::new(67, 0, 66, 20),
+            BuildingFootprint::new(67, 55, 66, 20),
+        ];
+        config.team_objective = [
+            SimPoint::new(1_625 * world, 375 * world),
+            SimPoint::new(375 * world, 375 * world),
+        ];
+    }
     config
 }
 
@@ -499,6 +574,7 @@ fn populate_scenario(
         Scenario::Stun => populate_global_stun_density(simulation, units),
         Scenario::Slow => populate_timed_movement_modifier_density(simulation, units),
         Scenario::Radius => populate_mixed_radius_battle(simulation, units),
+        Scenario::Traffic => populate_traffic_jam(simulation, units),
         Scenario::Mixed => populate_mixed_battle(simulation, units),
     }
 
@@ -508,6 +584,47 @@ fn populate_scenario(
             footprint: BuildingFootprint::new(118, 63, 1, 1),
         },
         _ => ScenarioState::Static,
+    }
+}
+
+fn populate_traffic_jam(simulation: &mut Simulation, total_units: usize) {
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let per_team = total_units / 2;
+    const ROWS: usize = 40;
+    assert!(
+        per_team <= ROWS * 40,
+        "traffic fixture supports at most 3,200 units on the client-scale lane"
+    );
+    let spacing = 8 * world;
+    let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
+        damage: 0,
+        range: 14 * world,
+        acquisition_range: 80 * world,
+        cooldown_ticks: 30,
+    };
+    let movement = MovementProfile {
+        speed_per_tick: 40 * world / 30,
+    };
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let row = index % ROWS;
+            let column = index / ROWS;
+            let x = if team == 0 {
+                960 * world - i32::try_from(column).expect("traffic column fits i32") * spacing
+            } else {
+                1_040 * world + i32::try_from(column).expect("traffic column fits i32") * spacing
+            };
+            let y = (219 + i32::try_from(row).expect("traffic row fits i32") * 8) * world;
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000_000,
+                attack,
+                movement,
+            });
+        }
     }
 }
 
@@ -1211,6 +1328,9 @@ fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
 
 fn accumulate_counters(result: &TickResult, counters: &mut BenchCounters) {
     counters.pursuit_steps += result.pursuit_steps;
+    counters.movement_intents += result.movement_intents;
+    counters.movement_blocked += result.movement_blocked;
+    counters.objective_move_intents += result.objective_move_intents;
     counters.a_star_fallbacks += result.a_star_fallbacks;
     counters.a_star_cache_hits += result.a_star_cache_hits;
     counters.a_star_expanded_nodes += result.a_star_expanded_nodes;
@@ -1343,6 +1463,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "stun" => Scenario::Stun,
             "slow" => Scenario::Slow,
             "radius" => Scenario::Radius,
+            "traffic" => Scenario::Traffic,
             "mixed" => Scenario::Mixed,
             other => panic!("unknown scenario: {other}"),
         })
