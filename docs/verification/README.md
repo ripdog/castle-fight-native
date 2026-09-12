@@ -23,8 +23,9 @@ Implemented:
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
 - authoritative `Bounce` projectiles with persistent chain identity, bounded hit history, integer travel/falloff, and keyed deterministic subsequent-target selection;
 - attack-capable buildings with independent target/cooldown state, footprint-based static acquisition, shared canonical unit/building combat ordering, and ordinary projectile delivery;
-- automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, atomic cast commitment, and immediate non-retaliatory damage effects;
-- projectile/targeting/ability-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, automatic evaluations/casts/effects/candidates, target retentions/changes, and ally-defense candidate counts;
+- automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, canonical map-wide enemy-unit targeting, atomic cast commitment, immediate non-retaliatory damage, and timed stun effects;
+- authoritative timed stun state with exclusive absolute expiry, max-expiry refresh, and exact suppression of fresh targeting, ordinary attacks, and intentional movement while active;
+- projectile/targeting/ability/status-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, automatic evaluations/casts/effects/candidates, current/average/peak stunned units, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
 - failed spawn attempts are lost rather than backlogged;
@@ -32,7 +33,7 @@ Implemented:
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, automatic abilities, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, and long mixed-combat release benchmarks;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, global-stun/status-density, and long mixed-combat release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -40,7 +41,7 @@ Not implemented yet:
 
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
-- broader ability/effect vocabulary, statuses/buffs, manual/legendary ability activation, and multi-ability buildings;
+- broader ability/effect vocabulary beyond immediate damage/stun, buffs/debuffs beyond stun, manual/legendary ability activation, and multi-ability buildings;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -85,6 +86,11 @@ cargo run --release -p castle-fight-sim-bench -- \
 # Automatic spellcasting / random-target density
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario ability --units 700,1000,5000,10000 \
+  --workers 1,8 --warmup 2 --ticks 20
+
+# Global timed-stun/status density
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario stun --units 700,1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
 
 # Two-minute mixed verification battle at the compatibility ceiling
@@ -460,21 +466,42 @@ The `ability` density fixture uses the requested unit count as durable stationar
 
 At the actual 700-unit compatibility ceiling, even this all-casters-every-tick fixture is only 2.68 ms/tick on one worker and 1.15 ms on eight, including the full canonical checksum. Unlike the smaller ordinary-combat fixtures, this phase contains enough independent candidate-query work to amortize Rayon overhead: eight workers reduce ability evaluation from 1.72 to 0.38 ms at 700 units and from 27.83 to 5.31 ms in the 10k torture case. This validates the intended architecture choice of parallel evaluation plus canonical serial commitment rather than requiring all simulation phases to exhibit multicore speedup.
 
+## Global timed-stun density — 2026-09-12
+
+Timed stun is now executable authoritative status state rather than only a scheduling requirement. A stun cast on tick `T` for duration `D > 0` stores exclusive expiry `T + D`; the unit is disabled while `current_tick < stunned_until_tick`. Reapplication keeps the later expiry, so a shorter stun cannot truncate a longer one. While stunned, units retain a still-valid existing target but do not perform fresh target acquisition/retaliation/ally-defense switching, ordinary attacks, or intentional movement. Active buildings with status state likewise suppress retargeting, ordinary attacks, and automatic casts while stunned. Cooldowns and mana regeneration continue normally.
+
+Focused regressions verify that a one-tick global stun cancels an already-established melee attack on its cast tick and releases the attacker on the next tick; a two-tick stun suppresses acquisition and movement for exactly two ticks; overlapping shorter/longer stuns preserve the longer expiry; and a global-stun battle produces identical checksums on 1/2/8 workers.
+
+The `stun` stress fixture uses the requested combat-unit count plus one global stun caster per 40 units, capped at 64 casters. Casters have a three-tick cooldown and apply a two-tick map-wide stun to every living enemy combat unit. This intentionally creates a high status duty cycle and mass canonical effect application while repeatedly taking thousands of units in and out of active targeting/movement.
+
+| Units | Casters | Workers | ms/tick | Ability ms/tick | Casts/tick | Stun effects/tick | Avg stunned | Peak stunned | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 700 | 17 | 1 | 1.353 | 0.017 | 6.0 | 2,082.5 | 455 | 700 | `42fdbcb6fb482313` |
+| 700 | 17 | 8 | 0.957 | 0.037 | 6.0 | 2,082.5 | 455 | 700 | `42fdbcb6fb482313` |
+| 1,000 | 25 | 1 | 2.214 | 0.028 | 8.8 | 4,375.0 | 650 | 1,000 | `5d0b18ae53073f39` |
+| 1,000 | 25 | 8 | 1.285 | 0.062 | 8.8 | 4,375.0 | 650 | 1,000 | `5d0b18ae53073f39` |
+| 5,000 | 64 | 1 | 16.304 | 0.188 | 22.4 | 56,000 | 3,250 | 5,000 | `8b910535430532c0` |
+| 5,000 | 64 | 8 | 6.805 | 0.200 | 22.4 | 56,000 | 3,250 | 5,000 | `8b910535430532c0` |
+| 10,000 | 64 | 1 | 46.819 | 0.455 | 22.4 | 112,000 | 6,500 | 10,000 | `f224d2396bb187b0` |
+| 10,000 | 64 | 8 | 18.719 | 0.501 | 22.4 | 112,000 | 6,500 | 10,000 | `f224d2396bb187b0` |
+
+Mass stun application itself is inexpensive even in the torture cases; the larger cost comes from thousands of units repeatedly transitioning back into active target/movement evaluation. At the actual 700-unit ceiling the entire deliberately extreme fixture remains below 1.4 ms/tick on one worker and below 1.0 ms on eight, including full canonical checksumming. The matching hashes confirm that status expiry/refresh and action suppression are worker-count independent.
+
 ## Long mixed compatibility battle — 2026-09-12
 
-The `mixed` fixture is the first sustained cross-system battle rather than an isolated subsystem torture test. Its 700-unit scale reserves four unit slots for four slow production buildings, starts 696 combat units split evenly between teams, then lets each producer emit one melee unit during the standard run so the no-death population cannot exceed the 700-unit compatibility reference. The initial army is evenly mixed across melee, guaranteed-hit, ballistic, and bounce delivery. The map also contains twelve independently targeted ranged attack buildings and eight automatic mana/damage spell buildings. Movement, hard non-overlap collision, sticky targeting/retaliation, ally defense, projectile travel/impact, bounce chains, splash, production placement, mana/cooldown scheduling, deaths, and the full canonical checksum all run together.
+The `mixed` fixture is the first sustained cross-system battle rather than an isolated subsystem torture test. Its 700-unit scale reserves four unit slots for four slow production buildings, starts 696 combat units split evenly between teams, then lets each producer emit one melee unit during the standard run so the no-death population cannot exceed the 700-unit compatibility reference. The initial army is evenly mixed across melee, guaranteed-hit, ballistic, and bounce delivery. The map also contains twelve independently targeted ranged attack buildings and eight automatic mana spell buildings: six random-target damage casters plus one infrequent global stunner per team. Movement, hard non-overlap collision, sticky targeting/retaliation, ally defense, projectile travel/impact, bounce chains, splash, production placement, mana/cooldown scheduling, timed stun suppression/expiry, deaths, and the full canonical checksum all run together.
 
 The standard long-run probe uses 30 warmup ticks plus 3,600 measured ticks, equivalent to two simulated minutes at 30 Hz. It completes without panic or overlap failure, resolves substantial attrition, and produces the same final checksum on one and eight workers:
 
-| Units ceiling | Workers | ms/tick | Avg live projectiles | Peak projectiles | Launches/tick | Impacts/tick | Effects/tick | Bounce jumps/tick | Ability casts/tick | Final live units | Final buildings | Final checksum |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 700 | 1 | 1.038 | 77.9 | 129 | 16.2 | 25.0 | 44.9 | 8.9 | 0.3 | 413 | 24 | `2cd10e13452a95fd` |
-| 700 | 8 | 0.908 | 77.9 | 129 | 16.2 | 25.0 | 44.9 | 8.9 | 0.3 | 413 | 24 | `2cd10e13452a95fd` |
+| Units ceiling | Workers | ms/tick | Avg live projectiles | Peak projectiles | Launches/tick | Impacts/tick | Effects/tick | Bounce jumps/tick | Ability casts/tick | Avg / peak stunned | Final live units | Final buildings | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 700 | 1 | 1.043 | 74.7 | 281 | 15.2 | 24.2 | 40.9 | 9.1 | 0.2 | 59.3 / 698 | 448 | 24 | `1667efd96259ecfc` |
+| 700 | 8 | 0.917 | 74.7 | 281 | 15.2 | 24.2 | 40.9 | 9.1 | 0.2 | 59.3 / 698 | 448 | 24 | `1667efd96259ecfc` |
 
-The run also averages 576.1 retained targets/tick with only 1.5 target changes/tick, while processing 7.7 ally-defense queries/tick. This is useful evidence that the sticky-target correction remains stable when unrelated projectile, tower, spell, death, and movement events are happening simultaneously rather than only in focused regressions. The overall one-worker cost remains about 1 ms/tick, leaving very large headroom against a 30 Hz budget at the original unit ceiling.
+The run also averages 586.2 retained targets/tick with only 1.3 target changes/tick, while processing 7.6 ally-defense queries/tick. Periodic global stuns push the instantaneous disabled population as high as 698 without introducing stale-target churn, movement/collision failures, or worker-count divergence. This is useful evidence that sticky targeting and status precedence remain stable when unrelated projectile, tower, spell, death, production, and movement events happen simultaneously rather than only in focused regressions. The overall one-worker cost remains about 1 ms/tick, leaving very large headroom against a 30 Hz budget at the original unit ceiling.
 
 ## Current interpretation
 
-Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage, ballistic post-movement splash queries, independently targeted long-range attack buildings, and automatic mana/random-target casting all remain viable at the 700-unit compatibility scale. Bounce is functionally/deterministically viable, but extreme simultaneous chain density exposes canonically ordered candidate evaluation as a measurable scaling risk that should be revisited only with realistic content frequency/support targets or an acceleration structure that provably preserves the keyed rule.
+Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage, ballistic post-movement splash queries, independently targeted long-range attack buildings, automatic mana/random-target casting, and mass timed-stun application all remain viable at the 700-unit compatibility scale. Bounce is functionally/deterministically viable, but extreme simultaneous chain density exposes canonically ordered candidate evaluation as a measurable scaling risk that should be revisited only with realistic content frequency/support targets or an acceleration structure that provably preserves the keyed rule.
 
-All four ordinary delivery architecture classes, attack-building source semantics, and the base automatic ability/mana scheduler now have executable deterministic verification coverage. The automatic-caster probe also shows where multicore execution is materially useful: expensive independent target evaluation scales well while canonical effect commitment remains ordered. The two-minute mixed battle provides the corresponding cross-system evidence at the actual unit ceiling. The next verification work should choose the next rule-heavy compatibility slice from observed map behavior—likely status/stun timing or a representative buff/area ability—rather than expanding into production UI/networking prematurely.
+All four ordinary delivery architecture classes, attack-building source semantics, the base automatic ability/mana scheduler, and exact timed-stun precedence now have executable deterministic verification coverage. The automatic-caster and status-transition probes also show where multicore execution is materially useful: expensive independent target/movement evaluation scales well while canonical effect commitment remains ordered. The two-minute mixed battle provides corresponding cross-system evidence at the actual unit ceiling. The next rule-heavy compatibility slice should be chosen from observed map behavior—preferably a representative buff/debuff or area effect that exercises modifier stacking/expiry—rather than expanding into production UI/networking prematurely.
