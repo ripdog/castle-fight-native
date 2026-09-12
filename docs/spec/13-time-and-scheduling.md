@@ -59,22 +59,25 @@ pub enum SimPhase {
     Topology,
     Navigation,
     Production,
+    SpatialAfterSpawn,
     Timers,
-    AbilityIntent,
+    AbilityResolve,
     Targeting,
     CombatIntent,
-    AbilityResolve,
     CombatResolve,
-    ProjectileResolve,
     MovementIntent,
     MovementResolve,
+    SpatialAfterMovement,
+    BallisticImpact,
     StructuralCommit,
     Victory,
     Checksum,
 }
 ```
 
-Exact names/order may evolve with gameplay rules.
+The initial ordering is gameplay-significant: pre-attack stuns/disables suppress ordinary attacks; death suppresses all later actions by that entity; and ballistic/siege impact queries use post-movement positions. Units created in `Production` are marked as spawned this tick and cannot create an ordinary attack intent until a later tick.
+
+Exact internal set names may evolve, but changing these visibility/precedence semantics is a simulation rules/version change.
 
 Any dependency that affects authoritative results MUST be explicit. Default scheduler ordering MUST NOT be treated as a gameplay guarantee.
 
@@ -205,13 +208,13 @@ Persistent inability to maintain the target tick rate is an overload condition t
 
 ## 13. Client catch-up after snapshot
 
-A reconnecting client may receive a snapshot older than the current server tick plus the finalized tick-input history after it.
+A reconnecting client may receive a snapshot older than the current server tick plus the canonical stream history after it, including any between-tick lifecycle controls.
 
 It MUST be possible to run the simulation without presentation during catch-up:
 
 ```text
 load snapshot T
-apply finalized tick inputs
+apply canonical stream records
 step T+1 ... current
 publish current state to presentation
 ```

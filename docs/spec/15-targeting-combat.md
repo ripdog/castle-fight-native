@@ -63,9 +63,16 @@ Depending on attack/content rules, eligibility may consider:
 - attack-specific target filters;
 - special taunt/priority effects.
 
-An attacker MUST NOT require a navigable ground path to a target unless that specific game rule explicitly requires it.
+Navigation reachability and targetability remain separate concepts, but an attacker MUST discard a candidate it cannot actually reach an attack position for with any attack that can affect that candidate.
 
-Therefore a caged unit may be selected normally by a long-range attacker.
+Examples:
+
+- a long-range attacker already able to hit a caged unit does not need a ground route to that unit;
+- a melee attacker outside a cage cannot select a unit inside when no reachable melee attack position exists;
+- a unit whose only applicable attack cannot affect the candidate (for example because of target class) ignores it;
+- if a reachable attack position exists around ordinary obstacles, pursuit/navigation may route toward that position.
+
+Thus caged units remain valid targets for attackers that can genuinely hit them, while attackers unable to hit them ignore them rather than pushing forever against the cage.
 
 The player builder is explicitly outside ordinary combat targetability. It MUST NOT enter standard combat candidate sets even when physically nearby, hostile by team ownership, or the carrier/origin of an offensive item effect.
 
@@ -77,16 +84,18 @@ A ranking function SHOULD conceptually produce comparable terms such as:
 
 ```text
 forced/taunt priority
-explicit target class priority
+explicit target class/threat priority
 current-target retention preference
 range/distance preference
 other gameplay-specific preference
 SimId final tie-break
 ```
 
+For the standard rules, an eligible enemy combat unit outranks a non-attacking building even when that passive building is closer. This is important around cages: if the caged units themselves are unreachable to a melee attacker, reachable enemy units outside the cage remain preferred; if no higher-priority combat-unit target is available, the cage buildings themselves may become the closest valid targets. More detailed ordering for attack-capable buildings/objectives remains content-compatible behavior to verify.
+
 Distance SHOULD be compared using deterministic squared fixed/integer distance where possible.
 
-If two candidates are otherwise identical, lower/higher `SimId` (one direction chosen globally) MUST provide a final deterministic tie-break.
+If two candidates are otherwise identical, the project explicitly accepts stable `SimId` as the final tie-break. No fairness-randomization layer is required.
 
 ## 7. Target retention
 
@@ -102,6 +111,7 @@ Rules must eventually define when a current target is dropped, including:
 - attacker becomes disabled;
 - taunt/forced-target effect;
 - attack mode can no longer hit target category;
+- no reachable attack position remains for any applicable attack;
 - explicit content-specific retarget rule.
 
 Retention semantics MUST be deterministic and individually evaluated.
@@ -159,7 +169,7 @@ This mode is typically used by siege/artillery attacks.
 
 At launch, the attack captures a target position/impact zone. The projectile then follows a deterministic ballistic/arc presentation toward that fixed destination and does **not** follow the original target.
 
-At impact, the simulation queries entities in the target/impact zone and applies the defined effect to the entities actually present there. Therefore:
+At impact, after movement for that simulation tick has resolved, the simulation refreshes the relevant spatial index and queries entities in the target/impact zone. The effect applies to the entities actually present at those post-movement positions. Therefore:
 
 - the originally selected unit can move away and be missed;
 - other units can move into the impact zone and be hit;
@@ -262,31 +272,30 @@ proc chance:
 
 Parallel execution order MUST NOT consume or shift another entity's random sequence.
 
-## 14. Death semantics
+## 14. Death and disable precedence
 
-The game MUST define when an entity becomes dead relative to same-tick actions.
+The initial rules are explicit:
 
-A recommended initial model is staged:
+1. **death wins over every later action** — once health reaches the death threshold, that entity may not resolve any later attack, cast, or movement in the tick;
+2. **stun/disable wins over an ordinary attack** — if the disabling status becomes active before that attack resolves, the attack is canceled even if its intent was prepared earlier;
+3. structural despawn still occurs at the normal commit point so references/effects can resolve deterministically;
+4. already-launched persistent projectiles remain independent authoritative state and are not canceled merely because their source subsequently dies.
 
-1. attack intents are created from valid start-of-combat-phase state;
-2. effects are deterministically resolved;
-3. health reaching the death threshold marks death pending;
-4. death effects resolve in a defined subphase;
-5. structural despawn occurs at a commit point.
-
-Whether a unit whose health reaches zero may still complete an already-generated same-tick attack is a gameplay decision that MUST be explicit rather than accidental.
+Same-phase interactions are processed in canonical event order. This means same-tick mutual actions are not implicitly simultaneous: a source killed earlier in canonical resolution cannot complete a later unresolved action.
 
 ## 15. Movement/combat interaction
 
-Movement and combat phase ordering must specify:
+Movement/combat interaction follows these initial rules:
 
-- whether attack range is checked before or after movement for the tick;
-- whether units stop moving during attack windup;
-- whether melee units approach current target rather than pure objective flow;
-- how attack range hysteresis works;
-- whether target movement after intent invalidates an attack.
+- a unit spawned on the current tick cannot attack until a later tick;
+- ordinary attack intent/resolution occurs before that tick's movement;
+- an entity killed before movement does not move;
+- a stunned/disabled entity does not resolve an ordinary attack after the disable becomes active;
+- due ballistic/siege impacts resolve after movement and use post-movement positions;
+- melee and other range-limited attackers pursue a reachable attack position for their selected target rather than steering blindly at the target through blockers;
+- if no attack position is reachable, the target is invalid and is dropped/reacquired.
 
-These are compatibility/game-feel rules and should be isolated from scheduler implementation.
+Windup/backswing, range hysteresis, and exact guaranteed-hit target-removal semantics remain compatibility details, but they must fit these precedence rules.
 
 ## 16. Attack buildings
 
@@ -351,16 +360,19 @@ The targeting/combat test suite MUST eventually include:
 1. two equivalent nearby attackers can independently choose different targets when geometry/rules differ;
 2. candidate insertion/grid traversal order does not alter target choice;
 3. exact tie resolves by documented stable ID rule;
-4. caged unit remains targetable by valid ranged attacker;
-5. no navigable path does not disqualify ranged target;
-6. lost/dead target triggers deterministic reacquisition;
-7. same battle yields identical checksum at different worker counts;
-8. same-tick multi-attacker damage follows documented resolution semantics;
-9. projectile impact timing is identical across runs;
-10. deterministic random proc/crit values do not change with worker count;
-11. attack building performs independent target selection;
-12. melee attack has no authoritative projectile trajectory;
-13. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
-14. ballistic ranged projectile captures a fixed destination, can miss the original moving target, and can hit another eligible unit in the impact zone;
-15. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
-16. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.
+4. caged unit remains targetable by a ranged attacker that can actually hit it;
+5. melee attacker rejects a caged unit with no reachable attack position and can instead acquire a reachable cage building;
+6. reachable enemy combat unit outside the cage outranks a closer non-attacking cage building;
+7. lost/dead/unreachable target triggers deterministic reacquisition;
+8. same battle yields identical checksum at different worker counts;
+9. same-tick multi-attacker damage follows documented canonical/death precedence;
+10. a stun applied before attack resolution cancels the affected source's pending attack;
+11. a unit cannot attack on its spawn tick;
+12. projectile impact timing is identical across runs;
+13. deterministic random proc/crit values do not change with worker count;
+14. attack building performs independent target selection;
+15. melee attack has no authoritative projectile trajectory;
+16. guaranteed-hit ranged attack still hits after target movement according to its documented lifetime rules;
+17. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
+18. bounce attack always hits the initial target and chooses identical subsequent random targets across worker counts;
+19. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path.

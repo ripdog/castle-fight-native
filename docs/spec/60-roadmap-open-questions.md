@@ -89,12 +89,13 @@ Add:
 - build grid/footprints;
 - objective/castle;
 - production buildings;
-- deterministic spawn placement;
+- deterministic bounded expanding-spiral spawn placement;
 - topology field;
 - flow/integration navigation;
+- reachable attack-position pursuit/filtering;
 - local steering;
 - attack buildings;
-- non-combat builder entity and owned build-region validation.
+- non-combat builder entity confined to the team's owned third/build region.
 
 Explicitly implement caging tests before adding anti-stuck behavior.
 
@@ -103,11 +104,14 @@ Add a minimal debug visualizer during this milestone (circles/boxes, footprints,
 Exit criteria:
 
 - legal cage can be built;
-- units remain trapped;
-- trapped units remain individually targetable by ranged attacks;
+- units remain trapped by ordinary navigation topology;
+- trapped units remain individually targetable by attackers that can actually hit them;
+- melee attacker rejects an unreachable caged unit and can acquire a reachable cage building instead;
+- reachable enemy combat units outrank passive cage buildings;
+- spawn search chooses the first valid point in a deterministic bounded spiral and drops an attempt when exhausted;
 - destroying cage wall updates pathing and releases units;
 - navigation output remains identical across worker counts;
-- topology changes do not trigger per-unit A* searches;
+- topology changes do not trigger per-unit global A* searches;
 - debug visualization makes footprints, target choices, cages, and navigation directions inspectable while preserving identical headless checksums.
 
 ## 6. Milestone 4 — Headless gameplay prototype
@@ -158,11 +162,13 @@ Implement:
 
 - match handshake/version/content checks;
 - player command submission;
-- server validation;
+- server admission + deterministic execution validation;
 - canonical tick/order assignment;
-- scheduled command broadcast plus finalized tick-input records;
+- scheduled command/server-event broadcast plus canonical stream records (finalized ticks and between-tick controls);
 - periodic checksum checkpoints;
 - disconnect/reconnect;
+- delegated teammate control of a disconnected player's builder;
+- team-wide pause/resume and disconnect-timeout match end;
 - snapshot resync.
 
 Exit criteria:
@@ -301,43 +307,45 @@ Evaluation criteria:
 
 Avoid importing a floating-point nondeterministic physics engine into authoritative movement merely for convenience.
 
-## 16. Open question — combat timing semantics
+## 16. Partially resolved — combat timing semantics
 
-Need establish compatibility rules for:
+The initial playable rules are fixed:
 
-- attack windup;
-- backswing;
-- same-tick mutual kills;
-- whether already-issued attacks complete if source dies;
+- a unit cannot attack on its spawn tick;
+- stun/disable that becomes active before an ordinary attack resolves cancels that attack;
+- death cancels every later unresolved action by that entity in the tick;
+- already-launched persistent projectiles survive source death;
+- ballistic/siege impacts resolve after movement and query post-movement occupants.
+
+Compatibility work still needs to establish:
+
+- attack windup and backswing details;
+- exact canonical ordering for otherwise simultaneous strikes beyond the stable-ID fallback;
 - guaranteed-hit projectile target death/removal behavior;
 - exact guaranteed-hit travel-time/interpolation rule;
-- ballistic impact tick, zone shape, and impact occupant semantics;
-- ballistic projectile interaction with dead/moved original target;
+- ballistic zone shape/splash details;
 - bounce candidate range, repeat policy, travel delay, and damage scaling;
-- retarget timing;
-- attack range checked before/after movement;
+- target-retention/range hysteresis details;
 - splash/chain ordering;
-- stun/disable timing;
-- automatic spell cast timing relative to movement/ordinary attacks;
+- automatic spell cast timing details not already fixed by stun/death precedence;
 - mana regeneration/cast-cost ordering on the same tick.
 
 These should become small executable fixtures as soon as decided.
 
-## 17. Open question — target ranking compatibility
+## 17. Partially resolved — target ranking compatibility
 
-Individual targeting is required, but exact ranking must be determined.
+The initial rules establish that a candidate requiring pursuit is invalid when the attacker has no reachable attack position; a unit that can hit a caged target from its current/reachable position may still select it. Eligible enemy combat units outrank non-attacking buildings, so an attacker unable to hit units inside a cage may instead attack the cage buildings while still preferring reachable enemy units outside it. Stable `SimId` is accepted as the final exact tie-break.
 
-Need investigate/decide:
+Compatibility work still needs to investigate/decide:
 
 - current target stickiness;
-- closest target vs target priority classes;
+- finer target priority classes, including attack-capable buildings/objectives;
 - acquisition vs attack range hysteresis;
-- whether attack buildings use same base rules as units;
-- how caged targets compete with lane targets;
+- whether attack buildings use the same base ranking rules as units;
 - aggro/taunt mechanics, while preserving the rule that damage from a builder-held item does not by itself make the builder a target;
-- air/ground/building preferences.
+- detailed air/ground/building preferences.
 
-The engine provides a deterministic total ordering; content/game rules fill in the semantic score.
+The engine provides the deterministic reachability filter and total ordering; content/game rules fill in the remaining semantic score.
 
 ## 18. Open question — transport
 

@@ -56,31 +56,36 @@ Pure caches MAY be excluded from snapshots if they can be rebuilt deterministica
 
 The exact final phase list may evolve, but the simulation MUST have explicit ordered phase boundaries.
 
-Provisional phase order:
+Initial playable phase order:
 
 ```text
 Tick N state
     │
-    ├─ 1. Accept/apply scheduled player commands
+    ├─ 1. Apply finalized scheduled player/server commands
     ├─ 2. Apply topology/content changes caused by commands
     ├─ 3. Refresh invalidated navigation data
-    ├─ 4. Advance production and scheduled spawns
-    ├─ 5. Update status timers/cooldowns/mana and other scheduled resources
-    ├─ 6. Evaluate automatic abilities and their deterministic targets
-    ├─ 7. Validate/retain/acquire individual combat targets
-    ├─ 8. Compute attack/ability intents
-    ├─ 9. Commit ability costs/cooldowns and resolve/spawn effects/projectiles
-    ├─10. Resolve combat/projectile effects deterministically
-    ├─11. Compute movement/steering intents (combat units and builder under distinct rules)
-    ├─12. Resolve movement/occupancy interactions
-    ├─13. Resolve deaths/despawns and deferred structural changes
-    ├─14. Evaluate victory/game-mode state
-    ├─15. Emit authoritative tick summary/checksum inputs
+    ├─ 4. Advance production and perform bounded spawn searches
+    ├─ 5. Refresh dynamic spatial indexes needed by post-spawn queries
+    ├─ 6. Update timers/cooldowns/mana/status expiration
+    ├─ 7. Evaluate and resolve automatic/manual abilities that act before ordinary attacks
+    ├─ 8. Apply resulting disables/stuns/deaths; cancel later actions for disabled/dead sources
+    ├─ 9. Validate/retain/acquire individual combat targets
+    ├─10. Compute ordinary attack intents (excluding units spawned this tick)
+    ├─11. Resolve ordinary attacks and non-ballistic impacts in canonical order
+    ├─12. Compute movement/steering intents for still-active entities
+    ├─13. Resolve movement/occupancy interactions
+    ├─14. Refresh dynamic spatial indexes for post-movement impact queries
+    ├─15. Resolve due ballistic/siege impacts against post-movement positions
+    ├─16. Resolve remaining deaths/despawns and deferred structural changes
+    ├─17. Evaluate victory/game-mode state
+    ├─18. Emit authoritative tick summary/checksum inputs
     │
 Tick N+1 state
 ```
 
-A later prototype MAY change the ordering where gameplay requires it. Any such change is a rules change and MUST be documented.
+This order encodes the initial gameplay rules: a newly spawned unit cannot attack on its spawn tick; a stun/disable that becomes active before an ordinary attack resolves suppresses that attack even if an intent was already prepared; once an entity is dead it performs no later action in that tick; and ballistic/siege impacts query positions after movement. Already-launched persistent projectiles are independent entities and are not retroactively removed merely because their source later dies.
+
+A later compatibility-driven rules change MAY revise this ordering, but doing so is a simulation-version change and must be covered by executable timing fixtures.
 
 ## 5. Phase semantics
 
@@ -135,7 +140,7 @@ Examples requiring explicit rules:
 - an automatic caster regenerates enough mana on the same tick an ability becomes ready;
 - a player-targeted legendary artillery command captures a moving target's position.
 
-The rule may be simultaneous, priority-based, or ordered, but MUST NOT depend on which worker completes first.
+The initial rules use explicit phase precedence plus canonical ordering within a phase. When otherwise same-tick effects compete, stable event ordering ultimately falls back to `SimId`. Once an entity reaches the death threshold, any later not-yet-resolved attack, cast, or movement by that entity is canceled. No rule may depend on which worker completes first.
 
 ## 6. Structural mutation
 
@@ -217,9 +222,9 @@ The spatial index is expected to be a deterministic derived cache. Rebuilding it
 
 The server controls match lifecycle.
 
-A disconnected player does not pause the simulation.
+A single disconnected player does not pause the simulation while at least one teammate remains connected. If an entire team is disconnected, the standard rules enter an explicit canonical pause state at a completed tick boundary and wait for the configured reconnect timeout. A canonical resume or timeout/end control record leaves that state.
 
-A match MAY support administrative pause, countdown, post-game state, or replay pause, but those states are explicit protocol/game-mode states rather than consequences of client frame timing.
+Administrative pause, countdown, post-game state, replay pause, and disconnect pause are explicit protocol/game-mode states rather than consequences of client frame timing.
 
 ## 11. Simulation API shape
 
@@ -231,7 +236,7 @@ pub struct Simulation { /* private canonical + derived state */ }
 impl Simulation {
     pub fn new(config: MatchConfig, content: ContentHashBundle) -> Result<Self>;
 
-    pub fn enqueue_input(&mut self, input: FinalizedTickInputs) -> Result<()>;
+    pub fn enqueue_stream_record(&mut self, record: CanonicalStreamRecord) -> Result<()>;
 
     pub fn step(&mut self) -> TickResult;
 

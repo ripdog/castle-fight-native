@@ -119,7 +119,7 @@ A bug reproduced in a real match should ideally become a replay/snapshot regress
 A compact issue fixture can include:
 
 ```text
-snapshot/seed + finalized tick inputs + expected checkpoint hashes
+snapshot/seed + canonical stream records + expected checkpoint hashes
 ```
 
 The test runs headlessly to the failing tick.
@@ -148,7 +148,7 @@ Where target rules contain tie-breaks, each term should have focused coverage.
 
 Large randomized worlds can compare optimized target selection against a canonical brute-force selector.
 
-Mirrored/symmetric scenarios SHOULD also be run with player/team allocation reversed so deterministic tie-breaks cannot silently introduce a large systematic side advantage. If a rule deliberately uses creation/`SimId` order, that bias must be measured and treated as an explicit gameplay choice rather than merely a determinism convenience.
+Stable `SimId` ordering is explicitly accepted as the final tie-break for otherwise identical targets/events. Mirrored scenarios remain useful regression coverage, but the engine does not need to add randomized/fairness-neutral tie-breaking solely to remove creation-order bias.
 
 ## 11. Snapshot/rejoin tests
 
@@ -184,7 +184,7 @@ Integration tests SHOULD simulate:
 - stale command retry;
 - corrupted client state/checksum mismatch.
 
-The canonical finalized tick-input stream must remain unambiguous. Tests MUST include explicit empty-tick finalization, missing stream-position gaps, duplicate delivery, and snapshot/live handoff overlap.
+The canonical stream must remain unambiguous. Tests MUST include explicit empty-tick finalization, between-tick disconnect/pause/resume records, missing stream-position gaps, duplicate delivery, and snapshot/live handoff overlap.
 
 ## 13. Performance philosophy
 
@@ -194,8 +194,9 @@ The project should benchmark at least:
 
 - ordinary spread-out battle;
 - high-density melee pile;
+- caged/unreachable-target scenarios that force attack-position filtering and building fallback;
 - many long-range attack buildings;
-- heavy production/spawn churn;
+- heavy production/spawn churn including bounded spiral exhaustion;
 - repeated building placement/navigation invalidation;
 - many disconnected cages/components;
 - projectile-heavy battle with guaranteed-hit, ballistic, and bounce deliveries;
@@ -239,7 +240,7 @@ The first meaningful milestone SHOULD establish a repeatable baseline on named r
 
 For each reference workload, record catch-up ratio as `headless_ticks_per_second / live_tick_rate`. A ratio at or below 1.0 means replay catch-up cannot reach live state and therefore requires a fresher snapshot or different support target.
 
-A useful early stress target is **10,000 simultaneously active units**, not because 10,000 is the final requirement, but because it will quickly expose O(N²) behavior and poor data layout.
+A useful early diagnostic stress scenario is **10,000 simultaneously active units**, but it is not a support promise. Minimum hardware, supported late-game unit count, and reconnect catch-up requirements will be chosen only after representative prototype measurements exist.
 
 The architecture should then be profiled at larger counts to find the next limiting subsystem.
 

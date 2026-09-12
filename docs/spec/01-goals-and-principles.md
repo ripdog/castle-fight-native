@@ -23,7 +23,7 @@ Given:
 - the same simulation build and content version,
 - the same initial match state,
 - the same match seed,
-- and the same ordered finalized tick-input stream,
+- and the same ordered canonical stream of finalized tick inputs and gameplay-relevant boundary controls,
 
 every conforming simulation instance MUST produce the same authoritative world state and checksum at every synchronization checkpoint.
 
@@ -38,11 +38,11 @@ Determinism MUST hold independently of:
 
 ### 2.3 Authoritative server with reconnect
 
-The server MUST be the canonical authority for match state, command scheduling, finalized tick inputs, and command execution outcomes.
+The server MUST be the canonical authority for match state, command scheduling, finalized tick inputs, boundary-control records, and command execution outcomes.
 
 A client MAY predict/run the complete deterministic simulation locally, but server state wins on disagreement.
 
-A player MUST be able to disconnect and later rejoin while the match continues. Rejoin MUST NOT require the other players to pause.
+A player MUST be able to disconnect and later rejoin. While at least one teammate remains connected, that player's autonomous state continues and the match does not pause. If an entire team is disconnected, the standard rules pause the match for the configured reconnect timeout before ending it if nobody returns.
 
 ### 2.4 Preserve emergent strategy
 
@@ -210,7 +210,7 @@ Each active player controls exactly one builder unit for normal gameplay.
 
 The builder exists for two purposes:
 
-1. move around the player's owned build region and construct buildings there;
+1. move around the owning team's build region and construct buildings there;
 2. hold and use items.
 
 The builder itself is non-combat. It MUST NOT:
@@ -224,13 +224,13 @@ The builder itself is non-combat. It MUST NOT:
 
 The builder's authoritative position remains gameplay state because building interaction, item range, and active item targeting may depend on it. Item effects carried or activated by the builder are separate gameplay effects; they do not make the builder itself a combat participant.
 
-Building placement MUST be restricted to the player's canonical owned build region (the player's third of the battlefield in the standard ruleset).
+Building placement and builder movement MUST be restricted to the owning team's canonical build area (the team's third of the battlefield in the standard ruleset).
 
 ## 6. Multiplayer philosophy
 
 The network model SHOULD combine the bandwidth efficiency of deterministic command replication with the recoverability of an authoritative server.
 
-Clients SHOULD normally receive finalized tick inputs and simulate the resulting world locally rather than receiving continuous transforms for every unit.
+Clients SHOULD normally receive the canonical stream and simulate the resulting world locally rather than receiving continuous transforms for every unit.
 
 The server MUST retain enough canonical state/history to recover a client from:
 

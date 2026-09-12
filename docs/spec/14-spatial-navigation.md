@@ -179,9 +179,13 @@ Queries MAY return candidates in arbitrary internal order only if the consuming 
 
 If steering aggregates multiple neighbors, accumulation order must either be canonical or mathematically/order-stable under the chosen integer representation.
 
-## 13. Local movement and steering
+## 13. Local movement, pursuit, and steering
 
-Strategic navigation provides a preferred direction. Units then apply local movement rules.
+Strategic navigation provides a preferred direction toward the objective. When a unit has an individually selected target that is not yet in attack position, movement instead pursues a reachable attack position for that target.
+
+Target pursuit MUST respect topology. If no valid attack position is reachable for any applicable attack, that target is invalid for this attacker and targeting must select something else. The implementation may use local pathfinding, cached target fields, component reachability, or another measured algorithm; the gameplay semantic is that units do not push indefinitely against blockers toward an unreachable target.
+
+Units then apply local movement rules.
 
 Conceptually:
 
@@ -228,18 +232,21 @@ If a recovery mechanism is eventually necessary, it must be an explicit gameplay
 
 ## 16. Spawn placement
 
-Production buildings need deterministic unit spawn placement.
+Production buildings use a simple deterministic space search rather than special-case cage logic.
 
-The rules MUST define:
+For each production attempt:
 
-- preferred spawn point(s);
-- what happens if immediately occupied by other units;
-- whether units may initially overlap and separate;
-- whether alternative spawn offsets are searched;
-- deterministic candidate order;
-- behavior when the production building is itself part of a cage.
+1. start at the building's authored preferred spawn point;
+2. enumerate candidate positions in a fixed expanding spiral/order;
+3. choose the first position where the unit's authoritative footprint fits on valid traversable space without overlapping a blocking building or another combat unit;
+4. stop after a configured deterministic candidate/radius limit;
+5. if no candidate succeeds, the unit is not spawned and that production attempt is lost; no backlog is created by the core rules.
 
-Spawn rules MUST allow a player intentionally to produce units into an enclosed cage when building geometry causes that outcome.
+The exact spiral step/orientation and search limit are simulation/content parameters and MUST be deterministic.
+
+The search deliberately does **not** reason about cages, connected components, or routes to the enemy objective. Caging remains emergent geometry rather than a spawn-system feature. Consequently, if the bounded spiral's first valid empty position happens to be outside an enclosure, the spawn may occur there; if no valid position is found within the search bound, it simply fails.
+
+Builders are ignored as blockers during this search.
 
 ## 17. Builder spatial treatment
 
@@ -284,11 +291,14 @@ Spatial/navigation tests MUST eventually include:
 2. building detour: field routes around a blocker;
 3. complete cage: unit has no objective route and remains enclosed;
 4. cage destruction: field updates and trapped units can leave;
-5. ranged enemy targets caged unit when targeting rules prefer it;
+5. ranged enemy targets caged unit when targeting rules prefer it and the attack can genuinely hit it;
 6. unit outside cage does not cross building footprint;
 7. flow field identical across worker counts;
 8. equal-cost route chooses the documented deterministic direction;
-9. high-density crowd does not cause O(N²) candidate explosion under ordinary distributions;
-10. spawn inside cage behaves predictably and deterministically;
-11. builder standing in a lane neither blocks nor steers combat units;
-12. builder cannot complete a cage and is absent from ordinary combat target queries.
+9. reachable attack-position filtering correctly rejects unreachable melee targets without rejecting valid long-range targets;
+10. high-density crowd does not cause O(N²) candidate explosion under ordinary distributions;
+11. bounded expanding-spiral spawn search always selects the same first valid position;
+12. a fully congested search region causes the production attempt to fail with no backlog;
+13. spawn search does not special-case cage connectivity and may select a valid position across an enclosure boundary if reached by the bounded spiral;
+14. builder standing in a lane neither blocks nor steers combat units;
+15. builder cannot complete a cage and is absent from ordinary combat target queries.

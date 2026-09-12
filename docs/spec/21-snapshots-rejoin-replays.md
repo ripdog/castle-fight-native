@@ -12,9 +12,9 @@ These capabilities intentionally share one state-continuity mechanism.
 
 A snapshot is a complete logical representation of authoritative state at a specific completed simulation tick.
 
-A snapshot labeled tick `T` means **all authoritative phases of tick `T`, including structural commit, victory evaluation, and checksum-visible state, have completed**. Loading it resumes with finalized inputs for tick `T + 1`; tick `T` is never executed again.
+A snapshot labeled tick `T` means **all authoritative phases of tick `T`, including structural commit, victory evaluation, and checksum-visible state, have completed**. The snapshot also records a canonical stream position `P` through which all between-tick control records are included. Loading resumes from the first canonical stream record after `P`; tick `T` is never executed again, and the next simulation tick is `T + 1` once lifecycle state permits it.
 
-A snapshot MUST contain enough information to resume the simulation with identical future results when supplied the same subsequent finalized tick-input stream.
+A snapshot MUST contain enough information to resume the simulation with identical future results when supplied the same subsequent canonical stream.
 
 It includes, directly or transitively:
 
@@ -25,6 +25,8 @@ It includes, directly or transitively:
 - exact finalized input-stream boundary included in the snapshot state;
 - match seed;
 - players/resources/game-mode state;
+- canonical disconnect/delegated-builder-control state where gameplay-relevant;
+- canonical match pause/abandonment state and the stream boundary at which it began;
 - all authoritative entities sorted or encoded by stable `SimId`;
 - canonical components/state;
 - deterministic allocators/counters;
@@ -68,7 +70,7 @@ Cadence is provisional and should be selected from measurements balancing:
 - reconnect fast-forward length;
 - replay seek granularity.
 
-A likely initial design is a snapshot every several seconds plus complete finalized tick-input history after the oldest retained live snapshot.
+A likely initial design is a snapshot every several seconds plus complete canonical stream history (tick bundles and boundary-control records) after the oldest retained live snapshot.
 
 ## 5. Snapshot creation and simulation stalls
 
@@ -85,7 +87,7 @@ Compression and disk/network encoding may run asynchronously because encoded byt
 
 ## 6. Live command history
 
-The server retains finalized tick inputs with canonical tick/order and monotonic input-stream positions for at least the period needed to advance from the oldest reconnect/desync snapshot to the live boundary.
+The server retains canonical stream records with monotonic input-stream positions for at least the period needed to advance from the oldest reconnect/desync snapshot to the live boundary.
 
 Every snapshot records the exact input-stream position through which its state is complete. Inputs after that boundary are replayed exactly once.
 
@@ -171,7 +173,7 @@ Optional checksum checkpoints
 Optional metadata/chat/events not affecting simulation
 ```
 
-The finalized tick-input stream is canonical gameplay history.
+The ordered canonical stream of finalized tick bundles plus between-tick control records is canonical gameplay history.
 
 A replay player runs the same deterministic simulation code rather than storing every entity transform for every frame.
 
@@ -181,7 +183,7 @@ To seek to tick `T`:
 
 1. choose nearest compatible snapshot/checkpoint `S <= T`;
 2. load `S`;
-3. replay finalized tick inputs;
+3. replay canonical stream records;
 4. simulate unpaced to `T`;
 5. render state.
 
@@ -231,7 +233,7 @@ Compression should occur off the critical simulation path where practical.
 A later dedicated-server milestone SHOULD support surviving server process restart by persisting:
 
 - a recent canonical snapshot;
-- finalized tick inputs after it;
+- canonical stream records after it;
 - match/session metadata needed to resume ownership/authentication.
 
 This is separate from ordinary player reconnect but deliberately uses the same canonical state machinery.

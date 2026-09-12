@@ -20,7 +20,7 @@ The builder may be selected and moved by its owner. Ownership validation occurs 
 
 The builder has exactly two core gameplay responsibilities:
 
-1. construct buildings in the player's owned build region;
+1. construct buildings in the owning team's build region;
 2. hold and use items.
 
 Additional convenience UI or cosmetic behavior MUST NOT accidentally make the builder a combat participant.
@@ -63,9 +63,9 @@ The builder need not exist in the same dynamic broad-phase buckets used for comb
 
 ## 6. Owned build region
 
-A player's building placement is restricted to that player's canonical owned build region.
+A player's building placement is restricted to that player's/team's canonical owned build region.
 
-In the standard Castle Fight-style map this is the player's third of the battlefield.
+In the standard Castle Fight-style map this is the team's third of the battlefield. The builder itself is confined to that same team area and cannot be ordered or move outside it.
 
 Map content MUST define the region authoritatively; the client visualizes it but does not define it.
 
@@ -81,17 +81,17 @@ MoveBuilder {
 }
 ```
 
-The server validates ownership/admission, assigns the movement command a canonical tick/order, and all simulations execute or reject it identically from canonical state at that tick.
+The server validates control rights/admission, team-area bounds, and destination legality, assigns the movement command a canonical tick/order, and all simulations execute or reject it identically from canonical state at that tick.
 
-Builder movement MUST NOT push, stop, separate, or reroute combat units.
+Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, separate, or reroute combat units.
 
-The exact builder movement/navigation model is open: it may navigate around static buildings/terrain or use another deterministic rule, provided this does not affect combat-unit pathing.
+The exact builder movement/navigation algorithm inside that area is open: it may navigate around static buildings/terrain or use another deterministic rule, provided this does not affect combat-unit pathing.
 
 ## 8. Building construction relationship
 
 Building placement commands are player commands associated with the builder/player.
 
-The standard rules require placement inside the player's owned region. Whether the builder must physically approach the site, has a construction range, or construction is effectively remote/instant is a compatibility/game-feel rule to verify separately.
+The standard rules require placement inside the owning team's build region. Whether the builder must physically approach the site, has a construction range, or construction is effectively remote/instant is a compatibility/game-feel rule to verify separately.
 
 No implementation should assume builder proximity unless content/rules explicitly require it.
 
@@ -195,15 +195,17 @@ Standard combat units continue their autonomous target lifecycle. An item only c
 
 This rule is essential for offensive builder items: enemy units may be damaged by them without trying to chase or attack the builder.
 
-## 16. Disconnect behavior
+## 16. Disconnect and delegated control
 
-On disconnect, the builder remains in canonical state.
+On owner disconnect, the builder remains in canonical state and continues any already-issued movement. Passive/automatic item effects continue normally.
 
-Autonomous/passive item effects SHOULD continue because the match continues on the authoritative server.
+Any still-connected teammate gains temporary authority to issue builder movement, building, and item commands for the disconnected player's builder. The builder, inventory, buildings, and player-slot resources do not change owner; teammate control is delegation only. Multiple teammates may submit commands, with conflicts resolved by the server's ordinary canonical command order.
 
-Player-activated items naturally cannot receive new commands while the player is absent.
+When the owner reconnects, delegated teammate authority ends and normal owner control resumes.
 
-The builder SHOULD stop or complete its current movement according to one explicit disconnect policy; disconnection MUST NOT cause nondeterministic movement.
+These permission changes are driven by canonical server-authored disconnect/reconnect events so replay and deterministic execution do not depend on invisible transport state.
+
+If all players on the team are disconnected, match-level rules pause the game and begin the reconnect timeout described in `41-match-gameplay.md`.
 
 ## 17. Death/elimination behavior
 
@@ -250,21 +252,23 @@ Snapshots MUST preserve all future-relevant builder/item state, including:
 - automatic-item cast/attack sequences;
 - any persistent aura state not fully derivable from inventory.
 
-Replay uses the finalized tick-input stream containing builder/item commands plus deterministic autonomous item behavior.
+Replay uses the canonical stream containing builder/item commands, disconnect/reconnect delegation records, and deterministic autonomous item behavior.
 
 ## 21. Required tests
 
 The builder/item suite MUST eventually verify:
 
 1. ordinary combat units reject/no-op no player order because no such valid command exists;
-2. only the owner can move a builder;
-3. builder never appears in ordinary enemy target candidate sets;
-4. builder does not affect combat-unit pathing or local separation;
-5. builder cannot be used to complete a cage;
-6. building placement outside the player's owned region is rejected;
-7. automatic offensive item damages eligible nearby enemy without changing that enemy's target merely toward the builder;
-8. map-wide aura affects eligible friendlies regardless of builder position;
-9. active area item uses the canonical selected area and affects exactly the eligible units there;
-10. item cooldown/charge state survives snapshot/rejoin;
-11. automatic/passive item effects continue deterministically during owner disconnect;
-12. replay and different worker counts produce identical item outcomes.
+2. connected owner can control their builder, and while that owner is disconnected any connected teammate can control it instead;
+3. builder destination/movement cannot leave the team's authored third/area;
+4. builder never appears in ordinary enemy target candidate sets;
+5. builder does not affect combat-unit pathing or local separation;
+6. builder cannot be used to complete a cage;
+7. building placement outside the owned team region is rejected;
+8. automatic offensive item damages eligible nearby enemy without changing that enemy's target merely toward the builder;
+9. map-wide aura affects eligible friendlies regardless of builder position;
+10. active area item uses the canonical selected area and affects exactly the eligible units there;
+11. item cooldown/charge state survives snapshot/rejoin;
+12. automatic/passive item effects and already-issued builder movement continue deterministically during owner disconnect;
+13. owner reconnect revokes delegated teammate control at the canonical reconnect boundary;
+14. replay and different worker counts produce identical item outcomes.

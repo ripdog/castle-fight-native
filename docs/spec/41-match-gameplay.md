@@ -28,7 +28,7 @@ Network connection state itself is operational, but any gameplay consequence of 
 
 Each active player has exactly one directly controlled builder under the standard rules.
 
-The builder is not a combat unit. It exists to move for player interaction, construct buildings inside that player's owned build region, and carry/use items. It is non-targetable by ordinary combat, invulnerable to ordinary battle damage, and non-blocking to combat-unit movement.
+The builder is not a combat unit. It exists to move for player interaction, construct buildings inside the owning team's build region, and carry/use items. It is non-targetable by ordinary combat, invulnerable to ordinary battle damage, and non-blocking to combat-unit movement.
 
 Ordinary combat units are never player-commandable. Their movement, target acquisition, attacks, and autonomous abilities remain simulation-driven.
 
@@ -36,11 +36,17 @@ See `42-builder-items.md` for the detailed builder/item contract.
 
 ## 3. Disconnect semantics
 
-By default, player disconnection MUST NOT freeze, despawn, or disable that player's existing buildings, combat units, builder state, or passive/autonomous item systems.
+A single player disconnecting does not otherwise alter that player's game state. Their buildings, combat units, builder movement already in progress, passive/automatic items, resources, production, and spellcasting continue normally on the authoritative server.
 
-Autonomous production, building spellcasting, item passive/automatic effects, and combat continue on the authoritative server. New player-targeted builder/item/legendary commands naturally cannot be issued while the player is absent.
+While that player is disconnected, **any still-connected teammate may control the disconnected player's builder** and issue the same builder/build/item commands that builder could normally receive. Delegated control does not transfer ownership: the builder, inventory, buildings, and player-slot resources remain owned by the disconnected player. Concurrent teammate commands are resolved by the ordinary canonical command order.
 
-Whether another player may control/sell/build for an absent ally is a game-mode rule and is not implicit in reconnect support.
+When the original player reconnects, normal control returns to that player and teammate delegation ends.
+
+Connection/disconnection changes have gameplay consequences and therefore MUST enter the replayable canonical server-event stream rather than existing only as transport state.
+
+If every player on one team is disconnected, the entire match pauses at a completed tick boundary and a configured real-time reconnect timeout begins. Simulation ticks do not advance while paused. If any player on that team reconnects before timeout, the server records a canonical resume event and play continues from the same simulation boundary. If the timeout expires, the server records a canonical timeout/end event and the match ends under the game mode's abandonment/forfeit result.
+
+Replay playback applies the recorded pause/resume/end events immediately at their stream positions; it need not reproduce the real-world waiting time.
 
 ## 4. Teams and hostility
 
@@ -102,7 +108,7 @@ The state in which a building begins blocking navigation, producing units, attac
 
 ## 8. Placement and ownership
 
-Building placement MUST be inside the placing player's canonical owned build region. In the standard map this corresponds to the player's third of the battlefield.
+Building placement MUST be inside the owning team's canonical build region. In the standard map this corresponds to that team's third of the battlefield.
 
 Accepted placement creates an authoritative building with:
 
@@ -164,18 +170,13 @@ If independent spawns can be resolved simultaneously without interaction, no unn
 
 ## 12. Spawn location
 
-Production definitions specify one or more canonical spawn anchors/offsets relative to the building footprint.
+Production definitions specify a canonical preferred spawn point/offset relative to the building footprint.
 
-Spawn resolution must define what happens when the preferred location is congested.
+On each production attempt, the simulation searches for empty placement using a deterministic expanding spiral beginning at that point. The first candidate at which the produced unit's footprint fits valid traversable space without overlapping a blocking building or combat unit is used.
 
-A provisional policy to test is:
+The spiral has a deterministic finite search limit. If no valid position is found before that limit, the unit is not created. The failed attempt does not create a production backlog; the building proceeds to its next ordinary production cycle.
 
-1. attempt preferred deterministic spawn point;
-2. if unit overlap is allowed at spawn, create there and let local steering separate units;
-3. otherwise search a finite ordered set/ring of candidate offsets;
-4. if no valid candidate exists, use an explicit blocked-production rule rather than nondeterministic search.
-
-The final policy must preserve intentional cages. It MUST NOT move a spawned unit outside a blocked enclosure merely to guarantee a route toward the enemy castle.
+The spawn search has no special knowledge of caging or connected navigation components. It neither tries to keep a spawn inside a cage nor tries to escape one. A valid position encountered by the bounded spiral is accepted regardless of which connected component it belongs to.
 
 ## 13. Production selection randomness
 
@@ -279,7 +280,7 @@ Attack buildings:
 - independently acquire targets;
 - do not navigate;
 - fire attacks/projectiles using the deterministic delivery modes in `15-targeting-combat.md`;
-- remain capable of targeting caged units if ordinary target rules select them.
+- remain capable of targeting caged units if ordinary target rules select them and the attack can genuinely reach/hit them.
 
 Spellcasting buildings may instead or additionally:
 
@@ -372,16 +373,17 @@ The eventual gameplay suite should include:
 1. accepted placement atomically charges resources and creates exactly one building;
 2. insufficient resources rejects placement with no partial mutation;
 3. production fires on exact documented ticks independent of worker count;
-4. disconnect does not pause the player's production or units;
-5. two same-tick production buildings yield identical state across worker counts;
-6. caged production spawns remain in the cage under the defined spawn policy;
-7. selling/destroying cage wall invalidates topology at the documented phase;
-8. same-tick income/purchase follows documented ordering;
-9. upgrade starts affecting entities at the documented tick;
-10. simultaneous objective destruction resolves according to explicit draw/priority rule;
-11. snapshot/reload preserves production sequences and next spawn ticks;
-12. replay reproduces resource balances, building ownership, production, and victory exactly;
-13. ordinary combat units have no accepted player-order path;
-14. builder is the only directly movable unit and does not block/participate in combat;
-15. spellcasting building mana/cooldowns/autocast continue deterministically during disconnect;
-16. player-targeted legendary artillery captures the selected unit's position and does not track it after launch.
+4. one player's disconnect does not pause that player's production/units and allows connected teammates to control that player's builder;
+5. if an entire team disconnects, the match pauses at a tick boundary, resumes if a teammate returns before timeout, and ends on canonical timeout if nobody returns;
+6. two same-tick production buildings yield identical state across worker counts;
+7. bounded spiral spawning selects the same first valid location and drops the spawn attempt when the search is exhausted;
+8. selling/destroying cage wall invalidates topology at the documented phase;
+9. same-tick income/purchase follows documented ordering;
+10. upgrade starts affecting entities at the documented tick;
+11. simultaneous objective destruction resolves according to explicit draw/priority rule;
+12. snapshot/reload preserves production sequences and next spawn ticks;
+13. replay reproduces resource balances, ownership, delegated builder control, production, pause/resume, and victory exactly;
+14. ordinary combat units have no player-order path;
+15. builder is the only directly movable unit and does not block/participate in combat;
+16. spellcasting building mana/cooldowns/autocast continue deterministically during a single-player disconnect;
+17. player-targeted legendary artillery captures the selected unit's position and does not track it after launch.

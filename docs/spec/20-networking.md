@@ -13,7 +13,7 @@ The design combines deterministic command replication with an authoritative cano
 The server is the sole canonical authority for:
 
 - admitted/scheduled player commands;
-- finalized tick-input stream and command execution outcomes;
+- canonical stream (finalized tick inputs plus boundary-control records) and command execution outcomes;
 - current canonical match state;
 - match lifecycle;
 - reconnect/snapshot state;
@@ -32,7 +32,7 @@ Clients normally advance from:
 
 ```text
 canonical starting snapshot/state
-+ ordered finalized tick-input stream
++ ordered canonical stream
 ```
 
 rather than receiving continuous per-unit position updates.
@@ -94,7 +94,7 @@ Gameplay-state checks whose truth may change before execution MUST be evaluated 
 Admission examples:
 
 - requested content/command type exists and is permitted;
-- command is issued by the owning player/session;
+- command is issued by the owning player/session, or by a currently delegated teammate for a disconnected player's builder where the rules allow it;
 - no command attempts to direct an ordinary combat unit;
 - coordinates/identifiers are well-formed and in representable bounds;
 - command is allowed in the current match phase;
@@ -103,7 +103,7 @@ Admission examples:
 Execution-time examples:
 
 - sufficient resources still exist;
-- the builder/building/item still exists and is owned by the player;
+- the builder/building/item still exists and the issuing player still has owner or delegated control permission at that canonical tick;
 - a build position is still legal and unoccupied;
 - an item/ability is still ready and affordable;
 - an entity target still exists and remains eligible where the ability requires that;
@@ -173,26 +173,37 @@ Early implementations MAY avoid gameplay prediction and simply wait for schedule
 
 The server MUST provide positive proof that each simulation tick's input set is complete. Silence is not proof of an empty tick.
 
-The canonical input stream therefore consists of finalized tick bundles (or an equivalent finalization record) containing:
+The canonical stream contains both finalized simulation-tick bundles and explicit between-tick control records:
 
 ```rust
+pub enum CanonicalStreamRecord {
+    Tick(FinalizedTickInputs),
+    Control(BoundaryControlRecord),
+}
+
 pub struct FinalizedTickInputs {
     pub tick: Tick,
     pub stream_position: InputStreamPosition,
     pub commands: Vec<ScheduledCommand>, // canonical CommandOrder
     pub server_events: Vec<ServerAuthoredInput>,
 }
+
+pub struct BoundaryControlRecord {
+    pub after_tick: Tick,
+    pub stream_position: InputStreamPosition,
+    pub event: MatchControlEvent,
+}
 ```
 
-An empty tick is represented explicitly. The wire format MAY compact consecutive empty finalized ticks into a range, provided the logical stream is identical.
+An empty simulation tick is represented explicitly. The wire format MAY compact consecutive empty finalized ticks into a range, provided the logical stream is identical.
 
-Clients MUST NOT execute tick `T` until they possess proof that all authoritative inputs for `T` are finalized and complete. Sequence/stream-position gaps MUST be recovered before advancing across the gap.
+Clients MUST NOT execute tick `T` until they possess proof that all authoritative inputs for `T` are finalized and complete. They also MUST process all preceding boundary-control records before advancing. Sequence/stream-position gaps MUST be recovered before crossing the gap.
 
-Transport messages may arrive out of order; the simulation-facing stream MUST not.
+Between-tick control records exist because some canonical lifecycle events occur while simulation ticks are stopped. Examples include disconnect/reconnect permission changes, team-wide pause, resume, and disconnect-timeout match termination. A pause record after completed tick `T` prevents `T+1` from executing until a later canonical resume record exists (or the match-end record terminates the match).
 
-`InputStreamPosition` is a monotonic logical boundary used for reconnect, duplicate suppression, and history retention. It is protocol state, not gameplay state, and MUST NOT enter gameplay checksums.
+Transport messages may arrive out of order; the simulation-facing canonical stream MUST not.
 
-Gameplay consequences initiated by the server rather than a player (for example a disconnect-forfeit event if the rules ever define one) MUST enter this same replayable input stream as `ServerAuthoredInput`; raw transport events MUST NOT directly mutate gameplay.
+`InputStreamPosition` is the monotonic logical ordering key used for reconnect, duplicate suppression, and history retention. It is protocol continuity state and MUST NOT by itself enter gameplay checksums; the gameplay-relevant state produced by applying control records does.
 
 ## 10. State checksums
 
@@ -218,7 +229,7 @@ On mismatch, protocol behavior SHOULD support:
 2. client pauses presentation of speculative future authoritative state as needed;
 3. server selects an appropriate canonical snapshot/checkpoint;
 4. client loads the snapshot;
-5. client replays finalized tick inputs to current tick;
+5. client replays canonical stream records to the live boundary;
 6. checksum is revalidated;
 7. normal pacing resumes.
 
@@ -226,11 +237,11 @@ Repeated mismatch after resync is an implementation/version integrity fault and 
 
 ## 12. Disconnect behavior
 
-A client disconnect MUST NOT stop the match.
+A single client disconnect does not stop the match. The server continues simulating that player's autonomous state, and a canonical disconnect event grants temporary builder-control permission to still-connected teammates as defined by `41-match-gameplay.md` and `42-builder-items.md`.
 
-The server continues simulating all units/buildings belonging to that player because autonomous production/combat is part of canonical world state.
+If every player on one team is disconnected, the server finalizes the current tick, records a canonical team-disconnected pause event, and stops advancing simulation ticks while a configured wall-clock reconnect timeout runs. A reconnect before expiry records a canonical resume event; expiry records a canonical match-end/forfeit event.
 
-Game-specific rules MAY define what happens to building control/resources during prolonged absence, but the networking layer does not implicitly remove or freeze the player's simulation state.
+The paused wall-clock interval itself is operational time, not simulation time. Replay applies the recorded control events at their stream positions without waiting.
 
 ## 13. Reconnect identity
 
@@ -303,7 +314,7 @@ A spectator can:
 
 1. authenticate/authorize;
 2. receive a recent/current canonical snapshot;
-3. receive subsequent finalized tick inputs;
+3. receive subsequent canonical stream records;
 4. fast-forward to live tick;
 5. continue deterministic simulation locally.
 

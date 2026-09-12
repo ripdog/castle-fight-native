@@ -6,7 +6,7 @@ Status: **normative**
 
 Determinism is a multiplayer, replay, testing, and recovery requirement rather than an implementation preference.
 
-For a fixed simulation version, content bundle, initial state, match seed, and ordered finalized tick-input stream, every conforming simulation instance MUST produce identical authoritative state at every tick checkpoint.
+For a fixed simulation version, content bundle, initial state, match seed, and ordered canonical stream of finalized tick inputs plus gameplay-relevant boundary-control records, every conforming simulation instance MUST produce identical authoritative state at every tick checkpoint.
 
 ## 2. Determinism boundary
 
@@ -309,7 +309,7 @@ Development builds SHOULD be able to capture:
 
 - last matching tick;
 - first mismatching tick;
-- finalized tick-input history around the mismatch;
+- canonical stream history around the mismatch;
 - simulation/content version;
 - hierarchical state hashes;
 - optionally canonical state dumps for offline comparison.

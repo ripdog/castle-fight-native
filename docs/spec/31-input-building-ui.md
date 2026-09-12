@@ -22,7 +22,7 @@ The first playable game is expected to need commands such as:
 
 - move the player's builder;
 - select building type for placement;
-- place production/attack/spell/utility/legendary building within the player's owned build region;
+- place production/attack/spell/utility/legendary building within the owning team's build region;
 - sell/destroy owned building where rules permit;
 - purchase upgrade;
 - use an active builder-held item, including a point/area target where required;
@@ -38,7 +38,7 @@ A generic RTS `OrderUnit` command is intentionally outside the core protocol.
 
 The builder's movement is authoritative because its position may matter to builder-local item effects and any placement interaction/range rules. The builder itself remains non-combat and does not participate in combat-unit collision, path blocking, targeting, threat, or damage resolution.
 
-Building placement is restricted to the player's authoritative owned build region. In the standard map this is the player's third of the battlefield; map content defines the exact canonical region.
+Building placement and builder movement are restricted to the owning team's authoritative build area. In the standard map this is the team's third of the battlefield; map content defines the exact canonical region.
 
 Recommended client placement flow:
 
@@ -248,7 +248,8 @@ Integration tests should eventually verify:
 7. replay/spectator input cannot emit gameplay commands;
 8. reconnect disables/reconciles stale pending placement state safely;
 9. no ordinary combat unit exposes an authoritative move/attack/order action;
-10. builder movement is accepted only for the owning player;
-11. placement outside the player's owned build region is rejected;
-12. active item point/area targets serialize to canonical authoritative coordinates;
-13. manually targeted building abilities validate ownership, cooldown/resources, and target semantics before acceptance.
+10. builder movement is accepted for the connected owner, or for a connected teammate while that owner is canonically disconnected;
+11. builder movement outside the owning team's area is rejected;
+12. placement outside the owned team build region is rejected;
+13. active item point/area targets serialize to canonical authoritative coordinates;
+14. manually targeted building abilities validate control permission, cooldown/resources, and target semantics before scheduling.

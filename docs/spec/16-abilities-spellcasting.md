@@ -79,7 +79,7 @@ The decision may consider:
 
 If legal, the caster chooses the target according to the ability's deterministic target policy and emits a cast intent.
 
-Automatic casting MUST continue while the owning player is disconnected.
+Automatic casting MUST continue through an individual player's disconnect while the match is still running. If an entire team disconnects and the match enters the canonical reconnect pause, simulation casting pauses with the rest of the simulation.
 
 ## 6. Deterministic automatic target selection
 
@@ -337,7 +337,7 @@ The ability test suite MUST eventually include:
 6. hostile item/building effect does not implicitly retarget its victim to the builder;
 7. global stun applies to all and only eligible enemy combat units for the exact tick duration;
 8. player-targeted artillery captures the target's position at command execution/launch and does not follow later movement;
-9. disconnect does not pause autonomous building casting;
+9. an individual player's disconnect does not pause autonomous building casting while a teammate remains connected;
 10. snapshot/reload preserves mana, cooldown, charge, and cast-sequence state;
 11. rejected manual cast spends no mana/charge and creates no projectile/effect;
 12. replay of the same finalized input stream reproduces all ability outcomes exactly;
