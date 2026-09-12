@@ -221,10 +221,10 @@ entities by class
 units alive
 buildings alive
 projectiles alive
-automatic ability evaluations/casts
+automatic ability evaluations/casts/effects and target candidates examined
 active aura sources
 total tick duration
-per-phase duration
+per-phase duration, including automatic ability evaluation/resolution
 spatial candidate queries/counts
 navigation rebuild count/duration
 A* fallback count/cache-hit count/expanded nodes

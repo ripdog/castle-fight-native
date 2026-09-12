@@ -319,6 +319,8 @@ The initial playable rules are fixed:
 
 The verification implementation now also has provisional executable `RangedGuaranteedHit`, `RangedBallistic`, and `Bounce` semantics. Guaranteed-hit uses integer launch-distance/speed travel time, retained target identity, source-death independence, and deterministic invalidation when the target has already died/been removed before impact. Ballistic captures a fixed pre-movement destination, uses the same integer travel rule, resolves a hostile circular splash query against post-movement occupants, and canonically orders due projectiles and affected targets by stable `SimId`. Bounce keeps one persistent projectile identity across a bounded chain, applies integer damage falloff, records bounded hit history, and uses keyed deterministic candidate ranks for subsequent hostile-unit hops. These are specified in `15-targeting-combat.md` and remain compatibility-tunable rather than unexamined behavior.
 
+Automatic building spell scheduling is now executable as well. The verification slice regenerates integer mana during timers, evaluates one automatic ability per spellcasting building before combat targeting, uses keyed order-independent random enemy-unit selection, commits successful casts atomically in canonical source/ability/sequence order, spends mana and starts cooldown only after resolution revalidation, and exposes ability-caused deaths to all later combat phases that tick. Non-retaliatory building spell damage does not populate ordinary retaliation or ally-defense threat state. The broader ability/effect vocabulary remains open, but this base scheduling/resource precedence is now an explicit provisional rule.
+
 Compatibility work still needs to establish:
 
 - attack windup and backswing details;
@@ -328,8 +330,8 @@ Compatibility work still needs to establish:
 - whether observed Castle Fight behavior requires revising the provisional bounce range, repeat/building eligibility, chain cap, damage falloff, travel, or keyed-random selection rules;
 - target-retention/range hysteresis details;
 - splash/chain ordering;
-- automatic spell cast timing details not already fixed by stun/death precedence;
-- mana regeneration/cast-cost ordering on the same tick.
+- compatibility-specific cast windup/channeling/interruption details beyond the current atomic automatic-cast slice;
+- whether observed Castle Fight mana regeneration timing requires revising the current regen-before-eligibility rule.
 
 These should become small executable fixtures as soon as decided.
 

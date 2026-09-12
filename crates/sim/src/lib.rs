@@ -6,14 +6,15 @@ mod spatial;
 mod topology;
 
 pub use components::{
-    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile,
-    ProductionProfile, SimId, Team, UnitSpawn, UnitTemplate,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, MovementProfile,
+    ProductionProfile, SimId, SpellcastingProfile, Team, UnitSpawn, UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
-    AttackEvent, BuildingPlacementError, BuildingView, ProjectileView, ProjectileViewKind,
-    Simulation, SimulationConfig, TickResult, TickTimings, UnitView,
+    AbilityCastEvent, AttackEvent, BuildingPlacementError, BuildingView, ProjectileView,
+    ProjectileViewKind, Simulation, SimulationConfig, TickResult, TickTimings, UnitView,
 };
 pub use topology::NavCell;
 
@@ -60,6 +61,7 @@ mod tests {
             health: 10_000,
             production: None,
             attack: None,
+            spellcasting: None,
         }
     }
 
@@ -74,6 +76,22 @@ mod tests {
             health: 10_000,
             production: None,
             attack: Some(attack),
+            spellcasting: None,
+        }
+    }
+
+    fn spell_building(
+        team: u8,
+        footprint: BuildingFootprint,
+        spellcasting: SpellcastingProfile,
+    ) -> BuildingSpawn {
+        BuildingSpawn {
+            team: Team(team),
+            footprint,
+            health: 10_000,
+            production: None,
+            attack: None,
+            spellcasting: Some(spellcasting),
         }
     }
 
@@ -103,6 +121,7 @@ mod tests {
                 },
             }),
             attack: None,
+            spellcasting: None,
         }
     }
 
@@ -616,6 +635,226 @@ mod tests {
     }
 
     #[test]
+    fn automatic_spell_mana_regen_cost_and_cooldown_are_tick_exact() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let caster = sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(10, 0, 1, 1),
+            SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 6,
+                    starting: 0,
+                    regen_per_tick: 2,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(7),
+                    mana_cost: 6,
+                    cooldown_ticks: 3,
+                    range: 8 * cell,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::Damage { amount: 1 },
+                },
+            },
+        ));
+        let target = sim.spawn_unit(passive_unit(1, 15 * cell));
+
+        let tick0 = sim.step();
+        assert_eq!(tick0.ability_evaluations, 1);
+        assert_eq!(tick0.ability_casts, 0);
+        assert_eq!(sim.building(caster).unwrap().mana_current, Some(2));
+
+        let tick1 = sim.step();
+        assert_eq!(tick1.ability_casts, 0);
+        assert_eq!(sim.building(caster).unwrap().mana_current, Some(4));
+
+        let tick2 = sim.step();
+        assert_eq!(tick2.ability_casts, 1);
+        assert_eq!(tick2.ability_effects, 1);
+        assert_eq!(sim.unit(target).unwrap().health, 9_999);
+        let view = sim.building(caster).unwrap();
+        assert_eq!(view.mana_current, Some(0));
+        assert_eq!(view.ability_ready_tick, Some(5));
+        assert_eq!(view.ability_cast_sequence, Some(1));
+        assert_eq!(
+            sim.ability_casts_last_tick(),
+            &[AbilityCastEvent {
+                source: caster,
+                ability: AbilityId(7),
+                target,
+                effect: AbilityEffect::Damage { amount: 1 },
+            }]
+        );
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 9_999);
+        let tick5 = sim.step();
+        assert_eq!(tick5.completed_tick, 5);
+        assert_eq!(tick5.ability_casts, 1);
+        assert_eq!(sim.unit(target).unwrap().health, 9_998);
+        assert_eq!(sim.building(caster).unwrap().ability_cast_sequence, Some(2));
+    }
+
+    #[test]
+    fn building_spell_damage_does_not_create_retaliation_or_ally_defense() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let victim = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let nearby_ally = sim.spawn_unit(passive_unit(0, 9 * cell));
+        let decoy = sim.spawn_unit(passive_unit(1, 12 * cell));
+        let caster = sim.spawn_building(spell_building(
+            1,
+            BuildingFootprint::new(14, 0, 1, 1),
+            SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 10,
+                    starting: 10,
+                    regen_per_tick: 0,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(11),
+                    mana_cost: 1,
+                    cooldown_ticks: 30,
+                    range: 8 * cell,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::Damage { amount: 1 },
+                },
+            },
+        ));
+
+        let cast = sim.step();
+        assert_eq!(cast.ability_casts, 1);
+        assert_eq!(sim.ability_casts_last_tick()[0].source, caster);
+        assert_eq!(sim.ability_casts_last_tick()[0].target, victim);
+        assert_eq!(sim.unit(victim).unwrap().health, 99);
+        assert_eq!(sim.unit(victim).unwrap().last_attacker, None);
+        assert_eq!(sim.unit(victim).unwrap().target, Some(decoy));
+        assert_eq!(sim.unit(nearby_ally).unwrap().target, None);
+
+        let next = sim.step();
+        assert_eq!(next.ally_defense_queries, 0);
+        assert_eq!(sim.unit(victim).unwrap().target, Some(decoy));
+        assert_eq!(sim.unit(nearby_ally).unwrap().target, None);
+    }
+
+    #[test]
+    fn automatic_spell_kill_suppresses_later_ordinary_attack() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let victim = sim.spawn_unit(passive_unit(0, 10 * cell));
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(12 * cell, 0),
+            health: 5,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 10,
+                range: 4 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(attacker).unwrap().target, Some(victim));
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(16, 0, 1, 1),
+            SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 10,
+                    starting: 10,
+                    regen_per_tick: 0,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(13),
+                    mana_cost: 1,
+                    cooldown_ticks: 30,
+                    range: 8 * cell,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::Damage { amount: 5 },
+                },
+            },
+        ));
+
+        let result = sim.step();
+        assert_eq!(result.ability_casts, 1);
+        assert_eq!(result.attacks_resolved, 0);
+        assert!(sim.unit(attacker).is_none());
+        assert_eq!(sim.unit(victim).unwrap().health, 10_000);
+    }
+
+    #[test]
+    fn automatic_spellcasting_is_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            let mut config = SimulationConfig {
+                match_seed: 0x5eed_ab11_17e5_2026,
+                ..SimulationConfig::default()
+            };
+            config.static_blockers.clear();
+            let mut sim = Simulation::new(config, workers);
+            let spellcasting = SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 1_000,
+                    starting: 1_000,
+                    regen_per_tick: 1,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(17),
+                    mana_cost: 1,
+                    cooldown_ticks: 1,
+                    range: 100 * cell,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::Damage { amount: 1 },
+                },
+            };
+            for index in 0..16 {
+                sim.spawn_building(spell_building(
+                    0,
+                    BuildingFootprint::new(4 + index, -20, 1, 1),
+                    spellcasting,
+                ));
+            }
+            for index in 0..40 {
+                sim.spawn_unit(UnitSpawn {
+                    health: 10_000,
+                    ..passive_unit(1, (40 + index) * cell)
+                });
+            }
+            for _ in 0..50 {
+                sim.step();
+            }
+            assert_eq!(
+                sim.buildings()
+                    .iter()
+                    .filter_map(|building| building.ability_cast_sequence)
+                    .sum::<u64>(),
+                800
+            );
+            sim.checksum()
+        }
+
+        let expected = run(1);
+        assert_eq!(run(2), expected);
+        assert_eq!(run(8), expected);
+    }
+
+    #[test]
     fn unit_retaliates_against_attack_building_after_resolved_hit() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
@@ -692,6 +931,7 @@ mod tests {
                 acquisition_range: 3 * cell,
                 cooldown_ticks: 30,
             }),
+            spellcasting: None,
         });
 
         sim.step();

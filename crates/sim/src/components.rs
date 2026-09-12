@@ -212,6 +212,71 @@ pub struct ProductionState {
     pub next_spawn_tick: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AbilityId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AbilityTargetPolicy {
+    RandomEnemyUnit,
+}
+
+impl AbilityTargetPolicy {
+    #[must_use]
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::RandomEnemyUnit => 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AbilityEffect {
+    Damage { amount: i32 },
+}
+
+impl AbilityEffect {
+    #[must_use]
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::Damage { .. } => 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManaProfile {
+    pub maximum: i32,
+    pub starting: i32,
+    pub regen_per_tick: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AutomaticAbilityProfile {
+    pub id: AbilityId,
+    pub mana_cost: i32,
+    pub cooldown_ticks: u16,
+    pub range: i32,
+    pub target_policy: AbilityTargetPolicy,
+    pub effect: AbilityEffect,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpellcastingProfile {
+    pub mana: ManaProfile,
+    pub ability: AutomaticAbilityProfile,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManaState {
+    pub current: i32,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AutomaticAbilityState {
+    pub ready_tick: u64,
+    pub cast_sequence: u64,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct BuildingSpawn {
     pub team: Team,
@@ -219,4 +284,5 @@ pub struct BuildingSpawn {
     pub health: i32,
     pub production: Option<ProductionProfile>,
     pub attack: Option<AttackProfile>,
+    pub spellcasting: Option<SpellcastingProfile>,
 }

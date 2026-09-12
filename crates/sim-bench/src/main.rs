@@ -5,10 +5,11 @@ use std::{
 };
 
 use castle_fight_sim::{
-    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, MovementProfile,
     ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
-    Team, TickResult, TickTimings, UnitSpawn, UnitTemplate, populate_crossing_crowd,
-    populate_dense_cage_battle, populate_lane_battle,
+    SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
+    populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -23,6 +24,7 @@ enum Scenario {
     Ballistic,
     Bounce,
     Tower,
+    Ability,
 }
 
 impl Scenario {
@@ -38,6 +40,7 @@ impl Scenario {
             Self::Ballistic => "ballistic",
             Self::Bounce => "bounce",
             Self::Tower => "tower",
+            Self::Ability => "ability",
         }
     }
 }
@@ -78,7 +81,7 @@ fn main() {
         println!();
         println!("scenario={}", scenario.name());
         println!(
-            "{:>8} {:>7} {:>9} {:>9} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>10} {:>8} {:>8} {:>18}",
+            "{:>8} {:>7} {:>9} {:>9} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>10} {:>8} {:>8} {:>18}",
             "units",
             "workers",
             "ms/tick",
@@ -87,6 +90,7 @@ fn main() {
             "timer",
             "prod",
             "spatial",
+            "ability",
             "target",
             "combat",
             "intent",
@@ -120,7 +124,7 @@ fn main() {
                 }
 
                 println!(
-                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.2} {:>7.2} {:>10.1} {:>8.2} {:>8.2} {:>18x}{}",
+                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.2} {:>7.2} {:>10.1} {:>8.2} {:>8.2} {:>18x}{}",
                     units,
                     workers,
                     result.ms_per_tick,
@@ -129,6 +133,7 @@ fn main() {
                     result.phase_ms.timers,
                     result.phase_ms.production,
                     result.phase_ms.snapshot_and_spatial,
+                    result.phase_ms.abilities,
                     result.phase_ms.targeting,
                     result.phase_ms.combat,
                     result.phase_ms.movement_intent,
@@ -165,6 +170,15 @@ fn main() {
                         result.bounce_candidates_per_jump,
                     );
                 }
+                if result.ability_evaluations_per_tick > 0.0 {
+                    println!(
+                        "         abilities eval/t={:.1} cast/t={:.1} effect/t={:.1} candidates/eval={:.2}",
+                        result.ability_evaluations_per_tick,
+                        result.ability_casts_per_tick,
+                        result.ability_effects_per_tick,
+                        result.ability_candidates_per_evaluation,
+                    );
+                }
                 if result.ally_defense_queries_per_tick > 0.0
                     || result.target_changes_per_tick > 0.0
                 {
@@ -193,6 +207,7 @@ struct PhaseMs {
     timers: f64,
     production: f64,
     snapshot_and_spatial: f64,
+    abilities: f64,
     targeting: f64,
     combat: f64,
     movement_intent: f64,
@@ -219,6 +234,10 @@ struct BenchCounters {
     ballistic_candidate_checks: usize,
     bounce_jumps: usize,
     bounce_candidate_checks: usize,
+    ability_evaluations: usize,
+    ability_casts: usize,
+    ability_candidate_checks: usize,
+    ability_effects: usize,
     retained_targets: usize,
     target_changes: usize,
     ally_defense_queries: usize,
@@ -246,6 +265,10 @@ struct BenchResult {
     ballistic_candidates_per_impact: f64,
     bounce_jumps_per_tick: f64,
     bounce_candidates_per_jump: f64,
+    ability_evaluations_per_tick: f64,
+    ability_casts_per_tick: f64,
+    ability_candidates_per_evaluation: f64,
+    ability_effects_per_tick: f64,
     retained_targets_per_tick: f64,
     target_changes_per_tick: f64,
     ally_defense_queries_per_tick: f64,
@@ -298,6 +321,7 @@ impl ScenarioState {
                         health: 1_000_000,
                         production: None,
                         attack: None,
+                        spellcasting: None,
                     }));
                 }
             }
@@ -363,6 +387,14 @@ fn run_case(
         } else {
             counters.bounce_candidate_checks as f64 / counters.bounce_jumps as f64
         },
+        ability_evaluations_per_tick: counters.ability_evaluations as f64 / ticks as f64,
+        ability_casts_per_tick: counters.ability_casts as f64 / ticks as f64,
+        ability_candidates_per_evaluation: if counters.ability_evaluations == 0 {
+            0.0
+        } else {
+            counters.ability_candidate_checks as f64 / counters.ability_evaluations as f64
+        },
+        ability_effects_per_tick: counters.ability_effects as f64 / ticks as f64,
         retained_targets_per_tick: counters.retained_targets as f64 / ticks as f64,
         target_changes_per_tick: counters.target_changes as f64 / ticks as f64,
         ally_defense_queries_per_tick: counters.ally_defense_queries as f64 / ticks as f64,
@@ -384,6 +416,9 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
     let mut config = SimulationConfig::default();
     if scenario == Scenario::Bounce {
         config.match_seed = 0x5eed_b0ce_2026_0912;
+    }
+    if scenario == Scenario::Ability {
+        config.match_seed = 0x5eed_ab11_17e5_2026;
     }
     if scenario == Scenario::Pathing {
         config
@@ -410,6 +445,7 @@ fn populate_scenario(
         Scenario::Ballistic => populate_ballistic_density_battle(simulation, units),
         Scenario::Bounce => populate_bounce_density_battle(simulation, units),
         Scenario::Tower => populate_attack_building_density(simulation, units),
+        Scenario::Ability => populate_automatic_ability_density(simulation, units),
     }
 
     match scenario {
@@ -597,6 +633,80 @@ fn populate_attack_building_density(simulation: &mut Simulation, total_units: us
                 health: 1_000_000_000,
                 production: None,
                 attack: Some(tower_attack),
+                spellcasting: None,
+            });
+        }
+    }
+
+    let per_team_units = total_units / 2;
+    let rows = 100usize.min(per_team_units.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let passive_attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
+        damage: 0,
+        range: 0,
+        acquisition_range: 0,
+        cooldown_ticks: 1,
+    };
+    for team in 0..2u8 {
+        for index in 0..per_team_units {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                45 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                75 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000_000_000,
+                attack: passive_attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+        }
+    }
+}
+
+fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: usize) {
+    let caster_count = (total_units / 4).clamp(2, 500);
+    let per_team_casters = caster_count.div_ceil(2);
+    let spellcasting = SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 1_000_000_000,
+            starting: 1_000_000_000,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(1),
+            mana_cost: 1,
+            cooldown_ticks: 1,
+            range: 100 * SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+            effect: AbilityEffect::Damage { amount: 1 },
+        },
+    };
+    for team in 0..2u8 {
+        for index in 0..per_team_casters {
+            if team == 1 && per_team_casters + index >= caster_count {
+                break;
+            }
+            let column = (index % 10) as i32;
+            let row = (index / 10) as i32;
+            let x = if team == 0 {
+                5 + column * 2
+            } else {
+                115 - column * 2
+            };
+            let y = -50 + row * 2;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 1, 1),
+                health: 1_000_000_000,
+                production: None,
+                attack: None,
+                spellcasting: Some(spellcasting),
             });
         }
     }
@@ -672,6 +782,7 @@ fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
                 health: 1_000_000,
                 production: Some(production),
                 attack: None,
+                spellcasting: None,
             });
         }
     }
@@ -695,6 +806,10 @@ fn accumulate_counters(result: &TickResult, counters: &mut BenchCounters) {
     counters.ballistic_candidate_checks += result.ballistic_candidate_checks;
     counters.bounce_jumps += result.bounce_jumps;
     counters.bounce_candidate_checks += result.bounce_candidate_checks;
+    counters.ability_evaluations += result.ability_evaluations;
+    counters.ability_casts += result.ability_casts;
+    counters.ability_candidate_checks += result.ability_candidate_checks;
+    counters.ability_effects += result.ability_effects;
     counters.retained_targets += result.retained_targets;
     counters.target_changes += result.target_changes;
     counters.ally_defense_queries += result.ally_defense_queries;
@@ -707,6 +822,7 @@ fn accumulate_timings(total: &mut TickTimings, tick: TickTimings) {
     total.timers += tick.timers;
     total.production += tick.production;
     total.snapshot_and_spatial += tick.snapshot_and_spatial;
+    total.abilities += tick.abilities;
     total.targeting += tick.targeting;
     total.combat += tick.combat;
     total.movement_intent += tick.movement_intent;
@@ -723,6 +839,7 @@ fn average_phase_ms(total: TickTimings, ticks: u64) -> PhaseMs {
         timers: ms_per_tick(total.timers, ticks),
         production: ms_per_tick(total.production, ticks),
         snapshot_and_spatial: ms_per_tick(total.snapshot_and_spatial, ticks),
+        abilities: ms_per_tick(total.abilities, ticks),
         targeting: ms_per_tick(total.targeting, ticks),
         combat: ms_per_tick(total.combat, ticks),
         movement_intent: ms_per_tick(total.movement_intent, ticks),
@@ -760,7 +877,7 @@ fn parse_args() -> Args {
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability"
                 );
                 println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
@@ -795,6 +912,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "ballistic" => Scenario::Ballistic,
             "bounce" => Scenario::Bounce,
             "tower" => Scenario::Tower,
+            "ability" => Scenario::Ability,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()

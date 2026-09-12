@@ -7,13 +7,15 @@ use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
+const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
 
 use crate::{
     components::{
-        AttackCooldown, AttackDelivery, AttackProfile, BallisticProjectile, BounceProjectile,
-        BuildingFootprint, BuildingSpawn, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
-        MovementProfile, Position, ProductionProfile, ProductionState, RetaliationState, SimId,
-        SpawnTick, TargetState, Team, UnitSpawn,
+        AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
+        AttackProfile, AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile,
+        BounceProjectile, BuildingFootprint, BuildingSpawn, GuaranteedHitProjectile, Health,
+        MAX_BOUNCE_HITS, ManaState, MovementProfile, Position, ProductionProfile, ProductionState,
+        RetaliationState, SimId, SpawnTick, SpellcastingProfile, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -60,6 +62,7 @@ pub struct TickTimings {
     pub timers: Duration,
     pub production: Duration,
     pub snapshot_and_spatial: Duration,
+    pub abilities: Duration,
     pub targeting: Duration,
     pub combat: Duration,
     pub movement_intent: Duration,
@@ -92,6 +95,10 @@ pub struct TickResult {
     pub ballistic_candidate_checks: usize,
     pub bounce_jumps: usize,
     pub bounce_candidate_checks: usize,
+    pub ability_evaluations: usize,
+    pub ability_casts: usize,
+    pub ability_candidate_checks: usize,
+    pub ability_effects: usize,
     pub retained_targets: usize,
     pub target_changes: usize,
     pub ally_defense_queries: usize,
@@ -108,6 +115,14 @@ pub struct AttackEvent {
     pub source_position: SimPoint,
     pub target_position: SimPoint,
     pub delivery: AttackDelivery,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AbilityCastEvent {
+    pub source: SimId,
+    pub ability: AbilityId,
+    pub target: SimId,
+    pub effect: AbilityEffect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,6 +174,10 @@ pub struct BuildingView {
     pub attack_delivery: Option<AttackDelivery>,
     pub target: Option<SimId>,
     pub cooldown_remaining: Option<u16>,
+    pub mana_current: Option<i32>,
+    pub mana_maximum: Option<i32>,
+    pub ability_ready_tick: Option<u64>,
+    pub ability_cast_sequence: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +199,7 @@ pub struct Simulation {
     pursuit_cache: BTreeMap<(NavCell, NavCell), NavCell>,
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
+    last_ability_casts: Vec<AbilityCastEvent>,
     next_tick: u64,
     next_id: u64,
 }
@@ -215,6 +235,7 @@ impl Simulation {
             pursuit_cache: BTreeMap::new(),
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
+            last_ability_casts: Vec::new(),
             next_tick: 0,
             next_id: 1,
         }
@@ -253,6 +274,9 @@ impl Simulation {
         }
         if let Some(attack) = building.attack {
             validate_attack_profile(attack);
+        }
+        if let Some(spellcasting) = building.spellcasting {
+            validate_spellcasting_profile(spellcasting);
         }
 
         if !self.footprint_inside_navigation(building.footprint) {
@@ -302,6 +326,18 @@ impl Simulation {
                 AttackCooldown::default(),
                 TargetState::default(),
                 SpawnTick(self.next_tick),
+            ));
+        }
+        if let Some(spellcasting) = building.spellcasting {
+            entity.insert((
+                spellcasting,
+                ManaState {
+                    current: spellcasting.mana.starting,
+                },
+                AutomaticAbilityState {
+                    ready_tick: self.next_tick,
+                    cast_sequence: 0,
+                },
             ));
         }
         self.topology_dirty = true;
@@ -361,6 +397,7 @@ impl Simulation {
 
     pub fn step(&mut self) -> TickResult {
         self.last_attacks.clear();
+        self.last_ability_casts.clear();
         let tick_start = Instant::now();
         let completed_tick = self.next_tick;
 
@@ -379,23 +416,14 @@ impl Simulation {
         let phase_start = Instant::now();
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
-        let needs_ally_defense_index = !self.defense_alerts.is_empty()
-            && self.pool.install(|| {
-                units
-                    .par_iter()
-                    .any(|unit| self.unit_will_query_ally_defense(unit, &units, &buildings))
-            });
-        let defense_victims = if needs_ally_defense_index {
-            grouped_defense_victims(&self.defense_alerts, &units, &buildings)
-        } else {
-            Vec::new()
-        };
         let has_bounce_projectile = {
             let mut query = self.world.query::<&BounceProjectile>();
             query.iter(&self.world).next().is_some()
         };
         let needs_global_unit_grid = has_bounce_projectile
-            || buildings.iter().any(|building| building.attack.is_some())
+            || buildings
+                .iter()
+                .any(|building| building.attack.is_some() || building.spellcasting.is_some())
             || units.iter().any(|unit| {
                 matches!(
                     unit.attack.delivery,
@@ -431,6 +459,24 @@ impl Simulation {
                     .flatten()
                 }),
         );
+        let mut snapshot_and_spatial = phase_start.elapsed();
+
+        let phase_start = Instant::now();
+        let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
+        let abilities = phase_start.elapsed();
+
+        let phase_start = Instant::now();
+        let needs_ally_defense_index = !self.defense_alerts.is_empty()
+            && self.pool.install(|| {
+                units
+                    .par_iter()
+                    .any(|unit| self.unit_will_query_ally_defense(unit, &units, &buildings))
+            });
+        let defense_victims = if needs_ally_defense_index {
+            grouped_defense_victims(&self.defense_alerts, &units, &buildings)
+        } else {
+            Vec::new()
+        };
         let alert_grid = SpatialGrid::build(
             self.config.spatial_cell_size,
             defense_victims.iter().enumerate().map(|(index, victim)| {
@@ -458,7 +504,7 @@ impl Simulation {
                         })
                 }),
         );
-        let snapshot_and_spatial = phase_start.elapsed();
+        snapshot_and_spatial += phase_start.elapsed();
 
         let phase_start = Instant::now();
         let target_selection = self.select_targets(
@@ -998,6 +1044,19 @@ impl Simulation {
                     target_state.current = live_target;
                     target_state.direct_retaliation_lock = false;
                 }
+                if building.spellcasting.is_some() {
+                    entity
+                        .get_mut::<ManaState>()
+                        .expect("spellcasting building mana missing")
+                        .current = building
+                        .mana_current
+                        .expect("spellcasting building snapshot mana missing");
+                    *entity
+                        .get_mut::<AutomaticAbilityState>()
+                        .expect("spellcasting building ability state missing") = building
+                        .ability_state
+                        .expect("spellcasting building snapshot ability state missing");
+                }
             }
         }
         if !building_deaths.is_empty() {
@@ -1023,6 +1082,7 @@ impl Simulation {
             timers,
             production,
             snapshot_and_spatial,
+            abilities,
             targeting,
             combat,
             movement_intent: movement.intent,
@@ -1058,6 +1118,10 @@ impl Simulation {
             ballistic_candidate_checks,
             bounce_jumps,
             bounce_candidate_checks,
+            ability_evaluations: ability_metrics.evaluations,
+            ability_casts: ability_metrics.casts,
+            ability_candidate_checks: ability_metrics.candidate_checks,
+            ability_effects: ability_metrics.effects,
             retained_targets: target_selection.retained_targets
                 + building_target_selection.retained_targets,
             target_changes: target_selection.target_changes
@@ -1078,6 +1142,11 @@ impl Simulation {
     #[must_use]
     pub fn attacks_last_tick(&self) -> &[AttackEvent] {
         &self.last_attacks
+    }
+
+    #[must_use]
+    pub fn ability_casts_last_tick(&self) -> &[AbilityCastEvent] {
+        &self.last_ability_casts
     }
 
     #[must_use]
@@ -1213,6 +1282,13 @@ impl Simulation {
         let mut query = self.world.query::<&mut AttackCooldown>();
         for mut cooldown in query.iter_mut(&mut self.world) {
             cooldown.remaining = cooldown.remaining.saturating_sub(1);
+        }
+
+        let mut mana_query = self.world.query::<(&SpellcastingProfile, &mut ManaState)>();
+        for (profile, mut mana) in mana_query.iter_mut(&mut self.world) {
+            let regenerated = i64::from(mana.current) + i64::from(profile.mana.regen_per_tick);
+            mana.current = i32::try_from(regenerated.min(i64::from(profile.mana.maximum)))
+                .expect("mana regeneration overflowed validated bounds");
         }
     }
 
@@ -1366,15 +1442,33 @@ impl Simulation {
             Option<&AttackCooldown>,
             Option<&TargetState>,
             Option<&SpawnTick>,
+            Option<&SpellcastingProfile>,
+            Option<&ManaState>,
+            Option<&AutomaticAbilityState>,
         )>();
         let mut buildings: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _)| health.current > 0)
             .map(
-                |(entity, id, team, footprint, health, attack, cooldown, target, spawn_tick)| {
+                |(
+                    entity,
+                    id,
+                    team,
+                    footprint,
+                    health,
+                    attack,
+                    cooldown,
+                    target,
+                    spawn_tick,
+                    spellcasting,
+                    mana,
+                    ability_state,
+                )| {
                     debug_assert_eq!(attack.is_some(), cooldown.is_some());
                     debug_assert_eq!(attack.is_some(), target.is_some());
                     debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
+                    debug_assert_eq!(spellcasting.is_some(), mana.is_some());
+                    debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
                     BuildingSnapshot {
                         entity,
                         id: *id,
@@ -1385,6 +1479,9 @@ impl Simulation {
                         cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
                         target: target.and_then(|target| target.current),
                         spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
+                        spellcasting: spellcasting.copied(),
+                        mana_current: mana.map(|mana| mana.current),
+                        ability_state: ability_state.copied(),
                     }
                 },
             )
@@ -1440,12 +1537,225 @@ impl Simulation {
         projectiles
     }
 
+    fn resolve_automatic_abilities(
+        &mut self,
+        buildings: &mut [BuildingSnapshot],
+        units: &mut [UnitSnapshot],
+        grid: &SpatialGrid,
+    ) -> AbilityMetrics {
+        let evaluations: Vec<_> = self.pool.install(|| {
+            buildings
+                .par_iter()
+                .enumerate()
+                .map(|(source_index, source)| {
+                    self.evaluate_automatic_ability(source_index, source, units, grid)
+                })
+                .collect()
+        });
+        let mut metrics = AbilityMetrics {
+            evaluations: buildings
+                .iter()
+                .filter(|building| building.spellcasting.is_some())
+                .count(),
+            candidate_checks: evaluations
+                .iter()
+                .map(|evaluation| evaluation.candidate_checks)
+                .sum(),
+            ..AbilityMetrics::default()
+        };
+        let mut intents: Vec<_> = evaluations
+            .into_iter()
+            .filter_map(|evaluation| evaluation.intent)
+            .collect();
+        intents.sort_unstable_by_key(|intent| {
+            (
+                intent.source_id,
+                intent.ability.id,
+                intent.cast_sequence,
+                intent.target_id,
+            )
+        });
+
+        for intent in intents {
+            let source = &mut buildings[intent.source_index];
+            if source.health <= 0 || source.id != intent.source_id {
+                continue;
+            }
+            let Some(spellcasting) = source.spellcasting else {
+                continue;
+            };
+            if spellcasting.ability != intent.ability {
+                continue;
+            }
+            let Some(mut state) = source.ability_state else {
+                continue;
+            };
+            let Some(mana) = source.mana_current else {
+                continue;
+            };
+            if state.cast_sequence != intent.cast_sequence
+                || state.ready_tick > self.next_tick
+                || mana < intent.ability.mana_cost
+            {
+                continue;
+            }
+
+            let target = &mut units[intent.target_index];
+            if target.id != intent.target_id
+                || target.health <= 0
+                || target.team == source.team
+                || point_to_footprint_distance_sq(
+                    target.position,
+                    source.footprint,
+                    self.config.navigation_cell_size,
+                ) > square_i32(intent.ability.range)
+            {
+                continue;
+            }
+
+            source.mana_current = Some(
+                mana.checked_sub(intent.ability.mana_cost)
+                    .expect("ability mana cost exceeded validated current mana"),
+            );
+            state.ready_tick = self
+                .next_tick
+                .checked_add(u64::from(intent.ability.cooldown_ticks))
+                .expect("ability cooldown tick overflow");
+            state.cast_sequence = state
+                .cast_sequence
+                .checked_add(1)
+                .expect("ability cast sequence exhausted");
+            source.ability_state = Some(state);
+
+            match intent.ability.effect {
+                AbilityEffect::Damage { amount } => {
+                    target.health = target
+                        .health
+                        .checked_sub(amount)
+                        .expect("ability damage overflowed validated bounds");
+                    metrics.effects += 1;
+                }
+            }
+            self.last_ability_casts.push(AbilityCastEvent {
+                source: intent.source_id,
+                ability: intent.ability.id,
+                target: intent.target_id,
+                effect: intent.ability.effect,
+            });
+            metrics.casts += 1;
+        }
+
+        metrics
+    }
+
+    fn evaluate_automatic_ability(
+        &self,
+        source_index: usize,
+        source: &BuildingSnapshot,
+        units: &[UnitSnapshot],
+        grid: &SpatialGrid,
+    ) -> AbilityEvaluation {
+        let Some(spellcasting) = source.spellcasting else {
+            return AbilityEvaluation::default();
+        };
+        if source.health <= 0 {
+            return AbilityEvaluation::default();
+        }
+        let Some(state) = source.ability_state else {
+            return AbilityEvaluation::default();
+        };
+        let Some(mana) = source.mana_current else {
+            return AbilityEvaluation::default();
+        };
+        if state.ready_tick > self.next_tick || mana < spellcasting.ability.mana_cost {
+            return AbilityEvaluation::default();
+        }
+
+        let mut candidate_checks = 0usize;
+        let target_index = match spellcasting.ability.target_policy {
+            AbilityTargetPolicy::RandomEnemyUnit => self.random_enemy_ability_target(
+                source,
+                spellcasting.ability,
+                state.cast_sequence,
+                units,
+                grid,
+                &mut candidate_checks,
+            ),
+        };
+        AbilityEvaluation {
+            intent: target_index.map(|target_index| AbilityIntent {
+                source_index,
+                source_id: source.id,
+                target_index,
+                target_id: units[target_index].id,
+                ability: spellcasting.ability,
+                cast_sequence: state.cast_sequence,
+            }),
+            candidate_checks,
+        }
+    }
+
+    fn random_enemy_ability_target(
+        &self,
+        source: &BuildingSnapshot,
+        ability: AutomaticAbilityProfile,
+        cast_sequence: u64,
+        units: &[UnitSnapshot],
+        grid: &SpatialGrid,
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let enemy_team = 1u8
+            .checked_sub(source.team.0)
+            .expect("verification slice supports teams 0 and 1 only");
+        let center = footprint_center_point(source.footprint, self.config.navigation_cell_size);
+        let query_radius = building_source_query_radius(
+            source.footprint,
+            ability.range,
+            self.config.navigation_cell_size,
+        );
+        let range_sq = square_i32(ability.range);
+        let mut best: Option<(u64, SimId, usize)> = None;
+        grid.for_each_candidate(
+            SpatialPartition::global(enemy_team),
+            center,
+            query_radius,
+            |unit_index| {
+                *candidate_checks += 1;
+                let candidate = &units[unit_index];
+                if candidate.health <= 0
+                    || point_to_footprint_distance_sq(
+                        candidate.position,
+                        source.footprint,
+                        self.config.navigation_cell_size,
+                    ) > range_sq
+                {
+                    return;
+                }
+                let rank = deterministic_ability_target_rank(
+                    self.config.match_seed,
+                    source.id,
+                    ability.id,
+                    cast_sequence,
+                    candidate.id,
+                );
+                let key = (rank, candidate.id, unit_index);
+                if best.is_none_or(|current| key < current) {
+                    best = Some(key);
+                }
+            },
+        );
+        best.map(|(_, _, unit_index)| unit_index)
+    }
+
     fn unit_will_query_ally_defense(
         &self,
         unit: &UnitSnapshot,
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
     ) -> bool {
+        if unit.health <= 0 {
+            return false;
+        }
         let current = unit
             .target
             .filter(|target| self.target_retainable_for(unit, *target, units, buildings));
@@ -1471,6 +1781,9 @@ impl Simulation {
             units
                 .par_iter()
                 .map(|unit| {
+                    if unit.health <= 0 {
+                        return TargetDecision::without_defense(None, false);
+                    }
                     let current = unit.target.filter(|target| {
                         self.target_retainable_for(unit, *target, units, buildings)
                     });
@@ -1569,6 +1882,9 @@ impl Simulation {
                 .par_iter()
                 .map(|building| {
                     let _attack = building.attack?;
+                    if building.health <= 0 {
+                        return None;
+                    }
                     if let Some(current) = building.target.filter(|target| {
                         self.building_source_target_retainable(building, *target, units, buildings)
                     }) {
@@ -1626,6 +1942,9 @@ impl Simulation {
             query_radius,
             |index| {
                 let candidate = &units[index];
+                if candidate.health <= 0 {
+                    return;
+                }
                 let distance_sq = point_to_footprint_distance_sq(
                     candidate.position,
                     source.footprint,
@@ -1725,6 +2044,9 @@ impl Simulation {
             |index| {
                 let candidate = &units[index];
                 debug_assert_ne!(source.team, candidate.team);
+                if candidate.health <= 0 {
+                    return;
+                }
                 let distance_sq = source.position.distance_sq(candidate.position);
                 if !self.unit_target_reachable(
                     source,
@@ -2051,7 +2373,7 @@ impl Simulation {
         distance_sq: u64,
         pursuit_limit_sq: u64,
     ) -> bool {
-        if distance_sq > pursuit_limit_sq {
+        if source.health <= 0 || target.health <= 0 || distance_sq > pursuit_limit_sq {
             return false;
         }
         let in_attack_range = distance_sq <= source.attack.range_sq();
@@ -2082,7 +2404,7 @@ impl Simulation {
         distance_sq: u64,
         pursuit_limit_sq: u64,
     ) -> bool {
-        if distance_sq > pursuit_limit_sq {
+        if source.health <= 0 || target.health <= 0 || distance_sq > pursuit_limit_sq {
             return false;
         }
         let in_attack_range = distance_sq <= source.attack.range_sq();
@@ -2765,6 +3087,9 @@ struct BuildingSnapshot {
     cooldown_remaining: Option<u16>,
     target: Option<SimId>,
     spawn_tick: Option<u64>,
+    spellcasting: Option<SpellcastingProfile>,
+    mana_current: Option<i32>,
+    ability_state: Option<AutomaticAbilityState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2799,6 +3124,30 @@ struct AttackIntent {
     target_id: SimId,
     attack: AttackProfile,
     distance_sq: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AbilityIntent {
+    source_index: usize,
+    source_id: SimId,
+    target_index: usize,
+    target_id: SimId,
+    ability: AutomaticAbilityProfile,
+    cast_sequence: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct AbilityMetrics {
+    evaluations: usize,
+    casts: usize,
+    candidate_checks: usize,
+    effects: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct AbilityEvaluation {
+    intent: Option<AbilityIntent>,
+    candidate_checks: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3080,6 +3429,22 @@ fn validate_attack_profile(attack: AttackProfile) {
     }
 }
 
+fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
+    assert!(spellcasting.mana.maximum >= 0);
+    assert!(spellcasting.mana.starting >= 0);
+    assert!(spellcasting.mana.starting <= spellcasting.mana.maximum);
+    assert!(spellcasting.mana.regen_per_tick >= 0);
+    assert!(spellcasting.ability.mana_cost >= 0);
+    assert!(spellcasting.ability.mana_cost <= spellcasting.mana.maximum);
+    assert!(spellcasting.ability.range >= 0);
+    match spellcasting.ability.target_policy {
+        AbilityTargetPolicy::RandomEnemyUnit => {}
+    }
+    match spellcasting.ability.effect {
+        AbilityEffect::Damage { amount } => assert!(amount >= 0),
+    }
+}
+
 fn validate_unit_template(unit: crate::components::UnitTemplate) {
     assert!(unit.health > 0);
     validate_attack_profile(unit.attack);
@@ -3182,6 +3547,8 @@ fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitV
 fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<BuildingView> {
     let production = entity.get::<ProductionProfile>().copied();
     let attack = entity.get::<AttackProfile>().copied();
+    let spellcasting = entity.get::<SpellcastingProfile>().copied();
+    let ability_state = entity.get::<AutomaticAbilityState>().copied();
     Some(BuildingView {
         id: *entity.get::<SimId>()?,
         team: *entity.get::<Team>()?,
@@ -3198,6 +3565,10 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
         cooldown_remaining: entity
             .get::<AttackCooldown>()
             .map(|cooldown| cooldown.remaining),
+        mana_current: entity.get::<ManaState>().map(|mana| mana.current),
+        mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
+        ability_ready_tick: ability_state.map(|state| state.ready_tick),
+        ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
     })
 }
 
@@ -3299,6 +3670,20 @@ fn deterministic_random(seed: u64, tick: u64, entity: SimId, purpose: u64, index
     let state = splitmix64(state ^ entity.0.rotate_left(31));
     let state = splitmix64(state ^ purpose);
     splitmix64(state ^ u64::from(index))
+}
+
+fn deterministic_ability_target_rank(
+    seed: u64,
+    caster: SimId,
+    ability: AbilityId,
+    cast_sequence: u64,
+    candidate: SimId,
+) -> u64 {
+    let state = splitmix64(seed ^ caster.0.rotate_left(31));
+    let state = splitmix64(state ^ u64::from(ability.0).rotate_left(17));
+    let state = splitmix64(state ^ RANDOM_PURPOSE_ABILITY_TARGET);
+    let state = splitmix64(state ^ cast_sequence);
+    splitmix64(state ^ candidate.0)
 }
 
 fn splitmix64(input: u64) -> u64 {
@@ -3501,6 +3886,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     cooldown: entity.get::<AttackCooldown>().copied(),
                     target: entity.get::<TargetState>().copied(),
                     spawn_tick: entity.get::<SpawnTick>().copied(),
+                    spellcasting: entity.get::<SpellcastingProfile>().copied(),
+                    mana: entity.get::<ManaState>().copied(),
+                    ability_state: entity.get::<AutomaticAbilityState>().copied(),
                 }))
             }
         })
@@ -3588,6 +3976,26 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                             .expect("attack building missing spawn tick")
                             .0,
                     );
+                } else {
+                    hash.write_u8(0);
+                }
+                if let Some(spellcasting) = building.spellcasting {
+                    hash.write_u8(1);
+                    hash.write_i32(spellcasting.mana.maximum);
+                    hash.write_i32(spellcasting.mana.starting);
+                    hash.write_i32(spellcasting.mana.regen_per_tick);
+                    hash_automatic_ability(&mut hash, spellcasting.ability);
+                    hash.write_i32(
+                        building
+                            .mana
+                            .expect("spellcasting building missing mana state")
+                            .current,
+                    );
+                    let state = building
+                        .ability_state
+                        .expect("spellcasting building missing ability state");
+                    hash.write_u64(state.ready_tick);
+                    hash.write_u64(state.cast_sequence);
                 } else {
                     hash.write_u8(0);
                 }
@@ -3712,6 +4120,9 @@ struct CanonicalBuilding {
     cooldown: Option<AttackCooldown>,
     target: Option<TargetState>,
     spawn_tick: Option<SpawnTick>,
+    spellcasting: Option<SpellcastingProfile>,
+    mana: Option<ManaState>,
+    ability_state: Option<AutomaticAbilityState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3730,6 +4141,18 @@ struct CanonicalBallisticProjectile {
 struct CanonicalBounceProjectile {
     id: SimId,
     projectile: BounceProjectile,
+}
+
+fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
+    hash.write_u64(u64::from(ability.id.0));
+    hash.write_i32(ability.mana_cost);
+    hash.write_u16(ability.cooldown_ticks);
+    hash.write_i32(ability.range);
+    hash.write_u8(ability.target_policy.stable_tag());
+    hash.write_u8(ability.effect.stable_tag());
+    match ability.effect {
+        AbilityEffect::Damage { amount } => hash.write_i32(amount),
+    }
 }
 
 fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {

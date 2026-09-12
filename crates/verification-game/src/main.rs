@@ -183,6 +183,7 @@ fn setup(mut commands: Commands) {
         health: 500,
         production: None,
         attack: None,
+        spellcasting: None,
     });
     let enemy_castle = simulation.spawn_building(BuildingSpawn {
         team: Team(1),
@@ -190,6 +191,7 @@ fn setup(mut commands: Commands) {
         health: 500,
         production: None,
         attack: None,
+        spellcasting: None,
     });
 
     commands.insert_resource(GameState {
@@ -454,6 +456,7 @@ fn production_building(
             unit: unit_template(kind),
         }),
         attack: None,
+        spellcasting: None,
     }
 }
 
@@ -892,6 +895,7 @@ mod tests {
             health: 100,
             production: None,
             attack: None,
+            spellcasting: None,
         });
         let mut state = GameState {
             simulation,

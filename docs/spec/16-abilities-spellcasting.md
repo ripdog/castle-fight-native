@@ -79,6 +79,8 @@ The decision may consider:
 
 If legal, the caster chooses the target according to the ability's deterministic target policy and emits a cast intent.
 
+The current verification slice makes one automatic ability per spellcasting building executable. This is deliberately narrower than the eventual content model, but it fixes the scheduler architecture: integer mana regeneration happens in the timer phase before automatic eligibility; mana is clamped to the authored maximum; ability evaluation then reads an immutable post-production/pre-targeting snapshot; committed ability effects are visible to combat target acquisition and ordinary attacks later in the same tick. A unit killed by an automatic ability therefore cannot acquire a target, move, or perform an ordinary attack later that tick.
+
 Automatic casting MUST continue through an individual player's disconnect while the match is still running. If an entire team disconnects and the match enters the canonical reconnect pause, simulation casting pauses with the rest of the simulation.
 
 ## 6. Deterministic automatic target selection
@@ -99,6 +101,8 @@ map-wide team set
 ```
 
 All non-random ties require a canonical final tie-break such as `SimId`.
+
+The executable verification target policy is currently `RandomEnemyUnit` within an authored finite range measured from the caster building's authoritative footprint. Every eligible candidate receives an order-independent keyed random rank and minimum `(rank, SimId)` wins, so spatial-grid enumeration and worker completion order cannot affect the selected target.
 
 Random target selection uses keyed deterministic RNG. A suitable key is:
 
@@ -136,7 +140,9 @@ pub enum AbilityTarget {
 
 At deterministic resolution the simulation validates any rules that must still hold, spends mana/charge, begins cooldown, and emits canonical effects/projectiles.
 
-Whether resources are reserved at intent creation or charged at resolution MUST be explicit. The initial implementation SHOULD make cast commitment atomic in one defined ability-resolution subphase.
+The current implementation makes cast commitment atomic in one ability-resolution subphase. Automatic intents are canonically ordered by source `SimId`, ability ID, cast sequence, then target `SimId`. Resolution revalidates source state, mana, readiness, target liveness/team/range, and rejects the cast without spending mana or starting cooldown if those conditions no longer hold. A successful cast subtracts mana, sets `ready_tick = cast_tick + cooldown_ticks`, increments the authoritative cast sequence, then applies its effect. Mana profile/state and ability ready/cast-sequence state participate in canonical checksums.
+
+Whether resources are reserved at intent creation or charged at resolution MUST remain explicit for later activation modes; the verification rule above is the initial ordinary automatic-cast behavior.
 
 ## 8. Common ability effects
 
@@ -262,11 +268,13 @@ pub enum EffectSource {
 
 Receiving damage or a hostile effect MUST NOT by itself create a generic retaliation order. An ordinary unit changes target only through the normal autonomous target lifecycle or an explicit forced-target/taunt mechanic.
 
-This ensures builder-held projectile items can damage enemies without causing units to attempt to target the invulnerable/non-combat builder.
+The executable building-ability damage effect follows this rule: it changes health but does **not** populate ordinary `last_attacker`/self-retaliation state or nearby-ally defense alerts. This is intentionally different from an attack-capable building's ordinary attack, which is an ordinary combat threat source and does create those reactions.
+
+This ensures builder-held projectile items and non-retaliatory building spells can damage enemies without causing units to attempt to target a source merely because an effect was attributed to it.
 
 ## 16. Scheduling
 
-A provisional ability phase relationship is:
+The current executable ability phase relationship is:
 
 ```text
 apply finalized tick inputs
@@ -282,7 +290,7 @@ spawn/apply effects and projectiles
 ordinary combat/projectile resolution according to phase rules
 ```
 
-Exact interleaving with movement and attacks must be documented in `13-time-and-scheduling.md` once compatibility behavior is known.
+For the verification slice, mana regeneration is part of the timer update immediately before this phase, and automatic damage/death is committed before ordinary target acquisition. Future compatibility findings may revise finer cast/windup semantics, but changing this visibility/precedence ordering is a simulation-version change and requires timing regressions plus an update to `13-time-and-scheduling.md`.
 
 ## 17. Content requirements
 
