@@ -343,6 +343,41 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(twins["unit_names"], "Twin Smiley")
         self.assertEqual(twins["production_building_rawcode"], "")
 
+    def test_scripted_unit_spell_mechanics_profile_all_handlers_and_effect_links(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["scripted_unit_spell_mechanic_rows"], 37)
+        self.assertEqual(summary["scripted_unit_spell_mechanics_with_delayed_callbacks"], 18)
+        self.assertEqual(sum(summary["scripted_unit_spell_mechanic_kinds"].values()), 37)
+        self.assertEqual(summary["scripted_unit_spell_mechanic_kinds"]["delegated-helper"], 12)
+
+        with (self.resolved / "unit-spell-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 37)
+
+        monk = rows["n03E"]
+        self.assertEqual(monk["mechanic_kind"], "dummy-point-ability")
+        self.assertEqual(json.loads(monk["scheduled_delays_json"]), ["0.1"])
+        monk_effects = {row["rawcode"]: row for row in json.loads(monk["reachable_effect_objects_json"])}
+        self.assertEqual(json.loads(monk_effects["A0GP"]["ability_level1"]["data_fields_labeled_json"])["Damage Amount"], 40)
+
+        twins = rows["n02L"]
+        self.assertEqual(twins["mechanic_kind"], "spawn-unit")
+        self.assertIn("CallbackSingle_doAfter_RaceChaosAbilities", twins["delayed_callback_functions"])
+        twin_effects = {row["rawcode"]: row for row in json.loads(twins["reachable_effect_objects_json"])}
+        self.assertEqual(twin_effects["h06N"]["unit_object"]["name"], "ClapDummy")
+        self.assertEqual(json.loads(twin_effects["A0FS"]["ability_level1"]["data_fields_labeled_json"])["AOE Damage"], 20)
+
+        trapper = rows["n02G"]
+        self.assertEqual(trapper["helper_functions"], "forestTrollTrapperSpell")
+        trapper_effects = {row["rawcode"]: row for row in json.loads(trapper["reachable_effect_objects_json"])}
+        self.assertEqual(trapper_effects["A0FC"]["ability_level1"]["range"], "800")
+        self.assertEqual(trapper_effects["A0FC"]["ability_level1"]["duration_normal"], "16")
+
+        giant = rows["e00F"]
+        self.assertEqual(giant["mechanic_kind"], "unit-immediate-order")
+        self.assertEqual(json.loads(giant["scheduled_delays_json"]), ["0.6"])
+        self.assertIn("CallbackSingle_doAfter_RaceNatureAbilities", giant["delayed_callback_functions"])
+
     def test_scripted_building_spells_recover_handlers_and_mana_timed_cadence(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_building_spell_rows"], 15)

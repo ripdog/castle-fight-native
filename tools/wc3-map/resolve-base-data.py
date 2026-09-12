@@ -1653,6 +1653,7 @@ def main() -> None:
     )
 
     unit_spell_rows: list[list[Any]] = []
+    unit_spell_by_pair: dict[tuple[str, str], dict[str, str]] = {}
     unit_spell_production_rows = 0
     unit_spell_registration_path = map_root / "script" / "unit-spell-registrations.tsv"
     production_source_by_unit: dict[str, dict[str, str]] = {}
@@ -1690,6 +1691,19 @@ def main() -> None:
                     expected = static_units.get(expected_rawcode)
                     expected_name = expected["name"] if expected is not None else registration["expected_immediate_unit_names"]
                 base_order = value_as_text(field_lookup(rows_by_object, "abilities", ability_rawcode, "aord", 0, 0))
+                unit_spell_by_pair[(unit_rawcode, ability_rawcode)] = {
+                    "unit_name": unit["name"],
+                    "production_building_rawcode": production["building_rawcode"] if production is not None else "",
+                    "production_building_names": production["building_names"] if production is not None else "",
+                    "ability_name": definition["name"],
+                    "ability_tip": definition["tip"],
+                    "ability_ubertip": definition["ubertip"],
+                    "effective_mana_cost": value_as_text(effective_mana),
+                    "effective_cooldown": value_as_text(effective_cooldown),
+                    "target_mode": registration["target_mode"],
+                    "target_mode_label": registration["target_mode_label"],
+                    "base_order": base_order,
+                }
                 unit_spell_rows.append([
                     unit_rawcode, unit["name"],
                     production["building_rawcode"] if production is not None else "",
@@ -1716,6 +1730,72 @@ def main() -> None:
             "handler_function", "registration_function", "evidence_kind", "byte_offset",
         ],
         unit_spell_rows,
+    )
+
+    unit_spell_mechanic_rows: list[list[Any]] = []
+    unit_spell_mechanics_path = map_root / "script" / "unit-spell-mechanics.tsv"
+    if unit_spell_mechanics_path.exists():
+        with unit_spell_mechanics_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                pair = (mechanic["unit_rawcode"], mechanic["ability_rawcode"])
+                spell = unit_spell_by_pair.get(pair)
+                if spell is None:
+                    raise ValueError(f"unit-spell mechanic has no scripted registration: {pair}")
+                reachable = json.loads(mechanic["reachable_effect_paths_json"])
+                enriched_effects: list[dict[str, Any]] = []
+                for effect in reachable:
+                    rawcode = str(effect["rawcode"])
+                    enriched: dict[str, Any] = dict(effect)
+                    definitions = ability_levels.get(rawcode, [])
+                    definition = next((row for row in definitions if row["level"] == "1"), None)
+                    if definition is None:
+                        definition = inherited_ability_level_one(rawcode)
+                    if definition is not None:
+                        enriched["ability_level1"] = {
+                            "name": definition["name"],
+                            "range": definition["range"],
+                            "area": definition["area"],
+                            "targets": definition["targets"],
+                            "buffs": definition["buffs"],
+                            "duration_normal": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "adur", 1, 0)),
+                            "duration_hero": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "ahdu", 1, 0)),
+                            "data_fields_labeled_json": definition["data_fields_labeled_json"],
+                        }
+                    unit_effect = static_units.get(rawcode)
+                    if unit_effect is not None:
+                        enriched["unit_object"] = {
+                            "name": unit_effect["name"],
+                            "abilities": unit_effect["abilities"],
+                            "move_speed": unit_effect["move_speed"],
+                            "attack1_type": unit_effect["attack1_type"],
+                            "attack1_weapon_type": unit_effect["attack1_weapon_type"],
+                            "attack1_targets": unit_effect["attack1_targets"],
+                        }
+                    enriched_effects.append(enriched)
+                unit_spell_mechanic_rows.append([
+                    mechanic["unit_rawcode"], spell["unit_name"],
+                    spell["production_building_rawcode"], spell["production_building_names"],
+                    mechanic["ability_rawcode"], spell["ability_name"], spell["ability_tip"], spell["ability_ubertip"],
+                    spell["effective_mana_cost"], spell["effective_cooldown"],
+                    spell["target_mode"], spell["target_mode_label"], spell["base_order"],
+                    mechanic["mechanic_kind"], mechanic["direct_calls"], mechanic["helper_functions"],
+                    mechanic["delayed_callback_functions"], mechanic["scheduled_delays_json"],
+                    mechanic["periodic_intervals_json"], mechanic["random_real_ranges_json"],
+                    mechanic["direct_effect_rawcodes"],
+                    json.dumps(enriched_effects, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+                    mechanic["handler_function"], mechanic["evidence_kind"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "unit-spell-mechanics.tsv",
+        [
+            "unit_rawcode", "unit_name", "production_building_rawcode", "production_building_names",
+            "ability_rawcode", "ability_name", "ability_tip", "ability_ubertip",
+            "effective_mana_cost", "effective_cooldown", "target_mode", "target_mode_label", "base_order",
+            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions",
+            "scheduled_delays_json", "periodic_intervals_json", "random_real_ranges_json",
+            "direct_effect_rawcodes", "reachable_effect_objects_json", "handler_function", "evidence_kind", "byte_offset",
+        ],
+        unit_spell_mechanic_rows,
     )
 
     # Join the map's generated UnitObjectMeta table to its complete race
@@ -2268,6 +2348,9 @@ def main() -> None:
         "scripted_unit_spell_rows": len(unit_spell_rows),
         "scripted_unit_spell_production_rows": unit_spell_production_rows,
         "scripted_unit_spell_target_modes": dict(sorted(Counter(row[24] for row in unit_spell_rows).items())),
+        "scripted_unit_spell_mechanic_rows": len(unit_spell_mechanic_rows),
+        "scripted_unit_spell_mechanic_kinds": dict(sorted(Counter(row[13] for row in unit_spell_mechanic_rows).items())),
+        "scripted_unit_spell_mechanics_with_delayed_callbacks": sum(bool(row[16]) for row in unit_spell_mechanic_rows),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
@@ -2303,6 +2386,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
+            "unit-spell-mechanics.tsv gives every scripted unit spell a complete first-layer implementation profile: direct primitives/helper calls, exact generated doAfter callback targets, timing literals and bounded named-call rawcode evidence enriched with resolved ability/unit object data; deeper callback state machines remain separate evidence rather than inferred behavior",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
             "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",

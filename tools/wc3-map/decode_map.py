@@ -770,6 +770,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_value_arguments = analysis["function_value_arguments"]
     building_spell_registrations = analysis["building_spell_registrations"]
     unit_spell_registrations = analysis["unit_spell_registrations"]
+    unit_spell_mechanics = analysis["unit_spell_mechanics"]
     corpse_building_mechanics = analysis["corpse_building_mechanics"]
     building_spell_mechanics = analysis["building_spell_mechanics"]
     resolved_call_edges = int(analysis["resolved_call_edges"])
@@ -912,6 +913,55 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 expected_rawcode, expected_id if expected_id else "", expected_names,
                 row["handler_function"], row["closure_class"], row["closure_variable"],
                 row["registration_function"], row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "unit-spell-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "unit_rawcode", "unit_rawcode_integer", "unit_names",
+            "ability_rawcode", "ability_rawcode_integer", "ability_names",
+            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions",
+            "scheduled_delays_json", "periodic_intervals_json", "random_real_ranges_json",
+            "direct_effect_rawcodes", "reachable_effect_paths_json",
+            "handler_function", "evidence_kind", "byte_offset",
+        ])
+        for row in unit_spell_mechanics:
+            unit_id = int(row["unit_id"])
+            ability_id = int(row["ability_id"])
+            unit_rawcode = rawcode_text(unit_id)
+            unit_names = ""
+            if unit_id in object_metadata:
+                unit_rawcode, _ucategories, _utables, unit_names, _udefs = rawcode_metadata(unit_id)
+            ability_rawcode = rawcode_text(ability_id)
+            ability_names = ""
+            if ability_id in object_metadata:
+                ability_rawcode, _acategories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
+            direct_effect_rawcodes = [rawcode_text(int(value)) for value in row["direct_effect_rawcodes"]]
+            reachable_paths = []
+            for path in row["reachable_effect_rawcode_paths"]:
+                integer_id = int(path["rawcode_integer"])
+                rawcode = rawcode_text(integer_id)
+                names = ""
+                categories = ""
+                if integer_id in object_metadata:
+                    rawcode, categories, _tables, names, _defs = rawcode_metadata(integer_id)
+                reachable_paths.append({
+                    "rawcode": rawcode,
+                    "rawcode_integer": integer_id,
+                    "categories": categories,
+                    "names": names,
+                    "hops": int(path["hops"]),
+                    "path": path["path"],
+                })
+            writer.writerow([
+                unit_rawcode, unit_id, unit_names,
+                ability_rawcode, ability_id, ability_names,
+                row["mechanic_kind"], ",".join(row["direct_calls"]), ",".join(row["helper_functions"]),
+                ",".join(row["delayed_callback_functions"]),
+                script_json(list(row["scheduled_delays"])), script_json(list(row["periodic_intervals"])),
+                script_json([list(values) for values in row["random_real_ranges"]]),
+                ",".join(direct_effect_rawcodes), script_json(reachable_paths),
+                row["handler_function"], row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "corpse-building-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1439,6 +1489,9 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "building_spell_handlers": len({str(row["handler_function"]) for row in building_spell_registrations}),
         "unit_spell_registrations": len(unit_spell_registrations),
         "unit_spell_handlers": len({str(row["handler_function"]) for row in unit_spell_registrations}),
+        "unit_spell_mechanics": len(unit_spell_mechanics),
+        "unit_spell_mechanic_kinds": dict(sorted(Counter(str(row["mechanic_kind"]) for row in unit_spell_mechanics).items())),
+        "unit_spell_mechanics_with_delayed_callbacks": sum(bool(row["delayed_callback_functions"]) for row in unit_spell_mechanics),
         "unit_spell_inlined_registrations": sum(
             str(row["evidence_kind"]) == "inlined-registration" for row in unit_spell_registrations
         ),

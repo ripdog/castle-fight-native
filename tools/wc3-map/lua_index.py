@@ -1800,6 +1800,210 @@ def _extract_unit_spell_registrations(
     return rows
 
 
+def _extract_unit_spell_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    unit_spell_registrations: list[dict[str, object]],
+    function_aliases: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+    function_rawcodes: Counter[tuple[str, int]],
+) -> list[dict[str, object]]:
+    """Build a complete lexical mechanics profile for every scripted unit spell.
+
+    Unlike the smaller building-spell set, many unit handlers hand work to a
+    named helper or a generated delayed callback object. This index preserves
+    those exact implementation links, primitive calls, timing literals and
+    bounded rawcode reachability without pretending dynamic callbacks are
+    ordinary synchronous calls.
+    """
+    if not unit_spell_registrations:
+        return []
+
+    defined = {str(function["name"]) for function in functions}
+    calls_by_function: dict[str, list[str]] = defaultdict(list)
+    for (caller, callee), _count in call_edges.items():
+        calls_by_function[caller].append(callee)
+    rawcodes_by_function: dict[str, set[int]] = defaultdict(set)
+    for (function_name, integer_id), _count in function_rawcodes.items():
+        rawcodes_by_function[function_name].add(int(integer_id))
+
+    delayed_callbacks_by_class: dict[str, list[str]] = defaultdict(list)
+    for alias in function_aliases:
+        alias_name = str(alias["alias"])
+        if "." not in alias_name:
+            continue
+        class_name, slot = alias_name.split(".", 1)
+        target = str(alias["target_function"])
+        if "CallbackSingle_doAfter" not in slot:
+            continue
+        if target.startswith(slot):
+            delayed_callbacks_by_class[class_name].append(target)
+    for class_name in delayed_callbacks_by_class:
+        delayed_callbacks_by_class[class_name] = sorted(set(delayed_callbacks_by_class[class_name]))
+
+    primitive_priority = (
+        ("dummyCastTargetWithVision", "dummy-target-ability-with-vision"),
+        ("dummyCastTargetFrom1", "dummy-target-ability-from-owner"),
+        ("dummyCastTargetFrom", "dummy-target-ability-from-caster"),
+        ("dummyCastPointFrom", "dummy-point-ability"),
+        ("dummyCastImmediateFrom1", "dummy-immediate-ability-from-owner"),
+        ("dummyCastImmediateFrom", "dummy-immediate-ability-from-caster"),
+        ("dummyCarrierWithAbilities1", "multi-ability-carrier"),
+        ("dummyCarrierWithAbility", "ability-carrier"),
+        ("createUnit", "spawn-unit"),
+        ("addProtectedAbility", "apply-protected-ability"),
+        ("unit_issueTargetOrderById", "unit-target-order"),
+        ("unit_issueImmediateOrderById", "unit-immediate-order"),
+        ("unit_issuePointOrderById", "unit-point-order"),
+        ("doAfter", "scheduled-callback"),
+    )
+    infrastructure_calls = {
+        "unit_getOwner", "unit_getPos", "unit_getX", "unit_getY", "unit_getTypeId",
+        "player_getId", "tupleCopy1", "tupleCopy2", "real_asAngleDegrees", "angle_degrees",
+        "vec2_distanceTo", "vec2_polarOffset", "GetRandomReal", "GetRandomInt", "OrderId",
+        "doAfter", "doPeriodically", "createUnit", "addEffect1", "addEffect",
+        "__wurst_safe_DestroyEffect", "__wurst_safe_UnitApplyTimedLife", "__wurst_ensureInt",
+        "unit_issueTargetOrderById", "unit_issueImmediateOrderById", "unit_issuePointOrderById",
+        "orderCodeAttack", "addProtectedAbility", "unit_removeAbility", "widget_getLife",
+    }
+
+    def call_arguments(tokens: list[LuaToken], callee: str) -> list[list[list[LuaToken]]]:
+        found: list[list[list[LuaToken]]] = []
+        for index, token in enumerate(tokens):
+            if token.kind != "ident" or token.text != callee:
+                continue
+            try:
+                args, _next = _call_arguments(tokens, index)
+            except ValueError:
+                continue
+            found.append(args)
+        return found
+
+    def numeric_arg(argument: list[LuaToken]) -> str | None:
+        try:
+            return _decimal_text(_decimal_literal_value(argument))
+        except ValueError:
+            return None
+
+    rows: list[dict[str, object]] = []
+    for registration in unit_spell_registrations:
+        handler = str(registration["handler_function"])
+        body = _function_body_tokens(data, functions, handler)
+        if body is None:
+            raise ValueError(f"unit-spell handler body is missing: {handler}")
+        handler_start, tokens = body
+        direct_calls = sorted(set(calls_by_function.get(handler, [])))
+
+        mechanic_kind = "script-handler"
+        for primitive, kind in primitive_priority:
+            if primitive in direct_calls:
+                mechanic_kind = kind
+                break
+
+        helper_calls = sorted({
+            callee
+            for callee in direct_calls
+            if callee in defined
+            and callee not in infrastructure_calls
+            and ":create" not in callee
+            and not callee.startswith("dummyCast")
+            and not callee.startswith("dummyCarrier")
+        })
+        if mechanic_kind == "script-handler" and helper_calls:
+            mechanic_kind = "delegated-helper"
+
+        callback_classes: set[str] = set()
+        for index in range(len(tokens) - 4):
+            if (
+                tokens[index].kind == "ident"
+                and tokens[index + 1].text == ":"
+                and tokens[index + 2].kind == "ident"
+                and tokens[index + 2].text.startswith("create")
+                and tokens[index + 3].text == "("
+            ):
+                callback_classes.add(tokens[index].text)
+        delayed_callbacks = sorted({
+            callback
+            for class_name in callback_classes
+            for callback in delayed_callbacks_by_class.get(class_name, [])
+        })
+
+        scheduled_delays: list[str] = []
+        for args in call_arguments(tokens, "doAfter"):
+            if args:
+                value = numeric_arg(args[0])
+                if value is not None:
+                    scheduled_delays.append(value)
+        periodic_intervals: list[str] = []
+        for args in call_arguments(tokens, "doPeriodically"):
+            if args:
+                value = numeric_arg(args[0])
+                if value is not None:
+                    periodic_intervals.append(value)
+        random_real_ranges: list[list[str]] = []
+        for args in call_arguments(tokens, "GetRandomReal"):
+            if len(args) == 2:
+                low = numeric_arg(args[0])
+                high = numeric_arg(args[1])
+                if low is not None and high is not None:
+                    random_real_ranges.append([low, high])
+
+        direct_rawcodes = sorted(rawcodes_by_function.get(handler, set()))
+
+        # Follow only exact named call edges, plus generated doAfter callback
+        # assignments whose closure class is visible in this handler. Two named
+        # hops are enough to surface the immediate effect objects of the current
+        # map while keeping evidence paths short and auditable.
+        paths: dict[int, tuple[str, ...]] = {}
+        frontier: list[tuple[str, tuple[str, ...]]] = [(handler, (handler,))]
+        seen_depth: dict[str, int] = {handler: 0}
+        while frontier:
+            function_name, path = frontier.pop(0)
+            depth = len(path) - 1
+            for integer_id in rawcodes_by_function.get(function_name, set()):
+                prior = paths.get(integer_id)
+                if prior is None or len(path) < len(prior) or (len(path) == len(prior) and path < prior):
+                    paths[integer_id] = path
+            if depth >= 2:
+                continue
+            successors = sorted({callee for callee in calls_by_function.get(function_name, []) if callee in defined})
+            if function_name == handler:
+                successors.extend(delayed_callbacks)
+                successors = sorted(set(successors))
+            for successor in successors:
+                next_depth = depth + 1
+                if seen_depth.get(successor, 99) < next_depth:
+                    continue
+                seen_depth[successor] = next_depth
+                frontier.append((successor, (*path, successor)))
+
+        rawcode_paths = [
+            {"rawcode_integer": integer_id, "path": list(path), "hops": len(path) - 1}
+            for integer_id, path in sorted(paths.items())
+        ]
+        rows.append({
+            "unit_id": int(registration["unit_id"]),
+            "ability_id": int(registration["ability_id"]),
+            "mechanic_kind": mechanic_kind,
+            "handler_function": handler,
+            "direct_calls": tuple(direct_calls),
+            "helper_functions": tuple(helper_calls),
+            "delayed_callback_functions": tuple(delayed_callbacks),
+            "scheduled_delays": tuple(scheduled_delays),
+            "periodic_intervals": tuple(periodic_intervals),
+            "random_real_ranges": tuple(tuple(values) for values in random_real_ranges),
+            "direct_effect_rawcodes": tuple(direct_rawcodes),
+            "reachable_effect_rawcode_paths": tuple(rawcode_paths),
+            "evidence_kind": "static-named-call-and-dispatch-evidence",
+            "byte_offset": handler_start,
+        })
+
+    rows.sort(key=lambda row: (int(row["unit_id"]), int(row["ability_id"])))
+    if len(rows) != len(unit_spell_registrations):
+        raise ValueError("unit-spell mechanic profile coverage mismatch")
+    return rows
+
+
 def _extract_corpse_building_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
@@ -2753,6 +2957,14 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     function_aliases, function_value_arguments = _function_value_links(data, functions)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
+    unit_spell_mechanics = _extract_unit_spell_mechanics(
+        data,
+        functions,
+        unit_spell_registrations,
+        function_aliases,
+        call_edges,
+        function_rawcodes,
+    )
     corpse_building_mechanics = _extract_corpse_building_mechanics(data, functions, building_spell_registrations)
     building_spell_mechanics = _extract_building_spell_mechanics(
         data, functions, building_spell_registrations, corpse_building_mechanics
@@ -2786,6 +2998,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_value_arguments": function_value_arguments,
         "building_spell_registrations": building_spell_registrations,
         "unit_spell_registrations": unit_spell_registrations,
+        "unit_spell_mechanics": unit_spell_mechanics,
         "corpse_building_mechanics": corpse_building_mechanics,
         "building_spell_mechanics": building_spell_mechanics,
     }
