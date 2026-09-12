@@ -3310,7 +3310,7 @@ impl Simulation {
                     self.topology
                         .objective_step_with_bias(unit.team.0, source_cell, route_bias)
                 };
-                if objective_cell.x == source_cell.x || fallback_objective_step.is_none() {
+                if objective_cell.x == source_cell.x {
                     None
                 } else {
                     let step_x = (objective_cell.x - source_cell.x).signum();

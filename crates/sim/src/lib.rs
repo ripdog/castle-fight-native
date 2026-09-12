@@ -218,14 +218,22 @@ mod tests {
             .collect();
         let closed = sim.step();
         assert_eq!(closed.topology_rebuilds, 1);
+        let pressing_toward_wall = trapped
+            .iter()
+            .zip(&initial_positions)
+            .filter(|(id, position)| {
+                sim.unit(**id)
+                    .is_some_and(|unit| unit.position.x > position.x)
+            })
+            .count();
         assert!(
-            trapped
-                .iter()
-                .zip(&initial_positions)
-                .all(|(id, position)| {
-                    sim.unit(*id).is_some_and(|unit| unit.position == *position)
-                })
+            pressing_toward_wall >= trapped.len() / 2,
+            "closed cage should still press the crowd toward the objective-side wall"
         );
+        assert!(trapped.iter().all(|id| {
+            sim.unit(*id)
+                .is_some_and(|unit| unit.position.x < 8 * cell)
+        }));
 
         assert!(sim.remove_building(gate));
         let opened = sim.step();

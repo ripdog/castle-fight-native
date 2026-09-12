@@ -185,7 +185,7 @@ If steering aggregates multiple neighbors, accumulation order must either be can
 
 ## 13. Local movement, pursuit, and steering
 
-Strategic navigation provides a preferred direction toward the objective. In the standard Castle Fight lane profile, a targetless ground unit prefers **pure horizontal progress** toward the enemy objective side at its current authoritative `y`; it does not converge toward the objective/castle centerline merely because the center is the destination point used by the topology field. This horizontal preference is stateless. There is no per-unit lane anchor: if combat, crowd flow, or static-topology detouring changes the unit's `y`, subsequent targetless movement proceeds horizontally from that new position. The shared objective field remains the reachability/detour fallback and caged units with no objective route remain stationary.
+Strategic navigation provides a preferred direction toward the objective. In the standard Castle Fight lane profile, a targetless ground unit prefers **pure horizontal progress** toward the enemy objective side at its current authoritative `y`; it does not converge toward the objective/castle centerline merely because the center is the destination point used by the topology field. This horizontal preference is stateless. There is no per-unit lane anchor: if combat, crowd flow, or static-topology detouring changes the unit's `y`, subsequent targetless movement proceeds horizontally from that new position. The shared objective field remains the normal reachability/detour fallback. If the objective lies in a disconnected component, the unit MUST still make best-effort progress within its own component toward the objective side instead of becoming stationary merely because no complete route exists. In the standard horizontal lane this means advancing along the current row toward the nearest reachable point on the objective side; a closed cage therefore causes units to accumulate against the cage wall nearest the enemy castle without crossing the blocker.
 
 When a unit has an individually selected target that is not yet in attack position, movement instead pursues the nearest reachable part of that target's **attack envelope**: the region of authoritative positions from which the unit's current attack is legal.
 
@@ -319,7 +319,7 @@ Spatial/navigation tests MUST eventually include:
 
 1. open lane: units advance to enemy objective;
 2. building detour: field routes around a blocker;
-3. complete cage: unit has no objective route and remains enclosed;
+3. complete cage: unit has no objective route, remains enclosed, and continues best-effort movement until blocked against the objective-side cage wall;
 4. cage destruction: field updates and trapped units can leave;
 5. ranged enemy targets caged unit when targeting rules prefer it and the attack can genuinely hit it;
 6. unit outside cage does not cross building footprint;
@@ -354,5 +354,5 @@ Spatial/navigation tests MUST eventually include:
 35. an objective-following unit blocked by stationary allies preserves a deterministic bypass side and flows around the clump when lateral space exists;
 36. an unobstructed targetless lane unit preserves its exact current `y` while advancing toward the enemy side rather than drifting toward the objective centerline;
 37. after combat or a forced topology detour moves a unit vertically, targetless movement resumes horizontally from the unit's new `y` without restoring any remembered spawn/home line;
-38. a unit in a disconnected cage does not pace horizontally inside the cage merely because same-row cells exist in its local component;
+38. a unit in a disconnected cage makes one-way best-effort progress along its current row toward the objective-side wall, then remains blocked there rather than pacing or crossing the cage;
 36. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping.
