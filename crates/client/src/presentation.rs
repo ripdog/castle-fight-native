@@ -30,6 +30,9 @@ const CORPSE_SIZE: f32 = 7.5;
 const CORPSE_THICKNESS: f32 = 0.8;
 const SWORD_SWING_SECONDS: f32 = 0.24;
 const GUN_RECOIL_SECONDS: f32 = 0.16;
+const UNIT_WALK_BOB_HEIGHT: f32 = 0.55;
+const UNIT_WALK_PHASE_PER_TICK: f32 = 0.58;
+const UNIT_FACING_RESPONSE: f32 = 14.0;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -117,11 +120,13 @@ struct PresentationAssets {
     corpse_mesh: Handle<Mesh>,
     unit_materials: [Handle<StandardMaterial>; 2],
     building_materials: [Handle<StandardMaterial>; 2],
+    building_accent_materials: [Handle<StandardMaterial>; 2],
     corpse_materials: [Handle<StandardMaterial>; 2],
     projectile_materials: [Handle<StandardMaterial>; 4],
     weapon_material: Handle<StandardMaterial>,
     neutral_unit_material: Handle<StandardMaterial>,
     neutral_building_material: Handle<StandardMaterial>,
+    neutral_building_accent_material: Handle<StandardMaterial>,
     neutral_corpse_material: Handle<StandardMaterial>,
 }
 
@@ -147,6 +152,13 @@ impl PresentationAssets {
             .get(usize::from(team.0))
             .cloned()
             .unwrap_or_else(|| self.neutral_building_material.clone())
+    }
+
+    fn building_accent_material(&self, team: Team) -> Handle<StandardMaterial> {
+        self.building_accent_materials
+            .get(usize::from(team.0))
+            .cloned()
+            .unwrap_or_else(|| self.neutral_building_accent_material.clone())
     }
 
     fn corpse_material(&self, team: Team) -> Handle<StandardMaterial> {
@@ -320,6 +332,20 @@ fn setup_scene(
             ..default()
         }),
     ];
+    let building_accent_materials = [
+        materials.add(StandardMaterial {
+            base_color: Color::srgb(0.20, 0.62, 1.0),
+            emissive: LinearRgba::new(0.04, 0.13, 0.30, 1.0),
+            perceptual_roughness: 0.52,
+            ..default()
+        }),
+        materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.30, 0.20),
+            emissive: LinearRgba::new(0.30, 0.05, 0.03, 1.0),
+            perceptual_roughness: 0.52,
+            ..default()
+        }),
+    ];
     let corpse_materials = [
         materials.add(StandardMaterial {
             base_color: Color::srgba(0.12, 0.32, 0.62, 0.42),
@@ -348,6 +374,11 @@ fn setup_scene(
     });
     let neutral_unit_material = materials.add(Color::srgb(0.72, 0.72, 0.74));
     let neutral_building_material = materials.add(Color::srgb(0.32, 0.32, 0.34));
+    let neutral_building_accent_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.70, 0.70, 0.74),
+        emissive: LinearRgba::new(0.08, 0.08, 0.09, 1.0),
+        ..default()
+    });
     let neutral_corpse_material = materials.add(StandardMaterial {
         base_color: Color::srgba(0.34, 0.34, 0.36, 0.40),
         alpha_mode: AlphaMode::Blend,
@@ -370,11 +401,13 @@ fn setup_scene(
         corpse_mesh,
         unit_materials,
         building_materials,
+        building_accent_materials,
         corpse_materials,
         projectile_materials,
         weapon_material,
         neutral_unit_material,
         neutral_building_material,
+        neutral_building_accent_material,
         neutral_corpse_material,
     });
 
@@ -553,6 +586,135 @@ fn weapon_transform(kind: WeaponKind, progress: Option<f32>) -> Transform {
     }
 }
 
+fn spawn_building_visual(
+    commands: &mut Commands,
+    assets: &PresentationAssets,
+    root: Entity,
+    building: &BuildingSample,
+    size: Vec2,
+    height: f32,
+) {
+    let body_material = assets.building_material(building.team);
+    let accent_material = assets.building_accent_material(building.team);
+    commands
+        .entity(root)
+        .with_children(|parent| match building.visual_kind {
+            BuildingVisualKind::Structure => {
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(body_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, -height * 0.10, 0.0),
+                        scale: Vec3::new(size.x * 0.78, height * 0.78, size.y * 0.78),
+                        ..default()
+                    },
+                ));
+                for x in [-0.34, 0.34] {
+                    for z in [-0.34, 0.34] {
+                        parent.spawn((
+                            Mesh3d(assets.building_mesh.clone()),
+                            MeshMaterial3d(accent_material.clone()),
+                            Transform {
+                                translation: Vec3::new(size.x * x, height * 0.16, size.y * z),
+                                scale: Vec3::new(size.x * 0.18, height * 0.60, size.y * 0.18),
+                                ..default()
+                            },
+                        ));
+                    }
+                }
+            }
+            BuildingVisualKind::Production => {
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(body_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, -height * 0.16, 0.0),
+                        scale: Vec3::new(size.x * 0.86, height * 0.66, size.y * 0.82),
+                        ..default()
+                    },
+                ));
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(accent_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, height * 0.20, 0.0),
+                        scale: Vec3::new(size.x * 0.92, height * 0.10, size.y * 0.88),
+                        ..default()
+                    },
+                ));
+                for x in [-0.24, 0.24] {
+                    parent.spawn((
+                        Mesh3d(assets.building_mesh.clone()),
+                        MeshMaterial3d(body_material.clone()),
+                        Transform {
+                            translation: Vec3::new(size.x * x, height * 0.30, -size.y * 0.18),
+                            scale: Vec3::new(size.x * 0.14, height * 0.54, size.y * 0.14),
+                            ..default()
+                        },
+                    ));
+                }
+            }
+            BuildingVisualKind::Attack => {
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(body_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, -height * 0.16, 0.0),
+                        scale: Vec3::new(size.x * 0.72, height * 0.68, size.y * 0.72),
+                        ..default()
+                    },
+                ));
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(accent_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, height * 0.28, 0.0),
+                        scale: Vec3::new(size.x * 0.44, height * 0.26, size.y * 0.44),
+                        ..default()
+                    },
+                ));
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, height * 0.29, size.y * 0.38),
+                        scale: Vec3::new(size.x * 0.11, height * 0.10, size.y * 0.60),
+                        ..default()
+                    },
+                ));
+            }
+            BuildingVisualKind::Spellcaster => {
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(body_material),
+                    Transform {
+                        translation: Vec3::new(0.0, -height * 0.19, 0.0),
+                        scale: Vec3::new(size.x * 0.70, height * 0.60, size.y * 0.70),
+                        ..default()
+                    },
+                ));
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(accent_material.clone()),
+                    Transform {
+                        translation: Vec3::new(0.0, height * 0.18, 0.0),
+                        scale: Vec3::new(size.x * 0.24, height * 0.52, size.y * 0.24),
+                        ..default()
+                    },
+                ));
+                parent.spawn((
+                    Mesh3d(assets.building_mesh.clone()),
+                    MeshMaterial3d(accent_material),
+                    Transform {
+                        translation: Vec3::new(0.0, height * 0.49, 0.0),
+                        rotation: Quat::from_euler(EulerRot::XYZ, 0.45, 0.65, 0.35),
+                        scale: Vec3::new(size.x * 0.24, height * 0.24, size.y * 0.24),
+                    },
+                ));
+            }
+        });
+}
+
 fn sync_render_entities(
     mut commands: Commands,
     samples: Res<PresentationSamples>,
@@ -672,15 +834,18 @@ fn sync_render_entities(
         let visual_height = building_height(building);
         let entity = commands
             .spawn((
-                Mesh3d(assets.building_mesh.clone()),
-                MeshMaterial3d(assets.building_material(building.team)),
-                Transform {
-                    translation: Vec3::new(center.x, visual_height * 0.5, center.z),
-                    scale: Vec3::new(size.x * 0.92, visual_height, size.y * 0.92),
-                    ..default()
-                },
+                Transform::from_xyz(center.x, visual_height * 0.5, center.z),
+                Visibility::default(),
             ))
             .id();
+        spawn_building_visual(
+            &mut commands,
+            &assets,
+            entity,
+            building,
+            size,
+            visual_height,
+        );
         render_map.buildings.insert(
             building.id,
             PresentedEntry {
@@ -722,6 +887,7 @@ fn sync_render_entities(
 }
 
 fn interpolate_render_transforms(
+    time: Res<Time>,
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
@@ -729,18 +895,27 @@ fn interpolate_render_transforms(
     mut transforms: Query<&mut Transform>,
 ) {
     let alpha = fixed_time.overstep_fraction();
+    let render_tick = samples.previous.tick as f32
+        + (samples.current.tick.saturating_sub(samples.previous.tick) as f32) * alpha;
+    let facing_blend = 1.0 - (-UNIT_FACING_RESPONSE * time.delta_secs()).exp();
 
     for (id, current) in &samples.current.units {
         let Some(entry) = render_map.units.get(id) else {
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(current);
-        let position = sim_point_to_world_lerp(previous.position, current.position, alpha)
-            + Vec3::Y * (unit_height(current) * 0.5);
-        if let Ok(mut transform) = transforms.get_mut(entry.entity)
-            && transform.translation != position
-        {
-            transform.translation = position;
+        let ground_position = sim_point_to_world_lerp(previous.position, current.position, alpha);
+        let moving = previous.position != current.position;
+        let bob = walk_bob(current.id, render_tick, moving);
+        let position = ground_position + Vec3::Y * (unit_height(current) * 0.5 + bob);
+        let desired_rotation = unit_facing_rotation(current, previous, &samples, &metrics, alpha);
+        if let Ok(mut transform) = transforms.get_mut(entry.entity) {
+            if transform.translation != position {
+                transform.translation = position;
+            }
+            if let Some(desired_rotation) = desired_rotation {
+                transform.rotation = transform.rotation.slerp(desired_rotation, facing_blend);
+            }
         }
     }
 
@@ -757,8 +932,6 @@ fn interpolate_render_transforms(
         }
     }
 
-    let render_tick = samples.previous.tick as f32
-        + (samples.current.tick.saturating_sub(samples.previous.tick) as f32) * alpha;
     for (id, projectile) in &samples.current.projectiles {
         let Some(&entity) = render_map.projectiles.get(id) else {
             continue;
@@ -798,6 +971,39 @@ fn projectile_position(
         position.y += BALLISTIC_ARC_HEIGHT * 4.0 * progress * (1.0 - progress);
     }
     position
+}
+
+fn unit_facing_rotation(
+    current: &UnitSample,
+    previous: &UnitSample,
+    samples: &PresentationSamples,
+    metrics: &WorldMetrics,
+    alpha: f32,
+) -> Option<Quat> {
+    let current_position = sim_point_to_world_lerp(previous.position, current.position, alpha);
+    let direction = current
+        .target
+        .and_then(|target| entity_render_position(target, samples, metrics, alpha))
+        .map(|target| target - current_position)
+        .filter(|direction| direction.xz().length_squared() > 0.001)
+        .or_else(|| {
+            let movement =
+                sim_point_to_world(current.position) - sim_point_to_world(previous.position);
+            (movement.xz().length_squared() > 0.001).then_some(movement)
+        })?;
+    Some(facing_rotation(direction))
+}
+
+fn facing_rotation(direction: Vec3) -> Quat {
+    Quat::from_rotation_y(direction.x.atan2(direction.z))
+}
+
+fn walk_bob(id: SimId, render_tick: f32, moving: bool) -> f32 {
+    if !moving {
+        return 0.0;
+    }
+    let phase = render_tick * UNIT_WALK_PHASE_PER_TICK + id.0 as f32 * 0.71;
+    phase.sin().abs() * UNIT_WALK_BOB_HEIGHT
 }
 
 fn entity_render_position(
@@ -1230,6 +1436,23 @@ mod tests {
         assert!(position.y < 0.0);
         assert!(top > 0.0);
         assert!(top < CORPSE_THICKNESS * 0.25);
+    }
+
+    #[test]
+    fn unit_facing_uses_local_positive_z_as_forward() {
+        let right = facing_rotation(Vec3::X);
+        let forward = right * Vec3::Z;
+        assert!((forward - Vec3::X).length() < 1e-5);
+
+        let backward = facing_rotation(-Vec3::Z) * Vec3::Z;
+        assert!((backward + Vec3::Z).length() < 1e-5);
+    }
+
+    #[test]
+    fn walk_bob_only_moves_visually_moving_units() {
+        assert_eq!(walk_bob(SimId(7), 42.5, false), 0.0);
+        let bob = walk_bob(SimId(7), 42.5, true);
+        assert!((0.0..=UNIT_WALK_BOB_HEIGHT).contains(&bob));
     }
 
     #[test]
