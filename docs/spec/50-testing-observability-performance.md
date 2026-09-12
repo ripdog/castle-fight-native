@@ -64,6 +64,7 @@ Examples:
 - 10,000-unit synthetic lane battle;
 - high-density pile/congestion case;
 - sustained many-unit convergence on one destination with no committed collision overlap;
+- mixed extracted-scale collision radii under sustained opposing flow, including radius-aware topology clearance and pairwise reservation;
 - terminal victory state does not advance further production/movement/combat ticks.
 
 Golden hashes may be updated only when an intentional simulation-compatible break/rules change is reviewed and documented.

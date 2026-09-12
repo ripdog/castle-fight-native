@@ -17,7 +17,7 @@ Implemented:
 - sticky individual target acquisition with retaliation-on-attack behavior;
 - reachable attack-position filtering and passive-building fallback around cages;
 - deterministic greedy pursuit with A* fallback around blockers;
-- deterministic attack-envelope pursuit with relative-closing crowd anticipation, canonical bypass continuity, and a hard non-overlap reservation/commit pass; melee/ranged groups can flow around occupied unit/building attack regions without assigned slots;
+- deterministic attack-envelope pursuit with relative-closing crowd anticipation, canonical bypass continuity, per-unit authoritative collision radii, radius-aware topology/objective fields, and a hard non-overlap reservation/commit pass; melee/ranged groups can flow around occupied unit/building attack regions without assigned slots;
 - melee attack cooldown/damage resolution;
 - authoritative `RangedGuaranteedHit` projectiles with integer travel time, retained target identity, source-death independence, and deterministic target-death invalidation;
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
@@ -35,13 +35,13 @@ Implemented:
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, automatic abilities, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, global-stun/status-density, and long mixed-combat release benchmarks;
+- open-lane, dense-cage, crossing-crowd, mixed-radius collision, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, global-stun/status-density, and long mixed-combat release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
 Not implemented yet:
 
-- richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
+- richer non-circular unit collision shapes / physically stronger crowd response beyond the current authoritative circle-distance exclusion;
 - builder control/items;
 - broader imported buff/debuff/aura semantics beyond the narrow movement-speed verification primitive, manual/legendary ability activation, and multi-ability buildings;
 - corpse-query/consume effects such as raise dead and corpse explosion, plus imported per-unit corpse-profile assignment;
@@ -526,6 +526,19 @@ The standard long-run probe uses 30 warmup ticks plus 3,600 measured ticks, equi
 | 700 | 8 | 1.407 | 94.7 | 424 | 20.5 | 31.6 | 53.1 | 11.2 | 0.2 | 54.9 / 696 | 341 | 24 | `782fb1e4ffda765b` |
 
 With attack-envelope pursuit and anticipatory crowd flow enabled, the run averages 540.7 retained targets/tick with only 1.5 target changes/tick while processing 11.7 ally-defense queries/tick. More units successfully reach useful combat positions than under the earlier tail-prone crowd solver, so sustained combat is denser: projectile/impact rates rise and the two-minute fixture ends with 341 live units rather than the earlier 448. Periodic global stuns still reach 696 simultaneous disabled units without stale-target churn, overlap failure, or worker-count divergence. The entire mixed simulation remains around 1.3–1.4 ms/tick including the full checksum, leaving very large headroom against a 30 Hz budget at the original unit ceiling; this particular mixed workload is too small/sequential for eight workers to improve wall time.
+
+## Mixed collision-radius verification — 2026-09-12
+
+The sim now supports an optional authoritative `CollisionRadius` per combat unit and a matching production-unit property. Unit-unit clearance is the sum of both radii; explicit radii also constrain map-boundary/static-blocker clearance, production spawn legality, local avoidance, hard reservation, attack-envelope fallback positions, and path traversal. Units without imported geometry retain the historical fallback radius (`unit_separation_distance / 2`) so existing placeholder/client fixtures remain behaviorally and checksum compatible. Attack range remains its separately authored center/footprint-distance rule; collision radius is not silently added to weapon range.
+
+The `radius` fixture drives 700 units using representative extracted Warcraft collision radii of 8, 16, 24, and 31 world units into sustained opposing flow. Radius-aware objective fields are lazily cached per `(team, radius)` and exclude cells where that circle cannot physically fit, while retaining the same strategic objective. Focused regressions also prove that large units detour around radius-inflated blocker clearance, can find alternate legal attack positions around both unit and building targets, and produce identical mixed-radius outcomes across worker counts.
+
+| Units | Workers | ms/tick | Movement intent | Crowd/collision | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 700 | 1 | 1.457 | 0.133 | 0.784 | `d6e517a1eb84cc3a` |
+| 700 | 8 | 1.246 | 0.063 | 0.622 | `d6e517a1eb84cc3a` |
+
+The ordinary 700-unit lane/cage/crowd fixtures still retain their pre-radius hashes when no explicit radius is authored, confirming that the imported-geometry path is opt-in rather than a silent rules change for verification placeholders.
 
 ## Current interpretation
 

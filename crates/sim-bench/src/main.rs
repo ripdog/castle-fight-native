@@ -6,10 +6,10 @@ use std::{
 
 use castle_fight_sim::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, ModifierId,
-    MovementProfile, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
-    SimulationConfig, SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
-    populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CollisionRadius, ManaProfile,
+    ModifierId, MovementProfile, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
+    Simulation, SimulationConfig, SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn,
+    UnitTemplate, populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -27,6 +27,7 @@ enum Scenario {
     Ability,
     Stun,
     Slow,
+    Radius,
     Mixed,
 }
 
@@ -46,6 +47,7 @@ impl Scenario {
             Self::Ability => "ability",
             Self::Stun => "stun",
             Self::Slow => "slow",
+            Self::Radius => "radius",
             Self::Mixed => "mixed",
         }
     }
@@ -461,6 +463,19 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
             .push(BuildingFootprint::new(60, -48, 1, 97));
         config.target_pursuit_extra_range = 64 * SUBUNITS_PER_WORLD_UNIT;
     }
+    if scenario == Scenario::Radius {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        config.spatial_cell_size = 40 * world;
+        config.navigation_cell_size = 10 * world;
+        config.navigation_min = castle_fight_sim::NavCell::new(0, -100);
+        config.navigation_max = castle_fight_sim::NavCell::new(240, 100);
+        config.target_pursuit_extra_range = 300 * world;
+        config.max_separation_per_tick = 4 * world;
+        config.team_objective = [
+            SimPoint::new(2_300 * world, 0),
+            SimPoint::new(100 * world, 0),
+        ];
+    }
     config
 }
 
@@ -483,6 +498,7 @@ fn populate_scenario(
         Scenario::Ability => populate_automatic_ability_density(simulation, units),
         Scenario::Stun => populate_global_stun_density(simulation, units),
         Scenario::Slow => populate_timed_movement_modifier_density(simulation, units),
+        Scenario::Radius => populate_mixed_radius_battle(simulation, units),
         Scenario::Mixed => populate_mixed_battle(simulation, units),
     }
 
@@ -492,6 +508,47 @@ fn populate_scenario(
             footprint: BuildingFootprint::new(118, 63, 1, 1),
         },
         _ => ScenarioState::Static,
+    }
+}
+
+fn populate_mixed_radius_battle(simulation: &mut Simulation, total_units: usize) {
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let per_team = total_units / 2;
+    let rows = 30usize;
+    let spacing = 64 * world;
+    let radii = [8 * world, 16 * world, 24 * world, 31 * world];
+    let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
+        damage: 0,
+        range: 0,
+        acquisition_range: 0,
+        cooldown_ticks: 30,
+    };
+    let movement = MovementProfile {
+        speed_per_tick: 4 * world,
+    };
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let row = index % rows;
+            let column = index / rows;
+            let x = if team == 0 {
+                900 * world - i32::try_from(column).expect("radius column fits i32") * spacing
+            } else {
+                1_500 * world + i32::try_from(column).expect("radius column fits i32") * spacing
+            };
+            let y = (i32::try_from(row).expect("radius row fits i32") - 14) * spacing;
+            simulation.spawn_unit_with_collision_radius(
+                UnitSpawn {
+                    team: Team(team),
+                    position: SimPoint::new(x, y),
+                    health: 100_000,
+                    attack,
+                    movement,
+                },
+                CollisionRadius(radii[index % radii.len()]),
+            );
+        }
     }
 }
 
@@ -1285,6 +1342,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "ability" => Scenario::Ability,
             "stun" => Scenario::Stun,
             "slow" => Scenario::Slow,
+            "radius" => Scenario::Radius,
             "mixed" => Scenario::Mixed,
             other => panic!("unknown scenario: {other}"),
         })
