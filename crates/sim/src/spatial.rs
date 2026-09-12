@@ -9,12 +9,19 @@ pub struct SpatialPartition {
 }
 
 impl SpatialPartition {
+    pub const GLOBAL_COMPONENT: u32 = u32::MAX;
+
     #[must_use]
     pub const fn new(team: u8, navigation_component: u32) -> Self {
         Self {
             team,
             navigation_component,
         }
+    }
+
+    #[must_use]
+    pub const fn global(team: u8) -> Self {
+        Self::new(team, Self::GLOBAL_COMPONENT)
     }
 }
 

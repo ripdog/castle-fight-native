@@ -1,6 +1,7 @@
 use crate::{
     components::{
-        AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, Team, UnitSpawn,
+        AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, Team,
+        UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     simulation::Simulation,
@@ -20,6 +21,7 @@ pub fn populate_lane_battle(simulation: &mut Simulation, total_units: usize) {
     let front_right = 72 * SUBUNITS_PER_WORLD_UNIT;
 
     let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
         damage: 5,
         range: 2 * SUBUNITS_PER_WORLD_UNIT,
         acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
@@ -59,6 +61,7 @@ pub fn populate_crossing_crowd(simulation: &mut Simulation, total_units: usize) 
     let spacing = SUBUNITS_PER_WORLD_UNIT / 3;
     let center_x = 60 * SUBUNITS_PER_WORLD_UNIT;
     let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
         damage: 0,
         range: SUBUNITS_PER_WORLD_UNIT,
         acquisition_range: 4 * SUBUNITS_PER_WORLD_UNIT,
@@ -113,6 +116,7 @@ pub fn populate_dense_cage_battle(simulation: &mut Simulation, total_units: usiz
     }
 
     let attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
         damage: 5,
         range: 2 * SUBUNITS_PER_WORLD_UNIT,
         acquisition_range: 12 * SUBUNITS_PER_WORLD_UNIT,

@@ -6,13 +6,14 @@ mod spatial;
 mod topology;
 
 pub use components::{
-    AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, ProductionProfile, SimId,
-    Team, UnitSpawn, UnitTemplate,
+    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile,
+    ProductionProfile, SimId, Team, UnitSpawn, UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
-    BuildingView, Simulation, SimulationConfig, TickResult, TickTimings, UnitView,
+    AttackEvent, BuildingPlacementError, BuildingView, Simulation, SimulationConfig, TickResult,
+    TickTimings, UnitView,
 };
 pub use topology::NavCell;
 
@@ -26,6 +27,7 @@ mod tests {
             position: SimPoint::new(x, 0),
             health,
             attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
                 damage,
                 range: 4 * SUBUNITS_PER_WORLD_UNIT,
                 acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
@@ -41,6 +43,7 @@ mod tests {
             position: SimPoint::new(x, 0),
             health: 10_000,
             attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
                 damage: 0,
                 range: 0,
                 acquisition_range: 0,
@@ -69,11 +72,13 @@ mod tests {
             footprint,
             health: 10_000,
             production: Some(ProductionProfile {
+                initial_delay_ticks: 0,
                 interval_ticks: 10,
                 search_radius_cells,
                 unit: UnitTemplate {
                     health: 100,
                     attack: AttackProfile {
+                        delivery: AttackDelivery::Melee,
                         damage: 1,
                         range: SUBUNITS_PER_WORLD_UNIT,
                         acquisition_range: 3 * SUBUNITS_PER_WORLD_UNIT,
@@ -125,6 +130,7 @@ mod tests {
             position: SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0),
             health: 100,
             attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
                 damage: 0,
                 range: 0,
                 acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
@@ -245,6 +251,7 @@ mod tests {
             position: preferred,
             health: 100,
             attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
                 damage: 0,
                 range: 0,
                 acquisition_range: 0,
@@ -283,6 +290,7 @@ mod tests {
             position: preferred,
             health: 100,
             attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
                 damage: 0,
                 range: 0,
                 acquisition_range: 0,
@@ -310,6 +318,68 @@ mod tests {
     }
 
     #[test]
+    fn ranged_unit_can_attack_across_disconnected_cage_wall() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let source = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(6 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit,
+                damage: 1,
+                range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let caged = sim.spawn_unit(passive_unit(1, 10 * SUBUNITS_PER_WORLD_UNIT));
+        for footprint in [
+            BuildingFootprint::new(9, -1, 1, 3),
+            BuildingFootprint::new(11, -1, 1, 3),
+            BuildingFootprint::new(10, -1, 1, 1),
+            BuildingFootprint::new(10, 1, 1, 1),
+        ] {
+            sim.spawn_building(passive_building(1, footprint));
+        }
+
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(caged));
+        sim.step();
+        assert_eq!(sim.unit(caged).unwrap().health, 9_999);
+        assert_eq!(sim.attacks_last_tick().len(), 1);
+    }
+
+    #[test]
+    fn static_blockers_reject_building_placement() {
+        let config = SimulationConfig {
+            static_blockers: vec![BuildingFootprint::new(20, 0, 2, 2)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let result =
+            sim.try_spawn_building(passive_building(0, BuildingFootprint::new(21, 1, 1, 1)));
+        assert_eq!(result, Err(BuildingPlacementError::StaticObstacle));
+    }
+
+    #[test]
+    fn production_can_delay_its_first_spawn() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let mut building = production_building(0, BuildingFootprint::new(20, 0, 1, 1), 1);
+        building
+            .production
+            .as_mut()
+            .expect("production profile missing")
+            .initial_delay_ticks = 3;
+        sim.spawn_building(building);
+
+        for _ in 0..3 {
+            assert_eq!(sim.step().units_spawned, 0);
+        }
+        assert_eq!(sim.step().units_spawned, 1);
+    }
+
+    #[test]
     fn exact_overlap_separates_units() {
         let mut sim = Simulation::new(SimulationConfig::default(), 4);
         let moving = |team| UnitSpawn {
@@ -317,6 +387,7 @@ mod tests {
             position: SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0),
             health: 100,
             attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
                 damage: 0,
                 range: 0,
                 acquisition_range: 0,

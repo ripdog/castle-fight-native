@@ -17,8 +17,25 @@ pub struct Health {
     pub max: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AttackDelivery {
+    Melee,
+    RangedGuaranteedHit,
+}
+
+impl AttackDelivery {
+    #[must_use]
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::Melee => 0,
+            Self::RangedGuaranteedHit => 1,
+        }
+    }
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AttackProfile {
+    pub delivery: AttackDelivery,
     pub damage: i32,
     pub range: i32,
     pub acquisition_range: i32,
@@ -124,6 +141,7 @@ impl BuildingFootprint {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProductionProfile {
+    pub initial_delay_ticks: u16,
     pub interval_ticks: u16,
     pub search_radius_cells: u16,
     pub unit: UnitTemplate,

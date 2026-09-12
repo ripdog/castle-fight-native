@@ -8,16 +8,16 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 use crate::{
     components::{
-        AttackCooldown, AttackProfile, BuildingFootprint, BuildingSpawn, Health, MovementProfile,
-        Position, ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick,
-        TargetState, Team, UnitSpawn,
+        AttackCooldown, AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, Health,
+        MovementProfile, Position, ProductionProfile, ProductionState, RetaliationState, SimId,
+        SpawnTick, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition},
     topology::{NavCell, TopologyGrid},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SimulationConfig {
     pub spatial_cell_size: i32,
     pub navigation_cell_size: i32,
@@ -26,6 +26,7 @@ pub struct SimulationConfig {
     pub target_pursuit_extra_range: i32,
     pub unit_separation_distance: i32,
     pub max_separation_per_tick: i32,
+    pub static_blockers: Vec<BuildingFootprint>,
     pub team_objective: [SimPoint; 2],
 }
 
@@ -39,6 +40,7 @@ impl Default for SimulationConfig {
             target_pursuit_extra_range: 3 * SUBUNITS_PER_WORLD_UNIT,
             unit_separation_distance: 3 * SUBUNITS_PER_WORLD_UNIT / 4,
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT / 16,
+            static_blockers: Vec::new(),
             team_objective: [
                 SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
                 SimPoint::new(0, 0),
@@ -74,11 +76,21 @@ pub struct TickResult {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttackEvent {
+    pub source: SimId,
+    pub target: SimId,
+    pub source_position: SimPoint,
+    pub target_position: SimPoint,
+    pub delivery: AttackDelivery,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnitView {
     pub id: SimId,
     pub team: Team,
     pub position: SimPoint,
     pub health: i32,
+    pub attack_delivery: AttackDelivery,
     pub target: Option<SimId>,
     pub last_attacker: Option<SimId>,
     pub cooldown_remaining: u16,
@@ -94,12 +106,20 @@ pub struct BuildingView {
     pub next_spawn_tick: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingPlacementError {
+    OutsideNavigation,
+    StaticObstacle,
+    BuildingOverlap,
+}
+
 pub struct Simulation {
     world: World,
     config: SimulationConfig,
     pool: ThreadPool,
     topology: TopologyGrid,
     topology_dirty: bool,
+    last_attacks: Vec<AttackEvent>,
     next_tick: u64,
     next_id: u64,
 }
@@ -122,7 +142,7 @@ impl Simulation {
             config.navigation_cell_size,
             config.navigation_min,
             config.navigation_max,
-            [],
+            config.static_blockers.iter().copied(),
             config.team_objective,
         );
 
@@ -132,6 +152,7 @@ impl Simulation {
             pool,
             topology,
             topology_dirty: false,
+            last_attacks: Vec::new(),
             next_tick: 0,
             next_id: 1,
         }
@@ -153,6 +174,14 @@ impl Simulation {
     }
 
     pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
+        self.try_spawn_building(building)
+            .expect("invalid authored building placement")
+    }
+
+    pub fn try_spawn_building(
+        &mut self,
+        building: BuildingSpawn,
+    ) -> Result<SimId, BuildingPlacementError> {
         assert!(building.health > 0);
         assert!(building.team.0 < 2, "verification slice supports two teams");
         assert!(building.footprint.width > 0 && building.footprint.height > 0);
@@ -161,22 +190,26 @@ impl Simulation {
             validate_unit_template(production.unit);
         }
 
-        for y in building.footprint.min_y..=building.footprint.max_y() {
-            for x in building.footprint.min_x..=building.footprint.max_x() {
-                assert!(
-                    self.topology.contains(NavCell::new(x, y)),
-                    "building footprint outside navigation bounds"
-                );
-            }
+        if !self.footprint_inside_navigation(building.footprint) {
+            return Err(BuildingPlacementError::OutsideNavigation);
         }
-
-        let mut query = self.world.query::<&BuildingFootprint>();
-        assert!(
-            query
-                .iter(&self.world)
-                .all(|existing| !footprints_overlap(*existing, building.footprint)),
-            "building footprints overlap"
-        );
+        if self
+            .config
+            .static_blockers
+            .iter()
+            .copied()
+            .any(|blocker| footprints_overlap(blocker, building.footprint))
+        {
+            return Err(BuildingPlacementError::StaticObstacle);
+        }
+        if self
+            .world
+            .iter_entities()
+            .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
+            .any(|existing| footprints_overlap(existing, building.footprint))
+        {
+            return Err(BuildingPlacementError::BuildingOverlap);
+        }
 
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
@@ -189,18 +222,41 @@ impl Simulation {
             },
         ));
         if let Some(production) = building.production {
-            entity.insert((
-                production,
-                ProductionState {
-                    next_spawn_tick: self.next_tick,
-                },
-            ));
+            let next_spawn_tick = self
+                .next_tick
+                .checked_add(u64::from(production.initial_delay_ticks))
+                .expect("initial production tick overflow");
+            entity.insert((production, ProductionState { next_spawn_tick }));
         }
         self.topology_dirty = true;
-        id
+        Ok(id)
+    }
+
+    #[must_use]
+    pub fn can_place_building(&self, footprint: BuildingFootprint) -> bool {
+        self.footprint_inside_navigation(footprint)
+            && !self
+                .config
+                .static_blockers
+                .iter()
+                .copied()
+                .any(|blocker| footprints_overlap(blocker, footprint))
+            && !self
+                .world
+                .iter_entities()
+                .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
+                .any(|existing| footprints_overlap(existing, footprint))
+    }
+
+    fn footprint_inside_navigation(&self, footprint: BuildingFootprint) -> bool {
+        (footprint.min_y..=footprint.max_y()).all(|y| {
+            (footprint.min_x..=footprint.max_x())
+                .all(|x| self.topology.contains(NavCell::new(x, y)))
+        })
     }
 
     pub fn step(&mut self) -> TickResult {
+        self.last_attacks.clear();
         let tick_start = Instant::now();
         let completed_tick = self.next_tick;
 
@@ -218,15 +274,24 @@ impl Simulation {
         let buildings = self.snapshot_buildings();
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
-            units.iter().enumerate().filter_map(|(index, unit)| {
-                let cell = self.topology.cell_of_point(unit.position);
-                let component = self.topology.component_id(cell)?;
-                Some((
-                    SpatialPartition::new(unit.team.0, component),
-                    index,
-                    unit.position,
-                ))
-            }),
+            units
+                .iter()
+                .enumerate()
+                .filter_map(|(index, unit)| {
+                    let cell = self.topology.cell_of_point(unit.position);
+                    let component = self.topology.component_id(cell)?;
+                    Some((index, *unit, component))
+                })
+                .flat_map(|(index, unit, component)| {
+                    [
+                        (
+                            SpatialPartition::new(unit.team.0, component),
+                            index,
+                            unit.position,
+                        ),
+                        (SpatialPartition::global(unit.team.0), index, unit.position),
+                    ]
+                }),
         );
         let snapshot_and_spatial = phase_start.elapsed();
 
@@ -262,20 +327,32 @@ impl Simulation {
                 continue;
             }
 
-            match intent.target {
+            let target_position = match intent.target {
                 TargetIndex::Unit(index) => {
                     unit_health[index] = unit_health[index]
                         .checked_sub(intent.damage)
                         .expect("unit damage arithmetic overflowed validated bounds");
                     attackers_this_tick[index].get_or_insert(intent.source_id);
+                    units[index].position
                 }
                 TargetIndex::Building(index) => {
                     building_health[index] = building_health[index]
                         .checked_sub(intent.damage)
                         .expect("building damage arithmetic overflowed validated bounds");
+                    footprint_center_point(
+                        buildings[index].footprint,
+                        self.config.navigation_cell_size,
+                    )
                 }
-            }
+            };
             cooldowns[intent.source_index] = intent.cooldown_ticks;
+            self.last_attacks.push(AttackEvent {
+                source: intent.source_id,
+                target: intent.target_id,
+                source_position: units[intent.source_index].position,
+                target_position,
+                delivery: units[intent.source_index].attack.delivery,
+            });
             attacks_resolved += 1;
         }
         let combat = phase_start.elapsed();
@@ -393,6 +470,11 @@ impl Simulation {
     }
 
     #[must_use]
+    pub fn attacks_last_tick(&self) -> &[AttackEvent] {
+        &self.last_attacks
+    }
+
+    #[must_use]
     pub fn unit_count(&self) -> usize {
         self.world
             .iter_entities()
@@ -479,12 +561,18 @@ impl Simulation {
             return;
         }
         let mut query = self.world.query::<&BuildingFootprint>();
-        let footprints: Vec<_> = query.iter(&self.world).copied().collect();
+        let building_footprints: Vec<_> = query.iter(&self.world).copied().collect();
+        let blockers = self
+            .config
+            .static_blockers
+            .iter()
+            .copied()
+            .chain(building_footprints);
         self.topology = TopologyGrid::build(
             self.config.navigation_cell_size,
             self.config.navigation_min,
             self.config.navigation_max,
-            footprints,
+            blockers,
             self.config.team_objective,
         );
         self.topology_dirty = false;
@@ -683,42 +771,40 @@ impl Simulation {
         grid: &SpatialGrid,
     ) -> Option<SimId> {
         let source_cell = self.topology.cell_of_point(source.position);
+        let component = self.topology.component_id(source_cell)?;
+        let enemy_team = 1u8
+            .checked_sub(source.team.0)
+            .expect("verification slice supports teams 0 and 1 only");
+        let partition = match source.attack.delivery {
+            AttackDelivery::Melee => SpatialPartition::new(enemy_team, component),
+            AttackDelivery::RangedGuaranteedHit => SpatialPartition::global(enemy_team),
+        };
         let mut best: Option<(u8, u64, SimId)> = None;
-        if let Some(component) = self.topology.component_id(source_cell) {
-            let enemy_team = 1u8
-                .checked_sub(source.team.0)
-                .expect("verification slice supports teams 0 and 1 only");
-            grid.for_each_candidate(
-                SpatialPartition::new(enemy_team, component),
-                source.position,
-                source.attack.acquisition_range,
-                |index| {
-                    let candidate = &units[index];
-                    debug_assert_ne!(source.team, candidate.team);
-                    let distance_sq = source.position.distance_sq(candidate.position);
-                    if distance_sq > source.attack.acquisition_range_sq()
-                        || (distance_sq > source.attack.range_sq()
-                            && source.movement.speed_per_tick == 0)
-                    {
-                        return;
-                    }
-                    let key = (0, distance_sq, candidate.id);
-                    if best.is_none_or(|current| key < current) {
-                        best = Some(key);
-                    }
-                },
-            );
-        }
+        grid.for_each_candidate(
+            partition,
+            source.position,
+            source.attack.acquisition_range,
+            |index| {
+                let candidate = &units[index];
+                debug_assert_ne!(source.team, candidate.team);
+                let distance_sq = source.position.distance_sq(candidate.position);
+                if !self.unit_target_reachable(
+                    source,
+                    candidate,
+                    distance_sq,
+                    source.attack.acquisition_range_sq(),
+                ) {
+                    return;
+                }
+                let key = (0, distance_sq, candidate.id);
+                if best.is_none_or(|current| key < current) {
+                    best = Some(key);
+                }
+            },
+        );
 
         for building in buildings {
             if source.team == building.team || building.health <= 0 {
-                continue;
-            }
-            if self
-                .topology
-                .nearest_reachable_perimeter_cell(source_cell, building.footprint)
-                .is_none()
-            {
                 continue;
             }
             let distance_sq = point_to_footprint_distance_sq(
@@ -726,9 +812,12 @@ impl Simulation {
                 building.footprint,
                 self.config.navigation_cell_size,
             );
-            if distance_sq > source.attack.acquisition_range_sq()
-                || (distance_sq > source.attack.range_sq() && source.movement.speed_per_tick == 0)
-            {
+            if !self.building_target_reachable(
+                source,
+                building,
+                distance_sq,
+                source.attack.acquisition_range_sq(),
+            ) {
                 continue;
             }
             let key = (1, distance_sq, building.id);
@@ -769,18 +858,12 @@ impl Simulation {
             .max(source.attack.acquisition_range);
         let pursuit_range = i64::from(pursuit_range);
         let pursuit_range_sq = (pursuit_range * pursuit_range) as u64;
-        let source_cell = self.topology.cell_of_point(source.position);
-
         if let Some(index) = find_unit_index(units, target_id) {
             let target = &units[index];
             let distance_sq = source.position.distance_sq(target.position);
             return source.team != target.team
                 && target.health > 0
-                && distance_sq <= pursuit_range_sq
-                && (distance_sq <= source.attack.range_sq() || source.movement.speed_per_tick > 0)
-                && self
-                    .topology
-                    .same_component(source_cell, self.topology.cell_of_point(target.position));
+                && self.unit_target_reachable(source, target, distance_sq, pursuit_range_sq);
         }
         if let Some(index) = find_building_index(buildings, target_id) {
             let target = &buildings[index];
@@ -791,14 +874,62 @@ impl Simulation {
             );
             return source.team != target.team
                 && target.health > 0
-                && distance_sq <= pursuit_range_sq
-                && (distance_sq <= source.attack.range_sq() || source.movement.speed_per_tick > 0)
-                && self
-                    .topology
-                    .nearest_reachable_perimeter_cell(source_cell, target.footprint)
-                    .is_some();
+                && self.building_target_reachable(source, target, distance_sq, pursuit_range_sq);
         }
         false
+    }
+
+    fn unit_target_reachable(
+        &self,
+        source: &UnitSnapshot,
+        target: &UnitSnapshot,
+        distance_sq: u64,
+        pursuit_limit_sq: u64,
+    ) -> bool {
+        if distance_sq > pursuit_limit_sq {
+            return false;
+        }
+        let in_attack_range = distance_sq <= source.attack.range_sq();
+        match source.attack.delivery {
+            AttackDelivery::Melee => {
+                self.topology.same_component(
+                    self.topology.cell_of_point(source.position),
+                    self.topology.cell_of_point(target.position),
+                ) && (in_attack_range || source.movement.speed_per_tick > 0)
+            }
+            AttackDelivery::RangedGuaranteedHit => {
+                in_attack_range
+                    || (source.movement.speed_per_tick > 0
+                        && self.topology.same_component(
+                            self.topology.cell_of_point(source.position),
+                            self.topology.cell_of_point(target.position),
+                        ))
+            }
+        }
+    }
+
+    fn building_target_reachable(
+        &self,
+        source: &UnitSnapshot,
+        target: &BuildingSnapshot,
+        distance_sq: u64,
+        pursuit_limit_sq: u64,
+    ) -> bool {
+        if distance_sq > pursuit_limit_sq {
+            return false;
+        }
+        let in_attack_range = distance_sq <= source.attack.range_sq();
+        if source.attack.delivery == AttackDelivery::RangedGuaranteedHit && in_attack_range {
+            return true;
+        }
+        (in_attack_range || source.movement.speed_per_tick > 0)
+            && self
+                .topology
+                .nearest_reachable_perimeter_cell(
+                    self.topology.cell_of_point(source.position),
+                    target.footprint,
+                )
+                .is_some()
     }
 
     fn attack_intents(
@@ -1188,6 +1319,7 @@ fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitV
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
         health: entity.get::<Health>()?.current,
+        attack_delivery: entity.get::<AttackProfile>()?.delivery,
         target: entity.get::<TargetState>()?.current,
         last_attacker: entity.get::<RetaliationState>()?.attacker,
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
@@ -1245,6 +1377,17 @@ fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
     a.min_x <= b.max_x() && a.max_x() >= b.min_x && a.min_y <= b.max_y() && a.max_y() >= b.min_y
 }
 
+fn footprint_center_point(footprint: BuildingFootprint, cell_size: i32) -> SimPoint {
+    let min_x = i64::from(footprint.min_x) * i64::from(cell_size);
+    let min_y = i64::from(footprint.min_y) * i64::from(cell_size);
+    let max_x = i64::from(footprint.max_x() + 1) * i64::from(cell_size);
+    let max_y = i64::from(footprint.max_y() + 1) * i64::from(cell_size);
+    SimPoint::new(
+        i32::try_from((min_x + max_x) / 2).expect("building center x overflow"),
+        i32::try_from((min_y + max_y) / 2).expect("building center y overflow"),
+    )
+}
+
 fn point_to_footprint_distance_sq(
     point: SimPoint,
     footprint: BuildingFootprint,
@@ -1271,6 +1414,8 @@ fn canonical_checksum(world: &World, next_tick: u64) -> u64 {
                     team,
                     position: position.0,
                     health,
+                    attack: *entity.get::<AttackProfile>()?,
+                    movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
                     target: *entity.get::<TargetState>()?,
                     retaliation: *entity.get::<RetaliationState>()?,
@@ -1303,6 +1448,12 @@ fn canonical_checksum(world: &World, next_tick: u64) -> u64 {
                 hash.write_i32(unit.position.y);
                 hash.write_i32(unit.health.current);
                 hash.write_i32(unit.health.max);
+                hash.write_u8(unit.attack.delivery.stable_tag());
+                hash.write_i32(unit.attack.damage);
+                hash.write_i32(unit.attack.range);
+                hash.write_i32(unit.attack.acquisition_range);
+                hash.write_u16(unit.attack.cooldown_ticks);
+                hash.write_i32(unit.movement.speed_per_tick);
                 hash.write_u16(unit.cooldown.remaining);
                 hash.write_u64(unit.target.current.map_or(0, |target| target.0));
                 hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
@@ -1321,9 +1472,11 @@ fn canonical_checksum(world: &World, next_tick: u64) -> u64 {
                 hash.write_i32(building.health.max);
                 if let Some(profile) = building.production {
                     hash.write_u8(1);
+                    hash.write_u16(profile.initial_delay_ticks);
                     hash.write_u16(profile.interval_ticks);
                     hash.write_u16(profile.search_radius_cells);
                     hash.write_i32(profile.unit.health);
+                    hash.write_u8(profile.unit.attack.delivery.stable_tag());
                     hash.write_i32(profile.unit.attack.damage);
                     hash.write_i32(profile.unit.attack.range);
                     hash.write_i32(profile.unit.attack.acquisition_range);
@@ -1365,6 +1518,8 @@ struct CanonicalUnit {
     team: Team,
     position: SimPoint,
     health: Health,
+    attack: AttackProfile,
+    movement: MovementProfile,
     cooldown: AttackCooldown,
     target: TargetState,
     retaliation: RetaliationState,
