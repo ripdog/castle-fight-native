@@ -18,9 +18,9 @@ use crate::{
         CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
         MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
         NavigationGoal, NavigationState, Position, ProductionCollisionRadius,
-        ProductionCorpseProfile, ProductionProfile, ProductionState, RetaliationState, SimId,
-        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties,
-        UnitSpawn,
+        ProductionCorpseProfile, ProductionProfile, ProductionSpellcastingProfile, ProductionState,
+        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
+        UnitGameplayProperties, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -194,6 +194,10 @@ pub struct UnitView {
     pub last_attacker: Option<SimId>,
     pub cooldown_remaining: u16,
     pub stunned_until_tick: u64,
+    pub mana_current: Option<i32>,
+    pub mana_maximum: Option<i32>,
+    pub ability_ready_tick: Option<u64>,
+    pub ability_cast_sequence: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -296,6 +300,16 @@ impl Simulation {
         self.spawn_unit_with_properties(unit, UnitGameplayProperties::default())
     }
 
+    pub fn spawn_unit_with_spellcasting(
+        &mut self,
+        unit: UnitSpawn,
+        spellcasting: SpellcastingProfile,
+    ) -> SimId {
+        validate_unit_spawn(unit);
+        validate_spellcasting_profile(spellcasting);
+        self.spawn_unit_unchecked(unit, None, None, Some(spellcasting))
+    }
+
     pub fn spawn_unit_with_corpse(&mut self, unit: UnitSpawn, corpse: CorpseProfile) -> SimId {
         self.spawn_unit_with_properties(
             unit,
@@ -346,7 +360,7 @@ impl Simulation {
                 "authored collision unit footprint overlaps blocked topology"
             );
         }
-        self.spawn_unit_unchecked(unit, properties.corpse, properties.collision_radius)
+        self.spawn_unit_unchecked(unit, properties.corpse, properties.collision_radius, None)
     }
 
     pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
@@ -372,7 +386,7 @@ impl Simulation {
         &mut self,
         building: BuildingSpawn,
     ) -> Result<SimId, BuildingPlacementError> {
-        self.try_spawn_building_internal(building, None, None)
+        self.try_spawn_building_internal(building, None, None, None)
     }
 
     pub fn try_spawn_building_with_production_corpse(
@@ -427,7 +441,34 @@ impl Simulation {
         if let Some(collision_radius) = properties.collision_radius {
             validate_collision_radius(collision_radius);
         }
-        self.try_spawn_building_internal(building, properties.corpse, properties.collision_radius)
+        self.try_spawn_building_internal(
+            building,
+            properties.corpse,
+            properties.collision_radius,
+            None,
+        )
+    }
+
+    pub fn spawn_building_with_production_spellcasting(
+        &mut self,
+        building: BuildingSpawn,
+        spellcasting: SpellcastingProfile,
+    ) -> SimId {
+        self.try_spawn_building_with_production_spellcasting(building, spellcasting)
+            .expect("invalid authored building placement")
+    }
+
+    pub fn try_spawn_building_with_production_spellcasting(
+        &mut self,
+        building: BuildingSpawn,
+        spellcasting: SpellcastingProfile,
+    ) -> Result<SimId, BuildingPlacementError> {
+        assert!(
+            building.production.is_some(),
+            "production spellcasting profile requires a production building"
+        );
+        validate_spellcasting_profile(spellcasting);
+        self.try_spawn_building_internal(building, None, None, Some(spellcasting))
     }
 
     fn try_spawn_building_internal(
@@ -435,6 +476,7 @@ impl Simulation {
         building: BuildingSpawn,
         production_corpse: Option<CorpseProfile>,
         production_collision_radius: Option<CollisionRadius>,
+        production_spellcasting: Option<SpellcastingProfile>,
     ) -> Result<SimId, BuildingPlacementError> {
         assert!(building.health > 0);
         assert!(building.team.0 < 2, "verification slice supports two teams");
@@ -495,6 +537,9 @@ impl Simulation {
             }
             if let Some(collision_radius) = production_collision_radius {
                 entity.insert(ProductionCollisionRadius(collision_radius));
+            }
+            if let Some(spellcasting) = production_spellcasting {
+                entity.insert(ProductionSpellcastingProfile(spellcasting));
             }
         }
         if let Some(attack) = building.attack {
@@ -618,12 +663,13 @@ impl Simulation {
                 .iter()
                 .any(|building| building.attack.is_some() || building.spellcasting.is_some())
             || units.iter().any(|unit| {
-                matches!(
-                    unit.attack.delivery,
-                    AttackDelivery::RangedGuaranteedHit { .. }
-                        | AttackDelivery::RangedBallistic { .. }
-                        | AttackDelivery::Bounce { .. }
-                )
+                unit.spellcasting.is_some()
+                    || matches!(
+                        unit.attack.delivery,
+                        AttackDelivery::RangedGuaranteedHit { .. }
+                            | AttackDelivery::RangedBallistic { .. }
+                            | AttackDelivery::Bounce { .. }
+                    )
             });
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
@@ -1223,6 +1269,19 @@ impl Simulation {
             *entity
                 .get_mut::<StatusState>()
                 .expect("unit status state missing") = unit.status;
+            if unit.spellcasting.is_some() {
+                entity
+                    .get_mut::<ManaState>()
+                    .expect("spellcasting unit mana missing")
+                    .current = unit
+                    .mana_current
+                    .expect("spellcasting unit snapshot mana missing");
+                *entity
+                    .get_mut::<AutomaticAbilityState>()
+                    .expect("spellcasting unit ability state missing") = unit
+                    .ability_state
+                    .expect("spellcasting unit snapshot ability state missing");
+            }
         }
 
         let corpses_spawned = corpse_spawns.len();
@@ -1529,6 +1588,7 @@ impl Simulation {
         unit: UnitSpawn,
         corpse: Option<CorpseProfile>,
         collision_radius: Option<CollisionRadius>,
+        spellcasting: Option<SpellcastingProfile>,
     ) -> SimId {
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
@@ -1553,6 +1613,18 @@ impl Simulation {
         }
         if let Some(collision_radius) = collision_radius {
             entity.insert(collision_radius);
+        }
+        if let Some(spellcasting) = spellcasting {
+            entity.insert((
+                spellcasting,
+                ManaState {
+                    current: spellcasting.mana.starting,
+                },
+                AutomaticAbilityState {
+                    ready_tick: self.next_tick,
+                    cast_sequence: 0,
+                },
+            ));
         }
         id
     }
@@ -1629,12 +1701,23 @@ impl Simulation {
             &ProductionState,
             Option<&ProductionCorpseProfile>,
             Option<&ProductionCollisionRadius>,
+            Option<&ProductionSpellcastingProfile>,
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _, _)| state.next_spawn_tick <= self.next_tick)
+            .filter(|(_, _, _, _, _, state, _, _, _)| state.next_spawn_tick <= self.next_tick)
             .map(
-                |(entity, id, team, footprint, profile, state, corpse, collision_radius)| {
+                |(
+                    entity,
+                    id,
+                    team,
+                    footprint,
+                    profile,
+                    state,
+                    corpse,
+                    collision_radius,
+                    spellcasting,
+                )| {
                     ProductionAttempt {
                         entity,
                         id: *id,
@@ -1643,6 +1726,7 @@ impl Simulation {
                         profile: *profile,
                         corpse: corpse.map(|corpse| corpse.0),
                         collision_radius: collision_radius.map(|radius| radius.0),
+                        spellcasting: spellcasting.map(|profile| profile.0),
                         next_spawn_tick: state.next_spawn_tick,
                     }
                 },
@@ -1720,6 +1804,7 @@ impl Simulation {
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                     attempt.corpse,
                     attempt.collision_radius,
+                    attempt.spellcasting,
                 );
                 reservations.insert_with_radius(next_reservation_index, position, collision_radius);
                 next_reservation_index += 1;
@@ -1757,12 +1842,11 @@ impl Simulation {
             &NavigationState,
             &MovementProfile,
             &SpawnTick,
-            Option<&CorpseProducer>,
-            Option<&CollisionRadius>,
         )>();
+        let default_collision_radius = self.default_collision_radius();
         let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
             .map(
                 |(
                     entity,
@@ -1778,27 +1862,38 @@ impl Simulation {
                     navigation,
                     movement,
                     spawn_tick,
-                    corpse,
-                    collision_radius,
-                )| UnitSnapshot {
-                    entity,
-                    id: *id,
-                    team: *team,
-                    position: position.0,
-                    health: health.current,
-                    attack: *attack,
-                    cooldown_remaining: cooldown.remaining,
-                    target: target.current,
-                    direct_retaliation_lock: target.direct_retaliation_lock,
-                    retaliation: *retaliation,
-                    status: *status,
-                    navigation: *navigation,
-                    movement: *movement,
-                    spawn_tick: spawn_tick.0,
-                    corpse: corpse.map(|corpse| corpse.0),
-                    collision_radius: collision_radius
-                        .map_or(self.default_collision_radius(), |radius| radius.0),
-                    collision_radius_override: collision_radius.map(|radius| radius.0),
+                )| {
+                    let entity_ref = self.world.entity(entity);
+                    let corpse = entity_ref.get::<CorpseProducer>().map(|corpse| corpse.0);
+                    let collision_radius = entity_ref.get::<CollisionRadius>().copied();
+                    let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
+                    let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
+                    let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
+                    debug_assert_eq!(spellcasting.is_some(), mana_current.is_some());
+                    debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
+                    UnitSnapshot {
+                        entity,
+                        id: *id,
+                        team: *team,
+                        position: position.0,
+                        health: health.current,
+                        attack: *attack,
+                        cooldown_remaining: cooldown.remaining,
+                        target: target.current,
+                        direct_retaliation_lock: target.direct_retaliation_lock,
+                        retaliation: *retaliation,
+                        status: *status,
+                        navigation: *navigation,
+                        movement: *movement,
+                        spawn_tick: spawn_tick.0,
+                        corpse,
+                        collision_radius: collision_radius
+                            .map_or(default_collision_radius, |radius| radius.0),
+                        collision_radius_override: collision_radius.map(|radius| radius.0),
+                        spellcasting,
+                        mana_current,
+                        ability_state,
+                    }
                 },
             )
             .collect();
@@ -1922,12 +2017,51 @@ impl Simulation {
         units: &mut [UnitSnapshot],
         grid: &SpatialGrid,
     ) -> AbilityMetrics {
-        let evaluations: Vec<_> = self.pool.install(|| {
+        let building_evaluations: Vec<_> = self.pool.install(|| {
             buildings
                 .par_iter()
                 .enumerate()
                 .map(|(source_index, source)| {
-                    self.evaluate_automatic_ability(source_index, source, units, grid)
+                    self.evaluate_automatic_ability(
+                        AbilitySourceSnapshot {
+                            source: AbilitySourceIndex::Building(source_index),
+                            id: source.id,
+                            team: source.team,
+                            origin: AbilitySourceOrigin::Building(source.footprint),
+                            health: source.health,
+                            stunned_until_tick: source
+                                .status
+                                .map_or(0, |status| status.stunned_until_tick),
+                            spellcasting: source.spellcasting,
+                            mana_current: source.mana_current,
+                            ability_state: source.ability_state,
+                        },
+                        units,
+                        grid,
+                    )
+                })
+                .collect()
+        });
+        let unit_evaluations: Vec<_> = self.pool.install(|| {
+            units
+                .par_iter()
+                .enumerate()
+                .map(|(source_index, source)| {
+                    self.evaluate_automatic_ability(
+                        AbilitySourceSnapshot {
+                            source: AbilitySourceIndex::Unit(source_index),
+                            id: source.id,
+                            team: source.team,
+                            origin: AbilitySourceOrigin::Unit(source.position),
+                            health: source.health,
+                            stunned_until_tick: source.status.stunned_until_tick,
+                            spellcasting: source.spellcasting,
+                            mana_current: source.mana_current,
+                            ability_state: source.ability_state,
+                        },
+                        units,
+                        grid,
+                    )
                 })
                 .collect()
         });
@@ -1935,15 +2069,21 @@ impl Simulation {
             evaluations: buildings
                 .iter()
                 .filter(|building| building.spellcasting.is_some())
-                .count(),
-            candidate_checks: evaluations
+                .count()
+                + units
+                    .iter()
+                    .filter(|unit| unit.spellcasting.is_some())
+                    .count(),
+            candidate_checks: building_evaluations
                 .iter()
+                .chain(&unit_evaluations)
                 .map(|evaluation| evaluation.candidate_checks)
                 .sum(),
             ..AbilityMetrics::default()
         };
-        let mut intents: Vec<_> = evaluations
+        let mut intents: Vec<_> = building_evaluations
             .into_iter()
+            .chain(unit_evaluations)
             .filter_map(|evaluation| evaluation.intent)
             .collect();
         intents.sort_unstable_by_key(|intent| {
@@ -1958,12 +2098,41 @@ impl Simulation {
         });
 
         for intent in intents {
-            let source = &mut buildings[intent.source_index];
+            let source = match intent.source {
+                AbilitySourceIndex::Unit(index) => {
+                    let source = &units[index];
+                    AbilitySourceSnapshot {
+                        source: intent.source,
+                        id: source.id,
+                        team: source.team,
+                        origin: AbilitySourceOrigin::Unit(source.position),
+                        health: source.health,
+                        stunned_until_tick: source.status.stunned_until_tick,
+                        spellcasting: source.spellcasting,
+                        mana_current: source.mana_current,
+                        ability_state: source.ability_state,
+                    }
+                }
+                AbilitySourceIndex::Building(index) => {
+                    let source = &buildings[index];
+                    AbilitySourceSnapshot {
+                        source: intent.source,
+                        id: source.id,
+                        team: source.team,
+                        origin: AbilitySourceOrigin::Building(source.footprint),
+                        health: source.health,
+                        stunned_until_tick: source
+                            .status
+                            .map_or(0, |status| status.stunned_until_tick),
+                        spellcasting: source.spellcasting,
+                        mana_current: source.mana_current,
+                        ability_state: source.ability_state,
+                    }
+                }
+            };
             if source.health <= 0
                 || source.id != intent.source_id
-                || source
-                    .status
-                    .is_some_and(|status| self.next_tick < status.stunned_until_tick)
+                || self.next_tick < source.stunned_until_tick
             {
                 continue;
             }
@@ -1982,34 +2151,14 @@ impl Simulation {
             if state.cast_sequence != intent.cast_sequence
                 || state.ready_tick > self.next_tick
                 || mana < intent.ability.mana_cost
+                || !self.ability_target_is_valid(source, intent.target, intent.ability, units)
             {
                 continue;
             }
 
-            let target_is_valid = match intent.target {
-                AbilityIntentTarget::Unit { index, id } => {
-                    let target = &units[index];
-                    target.id == id
-                        && target.health > 0
-                        && target.team != source.team
-                        && point_to_footprint_distance_sq(
-                            target.position,
-                            source.footprint,
-                            self.config.navigation_cell_size,
-                        ) <= square_i32(intent.ability.range)
-                }
-                AbilityIntentTarget::AllEnemyUnits => units
-                    .iter()
-                    .any(|target| target.health > 0 && target.team != source.team),
-            };
-            if !target_is_valid {
-                continue;
-            }
-
-            source.mana_current = Some(
-                mana.checked_sub(intent.ability.mana_cost)
-                    .expect("ability mana cost exceeded validated current mana"),
-            );
+            let remaining_mana = mana
+                .checked_sub(intent.ability.mana_cost)
+                .expect("ability mana cost exceeded validated current mana");
             state.ready_tick = self
                 .next_tick
                 .checked_add(u64::from(intent.ability.cooldown_ticks))
@@ -2018,11 +2167,38 @@ impl Simulation {
                 .cast_sequence
                 .checked_add(1)
                 .expect("ability cast sequence exhausted");
-            source.ability_state = Some(state);
+            match intent.source {
+                AbilitySourceIndex::Unit(index) => {
+                    units[index].mana_current = Some(remaining_mana);
+                    units[index].ability_state = Some(state);
+                }
+                AbilitySourceIndex::Building(index) => {
+                    buildings[index].mana_current = Some(remaining_mana);
+                    buildings[index].ability_state = Some(state);
+                }
+            }
 
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if apply_ability_effect_to_unit(
+                    if let AbilityEffect::AreaDamage { radius, .. } = intent.ability.effect {
+                        let center = units[index].position;
+                        let radius_sq = square_i32(radius);
+                        for target in units.iter_mut() {
+                            if target.health <= 0
+                                || target.team == source.team
+                                || center.distance_sq(target.position) > radius_sq
+                            {
+                                continue;
+                            }
+                            if apply_ability_effect_to_unit(
+                                target,
+                                intent.ability.effect,
+                                self.next_tick,
+                            ) {
+                                metrics.effects += 1;
+                            }
+                        }
+                    } else if apply_ability_effect_to_unit(
                         &mut units[index],
                         intent.ability.effect,
                         self.next_tick,
@@ -2059,19 +2235,14 @@ impl Simulation {
 
     fn evaluate_automatic_ability(
         &self,
-        source_index: usize,
-        source: &BuildingSnapshot,
+        source: AbilitySourceSnapshot,
         units: &[UnitSnapshot],
         grid: &SpatialGrid,
     ) -> AbilityEvaluation {
         let Some(spellcasting) = source.spellcasting else {
             return AbilityEvaluation::default();
         };
-        if source.health <= 0
-            || source
-                .status
-                .is_some_and(|status| self.next_tick < status.stunned_until_tick)
-        {
+        if source.health <= 0 || self.next_tick < source.stunned_until_tick {
             return AbilityEvaluation::default();
         }
         let Some(state) = source.ability_state else {
@@ -2099,6 +2270,18 @@ impl Simulation {
                     index,
                     id: units[index].id,
                 }),
+            AbilityTargetPolicy::RandomEnemyUnitGlobal => self
+                .random_enemy_ability_target_global(
+                    source,
+                    spellcasting.ability,
+                    state.cast_sequence,
+                    units,
+                    &mut candidate_checks,
+                )
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
             AbilityTargetPolicy::AllEnemyUnits => {
                 candidate_checks = units.len();
                 units
@@ -2109,7 +2292,7 @@ impl Simulation {
         };
         AbilityEvaluation {
             intent: target.map(|target| AbilityIntent {
-                source_index,
+                source: source.source,
                 source_id: source.id,
                 target,
                 ability: spellcasting.ability,
@@ -2121,7 +2304,7 @@ impl Simulation {
 
     fn random_enemy_ability_target(
         &self,
-        source: &BuildingSnapshot,
+        source: AbilitySourceSnapshot,
         ability: AutomaticAbilityProfile,
         cast_sequence: u64,
         units: &[UnitSnapshot],
@@ -2131,12 +2314,17 @@ impl Simulation {
         let enemy_team = 1u8
             .checked_sub(source.team.0)
             .expect("verification slice supports teams 0 and 1 only");
-        let center = footprint_center_point(source.footprint, self.config.navigation_cell_size);
-        let query_radius = building_source_query_radius(
-            source.footprint,
-            ability.range,
-            self.config.navigation_cell_size,
-        );
+        let (center, query_radius) = match source.origin {
+            AbilitySourceOrigin::Unit(position) => (position, ability.range),
+            AbilitySourceOrigin::Building(footprint) => (
+                footprint_center_point(footprint, self.config.navigation_cell_size),
+                building_source_query_radius(
+                    footprint,
+                    ability.range,
+                    self.config.navigation_cell_size,
+                ),
+            ),
+        };
         let range_sq = square_i32(ability.range);
         let mut best: Option<(u64, SimId, usize)> = None;
         grid.for_each_candidate(
@@ -2147,11 +2335,7 @@ impl Simulation {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
                 if candidate.health <= 0
-                    || point_to_footprint_distance_sq(
-                        candidate.position,
-                        source.footprint,
-                        self.config.navigation_cell_size,
-                    ) > range_sq
+                    || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
                 {
                     return;
                 }
@@ -2169,6 +2353,75 @@ impl Simulation {
             },
         );
         best.map(|(_, _, unit_index)| unit_index)
+    }
+
+    fn random_enemy_ability_target_global(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        cast_sequence: u64,
+        units: &[UnitSnapshot],
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let mut best: Option<(u64, SimId, usize)> = None;
+        for (unit_index, candidate) in units.iter().enumerate() {
+            *candidate_checks += 1;
+            if candidate.health <= 0 || candidate.team == source.team {
+                continue;
+            }
+            let rank = deterministic_ability_target_rank(
+                self.config.match_seed,
+                source.id,
+                ability.id,
+                cast_sequence,
+                candidate.id,
+            );
+            let key = (rank, candidate.id, unit_index);
+            if best.is_none_or(|current| key < current) {
+                best = Some(key);
+            }
+        }
+        best.map(|(_, _, unit_index)| unit_index)
+    }
+
+    fn ability_source_distance_sq(&self, source: AbilitySourceOrigin, target: SimPoint) -> u64 {
+        match source {
+            AbilitySourceOrigin::Unit(position) => position.distance_sq(target),
+            AbilitySourceOrigin::Building(footprint) => {
+                point_to_footprint_distance_sq(target, footprint, self.config.navigation_cell_size)
+            }
+        }
+    }
+
+    fn ability_target_is_valid(
+        &self,
+        source: AbilitySourceSnapshot,
+        target: AbilityIntentTarget,
+        ability: AutomaticAbilityProfile,
+        units: &[UnitSnapshot],
+    ) -> bool {
+        match target {
+            AbilityIntentTarget::Unit { index, id } => {
+                let target = &units[index];
+                target.id == id
+                    && target.health > 0
+                    && target.team != source.team
+                    && match ability.target_policy {
+                        AbilityTargetPolicy::RandomEnemyUnit => {
+                            self.ability_source_distance_sq(source.origin, target.position)
+                                <= square_i32(ability.range)
+                        }
+                        AbilityTargetPolicy::RandomEnemyUnitGlobal => true,
+                        AbilityTargetPolicy::AllEnemyUnits => false,
+                    }
+            }
+            AbilityIntentTarget::AllEnemyUnits => {
+                ability.target_policy == AbilityTargetPolicy::AllEnemyUnits
+                    && units
+                        .iter()
+                        .any(|target| target.health > 0 && target.team != source.team)
+            }
+        }
     }
 
     fn unit_will_query_ally_defense(
@@ -4104,6 +4357,9 @@ struct UnitSnapshot {
     corpse: Option<CorpseProfile>,
     collision_radius: i32,
     collision_radius_override: Option<i32>,
+    spellcasting: Option<SpellcastingProfile>,
+    mana_current: Option<i32>,
+    ability_state: Option<AutomaticAbilityState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4132,6 +4388,7 @@ struct ProductionAttempt {
     profile: ProductionProfile,
     corpse: Option<CorpseProfile>,
     collision_radius: Option<CollisionRadius>,
+    spellcasting: Option<SpellcastingProfile>,
     next_spawn_tick: u64,
 }
 
@@ -4145,6 +4402,31 @@ enum TargetIndex {
 enum AttackSourceIndex {
     Unit(usize),
     Building(usize),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AbilitySourceIndex {
+    Unit(usize),
+    Building(usize),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AbilitySourceOrigin {
+    Unit(SimPoint),
+    Building(BuildingFootprint),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AbilitySourceSnapshot {
+    source: AbilitySourceIndex,
+    id: SimId,
+    team: Team,
+    origin: AbilitySourceOrigin,
+    health: i32,
+    stunned_until_tick: u64,
+    spellcasting: Option<SpellcastingProfile>,
+    mana_current: Option<i32>,
+    ability_state: Option<AutomaticAbilityState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4183,7 +4465,7 @@ impl AbilityIntentTarget {
 
 #[derive(Debug, Clone, Copy)]
 struct AbilityIntent {
-    source_index: usize,
+    source: AbilitySourceIndex,
     source_id: SimId,
     target: AbilityIntentTarget,
     ability: AutomaticAbilityProfile,
@@ -4493,7 +4775,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.ability.range >= 0);
     match spellcasting.ability.target_policy {
         AbilityTargetPolicy::RandomEnemyUnit => {}
-        AbilityTargetPolicy::AllEnemyUnits => assert_eq!(spellcasting.ability.range, 0),
+        AbilityTargetPolicy::AllEnemyUnits | AbilityTargetPolicy::RandomEnemyUnitGlobal => {
+            assert_eq!(spellcasting.ability.range, 0);
+        }
     }
     match spellcasting.ability.effect {
         AbilityEffect::Damage { amount } => assert!(amount >= 0),
@@ -4506,6 +4790,15 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert!((-100..=1_000).contains(&percent_delta));
             assert_ne!(percent_delta, 0);
             assert!(duration_ticks > 0);
+        }
+        AbilityEffect::AreaDamage { amount, radius } => {
+            assert!(amount >= 0);
+            assert!(radius >= 0);
+            assert_ne!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::AllEnemyUnits,
+                "area damage requires a selected enemy unit as its center"
+            );
         }
     }
 }
@@ -4623,6 +4916,8 @@ fn unit_view_from_entity(
     if entity.get::<BuildingFootprint>().is_some() {
         return None;
     }
+    let spellcasting = entity.get::<SpellcastingProfile>().copied();
+    let ability_state = entity.get::<AutomaticAbilityState>().copied();
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         team: *entity.get::<Team>()?,
@@ -4636,6 +4931,10 @@ fn unit_view_from_entity(
         last_attacker: entity.get::<RetaliationState>()?.attacker,
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
         stunned_until_tick: entity.get::<StatusState>()?.stunned_until_tick,
+        mana_current: entity.get::<ManaState>().map(|mana| mana.current),
+        mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
+        ability_ready_tick: ability_state.map(|state| state.ready_tick),
+        ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
     })
 }
 
@@ -4782,6 +5081,12 @@ fn apply_ability_effect_to_unit(
                 percent_delta,
                 expires_tick,
             );
+        }
+        AbilityEffect::AreaDamage { amount, radius: _ } => {
+            target.health = target
+                .health
+                .checked_sub(amount)
+                .expect("area ability damage overflowed validated bounds");
         }
     }
     true
@@ -5170,6 +5475,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     spawn_tick: *entity.get::<SpawnTick>()?,
                     corpse: entity.get::<CorpseProducer>().map(|corpse| corpse.0),
                     collision_radius: entity.get::<CollisionRadius>().copied(),
+                    spellcasting: entity.get::<SpellcastingProfile>().copied(),
+                    mana: entity.get::<ManaState>().copied(),
+                    ability_state: entity.get::<AutomaticAbilityState>().copied(),
                 }))
             } else {
                 Some(CanonicalEntity::Building(CanonicalBuilding {
@@ -5185,6 +5493,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     production_collision_radius: entity
                         .get::<ProductionCollisionRadius>()
                         .map(|radius| radius.0),
+                    production_spellcasting: entity
+                        .get::<ProductionSpellcastingProfile>()
+                        .map(|profile| profile.0),
                     attack: entity.get::<AttackProfile>().copied(),
                     cooldown: entity.get::<AttackCooldown>().copied(),
                     target: entity.get::<TargetState>().copied(),
@@ -5244,6 +5555,23 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u64(0x434f_4c4c_4953_554e);
                     hash.write_i32(collision_radius.0);
                 }
+                if let Some(spellcasting) = unit.spellcasting {
+                    hash.write_u64(0x5350_454c_4c55_4e54);
+                    hash.write_i32(spellcasting.mana.maximum);
+                    hash.write_i32(spellcasting.mana.starting);
+                    hash.write_i32(spellcasting.mana.regen_per_tick);
+                    hash_automatic_ability(&mut hash, spellcasting.ability);
+                    hash.write_i32(
+                        unit.mana
+                            .expect("spellcasting unit missing mana state")
+                            .current,
+                    );
+                    let state = unit
+                        .ability_state
+                        .expect("spellcasting unit missing ability state");
+                    hash.write_u64(state.ready_tick);
+                    hash.write_u64(state.cast_sequence);
+                }
             }
             CanonicalEntity::Building(building) => {
                 hash.write_u8(1);
@@ -5281,6 +5609,13 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     if let Some(collision_radius) = building.production_collision_radius {
                         hash.write_u64(0x434f_4c4c_4953_5052);
                         hash.write_i32(collision_radius.0);
+                    }
+                    if let Some(spellcasting) = building.production_spellcasting {
+                        hash.write_u64(0x5350_454c_4c50_524f);
+                        hash.write_i32(spellcasting.mana.maximum);
+                        hash.write_i32(spellcasting.mana.starting);
+                        hash.write_i32(spellcasting.mana.regen_per_tick);
+                        hash_automatic_ability(&mut hash, spellcasting.ability);
                     }
                 } else {
                     hash.write_u8(0);
@@ -5462,6 +5797,9 @@ struct CanonicalUnit {
     spawn_tick: SpawnTick,
     corpse: Option<CorpseProfile>,
     collision_radius: Option<CollisionRadius>,
+    spellcasting: Option<SpellcastingProfile>,
+    mana: Option<ManaState>,
+    ability_state: Option<AutomaticAbilityState>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -5474,6 +5812,7 @@ struct CanonicalBuilding {
     production_state: Option<ProductionState>,
     production_corpse: Option<CorpseProfile>,
     production_collision_radius: Option<CollisionRadius>,
+    production_spellcasting: Option<SpellcastingProfile>,
     attack: Option<AttackProfile>,
     cooldown: Option<AttackCooldown>,
     target: Option<TargetState>,
@@ -5539,6 +5878,10 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u64(u64::from(modifier.0));
             hash.write_i32(i32::from(percent_delta));
             hash.write_u16(duration_ticks);
+        }
+        AbilityEffect::AreaDamage { amount, radius } => {
+            hash.write_i32(amount);
+            hash.write_i32(radius);
         }
     }
 }

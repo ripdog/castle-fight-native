@@ -4,7 +4,7 @@ Status: **normative architecture, provisional gameplay details**
 
 ## 1. Purpose
 
-This document defines deterministic abilities used by buildings, items, and any future autonomous combat entity that can cast spells.
+This document defines deterministic abilities used by buildings, autonomous combat-unit spellcasters, items, and other authoritative sources that can cast spells.
 
 The ability system is broader than ordinary attacks. Buildings may consume mana to cast buffs, damage spells, crowd-control effects, map-wide effects, or special projectile attacks. Some abilities are fully autonomous; specific legendary abilities may require a player-selected target.
 
@@ -29,7 +29,7 @@ PassiveRule
 
 ## 3. Mana
 
-Spellcasting buildings MAY have an authoritative mana pool.
+Spellcasting buildings and combat units MAY have an authoritative mana pool.
 
 Conceptual mutable state:
 
@@ -64,7 +64,7 @@ A spell cast MUST NOT become dependent on wall-clock time, animation completion,
 
 ## 5. Automatic spellcasting
 
-An automatic spellcasting building periodically evaluates whether an ability can be cast.
+An automatic spellcasting building or combat unit periodically evaluates whether an ability can be cast.
 
 The decision may consider:
 
@@ -79,7 +79,7 @@ The decision may consider:
 
 If legal, the caster chooses the target according to the ability's deterministic target policy and emits a cast intent.
 
-The current verification slice makes one automatic ability per spellcasting building executable. This is deliberately narrower than the eventual content model, but it fixes the scheduler architecture: integer mana regeneration happens in the timer phase before automatic eligibility; mana is clamped to the authored maximum; ability evaluation then reads an immutable post-production/pre-targeting snapshot; committed ability effects are visible to combat target acquisition and ordinary attacks later in the same tick. A unit killed by an automatic ability therefore cannot acquire a target, move, or perform an ordinary attack later that tick. A stunned spellcasting source is ineligible to cast until the stun has expired; mana regeneration and absolute cooldown readiness continue while stunned.
+The current verification slice makes one automatic ability per spellcasting building or combat unit executable. This is deliberately narrower than the eventual content model, but it fixes the scheduler architecture: integer mana regeneration happens in the timer phase before automatic eligibility; mana is clamped to the authored maximum; production happens after that timer phase, so a caster spawned during tick `T` begins with its authored starting mana and first regenerates during tick `T + 1`; ability evaluation then reads an immutable post-production/pre-targeting snapshot. Building and unit cast intents share one canonical resolution order. Committed ability effects are visible to later ability intents, combat target acquisition, and ordinary attacks in the same tick. A unit killed or stunned by an earlier canonical automatic ability therefore cannot cast a later pending intent, acquire a target, move, or perform an ordinary attack as applicable. A stunned spellcasting source is ineligible to cast until the stun has expired; mana regeneration and absolute cooldown readiness continue while stunned.
 
 Automatic casting MUST continue through an individual player's disconnect while the match is still running. If an entire team disconnects and the match enters the canonical reconnect pause, simulation casting pauses with the rest of the simulation.
 
@@ -102,7 +102,7 @@ map-wide team set
 
 All non-random ties require a canonical final tie-break such as `SimId`.
 
-The executable verification target policies are currently `RandomEnemyUnit`, within an authored finite range measured from the caster building's authoritative footprint, and `AllEnemyUnits` for map-wide hostile-unit effects. Every random eligible candidate receives an order-independent keyed random rank and minimum `(rank, SimId)` wins, so spatial-grid enumeration and worker completion order cannot affect the selected target. `AllEnemyUnits` uses authored range `0` as an explicit sentinel because range is not consulted for a global effect; the affected unit set resolves in stable `SimId` order.
+The executable verification target policies are currently `RandomEnemyUnit`, `RandomEnemyUnitGlobal`, and `AllEnemyUnits`. `RandomEnemyUnit` selects within an authored finite range measured from a unit caster's authoritative point or a building caster's authoritative footprint. `RandomEnemyUnitGlobal` selects one live enemy combat unit anywhere on the map and uses authored range `0` as an explicit global sentinel. `AllEnemyUnits` likewise uses range `0` and addresses the complete live hostile combat-unit set. Every random eligible candidate receives an order-independent keyed random rank and minimum `(rank, SimId)` wins, so spatial-grid enumeration and worker completion order cannot affect the selected target. Global selection is therefore deterministic without pretending that global range is a very large finite radius. `AllEnemyUnits` resolves its affected unit set in stable `SimId` order.
 
 Random target selection uses keyed deterministic RNG. A suitable key is:
 
@@ -164,7 +164,7 @@ The constrained effect vocabulary should support at least:
 - corpse-driven area damage (for example corpse explosion);
 - corpse-driven unit spawning/transformation (for example raise dead).
 
-Effects reuse the deterministic resolution rules in `15-targeting-combat.md`. Corpse-targeted abilities operate on authoritative corpse entities rather than presentation objects. They MUST revalidate corpse existence/eligibility at resolution, use canonical ordering/tie-breaking when selecting among multiple corpses, and atomically consume a corpse when the effect definition says it is spent so one corpse cannot satisfy multiple competing casts nondeterministically.
+Effects reuse the deterministic resolution rules in `15-targeting-combat.md`. The executable `AreaDamage` primitive requires a selected enemy unit, captures that unit's authoritative position at cast resolution as the area center, and damages every live enemy combat unit whose authoritative point lies within the authored radius, including the selected unit itself. The affected set is traversed in stable `SimId` order; the primitive does not implicitly damage buildings and does not generate ordinary attack retaliation/ally-defense events. `AreaDamage` is therefore not valid with `AllEnemyUnits`, which has no single center. Corpse-targeted abilities operate on authoritative corpse entities rather than presentation objects. They MUST revalidate corpse existence/eligibility at resolution, use canonical ordering/tie-breaking when selecting among multiple corpses, and atomically consume a corpse when the effect definition says it is spent so one corpse cannot satisfy multiple competing casts nondeterministically.
 
 ## 9. Buffing spell buildings
 
@@ -184,7 +184,7 @@ The builder does not need to remain nearby after placement unless a particular a
 
 ## 10. Random enemy damage spell buildings
 
-A building may automatically cast a damage spell against a random eligible enemy unit.
+A building may automatically cast a damage spell against a random eligible enemy unit. Its policy may be finite-range or explicitly global. A common verification pattern is a mana-charging building whose ability cost equals maximum mana, so it casts immediately upon reaching full mana, chooses one deterministic-random enemy globally, and applies `AreaDamage` around that unit.
 
 The random target MUST be chosen from the canonical eligible set using keyed RNG. Parallel candidate discovery MUST NOT change the selected unit.
 

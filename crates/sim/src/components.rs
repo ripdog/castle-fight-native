@@ -144,6 +144,9 @@ pub struct UnitGameplayProperties {
 pub(crate) struct ProductionCollisionRadius(pub CollisionRadius);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Corpse {
     pub source_unit: SimId,
     pub source_team: Team,
@@ -274,6 +277,7 @@ pub struct ModifierId(pub u32);
 pub enum AbilityTargetPolicy {
     RandomEnemyUnit,
     AllEnemyUnits,
+    RandomEnemyUnitGlobal,
 }
 
 impl AbilityTargetPolicy {
@@ -282,6 +286,7 @@ impl AbilityTargetPolicy {
         match self {
             Self::RandomEnemyUnit => 0,
             Self::AllEnemyUnits => 1,
+            Self::RandomEnemyUnitGlobal => 2,
         }
     }
 }
@@ -299,6 +304,10 @@ pub enum AbilityEffect {
         percent_delta: i16,
         duration_ticks: u16,
     },
+    AreaDamage {
+        amount: i32,
+        radius: i32,
+    },
 }
 
 impl AbilityEffect {
@@ -308,6 +317,7 @@ impl AbilityEffect {
             Self::Damage { .. } => 0,
             Self::Stun { .. } => 1,
             Self::ModifyMovementSpeedPercent { .. } => 2,
+            Self::AreaDamage { .. } => 3,
         }
     }
 }

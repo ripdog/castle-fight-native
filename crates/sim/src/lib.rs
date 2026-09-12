@@ -230,10 +230,11 @@ mod tests {
             pressing_toward_wall >= trapped.len() / 2,
             "closed cage should still press the crowd toward the objective-side wall"
         );
-        assert!(trapped.iter().all(|id| {
-            sim.unit(*id)
-                .is_some_and(|unit| unit.position.x < 8 * cell)
-        }));
+        assert!(
+            trapped
+                .iter()
+                .all(|id| { sim.unit(*id).is_some_and(|unit| unit.position.x < 8 * cell) })
+        );
 
         assert!(sim.remove_building(gate));
         let opened = sim.step();
@@ -936,6 +937,171 @@ mod tests {
     }
 
     #[test]
+    fn global_random_area_spell_casts_at_full_mana_and_hits_live_cluster() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let caster = sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(2, 0, 1, 1),
+            SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 2,
+                    starting: 0,
+                    regen_per_tick: 1,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(8),
+                    mana_cost: 2,
+                    cooldown_ticks: 1,
+                    range: 0,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
+                    effect: AbilityEffect::AreaDamage {
+                        amount: 3,
+                        radius: 2 * cell,
+                    },
+                },
+            },
+        ));
+        let targets = [
+            sim.spawn_unit(passive_unit(1, 60 * cell)),
+            sim.spawn_unit(passive_unit(1, 61 * cell)),
+            sim.spawn_unit(passive_unit(1, 80 * cell)),
+        ];
+
+        let charging = sim.step();
+        assert_eq!(charging.ability_casts, 0);
+        assert_eq!(sim.building(caster).unwrap().mana_current, Some(1));
+
+        let cast = sim.step();
+        assert_eq!(cast.ability_casts, 1);
+        assert_eq!(sim.building(caster).unwrap().mana_current, Some(0));
+        let event = sim.ability_casts_last_tick()[0];
+        let AbilityCastTarget::Unit(selected) = event.target else {
+            panic!("global random AOE should select one enemy unit as its center");
+        };
+        assert!(targets.contains(&selected));
+        let center = sim.unit(selected).unwrap().position;
+        let area_radius_sq = u64::try_from(2 * cell).unwrap().pow(2);
+        let expected_hits = targets
+            .iter()
+            .filter(|id| sim.unit(**id).unwrap().position.distance_sq(center) <= area_radius_sq)
+            .count();
+        assert_eq!(cast.ability_effects, expected_hits);
+        for target in targets {
+            let view = sim.unit(target).unwrap();
+            let expected_health = if view.position.distance_sq(center) <= area_radius_sq {
+                9_997
+            } else {
+                10_000
+            };
+            assert_eq!(view.health, expected_health);
+        }
+    }
+
+    #[test]
+    fn combat_unit_can_cast_short_range_random_area_spell() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let caster = sim.spawn_unit_with_spellcasting(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(10 * cell, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 1,
+                    starting: 1,
+                    regen_per_tick: 0,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(9),
+                    mana_cost: 1,
+                    cooldown_ticks: 10,
+                    range: 4 * cell,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::AreaDamage {
+                        amount: 2,
+                        radius: cell,
+                    },
+                },
+            },
+        );
+        let near = sim.spawn_unit(passive_unit(1, 13 * cell));
+        let far = sim.spawn_unit(passive_unit(1, 25 * cell));
+
+        let result = sim.step();
+        assert_eq!(result.ability_evaluations, 1);
+        assert_eq!(result.ability_casts, 1);
+        assert_eq!(result.ability_effects, 1);
+        assert_eq!(
+            sim.ability_casts_last_tick(),
+            &[AbilityCastEvent {
+                source: caster,
+                ability: AbilityId(9),
+                target: AbilityCastTarget::Unit(near),
+                effect: AbilityEffect::AreaDamage {
+                    amount: 2,
+                    radius: cell,
+                },
+            }]
+        );
+        assert_eq!(sim.unit(near).unwrap().health, 9_998);
+        assert_eq!(sim.unit(far).unwrap().health, 10_000);
+        let caster_view = sim.unit(caster).unwrap();
+        assert_eq!(caster_view.mana_current, Some(0));
+        assert_eq!(caster_view.mana_maximum, Some(1));
+        assert_eq!(caster_view.ability_cast_sequence, Some(1));
+    }
+
+    #[test]
+    fn production_spellcasting_profile_is_inherited_by_spawned_units() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let profile = SpellcastingProfile {
+            mana: ManaProfile {
+                maximum: 10,
+                starting: 0,
+                regen_per_tick: 1,
+            },
+            ability: AutomaticAbilityProfile {
+                id: AbilityId(10),
+                mana_cost: 10,
+                cooldown_ticks: 1,
+                range: 4 * SUBUNITS_PER_WORLD_UNIT,
+                target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                effect: AbilityEffect::AreaDamage {
+                    amount: 1,
+                    radius: SUBUNITS_PER_WORLD_UNIT,
+                },
+            },
+        };
+        sim.spawn_building_with_production_spellcasting(
+            production_building(0, BuildingFootprint::new(10, 0, 1, 1), 4),
+            profile,
+        );
+
+        let result = sim.step();
+        assert_eq!(result.units_spawned, 1);
+        let spawned = sim.units().into_iter().next().unwrap();
+        assert_eq!(spawned.mana_maximum, Some(10));
+        assert_eq!(spawned.mana_current, Some(0));
+        assert_eq!(spawned.ability_cast_sequence, Some(0));
+
+        sim.step();
+        let regenerated = sim.unit(spawned.id).unwrap();
+        assert_eq!(regenerated.mana_current, Some(1));
+        assert_eq!(regenerated.ability_cast_sequence, Some(0));
+    }
+
+    #[test]
     fn building_spell_damage_does_not_create_retaliation_or_ally_defense() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
@@ -1402,6 +1568,110 @@ mod tests {
                     .filter_map(|building| building.ability_cast_sequence)
                     .sum::<u64>(),
                 800
+            );
+            sim.checksum()
+        }
+
+        let expected = run(1);
+        assert_eq!(run(2), expected);
+        assert_eq!(run(8), expected);
+    }
+
+    #[test]
+    fn unit_and_global_area_spellcasting_are_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                match_seed: 0xaea0_2026_0913,
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            let global_spell = SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 1_000,
+                    starting: 1_000,
+                    regen_per_tick: 1,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(71),
+                    mana_cost: 1,
+                    cooldown_ticks: 1,
+                    range: 0,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
+                    effect: AbilityEffect::AreaDamage {
+                        amount: 1,
+                        radius: 2 * cell,
+                    },
+                },
+            };
+            let local_spell = SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 1_000,
+                    starting: 1_000,
+                    regen_per_tick: 1,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(72),
+                    mana_cost: 1,
+                    cooldown_ticks: 1,
+                    range: 12 * cell,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::AreaDamage {
+                        amount: 1,
+                        radius: 2 * cell,
+                    },
+                },
+            };
+            for index in 0..4 {
+                sim.spawn_building(spell_building(
+                    0,
+                    BuildingFootprint::new(4 + index * 2, -20, 1, 1),
+                    global_spell,
+                ));
+            }
+            for index in 0..8 {
+                sim.spawn_unit_with_spellcasting(
+                    UnitSpawn {
+                        team: Team(0),
+                        position: SimPoint::new(40 * cell, (index - 4) * 2 * cell),
+                        health: 10_000,
+                        attack: AttackProfile {
+                            delivery: AttackDelivery::Melee,
+                            damage: 0,
+                            range: 0,
+                            acquisition_range: 0,
+                            cooldown_ticks: 1,
+                        },
+                        movement: MovementProfile { speed_per_tick: 0 },
+                    },
+                    local_spell,
+                );
+            }
+            for index in 0..40 {
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new((44 + index % 8) * cell, (index / 8 - 2) * 2 * cell),
+                    health: 10_000,
+                    ..passive_unit(1, 0)
+                });
+            }
+            for _ in 0..20 {
+                sim.step();
+            }
+            assert_eq!(
+                sim.buildings()
+                    .iter()
+                    .filter_map(|building| building.ability_cast_sequence)
+                    .sum::<u64>(),
+                80
+            );
+            assert_eq!(
+                sim.units()
+                    .iter()
+                    .filter(|unit| unit.mana_maximum.is_some())
+                    .filter_map(|unit| unit.ability_cast_sequence)
+                    .sum::<u64>(),
+                160
             );
             sim.checksum()
         }
