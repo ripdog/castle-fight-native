@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/sim",
     "crates/sim-bench",
+    "crates/debug-viewer",
 ]
 
 [workspace.package]
@@ -11,6 +12,7 @@ rust-version = "1.98"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+bevy = { version = "0.19", default-features = false, features = ["2d"] }
 bevy_ecs = { version = "0.19", default-features = false, features = ["multi_threaded"] }
 rayon = "1.11"
 

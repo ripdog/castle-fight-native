@@ -215,22 +215,22 @@ impl Simulation {
     }
 
     #[must_use]
-    pub fn unit(&self, id: SimId) -> Option<UnitView> {
-        self.world.iter_entities().find_map(|entity| {
-            let entity_id = *entity.get::<SimId>()?;
-            if entity_id != id {
-                return None;
-            }
+    pub fn units(&self) -> Vec<UnitView> {
+        let mut units: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(unit_view_from_entity)
+            .collect();
+        units.sort_unstable_by_key(|unit| unit.id);
+        units
+    }
 
-            Some(UnitView {
-                id: entity_id,
-                team: *entity.get::<Team>()?,
-                position: entity.get::<Position>()?.0,
-                health: entity.get::<Health>()?.current,
-                target: entity.get::<TargetState>()?.current,
-                cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
-            })
-        })
+    #[must_use]
+    pub fn unit(&self, id: SimId) -> Option<UnitView> {
+        self.world
+            .iter_entities()
+            .filter_map(unit_view_from_entity)
+            .find(|unit| unit.id == id)
     }
 
     fn advance_cooldowns(&mut self) {
@@ -410,6 +410,17 @@ struct AttackIntent {
     target_id: SimId,
     damage: i32,
     cooldown_ticks: u16,
+}
+
+fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitView> {
+    Some(UnitView {
+        id: *entity.get::<SimId>()?,
+        team: *entity.get::<Team>()?,
+        position: entity.get::<Position>()?.0,
+        health: entity.get::<Health>()?.current,
+        target: entity.get::<TargetState>()?.current,
+        cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
+    })
 }
 
 fn is_valid_target(source: &UnitSnapshot, target: &UnitSnapshot) -> bool {
