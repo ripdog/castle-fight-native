@@ -17,7 +17,7 @@ Implemented:
 - sticky individual target acquisition with retaliation-on-attack behavior;
 - reachable attack-position filtering and passive-building fallback around cages;
 - deterministic greedy pursuit with A* fallback around blockers;
-- deterministic crowd steering from immutable movement intents plus a hard non-overlap reservation/commit pass;
+- deterministic attack-envelope pursuit with relative-closing crowd anticipation, canonical bypass continuity, and a hard non-overlap reservation/commit pass; melee/ranged groups can flow around occupied unit/building attack regions without assigned slots;
 - melee attack cooldown/damage resolution;
 - authoritative `RangedGuaranteedHit` projectiles with integer travel time, retained target identity, source-death independence, and deterministic target-death invalidation;
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
@@ -110,7 +110,9 @@ The benchmark exits non-zero if different worker counts produce different final 
 
 The original Castle Fight compatibility target caps total units at **700**, so 700-unit cases are now first-class benchmark points. The 1k/5k/10k workloads remain deliberate architecture stress probes rather than implied gameplay support targets.
 
-On the Ryzen 5 5600 reference machine, the ordinary 700-unit fixtures are far below a 30 Hz tick budget even on one worker: lane `0.732 ms/tick`, cage `0.995 ms/tick`, and crossing crowd `0.686 ms/tick`. The corresponding eight-worker runs are `0.642`, `0.675`, and `0.699 ms/tick`; these phases are so small that worker-count differences should be treated as modest/noisy rather than a requirement for live-match scaling. Worker-count checksums match for every fixture.
+On the Ryzen 5 5600 reference machine, the current attack-envelope/crowd-flow solver keeps the ordinary 700-unit fixtures far below a 30 Hz tick budget even on one worker: lane `0.980 ms/tick`, cage `1.184 ms/tick`, and crossing crowd `0.985 ms/tick`. The corresponding eight-worker runs are `0.831`, `0.861`, and `0.904 ms/tick`. These numbers include the full canonical checksum every tick. Relative-closing anticipation and canonical bypass continuity add roughly a few tenths of a millisecond versus the earlier overlap-only solver at this scale, which is accepted for the materially better congestion behavior. Worker-count checksums match for every fixture (`4ab212ca5cf02fb1`, `ec58f65e7f4dfd3`, and `61c87ff7b92653b1` respectively).
+
+Focused client-scale regressions now cover the observed 3D movement failures. A ranged unit entering behind an occupied firing line reaches range without repeated side-to-side reversal; the same continuity rule applies to melee congestion. A 12-unit melee group converging on one unit target produces the same result on one/eight workers while filling multiple sides of the legal attack region. A 24-unit melee group approaching a 7×7-cell building gets at least 20 distinct units into legal attack positions across at least three building faces, with no perimeter-slot assignment. A ranged unit spawned well inside its maximum range remains at that closer legal distance and attacks rather than backing away to the outer boundary.
 
 The intentionally extreme delivery-density fixtures also have substantial headroom at 700 total units, despite every attacker being allowed to launch every tick:
 
@@ -518,10 +520,10 @@ The standard long-run probe uses 30 warmup ticks plus 3,600 measured ticks, equi
 
 | Units ceiling | Workers | ms/tick | Avg live projectiles | Peak projectiles | Launches/tick | Impacts/tick | Effects/tick | Bounce jumps/tick | Ability casts/tick | Avg / peak stunned | Final live units | Final buildings | Final checksum |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 700 | 1 | 1.043 | 74.7 | 281 | 15.2 | 24.2 | 40.9 | 9.1 | 0.2 | 59.3 / 698 | 448 | 24 | `1667efd96259ecfc` |
-| 700 | 8 | 0.917 | 74.7 | 281 | 15.2 | 24.2 | 40.9 | 9.1 | 0.2 | 59.3 / 698 | 448 | 24 | `1667efd96259ecfc` |
+| 700 | 1 | 1.310 | 94.7 | 424 | 20.5 | 31.6 | 53.1 | 11.2 | 0.2 | 54.9 / 696 | 341 | 24 | `782fb1e4ffda765b` |
+| 700 | 8 | 1.407 | 94.7 | 424 | 20.5 | 31.6 | 53.1 | 11.2 | 0.2 | 54.9 / 696 | 341 | 24 | `782fb1e4ffda765b` |
 
-The run also averages 586.2 retained targets/tick with only 1.3 target changes/tick, while processing 7.6 ally-defense queries/tick. Periodic global stuns push the instantaneous disabled population as high as 698 without introducing stale-target churn, movement/collision failures, or worker-count divergence. This is useful evidence that sticky targeting and status precedence remain stable when unrelated projectile, tower, spell, death, production, and movement events happen simultaneously rather than only in focused regressions. The overall one-worker cost remains about 1 ms/tick, leaving very large headroom against a 30 Hz budget at the original unit ceiling.
+With attack-envelope pursuit and anticipatory crowd flow enabled, the run averages 540.7 retained targets/tick with only 1.5 target changes/tick while processing 11.7 ally-defense queries/tick. More units successfully reach useful combat positions than under the earlier tail-prone crowd solver, so sustained combat is denser: projectile/impact rates rise and the two-minute fixture ends with 341 live units rather than the earlier 448. Periodic global stuns still reach 696 simultaneous disabled units without stale-target churn, overlap failure, or worker-count divergence. The entire mixed simulation remains around 1.3–1.4 ms/tick including the full checksum, leaving very large headroom against a 30 Hz budget at the original unit ceiling; this particular mixed workload is too small/sequential for eight workers to improve wall time.
 
 ## Current interpretation
 
