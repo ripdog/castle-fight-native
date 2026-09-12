@@ -26,7 +26,8 @@ Implemented:
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics;
 - open-lane, dense-cage, and crossing-crowd release benchmarks;
-- Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos.
+- Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
+- a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
 Not implemented yet:
 
@@ -66,6 +67,33 @@ cargo run -p castle-fight-debug-viewer -- --scenario lane
 ```
 
 The viewer is presentation-only. Disabling or changing it must not change simulation checksums.
+
+## Playable verification game
+
+Run:
+
+```bash
+cargo run -p castle-fight-verification-game
+```
+
+The harness intentionally contains only enough game structure to exercise the simulation interactively:
+
+- map: 2,000 × 750 world units;
+- player base: left third;
+- enemy base: right third;
+- center third is blocked above/below a centered 350-unit-high lane;
+- one castle is centered in each base;
+- **left click** in the player base queues a melee production building;
+- **right click** queues a ranged production building;
+- every player placement is mirrored horizontally into the enemy base;
+- production starts after 10 seconds and repeats every 10 seconds;
+- both unit types have 10 HP and deal exactly 1 damage every 30 simulation ticks (1 DPS at 30 Hz);
+- melee and ranged attacks are shown as short-lived source→target lines;
+- building/unit art is entirely procedural placeholder geometry.
+
+This is deliberately **not** the production input/game-rule layer. It bypasses the builder, resources, network command scheduling, and normal construction UI so we can rapidly generate symmetric battles and inspect pathing, crowd behavior, targeting, production, and combat. That bypass does not change the normative builder-only control rules in `docs/spec`.
+
+The current ranged verification attack uses the simulation's guaranteed-hit ranged targeting semantics but resolves damage immediately at the attack tick; authoritative projectile travel/interpolation is a later combat-delivery verification slice.
 
 ## Initial baseline — 2026-09-12
 
@@ -123,6 +151,16 @@ The crowd fixture places two dense opposing populations into an interpenetrating
 | 10,000 | 8 | 5.382 | 1.711 | `ed78153b189f4ee3` |
 
 The 10,000-unit separation pass scales by about **3.5x** from one to eight workers while preserving the exact state hash. This is intentionally a hostile overlap fixture rather than a representative match; it gives us a concrete regression target as local collision rules become richer.
+
+A later regression sweep after crowd separation was enabled for every combat unit and the checksum projection was expanded to include unit attack/movement profiles produced the following 10,000-unit totals:
+
+| Scenario | 1 worker | 8 workers |
+| --- | ---: | ---: |
+| lane | 7.766 ms/tick | 5.440 ms/tick |
+| cage | 18.640 ms/tick | 6.588 ms/tick |
+| crowd | 10.786 ms/tick | 5.651 ms/tick |
+
+The cage fixture is now dominated by crowd separation rather than targeting. It remains comfortably inside a 30 Hz tick budget on the eight-worker reference run, but extreme enclosed density is the first place to revisit if richer collision rules materially increase cost.
 
 ## Current interpretation
 

@@ -1,0 +1,10 @@
+[package]
+name = "castle-fight-verification-game"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy.workspace = true
+castle-fight-sim = { path = "../sim" }
