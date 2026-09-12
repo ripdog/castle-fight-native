@@ -32,7 +32,7 @@ Implemented:
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, automatic abilities, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, and automatic-spellcasting release benchmarks;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, and long mixed-combat release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -86,6 +86,10 @@ cargo run --release -p castle-fight-sim-bench -- \
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario ability --units 700,1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
+
+# Two-minute mixed verification battle at the compatibility ceiling
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario mixed --units 700 --workers 1,8 --warmup 30 --ticks 3600
 ```
 
 The benchmark exits non-zero if different worker counts produce different final canonical checksums for the same fixture.
@@ -456,8 +460,21 @@ The `ability` density fixture uses the requested unit count as durable stationar
 
 At the actual 700-unit compatibility ceiling, even this all-casters-every-tick fixture is only 2.68 ms/tick on one worker and 1.15 ms on eight, including the full canonical checksum. Unlike the smaller ordinary-combat fixtures, this phase contains enough independent candidate-query work to amortize Rayon overhead: eight workers reduce ability evaluation from 1.72 to 0.38 ms at 700 units and from 27.83 to 5.31 ms in the 10k torture case. This validates the intended architecture choice of parallel evaluation plus canonical serial commitment rather than requiring all simulation phases to exhibit multicore speedup.
 
+## Long mixed compatibility battle — 2026-09-12
+
+The `mixed` fixture is the first sustained cross-system battle rather than an isolated subsystem torture test. Its 700-unit scale reserves four unit slots for four slow production buildings, starts 696 combat units split evenly between teams, then lets each producer emit one melee unit during the standard run so the no-death population cannot exceed the 700-unit compatibility reference. The initial army is evenly mixed across melee, guaranteed-hit, ballistic, and bounce delivery. The map also contains twelve independently targeted ranged attack buildings and eight automatic mana/damage spell buildings. Movement, hard non-overlap collision, sticky targeting/retaliation, ally defense, projectile travel/impact, bounce chains, splash, production placement, mana/cooldown scheduling, deaths, and the full canonical checksum all run together.
+
+The standard long-run probe uses 30 warmup ticks plus 3,600 measured ticks, equivalent to two simulated minutes at 30 Hz. It completes without panic or overlap failure, resolves substantial attrition, and produces the same final checksum on one and eight workers:
+
+| Units ceiling | Workers | ms/tick | Avg live projectiles | Peak projectiles | Launches/tick | Impacts/tick | Effects/tick | Bounce jumps/tick | Ability casts/tick | Final live units | Final buildings | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 700 | 1 | 1.038 | 77.9 | 129 | 16.2 | 25.0 | 44.9 | 8.9 | 0.3 | 413 | 24 | `2cd10e13452a95fd` |
+| 700 | 8 | 0.908 | 77.9 | 129 | 16.2 | 25.0 | 44.9 | 8.9 | 0.3 | 413 | 24 | `2cd10e13452a95fd` |
+
+The run also averages 576.1 retained targets/tick with only 1.5 target changes/tick, while processing 7.7 ally-defense queries/tick. This is useful evidence that the sticky-target correction remains stable when unrelated projectile, tower, spell, death, and movement events are happening simultaneously rather than only in focused regressions. The overall one-worker cost remains about 1 ms/tick, leaving very large headroom against a 30 Hz budget at the original unit ceiling.
+
 ## Current interpretation
 
 Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage, ballistic post-movement splash queries, independently targeted long-range attack buildings, and automatic mana/random-target casting all remain viable at the 700-unit compatibility scale. Bounce is functionally/deterministically viable, but extreme simultaneous chain density exposes canonically ordered candidate evaluation as a measurable scaling risk that should be revisited only with realistic content frequency/support targets or an acceleration structure that provably preserves the keyed rule.
 
-All four ordinary delivery architecture classes, attack-building source semantics, and the base automatic ability/mana scheduler now have executable deterministic verification coverage. The automatic-caster probe also shows where multicore execution is materially useful: expensive independent target evaluation scales well while canonical effect commitment remains ordered. The next verification work should return to longer realistic playable matches and then choose the next rule-heavy compatibility slice from observed map behavior—likely status/stun timing or a representative buff/area ability—rather than expanding into production UI/networking prematurely.
+All four ordinary delivery architecture classes, attack-building source semantics, and the base automatic ability/mana scheduler now have executable deterministic verification coverage. The automatic-caster probe also shows where multicore execution is materially useful: expensive independent target evaluation scales well while canonical effect commitment remains ordered. The two-minute mixed battle provides the corresponding cross-system evidence at the actual unit ceiling. The next verification work should choose the next rule-heavy compatibility slice from observed map behavior—likely status/stun timing or a representative buff/area ability—rather than expanding into production UI/networking prematurely.

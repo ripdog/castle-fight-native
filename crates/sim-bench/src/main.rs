@@ -25,6 +25,7 @@ enum Scenario {
     Bounce,
     Tower,
     Ability,
+    Mixed,
 }
 
 impl Scenario {
@@ -41,6 +42,7 @@ impl Scenario {
             Self::Bounce => "bounce",
             Self::Tower => "tower",
             Self::Ability => "ability",
+            Self::Mixed => "mixed",
         }
     }
 }
@@ -179,6 +181,12 @@ fn main() {
                         result.ability_candidates_per_evaluation,
                     );
                 }
+                if scenario == Scenario::Mixed {
+                    println!(
+                        "         mixed final-units={} final-buildings={}",
+                        result.final_units_alive, result.final_buildings_alive,
+                    );
+                }
                 if result.ally_defense_queries_per_tick > 0.0
                     || result.target_changes_per_tick > 0.0
                 {
@@ -274,6 +282,8 @@ struct BenchResult {
     ally_defense_queries_per_tick: f64,
     ally_defense_victims_per_query: f64,
     ally_defense_attackers_per_query: f64,
+    final_units_alive: usize,
+    final_buildings_alive: usize,
     checksum: u64,
 }
 
@@ -408,6 +418,8 @@ fn run_case(
         } else {
             counters.ally_defense_attacker_candidates as f64 / counters.ally_defense_queries as f64
         },
+        final_units_alive: simulation.unit_count(),
+        final_buildings_alive: simulation.building_count(),
         checksum: simulation.checksum(),
     }
 }
@@ -419,6 +431,9 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
     }
     if scenario == Scenario::Ability {
         config.match_seed = 0x5eed_ab11_17e5_2026;
+    }
+    if scenario == Scenario::Mixed {
+        config.match_seed = 0x5eed_7000_cafe_2026;
     }
     if scenario == Scenario::Pathing {
         config
@@ -446,6 +461,7 @@ fn populate_scenario(
         Scenario::Bounce => populate_bounce_density_battle(simulation, units),
         Scenario::Tower => populate_attack_building_density(simulation, units),
         Scenario::Ability => populate_automatic_ability_density(simulation, units),
+        Scenario::Mixed => populate_mixed_battle(simulation, units),
     }
 
     match scenario {
@@ -742,6 +758,156 @@ fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: 
     }
 }
 
+fn populate_mixed_battle(simulation: &mut Simulation, total_units: usize) {
+    const RESERVED_PRODUCTION_SPAWNS: usize = 4;
+    assert!(
+        total_units >= RESERVED_PRODUCTION_SPAWNS + 2,
+        "mixed fixture needs room for production reserve"
+    );
+    let initial_units = total_units - RESERVED_PRODUCTION_SPAWNS;
+    let per_team = initial_units / 2;
+    let rows = 100usize.min(per_team.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                32 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                88 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            let (delivery, damage, range) = match index % 4 {
+                0 => (AttackDelivery::Melee, 4, 2 * SUBUNITS_PER_WORLD_UNIT),
+                1 => (
+                    AttackDelivery::RangedGuaranteedHit {
+                        speed_per_tick: 3 * SUBUNITS_PER_WORLD_UNIT,
+                    },
+                    3,
+                    12 * SUBUNITS_PER_WORLD_UNIT,
+                ),
+                2 => (
+                    AttackDelivery::RangedBallistic {
+                        speed_per_tick: 3 * SUBUNITS_PER_WORLD_UNIT,
+                        impact_radius: 3 * SUBUNITS_PER_WORLD_UNIT / 2,
+                    },
+                    2,
+                    12 * SUBUNITS_PER_WORLD_UNIT,
+                ),
+                _ => (
+                    AttackDelivery::Bounce {
+                        speed_per_tick: 3 * SUBUNITS_PER_WORLD_UNIT,
+                        bounce_range: 4 * SUBUNITS_PER_WORLD_UNIT,
+                        max_bounces: 2,
+                        damage_percent_per_bounce: 75,
+                        allow_repeat_targets: false,
+                    },
+                    4,
+                    12 * SUBUNITS_PER_WORLD_UNIT,
+                ),
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000,
+                attack: AttackProfile {
+                    delivery,
+                    damage,
+                    range,
+                    acquisition_range: 18 * SUBUNITS_PER_WORLD_UNIT,
+                    cooldown_ticks: 15,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 4,
+                },
+            });
+        }
+    }
+
+    let tower_attack = AttackProfile {
+        delivery: AttackDelivery::RangedGuaranteedHit {
+            speed_per_tick: 5 * SUBUNITS_PER_WORLD_UNIT,
+        },
+        damage: 3,
+        range: 90 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 90 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 20,
+    };
+    let spellcasting = SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 100,
+            starting: 100,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(2),
+            mana_cost: 10,
+            cooldown_ticks: 30,
+            range: 90 * SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+            effect: AbilityEffect::Damage { amount: 5 },
+        },
+    };
+    let production = ProductionProfile {
+        initial_delay_ticks: 300,
+        interval_ticks: u16::MAX,
+        search_radius_cells: 10,
+        unit: UnitTemplate {
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 4,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 18 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 15,
+            },
+            movement: MovementProfile {
+                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 4,
+            },
+        },
+    };
+    for team in 0..2u8 {
+        for index in 0..6 {
+            let x = if team == 0 { 8 } else { 112 };
+            let y = -30 + index * 5;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 1, 1),
+                health: 100_000,
+                production: None,
+                attack: Some(tower_attack),
+                spellcasting: None,
+            });
+        }
+        for index in 0..4 {
+            let x = if team == 0 { 12 } else { 108 };
+            let y = 10 + index * 5;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 1, 1),
+                health: 100_000,
+                production: None,
+                attack: None,
+                spellcasting: Some(spellcasting),
+            });
+        }
+        for index in 0..2 {
+            let x = if team == 0 { 6 } else { 114 };
+            let y = 35 + index * 5;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 1, 1),
+                health: 100_000,
+                production: Some(production),
+                attack: None,
+                spellcasting: None,
+            });
+        }
+    }
+}
+
 fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
     let total_buildings = (scale / 100).clamp(2, 100);
     let per_team = total_buildings.div_ceil(2);
@@ -877,7 +1043,7 @@ fn parse_args() -> Args {
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,mixed"
                 );
                 println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
@@ -913,6 +1079,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "bounce" => Scenario::Bounce,
             "tower" => Scenario::Tower,
             "ability" => Scenario::Ability,
+            "mixed" => Scenario::Mixed,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()
