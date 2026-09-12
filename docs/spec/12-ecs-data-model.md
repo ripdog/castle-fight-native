@@ -142,6 +142,8 @@ CorpseEligibility / tags (if applicable)
 
 A corpse has its own stable `SimId` and is created through the deterministic death-resolution/structural-commit path. It is not an ordinary combat unit and SHOULD NOT carry movement, attack, retaliation, or living-unit target state merely to reuse unit systems. A successful consuming effect removes it through the same canonical structural-mutation mechanism used for other authoritative entities.
 
+The executable verification representation currently stores `Position + Corpse` on the corpse entity, where `Corpse` contains source unit/team, stable corpse-definition identity, creation tick, and optional exclusive expiry tick. Living corpse-producing units carry only a compact corpse-production profile; production buildings may carry the same profile for the units they spawn. These profiles and corpse entities are canonical/checksummed state, while corpse entities are excluded from living-unit targeting, movement/collision, and topology systems.
+
 ### 5.7 Projectiles
 
 A projectile should be authoritative only if its future trajectory/timing can affect gameplay.

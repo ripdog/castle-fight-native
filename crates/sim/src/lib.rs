@@ -7,16 +7,16 @@ mod topology;
 
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, ManaProfile, ModifierId,
-    MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState, Team, UnitSpawn,
-    UnitTemplate,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CorpseDefinitionId, CorpseProfile,
+    ManaProfile, ModifierId, MovementProfile, ProductionProfile, SimId, SpellcastingProfile,
+    StatusState, Team, UnitSpawn, UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuildingPlacementError, BuildingView,
-    ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TickResult, TickTimings,
-    UnitView,
+    CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TickResult,
+    TickTimings, UnitView,
 };
 pub use topology::NavCell;
 
@@ -323,6 +323,164 @@ mod tests {
         assert_eq!(result.deaths, 1);
         assert_eq!(sim.unit(first).unwrap().health, 100);
         assert!(sim.unit(second).is_none());
+    }
+
+    #[test]
+    fn corpse_lifecycle_is_tick_exact_and_worker_count_independent() {
+        fn run(workers: usize) -> ([u64; 3], CorpseView) {
+            let mut sim = Simulation::new(SimulationConfig::default(), workers);
+            let attacker = sim.spawn_unit(duel_unit(0, 0, 100, 100));
+            let victim_position = SimPoint::new(SUBUNITS_PER_WORLD_UNIT, 0);
+            let victim = sim.spawn_unit_with_corpse(
+                duel_unit(1, victim_position.x, 0, 100),
+                CorpseProfile {
+                    definition: CorpseDefinitionId(42),
+                    lifetime_ticks: Some(2),
+                },
+            );
+
+            sim.step();
+            let death = sim.step();
+            assert_eq!(death.deaths, 1);
+            assert_eq!(death.corpses_spawned, 1);
+            assert_eq!(death.corpses_alive, 1);
+            assert_eq!(sim.unit_count(), 1);
+            assert_eq!(sim.corpse_count(), 1);
+            let corpse = sim.corpses()[0];
+            assert!(corpse.id > victim);
+            assert_eq!(corpse.position, victim_position);
+            assert_eq!(corpse.source_unit, victim);
+            assert_eq!(corpse.source_team, Team(1));
+            assert_eq!(corpse.definition, CorpseDefinitionId(42));
+            assert_eq!(corpse.created_tick, 1);
+            assert_eq!(corpse.expires_tick, Some(3));
+            assert_eq!(sim.unit(attacker).unwrap().health, 100);
+            let after_death = sim.checksum();
+
+            let retained = sim.step();
+            assert_eq!(retained.corpses_expired, 0);
+            assert_eq!(retained.corpses_alive, 1);
+            let before_expiry = sim.checksum();
+
+            let expired = sim.step();
+            assert_eq!(expired.corpses_expired, 1);
+            assert_eq!(expired.corpses_alive, 0);
+            assert_eq!(sim.corpse_count(), 0);
+            let after_expiry = sim.checksum();
+            ([after_death, before_expiry, after_expiry], corpse)
+        }
+
+        let expected = run(1);
+        assert_eq!(run(8), expected);
+    }
+
+    #[test]
+    fn corpse_does_not_count_as_unit_or_block_building_placement() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * world, world / 2),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 100,
+                range: 12 * world,
+                acquisition_range: 20 * world,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let victim = sim.spawn_unit_with_corpse(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(20 * world + world / 2, world / 2),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            CorpseProfile {
+                definition: CorpseDefinitionId(7),
+                lifetime_ticks: None,
+            },
+        );
+
+        sim.step();
+        sim.step();
+        assert!(sim.unit(victim).is_none());
+        assert_eq!(sim.unit_count(), 1);
+        assert_eq!(sim.corpse_count(), 1);
+
+        let building = sim.try_spawn_building(BuildingSpawn {
+            team: Team(0),
+            footprint: BuildingFootprint::new(20, 0, 1, 1),
+            health: 100,
+            production: None,
+            attack: None,
+            spellcasting: None,
+        });
+        assert!(
+            building.is_ok(),
+            "authoritative corpse blocked building placement"
+        );
+        assert_eq!(sim.corpse_count(), 1);
+    }
+
+    #[test]
+    fn production_corpse_profile_is_inherited_by_spawned_units() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_building_with_production_corpse(
+            production_building(1, BuildingFootprint::new(10, 0, 1, 1), 2),
+            CorpseProfile {
+                definition: CorpseDefinitionId(19),
+                lifetime_ticks: None,
+            },
+        );
+
+        let production = sim.step();
+        assert_eq!(production.units_spawned, 1);
+        let produced = sim.units()[0].id;
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(12 * world + world / 2, world / 2),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 100,
+                range: 4 * world,
+                acquisition_range: 8 * world,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        let death = sim.step();
+        assert!(sim.unit(produced).is_none());
+        assert_eq!(death.corpses_spawned, 1);
+        let corpse = sim.corpses()[0];
+        assert_eq!(corpse.source_unit, produced);
+        assert_eq!(corpse.definition, CorpseDefinitionId(19));
+        assert_eq!(corpse.expires_tick, None);
+    }
+
+    #[test]
+    fn ordinary_unit_death_does_not_create_corpse_without_profile() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        sim.spawn_unit(duel_unit(0, 0, 100, 100));
+        sim.spawn_unit(duel_unit(1, SUBUNITS_PER_WORLD_UNIT, 0, 100));
+        sim.step();
+        let result = sim.step();
+        assert_eq!(result.deaths, 1);
+        assert_eq!(result.corpses_spawned, 0);
+        assert_eq!(result.corpses_alive, 0);
     }
 
     #[test]

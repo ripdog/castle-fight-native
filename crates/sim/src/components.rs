@@ -116,6 +116,30 @@ pub(crate) struct BounceProjectile {
     pub hit_count: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CorpseDefinitionId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CorpseProfile {
+    pub definition: CorpseDefinitionId,
+    pub lifetime_ticks: Option<u32>,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CorpseProducer(pub CorpseProfile);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionCorpseProfile(pub CorpseProfile);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Corpse {
+    pub source_unit: SimId,
+    pub source_team: Team,
+    pub definition: CorpseDefinitionId,
+    pub created_tick: u64,
+    pub expires_tick: Option<u64>,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct AttackCooldown {
     pub remaining: u16,

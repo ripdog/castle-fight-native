@@ -318,6 +318,10 @@ A successful corpse-consuming effect MUST consume/remove the selected corpse ato
 
 Whether a particular unit leaves a corpse, what corpse definition it produces, and whether/how long that corpse decays are content data. Biological units are corpse-producing by default unless imported/original-map semantics explicitly specify otherwise. A corpse remains authoritative until consumed, expired by its deterministic lifetime rule, or removed by another explicit gameplay rule.
 
+Corpse lifetime, when authored, uses an exclusive absolute expiry. A corpse created while resolving tick `T` with positive lifetime `D` stores `expires_tick = T + D`; it exists after the tick-`T` structural commit and remains eligible while `current_tick < expires_tick`. It is removed at the deterministic timer/expiry boundary before ordinary gameplay evaluation on tick `expires_tick`. An absent lifetime means the corpse persists until consumed or explicitly removed. A zero-tick lifetime is invalid content.
+
+The current executable verification slice carries corpse production through an explicit `CorpseProfile` attached to a directly spawned unit or to a production building's spawned-unit profile. This explicit authoring hook is transitional infrastructure for the content importer; it does not change the compatibility rule that imported biological/corpse-producing unit definitions should receive their recovered corpse semantics automatically.
+
 Rules must define credit when:
 
 - several attackers damage the victim on its death tick;

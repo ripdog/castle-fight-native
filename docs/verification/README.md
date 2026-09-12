@@ -26,6 +26,7 @@ Implemented:
 - automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, canonical map-wide enemy-unit targeting, atomic cast commitment, immediate non-retaliatory damage, and timed stun effects;
 - authoritative timed stun state with exclusive absolute expiry, max-expiry refresh, and exact suppression of fresh targeting, ordinary attacks, and intentional movement while active;
 - a bounded timed movement-speed modifier verification primitive with stable modifier identity, exact expiry, same-ID refresh, distinct-ID additive stacking, and derived integer effective movement speed without mutating authored base stats;
+- authoritative corpse entities with stable identity/source metadata, explicit corpse definitions, optional tick-exact expiry, direct- and production-spawn corpse profiles, canonical checksumming, and exclusion from ordinary unit targeting/collision/building occupancy;
 - projectile/targeting/ability/status-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, automatic evaluations/casts/effects/candidates, current/average/peak stunned units, active/average/peak timed movement modifiers, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
@@ -43,6 +44,7 @@ Not implemented yet:
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
 - broader imported buff/debuff/aura semantics beyond the narrow movement-speed verification primitive, manual/legendary ability activation, and multi-ability buildings;
+- corpse-query/consume effects such as raise dead and corpse explosion, plus imported per-unit corpse-profile assignment;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;

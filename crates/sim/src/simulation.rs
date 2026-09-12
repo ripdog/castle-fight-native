@@ -14,10 +14,11 @@ use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile,
-        BounceProjectile, BuildingFootprint, BuildingSpawn, GuaranteedHitProjectile, Health,
-        MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
-        NavigationState, Position, ProductionProfile, ProductionState, RetaliationState, SimId,
-        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitSpawn,
+        BounceProjectile, BuildingFootprint, BuildingSpawn, Corpse, CorpseDefinitionId,
+        CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
+        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile, NavigationState,
+        Position, ProductionCorpseProfile, ProductionProfile, ProductionState, RetaliationState,
+        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -80,8 +81,11 @@ pub struct TickResult {
     pub completed_tick: u64,
     pub units_alive: usize,
     pub buildings_alive: usize,
+    pub corpses_alive: usize,
     pub attacks_resolved: usize,
     pub deaths: usize,
+    pub corpses_spawned: usize,
+    pub corpses_expired: usize,
     pub units_spawned: usize,
     pub spawn_failures: usize,
     pub topology_rebuilds: usize,
@@ -159,6 +163,17 @@ pub struct ProjectileView {
     pub launch_tick: u64,
     pub impact_tick: u64,
     pub kind: ProjectileViewKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CorpseView {
+    pub id: SimId,
+    pub position: SimPoint,
+    pub source_unit: SimId,
+    pub source_team: Team,
+    pub definition: CorpseDefinitionId,
+    pub created_tick: u64,
+    pub expires_tick: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,7 +280,13 @@ impl Simulation {
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
         validate_unit_spawn(unit);
-        self.spawn_unit_unchecked(unit)
+        self.spawn_unit_unchecked(unit, None)
+    }
+
+    pub fn spawn_unit_with_corpse(&mut self, unit: UnitSpawn, corpse: CorpseProfile) -> SimId {
+        validate_unit_spawn(unit);
+        validate_corpse_profile(corpse);
+        self.spawn_unit_unchecked(unit, Some(corpse))
     }
 
     pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
@@ -273,9 +294,39 @@ impl Simulation {
             .expect("invalid authored building placement")
     }
 
+    pub fn spawn_building_with_production_corpse(
+        &mut self,
+        building: BuildingSpawn,
+        corpse: CorpseProfile,
+    ) -> SimId {
+        self.try_spawn_building_with_production_corpse(building, corpse)
+            .expect("invalid authored building placement")
+    }
+
     pub fn try_spawn_building(
         &mut self,
         building: BuildingSpawn,
+    ) -> Result<SimId, BuildingPlacementError> {
+        self.try_spawn_building_internal(building, None)
+    }
+
+    pub fn try_spawn_building_with_production_corpse(
+        &mut self,
+        building: BuildingSpawn,
+        corpse: CorpseProfile,
+    ) -> Result<SimId, BuildingPlacementError> {
+        assert!(
+            building.production.is_some(),
+            "production corpse profile requires a production building"
+        );
+        validate_corpse_profile(corpse);
+        self.try_spawn_building_internal(building, Some(corpse))
+    }
+
+    fn try_spawn_building_internal(
+        &mut self,
+        building: BuildingSpawn,
+        production_corpse: Option<CorpseProfile>,
     ) -> Result<SimId, BuildingPlacementError> {
         assert!(building.health > 0);
         assert!(building.team.0 < 2, "verification slice supports two teams");
@@ -331,6 +382,9 @@ impl Simulation {
                 .checked_add(u64::from(production.initial_delay_ticks))
                 .expect("initial production tick overflow");
             entity.insert((production, ProductionState { next_spawn_tick }));
+            if let Some(corpse) = production_corpse {
+                entity.insert(ProductionCorpseProfile(corpse));
+            }
         }
         if let Some(attack) = building.attack {
             entity.insert((
@@ -396,10 +450,12 @@ impl Simulation {
             let Some(position) = entity.get::<Position>() else {
                 return false;
             };
-            let alive = entity
-                .get::<Health>()
-                .is_none_or(|health| health.current > 0);
-            alive && footprint_contains_cell(footprint, self.topology.cell_of_point(position.0))
+            let Some(health) = entity.get::<Health>() else {
+                return false;
+            };
+            health.current > 0
+                && entity.get::<BuildingFootprint>().is_none()
+                && footprint_contains_cell(footprint, self.topology.cell_of_point(position.0))
         })
     }
 
@@ -422,6 +478,7 @@ impl Simulation {
 
         let phase_start = Instant::now();
         self.advance_cooldowns();
+        let corpses_expired = self.expire_corpses();
         let timers = phase_start.elapsed();
 
         let phase_start = Instant::now();
@@ -996,8 +1053,12 @@ impl Simulation {
         }
 
         let mut deaths = 0;
+        let mut corpse_spawns = Vec::new();
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
+                if let Some(profile) = unit.corpse {
+                    corpse_spawns.push((unit.id, unit.team, positions[index], profile));
+                }
                 self.world.despawn(unit.entity);
                 deaths += 1;
                 continue;
@@ -1041,6 +1102,27 @@ impl Simulation {
             *entity
                 .get_mut::<StatusState>()
                 .expect("unit status state missing") = unit.status;
+        }
+
+        let corpses_spawned = corpse_spawns.len();
+        for (source_unit, source_team, position, profile) in corpse_spawns {
+            let id = self.allocate_id();
+            let expires_tick = profile.lifetime_ticks.map(|lifetime_ticks| {
+                completed_tick
+                    .checked_add(u64::from(lifetime_ticks))
+                    .expect("corpse expiry tick overflow")
+            });
+            self.world.spawn((
+                id,
+                Position(position),
+                Corpse {
+                    source_unit,
+                    source_team,
+                    definition: profile.definition,
+                    created_tick: completed_tick,
+                    expires_tick,
+                },
+            ));
         }
 
         let mut building_deaths = Vec::new();
@@ -1099,6 +1181,7 @@ impl Simulation {
 
         self.defense_alerts = next_defense_alerts;
         let projectiles_alive = self.projectile_count();
+        let corpses_alive = self.corpse_count();
         self.next_tick = self
             .next_tick
             .checked_add(1)
@@ -1132,8 +1215,11 @@ impl Simulation {
                     .iter()
                     .filter(|health| **health <= 0)
                     .count(),
+            corpses_alive,
             attacks_resolved,
             deaths,
+            corpses_spawned,
+            corpses_expired,
             units_spawned,
             spawn_failures,
             topology_rebuilds: usize::from(topology_rebuilt),
@@ -1198,8 +1284,18 @@ impl Simulation {
         self.world
             .iter_entities()
             .filter(|entity| {
-                entity.get::<Position>().is_some() && entity.get::<BuildingFootprint>().is_none()
+                entity.get::<Position>().is_some()
+                    && entity.get::<Health>().is_some()
+                    && entity.get::<BuildingFootprint>().is_none()
             })
+            .count()
+    }
+
+    #[must_use]
+    pub fn corpse_count(&self) -> usize {
+        self.world
+            .iter_entities()
+            .filter(|entity| entity.get::<Corpse>().is_some())
             .count()
     }
 
@@ -1221,6 +1317,25 @@ impl Simulation {
                     || entity.get::<BounceProjectile>().is_some()
             })
             .count()
+    }
+
+    #[must_use]
+    pub fn corpses(&self) -> Vec<CorpseView> {
+        let mut corpses: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(corpse_view_from_entity)
+            .collect();
+        corpses.sort_unstable_by_key(|corpse| corpse.id);
+        corpses
+    }
+
+    #[must_use]
+    pub fn corpse(&self, id: SimId) -> Option<CorpseView> {
+        self.world
+            .iter_entities()
+            .filter_map(corpse_view_from_entity)
+            .find(|corpse| corpse.id == id)
     }
 
     #[must_use]
@@ -1278,9 +1393,9 @@ impl Simulation {
         id
     }
 
-    fn spawn_unit_unchecked(&mut self, unit: UnitSpawn) -> SimId {
+    fn spawn_unit_unchecked(&mut self, unit: UnitSpawn, corpse: Option<CorpseProfile>) -> SimId {
         let id = self.allocate_id();
-        self.world.spawn((
+        let mut entity = self.world.spawn((
             id,
             unit.team,
             Position(unit.position),
@@ -1297,6 +1412,9 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
+        if let Some(corpse) = corpse {
+            entity.insert(CorpseProducer(corpse));
+        }
         id
     }
 
@@ -1343,6 +1461,24 @@ impl Simulation {
         }
     }
 
+    fn expire_corpses(&mut self) -> usize {
+        let mut query = self.world.query::<(Entity, &SimId, &Corpse)>();
+        let mut expired: Vec<_> = query
+            .iter(&self.world)
+            .filter_map(|(entity, id, corpse)| {
+                corpse
+                    .expires_tick
+                    .is_some_and(|expires_tick| self.next_tick >= expires_tick)
+                    .then_some((*id, entity))
+            })
+            .collect();
+        expired.sort_unstable_by_key(|(id, _)| *id);
+        for (_, entity) in &expired {
+            self.world.despawn(*entity);
+        }
+        expired.len()
+    }
+
     fn advance_production(&mut self) -> (usize, usize) {
         let mut query = self.world.query::<(
             Entity,
@@ -1351,17 +1487,19 @@ impl Simulation {
             &BuildingFootprint,
             &ProductionProfile,
             &ProductionState,
+            Option<&ProductionCorpseProfile>,
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state)| state.next_spawn_tick <= self.next_tick)
+            .filter(|(_, _, _, _, _, state, _)| state.next_spawn_tick <= self.next_tick)
             .map(
-                |(entity, id, team, footprint, profile, state)| ProductionAttempt {
+                |(entity, id, team, footprint, profile, state, corpse)| ProductionAttempt {
                     entity,
                     id: *id,
                     team: *team,
                     footprint: *footprint,
                     profile: *profile,
+                    corpse: corpse.map(|corpse| corpse.0),
                     next_spawn_tick: state.next_spawn_tick,
                 },
             )
@@ -1406,11 +1544,10 @@ impl Simulation {
                 });
 
             if let Some((_cell, position)) = spawn {
-                self.spawn_unit_unchecked(UnitSpawn::from_template(
-                    attempt.team,
-                    position,
-                    attempt.profile.unit,
-                ));
+                self.spawn_unit_unchecked(
+                    UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
+                    attempt.corpse,
+                );
                 reservations.insert(next_reservation_index, position);
                 next_reservation_index += 1;
                 spawned += 1;
@@ -1447,10 +1584,11 @@ impl Simulation {
             &NavigationState,
             &MovementProfile,
             &SpawnTick,
+            Option<&CorpseProducer>,
         )>();
         let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _, _)| health.current > 0)
             .map(
                 |(
                     entity,
@@ -1466,6 +1604,7 @@ impl Simulation {
                     navigation,
                     movement,
                     spawn_tick,
+                    corpse,
                 )| UnitSnapshot {
                     entity,
                     id: *id,
@@ -1481,6 +1620,7 @@ impl Simulation {
                     navigation: *navigation,
                     movement: *movement,
                     spawn_tick: spawn_tick.0,
+                    corpse: corpse.map(|corpse| corpse.0),
                 },
             )
             .collect();
@@ -3385,6 +3525,7 @@ struct UnitSnapshot {
     navigation: NavigationState,
     movement: MovementProfile,
     spawn_tick: u64,
+    corpse: Option<CorpseProfile>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3411,6 +3552,7 @@ struct ProductionAttempt {
     team: Team,
     footprint: BuildingFootprint,
     profile: ProductionProfile,
+    corpse: Option<CorpseProfile>,
     next_spawn_tick: u64,
 }
 
@@ -3804,6 +3946,12 @@ fn validate_unit_spawn(unit: UnitSpawn) {
     assert!(unit.team.0 < 2, "verification slice supports two teams");
 }
 
+fn validate_corpse_profile(corpse: CorpseProfile) {
+    if let Some(lifetime_ticks) = corpse.lifetime_ticks {
+        assert!(lifetime_ticks > 0, "corpse lifetime must be positive");
+    }
+}
+
 fn preferred_spawn_cell(team: Team, footprint: BuildingFootprint) -> NavCell {
     let y = footprint.min_y + i32::from(footprint.height / 2);
     if team.0 == 0 {
@@ -3828,6 +3976,19 @@ fn spiral_cells(center: NavCell, radius: u16) -> impl Iterator<Item = NavCell> {
             .map(move |y| NavCell::new(min_x, y));
         top.chain(right).chain(bottom).chain(left)
     }))
+}
+
+fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<CorpseView> {
+    let corpse = *entity.get::<Corpse>()?;
+    Some(CorpseView {
+        id: *entity.get::<SimId>()?,
+        position: entity.get::<Position>()?.0,
+        source_unit: corpse.source_unit,
+        source_team: corpse.source_team,
+        definition: corpse.definition,
+        created_tick: corpse.created_tick,
+        expires_tick: corpse.expires_tick,
+    })
 }
 
 fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<ProjectileView> {
@@ -4395,6 +4556,13 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     },
                 ));
             }
+            if let Some(corpse) = entity.get::<Corpse>() {
+                return Some(CanonicalEntity::Corpse(CanonicalCorpse {
+                    id,
+                    position: entity.get::<Position>()?.0,
+                    corpse: *corpse,
+                }));
+            }
             let team = *entity.get::<Team>()?;
             let health = *entity.get::<Health>()?;
             if let Some(position) = entity.get::<Position>() {
@@ -4411,6 +4579,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     status: *entity.get::<StatusState>()?,
                     navigation: *entity.get::<NavigationState>()?,
                     spawn_tick: *entity.get::<SpawnTick>()?,
+                    corpse: entity.get::<CorpseProducer>().map(|corpse| corpse.0),
                 }))
             } else {
                 Some(CanonicalEntity::Building(CanonicalBuilding {
@@ -4420,6 +4589,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     health,
                     production: entity.get::<ProductionProfile>().copied(),
                     production_state: entity.get::<ProductionState>().copied(),
+                    production_corpse: entity
+                        .get::<ProductionCorpseProfile>()
+                        .map(|corpse| corpse.0),
                     attack: entity.get::<AttackProfile>().copied(),
                     cooldown: entity.get::<AttackCooldown>().copied(),
                     target: entity.get::<TargetState>().copied(),
@@ -4467,6 +4639,11 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_i32(i32::from(unit.navigation.bypass_side));
                 hash.write_u8(unit.navigation.clear_ticks);
                 hash.write_u64(unit.spawn_tick.0);
+                if let Some(corpse) = unit.corpse {
+                    hash.write_u64(0x434f_5250_5345_554e);
+                    hash.write_u64(u64::from(corpse.definition.0));
+                    hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+                }
             }
             CanonicalEntity::Building(building) => {
                 hash.write_u8(1);
@@ -4496,6 +4673,11 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                             .expect("production profile missing state")
                             .next_spawn_tick,
                     );
+                    if let Some(corpse) = building.production_corpse {
+                        hash.write_u64(0x434f_5250_5345_5052);
+                        hash.write_u64(u64::from(corpse.definition.0));
+                        hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+                    }
                 } else {
                     hash.write_u8(0);
                 }
@@ -4600,6 +4782,17 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u64(target.0);
                 }
             }
+            CanonicalEntity::Corpse(corpse) => {
+                hash.write_u8(5);
+                hash.write_u64(corpse.id.0);
+                hash.write_i32(corpse.position.x);
+                hash.write_i32(corpse.position.y);
+                hash.write_u64(corpse.corpse.source_unit.0);
+                hash.write_u8(corpse.corpse.source_team.0);
+                hash.write_u64(u64::from(corpse.corpse.definition.0));
+                hash.write_u64(corpse.corpse.created_tick);
+                hash.write_u64(corpse.corpse.expires_tick.unwrap_or(u64::MAX));
+            }
         }
     }
 
@@ -4633,6 +4826,7 @@ enum CanonicalEntity {
     Projectile(CanonicalProjectile),
     BallisticProjectile(CanonicalBallisticProjectile),
     BounceProjectile(CanonicalBounceProjectile),
+    Corpse(CanonicalCorpse),
 }
 
 impl CanonicalEntity {
@@ -4643,6 +4837,7 @@ impl CanonicalEntity {
             Self::Projectile(projectile) => projectile.id,
             Self::BallisticProjectile(projectile) => projectile.id,
             Self::BounceProjectile(projectile) => projectile.id,
+            Self::Corpse(corpse) => corpse.id,
         }
     }
 }
@@ -4661,6 +4856,7 @@ struct CanonicalUnit {
     status: StatusState,
     navigation: NavigationState,
     spawn_tick: SpawnTick,
+    corpse: Option<CorpseProfile>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4671,6 +4867,7 @@ struct CanonicalBuilding {
     health: Health,
     production: Option<ProductionProfile>,
     production_state: Option<ProductionState>,
+    production_corpse: Option<CorpseProfile>,
     attack: Option<AttackProfile>,
     cooldown: Option<AttackCooldown>,
     target: Option<TargetState>,
@@ -4697,6 +4894,13 @@ struct CanonicalBallisticProjectile {
 struct CanonicalBounceProjectile {
     id: SimId,
     projectile: BounceProjectile,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CanonicalCorpse {
+    id: SimId,
+    position: SimPoint,
+    corpse: Corpse,
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
