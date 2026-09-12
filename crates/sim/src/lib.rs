@@ -2320,6 +2320,122 @@ mod tests {
     }
 
     #[test]
+    fn trailing_ranged_unit_routes_around_occupied_firing_clump() {
+        fn run(workers: usize) -> (u64, i32, Option<usize>, usize, usize) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let mut config = SimulationConfig {
+                spatial_cell_size: 40 * world,
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, -40),
+                navigation_max: NavCell::new(100, 40),
+                target_pursuit_extra_range: 30 * world,
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+                ..SimulationConfig::default()
+            };
+            config.static_blockers.clear();
+            let mut sim = Simulation::new(config, workers);
+            let ranged = |x_world: i32, y_world: i32| UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(x_world * world, y_world * world),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedGuaranteedHit {
+                        speed_per_tick: 10 * world,
+                    },
+                    damage: 0,
+                    range: 120 * world,
+                    acquisition_range: 180 * world,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: 40 * world / 30,
+                },
+            };
+            for row in -2..=2 {
+                sim.spawn_unit(ranged(180, row * 8));
+            }
+            let rear = sim.spawn_unit(ranged(172, 0));
+            let target = sim.spawn_unit(UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(300 * world, 0),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+
+            let mut max_lateral = 0;
+            let mut attack_tick = None;
+            let mut previous = sim.unit(rear).unwrap().position;
+            let mut previous_dy: i32 = 0;
+            let mut vertical_reversals = 0;
+            let mut stationary_ticks = 0;
+            for tick in 0..120 {
+                sim.step();
+                let rear_view = sim.unit(rear).unwrap();
+                max_lateral = max_lateral.max(rear_view.position.y.abs());
+                let dx = rear_view.position.x - previous.x;
+                let dy = rear_view.position.y - previous.y;
+                stationary_ticks += usize::from(dx == 0 && dy == 0);
+                if dy != 0 && previous_dy != 0 && dy.signum() != previous_dy.signum() {
+                    vertical_reversals += 1;
+                }
+                if dy != 0 {
+                    previous_dy = dy;
+                }
+                previous = rear_view.position;
+                if sim
+                    .attacks_last_tick()
+                    .iter()
+                    .any(|attack| attack.source == rear && attack.target == target)
+                {
+                    attack_tick = Some(tick);
+                    break;
+                }
+            }
+            (
+                sim.checksum(),
+                max_lateral,
+                attack_tick,
+                vertical_reversals,
+                stationary_ticks,
+            )
+        }
+
+        let expected = run(1);
+        let parallel = run(8);
+        assert_eq!(
+            parallel, expected,
+            "worker count changed ranged-clump bypass"
+        );
+        let (_, max_lateral, attack_tick, vertical_reversals, stationary_ticks) = expected;
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        assert!(
+            max_lateral >= 16 * world,
+            "rear ranged unit never committed to routing around the firing clump"
+        );
+        assert!(
+            attack_tick.is_some_and(|tick| tick < 40),
+            "rear ranged unit took too long to reach a firing position: {attack_tick:?}"
+        );
+        assert!(
+            vertical_reversals <= 2,
+            "rear ranged unit jittered between bypass directions {vertical_reversals} times"
+        );
+        assert!(
+            stationary_ticks <= 2,
+            "rear ranged unit stalled for {stationary_ticks} ticks while pursuing"
+        );
+    }
+
+    #[test]
     fn worker_count_does_not_change_battle_checksum() {
         let mut expected = None;
         for workers in [1, 2, 4] {

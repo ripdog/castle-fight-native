@@ -2696,7 +2696,9 @@ impl Simulation {
             self.apply_crowd_separation(units, unit_health, &desired_positions);
         let legal_positions = self.enforce_hard_non_overlap(
             units,
+            buildings,
             unit_health,
+            &decisions,
             &desired_positions,
             &separated_positions,
         );
@@ -2935,7 +2937,9 @@ impl Simulation {
     fn enforce_hard_non_overlap(
         &self,
         units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
         unit_health: &[i32],
+        decisions: &[MovementDecision],
         desired_positions: &[SimPoint],
         separated_positions: &[SimPoint],
     ) -> Vec<SimPoint> {
@@ -2975,13 +2979,46 @@ impl Simulation {
             let preferred_side =
                 perpendicular_step(unit.id, unit.position, desired, sidestep_distance);
             let opposite_side = SimPoint::new(-preferred_side.x, -preferred_side.y);
-            let candidates = [
-                Some(separated),
-                Some(desired),
-                offset_point(unit.position, preferred_side.x, preferred_side.y),
-                offset_point(unit.position, opposite_side.x, opposite_side.y),
-                Some(unit.position),
-            ];
+            let preferred_side = offset_point(unit.position, preferred_side.x, preferred_side.y);
+            let opposite_side = offset_point(unit.position, opposite_side.x, opposite_side.y);
+            let pursuing = decisions[index].pursuit_step && desired != unit.position;
+            let persistent_ranged_bypass =
+                pursuing && !matches!(unit.attack.delivery, AttackDelivery::Melee);
+            let direct_clear = self.position_is_traversable_from(original_cell, desired)
+                && reservations.is_clear(desired, minimum_distance);
+            let corridor_clear = if persistent_ranged_bypass {
+                self.pursuit_corridor_is_clear(
+                    unit,
+                    units,
+                    buildings,
+                    original_cell,
+                    minimum_distance,
+                    &reservations,
+                )
+            } else {
+                true
+            };
+            let candidates = if persistent_ranged_bypass && (!direct_clear || !corridor_clear) {
+                // Pursuit needs directional persistence around occupied firing/melee lines.
+                // Keep the stable full-speed lateral side until both the immediate step and
+                // a short look-ahead corridor are clear; otherwise direct steering recenters
+                // behind the blocker and produces visible left/right or up/down jitter.
+                [
+                    preferred_side,
+                    opposite_side,
+                    Some(desired),
+                    Some(separated),
+                    Some(unit.position),
+                ]
+            } else {
+                [
+                    Some(separated),
+                    Some(desired),
+                    preferred_side,
+                    opposite_side,
+                    Some(unit.position),
+                ]
+            };
 
             let chosen = candidates
                 .into_iter()
@@ -3005,6 +3042,36 @@ impl Simulation {
         }
 
         result
+    }
+
+    fn pursuit_corridor_is_clear(
+        &self,
+        unit: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        original_cell: NavCell,
+        minimum_distance: i32,
+        reservations: &SpatialReservationGrid,
+    ) -> bool {
+        let Some(target_id) = unit.target else {
+            return true;
+        };
+        let Some(target_index) = find_unit_index(units, target_id) else {
+            // Building pursuit already aims at a reachable perimeter cell; do not look through
+            // the building footprint itself as though it were dynamic unit congestion.
+            return find_building_index(buildings, target_id).is_some();
+        };
+        let target_position = units[target_index].position;
+        let lookahead_distance = unit
+            .movement
+            .speed_per_tick
+            .saturating_add(minimum_distance)
+            .max(1);
+        let lookahead = unit
+            .position
+            .step_towards(target_position, lookahead_distance);
+        self.position_is_traversable_from(original_cell, lookahead)
+            && reservations.is_clear(lookahead, minimum_distance)
     }
 
     fn find_local_non_overlap_position(

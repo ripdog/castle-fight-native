@@ -232,7 +232,7 @@ The game needs deterministic rules for:
 
 The first implementation SHOULD prefer simple, testable steering over physically realistic pushing.
 
-A combat unit that reaches attack range stops its strategic forward movement to fight. Units queued behind that engagement do **not** treat the engaged unit as permanent topology: when lateral traversable space exists, local steering SHOULD sidestep around the stationary fight and continue toward a reachable attack position. A deterministic `SimId`-derived side preference may break perfectly symmetric congestion. If geometry genuinely leaves no room to pass, ordinary congestion is allowed and no teleport/push-through exception is created.
+A combat unit that reaches attack range stops its strategic forward movement to fight. Units queued behind that engagement do **not** treat the engaged unit as permanent topology: when lateral traversable space exists, local steering SHOULD sidestep around the stationary fight and continue toward a reachable attack position. A deterministic `SimId`-derived side preference may break perfectly symmetric congestion. For a ranged unit pursuing a retained target, once dynamic unit congestion blocks the direct approach, the local resolver SHOULD keep that deterministic bypass side until a short look-ahead corridor toward the target is actually clear; immediately recentering after a single barely-legal forward step can otherwise make rear ranged units oscillate behind an occupied firing clump. If geometry genuinely leaves no room to pass, ordinary congestion is allowed and no teleport/push-through exception is created.
 
 The verification implementation uses deterministic movement intent plus local crowd resolution. Units first compute movement intents from one immutable phase snapshot. A data-parallel steering pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps and symmetric sidestep choices, so worker scheduling and neighbor enumeration order cannot alter results.
 
@@ -331,4 +331,5 @@ Spatial/navigation tests MUST eventually include:
 22. production rejects a candidate spawn point that is in an empty navigation cell but lies within another unit's collision radius in a neighboring cell;
 23. collision remains global across disconnected navigation components, including units approaching opposite sides/corners of blocking topology;
 24. long-running production/convergence with hundreds of units does not panic and never commits overlapping collision footprints;
-25. dense opposing crowds remain benchmarked separately from ordinary lane movement.
+25. dense opposing crowds remain benchmarked separately from ordinary lane movement;
+26. a ranged unit arriving behind an occupied allied firing clump commits to a deterministic lateral bypass, reaches a firing position without repeated side-to-side jitter, and produces the same result across worker counts.
