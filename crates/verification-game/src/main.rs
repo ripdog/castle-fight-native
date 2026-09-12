@@ -76,6 +76,23 @@ struct AttackTrace {
 #[derive(Resource, Default)]
 struct AttackVisuals(Vec<AttackTrace>);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MatchOutcome {
+    PlayerVictory,
+    EnemyVictory,
+    Draw,
+}
+
+impl MatchOutcome {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::PlayerVictory => "PLAYER VICTORY",
+            Self::EnemyVictory => "ENEMY VICTORY",
+            Self::Draw => "DRAW",
+        }
+    }
+}
+
 #[derive(Resource)]
 struct GameState {
     simulation: Simulation,
@@ -83,6 +100,25 @@ struct GameState {
     presented_buildings: HashMap<SimId, Entity>,
     player_castle: SimId,
     enemy_castle: SimId,
+    outcome: Option<MatchOutcome>,
+}
+
+impl GameState {
+    fn step_match(&mut self) -> bool {
+        if self.outcome.is_some() {
+            return false;
+        }
+        self.simulation.step();
+        let player_alive = self.simulation.building(self.player_castle).is_some();
+        let enemy_alive = self.simulation.building(self.enemy_castle).is_some();
+        self.outcome = match (player_alive, enemy_alive) {
+            (true, true) => None,
+            (true, false) => Some(MatchOutcome::PlayerVictory),
+            (false, true) => Some(MatchOutcome::EnemyVictory),
+            (false, false) => Some(MatchOutcome::Draw),
+        };
+        true
+    }
 }
 
 #[derive(Component)]
@@ -159,6 +195,7 @@ fn setup(mut commands: Commands) {
         presented_buildings: HashMap::new(),
         player_castle,
         enemy_castle,
+        outcome: None,
     });
 }
 
@@ -293,9 +330,16 @@ fn queue_build_input(
     buttons: Res<ButtonInput<MouseButton>>,
     camera: Single<(&Camera, &GlobalTransform), With<VerificationCamera>>,
     window: Single<&Window, With<PrimaryWindow>>,
+    state: Res<GameState>,
     mut pending: ResMut<PendingPlacements>,
     mut status: ResMut<UiStatus>,
 ) {
+    if let Some(outcome) = state.outcome {
+        if buttons.just_pressed(MouseButton::Left) || buttons.just_pressed(MouseButton::Right) {
+            status.text = format!("{} — simulation stopped", outcome.label());
+        }
+        return;
+    }
     let kind = if buttons.just_pressed(MouseButton::Left) {
         Some(ProductionKind::Melee)
     } else if buttons.just_pressed(MouseButton::Right) {
@@ -328,6 +372,11 @@ fn apply_placements_and_step(
     mut status: ResMut<UiStatus>,
     mut attacks: ResMut<AttackVisuals>,
 ) {
+    if state.outcome.is_some() {
+        pending.0.clear();
+        return;
+    }
+
     for placement in pending.0.drain(..) {
         let enemy_footprint = mirror_footprint(placement.footprint);
         if !state.simulation.can_place_building(placement.footprint)
@@ -359,7 +408,11 @@ fn apply_placements_and_step(
         );
     }
 
-    state.simulation.step();
+    let stepped = state.step_match();
+    debug_assert!(
+        stepped,
+        "running verification match unexpectedly refused a tick"
+    );
     attacks.0.extend(
         state
             .simulation
@@ -373,6 +426,11 @@ fn apply_placements_and_step(
                 remaining: ATTACK_TRACE_SECONDS,
             }),
     );
+
+    if let Some(outcome) = state.outcome {
+        pending.0.clear();
+        status.text = format!("{} — simulation stopped", outcome.label());
+    }
 }
 
 fn production_building(
@@ -567,8 +625,12 @@ fn update_window_title(
         .simulation
         .building(state.enemy_castle)
         .map_or(0, |castle| castle.health);
+    let outcome = state
+        .outcome
+        .map(|outcome| format!(" | {}", outcome.label()))
+        .unwrap_or_default();
     window.title = format!(
-        "Castle Fight verification | LMB melee • RMB ranged | t={seconds:.1}s • units={} • buildings={} • castles {player_castle_hp}/{enemy_castle_hp} | {}",
+        "Castle Fight verification | LMB melee • RMB ranged | t={seconds:.1}s • units={} • buildings={} • castles {player_castle_hp}/{enemy_castle_hp}{outcome} | {}",
         state.simulation.unit_count(),
         state.simulation.building_count(),
         status.text,
@@ -713,5 +775,30 @@ mod tests {
             .expect("production building missing profile");
         assert_eq!(production.initial_delay_ticks, 300);
         assert_eq!(production.interval_ticks, 300);
+    }
+
+    #[test]
+    fn terminal_match_does_not_advance_after_victory() {
+        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        let player_castle = simulation.spawn_building(BuildingSpawn {
+            team: Team(0),
+            footprint: BuildingFootprint::new(10, 0, 2, 2),
+            health: 100,
+            production: None,
+        });
+        let mut state = GameState {
+            simulation,
+            presented_units: HashMap::new(),
+            presented_buildings: HashMap::new(),
+            player_castle,
+            enemy_castle: SimId(u64::MAX),
+            outcome: None,
+        };
+
+        assert!(state.step_match());
+        assert_eq!(state.outcome, Some(MatchOutcome::PlayerVictory));
+        let terminal_tick = state.simulation.tick();
+        assert!(!state.step_match());
+        assert_eq!(state.simulation.tick(), terminal_tick);
     }
 }

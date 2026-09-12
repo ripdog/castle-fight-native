@@ -234,7 +234,7 @@ Possible deterministic policies include:
 
 The outcome MUST NOT depend on which worker reported destruction first.
 
-Once match outcome is final, further gameplay commands are rejected or ignored according to protocol state.
+Once match outcome is final, the authoritative gameplay simulation is terminal: production, movement, combat, abilities, and other gameplay ticks MUST NOT continue advancing. The server MAY retain the final frozen state for results, replay, spectators, or post-match UI, but further gameplay commands are rejected or ignored according to protocol state.
 
 ## 17. Player elimination
 

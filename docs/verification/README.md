@@ -17,7 +17,7 @@ Implemented:
 - sticky individual target acquisition with retaliation-on-attack behavior;
 - reachable attack-position filtering and passive-building fallback around cages;
 - deterministic greedy pursuit with A* fallback around blockers;
-- deterministic two-stage crowd separation using immutable movement intents plus local spatial queries;
+- deterministic crowd steering from immutable movement intents plus a hard non-overlap reservation/commit pass;
 - melee attack cooldown/damage resolution;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
@@ -31,7 +31,7 @@ Implemented:
 
 Not implemented yet:
 
-- richer unit collision shapes / physically stronger crowd resolution beyond the current separation pass;
+- richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
 - building attacks, mana, automatic abilities, or legendary abilities;
 - ranged/ballistic/bounce delivery;
@@ -139,7 +139,7 @@ At this point checksum generation itself is a visible part of the synthetic tick
 
 ## Crowd-separation baseline — 2026-09-12
 
-The crowd fixture places two dense opposing populations into an interpenetrating central region. Movement is computed from one immutable snapshot, then a second data-parallel pass applies bounded deterministic separation using a dedicated small-cell spatial grid. Exact position ties use stable `SimId`-derived directions.
+The original crowd fixture placed two dense opposing populations into an intentionally interpenetrating central region. That was useful while crowd handling was only soft separation, but it is not a legal game state once non-overlap is a hard invariant. The current crowd fixture therefore starts as two legally packed opposing formations and drives them into one another. Movement is computed from one immutable snapshot, a data-parallel pass applies bounded deterministic steering, and a final deterministic reservation/commit pass rejects overlapping final positions.
 
 | Units | Workers | ms/tick | Crowd separation ms/tick | Final checksum |
 | ---: | ---: | ---: | ---: | --- |
@@ -150,7 +150,7 @@ The crowd fixture places two dense opposing populations into an interpenetrating
 | 10,000 | 1 | 10.574 | 6.057 | `ed78153b189f4ee3` |
 | 10,000 | 8 | 5.382 | 1.711 | `ed78153b189f4ee3` |
 
-The 10,000-unit separation pass scales by about **3.5x** from one to eight workers while preserving the exact state hash. This is intentionally a hostile overlap fixture rather than a representative match; it gives us a concrete regression target as local collision rules become richer.
+Those historical numbers predate the hard collision invariant and are retained only as an implementation baseline. The old intentionally overlapping initial state is no longer considered a valid gameplay benchmark.
 
 A later regression sweep after crowd separation was enabled for every combat unit and the checksum projection was expanded to include unit attack/movement profiles produced the following 10,000-unit totals:
 
@@ -177,6 +177,26 @@ A 10,000-unit regression sweep after these rules were enabled remained worker-co
 | crowd | 11.486 ms/tick | 6.190 ms/tick |
 
 The defense-alert spatial query is deliberately lazy: units already in a mutual engagement do not query nearby ally alerts. The pathological cage case nevertheless shows a measurable increase because many units are fighting passive/unreciprocating targets; this is recorded as a future optimization target rather than hidden behind additional threading.
+
+## Hard non-overlap and terminal-match regression — 2026-09-12
+
+Leaving the playable verification game running after castle destruction exposed two separate issues. First, the client continued stepping the simulation after victory, so production never stopped and surviving units continued following the now-ownerless static objective field. Second, crowd separation was only a bounded steering force and therefore could not guarantee non-overlap under sustained compression.
+
+The verification match now becomes terminal immediately after the victory phase: the final state remains visible, but no further production, movement, combat, or placement ticks advance. Simultaneous castle loss resolves as a draw in this harness.
+
+Movement now has a hard deterministic collision commit after the parallel steering pass. Proposed positions are reserved in stable unit order using a dense intrusive spatial grid; an overlapping move is rejected or replaced with a legal local sidestep, and a legal state must always finish the movement phase with non-overlapping live combat-unit collision footprints. A dedicated fixture drives 100 friendly units toward one objective for 300 ticks and checks every pair after every commit.
+
+The previous tiny-cage and interpenetrating-crowd stress fixtures intentionally created states that are no longer legal under the hard collision invariant. They remain useful historical evidence, but the active `cage` and `crowd` benchmarks now start from legal non-overlapping layouts; the cage enclosure was enlarged to hold its population physically.
+
+After replacing an initial hash-map reservation prototype (~15–23 ms/tick of collision work at 10k) with the bounded dense intrusive grid, the current 10,000-unit legal-state regression is:
+
+| Scenario | 1 worker | 8 workers |
+| --- | ---: | ---: |
+| lane | 9.460 ms/tick | 7.766 ms/tick |
+| cage | 13.820 ms/tick | 9.122 ms/tick |
+| crowd | 10.765 ms/tick | 8.749 ms/tick |
+
+The hard collision commit is intentionally canonical and currently sequential, so it reduces worker scaling compared with pure soft steering. It costs roughly a few milliseconds at 10,000 units on the reference machine while enforcing a gameplay invariant that soft repulsion cannot guarantee. This is acceptable for the verification stage but remains a clear optimization target if realistic matches approach these densities.
 
 ## Current interpretation
 
