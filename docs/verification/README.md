@@ -20,15 +20,16 @@ Implemented:
 - deterministic crowd steering from immutable movement intents plus a hard non-overlap reservation/commit pass;
 - melee attack cooldown/damage resolution;
 - authoritative `RangedGuaranteedHit` projectiles with integer travel time, retained target identity, source-death independence, and deterministic target-death invalidation;
-- projectile/targeting-density diagnostics including live/peak projectiles, launches/impacts/invalidations, target retentions/changes, and ally-defense candidate counts;
+- authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
+- projectile/targeting-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
 - failed spawn attempts are lost rather than backlogged;
 - dedicated Rayon worker pool configurable per simulation instance;
 - cross-worker determinism tests;
-- phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, targeting, combat, movement intent, collision/commit, structural commit, and checksum;
+- phase-level tick timing diagnostics split across topology, timers, production, spatial rebuild, targeting, combat, movement intent, collision/commit, post-movement ballistic impact, structural commit, and checksum;
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
-- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, and projectile-density release benchmarks;
+- open-lane, dense-cage, crossing-crowd, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, and ballistic splash-density release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
 - a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
 
@@ -37,7 +38,7 @@ Not implemented yet:
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
 - building attacks, mana, automatic abilities, or legendary abilities;
-- ballistic and bounce delivery;
+- bounce delivery;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -62,6 +63,11 @@ cargo run --release -p castle-fight-sim-bench -- \
 # Guaranteed-hit projectile/targeting density
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario projectile --units 1000,5000,10000 \
+  --workers 1,8 --warmup 2 --ticks 20
+
+# Ballistic post-movement splash density
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario ballistic --units 1000,5000,10000 \
   --workers 1,8 --warmup 2 --ticks 20
 ```
 
@@ -331,8 +337,31 @@ The corrected rule also removes the repeated defense-query cost from the synthet
 
 At 10,000 units this cuts one-worker targeting from 88.635 to 0.542 ms/tick and eight-worker targeting from 18.108 to 0.338 ms/tick. The changed checksum is expected because target-state semantics now include the authoritative direct-retaliation lock. The result reinforces the intended architecture: ally-defense indexing remains necessary for idle units and units currently attacking buildings, but active unit-vs-unit engagements should not pay that query cost or change targets in response to unrelated nearby fights.
 
+## Ballistic post-movement splash density — 2026-09-12
+
+`RangedBallistic` now has executable authoritative semantics rather than only a design placeholder. Launch captures the selected target's current pre-movement position as a fixed destination and computes integer travel time from launch distance/speed. The due projectile survives source death, does not follow its original target, and resolves after movement against a fresh spatial index. The provisional verification splash is a hostile-only circle: living enemy units are tested by post-movement center position and enemy buildings by footprint/radius intersection. Due projectiles resolve by projectile `SimId`, and affected entities within each impact resolve by target `SimId`.
+
+Focused regressions prove the two rule-significant movement cases: an original target can move out of the captured impact zone and take no damage, while another unit that was outside the zone at launch can move into it and be damaged at impact. The second fixture also verifies that splash membership is using the post-movement position rather than the launch-time snapshot.
+
+The first 10,000-unit ballistic run exposed a derived-data cost rather than an impact-query problem. Roughly 70,000 splash damage effects per tick generated the same order of one-tick defense alerts. Every unit already had a valid sticky unit engagement (`defense-q/t=0`), but snapshot/spatial preparation still grouped and spatially indexed those alerts unconditionally. Before making that index lazy, the 10,000-unit fixture measured 49.241/46.336 ms/tick for 1/8 workers, including 12.965/12.028 ms/tick in snapshot/spatial preparation. The canonical checksum was `823987be85591108` at both worker counts.
+
+Defense-alert grouping/index construction is now skipped unless at least one unit satisfies the exact selector condition that can reach an ally-defense query: no retained valid unit engagement/direct-retaliation outcome, or a retained building target eligible for the building-target ally-defense exception. The alert events themselves remain authoritative and stay in the checksum; only the derived lookup structures are omitted when provably unused. The same 10,000-unit ballistic fixture keeps checksum `823987be85591108` while snapshot/spatial preparation falls to roughly 1.7 ms/tick.
+
+Final ballistic-density sweep:
+
+| Units | Workers | ms/tick | Spatial ms/tick | Ballistic impact ms/tick | Avg live | Peak live | Impacts/tick | Effects/tick | Candidates/impact | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1,000 | 1 | 3.352 | 0.191 | 0.401 | 5,439 | 5,998 | 750.1 | 9,640.4 | 60.42 | `fcc0a2b7e85bc7f5` |
+| 1,000 | 8 | 3.368 | 0.223 | 0.359 | 5,439 | 5,998 | 750.1 | 9,640.4 | 60.42 | `fcc0a2b7e85bc7f5` |
+| 5,000 | 1 | 17.326 | 0.910 | 1.936 | 33,649 | 38,798 | 3,310.1 | 42,562.0 | 128.36 | `dd3f01ad89105b45` |
+| 5,000 | 8 | 16.613 | 0.851 | 1.967 | 33,649 | 38,798 | 3,310.1 | 42,562.0 | 128.36 | `dd3f01ad89105b45` |
+| 10,000 | 1 | 35.906 | 1.658 | 3.272 | 80,589 | 100,798 | 5,460.1 | 70,211.0 | 128.36 | `823987be85591108` |
+| 10,000 | 8 | 35.003 | 1.756 | 3.425 | 80,589 | 100,798 | 5,460.1 | 70,211.0 | 128.36 | `823987be85591108` |
+
+At 10,000 units the full every-tick verification checksum itself costs ~22.7 ms/tick on eight workers; the other timed phases total roughly 12.3 ms/tick. The ballistic impact query is therefore not the limiting subsystem in this synthetic splash-heavy fixture. The current implementation still checks buildings linearly per ballistic impact; that is acceptable for the current unit-heavy probe but should be revisited if a future many-building siege benchmark makes building splash membership material.
+
 ## Current interpretation
 
-Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback and dense ally-defense alert processing both exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts.
+Repeated full topology rebuilding and bounded spawn churn are not architectural bottlenecks on the current verification map. Arbitrary-target A* fallback, dense ally-defense processing, and unnecessary derived alert-index construction all exposed architecture/correctness risks; sustained regression fixtures plus deterministic derived indexes/caches and exact lazy construction now keep those costs bounded enough for continued verification while preserving canonical outcomes across worker counts. Guaranteed-hit projectile storage and ballistic post-movement splash queries also remain viable in the current synthetic density probes.
 
-The next high-risk delivery mechanics are ballistic and bounce attacks. Ballistic work must stress post-movement impact-zone spatial queries and effect density; bounce work must stress deterministic subsequent-target selection without turning chains into candidate-scan explosions. Longer playable verification matches should continue in parallel so congestion, topology, targeting, production, and projectile failures discovered interactively become focused regressions.
+The next high-risk delivery mechanic is bounce. It must stress deterministic subsequent-target selection, repeat/eligibility rules, travel delay, and chain effect density without turning each jump into an uncontrolled candidate scan. Longer playable verification matches should continue in parallel so congestion, topology, targeting, production, and projectile failures discovered interactively become focused regressions.
