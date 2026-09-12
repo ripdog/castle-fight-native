@@ -25,7 +25,8 @@ Implemented:
 - attack-capable buildings with independent target/cooldown state, footprint-based static acquisition, shared canonical unit/building combat ordering, and ordinary projectile delivery;
 - automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, canonical map-wide enemy-unit targeting, atomic cast commitment, immediate non-retaliatory damage, and timed stun effects;
 - authoritative timed stun state with exclusive absolute expiry, max-expiry refresh, and exact suppression of fresh targeting, ordinary attacks, and intentional movement while active;
-- projectile/targeting/ability/status-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, automatic evaluations/casts/effects/candidates, current/average/peak stunned units, target retentions/changes, and ally-defense candidate counts;
+- a bounded timed movement-speed modifier verification primitive with stable modifier identity, exact expiry, same-ID refresh, distinct-ID additive stacking, and derived integer effective movement speed without mutating authored base stats;
+- projectile/targeting/ability/status-density diagnostics including live/peak projectiles, launches/impacts/effects/invalidations, ballistic impact candidates, bounce jumps/candidates, automatic evaluations/casts/effects/candidates, current/average/peak stunned units, active/average/peak timed movement modifiers, target retentions/changes, and ally-defense candidate counts;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
 - failed spawn attempts are lost rather than backlogged;
@@ -41,7 +42,7 @@ Not implemented yet:
 
 - richer unit collision shapes / physically stronger crowd response beyond the current hard circle-distance exclusion;
 - builder control/items;
-- broader ability/effect vocabulary beyond immediate damage/stun, buffs/debuffs beyond stun, manual/legendary ability activation, and multi-ability buildings;
+- broader imported buff/debuff/aura semantics beyond the narrow movement-speed verification primitive, manual/legendary ability activation, and multi-ability buildings;
 - air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -91,6 +92,11 @@ cargo run --release -p castle-fight-sim-bench -- \
 # Global timed-stun/status density
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario stun --units 700,1000,5000,10000 \
+  --workers 1,8 --warmup 2 --ticks 20
+
+# Timed movement-modifier density
+cargo run --release -p castle-fight-sim-bench -- \
+  --scenario slow --units 700,1000,5000 \
   --workers 1,8 --warmup 2 --ticks 20
 
 # Two-minute mixed verification battle at the compatibility ceiling
@@ -486,6 +492,23 @@ The `stun` stress fixture uses the requested combat-unit count plus one global s
 | 10,000 | 64 | 8 | 18.719 | 0.501 | 22.4 | 112,000 | 6,500 | 10,000 | `f224d2396bb187b0` |
 
 Mass stun application itself is inexpensive even in the torture cases; the larger cost comes from thousands of units repeatedly transitioning back into active target/movement evaluation. At the actual 700-unit ceiling the entire deliberately extreme fixture remains below 1.4 ms/tick on one worker and below 1.0 ms on eight, including full canonical checksumming. The matching hashes confirm that status expiry/refresh and action suppression are worker-count independent.
+
+## Timed movement-modifier density — 2026-09-12
+
+The `slow` fixture exercises the first generic timed-stat architecture without claiming to reproduce every Warcraft III buff rule. Each unit retains immutable authored movement speed; active `ModifierId` entries are canonical status state with exclusive expiry ticks. Reapplying the same ID refreshes rather than adding another copy, while distinct IDs stack additively. Effective speed uses deterministic integer `base * clamp(100 + sum(percent), 0..1000) / 100`. The current fixed-capacity representation allows eight simultaneous movement-modifier identities per combat unit; exceeding that bound is a content/simulation error rather than allocating an unbounded collection in the movement hot path.
+
+The stress fixture uses the requested combat-unit count plus one global modifier caster per 40 units, capped at 64 casters. Casters alternate between two modifier identities (`-20%` and `-15%`), cast every three ticks, and refresh five-tick effects across every hostile combat unit. This deliberately keeps two simultaneous modifiers active on essentially the entire population, stressing canonical refresh/expiry and effective-speed derivation more heavily than representative Castle Fight content is expected to.
+
+| Units | Casters | Workers | ms/tick | Ability ms/tick | Effects/tick | Avg active modifiers | Peak active modifiers | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 700 | 17 | 1 | 1.668 | 0.024 | 2,082.5 | 1,400 | 1,400 | `16d2b4f6f9e62eea` |
+| 700 | 17 | 8 | 1.049 | 0.037 | 2,082.5 | 1,400 | 1,400 | `16d2b4f6f9e62eea` |
+| 1,000 | 25 | 1 | 2.312 | 0.041 | 4,375.0 | 2,000 | 2,000 | `3d53320ea76db3a1` |
+| 1,000 | 25 | 8 | 1.409 | 0.053 | 4,375.0 | 2,000 | 2,000 | `3d53320ea76db3a1` |
+| 5,000 | 64 | 1 | 14.112 | 0.456 | 56,000 | 10,000 | 10,000 | `c7f1f9e27d0d59c6` |
+| 5,000 | 64 | 8 | 7.826 | 0.529 | 56,000 | 10,000 | 10,000 | `c7f1f9e27d0d59c6` |
+
+At the real 700-unit compatibility ceiling, two continuously refreshed modifiers on every combat unit still leave the full simulation at about 1.67 ms/tick on one worker and 1.05 ms on eight, including checksum. The focused regressions additionally verify exact duration/expiry, same-ID refresh without duplicate stacking, distinct-ID additive stacking, and worker-count independence. These semantics remain provisional import/runtime primitives until original-map extraction establishes the precise Warcraft stacking/source/aura rules for each content effect.
 
 ## Long mixed compatibility battle — 2026-09-12
 
