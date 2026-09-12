@@ -1,0 +1,1488 @@
+category	table	rawcode	base_rawcode	name	modification_count	canonical_modification_count	duplicate_modification_count	protection_conflict_count
+units	original	hcas	hcas	Main Castle	51	17	34	1
+units	original	hfoo	hfoo	Footman	69	23	46	3
+units	original	hmtm	hmtm	Mortar	102	34	68	3
+units	original	hrif	hrif	Sniper	90	30	60	4
+units	original	nalb	nalb	Albatross	3	1	2	0
+units	original	ncp2	ncp2	Circle of Power	3	1	2	0
+units	original	ncrb	ncrb	Crab	3	1	2	0
+units	original	nder	nder	Stag	3	1	2	0
+units	original	ndog	ndog	Dog	3	1	2	0
+units	original	ndwm	ndwm	Dune Worm	3	1	2	0
+units	original	nech	nech	Chicken	3	1	2	0
+units	original	necr	necr	Rabbit	3	1	2	0
+units	original	nfbr	nfbr	Fel Boar	3	1	2	0
+units	original	nfro	nfro	Frog	3	1	2	0
+units	original	nhmc	nhmc	Hermit Crab	3	1	2	0
+units	original	nmrk	nmrk	Marketplace	12	4	8	0
+units	original	npig	npig	Pig	3	1	2	0
+units	original	npng	npng	Penguin	3	1	2	0
+units	original	npnw	npnw	Penguin	3	1	2	0
+units	original	nrac	nrac	Raccoon	3	1	2	0
+units	original	nrat	nrat	Rat	3	1	2	0
+units	original	nsea	nsea	Seal	3	1	2	0
+units	original	nshe	nshe	Sheep	3	1	2	0
+units	original	nshp	nshp	Goblin Shipyard	15	5	10	0
+units	original	nskk	nskk	Skink	3	1	2	0
+units	original	nsno	nsno	Snowy Owl	3	1	2	0
+units	original	nvul	nvul	Vulture	3	1	2	0
+units	original	otot	otot	Stasis Trap	6	2	4	1
+units	custom	h07W	hbla	Snowveil Fountain	47	43	4	2
+units	custom	x001	ewsp	Effect Dummy Unit	42	42	0	0
+units	custom	x002	uloc	Feathered Friend	29	29	0	0
+units	custom	h081	hgtw	Tiny Watch Tower	35	35	0	0
+units	custom	h082	hgtw	Tiny Multishot Tower	37	37	0	0
+units	custom	e00E	ewsp	Twins	34	34	0	0
+units	custom	h007	hbla	Demon Gate	40	40	0	0
+units	custom	h009	hbla	Dragon Nest	41	41	0	0
+units	custom	h01C	hbla	Altar of Greed	42	42	0	0
+units	custom	h01D	hbla	Chaos Citadel	41	41	0	0
+units	custom	h01E	hbla	Shrine of Destruction	45	45	0	0
+units	custom	h01F	hbla	Volcano	43	43	0	0
+units	custom	h01I	hbla	Lesser Demon Cage	41	41	0	0
+units	custom	h01M	hbla	Eraser (Level 1)	48	48	0	0
+units	custom	h01W	hbla	Eraser (Level 2)	46	46	0	0
+units	custom	h01X	hbla	Eraser (Level 3)	45	45	0	0
+units	custom	h025	hbla	Fountain of Blood	41	41	0	0
+units	custom	h026	hbla	Greater Demon Cage	42	42	0	0
+units	custom	h03G	hbla	Greater Chaos Citadel	41	41	0	0
+units	custom	h05I	hbla	Magic Ruin	44	44	0	0
+units	custom	h06C	hmpr	SodDummy	34	34	0	0
+units	custom	h06M	hcas	Main Castle	18	18	0	0
+units	custom	h06N	hmpr	ClapDummy	31	31	0	0
+units	custom	h06O	hbla	Serenity	42	42	0	0
+units	custom	n000	ninf	Infernal	35	35	0	0
+units	custom	n001	nbwm	Red Dragon	39	39	0	0
+units	custom	n008	ndqn	Succubus	40	40	0	0
+units	custom	n009	nfgu	Chaos Warrior	30	30	0	0
+units	custom	n00A	nsty	Satyr	34	34	0	0
+units	custom	n00C	nsko	Skeletal Hero	20	20	0	0
+units	custom	n00D	nsca	Skeleton Archer	19	19	0	0
+units	custom	n00L	nubr	Blood Fiend	35	35	0	0
+units	custom	n00M	nubr	Blood Fiend	31	31	0	0
+units	custom	n00N	nubr	Blood Fiend	31	31	0	0
+units	custom	n00O	nubr	Blood Fiend	31	31	0	0
+units	custom	n00P	nubr	Blood Fiend	30	30	0	0
+units	custom	n00Q	nubr	Blood Fiend	31	31	0	0
+units	custom	n00R	nubr	Blood Fiend	31	31	0	0
+units	custom	n00Z	nfgu	Chaos Champion	31	31	0	0
+units	custom	n01L	nsca	Greater Skeleton Archer	21	21	0	0
+units	custom	n01M	nsko	Skeletal General	21	21	0	0
+units	custom	n01S	nslm	Mutation	20	20	0	0
+units	custom	n02L	nmpe	Twin Smiley	45	45	0	0
+units	custom	u002	uske	Skeleton Warrior	19	19	0	0
+units	custom	u003	uskm	Greater Skeletal Mage	25	25	0	0
+units	custom	u004	ugho	Ghoul	7	7	0	0
+units	custom	u008	ugho	Greater Ghoul	7	7	0	0
+units	custom	u00A	uskm	Skeletal Mage	21	21	0	0
+units	custom	u00B	uske	Greater Skeleton Warrior	19	19	0	0
+units	custom	u00E	ugho	Lich Ghoul	8	8	0	0
+units	custom	z000	zzrg	Quill Demon	44	44	0	0
+units	custom	X00O	hpea	Chaos Builder	23	23	0	0
+units	custom	h07J	hcas	Main Castle	18	18	0	0
+units	custom	h07K	hcas	Main Castle	18	18	0	0
+units	custom	h04I	hfoo	Incubus	67	67	0	0
+units	custom	h04K	hbla	Well of Pain	46	46	0	0
+units	custom	h04L	hbla	Void Portal	44	44	0	0
+units	custom	h04M	hbla	Shadow Ancient	42	42	0	0
+units	custom	h04N	hbla	Portal of the Abyss	45	45	0	0
+units	custom	h04O	hbla	Nether Ancient	44	44	0	0
+units	custom	h04P	hbla	Hell's Portal	43	43	0	0
+units	custom	h04Q	hbla	Hell's Gate	46	46	0	0
+units	custom	h04R	hbla	Forgotten One	45	45	0	0
+units	custom	h04S	hbla	Felhound Shrine	43	43	0	0
+units	custom	h04T	hbla	Eye of Corruption	43	43	0	0
+units	custom	h04U	hbla	Demonic Statue	45	45	0	0
+units	custom	h04V	hbla	Ancient of Battle	43	43	0	0
+units	custom	h04W	hbla	Corrupted Ancient of War	44	44	0	0
+units	custom	h06B	hfoo	Wisp	39	39	0	0
+units	custom	h09Y	hbla	Corrupted Ancient of Annihilation	44	44	0	0
+units	custom	n019	nvdl	Void Walker	27	27	0	0
+units	custom	n01A	nvdl	Void Keeper	32	32	0	0
+units	custom	n01B	nndk	Shadow Drake	52	52	0	0
+units	custom	n01D	nndk	Nether Drake	53	53	0	0
+units	custom	n01E	ninm	Infernal Tank	51	51	0	0
+units	custom	n01F	ninm	Infernal Machine	50	50	0	0
+units	custom	n01G	npfl	Felhound	28	28	0	0
+units	custom	n01H	nenc	Corrupted Treant	30	30	0	0
+units	custom	n01I	nenc	Corrupted Ent	28	28	0	0
+units	custom	n01J	ncap	Corrupted Protector	72	72	0	0
+units	custom	n027	nenc	Corrupted Annihilator	39	39	0	0
+units	custom	X006	ushd	Corrupted Builder	27	27	0	0
+units	custom	n03C	nenc	Ghost of Sorrow	41	41	0	0
+units	custom	X0Z0	hpea	Critter Builder	20	20	0	0
+units	custom	h0Z1	hbla	Mudcrab Burrow	37	37	0	0
+units	custom	n0Z1	nscb	Mudcrab	26	26	0	0
+units	custom	h0Z2	hbla	Rockcrab Burrow	36	36	0	0
+units	custom	n0Z2	nsc2	Rock Crab	26	26	0	0
+units	custom	h0Z3	hbla	Spinecrab Tidepool	36	36	0	0
+units	custom	n0Z3	ncrb	Spiny Crab	33	33	0	0
+units	custom	h0Z4	hbla	Hermit Mound	36	36	0	0
+units	custom	n0Z4	nhmc	Hermit Crab	31	31	0	0
+units	custom	h0Z5	hbla	Tidal Cairn	35	35	0	0
+units	custom	h0Z6	hgtw	Coral Spire	38	38	0	0
+units	custom	h0Z7	hbla	Reef Guardian	37	37	0	0
+units	custom	n0Z7	nsc3	Giant Reef Crab	27	27	0	0
+units	custom	n02V	nqb1	Quillboar	43	43	0	0
+units	custom	n02U	nrzt	Razormane	38	38	0	0
+units	custom	n02S	ngna	Gnoll	44	44	0	0
+units	custom	n02T	ngns	Fire Gnoll	44	44	0	0
+units	custom	n034	nhrr	Harpies' Matriarch	56	56	0	0
+units	custom	n02W	nhrr	Harpy	54	54	0	0
+units	custom	n032	nhrr	Harpy Witch	60	60	0	0
+units	custom	n02X	nogr	Ogre	39	39	0	0
+units	custom	n02Y	nogl	Ogre Lord	46	46	0	0
+units	custom	n035	nowb	Monstrous Sandkin	50	50	0	0
+units	custom	n030	nowb	Sandkin	48	48	0	0
+units	custom	n02Z	nsll	Salamander	51	51	0	0
+units	custom	h079	hhou	Beacon of the Oasis	45	45	0	0
+units	custom	h07A	hhou	Sacred Peyote	45	45	0	0
+units	custom	h07E	hgtw	Ballista Tower	54	54	0	0
+units	custom	n02N	npgr	Fire Gnoll Hut	37	37	0	0
+units	custom	n02O	npgr	Den of the Ogre Lord	39	39	0	0
+units	custom	n02P	npgr	Gnoll Tent	37	37	0	0
+units	custom	n02Q	npgr	Harpy Nest	39	39	0	0
+units	custom	n02R	npgr	Monstrous Sandkin Burrow	39	39	0	0
+units	custom	n031	npgr	Nest of Harpy Matriarch	42	42	0	0
+units	custom	n033	npgr	Ogre Den	37	37	0	0
+units	custom	n036	npgr	Quillboar Yard	38	38	0	0
+units	custom	n037	npgr	Razormane Abode	39	39	0	0
+units	custom	n038	npgr	Salamander Hatchery	37	37	0	0
+units	custom	n039	npgr	Sandkin Burrow	40	40	0	0
+units	custom	n03A	npgr	Temple of Storm	52	52	0	0
+units	custom	n03B	npgr	Nest of Harpy Witch	40	40	0	0
+units	custom	X078	hpea	Desert Builder	21	21	0	0
+units	custom	h02W	hwat	Lesser Elemental Of Water	56	56	0	0
+units	custom	h02X	hwat	Elemental Of Water	58	58	0	0
+units	custom	h02Y	hwat	Greater Elemental Of Water	57	57	0	0
+units	custom	h02Z	hwat	Elemental Of Fire	45	45	0	0
+units	custom	h034	hwat	Elemental Of Earth	47	47	0	0
+units	custom	h03H	hfoo	Footman	10	10	0	0
+units	custom	h03N	hwat	Greater Elemental Of Earth	46	46	0	0
+units	custom	h03P	hwat	Elemental Of Lightning	53	53	0	0
+units	custom	h03R	hwat	Greater Elemental Of Lightning	55	55	0	0
+units	custom	h03V	hwat	Master Of Elements	59	59	0	0
+units	custom	h03X	hbla	Water Spring	41	41	0	0
+units	custom	h03Y	hbla	Golden Fountain	42	42	0	0
+units	custom	h03Z	hbla	Spellbound Fountain	41	41	0	0
+units	custom	h040	hbla	Rock Pile	43	43	0	0
+units	custom	h041	hbla	Greater Fissure	40	40	0	0
+units	custom	h042	hbla	Pillar of Globe-Lightning	42	42	0	0
+units	custom	h044	hbla	Pillar of St. Elmo's Fire	41	41	0	0
+units	custom	h045	hbla	Altar of Fire	42	42	0	0
+units	custom	h046	hbla	Altar of Blaze	42	42	0	0
+units	custom	h04A	hbla	Trapped Gale	41	41	0	0
+units	custom	h04C	hbla	Monument of Wind Stream	41	41	0	0
+units	custom	h04D	hbla	Zephyros Memorial	40	40	0	0
+units	custom	h04E	hbla	Tower of Elder Knowledge	39	39	0	0
+units	custom	h05Z	hbla	Books of Conjuration	42	42	0	0
+units	custom	h060	hbla	Obelisk of Elements	44	44	0	0
+units	custom	h061	hbla	Elemental Guard Tower	61	61	0	0
+units	custom	h062	hbla	Mana Generator	42	42	0	0
+units	custom	h063	hbla	Linker	42	42	0	0
+units	custom	h068	hfoo	Footman	10	10	0	0
+units	custom	h06E	hbla	Meteor Shower	42	42	0	0
+units	custom	h06F	hbla	Elemental Rain	42	42	0	0
+units	custom	h076	hbla	Discharge Tower	66	66	0	0
+units	custom	o00C	oswy	Lesser Elemental Of Wind	39	39	0	0
+units	custom	o00D	oswy	Elemental Of Wind	48	48	0	0
+units	custom	o00E	oswy	Greater Elemental Of Wind	54	54	0	0
+units	custom	u00F	ugho	Greater Elemental Of Fire	20	20	0	0
+units	custom	X051	hpea	Elemental Builder	24	24	0	0
+units	custom	e005	ebal	Ballista	55	55	0	0
+units	custom	h005	hbla	Obelisk of Light	37	37	0	0
+units	custom	h00T	hbla	Hall of Honor	40	40	0	0
+units	custom	h00U	hspt	Bloodthirster	44	44	0	0
+units	custom	h00V	hbla	Bloodelf War Academy	40	40	0	0
+units	custom	h00W	hmpr	Wizard	42	42	0	0
+units	custom	h00X	hbla	Tower of Supreme Magic	40	40	0	0
+units	custom	h00Z	hbla	City of Magic	43	43	0	0
+units	custom	h014	hbla	Arcane Tower	57	57	0	0
+units	custom	h03F	hbla	Hall of the Eldest	39	39	0	0
+units	custom	h059	hbla	Golden Shrine of Justice	40	40	0	0
+units	custom	h069	hbla	Spare Part Heap	41	41	0	0
+units	custom	h06Y	hbla	Dragonhawk Portal	40	40	0	0
+units	custom	h070	hbla	Highelf Siege Factory	41	41	0	0
+units	custom	h07B	hsor	Sorceress	44	44	0	0
+units	custom	h08X	hbla	Archery Range	39	39	0	0
+units	custom	h08Y	hbla	Archery Tower	39	39	0	0
+units	custom	h09X	hbla	School of Wizardry	41	41	0	0
+units	custom	n006	nbel	Blademaster	41	41	0	0
+units	custom	n00Y	nbel	Elder Blademaster	44	44	0	0
+units	custom	n01U	ncg1	Gobbo Machinist	23	23	0	0
+units	custom	n01Y	nws1	Dragonhawk Rider	42	42	0	0
+units	custom	n022	nhea	Archer	34	34	0	0
+units	custom	n023	nhea	Master Archer	35	35	0	0
+units	custom	X00P	hpea	Elf Builder	23	23	0	0
+units	custom	h000	hbla	Barracks	38	38	0	0
+units	custom	h001	hbla	Artillery	61	61	0	0
+units	custom	h003	hbla	Sniper Nest	37	37	0	0
+units	custom	h004	hbla	Weapon Lab	38	38	0	0
+units	custom	h006	hgtw	Watch Tower	34	34	0	0
+units	custom	h00K	hbla	Hjordhejmen	39	39	0	0
+units	custom	h010	hbla	Gjallarhorn	42	42	0	0
+units	custom	h015	hbla	Gryphon Rock	38	38	0	0
+units	custom	h016	hgry	Gryphon Rider	33	33	0	0
+units	custom	h037	hbla	Chapel	41	41	0	0
+units	custom	h038	hbla	Church	40	40	0	0
+units	custom	h039	hbla	Stronghold	39	39	0	0
+units	custom	h03A	hfoo	Defender	31	31	0	0
+units	custom	h03B	hkni	Crusader	40	40	0	0
+units	custom	h03C	hkni	Paladin	43	43	0	0
+units	custom	h05C	hrif	Marksman	51	51	0	0
+units	custom	h05D	hbla	Gunner's Hall	39	39	0	0
+units	custom	h05G	hbla	Heroic Shrine	41	41	0	0
+units	custom	h072	hbla	Holy Altar	43	43	0	0
+units	custom	h074	hkni	Holy Warrior	46	46	0	0
+units	custom	h0A1	hbla	Marksmen's Encampment	37	37	0	0
+units	custom	h0A2	hrif	Heavy Gunner	43	43	0	0
+units	custom	n005	nwiz	Warlock	36	36	0	0
+units	custom	X00C	hpea	Human Builder	19	19	0	0
+units	custom	h07U	hbla	Vessel of Purity	45	45	0	0
+units	custom	h05J	hbla	Aircraft Factory	40	40	0	0
+units	custom	h05L	hbla	Energy Tower	62	62	0	0
+units	custom	h05M	hbla	Demolition Lab	43	43	0	0
+units	custom	h05R	hbla	Red Shield Generator	40	40	0	0
+units	custom	h05T	hbla	Gun Smith	38	38	0	0
+units	custom	h05U	hbla	Lumber Mill	43	43	0	0
+units	custom	h05V	hbla	Golem Factory	44	44	0	0
+units	custom	h05X	hbla	Tank Factory	41	41	0	0
+units	custom	h06J	hbla	Blue Shield Generator	44	44	0	0
+units	custom	h06Q	hgyr	Roterothopter	45	45	0	0
+units	custom	h06R	hgyr	Gyrocopter	48	48	0	0
+units	custom	h06S	hmtt	Heavy Tank	49	49	0	0
+units	custom	h06T	hmtt	Light Tank	51	51	0	0
+units	custom	h06U	hmtt	Mine Layer	57	57	0	0
+units	custom	h06Z	hbla	Protection Center	42	42	0	0
+units	custom	h097	hbla	Precious Golem Factory	44	44	0	0
+units	custom	h098	hmtt	Rocket Tank	54	54	0	0
+units	custom	h099	hmtt	Assault Tank	61	61	0	0
+units	custom	h09B	hbla	Heavy Tank Factory	43	43	0	0
+units	custom	h09H	hbla	Rocket Tank Factory	41	41	0	0
+units	custom	h09I	hbla	Assault Tank Factory	42	42	0	0
+units	custom	h09J	hbla	Mine Layer Factory	40	40	0	0
+units	custom	h09L	hbla	Bomber Factory	40	40	0	0
+units	custom	h09M	hmpr	MineDummy	31	31	0	0
+units	custom	h09P	hbla	Arsenal	37	37	0	0
+units	custom	h09Q	hmpr	GrenadeDummy	31	31	0	0
+units	custom	h09T	hbla	Power Plant	43	43	0	0
+units	custom	n01T	ngir	Goblin Shredder	42	42	0	0
+units	custom	n01V	ngsp	Lunatic Goblin	39	39	0	0
+units	custom	n01X	nsgg	Iron Golem	40	40	0	0
+units	custom	n024	nsgg	Adamant Golem	39	39	0	0
+units	custom	n025	nglm	Landmine	7	7	0	0
+units	custom	n02J	nsgg	Goliath	76	76	0	0
+units	custom	z002	zcso	Flamegunner	40	40	0	0
+units	custom	z003	zcso	Flamegunner Sergeant	44	44	0	0
+units	custom	n02M	ngsp	Goblin Rocketeer	58	58	0	0
+units	custom	h077	hbla	Rocket Lab	40	40	0	0
+units	custom	X06P	hpea	Mechanical Builder	26	26	0	0
+units	custom	h00F	hbla	Spawning Grounds	41	41	0	0
+units	custom	h00G	hbla	Coral Statue	39	39	0	0
+units	custom	h00I	hbla	Ancient Pyramide	43	43	0	0
+units	custom	h00J	hbla	Swamp Well	43	43	0	0
+units	custom	h00M	hbla	Oracle of Sirens	44	44	0	0
+units	custom	h00N	hgtw	Tidal Guardian	51	51	0	0
+units	custom	h01B	hbla	Reptile Pool	42	42	0	0
+units	custom	h01Y	hbla	Temple of Snakes	42	42	0	0
+units	custom	h01Z	hbla	Naga Spring	41	41	0	0
+units	custom	h020	hbla	Murloc Camp	43	43	0	0
+units	custom	h021	hbla	Murloc Village	42	42	0	0
+units	custom	h022	hbla	Murloc Fortress	41	41	0	0
+units	custom	h032	hbla	Royal Spawning Grounds	40	40	0	0
+units	custom	h05F	hbla	Lernaean Fountain	44	44	0	0
+units	custom	n002	nnrg	Naga Guardian	43	43	0	0
+units	custom	n004	nnrg	Suumpmolk	53	53	0	0
+units	custom	n007	nhyc	Dragon Turtle	34	34	0	0
+units	custom	n00H	nwgs	Winged Serpent	39	39	0	0
+units	custom	n00I	nmpe	Murloc Warrior	36	36	0	0
+units	custom	n00J	nmpe	Murloc Champion	36	36	0	0
+units	custom	n00K	nmpe	Murloc Assassin	39	39	0	0
+units	custom	n00S	nnsu	Naga Siren	42	42	0	0
+units	custom	n00X	nnrg	Naga Royal Guard	45	45	0	0
+units	custom	n01P	nahy	Ancient Hydra	47	47	0	0
+units	custom	X00E	hpea	Naga Builder	24	24	0	0
+units	custom	n03U	nwgs	Winged Riptide Serpent	44	44	0	0
+units	custom	h080	hbla	Temple of Riptide	43	43	0	0
+units	custom	e006	edry	Dryad	41	41	0	0
+units	custom	e009	edry	Keeper of the Grove	43	43	0	0
+units	custom	e00C	edry	Ancient Keeper	46	46	0	0
+units	custom	e00D	efon	Treant	30	30	0	0
+units	custom	e00F	emtg	Mountain Giant	45	45	0	0
+units	custom	e00G	edry	Visioneer	62	62	0	0
+units	custom	h002	hbla	Spider Egg Clutch	43	43	0	0
+units	custom	h00Q	hbla	Spider Egg Nest	43	43	0	0
+units	custom	h00R	hbla	Spider Egg Hatchery	42	42	0	0
+units	custom	h00Y	hbla	Furbolg Hut	41	41	0	0
+units	custom	h012	hbla	Furbolg Abode	40	40	0	0
+units	custom	h013	hbla	Ancient of Growth	44	44	0	0
+units	custom	h01H	hbla	Ancient of Life	44	44	0	0
+units	custom	h01J	hbla	Ancient of Eternity	44	44	0	0
+units	custom	h023	hbla	Ancient of Slumber	43	43	0	0
+units	custom	h024	hbla	Ancient of Hibernation	42	42	0	0
+units	custom	h027	hbla	Emerald Dragon Roost	42	42	0	0
+units	custom	h028	hbla	Monolith	41	41	0	0
+units	custom	h02A	hbla	Ancient of Gale	45	45	0	0
+units	custom	h02C	hbla	Ancient Guardian	45	45	0	0
+units	custom	h02D	hbla	Ancient of Wonders	48	48	0	0
+units	custom	h071	hbla	Enigma	43	43	0	0
+units	custom	n00U	nspb	Black Spider	29	29	0	0
+units	custom	n01N	nsgt	Giant Spider	30	30	0	0
+units	custom	n01W	nsbm	Brood Mother	34	34	0	0
+units	custom	n026	nfrs	Furbolg Shaman	37	37	0	0
+units	custom	n028	nfre	Furbolg Elder Shaman	36	36	0	0
+units	custom	n029	ngz1	Bear	31	31	0	0
+units	custom	n02A	ngdk	Emerald Dragon	38	38	0	0
+units	custom	n02B	ngz1	Ancient Bear	37	37	0	0
+units	custom	n02D	ncap	Ancient Protector	74	74	0	0
+units	custom	X01A	hpea	Nature Builder	25	25	0	0
+units	custom	e000	efdr	Faerie Dragon	35	35	0	0
+units	custom	e001	earc	Huntress	30	30	0	0
+units	custom	e002	ebal	Glaive Thrower	47	47	0	0
+units	custom	e003	earc	Ranger	35	35	0	0
+units	custom	e004	earc	Amazon	37	37	0	0
+units	custom	e007	edot	Druid	39	39	0	0
+units	custom	e00A	espv	Avatar of Vengeance	41	41	0	0
+units	custom	e00B	even	Avenging Spirit	36	36	0	0
+units	custom	e00J	edot	Sage Druid	47	47	0	0
+units	custom	h00B	hbla	Fountain of Wonders	41	41	0	0
+units	custom	h00S	hbla	Hunter's Hall	39	39	0	0
+units	custom	h011	hbla	Nightelf Siege Factory	40	40	0	0
+units	custom	h03D	hbla	Ranger's Hall	40	40	0	0
+units	custom	h03E	hbla	Amazon's Hall	40	40	0	0
+units	custom	h073	hbla	Elune's Lantern	56	56	0	0
+units	custom	h07D	hbla	Moon Altar	39	39	0	0
+units	custom	h07H	hbla	Obelisk of Wilderness	42	42	0	0
+units	custom	h07I	hbla	Starfall Obelisk	44	44	0	0
+units	custom	h07L	hbla	Guild of Shadows	39	39	0	0
+units	custom	h07M	hbla	House of Shadows	40	40	0	0
+units	custom	h07N	hbla	Scorched Mansion	39	39	0	0
+units	custom	h07O	hbla	Pillaged Hut	40	40	0	0
+units	custom	h088	hbla	Moon Shrine	39	39	0	0
+units	custom	h08P	hbla	Silver Glade	42	42	0	0
+units	custom	n01Z	nwat	Assassin	41	41	0	0
+units	custom	n020	nssn	Royal Assassin	44	44	0	0
+units	custom	X089	hpea	Night Elf Builder	24	24	0	0
+units	custom	h03I	hbla	Azure Nest	42	42	0	0
+units	custom	h03J	hbla	Ice Troll Voodoo Lounge	40	40	0	0
+units	custom	h03K	hbla	Ice Troll Hut	40	40	0	0
+units	custom	h03L	hbla	Greater Frost Launcher	44	44	0	0
+units	custom	h03O	hbla	World Freezer	44	44	0	0
+units	custom	h03Q	hbla	Icy Tower	65	65	0	0
+units	custom	h03S	hbla	Crystal Palace	45	45	0	0
+units	custom	h03T	hbla	Ice Claws	42	42	0	0
+units	custom	h03U	hbla	Igloo	40	40	0	0
+units	custom	h03W	hbla	Glacier	41	41	0	0
+units	custom	h043	hbla	Frost Claws	41	41	0	0
+units	custom	h047	hbla	Chilling Mushroom	43	43	0	0
+units	custom	h048	hbla	Frost Launcher	44	44	0	0
+units	custom	h049	hbla	Snowy Rocks	41	41	0	0
+units	custom	h04F	hbla	Icy Rocks	42	42	0	0
+units	custom	h04G	hmpr	FreezeDummy	33	33	0	0
+units	custom	h04H	hmpr	AdvancedFreezeDummy	34	34	0	0
+units	custom	h06L	hbla	Modern Igloo	40	40	0	0
+units	custom	h08U	hmpr	FrostOrbDummy	28	28	0	0
+units	custom	n010	nadk	Azure Drake	44	44	0	0
+units	custom	n011	ntka	Hrimthrusa	34	34	0	0
+units	custom	n012	nwen	Wandigoo	33	33	0	0
+units	custom	n013	nwns	Ancient Wandigoo	40	40	0	0
+units	custom	n014	nhea	Ice Queen	53	53	0	0
+units	custom	n015	nitp	Ice Troll Shadow Priest	39	39	0	0
+units	custom	n016	nmgd	Magnataur	41	41	0	0
+units	custom	n017	nwwf	Frost Wolf	32	32	0	0
+units	custom	n018	nplb	Polar Bear	32	32	0	0
+units	custom	n02I	ntka	Angry Hrimthrusa	40	40	0	0
+units	custom	o00A	odoc	Ice Troll Witch Doctor	44	44	0	0
+units	custom	X017	hpea	Northern Builder	27	27	0	0
+units	custom	h029	hbla	Fighters' Hall	39	39	0	0
+units	custom	h02B	hbla	Shamanic Tent	39	39	0	0
+units	custom	h02H	hbla	Troll Hut	40	40	0	0
+units	custom	h02I	hbla	Orcish Siege Factory	40	40	0	0
+units	custom	h02K	hbla	Kodo Farm	42	42	0	0
+units	custom	h02N	hbla	Serpent Rock	43	43	0	0
+units	custom	h02O	hbla	Legendary Totem	46	46	0	0
+units	custom	h02P	hbla	Falcon-Clan Encampment	39	39	0	0
+units	custom	h02R	hbla	Ceremonial Totem	41	41	0	0
+units	custom	h02U	hbla	Advanced Fighters' Hall	41	41	0	0
+units	custom	h031	hbla	Superior Fighters' Hall	40	40	0	0
+units	custom	h035	hbla	Melee Kodo Farm	40	40	0	0
+units	custom	h036	hbla	Defensive Kodo Farm	40	40	0	0
+units	custom	h05E	hbla	Trapper's Hut	40	40	0	0
+units	custom	h06D	hbla	Forest Trapper's Hole	40	40	0	0
+units	custom	h06I	hbla	Infostealer's Place	38	38	0	0
+units	custom	h092	hbla	Spellbreaker Kodo Farm	39	39	0	0
+units	custom	n00V	ndtb	Troll Berserker	31	31	0	0
+units	custom	n01O	ndtb	Troll Trapper	37	37	0	0
+units	custom	n02G	ndtb	Forest Troll Trapper	39	39	0	0
+units	custom	o000	owtw	Anti Air Tower	52	52	0	0
+units	custom	o001	ocat	Catapult	48	48	0	0
+units	custom	o002	ogru	Grunt	28	28	0	0
+units	custom	o003	oshm	Shaman	34	34	0	0
+units	custom	o004	ogru	Veteran Grunt	30	30	0	0
+units	custom	o005	ogru	Axemaster	30	30	0	0
+units	custom	o006	okod	Defensive Kodo Rider	38	38	0	0
+units	custom	o007	okod	Kodo	40	40	0	0
+units	custom	o008	okod	Melee Kodo Rider	40	40	0	0
+units	custom	o009	owyv	Wyvern Rider	32	32	0	0
+units	custom	o00B	okod	Spellbreaker Kodo Rider	38	38	0	0
+units	custom	o00F	oshm	Infostealer	40	40	0	0
+units	custom	X019	hpea	Orc Builder	24	24	0	0
+units	custom	o00G	oshm	Blood Shaman	38	38	0	0
+units	custom	h07Q	hbla	Blood Shaman Tent	41	41	0	0
+units	custom	h07X	hbla	Stasis Totem	45	45	0	0
+units	custom	h07Y	hbla	Healing Totem	44	44	0	0
+units	custom	h07Z	hbla	Endurance Totem	45	45	0	0
+units	custom	u00G	uloc	Locust Harpy	14	14	0	0
+units	custom	n03D	npgr	Bamboo Dojo	35	35	0	0
+units	custom	n03E	nqb1	Sagepaw Monk	56	56	0	0
+units	custom	X07P	hpea	Pandaren Builder	21	21	0	0
+units	custom	n03F	npgr	Brew Hut	37	37	0	0
+units	custom	n03G	nogr	Ironpaw Militia	42	42	0	0
+units	custom	n03H	npgr	Temple of the Wandering Spark	37	37	0	0
+units	custom	n03I	nqb1	Echofoot Mystic	52	52	0	0
+units	custom	n03J	nogr	Ironpaw Guardian	41	41	0	0
+units	custom	n03K	npgr	Fighting Tavern	39	39	0	0
+units	custom	n03L	npgr	Jade Shrine	38	38	0	0
+units	custom	n03M	nqb1	Jade Elder	57	57	0	0
+units	custom	h07P	hgtw	Poof Tower	57	57	0	0
+units	custom	o00H	ocat	Brewshock Catapult	58	58	0	0
+units	custom	n03N	npgr	Pandaren Siege Workshop	36	36	0	0
+units	custom	n03O	nogr	Drunken Brewmaster	45	45	0	0
+units	custom	n03P	npgr	Temple of Ten Thousand Drinks	40	40	0	0
+units	custom	h07R	hhou	Thunderpaw Spire	45	45	0	0
+units	custom	n03Q	npgr	Cloud Hangar	35	35	0	0
+units	custom	h07S	hgry	Cloud Ship	51	51	0	0
+units	custom	h07T	hhou	Withering Hall	44	44	0	0
+units	custom	h07V	hgtw	Celestial Chi Tower	65	65	0	0
+units	custom	n03R	nglm	Echo Remnant	15	15	0	0
+units	custom	n03S	npgr	Sagepaw Sanctum	36	36	0	0
+units	custom	n03T	nqb1	Sagepaw Soulkeeper	57	57	0	0
+units	custom	e008	ewsp	dummy	30	30	0	0
+units	custom	e00M	ewsp	PROGR dummy	44	44	0	0
+units	custom	h008	hbla	Treasure Box	35	35	0	0
+units	custom	h00C	hpea	Human Builder	17	17	0	0
+units	custom	h00D	hmpr	Dummy	23	23	0	0
+units	custom	h00E	hpea	Naga Builder	22	22	0	0
+units	custom	h00L	hhou	Flower of life	14	14	0	0
+units	custom	h00O	hpea	Chaos Builder	21	21	0	0
+units	custom	h00P	hpea	Elf Builder	21	21	0	0
+units	custom	h017	hpea	Northern Builder	25	25	0	0
+units	custom	h018	hpea	Undead Builder	21	21	0	0
+units	custom	h019	hpea	Orc Builder	22	22	0	0
+units	custom	h01A	hpea	Nature Builder	23	23	0	0
+units	custom	h01G	hmpr	DemolishDummy	15	15	0	0
+units	custom	h01V	hfoo	Lesser Vampire	35	35	0	0
+units	custom	h02E	hbla	Spider Egg Sack: Web	35	35	0	0
+units	custom	h02F	hbla	Spider Egg Nest: Bones	31	31	0	0
+units	custom	h02G	hbla	Spider Egg Nest: Wood	31	31	0	0
+units	custom	h02J	hbla	Spider Egg: Rock Base	33	33	0	0
+units	custom	h02L	hbla	Ancient of Hibernation: Roots	32	32	0	0
+units	custom	h02M	hbla	Ancient of Hibernation: Owl	35	35	0	0
+units	custom	h02Q	hbla	Furbolg Hut	31	31	0	0
+units	custom	h02S	hbla	Monolith: Bush	31	31	0	0
+units	custom	h02T	hbla	Monolith: Rocks	30	30	0	0
+units	custom	h02V	hbla	Blacksmith	30	30	0	0
+units	custom	h030	hwat	Greater Elemental Of Fire	42	42	0	0
+units	custom	h033	hkni	Race Chooser	17	17	0	0
+units	custom	h04J	hbla	Demonic Statue	36	36	0	0
+units	custom	h04X	hmpr	RescueDummy	23	23	0	0
+units	custom	h04Y	hbla	Column	31	31	0	0
+units	custom	h050	hbla	Column Ruined	31	31	0	0
+units	custom	h051	hpea	Elemental Builder	22	22	0	0
+units	custom	h052	hbla	Lightning (Alis)	34	34	0	0
+units	custom	h053	hbla	Lightning (Coruscus)	35	35	0	0
+units	custom	h057	hbla	Fire Pillar (Coruscus)	34	34	0	0
+units	custom	h058	hbla	Fissure (Coruscus)	32	32	0	0
+units	custom	h05A	hmpr	HandOfJusticeDummy	22	22	0	0
+units	custom	h05B	hbla	Tornado (Atrium)	32	32	0	0
+units	custom	h05K	hbla	Tornado (Thalamus)	35	35	0	0
+units	custom	h05N	hbla	Anima	35	35	0	0
+units	custom	h05O	hbla	Fontis Oris	34	34	0	0
+units	custom	h05P	hbla	Ignis-fluus	34	34	0	0
+units	custom	h05Q	hbla	FireOrb	34	34	0	0
+units	custom	h05S	hbla	LightningOrb	34	34	0	0
+units	custom	h05W	hbla	LandEffect	31	31	0	0
+units	custom	h05Y	hbla	WindOrb	33	33	0	0
+units	custom	h064	hbla	Linker	33	33	0	0
+units	custom	h065	hbla	Obelisk of Elements	32	32	0	0
+units	custom	h066	hbla	Book of Conjuration	36	36	0	0
+units	custom	h067	hbla	Elemental Guard Tower	31	31	0	0
+units	custom	h06A	hfoo	Footman	9	9	0	0
+units	custom	h06G	hbla	Book of Conjuration 2	36	36	0	0
+units	custom	h06H	hbla	Skull Shrine2	40	40	0	0
+units	custom	h06P	hpea	Mechanical Builder	24	24	0	0
+units	custom	h06V	hmpr	Nuke Dummy	28	28	0	0
+units	custom	h06W	hmpr	Nuke Explosion Dummy	28	28	0	0
+units	custom	h06X	hmpr	Nuke Start Dummy	27	27	0	0
+units	custom	h075	hpea	Ultimate Builder	22	22	0	0
+units	custom	h07C	hmpr	Bloodmage	39	39	0	0
+units	custom	h089	hpea	Night Elf Builder	22	22	0	0
+units	custom	h08A	hbla	Teleport	35	35	0	0
+units	custom	h08B	hbla	Luna Beam	35	35	0	0
+units	custom	h08C	hbla	Star Fall	31	31	0	0
+units	custom	h08D	hbla	Orb1	31	31	0	0
+units	custom	h08E	hbla	Orb2	32	32	0	0
+units	custom	h08F	hbla	Orb3	33	33	0	0
+units	custom	h08G	hbla	Orb4	32	32	0	0
+units	custom	h08H	hbla	Orb5	32	32	0	0
+units	custom	h08I	hbla	Orb6	31	31	0	0
+units	custom	h08J	hbla	Orb7	33	33	0	0
+units	custom	h08K	hbla	Orb8	33	33	0	0
+units	custom	h08L	hbla	Entangle	32	32	0	0
+units	custom	h08M	hbla	Orb2High	33	33	0	0
+units	custom	h08N	hbla	plant	31	31	0	0
+units	custom	h08O	hbla	plant2	31	31	0	0
+units	custom	h08Q	hbla	Fire	35	35	0	0
+units	custom	h08R	hbla	Fire Small	35	35	0	0
+units	custom	h08S	hbla	Orb3 BIG	32	32	0	0
+units	custom	h08T	hbla	Orb9	32	32	0	0
+units	custom	h08V	hbla	Orb18	33	33	0	0
+units	custom	h08W	hbla	Tower	34	34	0	0
+units	custom	h08Z	hbla	Archery Target	33	33	0	0
+units	custom	h090	hbla	Elf Build	32	32	0	0
+units	custom	h091	hbla	Elf Build2	32	32	0	0
+units	custom	h093	hbla	Citadel Effect	34	34	0	0
+units	custom	h094	hbla	Citadel Effect 2	34	34	0	0
+units	custom	h096	hbla	Golem Factory: Gold	31	31	0	0
+units	custom	h09A	hbla	Tank Factory: Big Mine	32	32	0	0
+units	custom	h09C	hbla	Tank Factory: Brazier	31	31	0	0
+units	custom	h09D	hbla	Tank Factory: Runes1	32	32	0	0
+units	custom	h09E	hbla	Tank Factory: Furnace Fire	32	32	0	0
+units	custom	h09F	hbla	Tank Factory: Mine	32	32	0	0
+units	custom	h09G	hbla	Tank Factory: Runes2	31	31	0	0
+units	custom	h09K	hbla	Aircraft: Fence	31	31	0	0
+units	custom	h09N	hbla	Arsenal: Trash1	31	31	0	0
+units	custom	h09O	hbla	Arsenal: Trash2	31	31	0	0
+units	custom	h09R	hbla	Spare Part Heap: Gobbo	32	32	0	0
+units	custom	h09U	hbla	Power Plant: Fence	31	31	0	0
+units	custom	h09V	hbla	Power Plant: Teleport	31	31	0	0
+units	custom	h09W	hkni	Race Ban	18	18	0	0
+units	custom	h09Z	hbla	Corrupted	33	33	0	0
+units	custom	h0A0	hbla	Human BUild	32	32	0	0
+units	custom	n003	nmpe	Murloc	35	35	0	0
+units	custom	n00F	nshe	Sheep	6	6	0	0
+units	custom	n00G	nshf	Flying Sheep	4	4	0	0
+units	custom	n00T	nspg	Forest Spider	26	26	0	0
+units	custom	n00W	nltc	Summoned Lobster	33	33	0	0
+units	custom	n01C	nfgt	Raised Tentacle	26	26	0	0
+units	custom	n01Q	nahy	Hydra	43	43	0	0
+units	custom	n01R	nahy	Lesser Hydra	42	42	0	0
+units	custom	n021	nfgt	Raised Tentacle	26	26	0	0
+units	custom	n02E	ntor	Tornado	4	4	0	0
+units	custom	n02F	ntor	Tornado (-na)	4	4	0	0
+units	custom	n02H	nfrm	testing	5	5	0	0
+units	custom	n02K	nmpe	Twin Weeper	39	39	0	0
+units	custom	tec1	hmpr	Tech Level 1	23	23	0	0
+units	custom	tec2	hmpr	Tech Level 2	23	23	0	0
+units	custom	tec3	hmpr	Tech Level 3	23	23	0	0
+units	custom	u006	ushd	Corrupted Builder	25	25	0	0
+units	custom	u00C	ugho	Ghoul	8	8	0	0
+units	custom	z001	zcso	Flamegunner Sergeant	42	42	0	0
+units	custom	h078	hpea	Desert Builder	19	19	0	0
+units	custom	h07F	hlum	Matriarchs	33	33	0	0
+units	custom	h07G	hlum	AltarOfSand: Cloud	35	35	0	0
+units	custom	e00I	ewsp	quicksand	37	37	0	0
+units	custom	X075	hpea	Ultimate Builder	24	24	0	0
+units	custom	h00A	hbla	Death Pit	42	42	0	0
+units	custom	h01K	hbla	Temple of Bone	40	40	0	0
+units	custom	h01L	hbla	Haunted Mine	39	39	0	0
+units	custom	h01N	hbla	Crypt	42	42	0	0
+units	custom	h01O	hbla	Turret of Souls	59	59	0	0
+units	custom	h01P	hbla	Skull Pile	41	41	0	0
+units	custom	h01Q	hbla	City of Decay	40	40	0	0
+units	custom	h01R	hbla	Rotting Hay Cart	40	40	0	0
+units	custom	h01S	hbla	Dragon Cemetery	40	40	0	0
+units	custom	h01T	hbla	Slaughter House	42	42	0	0
+units	custom	h01U	hfoo	Vampire	37	37	0	0
+units	custom	h03M	hbla	Defiled Granary	39	39	0	0
+units	custom	h04B	hbla	Temple of Necromancy	43	43	0	0
+units	custom	h04Z	hbla	Tainted Farm	41	41	0	0
+units	custom	h054	hbla	Graveyard	40	40	0	0
+units	custom	h055	hbla	High Citadel of Necromancy	42	42	0	0
+units	custom	h056	hbla	Skull Shrine	40	40	0	0
+units	custom	h05H	hfoo	Vampire Lord	39	39	0	0
+units	custom	n00B	nzom	Zombie	27	27	0	0
+units	custom	n00E	nfgl	Flesh Golem	40	40	0	0
+units	custom	n01K	nzom	Suffocated Zombie	30	30	0	0
+units	custom	u000	ufro	Frost Wyrm	38	38	0	0
+units	custom	u001	uswb	Banshee	35	35	0	0
+units	custom	u005	unec	Necromancer	36	36	0	0
+units	custom	u007	uabo	Plague Bearer	37	37	0	0
+units	custom	u009	uktg	Mighty Necromancer	46	46	0	0
+units	custom	u00D	unec	Lich King	42	42	0	0
+units	custom	X018	hpea	Undead Builder	23	23	0	0
+units	custom	x003	ewsp	Dummy Caster	28	28	0	0
+items	custom	IcfS	will	Portable Cloud Machine	14	14	0	0
+items	custom	IM01	will	Bird Food	14	14	0	0
+items	custom	IM02	tsct	Towerless Token	14	14	0	0
+items	custom	I000	rst1	Gold	11	11	0	0
+items	custom	I001	bgst	Blast Staff	12	12	0	0
+items	custom	I002	bgst	Multi Blast Staff	11	11	0	0
+items	custom	I003	ajen	Drum'n'Bass Bass Drums	12	12	0	0
+items	custom	I004	lmbr	Cheese	16	16	0	0
+items	custom	I005	sres	Scroll of Stone	13	13	0	0
+items	custom	I006	thdm	Orb of Lightning	11	11	0	0
+items	custom	I007	sror	Quad Damage	15	15	0	0
+items	custom	I008	sror	Double Damage	14	14	0	0
+items	custom	I009	bgst	Rune of Repair	12	12	0	0
+items	custom	I00A	ward	Drum'n'Bass Bassline Generator	10	10	0	0
+items	custom	I00C	rat9	Explode Mine	6	6	0	0
+items	custom	I00F	sres	Scroll of Speed	14	14	0	0
+abilities	original	ACrj	ACrj	Rejuvenation	1	1	0	0
+abilities	original	ANic	ANic	COR: Void Walker (Incinerate)	12	12	0	0
+abilities	original	AUbu	AUbu	Build (Undead)	1	1	0	0
+abilities	original	Aall	Aall	Shop Sharing, Allied Bldg.	2	2	0	0
+abilities	original	Aasl	Aasl	Slow Aura	4	4	0	0
+abilities	original	Agra	Agra	War Club	4	4	0	0
+abilities	original	Ahrp	Ahrp	Repair	2	2	0	0
+abilities	original	Ane2	Ane2	Select Unit	2	2	0	0
+abilities	original	Asla	Asla	Sleep Always	2	2	0	0
+abilities	original	Atdg	Atdg	Building Damage Aura	5	5	0	0
+abilities	original	Awha	Awha	Gather	3	3	0	0
+abilities	original	ARal	ARal	Sync	2	2	0	0
+abilities	original	Adtg	Adtg	True Sight	2	2	0	0
+abilities	original	Ahsb	Ahsb	Sundering Blades	1	1	0	0
+abilities	custom	AM01	Adef	Leave Detect	6	6	0	0
+abilities	custom	AM02	Aro1	Root	1	1	0	0
+abilities	custom	AM03	Apiv	Permanent Invisibility	4	4	0	0
+abilities	custom	AcfS	AIfg	Cloud of Fog	12	12	0	0
+abilities	custom	A0-1	ANcl	Blink	26	26	0	0
+abilities	custom	AM04	AIbt	Build Tiny Scout Tower	7	7	0	0
+abilities	custom	AM05	Aroc	Multi Shot	17	17	0	0
+abilities	custom	AM06	ANcl	Combat Stance: Execute	25	25	0	0
+abilities	custom	AM07	ANcl	Combat Stance: Open Fire	25	25	0	0
+abilities	custom	AM08	AId4	Item Armor Bonus	8	8	0	0
+abilities	custom	AM09	AId4	Item Armor Bonus	8	8	0	0
+abilities	custom	AM0a	ANcl	Production Enchantment	27	27	0	0
+abilities	custom	AM0d	ANcl	Spell Enchantment	27	27	0	0
+abilities	custom	AM0b	AId4	Item Armor Bonus	8	8	0	0
+abilities	custom	AM0c	ACct	Critical Strike	10	10	0	0
+abilities	custom	AM0e	ACct	Critical Strike	10	10	0	0
+abilities	custom	AM0f	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0g	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0h	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0i	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0j	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0k	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0l	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0m	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0o	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0p	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0q	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0r	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0t	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0u	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0w	ACct	Critical Strike	3	3	0	0
+abilities	custom	AM0x	ACct	Critical Strike	3	3	0	0
+abilities	custom	ZE2E	ANcl	Channel	66	66	0	0
+abilities	custom	cfOL	ACcl	Chain Lightning	44	44	0	0
+abilities	custom	A000	Apxf	HEL: Obelisk of Light	12	12	0	0
+abilities	custom	A001	AEbl	Blink	12	12	0	0
+abilities	custom	A002	Apxf	Death	19	19	0	0
+abilities	custom	A003	Afbt	Feedback	4	4	0	0
+abilities	custom	A004	Ahea	NAT: Dryad (natures touch)	6	6	0	0
+abilities	custom	A005	ANfs	Rescue Strike	21	21	0	0
+abilities	custom	A006	ACpv	Pulverize	4	4	0	0
+abilities	custom	A007	ACnr	Life Regeneration Aura	6	6	0	0
+abilities	custom	A008	ACnr	Life Regeneration Aura	6	6	0	0
+abilities	custom	A009	ACce	Cleaving Attack	4	4	0	0
+abilities	custom	A00A	Ahrp	Repair	9	9	0	0
+abilities	custom	A00B	AHtc	Thunder Clap	14	14	0	0
+abilities	custom	A00C	Aspo	Slow Poison	5	5	0	0
+abilities	custom	A00D	ACct	Critical Strike	3	3	0	0
+abilities	custom	A00E	Apxf	Kills	18	18	0	0
+abilities	custom	A00F	AHab	Brilliance Aura	10	10	0	0
+abilities	custom	A00G	Apsh	Phase Shift	6	6	0	0
+abilities	custom	A00H	AHfa	TriggerAttack	11	11	0	0
+abilities	custom	A00I	AEfk	Fan of Knives	13	13	0	0
+abilities	custom	A00J	Aspb	Spell Book	17	17	0	0
+abilities	custom	A00K	ACpa	Parasite	14	14	0	0
+abilities	custom	A00L	ACcl	Chain Lightning	10	10	0	0
+abilities	custom	A00M	ACpa	Parasite	17	17	0	0
+abilities	custom	A00N	ACch	Charm	7	7	0	0
+abilities	custom	A00O	ACpa	NAG: Oracle	18	18	0	0
+abilities	custom	A00P	ACcv	Crushing Wave	14	14	0	0
+abilities	custom	A00Q	ACpv	Pulverize	5	5	0	0
+abilities	custom	A00R	ANde	Demolish	3	3	0	0
+abilities	custom	A00S	AOcr	Killer Strike	7	7	0	0
+abilities	custom	A00T	ACes	Evasion	3	3	0	0
+abilities	custom	A00U	ACev	Evasion	2	2	0	0
+abilities	custom	A00V	ACct	Critical Strike	4	4	0	0
+abilities	custom	A00W	ACff	Faerie Fire	8	8	0	0
+abilities	custom	A00X	Ahea	HEL: Wizard (Heal (dummy))	6	6	0	0
+abilities	custom	A00Y	AChv	HEL: Wizard (Heal)	9	9	0	0
+abilities	custom	A00Z	AIlx	HEL: Wizard (Lightning)	16	16	0	0
+abilities	custom	A010	Apxf	Phoenix Fire	19	19	0	0
+abilities	custom	A011	AHad	Devotion Aura	6	6	0	0
+abilities	custom	A012	ANpi	Permanent Immolation	5	5	0	0
+abilities	custom	A013	Aasl	Slow Aura	8	8	0	0
+abilities	custom	A014	Afbt	Feedback	4	4	0	0
+abilities	custom	A015	Aroc	Barrage	13	13	0	0
+abilities	custom	A016	Ablo	Gjall Horn Buff	34	34	0	0
+abilities	custom	A017	ACpa	Parasite	17	17	0	0
+abilities	custom	A018	AOhx	Hex	13	13	0	0
+abilities	custom	A019	ACac	Command Aura	3	3	0	0
+abilities	custom	A01A	ACbh	Bash	4	4	0	0
+abilities	custom	A01B	AIlx	Melee Lightning Damage Bonus	16	16	0	0
+abilities	custom	A01C	ANth	NAG: Dragon Turtle (spiked shell)	5	5	0	0
+abilities	custom	A01D	ACtb	Hurl Boulder	7	7	0	0
+abilities	custom	A01E	ACpa	Parasite	17	17	0	0
+abilities	custom	A01F	ACce	Cleaving Attack	3	3	0	0
+abilities	custom	A01G	Acrs	Curse	9	9	0	0
+abilities	custom	A01H	AHtb	Storm Bolt	14	14	0	0
+abilities	custom	A01I	AHfs	Flame Strike	15	15	0	0
+abilities	custom	A01J	ACpa	Parasite	17	17	0	0
+abilities	custom	A01K	ACpa	Parasite	17	17	0	0
+abilities	custom	A01L	ANpi	Permanent Immolation	6	6	0	0
+abilities	custom	A01M	Aslo	Slow	9	9	0	0
+abilities	custom	A01N	ACac	Command Aura	6	6	0	0
+abilities	custom	A01O	ACvp	Vampiric Aura	6	6	0	0
+abilities	custom	A01P	ACvp	Vampiric Aura	6	6	0	0
+abilities	custom	A01Q	ACpa	Parasite	19	19	0	0
+abilities	custom	A01R	ANde	Demolish	4	4	0	0
+abilities	custom	A01S	ACpv	Pulverize	4	4	0	0
+abilities	custom	A01T	ANpi	UND: City Of Decay	9	9	0	0
+abilities	custom	A01U	ACbh	Bash	10	10	0	0
+abilities	custom	A01V	AHad	Devotion Aura	11	11	0	0
+abilities	custom	A01W	ACpa	Parasite	19	19	0	0
+abilities	custom	A01X	AHtb	Storm Bolt	14	14	0	0
+abilities	custom	A01Y	Arai	Raise Dead	9	9	0	0
+abilities	custom	A01Z	ACdm	NAG Winged Snake: Dispel	5	5	0	0
+abilities	custom	A020	ACvs	Envenomed Weapons	9	9	0	0
+abilities	custom	A021	Aasl	Slow Aura	10	10	0	0
+abilities	custom	A022	Aasl	Slow Aura	7	7	0	0
+abilities	custom	A023	Aasl	Slow Aura	10	10	0	0
+abilities	custom	A024	Aasl	Slow Aura	10	10	0	0
+abilities	custom	A025	ACct	Critical Strike	2	2	0	0
+abilities	custom	A026	ACbh	Bash	3	3	0	0
+abilities	custom	A027	Asph	Sphere	6	6	0	0
+abilities	custom	A028	Aasl	Slow Aura	9	9	0	0
+abilities	custom	A029	Aasl	Slow Aura	9	9	0	0
+abilities	custom	A02A	Asph	Sphere	7	7	0	0
+abilities	custom	A02B	AIcb	Item Attack Corruption Bonus	5	5	0	0
+abilities	custom	A02C	AHad	COR: Eey Of Corruption (permanent)	13	13	0	0
+abilities	custom	A02D	Apxf	Blast	13	13	0	0
+abilities	custom	A02E	ANcl	Channel	5	5	0	0
+abilities	custom	A02F	AIcd	Damage Add	5	5	0	0
+abilities	custom	A02G	AIdb	Scroll Heal	9	9	0	0
+abilities	custom	A02H	AIcl	Chain Lightning	11	11	0	0
+abilities	custom	A02I	Absk	Berserk	12	12	0	0
+abilities	custom	A02J	Abof	Burning Oil	9	9	0	0
+abilities	custom	A02K	Abof	Burning Oil	9	9	0	0
+abilities	custom	A02L	ACct	Critical Strike	4	4	0	0
+abilities	custom	A02M	Ainf	Inner Fire	12	12	0	0
+abilities	custom	A02N	ACce	Cleaving Attack	4	4	0	0
+abilities	custom	A02O	Aasl	Slow Aura	8	8	0	0
+abilities	custom	A02P	ACpv	Pulverize	7	7	0	0
+abilities	custom	A02Q	Assk	Hardened Skin	5	5	0	0
+abilities	custom	A02R	ACct	Critical Strike	4	4	0	0
+abilities	custom	A02S	AOsf	Feral Spirit	11	11	0	0
+abilities	custom	A02T	ACpu	NAG: Siren (Purge)	13	13	0	0
+abilities	custom	A02U	ACpa	NAG: Siren (Purge (cd))	14	14	0	0
+abilities	custom	A02V	ACct	Critical Strike	3	3	0	0
+abilities	custom	A02W	ACct	Critical Strike	4	4	0	0
+abilities	custom	A02X	ACce	NAG: RG (Cleaving Attack)	5	5	0	0
+abilities	custom	A02Y	Asph	Sphere	3	3	0	0
+abilities	custom	A02Z	ACpa	ORC: Serpent Rock	19	19	0	0
+abilities	custom	A030	ANab	ORC: Serpent Rock	24	24	0	0
+abilities	custom	A031	Awrg	War Stomp	13	13	0	0
+abilities	custom	A032	ACpa	Parasite	18	18	0	0
+abilities	custom	A033	ACpa	UND: Death Pit	18	18	0	0
+abilities	custom	A034	AHad	ORC: Defensive Kodo (defensive aura)	7	7	0	0
+abilities	custom	A035	AIar	ORC: Offensive Kodo (damage aura)	9	9	0	0
+abilities	custom	A036	Asph	Sphere	5	5	0	0
+abilities	custom	A037	Asph	Sphere	5	5	0	0
+abilities	custom	A038	Aven	Envenomed Spears	9	9	0	0
+abilities	custom	A039	ACpa	ORC: Ceremonial Totem	18	18	0	0
+abilities	custom	A03A	AItn	Item Damage Bonus	4	4	0	0
+abilities	custom	A03B	AIs2	Item Attack Speed Bonus	3	3	0	0
+abilities	custom	A03C	Afra	Frost Attack	4	4	0	0
+abilities	custom	A03D	AIl2	Item Life Bonus	4	4	0	0
+abilities	custom	A03E	AIrr	Quad Damage	8	8	0	0
+abilities	custom	A03F	AIrr	Double Damage	8	8	0	0
+abilities	custom	A03G	Adef	Defend	6	6	0	0
+abilities	custom	A03H	AHre	Resurrection	5	5	0	0
+abilities	custom	A03I	Ainf	HUM: Inner Fire (paladin)	14	14	0	0
+abilities	custom	A03J	AHad	Devotion Aura	6	6	0	0
+abilities	custom	A03K	Ahea	HUM: Crusader/Paladin Heal	5	5	0	0
+abilities	custom	A03L	AIl1	Item Life Bonus	4	4	0	0
+abilities	custom	A03M	Ainf	HUM: Crusader (inner fire)	14	14	0	0
+abilities	custom	A03N	Aroc	Barrage	11	11	0	0
+abilities	custom	A03O	Aroc	Barrage	11	11	0	0
+abilities	custom	A03P	ACev	Evasion	3	3	0	0
+abilities	custom	A03Q	ANcl	Channel	5	5	0	0
+abilities	custom	A03R	ACro	Roar	7	7	0	0
+abilities	custom	A03S	ACpa	Parasite	14	14	0	0
+abilities	custom	A03T	AOae	Endurance Aura	9	9	0	0
+abilities	custom	A03U	ANcl	Channel	5	5	0	0
+abilities	custom	A03V	Asph	Sphere	7	7	0	0
+abilities	custom	A03W	Aenr	Entangling Roots	10	10	0	0
+abilities	custom	A03X	AIlx	Melee Lightning Damage Bonus	15	15	0	0
+abilities	custom	A03Y	Afrb	Frost Breath	5	5	0	0
+abilities	custom	A03Z	ACf2	Frost Armor	8	8	0	0
+abilities	custom	A040	ACf2	Frost Armor	7	7	0	0
+abilities	custom	A041	ANhs	Healing Spray	4	4	0	0
+abilities	custom	A042	ACba	Brilliance Aura	5	5	0	0
+abilities	custom	A043	ACfn	NOR: Ice Queen (frost nova)	11	11	0	0
+abilities	custom	A044	ACpa	Parasite	14	14	0	0
+abilities	custom	A045	Aenr	Entangling Roots	10	10	0	0
+abilities	custom	A046	AIlx	Melee Lightning Damage Bonus	15	15	0	0
+abilities	custom	A047	Aenr	Entangling Roots	9	9	0	0
+abilities	custom	A048	AIlx	Melee Lightning Damage Bonus	14	14	0	0
+abilities	custom	A049	AIlx	Melee Lightning Damage Bonus	14	14	0	0
+abilities	custom	A04A	Asph	Sphere	7	7	0	0
+abilities	custom	A04B	Asph	Sphere	6	6	0	0
+abilities	custom	A04C	Asph	Sphere	7	7	0	0
+abilities	custom	A04D	ACce	Cleaving Attack	5	5	0	0
+abilities	custom	A04E	ACct	Critical Strike	5	5	0	0
+abilities	custom	A04F	Afrz	Freezing Breath	6	6	0	0
+abilities	custom	A04G	AHtb	Storm Bolt	10	10	0	0
+abilities	custom	A04H	Aenr	Entangling Roots	10	10	0	0
+abilities	custom	A04I	ACpa	Parasite	17	17	0	0
+abilities	custom	A04J	ACpa	Parasite	19	19	0	0
+abilities	custom	A04K	Afrz	Freezing Breath	7	7	0	0
+abilities	custom	A04L	ACpa	Parasite	18	18	0	0
+abilities	custom	A04M	Asph	Sphere	14	14	0	0
+abilities	custom	A04N	AIll	Item Attack Lightning Bonus (new)	12	12	0	0
+abilities	custom	A04O	ANch	Charm	11	11	0	0
+abilities	custom	A04P	AIll	Item Attack Lightning Bonus (new)	12	12	0	0
+abilities	custom	A04Q	ACcr	Cripple	14	14	0	0
+abilities	custom	A04R	ACpa	Parasite	17	17	0	0
+abilities	custom	A04S	AIad	COR: Eye of Corruption	14	14	0	0
+abilities	custom	A04T	AOae	Endurance Aura	10	10	0	0
+abilities	custom	A04U	ACpa	Parasite	19	19	0	0
+abilities	custom	A04V	Amnx	AOE damage upon death	8	8	0	0
+abilities	custom	A04W	AIll	Item Attack Lightning Bonus (new)	13	13	0	0
+abilities	custom	A04X	AUcs	Carrion Swarm	17	17	0	0
+abilities	custom	A04Y	Amnx	AOE damage upon death	7	7	0	0
+abilities	custom	A04Z	Afak	Orb of Annihilation	12	12	0	0
+abilities	custom	A050	ACct	Critical Strike	4	4	0	0
+abilities	custom	A051	Asph	Sphere	10	10	0	0
+abilities	custom	A052	Aegr	COR: Shadow Dragon (Damage Reflect)	9	9	0	0
+abilities	custom	A053	Asph	Sphere	9	9	0	0
+abilities	custom	A054	AIll	Item Attack Lightning Bonus (new)	13	13	0	0
+abilities	custom	A055	Acri	Cripple	13	13	0	0
+abilities	custom	A056	ANpi	Corrupted: Void Walker	6	6	0	0
+abilities	custom	A057	ACpa	COR: Well Of Pain	20	20	0	0
+abilities	custom	A058	Asph	Sphere	6	6	0	0
+abilities	custom	A059	ACpv	Pulverize	5	5	0	0
+abilities	custom	A05A	ACpv	Pulverize	5	5	0	0
+abilities	custom	A05B	Acht	Howl of Terror	9	9	0	0
+abilities	custom	A05C	ACpa	Parasite	14	14	0	0
+abilities	custom	A05D	Awrs	War Stomp	8	8	0	0
+abilities	custom	A05E	ACpa	Parasite	14	14	0	0
+abilities	custom	A05F	AHad	Devotion Aura	9	9	0	0
+abilities	custom	A05G	AHad	Devotion Aura	9	9	0	0
+abilities	custom	A05H	AHfs	Flame Strike	15	15	0	0
+abilities	custom	A05I	ACct	Critical Strike	3	3	0	0
+abilities	custom	A05J	ACev	Evasion	3	3	0	0
+abilities	custom	A05K	ACbh	Bash	4	4	0	0
+abilities	custom	A05L	Arai	Raise Dead	9	9	0	0
+abilities	custom	A05M	AUcs	Carrion Swarm	11	11	0	0
+abilities	custom	A05N	AIlx	UND: Mighty Necromancer (carrion swarm)	17	17	0	0
+abilities	custom	A05O	Asph	Sphere	6	6	0	0
+abilities	custom	A05P	ANpi	Permanent Immolation	6	6	0	0
+abilities	custom	A05Q	ACvs	Envenomed Weapons	7	7	0	0
+abilities	custom	A05R	Aap1	Disease Cloud	7	7	0	0
+abilities	custom	A05S	ACvs	Envenomed Weapons	7	7	0	0
+abilities	custom	A05T	ANpi	Permanent Immolation	6	6	0	0
+abilities	custom	A05U	ACpa	Parasite	17	17	0	0
+abilities	custom	A05V	AEah	CHA: Quill Demon (thorns aura)	8	8	0	0
+abilities	custom	A05W	ACce	Cleaving Attack	3	3	0	0
+abilities	custom	A05X	ACcl	Chain Lightning	7	7	0	0
+abilities	custom	A05Y	ACct	Critical Strike	4	4	0	0
+abilities	custom	A05Z	ACce	Cleaving Attack	4	4	0	0
+abilities	custom	A060	ACce	Cleaving Attack	3	3	0	0
+abilities	custom	A061	Afbt	Feedback	4	4	0	0
+abilities	custom	A062	ACct	Critical Strike	4	4	0	0
+abilities	custom	A063	ACce	Cleaving Attack	4	4	0	0
+abilities	custom	A064	Afrb	Frost Breath	5	5	0	0
+abilities	custom	A065	ACce	Cleaving Attack	3	3	0	0
+abilities	custom	A066	ACct	Critical Strike	2	2	0	0
+abilities	custom	A067	ACce	Cleaving Attack	3	3	0	0
+abilities	custom	A068	ACbh	Bash	3	3	0	0
+abilities	custom	A069	Afak	Orb of Annihilation	13	13	0	0
+abilities	custom	A06A	ACct	Critical Strike	5	5	0	0
+abilities	custom	A06B	ACct	Critical Strike	5	5	0	0
+abilities	custom	A06C	Aakb	QuadDamageAura	6	6	0	0
+abilities	custom	A06D	Aakb	DoubleDamageAura	6	6	0	0
+abilities	custom	A06E	Asph	Rescue Strike Effect	10	10	0	0
+abilities	custom	A06F	ACct	Critical Strike	5	5	0	0
+abilities	custom	A06G	Aasl	Slow Aura	8	8	0	0
+abilities	custom	A06H	Aens	Ensnare	9	9	0	0
+abilities	custom	A06I	ACpa	Parasite	14	14	0	0
+abilities	custom	A06J	Aspy	Spawn Hydra	3	3	0	0
+abilities	custom	A06K	Aspy	Spawn Hydra	3	3	0	0
+abilities	custom	A06L	ACct	Critical Strike	3	3	0	0
+abilities	custom	A06M	ACct	Critical Strike	6	6	0	0
+abilities	custom	A06N	ACvp	UND: Greater Vampir (vampiric aura)	7	7	0	0
+abilities	custom	A06O	Asph	Sphere	8	8	0	0
+abilities	custom	A06P	ACpa	NOR: Chilling Mushroom	19	19	0	0
+abilities	custom	A06Q	Aens	Ensnare	15	15	0	0
+abilities	custom	A06R	ACpa	Parasite	17	17	0	0
+abilities	custom	A06S	AHtb	Storm Bolt	13	13	0	0
+abilities	custom	A06T	AIl2	Item Life Bonus	4	4	0	0
+abilities	custom	A06U	AIth	Item Damage Bonus	4	4	0	0
+abilities	custom	A06V	Asph	Legendary Unit	8	8	0	0
+abilities	custom	A06W	AOae	Endurance Aura	9	9	0	0
+abilities	custom	A06X	AOae	Endurance Aura	9	9	0	0
+abilities	custom	A06Y	AOae	Endurance Aura	9	9	0	0
+abilities	custom	A06Z	ANss	Spell Shield	2	2	0	0
+abilities	custom	A070	Amgl	Leg-anti-hex	3	3	0	0
+abilities	custom	A071	Ahrp	Repair	9	9	0	0
+abilities	custom	A073	ACev	Evasion	3	3	0	0
+abilities	custom	A074	ACev	Evasion	3	3	0	0
+abilities	custom	A075	Afbt	Feedback	6	6	0	0
+abilities	custom	A076	Afbt	Feedback	6	6	0	0
+abilities	custom	A077	AOwk	Wind Walk	12	12	0	0
+abilities	custom	A078	AOwk	Wind Walk	12	12	0	0
+abilities	custom	A079	AEtq	NEL: Druid (Heal Rain)	4	4	0	0
+abilities	custom	A07A	AEer	Entangling Roots	10	10	0	0
+abilities	custom	A07B	Arsk	Resistant Skin	3	3	0	0
+abilities	custom	A07C	AIcb	Item Attack Corruption Bonus	12	12	0	0
+abilities	custom	A07D	AIcb	Item Attack Corruption Bonus	12	12	0	0
+abilities	custom	A07E	ANcl	Channel	5	5	0	0
+abilities	custom	A07F	ANcl	Channel	5	5	0	0
+abilities	custom	A07G	ANcl	Summoned Unit	6	6	0	0
+abilities	custom	A07H	ANcl	TypeLegendary	6	6	0	0
+abilities	custom	A07I	ANcl	Channel	5	5	0	0
+abilities	custom	A07J	ANcl	Channel	5	5	0	0
+abilities	custom	A07K	ANcl	Channel(troll)	6	6	0	0
+abilities	custom	A07L	Afbt	Feedback	4	4	0	0
+abilities	custom	A07M	ANcl	Channel	5	5	0	0
+abilities	custom	A07N	ANcl	Channel	5	5	0	0
+abilities	custom	A07O	ANcl	Channel	5	5	0	0
+abilities	custom	A07P	ACpa	Parasite	14	14	0	0
+abilities	custom	A07Q	AEer	Entangling Roots	11	11	0	0
+abilities	custom	A07R	ACpa	Parasite	13	13	0	0
+abilities	custom	A07T	AEsf	NEL: Starfall	10	10	0	0
+abilities	custom	A07U	ACpa	Parasite	17	17	0	0
+abilities	custom	A07V	Amgl	Moon Glaive	6	6	0	0
+abilities	custom	A07W	Amgl	Moon Glaive	6	6	0	0
+abilities	custom	A07X	AHtb	Killzor	15	15	0	0
+abilities	custom	A07Y	Asp1	Sphere	2	2	0	0
+abilities	custom	A07Z	Afbt	Feedback	8	8	0	0
+abilities	custom	A080	Apxf	World Freezer Phoenix Fire	14	14	0	0
+abilities	custom	A081	AOae	freezer orb slow	9	9	0	0
+abilities	custom	A082	AHtb	Storm Bolt	13	13	0	0
+abilities	custom	A083	AHtb	Storm Bolt	13	13	0	0
+abilities	custom	A084	Apxf	World Freezer Phoenix Fire -na	14	14	0	0
+abilities	custom	A085	Arai	Raise Dead	9	9	0	0
+abilities	custom	A086	AUdd	Death And Decay	11	11	0	0
+abilities	custom	A087	AUdp	UND Lich King: Death Pact	6	6	0	0
+abilities	custom	A088	AItx	Item Damage Bonus	4	4	0	0
+abilities	custom	A089	AId3	Item Armor Bonus	3	3	0	0
+abilities	custom	A08A	AIdb	Item Temporary Area Armor Bonus	12	12	0	0
+abilities	custom	A08B	ACpa	Parasite	17	17	0	0
+abilities	custom	A08C	AIsr	NEL: Obelisk Of Wilderness (spell resist)	5	5	0	0
+abilities	custom	A08D	Assk	Hardened Skin	6	6	0	0
+abilities	custom	A08E	ACpa	NEL: Obelisk of Wilderness	18	18	0	0
+abilities	custom	A08F	AOae	Endurance Aura	9	9	0	0
+abilities	custom	A08G	Ahrp	Repair	9	9	0	0
+abilities	custom	A08H	ANcl	Channel	5	5	0	0
+abilities	custom	A08I	ACbh	Bash	7	7	0	0
+abilities	custom	A08J	ACbh	Bash	7	7	0	0
+abilities	custom	A08K	AIsr	ZZZauberschaden-Reduzierung	3	3	0	0
+abilities	custom	A08L	AId4	Item Armor Bonus	4	4	0	0
+abilities	custom	A08M	ACev	Evasion	3	3	0	0
+abilities	custom	A08N	Asph	Sphere	5	5	0	0
+abilities	custom	A08O	AIsr	Spell Damage Reduction	5	5	0	0
+abilities	custom	A08P	Aasl	Slow Aura	8	8	0	0
+abilities	custom	A08Q	ACf3	Damage 200	9	9	0	0
+abilities	custom	A08R	ANde	Demolish	4	4	0	0
+abilities	custom	A08S	Aenr	Entangling Roots	10	10	0	0
+abilities	custom	A08T	AEsf	NEL: Starfall (-na)	11	11	0	0
+abilities	custom	A08U	AHtb	HEL: Dragonhawk (SolarStrike)	15	15	0	0
+abilities	custom	A08V	ACpa	Parasite	12	12	0	0
+abilities	custom	A08W	ACbl	Bloodlust	11	11	0	0
+abilities	custom	A08X	ANcl	Channel	5	5	0	0
+abilities	custom	A08Y	ANcl	Scroll of Stone Trigger	19	19	0	0
+abilities	custom	A08Z	ACbh	MEH: Iron Golem (bash)	5	5	0	0
+abilities	custom	A090	ACbh	Bash 2	6	6	0	0
+abilities	custom	A091	ACpv	Pulverize	5	5	0	0
+abilities	custom	A092	ACpv	Pulverize	5	5	0	0
+abilities	custom	A093	AIsr	Spell Damage Reduction	5	5	0	0
+abilities	custom	A094	ACce	Cleaving Attack	4	4	0	0
+abilities	custom	A095	ACpa	Parasite	15	15	0	0
+abilities	custom	A096	Amb2	MECCCC	5	5	0	0
+abilities	custom	A097	Amnx	AOE damage upon death	6	6	0	0
+abilities	custom	A098	Amin	Mine - exploding	4	4	0	0
+abilities	custom	A099	Asds	Kaboom!	9	9	0	0
+abilities	custom	A09A	Absk	Check Range	14	14	0	0
+abilities	custom	A09B	Amnx	AOE damage upon death	36	36	0	0
+abilities	custom	A09C	AIs2	Item Attack Speed Bonus	9	9	0	0
+abilities	custom	A09D	ACpa	Parasite	14	14	0	0
+abilities	custom	A09F	Apxf	MEH: Rocket Tank (rockets)	12	12	0	0
+abilities	custom	A09G	ANcl	Gold Coin Trigger	19	19	0	0
+abilities	custom	A09H	ANcl	TypeMurloc	6	6	0	0
+abilities	custom	A09I	ACbh	Bash	7	7	0	0
+abilities	custom	A09J	ACbh	Bash	7	7	0	0
+abilities	custom	A09K	Ahrp	MEH: Gobbo Machinist (repair)	12	12	0	0
+abilities	custom	A09L	AHad	Devotion Aura	18	18	0	0
+abilities	custom	A09M	AIl1	Stacking Life Bonus	13	13	0	0
+abilities	custom	A09N	ACpa	Parasite	20	20	0	0
+abilities	custom	A09O	ACpa	Parasite	18	18	0	0
+abilities	custom	A09P	AHab	Brilliance Aura	13	13	0	0
+abilities	custom	A09Q	AId2	Item Armor Bonus	5	5	0	0
+abilities	custom	A09R	ACac	Command Aura	9	9	0	0
+abilities	custom	A09S	AHad	Power Armor	15	15	0	0
+abilities	custom	A09T	ACcl	Chain Lightning	9	9	0	0
+abilities	custom	A09U	Amgl	Moon Glaive	6	6	0	0
+abilities	custom	A09V	Aakb	War Drums	12	12	0	0
+abilities	custom	A09W	Aspo	Slow Poison	9	9	0	0
+abilities	custom	A09X	ACpa	Parasite	14	14	0	0
+abilities	custom	A09Y	Assk	Hardened Skin	5	5	0	0
+abilities	custom	A09Z	Assk	Hardened Skin	5	5	0	0
+abilities	custom	A0A0	Assk	Hardened Skin	4	4	0	0
+abilities	custom	A0A1	Asph	Sphere	6	6	0	0
+abilities	custom	A0A2	Asph	Sphere	6	6	0	0
+abilities	custom	A0A3	Amnx	AOE damage upon death	7	7	0	0
+abilities	custom	A0A4	Asph	Sphere	6	6	0	0
+abilities	custom	A0A5	Aspb	Issue buy order	12	12	0	0
+abilities	custom	A0A6	Asps	Infostealer's (spell steal)	7	7	0	0
+abilities	custom	A0A7	Ahea	Heal	5	5	0	0
+abilities	custom	A0A8	AChv	HEL: Sorceress (healing wave)	9	9	0	0
+abilities	custom	A0A9	AIlx	Melee Lightning Damage Bonus	15	15	0	0
+abilities	custom	A0AA	ACcl	Chain Lightning	9	9	0	0
+abilities	custom	A0AB	Acri	Cripple	13	13	0	0
+abilities	custom	A0AC	AIll	Item Attack Lightning Bonus (new)	13	13	0	0
+abilities	custom	A0AD	ACce	Cleaving Attack	4	4	0	0
+abilities	custom	A0AE	ACpa	Parasite	15	15	0	0
+abilities	custom	A0AF	ACmp	Impale	11	11	0	0
+abilities	custom	A0AG	ACct	Critical Strike	3	3	0	0
+abilities	custom	A0AH	AIsr	Spell Resist (legendary)	6	6	0	0
+abilities	custom	A0AI	AIsr	Spell Damage Reduction	5	5	0	0
+abilities	custom	A0AJ	Aspi	Spiked Barricades	5	5	0	0
+abilities	custom	A0AK	AHtb	NOR: Chilling Mushroom	16	16	0	0
+abilities	custom	A0AL	AIsr	HEL: Blademaster (spell resist)	5	5	0	0
+abilities	custom	A0AN	AIsr	HEL: Elder Blademaster (spell resist)	6	6	0	0
+abilities	custom	A0AO	Aven	NAT: Black Spider (slow poison)	8	8	0	0
+abilities	custom	A0AP	Aven	NAT: Giant Spider (slow poison)	8	8	0	0
+abilities	custom	A0AQ	Aspy	NAT: Giant Spider (spawn forest spiders)	3	3	0	0
+abilities	custom	A0AR	Aweb	NAT: Giant Spider (Web)	9	9	0	0
+abilities	custom	A0AS	Aweb	NAT: Brood Mother (Web)	8	8	0	0
+abilities	custom	A0AT	Aven	NAT: Brood Mother (slow poison)	7	7	0	0
+abilities	custom	A0AU	Aspy	NAT: Brood Mother (spawn giant spiders)	4	4	0	0
+abilities	custom	A0AV	ACpa	NAT: Brood Mother (infest)	11	11	0	0
+abilities	custom	A0AW	Arej	NAT: Furbolg Shaman (rejuvenation)	10	10	0	0
+abilities	custom	A0AX	Arej	NAT: Furbolg Elder Shaman (rejuvenation)	9	9	0	0
+abilities	custom	A0AY	AIsr	NAT: Dryad (spell resist)	5	5	0	0
+abilities	custom	A0AZ	AIsr	NAT: Keeper of the Groove (spell resist)	6	6	0	0
+abilities	custom	A0B0	ACua	NAT: Ancient Keeper (natures aura)	8	8	0	0
+abilities	custom	A0B1	ACbh	NAT: Bear (bash)	5	5	0	0
+abilities	custom	A0B2	ACbh	NAT: Ancient Bear (bash)	6	6	0	0
+abilities	custom	A0B3	ACct	NAT: Bear (critical strike)	2	2	0	0
+abilities	custom	A0B4	ACct	NAT: Ancient Bear (critical strike)	3	3	0	0
+abilities	custom	A0B5	ACbb	Bloodlust	8	8	0	0
+abilities	custom	A0B6	ACbb	Bloodlust	8	8	0	0
+abilities	custom	A0B7	Ainf	NAT: Bear (feral rage)	14	14	0	0
+abilities	custom	A0B8	Ainf	NAT: Ancient Bear (feral rage)	14	14	0	0
+abilities	custom	A0B9	ANic	COR: Void Keeper (Incinerate)	13	13	0	0
+abilities	custom	A0BA	Aven	NAT: Emerald Dragon (corrosive breath (poison))	6	6	0	0
+abilities	custom	A0BB	AIcb	NAT: Emerald Dragon (armor reduce)	19	19	0	0
+abilities	custom	A0BC	Agra	NAT: Mounatin Giant (Grab Tree)	6	6	0	0
+abilities	custom	A0BD	ANto	NAT: Ancient of Gale	9	9	0	0
+abilities	custom	A0BE	Assk	NAT: Mountain Giant (hardened skin)	6	6	0	0
+abilities	custom	A0BF	AUts	NAT: Mountain Giant (damage reduce %)	8	8	0	0
+abilities	custom	A0BG	ANcl	Channel	5	5	0	0
+abilities	custom	A0BH	ACpv	NAT: Mountain Giant (pulverize)	8	8	0	0
+abilities	custom	A0BI	Atau	NAT: Mountain Giant (taunt)	4	4	0	0
+abilities	custom	A0BJ	ACpa	NAT: Mountain Giant (taunt dummy)	15	15	0	0
+abilities	custom	A0BK	ANth	NAT: Treant (thorns)	4	4	0	0
+abilities	custom	A0BL	AHbn	NAT: Banish	9	9	0	0
+abilities	custom	A0BM	ACpa	NAT: Banish (dummy)	20	20	0	0
+abilities	custom	A0BN	AHbh	NAT: Ancient protector (bash)	9	9	0	0
+abilities	custom	A0BO	ACpa	NAT: Ancient of Gale (dummy)	18	18	0	0
+abilities	custom	A0BP	ACpa	NAT: Ancient of Gale (dummy, -na)	18	18	0	0
+abilities	custom	A0BQ	ANto	NAT: Ancient of Gale (-na)	9	9	0	0
+abilities	custom	A0BR	AHab	NAT: Curse of Nature	13	13	0	0
+abilities	custom	A0BS	ACpa	NAT: Ancient of Wonders (dummy)	17	17	0	0
+abilities	custom	A0BT	Ahea	NAT: Keeper of the Groove (natures touch)	7	7	0	0
+abilities	custom	A0BU	AOsf	NAT: Keeper of the Grove (summon treants)	12	12	0	0
+abilities	custom	A0BV	Arsk	NAT: Ancient Keeper (spell immune)	4	4	0	0
+abilities	custom	A0BW	ACev	NAT: Ancient Keeper (incorporeal)	4	4	0	0
+abilities	custom	A0BX	ACpa	NAT: Ancient Keeper (treants sprout)	15	15	0	0
+abilities	custom	A0BY	ACce	NAT: Bear (cleaving attack)	4	4	0	0
+abilities	custom	A0BZ	ACce	NAT: Ancient Bear (cleaving attack)	5	5	0	0
+abilities	custom	A0C0	Ahea	NAT: Furbolg Shaman (rejuvenation (dummy))	6	6	0	0
+abilities	custom	A0C1	Ahea	NAT: Furbolg Elder Shaman (rejuvenation (dummy))	6	6	0	0
+abilities	custom	A0C2	AIlx	NAT: Furbolg Elder Shaman (manaburn orb)	16	16	0	0
+abilities	custom	A0C3	AEmb	NAT: Furbolg Elder Shaman (manaburn)	10	10	0	0
+abilities	custom	A0C4	ANcl	Channel	5	5	0	0
+abilities	custom	A0C5	ANcl	Channel	5	5	0	0
+abilities	custom	A0C6	Arll	Item Life Regeneration	2	2	0	0
+abilities	custom	A0C7	Arll	Item Life Regeneration	2	2	0	0
+abilities	custom	A0C8	AItx	Item Damage Bonus	2	2	0	0
+abilities	custom	A0C9	Aspb	Spell Book	11	11	0	0
+abilities	custom	A0CA	Aasl	Slow Aura	5	5	0	0
+abilities	custom	A0CB	AId1	Item Armor Bonus	2	2	0	0
+abilities	custom	A0CC	AId1	Item Armor Bonus	2	2	0	0
+abilities	custom	A0CD	AId1	Item Armor Bonus	2	2	0	0
+abilities	custom	A0CE	Atdg	Tornado (Unit Damage Aura)	7	7	0	0
+abilities	custom	A0CF	AIsr	NAT: Mountain Giant (spell resist)	5	5	0	0
+abilities	custom	A0CG	Ahea	NEL: Faerie Dragon (heal)	7	7	0	0
+abilities	custom	A0CH	AIlx	ELE: Elemental Of Lightning (orb)	15	15	0	0
+abilities	custom	A0CI	AIlx	ELE: Greater Elemental Of Lightning (orb)	15	15	0	0
+abilities	custom	A0CJ	ACfl	ELE: Elemental Of Lightning (forked lightning)	10	10	0	0
+abilities	custom	A0CK	ACfl	ELE: Greater Elemental Of Lightning (forked lightning)	11	11	0	0
+abilities	custom	A0CL	ANlm	ELE: Elemental Of Fire (split)	8	8	0	0
+abilities	custom	A0CM	AIlx	ELE: Greater Elemental Of Fire (firebreath orb)	16	16	0	0
+abilities	custom	A0CN	ACbc	ELE: Greater Elemental Of Fire (firebreath)	11	11	0	0
+abilities	custom	A0CO	Awar	ELE: Elemental Of Earth	8	8	0	0
+abilities	custom	A0CP	Awar	ELE: Greater Elemental Of Earth	8	8	0	0
+abilities	custom	A0CQ	AOae	ELE: Elemental Of Wind (slow aura)	11	11	0	0
+abilities	custom	A0CR	AOae	ELE: Greater Elemental Of Wind (slow aura)	11	11	0	0
+abilities	custom	A0CS	ACes	ELE: Lesser Elemental Of Water (evasion)	4	4	0	0
+abilities	custom	A0CT	ACes	ELE: Elemental Of Water (evasion)	4	4	0	0
+abilities	custom	A0CU	AOmi	ELE: Greater Elemental Of Water (illusions)	10	10	0	0
+abilities	custom	A0CV	ANcl	Channel ( Assasin Target )	6	6	0	0
+abilities	custom	A0CW	Asph	ELE: Onis Alis	8	8	0	0
+abilities	custom	A0CX	Asph	ELE: Onis Coruscus	8	8	0	0
+abilities	custom	A0CY	ACpa	ELE: Elemental Rain	17	17	0	0
+abilities	custom	A0CZ	ACpa	ELE: Enchant	17	17	0	0
+abilities	custom	A0D0	ACrg	ELE: Elemental Rain (Meteor Shower)	12	12	0	0
+abilities	custom	A0D1	AHbz	ELE: Elemental Rain (Blizzard)	11	11	0	0
+abilities	custom	A0D2	AHbz	ELE: Elemental Rain (Blizzard) (-na)	13	13	0	0
+abilities	custom	A0D3	ACrg	ELE: Elemental Rain (Meteor Shower)	11	11	0	0
+abilities	custom	A0D4	Awar	ELE: Enchant(Forge Weapon)	12	12	0	0
+abilities	custom	A0D5	AHtb	ELE: ElectroShieldElemental	15	15	0	0
+abilities	custom	A0D6	AId4	ELE: Enchant(Rock Shield)	6	6	0	0
+abilities	custom	A0D7	AOae	ELE: Enchant(Haste)	10	10	0	0
+abilities	custom	A0D8	Apig	ELE: Elemental Guard Tower (Immolation)	7	7	0	0
+abilities	custom	A0D9	Apxf	ELE: Elemental Guard Tower (Discharge)	13	13	0	0
+abilities	custom	A0DA	Aclf	ELE: Elemental Guard Tower (Shield of Mist)	11	11	0	0
+abilities	custom	A0DB	AIlx	ELE: Elemental Guard Tower	16	16	0	0
+abilities	custom	A0DC	ACtb	ELE: Elemental Guard Tower (Boulder)	7	7	0	0
+abilities	custom	A0DD	ANcl	Channel	14	14	0	0
+abilities	custom	A0DE	ANcl	Channel	13	13	0	0
+abilities	custom	A0DF	ANcl	Channel	15	15	0	0
+abilities	custom	A0DG	ANcl	Channel	14	14	0	0
+abilities	custom	A0DH	ANcl	Channel	14	14	0	0
+abilities	custom	A0DI	ANcl	Channel	15	15	0	0
+abilities	custom	A0DJ	ANcl	Channel	14	14	0	0
+abilities	custom	A0DK	ANcl	Channel	15	15	0	0
+abilities	custom	A0DL	ANcl	Channel	15	15	0	0
+abilities	custom	A0DM	ANcl	Channel	14	14	0	0
+abilities	custom	A0DN	ANcl	Channel	14	14	0	0
+abilities	custom	A0DO	ANcl	Channel	13	13	0	0
+abilities	custom	A0DP	ANcl	Channel	16	16	0	0
+abilities	custom	A0DQ	ANcl	Channel	15	15	0	0
+abilities	custom	A0DR	ANcl	Channel	15	15	0	0
+abilities	custom	A0DS	ANcl	Elemental Building	7	7	0	0
+abilities	custom	A0DT	ACpa	Lesser Water Elemental	20	20	0	0
+abilities	custom	A0DU	AEfn	NAT: Force of Nature	12	12	0	0
+abilities	custom	A0DV	ACpa	ELE: ObeliskOfElements (dummy)	18	18	0	0
+abilities	custom	A0DW	ANcl	Channel	5	5	0	0
+abilities	custom	A0DX	ANcl	Channel	5	5	0	0
+abilities	custom	A0DY	ANlm	ELE: Greater Elemental Of Fire (split)	12	12	0	0
+abilities	custom	A0DZ	ANcl	Channel	5	5	0	0
+abilities	custom	A0E0	ANcl	Channel	5	5	0	0
+abilities	custom	A0E1	ACpa	Parasite	14	14	0	0
+abilities	custom	A0E2	AUfn	Frost Nova	27	27	0	0
+abilities	custom	A0E3	ACmo	ELE: monsoon	10	10	0	0
+abilities	custom	A0E4	ACmo	ELE: monsoon (-na)	10	10	0	0
+abilities	custom	A0E5	Asph	ELE: Elemental of Wind (effect)	8	8	0	0
+abilities	custom	A0E6	Asph	ELE: Greater Elemental of Wind (effect)	9	9	0	0
+abilities	custom	A0E7	ACpa	Water Elemental	20	20	0	0
+abilities	custom	A0E8	ACpa	Greater Water Elemental	22	22	0	0
+abilities	custom	A0E9	ACpa	Elemental Of Earth	20	20	0	0
+abilities	custom	A0EA	ACpa	Greater Elemental Of Earth	20	20	0	0
+abilities	custom	A0EB	ACpa	Elemental Of Lightning	20	20	0	0
+abilities	custom	A0EC	ACpa	Greater Elemental Of Lightning	20	20	0	0
+abilities	custom	A0ED	ACpa	Elemental Of Fire	20	20	0	0
+abilities	custom	A0EE	ACpa	Greater Elemental Of Fire	20	20	0	0
+abilities	custom	A0EF	ACpa	Lesser Elemental Of Wind	20	20	0	0
+abilities	custom	A0EG	ACpa	Elemental Of Wind	20	20	0	0
+abilities	custom	A0EH	ACpa	Greater Elemental Of Wind	20	20	0	0
+abilities	custom	A0EI	ACpa	ELE: Book of Conjuration	18	18	0	0
+abilities	custom	A0EJ	Amnx	NAT: Wisp explosion	9	9	0	0
+abilities	custom	A0EK	ANcl	Channel	19	19	0	0
+abilities	custom	A0EL	ANre	Mana Regeneration	7	7	0	0
+abilities	custom	A0EM	ACbh	NAT: Wisp (stun)	5	5	0	0
+abilities	custom	A0EN	Asds	Kaboom!	11	11	0	0
+abilities	custom	A0EO	ANcl	Channel	16	16	0	0
+abilities	custom	A0EP	ANak	ELE: Enchant (forged weapon)	11	11	0	0
+abilities	custom	A0EQ	AIlx	NOT WORKING	13	13	0	0
+abilities	custom	A0ER	ANcl	Channel	6	6	0	0
+abilities	custom	A0ES	Aasl	Slow Aura	5	5	0	0
+abilities	custom	A0ET	ACct	ELE: Linker	7	7	0	0
+abilities	custom	A0EU	Afrz	(Sod) Freezing Breath	21	21	0	0
+abilities	custom	A0EV	Amgl	ELE: Boulder	7	7	0	0
+abilities	custom	A0EW	Amgl	ELE: Shield of Mist	7	7	0	0
+abilities	custom	A0EX	Amgl	ELE: Discharge	7	7	0	0
+abilities	custom	A0EY	ACcr	Cripple	20	20	0	0
+abilities	custom	A0EZ	ANcl	Channel	5	5	0	0
+abilities	custom	A0F0	AIlx	ELE: Greater Elemental Of Lightning (orb)buildings	15	15	0	0
+abilities	custom	A0F1	Aasl	Slow Aura	5	5	0	0
+abilities	custom	A0F2	Aasl	Slow Aura	5	5	0	0
+abilities	custom	A0F3	Aspb	Spell Book	4	4	0	0
+abilities	custom	A0F4	ANcl	Channel	5	5	0	0
+abilities	custom	A0F5	ANcl	Elemental Unit	6	6	0	0
+abilities	custom	A0F6	ACfl	ELE: Greater Elemental Of Lightning (forked lightning) buildings	11	11	0	0
+abilities	custom	A0F7	AIlx	ELE: Elemental Of Lightning (orb)buildings	15	15	0	0
+abilities	custom	A0F8	ACfl	ELE: Elemental Of Lightning (forked lightning)buildgins	11	11	0	0
+abilities	custom	A0F9	ACfn	NOR: Ice Queen (frost nova) warlock	13	13	0	0
+abilities	custom	A0FA	ACes	ELE: Elemental Of Water Greater (evasion)	4	4	0	0
+abilities	custom	A0FB	ACpa	Parasite(leg troll)	15	15	0	0
+abilities	custom	A0FC	Aens	Ensnare (Leg Troll)	10	10	0	0
+abilities	custom	A0FD	Aliq	Liquid Fire ( Sod )	5	5	0	0
+abilities	custom	A0FE	ACvs	( SOD ) damage overtime	20	20	0	0
+abilities	custom	A0FF	Abof	(Sod ) Burning Oil	15	15	0	0
+abilities	custom	A0FG	ACpa	ELE: Meteor Shower	18	18	0	0
+abilities	custom	A0FH	AIsr	water lesser(spell resist)	5	5	0	0
+abilities	custom	A0FI	AIsr	water (spell resist)	5	5	0	0
+abilities	custom	A0FJ	AIsr	water greater (spell resist)	5	5	0	0
+abilities	custom	A0FK	ANcl	Channel ( Assasin NotTarget )	6	6	0	0
+abilities	custom	A0FL	Aroc	Barrage Igloo	12	12	0	0
+abilities	custom	A0FM	AIlx	Igloo frost chance	15	15	0	0
+abilities	custom	A0FN	AIsr	spell resist 50%	5	5	0	0
+abilities	custom	A0FO	ANcl	TypeTwins	6	6	0	0
+abilities	custom	A0FP	ACct	Critical Strike(twins)	5	5	0	0
+abilities	custom	A0FQ	ACce	Cleaving Attack Twins	5	5	0	0
+abilities	custom	A0FR	ANpi	Twin: Smile and Cry	10	10	0	0
+abilities	custom	A0FS	AHtc	Twins:Thunder Clap	13	13	0	0
+abilities	custom	A0FT	ACsh	Twins:Shockwave	8	8	0	0
+abilities	custom	A0FU	ACpa	Parasite(twins)	15	15	0	0
+abilities	custom	A0FV	ANde	Demolisher	5	5	0	0
+abilities	custom	A0FW	ACdr	Life Drain Visioneer	12	12	0	0
+abilities	custom	A0FX	ACpa	Parasite( life drain)	15	15	0	0
+abilities	custom	A0FY	ANcl	Channel	14	14	0	0
+abilities	custom	A0HZ	AHad	+9arm 400aoe	8	8	0	0
+abilities	custom	A0I0	Ahea	Prayer	12	12	0	0
+abilities	custom	A0I1	AIra	Prayer: heal+mana	10	10	0	0
+abilities	custom	A0I2	AIrr	Prayer: +dmg +armor	11	11	0	0
+abilities	custom	A0I3	AHre	Resurrection	1	1	0	0
+abilities	custom	A0I4	AHre	Prayer: resurrection	19	19	0	0
+abilities	custom	IBA0	ANcl	Channel	18	18	0	0
+abilities	custom	IBA1	ANcl	Channel	18	18	0	0
+abilities	custom	IBA2	ANcl	Channel	18	18	0	0
+abilities	custom	IBA3	ANcl	Channel	18	18	0	0
+abilities	custom	IBA4	ANcl	Channel	18	18	0	0
+abilities	custom	IBA5	ANcl	Channel	18	18	0	0
+abilities	custom	IBA6	ANcl	Channel	18	18	0	0
+abilities	custom	IBA7	ANcl	Channel	18	18	0	0
+abilities	custom	IBA8	ANcl	Channel	18	18	0	0
+abilities	custom	A0FZ	Amnx	AOE damage upon death	9	9	0	0
+abilities	custom	A0G0	ANcl	Channel	16	16	0	0
+abilities	custom	A0G6	AUts	DST: Thorns	8	8	0	0
+abilities	custom	A0HL	ACct	Fowlhunter 3x	7	7	0	0
+abilities	custom	A0HK	ACpa	DST: Gnolls auto	16	16	0	0
+abilities	custom	A0G2	ACvs	Heavy Bolt	9	9	0	0
+abilities	custom	A0G1	ANwk	Ambush	21	21	0	0
+abilities	custom	A0G3	ACev	Evasion	4	4	0	0
+abilities	custom	A0HM	ACct	Fowlhunter 2x	6	6	0	0
+abilities	custom	A0H3	Asp1	Matriarchs visual	7	7	0	0
+abilities	custom	A0H1	ACpa	DST: Matriarch auto	16	16	0	0
+abilities	custom	A0G9	ACpa	DST: Harpy auto	16	16	0	0
+abilities	custom	A0G5	AIdf	DST: Blind 16%	16	16	0	0
+abilities	custom	A0KB	AIva	Life Steal	4	4	0	0
+abilities	custom	A0J6	Awar	DST: Pulverize	7	7	0	0
+abilities	custom	A0J7	Awar	DST: Pulverize2	8	8	0	0
+abilities	custom	A0GR	Absk	OgreLords rage	13	13	0	0
+abilities	custom	A0GB	ACpa	DST: Ogre auto	16	16	0	0
+abilities	custom	A0GU	ACbh	Bash	7	7	0	0
+abilities	custom	A0HQ	AOae	Sandshield	12	12	0	0
+abilities	custom	A0G8	ACpa	DST: Sandkin abil	15	15	0	0
+abilities	custom	A0G7	AUts	DST: Thorns 70%	7	7	0	0
+abilities	custom	A0HX	AIdf	DST: salamanders	16	16	0	0
+abilities	custom	A0GE	ACpa	Oasis Ability	18	18	0	0
+abilities	custom	A0GF	ACpa	Peyote abil	18	18	0	0
+abilities	custom	A0H5	AOae	QuickSand L	11	11	0	0
+abilities	custom	A0IL	ACmp	succomb	23	23	0	0
+abilities	custom	A0JD	ANab	Peyote	24	24	0	0
+abilities	custom	A0G4	ACsi	Sandstorm	16	16	0	0
+abilities	custom	A0GC	ANpi	SandStorm	11	11	0	0
+abilities	custom	A0HP	ACsi	Sandcloud2x	13	13	0	0
+abilities	custom	A0GA	ACsi	Sandcloud	14	14	0	0
+abilities	custom	A0HW	ANab	DST: salam burn	23	23	0	0
+abilities	custom	A0GD	ANdh	DST: Blind	15	15	0	0
+abilities	custom	A0GK	ACpa	SandStorm abil	19	19	0	0
+abilities	custom	A0GG	ACsa	Searing Arrows	5	5	0	0
+abilities	custom	A0GH	AUau	Quick Sand M	8	8	0	0
+abilities	custom	A0GI	ACac	Quick Sand S	4	4	0	0
+abilities	custom	A0GJ	Ambt	Sand Replenish	8	8	0	0
+abilities	custom	A0GL	AEfk	Razor Spray	9	9	0	0
+abilities	custom	A0GM	AUls	Harpy Swarm	13	13	0	0
+abilities	custom	A0GN	Ahea	PAN: Panda Monk Heal	6	6	0	0
+abilities	custom	A0GO	ANcl	Channel	16	16	0	0
+abilities	custom	A0GP	ANhs	PAN: Healing Spray	14	14	0	0
+abilities	custom	A0GQ	ACct	PAN: Drunk	5	5	0	0
+abilities	custom	A0GS	Assk	PAN: Drunk resistance	6	6	0	0
+abilities	custom	A0GT	Ainf	Inner Fire	11	11	0	0
+abilities	custom	A0GW	ACpa	Thunderpaw Spire Ability	18	18	0	0
+abilities	custom	A0GX	Apoi	Blood Corrosion	2	2	0	0
+abilities	custom	A0GY	AId1	Blood Corrosion	8	8	0	0
+abilities	custom	A0GZ	Aroc	Cloud Ship Multishot	11	11	0	0
+abilities	custom	A0H2	AOae	PAN: Zen Field Aura	13	13	0	0
+abilities	custom	A0H4	ANcl	Echo Blink	15	15	0	0
+abilities	custom	A0H6	ACpa	PAN: Withering Touch	17	17	0	0
+abilities	custom	A0H7	Assk	PAN: Drunk resistance 2	6	6	0	0
+abilities	custom	A0H8	ACct	PAN: Drunk 2	6	6	0	0
+abilities	custom	A0H9	AEpa	Whirlstone Brew	14	14	0	0
+abilities	custom	A0HA	ACct	PAN: Drunk 3	6	6	0	0
+abilities	custom	A0HC	Assk	PAN: Drunk resistance 3	6	6	0	0
+abilities	custom	S000	SCae	PAN: Breath Aura	8	8	0	0
+abilities	custom	A0HD	Amin	Static Remnant Explosion	6	6	0	0
+abilities	custom	A0HE	Amnx	AOE damage upon death remnant	7	7	0	0
+abilities	custom	A0HF	ACev	Evasion	4	4	0	0
+abilities	custom	A0HG	ACct	PAN: Whirlwind	5	5	0	0
+abilities	custom	A0HH	ACac	PAN: Brewcommand Aura	5	5	0	0
+abilities	custom	A0HI	ANhs	PAN: Healing Spray 2	15	15	0	0
+abilities	custom	A0GV	AIsr	Spell Damage Reduction	5	5	0	0
+abilities	custom	A0H0	AIsr	spell resist 20%	5	5	0	0
+abilities	custom	A0HB	AIsa	Scroll of Speed	5	5	0	0
+abilities	custom	A0HJ	ANcl	Scroll of Speed Trigger	19	19	0	0
+abilities	custom	IBA9	ANcl	Buy Speedscroll	21	21	0	0
+abilities	custom	A0HN	ACpa	Parasite	17	17	0	0
+abilities	custom	A0HO	ACpa	Parasite	17	17	0	0
+abilities	custom	A0HR	AItx	Troll Damage Bonus	7	7	0	0
+abilities	custom	A0HS	ACpa	Global Endurance	19	19	0	0
+abilities	custom	A0HT	ACpa	Global Healing	19	19	0	0
+abilities	custom	A0HU	AChw	GlobalHealWard	2	2	0	0
+abilities	custom	A0HV	AIsr	pp spell resist	6	6	0	0
+abilities	custom	A0HY	ACav	Coral Armor Aura	6	6	0	0
+abilities	custom	A0I5	ACct	AA Crit 1.45x	7	7	0	0
+abilities	custom	A0Z1	AHad	Carapace Aura	7	7	0	0
+abilities	custom	AM0y	AIil	Item Illusions	12	12	0	0
+abilities	custom	AM0z	Aro1	Root	1	1	0	0
+abilities	custom	A9FS	AOfs	Far Sight	9	9	0	0
+abilities	custom	A09E	AHtc	Thunder Clap	12	12	0	0
+abilities	custom	AM0{	ANcl	Explode Snow	25	25	0	0
+abilities	custom	Ast9	Asta	Stasis Trap	12	12	0	0
+abilities	custom	AstB	Aoar	Healing Ward Aura	4	4	0	0
+abilities	custom	AstC	SCae	Endurance Aura	4	4	0	0
+buffs	original	BNic	BNic	Incinerate	1	1	0	0
+buffs	original	Bbof	Bbof	Burning	2	2	0	0
+buffs	original	Bweb	Bweb	Web	1	1	0	0
+buffs	original	Xbdt	Xbdt		1	1	0	0
+buffs	custom	B000	Bblo	Holy Power	4	4	0	0
+buffs	custom	B001	Bapl	Rot	3	3	0	0
+buffs	custom	B002	BHfs	Fear of the Banshee	5	5	0	0
+buffs	custom	B003	Bapl	Plague	2	2	0	0
+buffs	custom	B004	Bbof	Weaken Soul	7	7	0	0
+buffs	custom	B005	BPSE	Soul Taken	2	2	0	0
+buffs	custom	B006	Bbsk	Berserk	1	1	0	0
+buffs	custom	B007	Bblo	Berserk	4	4	0	0
+buffs	custom	B008	BOac	Drum'n'Bass Beats	3	3	0	0
+buffs	custom	B009	Binf	Shaman's Buff	5	5	0	0
+buffs	custom	B00A	BOsf	Summoned Lobster	4	4	0	0
+buffs	custom	B00B	BPSE	Dummy insta kill	2	2	0	0
+buffs	custom	B00C	BNab	Serpent Rock Poison	3	3	0	0
+buffs	custom	B00D	BPSE	Stasis	4	4	0	0
+buffs	custom	B00E	BHad	Song of Shields	3	3	0	0
+buffs	custom	B00F	BHad	Aggressive Warsong	3	3	0	0
+buffs	custom	B00G	Bcri	Poison	4	4	0	0
+buffs	custom	B00H	BNbr	Double Damage	4	4	0	0
+buffs	custom	B00I	BNbr	Quad Damage	4	4	0	0
+buffs	custom	B00J	Binf	Blessing	2	2	0	0
+buffs	custom	B00K	Broa	Battle Cry	3	3	0	0
+buffs	custom	B00L	BOac	Drum'n'Bass Bassline	3	3	0	0
+buffs	custom	B00M	BEer	Frozen	4	4	0	0
+buffs	custom	B00N	BHab	Crystal Aura	2	2	0	0
+buffs	custom	B00O	BNic	Burning Soul	4	4	0	0
+buffs	custom	B00P	Bcri	Corrupted Speed	5	5	0	0
+buffs	custom	B00Q	Bhea	|c00ff0000Corrupt Armor|r	7	7	0	0
+buffs	custom	B00R	Bcri	Broken Weapon	4	4	0	0
+buffs	custom	B00S	BNpi		4	4	0	0
+buffs	custom	B00T	Bphx	Nothing	1	1	0	0
+buffs	custom	B00U	Bapl	Greater Plague	4	4	0	0
+buffs	custom	B00V	BEah	Quill Aura	2	2	0	0
+buffs	custom	B00W	BHfs	Inner Void	6	6	0	0
+buffs	custom	B00X	Bens	Frozen	5	5	0	0
+buffs	custom	B00Y	BOae	Tribal Blessing: Demolish	4	4	0	0
+buffs	custom	B00Z	BOae	Tribal Blessing: Critical Strike	4	4	0	0
+buffs	custom	B010	BOae	Tribal Blessing: Evasion	4	4	0	0
+buffs	custom	B011	BHab	Chamber of Darkness	5	5	0	0
+buffs	custom	B012	BOwk	Stealth	2	2	0	0
+buffs	custom	B013	BUau	Vitality Aura	4	4	0	0
+buffs	custom	B014	Bcri	Freezing Cold	5	5	0	0
+buffs	custom	B015	Bcri	Frozen	5	5	0	0
+buffs	custom	B016	Bdef	Elune's Protection	5	5	0	0
+buffs	custom	B017	Bbar	Blessing of the Wilderness	5	5	0	0
+buffs	custom	B018	BNcs	Solar Attack	5	5	0	0
+buffs	custom	B019	Bphx	Targeted	4	4	0	0
+buffs	custom	B01A	Bphx	Nothing	1	1	0	0
+buffs	custom	B01B	BHad	Devotion Aura	1	1	0	0
+buffs	custom	B01C	Bdef	Scroll of Stone	2	2	0	0
+buffs	custom	B01D	Bpxf	Firebolt	3	3	0	0
+buffs	custom	B01E	Basl	Lightning	4	4	0	0
+buffs	custom	B01F	BHds	Spell Protection	6	6	0	0
+buffs	custom	B01G	BHab	Red Energy Shield	3	3	0	0
+buffs	custom	B01H	BHab	Energy Shield	4	4	0	0
+buffs	custom	B01I	BHab	Powered	5	5	0	0
+buffs	custom	B01J	BOac	Empowered	5	5	0	0
+buffs	custom	B01K	BHab	Power Armor	5	5	0	0
+buffs	custom	B01L	Bakb	Power Ammo	5	5	0	0
+buffs	custom	B01M	Bpxf	Ray of Light	4	4	0	0
+buffs	custom	B01N	Bpxf	Rocket	4	4	0	0
+buffs	custom	B01O	Bpxf	Blasted	4	4	0	0
+buffs	custom	B01P	Bslo	Astral Chains	2	2	0	0
+buffs	custom	B01Q	BIcb	Fragrance of Shadows	3	3	0	0
+buffs	custom	B01R	BNht	Howl	2	2	0	0
+buffs	custom	B01S	BUim	Impale	1	1	0	0
+buffs	custom	B01T	BNpa	Targeted	5	5	0	0
+buffs	custom	B01U	Basl	Explosive Shells	4	4	0	0
+buffs	custom	B01V	Bphx	Nothing	1	1	0	0
+buffs	custom	B01W	BHtc	Earthquake	3	3	0	0
+buffs	custom	B01X	Bphx	Nothing	3	3	0	0
+buffs	custom	B01Y	BHtc	Astral Grenade	3	3	0	0
+buffs	custom	B01Z	BOae	Cyclone	5	5	0	0
+buffs	custom	B020	BHab	Curse of Nature	5	5	0	0
+buffs	custom	B021	BOsf	Summoned Treant	3	3	0	0
+buffs	custom	B022	BNpa	"""Parasite"""	2	2	0	0
+buffs	custom	B023	Basl	Corrosive Breath	4	4	0	0
+buffs	custom	B024	BUau	Natures Aura	4	4	0	0
+buffs	custom	B025	Binf	Nothing	6	6	0	0
+buffs	custom	B026	BOae	Squall	6	6	0	0
+buffs	custom	B027	Bbar	Haste	6	6	0	0
+buffs	custom	B028	BNcs	Lightning Shield	5	5	0	0
+buffs	custom	B029	Bfro	Slowed	0	0	0	0
+buffs	custom	B02A	BHad	|cff00ff00Forged Weapon|r	5	5	0	0
+buffs	custom	B02B	BHad	Haste	5	5	0	0
+buffs	custom	B02C	BHad	|cff00ff00Rock Shield|r	5	5	0	0
+buffs	custom	B02D	Basl	Wisp Strike	3	3	0	0
+buffs	custom	B02U	BOae	Quicksand	6	6	0	0
+buffs	custom	B02S	BUts		2	2	0	0
+buffs	custom	B02T	Bblo	Ogre's rage	6	6	0	0
+buffs	custom	B02W	Bcri	Slowed by sandshield	5	5	0	0
+buffs	custom	B02O	BNdh	Blind	4	4	0	0
+buffs	custom	B02R	Bclf	Sandstorm	3	3	0	0
+buffs	custom	B02Q	BNab	Salamanders poison	4	4	0	0
+buffs	custom	B02E	BOae	|cffd45e19Zen Field|r	4	4	0	0
+buffs	custom	B02F	BOac		3	3	0	0
+buffs	custom	B02G	BHad	Devotion Aura	3	3	0	0
+destructables	original	ZTw0	ZTw0	"""Stone Wall"""	3	3	0	0
+destructables	original	ZTw2	ZTw2	"""Stone Wall"""	4	4	0	0
+destructables	custom	B000	KTtw	Black Citadel Tree Wall	0	0	0	0
+destructables	custom	B001	DTsh	Dungeon Tree Wall	1	1	0	0
+destructables	custom	B002	ZTw0	WALL -|	7	7	0	0
+destructables	custom	B003	ZTw0	WALL |-|	7	7	0	0
+destructables	custom	B004	ZTw2	WALL -|	8	8	0	0
+destructables	custom	B005	ZTw2	WALL |-|	8	8	0	0
+destructables	custom	B006	ZTw0	ARCHWAY	10	10	0	0
+destructables	custom	B007	ZTw0	BWALL	7	7	0	0
+destructables	custom	B008	ZTw0	BWALL	7	7	0	0
+destructables	custom	B009	ZTw2	BWALL	8	8	0	0
+destructables	custom	B00A	ZTw2	BWALL	8	8	0	0
+destructables	custom	B00B	ZTw2	SWALL	8	8	0	0
+destructables	custom	B00C	ZTw2	SWALL	8	8	0	0
+destructables	custom	B00D	ZTw0	SWALL	7	7	0	0
+destructables	custom	B00E	ZTw0	SWALL	7	7	0	0
+destructables	custom	B00F	ZTw0	SARCHWAY	10	10	0	0
+destructables	custom	B00G	ZTw0	BARCHWAY	10	10	0	0
+destructables	custom	B00H	ZTw0	LWALL	10	10	0	0
+destructables	custom	B00I	ZTw0	LARCHWAY	12	12	0	0
+destructables	custom	B00J	ZTw0	LWALL	10	10	0	0
+destructables	custom	B00K	ZTw2	LWALL	11	11	0	0
+destructables	custom	B00L	ZTw2	LWALL	11	11	0	0
+destructables	custom	B00M	ZTw0	IWALL	7	7	0	0
+destructables	custom	B00N	ZTw0	IWALL	7	7	0	0
+destructables	custom	B00O	ZTw2	IWALL	9	9	0	0
+destructables	custom	B00P	ZTw2	IWALL	9	9	0	0
+doodads	original	ZSas	ZSas	Archway	2	2	0	0
+doodads	original	ZObz	ZObz	Ruins Brazier	2	2	0	0
+doodads	original	YOlb	YOlb	Lightning Bolt	1	1	0	0
+doodads	custom	D000	YSw0	Wall Hori -|	7	7	0	0
+doodads	custom	D001	YSw0	Wall Hori |-|	7	7	0	0
+doodads	custom	D002	YSw0	Wall Vert -|	7	7	0	0
+doodads	custom	D003	YSw0	Wall Vert |-|	7	7	0	0

@@ -10,9 +10,10 @@ SHA-256: `9e3519bbc2a0fb6145460dd8b5730e9a35b2fd5923d63404eaf31e3618208a88`
 
 The map identifies itself as **Castle Fight DE Beta 9.27**, authored by **Frotty**. Its map-info format is 31 and records Warcraft III version `2.0.4.23745`.
 
-Do not edit files under `extracted/` by hand. Regenerate them with:
+Do not edit files under `extracted/` by hand. The full inherited-data extraction uses the matching local Warcraft III install and is regenerated with:
 
 ```sh
+WC3_INSTALL=/mnt/gamessd_linux/Games/Warcraft3 tools/wc3-map/extract-base-data.sh
 tools/wc3-map/extract.sh
 ```
 
@@ -26,13 +27,16 @@ The first extraction recovers substantial compatibility data:
 - playable area: **100 × 56** tiles;
 - pathing/buildability grid: **528 × 256** cells;
 - six configured player slots split across two forces, with the three western starts near `x=-4352` and three eastern starts near `x=4352`;
-- **1,780** placed doodads/destructables;
+- **1,780** placed doodads/destructables, now joined to inherited names and pathing footprints;
 - **585** custom unit/building object definitions plus 28 modified standard units;
 - **709** custom abilities plus 14 modified standard abilities;
 - **96** custom buffs, **16** custom items, **26** custom destructables, and four custom doodad definitions;
 - map-specific gameplay constants from `war3mapMisc.txt`, including damage-type/armor multipliers;
 - human-readable names and tooltips describing production rates, health, attacks, armor, spell effects, cooldowns, mana use, special targeting behavior, and legendary mechanics;
-- the complete **11.8 MB** W3P-protected runtime Lua plus static indexes of **5,708** function definitions and **7,688** distinct call tokens.
+- the complete **11.8 MB** W3P-protected runtime Lua plus static indexes of **5,708** function definitions and **7,688** distinct call tokens;
+- a full inheritance merge against Warcraft III `2.0.4.23745` custom data set V0: **148,765** resolved editor-field rows and **184,817** inherited source-table field rows across all 1,487 map object definitions;
+- all **207** standard pathing textures decoded to exact 32-world-unit pathing cells, with every unit/building and placed doodad pathing reference resolved;
+- normalized effective unit combat tables and **325** building-like definitions with exact footprint masks rather than filename size guesses.
 
 Examples visible directly in the extracted catalogs include Footman, Mortar, Sniper, Faerie Dragon, their production buildings, and legendary/utility buildings such as Shrine of Destruction, Eraser, Snowveil Fountain, and Well of Pain. These tooltips already expose many mechanics that will eventually become compatibility fixtures rather than guessed native behavior.
 
@@ -40,8 +44,12 @@ Examples visible directly in the extracted catalogs include Footman, Mortar, Sni
 
 Treat this directory as reverse-engineering evidence, not yet as final native content.
 
-The terrain/pathing/doodad placement files are direct decodes of authoritative map data. Object-editor JSON/TSV records are direct map overrides, but Warcraft object definitions inherit unspecified fields from the base game; missing fields therefore cannot yet be interpreted as zero/default. `catalog/buildings.tsv` likewise records a pathing-texture filename size hint, not a finalized native footprint.
+The terrain/pathing/doodad placement files are direct decodes of authoritative map data. The original `catalog/` files remain map-override views. The newer `extracted/resolved/` tree fills inherited fields from the exact installed Warcraft III build and W3I-selected `custom_v0` balance set. `resolved/object-fields.tsv` records base value, all map candidates, last-write value, recovered value, editor metadata, and source table/field so a later importer does not have to infer inheritance again. `resolved/base-data-manifest.json` hashes every ignored local base file used to produce that committed merge.
 
-The runtime Lua is the strongest source for custom mechanics that are implemented in script rather than object fields. It is W3P-obfuscated, so current extraction indexes readable Wurst-generated names and preserves the original code without executing it. Semantic deobfuscation and cross-linking script functions to rawcodes/abilities is a separate next phase.
+Physical geometry is likewise explicit now. `resolved/buildings.tsv` contains exact pathing-mask dimensions and cells; `resolved/pathing-textures.json` retains the masks themselves; and `resolved/placed-doodads.tsv` joins all 1,780 placed objects to their inherited pathing texture and object name. Ordinary moving-unit physical size remains represented by the unit collision field rather than a building-style pathing mask.
+
+The W3P object protection introduces 14 conflicting repeated fields across six objects. These are not hidden: `resolved/protection-conflicts.tsv` preserves every value and the resolution reason. Convenience catalogs recover only the observed numeric `value → 0/1 → 0/1` sentinel pattern; ambiguous string changes retain ordinary last-write semantics.
+
+The runtime Lua remains the strongest source for custom mechanics implemented in script and for values mutated after map load. It is W3P-obfuscated, so current extraction indexes readable Wurst-generated names and preserves the original code without executing it. The script contains runtime unit/attack/ability field setters, so static object data should be cross-checked against script behavior when a compatibility rule depends on a value that may change after initialization. Semantic deobfuscation and cross-linking script functions to rawcodes/abilities is a separate next phase.
 
 When compatibility conclusions are promoted into Castle Fight Native, record whether each value/behavior is directly verified from these files, inferred by cross-referencing several sources, observed in Warcraft III, or an intentional divergence. That matches the provenance policy in `docs/spec/40-content-data.md`.

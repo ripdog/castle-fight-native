@@ -1,0 +1,6898 @@
+{
+  "10x10citybuilding45.tga": {
+    "name": "10x10citybuilding45.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 68,
+      "unflyable": 0,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "4444555544",
+      "4444555544",
+      "4455555555",
+      "4455555555",
+      "5555555555",
+      "5555555555",
+      "5555555544",
+      "5555555544",
+      "4455554444",
+      "4455554444"
+    ],
+    "sha256": "6d149b653b76e307e945eb0e0b8120a6ce9e7e889f8e190278fd51fcddc0f20b"
+  },
+  "10x10default.tga": {
+    "name": "10x10default.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 100,
+      "unflyable": 0,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "e0ba8b5ed2317a4977502384f9b9fac56a0693fb5025043b0add723b95c88d83"
+  },
+  "10x10simple.tga": {
+    "name": "10x10simple.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 36,
+      "unflyable": 0,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "4444444444",
+      "4444444444",
+      "4455555544",
+      "4455555544",
+      "4455555544",
+      "4455555544",
+      "4455555544",
+      "4455555544",
+      "4444444444",
+      "4444444444"
+    ],
+    "sha256": "03d8087037e05b6c0253ca077a97953e2f17e158cc3fa8792d0f496c3cc8665b"
+  },
+  "10x10simple1cell.tga": {
+    "name": "10x10simple1cell.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "000000000000",
+      "044444444440",
+      "045555555540",
+      "045555555540",
+      "045555555540",
+      "045555555540",
+      "045555555540",
+      "045555555540",
+      "045555555540",
+      "045555555540",
+      "044444444440",
+      "000000000000"
+    ],
+    "sha256": "c1d3175cd3cca9d3434452b6e80b6a05a134c14eec1afb0fba861420d7b06231"
+  },
+  "10x10simplesolid.tga": {
+    "name": "10x10simplesolid.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 100,
+      "unflyable": 0,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "422db3cc89e167a006d4649821e4674e9eaa8f60c8cdb224393d7d6d86410b89"
+  },
+  "10x10unbuildable.tga": {
+    "name": "10x10unbuildable.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444"
+    ],
+    "sha256": "5fd1f75305322096d3fd1191dcee172eed11e2b92105d05b306aaae94e25858b"
+  },
+  "10x10unflyable.tga": {
+    "name": "10x10unflyable.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 100,
+      "unflyable": 100,
+      "unbuildable": 100
+    },
+    "hex_rows": [
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777",
+      "7777777777"
+    ],
+    "sha256": "45e1742d5919b514abf60d9ef23443847e32f501e3d0262c804e2f0f5e19f310"
+  },
+  "10x12default.tga": {
+    "name": "10x12default.tga",
+    "width_cells": 10,
+    "height_cells": 12,
+    "width_world_units": 320,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 120,
+      "unflyable": 0,
+      "unbuildable": 120
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "f17332cbea79165842e1c454dd78eb23d32a4b477f56bf1653e1c8b996cacecb"
+  },
+  "10x14default.tga": {
+    "name": "10x14default.tga",
+    "width_cells": 10,
+    "height_cells": 14,
+    "width_world_units": 320,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 140,
+      "unflyable": 0,
+      "unbuildable": 140
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "009c8919cc1387fc0313da5235062f6c6f60364e8b45a496c2afc048d4ef885a"
+  },
+  "10x14simplesolid.tga": {
+    "name": "10x14simplesolid.tga",
+    "width_cells": 10,
+    "height_cells": 14,
+    "width_world_units": 320,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 140,
+      "unflyable": 0,
+      "unbuildable": 140
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "33d7a6c64fda4c2a48ba741f3facccfc918c966cc997fd2743aa4d54904e202f"
+  },
+  "10x4default.tga": {
+    "name": "10x4default.tga",
+    "width_cells": 10,
+    "height_cells": 4,
+    "width_world_units": 320,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 40
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "f83107c46da7b3e95904843bc79c74225482d4b87f4d84b338c0ffef5ff1db47"
+  },
+  "12x10pen45path.tga": {
+    "name": "12x10pen45path.tga",
+    "width_cells": 12,
+    "height_cells": 10,
+    "width_world_units": 384,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 72
+    },
+    "hex_rows": [
+      "000055550000",
+      "000055550000",
+      "005544445500",
+      "005544445500",
+      "554444444455",
+      "554444444455",
+      "005544445500",
+      "005544445500",
+      "000055550000",
+      "000055550000"
+    ],
+    "sha256": "44bd3e08c8253eae4b1c7ca888a5550b8cb35732ffbf5fe7695ecf59a4b12e60"
+  },
+  "12x12ashenhand.tga": {
+    "name": "12x12ashenhand.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 123,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444555555544",
+      "445555555544",
+      "445555555544",
+      "455555555554",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "455555555554",
+      "445555555544"
+    ],
+    "sha256": "0c3ef4c562e16d720d1b358986b669733af9a8bec8a0fb0fc808a8bafb720f14"
+  },
+  "12x12default.tga": {
+    "name": "12x12default.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 144,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "ef44d5c72485c4428e6c2fcd26a2d63959601ac364dbe52994a65dd779248f2b"
+  },
+  "12x12goldmine.tga": {
+    "name": "12x12goldmine.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444444444444",
+      "444444444444",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "0a3f9669685741a8fe29dd2fbaa4e0d6b4b902d99a3a433f93473b888e671b99"
+  },
+  "12x12simple.tga": {
+    "name": "12x12simple.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444444444444",
+      "444444444444",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "ec25a962dde9a8d261ba6b1448a0519bce78870de117431f70c90670e53c7ef8"
+  },
+  "12x12simplesolid.tga": {
+    "name": "12x12simplesolid.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 144,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "41e0358e3a38f3f7f72c379b167a3497336c456c3979362c6e899004ad2c113a"
+  },
+  "12x12treeoflife.tga": {
+    "name": "12x12treeoflife.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444444444444",
+      "444444444444",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "445555555544",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "ec25a962dde9a8d261ba6b1448a0519bce78870de117431f70c90670e53c7ef8"
+  },
+  "12x12unflyable.tga": {
+    "name": "12x12unflyable.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 144,
+      "unflyable": 144,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777"
+    ],
+    "sha256": "ac998bb08485df8fda402c1f718546c295378781e6a66e6d7e5aa483982c1dec"
+  },
+  "12x12wallfountain.tga": {
+    "name": "12x12wallfountain.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "000000000000",
+      "000000000000",
+      "000000000000",
+      "000000000000",
+      "000000000000",
+      "000000000000",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "005555555500",
+      "005555555500"
+    ],
+    "sha256": "e2f5e11b99b9d8594d31a6c2a90e5bbd331dd2875e0f1e0805430faedd61d4a0"
+  },
+  "12x4default.tga": {
+    "name": "12x4default.tga",
+    "width_cells": 12,
+    "height_cells": 4,
+    "width_world_units": 384,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "d5b5fc73f4dfd4f20c678612614dab2b616adab43a6d9098a4e197d1877fc3c6"
+  },
+  "12x6default.tga": {
+    "name": "12x6default.tga",
+    "width_cells": 12,
+    "height_cells": 6,
+    "width_world_units": 384,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 72
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "e592a6375e8bc4eab0159b64a299d240222135f060c3982c5a7a90c0fc383646"
+  },
+  "14x14default.tga": {
+    "name": "14x14default.tga",
+    "width_cells": 14,
+    "height_cells": 14,
+    "width_world_units": 448,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 196,
+      "unflyable": 0,
+      "unbuildable": 196
+    },
+    "hex_rows": [
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555"
+    ],
+    "sha256": "03794181dad61ca715431db95ce1a1817c4b8422de378ae83f874daff5559528"
+  },
+  "14x14simple.tga": {
+    "name": "14x14simple.tga",
+    "width_cells": 14,
+    "height_cells": 14,
+    "width_world_units": 448,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 100,
+      "unflyable": 0,
+      "unbuildable": 196
+    },
+    "hex_rows": [
+      "44444444444444",
+      "44444444444444",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44555555555544",
+      "44444444444444",
+      "44444444444444"
+    ],
+    "sha256": "adef36c683688d0c8bd480dd1d28836da47ea500e255fcc71531611a20559460"
+  },
+  "16x16default.tga": {
+    "name": "16x16default.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 256,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555"
+    ],
+    "sha256": "85a35aa644a04fe3f11f83c47fe412ff9b12bcf105f08fb20591acfc882c763c"
+  },
+  "16x16goldmine.tga": {
+    "name": "16x16goldmine.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "74079ea85a7f521effc24289dc6cc8a2b55510f87596f68420171ff424277706"
+  },
+  "16x16necropolis.tga": {
+    "name": "16x16necropolis.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 120,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444455555544444",
+      "4444555555554444",
+      "4445555555555444",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4445555555555444",
+      "4444555555554444",
+      "4444455555544444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "cc8b17253ab88a86675e5845a212b95e499edc67ed897d6e726ea9488e6c2b4d"
+  },
+  "16x16nothing.tga": {
+    "name": "16x16nothing.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 0
+    },
+    "hex_rows": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+    ],
+    "sha256": "fffb3b9a233fbd27a58c411e8eb2cb6828f21b0041cd514dd97ed2a9cdaff122"
+  },
+  "16x16simple.tga": {
+    "name": "16x16simple.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 144,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "22a9db31356eb3167e4e7e7d9d63cc7fb5371870dcb5bd06dd1a0a954f943bf9"
+  },
+  "16x16townhall.tga": {
+    "name": "16x16townhall.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 144,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4455555555555544",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "a48721fe7dfe487928dc8495ff01eff846b2bbfedb89e00343deb76559a44744"
+  },
+  "16x16unbuildable.tga": {
+    "name": "16x16unbuildable.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "a2a6c3637db79af2611c2532098722ac08cca12da0514538e65eb519e9e56c54"
+  },
+  "16x16unbuildableheighta.tga": {
+    "name": "16x16unbuildableheighta.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "dde2039d25b8ffaaa9300965e7828562c47004f1a61dacc52d28957250983339"
+  },
+  "16x4doublecolumn.tga": {
+    "name": "16x4doublecolumn.tga",
+    "width_cells": 16,
+    "height_cells": 4,
+    "width_world_units": 512,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "5555444444445555",
+      "5555444444445555",
+      "5555444444445555",
+      "5555444444445555"
+    ],
+    "sha256": "464c3b50cbcaf2a89131d7ef153b73a7502223a620e95073e3a86ba4587165df"
+  },
+  "16x4elevatorblockpath.tga": {
+    "name": "16x4elevatorblockpath.tga",
+    "width_cells": 16,
+    "height_cells": 4,
+    "width_world_units": 512,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555"
+    ],
+    "sha256": "33df265ea60af34ea3f41e5c1a44b93e2ee1ff14c79370838fb05fae187032d2"
+  },
+  "16x4elevatorblockpathdeath.tga": {
+    "name": "16x4elevatorblockpathdeath.tga",
+    "width_cells": 16,
+    "height_cells": 4,
+    "width_world_units": 512,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "77380b08b77405f47c7dd6783aed2ad5c8daa03e9808555d54cf594c4bf4248b"
+  },
+  "16x8default.tga": {
+    "name": "16x8default.tga",
+    "width_cells": 16,
+    "height_cells": 8,
+    "width_world_units": 512,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 128,
+      "unflyable": 0,
+      "unbuildable": 128
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555"
+    ],
+    "sha256": "d84e882c642e5c61f02d58dc82b9fdd55fd1aaf14c8ce51b9b2fc0ea874cbdd5"
+  },
+  "16x8nothing.tga": {
+    "name": "16x8nothing.tga",
+    "width_cells": 16,
+    "height_cells": 8,
+    "width_world_units": 512,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 0
+    },
+    "hex_rows": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+    ],
+    "sha256": "61df5f6cdaab83718e7ea9804b4d0d093793d9d4312f10e444796e48e51f2948"
+  },
+  "16x8unbuildable.tga": {
+    "name": "16x8unbuildable.tga",
+    "width_cells": 16,
+    "height_cells": 8,
+    "width_world_units": 512,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 128
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "51f8874477c8ef471c75841cf8307bd43041703cb593427ec512d0e1ab7abf55"
+  },
+  "16x8unbuildableheighta.tga": {
+    "name": "16x8unbuildableheighta.tga",
+    "width_cells": 16,
+    "height_cells": 8,
+    "width_world_units": 512,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 128
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "92918ddda1030afa912be3758fad91cee1b089e5eda6e589050c86dd6a537922"
+  },
+  "18x12default.tga": {
+    "name": "18x12default.tga",
+    "width_cells": 18,
+    "height_cells": 12,
+    "width_world_units": 576,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 216,
+      "unflyable": 0,
+      "unbuildable": 216
+    },
+    "hex_rows": [
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555"
+    ],
+    "sha256": "8cb76f5ff85f142a37b0e90cfddf69b34a4d21e68517ca1ff4c72ae7ebccce19"
+  },
+  "18x4doublecolumn.tga": {
+    "name": "18x4doublecolumn.tga",
+    "width_cells": 18,
+    "height_cells": 4,
+    "width_world_units": 576,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 72
+    },
+    "hex_rows": [
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555"
+    ],
+    "sha256": "3e03f07b0e84e229a156987657f8544e08cf6e17eefb5803744e12994332ec99"
+  },
+  "20x16default.tga": {
+    "name": "20x16default.tga",
+    "width_cells": 20,
+    "height_cells": 16,
+    "width_world_units": 640,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 320,
+      "unflyable": 0,
+      "unbuildable": 320
+    },
+    "hex_rows": [
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555"
+    ],
+    "sha256": "20db26bd889a2408d8417e7e078ba0f2a9f52a040949571f0d12ece4909833fb"
+  },
+  "22x4doublecolumn.tga": {
+    "name": "22x4doublecolumn.tga",
+    "width_cells": 22,
+    "height_cells": 4,
+    "width_world_units": 704,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 88
+    },
+    "hex_rows": [
+      "4455554444444444555544",
+      "4455554444444444555544",
+      "4455554444444444555544",
+      "4455554444444444555544"
+    ],
+    "sha256": "53f04af4ede806a3ac0897aecfd07095ec3668b41f175740001bde917c728767"
+  },
+  "24x14columnsemicircle.tga": {
+    "name": "24x14columnsemicircle.tga",
+    "width_cells": 24,
+    "height_cells": 14,
+    "width_world_units": 768,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 336
+    },
+    "hex_rows": [
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444455554444444444",
+      "444444444455554444444444",
+      "444444444455554444444444",
+      "444444444455554444444444"
+    ],
+    "sha256": "6894bcddec807b62713a6cbc1f618e7ce1f7f3d1e082ac6f4485a95e754d702d"
+  },
+  "24x20ashenhead.tga": {
+    "name": "24x20ashenhead.tga",
+    "width_cells": 24,
+    "height_cells": 20,
+    "width_world_units": 768,
+    "height_world_units": 640,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 328,
+      "unflyable": 0,
+      "unbuildable": 480
+    },
+    "hex_rows": [
+      "444444445555444444444444",
+      "444444445555444444444444",
+      "445555555555555555444444",
+      "445555555555555555444444",
+      "445555555555555555554444",
+      "445555555555555555554444",
+      "445555555555555555555544",
+      "445555555555555555555544",
+      "445555555555555555555555",
+      "445555555555555555555555",
+      "445555555555555555555555",
+      "445555555555555555555555",
+      "445555555555555555555555",
+      "445555555555555555555555",
+      "444455555555555555555544",
+      "444455555555555555555544",
+      "444444555555555555555544",
+      "444444555555555555555544",
+      "444444444444555555444444",
+      "444444444444555555444444"
+    ],
+    "sha256": "ac2d32192d63fef5014b30c0cdd4d549c622a5d6ec0ef63f2a123456080ff55f"
+  },
+  "24x24unflyable.tga": {
+    "name": "24x24unflyable.tga",
+    "width_cells": 29,
+    "height_cells": 24,
+    "width_world_units": 928,
+    "height_world_units": 768,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 182,
+      "unflyable": 696,
+      "unbuildable": 696
+    },
+    "hex_rows": [
+      "66666666666666677777777677777",
+      "66666666666666677777666666677",
+      "66666666666666677776666666667",
+      "66666666666666777776666666666",
+      "66666666666666777766666666666",
+      "66666666666677777766666666666",
+      "66666667777777767766666666666",
+      "66666777777777667766666666666",
+      "77777777777766667776666666666",
+      "77777776666666667776666666667",
+      "77777666666666666777666666677",
+      "66666666666666666677777666666",
+      "66677777776666666677777766666",
+      "67777777777666666666777766666",
+      "77776666677776666666777666666",
+      "77766666667776666666777666666",
+      "77666666666777777777776666666",
+      "76666666666677777777776666666",
+      "76666666666666666666666666666",
+      "76666666666666666666666666666",
+      "76666666666666666666666666666",
+      "76666666666666666666666666666",
+      "76666666666666666666666666666",
+      "77666666666666666666666666677"
+    ],
+    "sha256": "f3b34030696a36f3863c52118a55e7f2a73f8a231a225c81a65197d54a3b1566"
+  },
+  "2x2cyan.tga": {
+    "name": "2x2cyan.tga",
+    "width_cells": 2,
+    "height_cells": 2,
+    "width_world_units": 64,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 4,
+      "unbuildable": 4
+    },
+    "hex_rows": [
+      "66",
+      "66"
+    ],
+    "sha256": "980f0a5837ad433d1760cdfd362364a7982924e9a949f59cb6b47394139238e5"
+  },
+  "2x2default.tga": {
+    "name": "2x2default.tga",
+    "width_cells": 2,
+    "height_cells": 2,
+    "width_world_units": 64,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 4,
+      "unflyable": 0,
+      "unbuildable": 4
+    },
+    "hex_rows": [
+      "55",
+      "55"
+    ],
+    "sha256": "bda7e96d49f2b4e135f52de81b1059520fa54d50d212766c06167f5e019e7e31"
+  },
+  "2x2unbuildable.tga": {
+    "name": "2x2unbuildable.tga",
+    "width_cells": 2,
+    "height_cells": 2,
+    "width_world_units": 64,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 4
+    },
+    "hex_rows": [
+      "44",
+      "44"
+    ],
+    "sha256": "e93b8bc615a9ff2e1601eff30f551bddc3fa6a3151f4f35cad6bf8386978eea4"
+  },
+  "2x2unflyable.tga": {
+    "name": "2x2unflyable.tga",
+    "width_cells": 2,
+    "height_cells": 2,
+    "width_world_units": 64,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 4,
+      "unflyable": 4,
+      "unbuildable": 4
+    },
+    "hex_rows": [
+      "77",
+      "77"
+    ],
+    "sha256": "49eb33dd76cd7d7e34632851275c38bbbf3fecceb3a1936225264bb0d252c1aa"
+  },
+  "2x4default.tga": {
+    "name": "2x4default.tga",
+    "width_cells": 2,
+    "height_cells": 4,
+    "width_world_units": 64,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 8,
+      "unflyable": 0,
+      "unbuildable": 8
+    },
+    "hex_rows": [
+      "55",
+      "55",
+      "55",
+      "55"
+    ],
+    "sha256": "7dfb0cec5afc1ca24f3cb4627195c8e494d7e2bd55ab78a632a832d9821a4fef"
+  },
+  "2x8default.tga": {
+    "name": "2x8default.tga",
+    "width_cells": 2,
+    "height_cells": 8,
+    "width_world_units": 64,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55"
+    ],
+    "sha256": "11d60c16a8bd21c885febfd15548a2f3b88210ca0ce3235eecfdeacb7439fe1f"
+  },
+  "4x12default.tga": {
+    "name": "4x12default.tga",
+    "width_cells": 4,
+    "height_cells": 12,
+    "width_world_units": 128,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "ea606cbbe50a23a0326ad77e32d0446ab2acbb26d93fe6a9e8df234ac3590cdc"
+  },
+  "4x12lordwall.tga": {
+    "name": "4x12lordwall.tga",
+    "width_cells": 4,
+    "height_cells": 12,
+    "width_world_units": 128,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 24,
+      "unflyable": 0,
+      "unbuildable": 18
+    },
+    "hex_rows": [
+      "0110",
+      "0110",
+      "0550",
+      "0550",
+      "0550",
+      "0550",
+      "0550",
+      "0550",
+      "0550",
+      "0550",
+      "0550",
+      "0110"
+    ],
+    "sha256": "4f14079d904297f6baabb9089296cf0e99fe036ecaad8169fcc6463b486f5d55"
+  },
+  "4x1default.tga": {
+    "name": "4x1default.tga",
+    "width_cells": 4,
+    "height_cells": 1,
+    "width_world_units": 128,
+    "height_world_units": 32,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 4,
+      "unflyable": 0,
+      "unbuildable": 4
+    },
+    "hex_rows": [
+      "5555"
+    ],
+    "sha256": "d73e083734af4a600532bb2170f5eb0f6568fd79c8e850d5bb5ccca2c0c34c93"
+  },
+  "4x2default.tga": {
+    "name": "4x2default.tga",
+    "width_cells": 4,
+    "height_cells": 2,
+    "width_world_units": 128,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 8,
+      "unflyable": 0,
+      "unbuildable": 8
+    },
+    "hex_rows": [
+      "5555",
+      "5555"
+    ],
+    "sha256": "1a06240d74a32e0a89e168b5387967c4189389b6f57bba27786303e003e5be17"
+  },
+  "4x4column.tga": {
+    "name": "4x4column.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 12,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "4554",
+      "5555",
+      "5555",
+      "4554"
+    ],
+    "sha256": "201a8f46d5a7adfd3b91b3354377cebefaecdd4ac610f217b4414f9700e17508"
+  },
+  "4x4cyan.tga": {
+    "name": "4x4cyan.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 16,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "6666",
+      "6666",
+      "6666",
+      "6666"
+    ],
+    "sha256": "9a452bc306323e81f0928e5900bcc7f6fb67acd8b8edb109ed3fe9396f5f58ec"
+  },
+  "4x4default.tga": {
+    "name": "4x4default.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "375e1f112d3ad94d9a7459d8bfd1bae5e76cbd74f26b5a26952583d2575fd190"
+  },
+  "4x4diag0.tga": {
+    "name": "4x4diag0.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 8,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "4455",
+      "4455",
+      "5544",
+      "5544"
+    ],
+    "sha256": "daac031ef46f83a11683528c5df4749ecaa6d546b32505ab99ea4f2232ac7c4e"
+  },
+  "4x4diag1.tga": {
+    "name": "4x4diag1.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 8,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "5544",
+      "5544",
+      "4455",
+      "4455"
+    ],
+    "sha256": "26a09d692921662054fc50ec40392477bcd544e8700e40f5ba8e9c1baf64db74"
+  },
+  "4x4simplesolid.tga": {
+    "name": "4x4simplesolid.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "375e1f112d3ad94d9a7459d8bfd1bae5e76cbd74f26b5a26952583d2575fd190"
+  },
+  "4x4unbuildable.tga": {
+    "name": "4x4unbuildable.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "4444",
+      "4444",
+      "4444",
+      "4444"
+    ],
+    "sha256": "a395b10882665d8700c30b38d59401bce3cb56d4d3841126e429685fe49809e7"
+  },
+  "4x4unflyable.tga": {
+    "name": "4x4unflyable.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 16,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "7777",
+      "7777",
+      "7777",
+      "7777"
+    ],
+    "sha256": "66c098e2b0e59a9bc5f24729fc39f0fbde732f90db90e94d9566b6969b9cb220"
+  },
+  "4x6default.tga": {
+    "name": "4x6default.tga",
+    "width_cells": 4,
+    "height_cells": 6,
+    "width_world_units": 128,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 24,
+      "unflyable": 0,
+      "unbuildable": 24
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "c09743cebdd4035b30dd733c0144317ddcbbd2166ac1c76b4a67b32cbd06ee94"
+  },
+  "4x6house.tga": {
+    "name": "4x6house.tga",
+    "width_cells": 4,
+    "height_cells": 6,
+    "width_world_units": 128,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 24
+    },
+    "hex_rows": [
+      "4554",
+      "5555",
+      "5555",
+      "5555",
+      "4554",
+      "4444"
+    ],
+    "sha256": "01e7c63a4b7ade407e2851eff230b8e799455b954e84b566c81bccef9c8678dd"
+  },
+  "4x8default.tga": {
+    "name": "4x8default.tga",
+    "width_cells": 4,
+    "height_cells": 8,
+    "width_world_units": 128,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "d5c1a3271594b3b81f38430d4bfc39a4b9ba10d0c31aaf137124098da61cab80"
+  },
+  "6x10default.tga": {
+    "name": "6x10default.tga",
+    "width_cells": 6,
+    "height_cells": 10,
+    "width_world_units": 192,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 60,
+      "unflyable": 0,
+      "unbuildable": 60
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "0d82e98f47d4a642221bfaf320f62ed7476039b1dbcfefd5515555e7592f05ba"
+  },
+  "6x12default.tga": {
+    "name": "6x12default.tga",
+    "width_cells": 6,
+    "height_cells": 12,
+    "width_world_units": 192,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 72
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "03309302db5a8174bf97e6f21829838d38b36bcf8b95dffdd1e24f2f7bd04790"
+  },
+  "6x4default.tga": {
+    "name": "6x4default.tga",
+    "width_cells": 6,
+    "height_cells": 4,
+    "width_world_units": 192,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 24,
+      "unflyable": 0,
+      "unbuildable": 24
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "707c3771646617d36c359847e2bf8aa5ef7114df7f8d56be8a9a52cb4151fa94"
+  },
+  "6x6canopy.tga": {
+    "name": "6x6canopy.tga",
+    "width_cells": 6,
+    "height_cells": 6,
+    "width_world_units": 192,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 4,
+      "unflyable": 0,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "444444",
+      "444444",
+      "445544",
+      "445544",
+      "444444",
+      "444444"
+    ],
+    "sha256": "ae9840cf3365dda7b0d1c146c8a828622fff14ef83a7b392112d72992c99c473"
+  },
+  "6x6cyan.tga": {
+    "name": "6x6cyan.tga",
+    "width_cells": 6,
+    "height_cells": 6,
+    "width_world_units": 192,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 36,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "666666",
+      "666666",
+      "666666",
+      "666666",
+      "666666",
+      "666666"
+    ],
+    "sha256": "e7851aaad98cae468fdb014a6292a863428e401fe3d6e9578ed5ace4266dcf48"
+  },
+  "6x6default.tga": {
+    "name": "6x6default.tga",
+    "width_cells": 6,
+    "height_cells": 6,
+    "width_world_units": 192,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 36,
+      "unflyable": 0,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "1e8433e2b963fbc4d6edc5a14d19b1e8f27abf144cb549330688bfcafd34e3c0"
+  },
+  "6x6simple1cell.tga": {
+    "name": "6x6simple1cell.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "00000000",
+      "04444440",
+      "04555540",
+      "04555540",
+      "04555540",
+      "04555540",
+      "04444440",
+      "00000000"
+    ],
+    "sha256": "61d8d3c2d26b7fc5c0ab532e2b89aa750535a4765cb1cedb8189a34ff5b6c1d8"
+  },
+  "6x6simplesolid.tga": {
+    "name": "6x6simplesolid.tga",
+    "width_cells": 6,
+    "height_cells": 6,
+    "width_world_units": 192,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 36,
+      "unflyable": 0,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "5d06de419b73de6d1e0c362191da82c2135b6fca8ab31ee10dee9fc09f4af873"
+  },
+  "6x6unbuildable.tga": {
+    "name": "6x6unbuildable.tga",
+    "width_cells": 6,
+    "height_cells": 6,
+    "width_world_units": 192,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "444444",
+      "444444",
+      "444444",
+      "444444",
+      "444444",
+      "444444"
+    ],
+    "sha256": "136ba7b32c75262b67babf7bd6fefab9fb398ede87b2b2715e97547522ee6546"
+  },
+  "6x6unflyable.tga": {
+    "name": "6x6unflyable.tga",
+    "width_cells": 6,
+    "height_cells": 6,
+    "width_world_units": 192,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 36,
+      "unflyable": 36,
+      "unbuildable": 36
+    },
+    "hex_rows": [
+      "777777",
+      "777777",
+      "777777",
+      "777777",
+      "777777",
+      "777777"
+    ],
+    "sha256": "f63f710586ab30378a1b305ce4256ef2bd386e83090cc691a47752ce813032d3"
+  },
+  "6x8default.tga": {
+    "name": "6x8default.tga",
+    "width_cells": 6,
+    "height_cells": 8,
+    "width_world_units": 192,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "498d3e0dceb46d043091f2c4ad35d5d24272d0888eb6a29868e60116e3bfa92a"
+  },
+  "8x10default.tga": {
+    "name": "8x10default.tga",
+    "width_cells": 8,
+    "height_cells": 10,
+    "width_world_units": 256,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "486c5d384a177ba0c33e27fd4b6c7fd0fb1087262fbf13dfd5fe7fe7b5cc5225"
+  },
+  "8x2default.tga": {
+    "name": "8x2default.tga",
+    "width_cells": 8,
+    "height_cells": 2,
+    "width_world_units": 256,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "bdc204e6c2bb089575477bc2d0f9e9f0ed5d58c9dc3bf7f6dad68937ccf83897"
+  },
+  "8x4default.tga": {
+    "name": "8x4default.tga",
+    "width_cells": 8,
+    "height_cells": 4,
+    "width_world_units": 256,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "4b7ff5f8168f44e6f2bbc25017571c448c128474e1659242618ddfbf3661c08a"
+  },
+  "8x6default.tga": {
+    "name": "8x6default.tga",
+    "width_cells": 8,
+    "height_cells": 6,
+    "width_world_units": 256,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "9c43b29860200b54dd09c5049c8bfe488bd5f2aa8fd57c67ff7835f23caf7cf1"
+  },
+  "8x8cross.tga": {
+    "name": "8x8cross.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "00555500",
+      "00555500",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "00555500",
+      "00555500"
+    ],
+    "sha256": "22a2957464f44f2ee2f649bb36381155e1c63ae94672416139c9091039fb55de"
+  },
+  "8x8cyan.tga": {
+    "name": "8x8cyan.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 64,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "66666666",
+      "66666666",
+      "66666666",
+      "66666666",
+      "66666666",
+      "66666666",
+      "66666666",
+      "66666666"
+    ],
+    "sha256": "6e6e8446bbaeda03eb1f5be85d4d4c63f1608c8714a2a66b9d3fd7e50d153dad"
+  },
+  "8x8default.tga": {
+    "name": "8x8default.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "be457fe0be2ab7385101e13cf7f502be61f710aa5f54221889d806f2a73870fe"
+  },
+  "8x8nothing.tga": {
+    "name": "8x8nothing.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 0
+    },
+    "hex_rows": [
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000"
+    ],
+    "sha256": "85f10ca84b5f97639b2c907d9654ceb0be83d3869f43ffc696592fe6f6a4a082"
+  },
+  "8x8penpath.tga": {
+    "name": "8x8penpath.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55444455",
+      "55444455",
+      "55444455",
+      "55444455",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "14c087e7fcbe48cad6ce1f3aca234b59e63a1a1c1be3cbad77c1e195dbc2a53d"
+  },
+  "8x8round.tga": {
+    "name": "8x8round.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "44555544",
+      "44555544",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "44555544",
+      "44555544"
+    ],
+    "sha256": "764d7fc6d2778f92aec73b879e1273c353eef26763837463e2512845e2170548"
+  },
+  "8x8simple.tga": {
+    "name": "8x8simple.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "44444444",
+      "44444444",
+      "44555544",
+      "44555544",
+      "44555544",
+      "44555544",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "248455c4780f25cc115649406d9cc1aa17eaa487ee602fbd837e5d48e1c6966a"
+  },
+  "8x8simple1cell.tga": {
+    "name": "8x8simple1cell.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 36,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "0000000000",
+      "0444444440",
+      "0455555540",
+      "0455555540",
+      "0455555540",
+      "0455555540",
+      "0455555540",
+      "0455555540",
+      "0444444440",
+      "0000000000"
+    ],
+    "sha256": "3572e4dce3c9983c45120f4b5f14924b2dd549ebbb87f2596419ab8d3a66854a"
+  },
+  "8x8simplesolid.tga": {
+    "name": "8x8simplesolid.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "b3741ef26684fe026735c0c34ef06a58fee6e72ada667c62547463c4c74f8150"
+  },
+  "8x8unbuildable.tga": {
+    "name": "8x8unbuildable.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "6f81daede337850770b913b3dcffe61143f31ec62087a1d4c5b2baec9bfd1f02"
+  },
+  "8x8unbuildableheighta.tga": {
+    "name": "8x8unbuildableheighta.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "fabe9ecba151051f3d3742a9eda9a1dae3adbe65819e54f16c1dfaecb8a0dc98"
+  },
+  "8x8unflyable.tga": {
+    "name": "8x8unflyable.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 64,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "77777777",
+      "77777777",
+      "77777777",
+      "77777777",
+      "77777777",
+      "77777777",
+      "77777777",
+      "77777777"
+    ],
+    "sha256": "c278ea75ba0fa7392251ad00a1dfd1c069df4583a52e0aacf882135dcd44b639"
+  },
+  "arcaneobservatorypath.tga": {
+    "name": "arcaneobservatorypath.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 144,
+      "unflyable": 144,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4477777777777744",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "1c74597720ea5c6ed45c73985388b9d49e038871429ca8595247226197d8a042"
+  },
+  "cathedral.tga": {
+    "name": "cathedral.tga",
+    "width_cells": 22,
+    "height_cells": 40,
+    "width_world_units": 704,
+    "height_world_units": 1280,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 556,
+      "unflyable": 0,
+      "unbuildable": 792
+    },
+    "hex_rows": [
+      "4444444455555544444444",
+      "4444444455555544444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "4444445555555555444444",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "4444555555555555554444",
+      "4444555555555555554444",
+      "4444555555555555554444",
+      "4444555555555555554444",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4455555555555555555544",
+      "4444444444444444444444",
+      "4444444444444444444444",
+      "0000000000000000000000",
+      "0000000000000000000000",
+      "0000000000000000000000",
+      "0000000000000000000000"
+    ],
+    "sha256": "cbebecf5cf1ff7d642a1eb3c3163f9d905bb8cac8945c2526d84080c1d6d3a50"
+  },
+  "cave0base.tga": {
+    "name": "cave0base.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 56,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555544445555",
+      "555544445555",
+      "445544445555",
+      "445544445555",
+      "444444444455",
+      "444444444455",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "3b5bb9402e63be91a4c78648bfae3d9c598196b442ec697d054483ea2dc59b71"
+  },
+  "cave2base.tga": {
+    "name": "cave2base.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 56,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555544445555",
+      "555544445555",
+      "555544445544",
+      "555544445544",
+      "554444444444",
+      "554444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "d9b8be7cae396e4adf772d86b9b9ec9d165d2a94ba95752d074a0533d423f607"
+  },
+  "cavecitycliff1base.tga": {
+    "name": "cavecitycliff1base.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 52,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "444444444455",
+      "444444444455",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "25fa34555dd28d301368d1bf4a2a62167d4aad49fdb211957dc287743f89b8fd"
+  },
+  "cavecitycliff2base.tga": {
+    "name": "cavecitycliff2base.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 52,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444444",
+      "554444444444",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "ae53e898878237386385d7838d91967ff209c946eea3e574dbc1691157427035"
+  },
+  "cavecitycliff3base.tga": {
+    "name": "cavecitycliff3base.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 52,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555544",
+      "555555555544",
+      "554444444444",
+      "554444444444",
+      "554444444444",
+      "554444444444",
+      "554444444444",
+      "554444444444",
+      "554444444444",
+      "554444444444",
+      "555555554444",
+      "555555554444"
+    ],
+    "sha256": "bd43b750a5861db7e52f6508ebe0f5768ea7ffe2e2947ded2bc182f01c8fcfef"
+  },
+  "cavecitycliff4base.tga": {
+    "name": "cavecitycliff4base.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 52,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "445555555555",
+      "445555555555",
+      "444444444455",
+      "444444444455",
+      "444444444455",
+      "444444444455",
+      "444444444455",
+      "444444444455",
+      "444444444455",
+      "444444444455",
+      "444455555555",
+      "444455555555"
+    ],
+    "sha256": "c1b00bb9bbc3c6835343907e722c47cc382db87a448297638c3f370dc8464725"
+  },
+  "cavegate1path.tga": {
+    "name": "cavegate1path.tga",
+    "width_cells": 8,
+    "height_cells": 6,
+    "width_world_units": 256,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "44444555",
+      "44444555",
+      "55555444",
+      "55555444",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "2d17fb7df48bc5bd6a8589b39c5ee4b1785204014112775983bc3533ca17e3ee"
+  },
+  "cavegate1pathdeath.tga": {
+    "name": "cavegate1pathdeath.tga",
+    "width_cells": 8,
+    "height_cells": 6,
+    "width_world_units": 256,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "8b6766e5102e1a38bfef9b51e687d6d67f57527a820c3eabe842c2a1f692c521"
+  },
+  "cavegate2path.tga": {
+    "name": "cavegate2path.tga",
+    "width_cells": 8,
+    "height_cells": 6,
+    "width_world_units": 256,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "55544444",
+      "55544444",
+      "44455555",
+      "44455555",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "787ae469a99cf76edb35d1c177c966843ffb91f4ba2438d15aefebb72f07f983"
+  },
+  "cavegate2pathdeath.tga": {
+    "name": "cavegate2pathdeath.tga",
+    "width_cells": 8,
+    "height_cells": 6,
+    "width_world_units": 256,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 48
+    },
+    "hex_rows": [
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444",
+      "44444444"
+    ],
+    "sha256": "8b6766e5102e1a38bfef9b51e687d6d67f57527a820c3eabe842c2a1f692c521"
+  },
+  "cityarch.tga": {
+    "name": "cityarch.tga",
+    "width_cells": 28,
+    "height_cells": 6,
+    "width_world_units": 896,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 168
+    },
+    "hex_rows": [
+      "5555554444444444444444555555",
+      "5555554444444444444444555555",
+      "5555554444444444444444555555",
+      "5555554444444444444444555555",
+      "5555554444444444444444555555",
+      "5555554444444444444444555555"
+    ],
+    "sha256": "8ce99b241c3f2a8707d588378ea640972a66589158f1442dedcfb3801426d9fc"
+  },
+  "cityarch45.tga": {
+    "name": "cityarch45.tga",
+    "width_cells": 22,
+    "height_cells": 22,
+    "width_world_units": 704,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 188
+    },
+    "hex_rows": [
+      "0055550000000000000000",
+      "0055550000000000000000",
+      "5555555500000000000000",
+      "5555555500000000000000",
+      "5555554444000000000000",
+      "5555554444000000000000",
+      "0055444444440000000000",
+      "0055444444440000000000",
+      "0000444444444400000000",
+      "0000444444444400000000",
+      "0000004444444444000000",
+      "0000004444444444000000",
+      "0000000044444444440000",
+      "0000000044444444440000",
+      "0000000000444444445500",
+      "0000000000444444445500",
+      "0000000000004444555555",
+      "0000000000004444555555",
+      "0000000000000055555555",
+      "0000000000000055555555",
+      "0000000000000000555500",
+      "0000000000000000555500"
+    ],
+    "sha256": "203ba3449d3abb7f3fa3e7daea4f6c94658c5e2bb1969215a89039c6dfb5ed0d"
+  },
+  "cityarchangle.tga": {
+    "name": "cityarchangle.tga",
+    "width_cells": 22,
+    "height_cells": 22,
+    "width_world_units": 704,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 188
+    },
+    "hex_rows": [
+      "0000000000000000555500",
+      "0000000000000000555500",
+      "0000000000000055555555",
+      "0000000000000055555555",
+      "0000000000004444555555",
+      "0000000000004444555555",
+      "0000000000444444445500",
+      "0000000000444444445500",
+      "0000000044444444440000",
+      "0000000044444444440000",
+      "0000004444444444000000",
+      "0000004444444444000000",
+      "0000444444444400000000",
+      "0000444444444400000000",
+      "0055444444440000000000",
+      "0055444444440000000000",
+      "5555554444000000000000",
+      "5555554444000000000000",
+      "5555555500000000000000",
+      "5555555500000000000000",
+      "0055550000000000000000",
+      "0055550000000000000000"
+    ],
+    "sha256": "c746524a9596ffba29b21b8ae1c6f02dfd1348263624c7a3efd3ded410e66f1f"
+  },
+  "citybridgedestroyed.tga": {
+    "name": "citybridgedestroyed.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 584,
+      "unflyable": 0,
+      "unbuildable": 728
+    },
+    "hex_rows": [
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000044445555555500000000000000",
+      "0000000044445555555500000000000000",
+      "0000004444444455555555000000000000",
+      "0000004444444455555555000000000000",
+      "0000444444445555555555550000000000",
+      "0000444444445555555555550000000000",
+      "0044444444555555555555555500000000",
+      "0044444444555555555555555500000000",
+      "5544444455555555555555555555000000",
+      "5544444455555555555555555555000000",
+      "5555445555555555555555555555550000",
+      "5555445555555555555555555555550000",
+      "5555555555555555555555555555555500",
+      "5555555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555445555",
+      "0000555555555555555555555555445555",
+      "0000005555555555555555555544444455",
+      "0000005555555555555555555544444455",
+      "0000000055555555555555554444444400",
+      "0000000055555555555555554444444400",
+      "0000000000555555555555444444440000",
+      "0000000000555555555555444444440000",
+      "0000000000005555555544444444000000",
+      "0000000000005555555544444444000000",
+      "0000000000000055555555444400000000",
+      "0000000000000055555555444400000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000"
+    ],
+    "sha256": "a4d00313f3cb39c49b58ec427887d0f4bcba8f58bd369d1fdcdfc6cefa37c54e"
+  },
+  "citybridgeextraextralarge0.tga": {
+    "name": "citybridgeextraextralarge0.tga",
+    "width_cells": 32,
+    "height_cells": 22,
+    "width_world_units": 1024,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 192,
+      "unflyable": 0,
+      "unbuildable": 704
+    },
+    "hex_rows": [
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555"
+    ],
+    "sha256": "0f6fa52774aa7375502003fb85e3719efd54cfe7ad6de7733c5997633637a5a2"
+  },
+  "citybridgeextraextralarge0death.tga": {
+    "name": "citybridgeextraextralarge0death.tga",
+    "width_cells": 32,
+    "height_cells": 22,
+    "width_world_units": 1024,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 560,
+      "unflyable": 0,
+      "unbuildable": 704
+    },
+    "hex_rows": [
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555"
+    ],
+    "sha256": "06e733a5c300ee8354f7c8b7cbd25b8e31497caeac8d1a62ac578c1a7104d850"
+  },
+  "citybridgeextraextralarge45.tga": {
+    "name": "citybridgeextraextralarge45.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 168,
+      "unflyable": 0,
+      "unbuildable": 676
+    },
+    "hex_rows": [
+      "0000000000445555000000000000000000",
+      "0000000000445555000000000000000000",
+      "0000000044444455550000000000000000",
+      "0000000044444455550000000000000000",
+      "0000004444444444555500000000000000",
+      "0000004444444444555500000000000000",
+      "0000444444444444445555000000000000",
+      "0000444444444444445555000000000000",
+      "0044444444444444444455550000000000",
+      "0044444444444444444455550000000000",
+      "4444444444444444444444555500000000",
+      "4444444444444444444444555500000000",
+      "5544444444444444444444445555000000",
+      "5544444444444444444444445555000000",
+      "5555444444444444444444444455550000",
+      "5555444444444444444444444455550000",
+      "0055554444444444444444444444555500",
+      "0055554444444444444444444444555500",
+      "0000555544444444444444444444445555",
+      "0000555544444444444444444444445555",
+      "0000005555444444444444444444444455",
+      "0000005555444444444444444444444455",
+      "0000000055554444444444444444444444",
+      "0000000055554444444444444444444444",
+      "0000000000555544444444444444444400",
+      "0000000000555544444444444444444400",
+      "0000000000005555444444444444440000",
+      "0000000000005555444444444444440000",
+      "0000000000000055554444444444000000",
+      "0000000000000055554444444444000000",
+      "0000000000000000555544444400000000",
+      "0000000000000000555544444400000000",
+      "0000000000000000005555440000000000",
+      "0000000000000000005555440000000000"
+    ],
+    "sha256": "bf11d12540d6d65021d15c61f777d9f9b230bbf9088a24271a31fa1458aeb85a"
+  },
+  "citybridgeextraextralarge45death.tga": {
+    "name": "citybridgeextraextralarge45death.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 631,
+      "unflyable": 0,
+      "unbuildable": 678
+    },
+    "hex_rows": [
+      "0000000000445555000000000000000000",
+      "0000000000445555000000000000000000",
+      "0000000044555555550000000000000000",
+      "0000000044555555550000000000000000",
+      "0000004455555555555500000000000000",
+      "0000004455555555555500000000000000",
+      "0000445555555555555555000000000000",
+      "0000445555555555555555000000000000",
+      "0044555555555555555555550000000000",
+      "0044555555555555555555550000000000",
+      "4455555555555555555555555500000000",
+      "4455555555555555555555555500000000",
+      "5555555555555555555555555555000000",
+      "5555555555555555555555555555000000",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "0055555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000005555555555555555555555555555",
+      "0000005555555555555555555555555555",
+      "0000000555555555555555555555555544",
+      "0000000555555555555555555555555545",
+      "0000000000555555555555555555554400",
+      "0000000000555555555555555555554400",
+      "0000000000005555555555555555440000",
+      "0000000000005555555555555555440000",
+      "0000000000000055555555555544000000",
+      "0000000000000055555555555544000000",
+      "0000000000000000555555554400000000",
+      "0000000000000000555555554400000000",
+      "0000000000000000005555440000000000",
+      "0000000000000000005555440000000000"
+    ],
+    "sha256": "feafb806bcb95440662c836357cbd1011c1808d628bd6fd308f364b6f174ae39"
+  },
+  "citybridgeextralarge0.tga": {
+    "name": "citybridgeextralarge0.tga",
+    "width_cells": 32,
+    "height_cells": 22,
+    "width_world_units": 1024,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 224,
+      "unflyable": 0,
+      "unbuildable": 704
+    },
+    "hex_rows": [
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55554444555544444444555544445555",
+      "55554444555544444444555544445555",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555"
+    ],
+    "sha256": "4622908f5ce83a8a3dd8cacc22d020e7eb14e15ace7101c9847c445623e05400"
+  },
+  "citybridgeextralarge0death.tga": {
+    "name": "citybridgeextralarge0death.tga",
+    "width_cells": 32,
+    "height_cells": 22,
+    "width_world_units": 1024,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 592,
+      "unflyable": 0,
+      "unbuildable": 704
+    },
+    "hex_rows": [
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555"
+    ],
+    "sha256": "6d3ddd6e9c4d5155552dd451ba466504eaaced2c262b64c5f63862d0590f0798"
+  },
+  "citybridgeextralarge135.tga": {
+    "name": "citybridgeextralarge135.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 232,
+      "unflyable": 0,
+      "unbuildable": 676
+    },
+    "hex_rows": [
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000555555444400000000",
+      "0000000000000000555555444400000000",
+      "0000000000000055554444444444000000",
+      "0000000000000055554444444444000000",
+      "0000000000005555554444444444440000",
+      "0000000000005555554444444444440000",
+      "0000000000555555444444444444444400",
+      "0000000000555555444444444444444400",
+      "0000000055554444444444444444444455",
+      "0000000055554444444444444444444455",
+      "0000005555444444444444444444445555",
+      "0000005555444444444444444444445555",
+      "0000555555444444444444444444445555",
+      "0000555555444444444444444444445555",
+      "0055555544444444444444444455555500",
+      "0055555544444444444444444455555500",
+      "5555444444444444444444445555550000",
+      "5555444444444444444444445555550000",
+      "5555444444444444444444445555000000",
+      "5555444444444444444444445555000000",
+      "5544444444444444444444555500000000",
+      "5544444444444444444444555500000000",
+      "0044444444444444445555550000000000",
+      "0044444444444444445555550000000000",
+      "0000444444444444555555000000000000",
+      "0000444444444444555555000000000000",
+      "0000004444444444555500000000000000",
+      "0000004444444444555500000000000000",
+      "0000000044445555550000000000000000",
+      "0000000044445555550000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000"
+    ],
+    "sha256": "73f99ec8cccd386cf1152fe14670b35c26f1a5881ffe939c7aba875aaa8468f0"
+  },
+  "citybridgeextralarge135death.tga": {
+    "name": "citybridgeextralarge135death.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 646,
+      "unflyable": 0,
+      "unbuildable": 678
+    },
+    "hex_rows": [
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000555555554400000000",
+      "0000000000000000555555554400000000",
+      "0000000000000055555555555544000000",
+      "0000000000000055555555555544000000",
+      "0000000000005555555555555555440000",
+      "0000000000555555555555555555440000",
+      "0000000000555555555555555555554400",
+      "0000000000555555555555555555554400",
+      "0000000055555555555555555555555555",
+      "0000000055555555555555555555555555",
+      "0000005555555555555555555555555555",
+      "0000005555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0055555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555000000",
+      "5555555555555555555555555555000000",
+      "5555555555555555555555555500000000",
+      "5555555555555555555555555500000000",
+      "0044555555555555555555550000000000",
+      "0044555555555555555555550000000000",
+      "0000445555555555555555000000000000",
+      "0000445555555555555555000000000000",
+      "0000004455555555555500000000000000",
+      "0000004455555555555500000000000000",
+      "0000000044555555550000000000000000",
+      "0000000044555555550000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000"
+    ],
+    "sha256": "1fbab7bdbabaa29f232cf9142239ace0b1c1c42e9a890218909701f5f3c6c426"
+  },
+  "citybridgeextralarge45.tga": {
+    "name": "citybridgeextralarge45.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 232,
+      "unflyable": 0,
+      "unbuildable": 676
+    },
+    "hex_rows": [
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000044445555550000000000000000",
+      "0000000044445555550000000000000000",
+      "0000004444444444555500000000000000",
+      "0000004444444444555500000000000000",
+      "0000444444444444555555000000000000",
+      "0000444444444444555555000000000000",
+      "0044444444444444445555550000000000",
+      "0044444444444444445555550000000000",
+      "5544444444444444444444555500000000",
+      "5544444444444444444444555500000000",
+      "5555444444444444444444445555000000",
+      "5555444444444444444444445555000000",
+      "5555444444444444444444445555550000",
+      "5555444444444444444444445555550000",
+      "0055555544444444444444444455555500",
+      "0055555544444444444444444455555500",
+      "0000555555444444444444444444445555",
+      "0000555555444444444444444444445555",
+      "0000005555444444444444444444445555",
+      "0000005555444444444444444444445555",
+      "0000000055554444444444444444444455",
+      "0000000055554444444444444444444455",
+      "0000000000555555444444444444444400",
+      "0000000000555555444444444444444400",
+      "0000000000005555554444444444440000",
+      "0000000000005555554444444444440000",
+      "0000000000000055554444444444000000",
+      "0000000000000055554444444444000000",
+      "0000000000000000555555444400000000",
+      "0000000000000000555555444400000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000"
+    ],
+    "sha256": "16559d3c707d134a9d28cedfcc43286bad70b7a86f249fb8d45d1e242afea29b"
+  },
+  "citybridgeextralarge45death.tga": {
+    "name": "citybridgeextralarge45death.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 646,
+      "unflyable": 0,
+      "unbuildable": 678
+    },
+    "hex_rows": [
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000044555555550000000000000000",
+      "0000000044555555550000000000000000",
+      "0000004455555555555500000000000000",
+      "0000004455555555555500000000000000",
+      "0000445555555555555555000000000000",
+      "0000445555555555555555000000000000",
+      "0044555555555555555555550000000000",
+      "0044555555555555555555550000000000",
+      "5555555555555555555555555500000000",
+      "5555555555555555555555555500000000",
+      "5555555555555555555555555555000000",
+      "5555555555555555555555555555000000",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "0055555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000005555555555555555555555555555",
+      "0000005555555555555555555555555555",
+      "0000000555555555555555555555555555",
+      "0000000555555555555555555555555555",
+      "0000000000555555555555555555554400",
+      "0000000000555555555555555555554400",
+      "0000000000005555555555555555440000",
+      "0000000000005555555555555555440000",
+      "0000000000000055555555555544000000",
+      "0000000000000055555555555544000000",
+      "0000000000000000555555554400000000",
+      "0000000000000000555555554400000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000"
+    ],
+    "sha256": "ded9c1bf78f5ac6df87437e9556c71e9784b4698ac357068f4afc89ab0480a29"
+  },
+  "citybridgeextralarge90.tga": {
+    "name": "citybridgeextralarge90.tga",
+    "width_cells": 22,
+    "height_cells": 32,
+    "width_world_units": 704,
+    "height_world_units": 1024,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 224,
+      "unflyable": 0,
+      "unbuildable": 704
+    },
+    "hex_rows": [
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5544444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555"
+    ],
+    "sha256": "7f2c1b0b11473e961fa1cd4c5f0b8ce1dcbcec8131c11d82825bbcae787f74f7"
+  },
+  "citybridgeextralarge90death.tga": {
+    "name": "citybridgeextralarge90death.tga",
+    "width_cells": 22,
+    "height_cells": 32,
+    "width_world_units": 704,
+    "height_world_units": 1024,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 592,
+      "unflyable": 0,
+      "unbuildable": 704
+    },
+    "hex_rows": [
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555555555555555555555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555",
+      "5555444444444444445555"
+    ],
+    "sha256": "85a2c777680fc32182213823506218267182d8e4c897352187289ce9ab407a71"
+  },
+  "citybridgelarge0.tga": {
+    "name": "citybridgelarge0.tga",
+    "width_cells": 32,
+    "height_cells": 18,
+    "width_world_units": 1024,
+    "height_world_units": 576,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 224,
+      "unflyable": 0,
+      "unbuildable": 576
+    },
+    "hex_rows": [
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55554444555544444444555544445555",
+      "55554444555544444444555544445555",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "44444444444444444444444444444444",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555"
+    ],
+    "sha256": "48de12e58e60f774a7f2d027ccdfa210231ffb95de5b22b0958afc6d2a659000"
+  },
+  "citybridgelarge0death.tga": {
+    "name": "citybridgelarge0death.tga",
+    "width_cells": 32,
+    "height_cells": 20,
+    "width_world_units": 1024,
+    "height_world_units": 640,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 544,
+      "unflyable": 0,
+      "unbuildable": 640
+    },
+    "hex_rows": [
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "44445555555555555555555555554444",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555",
+      "55555555555555555555555555555555"
+    ],
+    "sha256": "59be4c6e9fa4f5eb31ffef0ef4dd29d308fc6489ab0433c9bc3def6dc8b431d4"
+  },
+  "citybridgelarge135.tga": {
+    "name": "citybridgelarge135.tga",
+    "width_cells": 32,
+    "height_cells": 32,
+    "width_world_units": 1024,
+    "height_world_units": 1024,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 216,
+      "unflyable": 0,
+      "unbuildable": 584
+    },
+    "hex_rows": [
+      "00000000000000000055554400000000",
+      "00000000000000000055554400000000",
+      "00000000000000005555444444000000",
+      "00000000000000005555444444000000",
+      "00000000000000555544444444440000",
+      "00000000000000555544444444440000",
+      "00000000000055554444444444444400",
+      "00000000000055554444444444444400",
+      "00000000005555444444444444444455",
+      "00000000005555444444444444444455",
+      "00000000555544444444444444445555",
+      "00000000555544444444444444445555",
+      "00000055554444444444444444555555",
+      "00000055554444444444444444555555",
+      "00005555444444444444444455555500",
+      "00005555444444444444444455555500",
+      "00555544444444444444445555550000",
+      "00555544444444444444445555550000",
+      "55554444444444444444555555000000",
+      "55554444444444444444555555000000",
+      "55444444444444444455555500000000",
+      "55444444444444444455555500000000",
+      "44444444444444445555550000000000",
+      "44444444444444445555550000000000",
+      "00444444444444555555000000000000",
+      "00444444444444555555000000000000",
+      "00004444444455555500000000000000",
+      "00004444444455555500000000000000",
+      "00000044445555550000000000000000",
+      "00000044445555550000000000000000",
+      "00000000555555000000000000000000",
+      "00000000555555000000000000000000"
+    ],
+    "sha256": "42ed98ef7f1f10b67f96a4bbb320e1714f307f1e9f87186537f6165a09f09b20"
+  },
+  "citybridgelarge135death.tga": {
+    "name": "citybridgelarge135death.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 652,
+      "unflyable": 0,
+      "unbuildable": 724
+    },
+    "hex_rows": [
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000555555444400000000",
+      "0000000000000000555555444400000000",
+      "0000000000005555555555554444000000",
+      "0000000000005555555555554444000000",
+      "0000000000555555555555555544440000",
+      "0000000000555555555555555544440000",
+      "0000000055555555555555555555444400",
+      "0000000055555555555555555555444400",
+      "0000005555555555555555555555554455",
+      "0000005555555555555555555555554455",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0055555555555555555555555555555555",
+      "0055555555555555555555555555555555",
+      "0055555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "5555555555555555555555555555555500",
+      "5555555555555555555555555555555500",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "5544555555555555555555555555000000",
+      "5544555555555555555555555555000000",
+      "0044445555555555555555555500000000",
+      "0044445555555555555555555500000000",
+      "0000444455555555555555550000000000",
+      "0000444455555555555555550000000000",
+      "0000004444555555555555000000000000",
+      "0000004444555555555555000000000000",
+      "0000000044445555550000000000000000",
+      "0000000044445555550000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000"
+    ],
+    "sha256": "084365063f1a77a0e30c01373fcf5c600cb9eac3600049b5125af75ce5f6ebd5"
+  },
+  "citybridgelarge45.tga": {
+    "name": "citybridgelarge45.tga",
+    "width_cells": 32,
+    "height_cells": 32,
+    "width_world_units": 1024,
+    "height_world_units": 1024,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 168,
+      "unflyable": 0,
+      "unbuildable": 584
+    },
+    "hex_rows": [
+      "00000000445555000000000000000000",
+      "00000000445555000000000000000000",
+      "00000044444455550000000000000000",
+      "00000044444455550000000000000000",
+      "00004444444444555500000000000000",
+      "00004444444444555500000000000000",
+      "00444444444444445555000000000000",
+      "00444444444444445555000000000000",
+      "44444444444444444455550000000000",
+      "44444444444444444455550000000000",
+      "55444444444444444444555500000000",
+      "55444444444444444444555500000000",
+      "55554444444444444444445555000000",
+      "55554444444444444444445555000000",
+      "00555544444444444444444455550000",
+      "00555544444444444444444455550000",
+      "00005555444444444444444444555500",
+      "00005555444444444444444444555500",
+      "00000055554444444444444444445555",
+      "00000055554444444444444444445555",
+      "00000000555544444444444444444455",
+      "00000000555544444444444444444455",
+      "00000000005555444444444444444444",
+      "00000000005555444444444444444444",
+      "00000000000055554444444444444400",
+      "00000000000055554444444444444400",
+      "00000000000000555544444444440000",
+      "00000000000000555544444444440000",
+      "00000000000000005555444444000000",
+      "00000000000000005555444444000000",
+      "00000000000000000055554400000000",
+      "00000000000000000055554400000000"
+    ],
+    "sha256": "6058c42365fd3e0af42af1194b5dc0cb21675d46e296a2e8797bb5c1dddfef6e"
+  },
+  "citybridgelarge45death.tga": {
+    "name": "citybridgelarge45death.tga",
+    "width_cells": 34,
+    "height_cells": 34,
+    "width_world_units": 1088,
+    "height_world_units": 1088,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 652,
+      "unflyable": 0,
+      "unbuildable": 724
+    },
+    "hex_rows": [
+      "0000000000555555000000000000000000",
+      "0000000000555555000000000000000000",
+      "0000000044445555555500000000000000",
+      "0000000044445555555500000000000000",
+      "0000004444555555555555000000000000",
+      "0000004444555555555555000000000000",
+      "0000444455555555555555550000000000",
+      "0000444455555555555555550000000000",
+      "0044445555555555555555555500000000",
+      "0044445555555555555555555500000000",
+      "5544555555555555555555555555000000",
+      "5544555555555555555555555555000000",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "5555555555555555555555555555550000",
+      "0055555555555555555555555555555500",
+      "0055555555555555555555555555555500",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000555555555555555555555555555555",
+      "0000005555555555555555555555554455",
+      "0000005555555555555555555555554455",
+      "0000000055555555555555555555444400",
+      "0000000055555555555555555555444400",
+      "0000000000555555555555555544440000",
+      "0000000000555555555555555544440000",
+      "0000000000005555555555554444000000",
+      "0000000000005555555555554444000000",
+      "0000000000000055555555444400000000",
+      "0000000000000055555555444400000000",
+      "0000000000000000005555550000000000",
+      "0000000000000000005555550000000000"
+    ],
+    "sha256": "e5f313ee9fa304c06ed808227b53ee6690282345db4aacb0a60fdb74af877817"
+  },
+  "citybridgelarge90.tga": {
+    "name": "citybridgelarge90.tga",
+    "width_cells": 18,
+    "height_cells": 32,
+    "width_world_units": 576,
+    "height_world_units": 1024,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 224,
+      "unflyable": 0,
+      "unbuildable": 576
+    },
+    "hex_rows": [
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "554444444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555",
+      "555544444444445555"
+    ],
+    "sha256": "fd7fa89bf1134c3acd0d90abe431c0d40c25e91cd8dea853a1a3335208dbdac6"
+  },
+  "citybridgelarge90death.tga": {
+    "name": "citybridgelarge90death.tga",
+    "width_cells": 20,
+    "height_cells": 32,
+    "width_world_units": 640,
+    "height_world_units": 1024,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 544,
+      "unflyable": 0,
+      "unbuildable": 640
+    },
+    "hex_rows": [
+      "55554444444444445555",
+      "55554444444444445555",
+      "55554444444444445555",
+      "55554444444444445555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55554444444444445555",
+      "55554444444444445555",
+      "55554444444444445555",
+      "55554444444444445555"
+    ],
+    "sha256": "954e914d131b84b0f1a7ae996c7a0706c77c507e946eab1a7b09e8a397555e7b"
+  },
+  "citybridgesmall0.tga": {
+    "name": "citybridgesmall0.tga",
+    "width_cells": 16,
+    "height_cells": 12,
+    "width_world_units": 512,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 192
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "5555555555555555",
+      "5555555555555555"
+    ],
+    "sha256": "def6125df86e256fa49c6fae004a158ff92289d00bcc2bf023c06e0bfb896a9e"
+  },
+  "citybridgesmall0death.tga": {
+    "name": "citybridgesmall0death.tga",
+    "width_cells": 16,
+    "height_cells": 12,
+    "width_world_units": 512,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 192,
+      "unflyable": 0,
+      "unbuildable": 192
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555"
+    ],
+    "sha256": "37f5e5cee02fbd85f8dbe8586d7f2725b39d6be153ef6f8922a8c1a7333c9505"
+  },
+  "citybridgesmall135.tga": {
+    "name": "citybridgesmall135.tga",
+    "width_cells": 18,
+    "height_cells": 18,
+    "width_world_units": 576,
+    "height_world_units": 576,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 92,
+      "unflyable": 0,
+      "unbuildable": 248
+    },
+    "hex_rows": [
+      "000000005555440000",
+      "000000005555440000",
+      "000000555544444400",
+      "000000555544444400",
+      "000055554444444444",
+      "000055554444444444",
+      "005555444444444444",
+      "005555444444444444",
+      "555544444444444455",
+      "555544444444444455",
+      "554444444444445555",
+      "554444444444445555",
+      "444444444444555555",
+      "444444444444555555",
+      "004444444455555500",
+      "004444444455555500",
+      "000044445555550000",
+      "000044445555550000"
+    ],
+    "sha256": "8cf26dddea32a132aa5c60a9a67da96d0117d7075175f4f17ce9e46340eb4c4b"
+  },
+  "citybridgesmall135death.tga": {
+    "name": "citybridgesmall135death.tga",
+    "width_cells": 18,
+    "height_cells": 18,
+    "width_world_units": 576,
+    "height_world_units": 576,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 248,
+      "unflyable": 0,
+      "unbuildable": 248
+    },
+    "hex_rows": [
+      "000000005555550000",
+      "000000005555550000",
+      "000000555555555500",
+      "000000555555555500",
+      "000055555555555555",
+      "000055555555555555",
+      "005555555555555555",
+      "005555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "005555555555555500",
+      "005555555555555500",
+      "000055555555550000",
+      "000055555555550000"
+    ],
+    "sha256": "658b3d67302da26ecee1ecf54e0286f5630390d667ba6e98db21423488e015d5"
+  },
+  "citybridgesmall45.tga": {
+    "name": "citybridgesmall45.tga",
+    "width_cells": 18,
+    "height_cells": 18,
+    "width_world_units": 576,
+    "height_world_units": 576,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 96,
+      "unflyable": 0,
+      "unbuildable": 260
+    },
+    "hex_rows": [
+      "004444445555000000",
+      "004444445555000000",
+      "444444444455550000",
+      "444444444455550000",
+      "444444444444555500",
+      "444444444444555500",
+      "554444444444445555",
+      "554444444444445555",
+      "555544444444444455",
+      "555544444444444455",
+      "555555444444444444",
+      "555555444444444444",
+      "005555554444444444",
+      "005555554444444444",
+      "000055555544444400",
+      "000055555544444400",
+      "000000555555440000",
+      "000000555555440000"
+    ],
+    "sha256": "ba8bbcfdad62bdc3ef63b5e18858df4f36110bada5d75a2c173cf9e2347cbe4d"
+  },
+  "citybridgesmall45death.tga": {
+    "name": "citybridgesmall45death.tga",
+    "width_cells": 18,
+    "height_cells": 18,
+    "width_world_units": 576,
+    "height_world_units": 576,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 248,
+      "unflyable": 0,
+      "unbuildable": 248
+    },
+    "hex_rows": [
+      "000055555500000000",
+      "000055555500000000",
+      "005555555555000000",
+      "005555555555000000",
+      "555555555555550000",
+      "555555555555550000",
+      "555555555555555500",
+      "555555555555555500",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "555555555555555555",
+      "005555555555555500",
+      "005555555555555500",
+      "000055555555550000",
+      "000055555555550000"
+    ],
+    "sha256": "933b9d9fdcc6c9bc82efa862bfe32179f2b24436a929a163c68f7bfbb0e4ce52"
+  },
+  "citybridgesmall90.tga": {
+    "name": "citybridgesmall90.tga",
+    "width_cells": 12,
+    "height_cells": 16,
+    "width_world_units": 384,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 192
+    },
+    "hex_rows": [
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455",
+      "554444444455"
+    ],
+    "sha256": "35e97743f2f0749f1f0289a7db2befd72faf6c5586a9f2e3e6c3d5d1e284e433"
+  },
+  "citybridgesmall90death.tga": {
+    "name": "citybridgesmall90death.tga",
+    "width_cells": 12,
+    "height_cells": 16,
+    "width_world_units": 384,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 192,
+      "unflyable": 0,
+      "unbuildable": 192
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "afca1fe51575cdfb9a0c59e865304ed86d7f7036270f1ab024678d5e7a9d907f"
+  },
+  "citybuilding0-2.tga": {
+    "name": "citybuilding0-2.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 68,
+      "unflyable": 0,
+      "unbuildable": 68
+    },
+    "hex_rows": [
+      "0000555500",
+      "0000555500",
+      "0055555555",
+      "0055555555",
+      "5555555555",
+      "5555555555",
+      "5555555500",
+      "5555555500",
+      "0055550000",
+      "0055550000"
+    ],
+    "sha256": "7dd81c02be7b1b2b6c43402a7541f1b866f9281b8511c27b346e14518501ad70"
+  },
+  "citybuilding3-5.tga": {
+    "name": "citybuilding3-5.tga",
+    "width_cells": 10,
+    "height_cells": 6,
+    "width_world_units": 320,
+    "height_world_units": 192,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 60,
+      "unflyable": 0,
+      "unbuildable": 60
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "b7a50d082b070d16b02f45f0cd2c0290504ed7edbfd97a824d56f720297eefa7"
+  },
+  "citybuilding6-8.tga": {
+    "name": "citybuilding6-8.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 68,
+      "unflyable": 0,
+      "unbuildable": 68
+    },
+    "hex_rows": [
+      "0055550000",
+      "0055550000",
+      "5555555500",
+      "5555555500",
+      "5555555555",
+      "5555555555",
+      "0055555555",
+      "0055555555",
+      "0000555500",
+      "0000555500"
+    ],
+    "sha256": "c15b4e525495993ef3ada7a6d26bc18ab9c0a30f9f079f06169b30b5fdb7f84e"
+  },
+  "citybuilding9-11.tga": {
+    "name": "citybuilding9-11.tga",
+    "width_cells": 6,
+    "height_cells": 10,
+    "width_world_units": 192,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 60,
+      "unflyable": 0,
+      "unbuildable": 60
+    },
+    "hex_rows": [
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555",
+      "555555"
+    ],
+    "sha256": "33dcf220c0ee197376dda3d7696e5e0fbdf672618d7dc91e4d530bc6a1326005"
+  },
+  "citybuildinglarge_0.tga": {
+    "name": "citybuildinglarge_0.tga",
+    "width_cells": 14,
+    "height_cells": 16,
+    "width_world_units": 448,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 164,
+      "unflyable": 0,
+      "unbuildable": 200
+    },
+    "hex_rows": [
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555555555",
+      "55555555444444",
+      "55555555444444",
+      "55555555444444",
+      "55555555444444",
+      "55555555440000",
+      "55555555440000",
+      "55555555440000",
+      "55555555440000",
+      "55555555440000",
+      "55555555440000"
+    ],
+    "sha256": "f16b7124ff4da89a846b57ffcc5bf7586a44b71f15f073f021000ebc4315b047"
+  },
+  "citybuildinglarge_135.tga": {
+    "name": "citybuildinglarge_135.tga",
+    "width_cells": 20,
+    "height_cells": 18,
+    "width_world_units": 640,
+    "height_world_units": 576,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 154,
+      "unflyable": 0,
+      "unbuildable": 244
+    },
+    "hex_rows": [
+      "00000004455544000000",
+      "00000004455544000000",
+      "00000445555555440000",
+      "00000445555555440000",
+      "00044555555555554400",
+      "00044555555555554400",
+      "04455555555555555544",
+      "04455555555555555544",
+      "45555555555555555555",
+      "45555555555555555555",
+      "55555555554444555544",
+      "55555555554444555544",
+      "44555555444444444400",
+      "44555555444444444400",
+      "00445544000044440000",
+      "00445544000044440000",
+      "00004400000000000000",
+      "00004400000000000000"
+    ],
+    "sha256": "e1bc6f1cf87275b9118bdc54e630177a5ec98ebb07618068507204b02a88a6e9"
+  },
+  "citybuildinglarge_45.tga": {
+    "name": "citybuildinglarge_45.tga",
+    "width_cells": 18,
+    "height_cells": 20,
+    "width_world_units": 576,
+    "height_world_units": 640,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 154,
+      "unflyable": 0,
+      "unbuildable": 244
+    },
+    "hex_rows": [
+      "000044554400000000",
+      "000044555544000000",
+      "004455555544000000",
+      "004455555555440000",
+      "445555555555440000",
+      "445555555555554400",
+      "004455555555554400",
+      "004455555555555544",
+      "000044555555555544",
+      "000044555555555555",
+      "000044445555555555",
+      "000044445555555555",
+      "004444445555555544",
+      "004444445555555544",
+      "004444555555554400",
+      "004444555555554400",
+      "000044555555440000",
+      "000044555555440000",
+      "000000445544000000",
+      "000000445544000000"
+    ],
+    "sha256": "3cfdd0bc8b5fbe8879a66193f16e2308b26f054830ceb7b969a2bba5b3cae47b"
+  },
+  "citybuildinglarge_90.tga": {
+    "name": "citybuildinglarge_90.tga",
+    "width_cells": 16,
+    "height_cells": 14,
+    "width_world_units": 512,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 164,
+      "unflyable": 0,
+      "unbuildable": 200
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "5555555555555555",
+      "4444444444555555",
+      "4444444444555555",
+      "0000004444555555",
+      "0000004444555555",
+      "0000004444555555",
+      "0000004444555555"
+    ],
+    "sha256": "137c9c3519cb3486a5932dff28d2c777fba51ea9f14cd42bfd1a871ccff0c9ab"
+  },
+  "cliffcollapse0path.tga": {
+    "name": "cliffcollapse0path.tga",
+    "width_cells": 8,
+    "height_cells": 4,
+    "width_world_units": 256,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "7e6c3ff973ba6760c5c9f708e85092afca16b8eea97635bfdca531b502e61df8"
+  },
+  "cliffcollapse0shortpath.tga": {
+    "name": "cliffcollapse0shortpath.tga",
+    "width_cells": 8,
+    "height_cells": 4,
+    "width_world_units": 256,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "4b376c73422a20a4f1e047b5380d4bd1d12c5a3715b2c5a33c21d468df87e3ad"
+  },
+  "cliffcollapse1path.tga": {
+    "name": "cliffcollapse1path.tga",
+    "width_cells": 4,
+    "height_cells": 8,
+    "width_world_units": 128,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "30ace897aa6e5aca9dfa58b29f5842419c1c2122c2991a0fb8fcbcf3005fe59d"
+  },
+  "cliffcollapse1shortpath.tga": {
+    "name": "cliffcollapse1shortpath.tga",
+    "width_cells": 4,
+    "height_cells": 8,
+    "width_world_units": 128,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "1a0753c790b497689be7ed2b059fac1ae171b0ec01251c88f5e18a87d3caee55"
+  },
+  "cliffcollapse2path.tga": {
+    "name": "cliffcollapse2path.tga",
+    "width_cells": 8,
+    "height_cells": 4,
+    "width_world_units": 256,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "21ae063c7435a090231c36fadbaf3fa7279ec9eb5bf7785311f49a76ca5b23fe"
+  },
+  "cliffcollapse2shortpath.tga": {
+    "name": "cliffcollapse2shortpath.tga",
+    "width_cells": 8,
+    "height_cells": 4,
+    "width_world_units": 256,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "6daed939a39108a0fef0187ace475ecadddf260ec8c9d37d3e5119d1ca0a772a"
+  },
+  "cliffcollapse3path.tga": {
+    "name": "cliffcollapse3path.tga",
+    "width_cells": 4,
+    "height_cells": 8,
+    "width_world_units": 128,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "13b66b4e5d5f30e06b7419970b8fcc0d186026d1f671a8a85d9ed904d85f130b"
+  },
+  "cliffcollapse3shortpath.tga": {
+    "name": "cliffcollapse3shortpath.tga",
+    "width_cells": 4,
+    "height_cells": 8,
+    "width_world_units": 128,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 32
+    },
+    "hex_rows": [
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555",
+      "5555"
+    ],
+    "sha256": "afe2234183effebad807f3a3fb35fc89e4da173405b4b2ffceb1535fb17546ec"
+  },
+  "clifframppath.tga": {
+    "name": "clifframppath.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "55544444",
+      "55444444",
+      "54444444",
+      "44444444",
+      "44444445",
+      "44444455",
+      "44444555",
+      "44445555"
+    ],
+    "sha256": "6258cf77fc62ff30e5e6b8540975118809265cc31ebd6263388aa4c4f6f47583"
+  },
+  "clifframpstraight0.tga": {
+    "name": "clifframpstraight0.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555554444",
+      "555555554444",
+      "555555555544",
+      "555555555544",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "555555555544",
+      "555555555544",
+      "555555554444",
+      "555555554444"
+    ],
+    "sha256": "e9374b126140c14d3bb96ac8df5aed31de6eb0d189b374480a5c70db5e79d3a0"
+  },
+  "clifframpstraight0death.tga": {
+    "name": "clifframpstraight0death.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444",
+      "555544444444"
+    ],
+    "sha256": "fc8dd8f8b09fec7ca55d05076acda23fd303f827f2d14cf5a28bd3cdc860edb2"
+  },
+  "clifframpstraight180.tga": {
+    "name": "clifframpstraight180.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444455555555",
+      "444455555555",
+      "445555555555",
+      "445555555555",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "445555555555",
+      "445555555555",
+      "444455555555",
+      "444455555555"
+    ],
+    "sha256": "3dbca043ba1d311e3ff27fe4a91cc6c5ff53adaf0d4e545620f1cb081d66a38a"
+  },
+  "clifframpstraight180death.tga": {
+    "name": "clifframpstraight180death.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555",
+      "444444445555"
+    ],
+    "sha256": "d041a9db195d344bd2575214220a1fd5b861de3bcf2bf58ca4c882928d6091dc"
+  },
+  "clifframpstraight270.tga": {
+    "name": "clifframpstraight270.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "445544445544",
+      "445544445544",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "ea5d0b6d1511e5ef032e290bb5436f311702cb0537abf2752873731d3f73b23c"
+  },
+  "clifframpstraight270death.tga": {
+    "name": "clifframpstraight270death.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444"
+    ],
+    "sha256": "6f67932d373bed7f89c2b2fff03f7aae96cae7d7aa3b932792ba3dfe7f57e44e"
+  },
+  "clifframpstraight90.tga": {
+    "name": "clifframpstraight90.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 72,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444444444444",
+      "444444444444",
+      "445544445544",
+      "445544445544",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555",
+      "555544445555"
+    ],
+    "sha256": "243150f5786d6cd0721ed8722e2657c55cbdf5d8412a35d45fb9970bfbe83331"
+  },
+  "clifframpstraight90death.tga": {
+    "name": "clifframpstraight90death.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "6e6a71a93fe18a1ba49a18288d0380a12f5b2286df929aea48fbfaece3db9c54"
+  },
+  "columnsemicircle.tga": {
+    "name": "columnsemicircle.tga",
+    "width_cells": 28,
+    "height_cells": 16,
+    "width_world_units": 896,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 448
+    },
+    "hex_rows": [
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4455554444444444444444555544",
+      "4455554444444444444444555544",
+      "4455554444444444444444555544",
+      "4455554444444444444444555544",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444445555444444444444",
+      "4444444444445555444444444444",
+      "4444444444445555444444444444",
+      "4444444444445555444444444444"
+    ],
+    "sha256": "f83a6690c14bff6f05ab1c619a705d56eaa4076b06c6597a3a854aa3362009d6"
+  },
+  "columnsemicircle3.tga": {
+    "name": "columnsemicircle3.tga",
+    "width_cells": 28,
+    "height_cells": 16,
+    "width_world_units": 896,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 48,
+      "unflyable": 0,
+      "unbuildable": 448
+    },
+    "hex_rows": [
+      "4444444444445555444444444444",
+      "4444444444445555444444444444",
+      "4444444444445555444444444444",
+      "4444444444445555444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444",
+      "4455554444444444444444555544",
+      "4455554444444444444444555544",
+      "4455554444444444444444555544",
+      "4455554444444444444444555544",
+      "4444444444444444444444444444",
+      "4444444444444444444444444444"
+    ],
+    "sha256": "22010d9ff8028b327acccecb049295d8bbb6e2a6e8d088ffb02226cdb77f9e1f"
+  },
+  "darkportalse.tga": {
+    "name": "darkportalse.tga",
+    "width_cells": 20,
+    "height_cells": 16,
+    "width_world_units": 640,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 208,
+      "unflyable": 0,
+      "unbuildable": 320
+    },
+    "hex_rows": [
+      "44444444444455555544",
+      "44444444444455555544",
+      "44444444555555555555",
+      "44444444555555555555",
+      "44444455555555555555",
+      "44444455555555555555",
+      "44445555555555555544",
+      "44445555555555555544",
+      "44555555555555554444",
+      "44555555555555554444",
+      "55555555555555554444",
+      "55555555555555554444",
+      "55555555555555555544",
+      "55555555555555555544",
+      "44555544445555554444",
+      "44555544445555554444"
+    ],
+    "sha256": "d403bf7228b627ee4c3fd5b93f4f0c8b8a181095b8144a4b5b333c7161d77d80"
+  },
+  "darkportalsw.tga": {
+    "name": "darkportalsw.tga",
+    "width_cells": 20,
+    "height_cells": 16,
+    "width_world_units": 640,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 208,
+      "unflyable": 0,
+      "unbuildable": 320
+    },
+    "hex_rows": [
+      "44555555444444444444",
+      "44555555444444444444",
+      "55555555555544444444",
+      "55555555555544444444",
+      "55555555555555444444",
+      "55555555555555444444",
+      "44555555555555554444",
+      "44555555555555554444",
+      "44445555555555555544",
+      "44445555555555555544",
+      "44445555555555555555",
+      "44445555555555555555",
+      "44555555555555555555",
+      "44555555555555555555",
+      "44445555554444555544",
+      "44445555554444555544"
+    ],
+    "sha256": "3af199f72b98a45c1fc3bfd4c0479e9a12449774f6d4e0d26535f332bbb9219a"
+  },
+  "demongatepath.tga": {
+    "name": "demongatepath.tga",
+    "width_cells": 20,
+    "height_cells": 16,
+    "width_world_units": 640,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 150,
+      "unflyable": 0,
+      "unbuildable": 320
+    },
+    "hex_rows": [
+      "44555555555544444444",
+      "44555555555544444444",
+      "55555555555555444444",
+      "55555555555555444444",
+      "55555555555555554444",
+      "55555555555555554444",
+      "44555544444455555544",
+      "44555544444455555544",
+      "44444444444455555544",
+      "44444444444455555544",
+      "44444444444455555544",
+      "44444444444455555544",
+      "44444444445555555544",
+      "44444444445555555544",
+      "44444444444555554444",
+      "44444444444555554444"
+    ],
+    "sha256": "5f980d5dcb16ed0d68a89441a7edda7d93f189c24c6f87f1f881d2e9a9752698"
+  },
+  "doublecolumn45.tga": {
+    "name": "doublecolumn45.tga",
+    "width_cells": 14,
+    "height_cells": 14,
+    "width_world_units": 448,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 76
+    },
+    "hex_rows": [
+      "55550000000000",
+      "55550000000000",
+      "55554400000000",
+      "55554400000000",
+      "00444444000000",
+      "00444444000000",
+      "00004444440000",
+      "00004444440000",
+      "00000044444400",
+      "00000044444400",
+      "00000000445555",
+      "00000000445555",
+      "00000000005555",
+      "00000000005555"
+    ],
+    "sha256": "c944965ab38da0bd1fe68e2b3c11dca86708c947c60f8ea164f6d0985bc233fc"
+  },
+  "fence135.tga": {
+    "name": "fence135.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "00000055",
+      "00000055",
+      "00005500",
+      "00005500",
+      "00550000",
+      "00550000",
+      "55000000",
+      "55000000"
+    ],
+    "sha256": "ec0b18a8168e0c79ddbabb1c4bfba2a96cce37ddcd5ca3bb5147e2eb173eae7b"
+  },
+  "fence45.tga": {
+    "name": "fence45.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 16
+    },
+    "hex_rows": [
+      "55000000",
+      "55000000",
+      "00550000",
+      "00550000",
+      "00005500",
+      "00005500",
+      "00000055",
+      "00000055"
+    ],
+    "sha256": "05439be2d0264ea7ce02495cd788f6a1fee7fafda2485818965deebadfe8732e"
+  },
+  "forcewall.tga": {
+    "name": "forcewall.tga",
+    "width_cells": 24,
+    "height_cells": 8,
+    "width_world_units": 768,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 192,
+      "unflyable": 0,
+      "unbuildable": 192
+    },
+    "hex_rows": [
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555"
+    ],
+    "sha256": "a0c2ed8e2cbb12e408fc47a1ae6bd9941e917798158a2621574f57ceee910db2"
+  },
+  "forcewall45.tga": {
+    "name": "forcewall45.tga",
+    "width_cells": 20,
+    "height_cells": 20,
+    "width_world_units": 640,
+    "height_world_units": 640,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 176,
+      "unflyable": 0,
+      "unbuildable": 176
+    },
+    "hex_rows": [
+      "00000000000000555555",
+      "00000000000000555555",
+      "00000000000055555555",
+      "00000000000055555555",
+      "00000000005555555555",
+      "00000000005555555555",
+      "00000000555555555500",
+      "00000000555555555500",
+      "00000055555555550000",
+      "00000055555555550000",
+      "00005555555555000000",
+      "00005555555555000000",
+      "00555555555500000000",
+      "00555555555500000000",
+      "55555555550000000000",
+      "55555555550000000000",
+      "55555555000000000000",
+      "55555555000000000000",
+      "55555500000000000000",
+      "55555500000000000000"
+    ],
+    "sha256": "ae19bcea2af79d381715c7bbb96b1f07488d74b2ff74953ecd2215bf8fd13ec2"
+  },
+  "gate1path.tga": {
+    "name": "gate1path.tga",
+    "width_cells": 20,
+    "height_cells": 4,
+    "width_world_units": 640,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555"
+    ],
+    "sha256": "75f777176e6021111a4e62e6c6e297f89ef4a9061828681d3cb42dc04ac5a7ec"
+  },
+  "gate1pathdeath.tga": {
+    "name": "gate1pathdeath.tga",
+    "width_cells": 20,
+    "height_cells": 4,
+    "width_world_units": 640,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 16,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55444444444444444455",
+      "55444444444444444455",
+      "55444444444444444455",
+      "55444444444444444455"
+    ],
+    "sha256": "76ae60f5eb0189c5b5f43d37d70b0cca31e37362635532b50bccd1ed0d8d842f"
+  },
+  "gate2path.tga": {
+    "name": "gate2path.tga",
+    "width_cells": 22,
+    "height_cells": 22,
+    "width_world_units": 704,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 124,
+      "unflyable": 0,
+      "unbuildable": 260
+    },
+    "hex_rows": [
+      "0000000000000044445555",
+      "0000000000000044445555",
+      "0000000000004444555555",
+      "0000000000004444555555",
+      "0000000000444455555544",
+      "0000000000444455555544",
+      "0000000044445555554444",
+      "0000000044445555554444",
+      "0000004444555555444400",
+      "0000004444555555444400",
+      "0000444455555544440000",
+      "0000444455555544440000",
+      "0044445555554444000000",
+      "0044445555554444000000",
+      "4444555555444400000000",
+      "4444555555444400000000",
+      "4455555544440000000000",
+      "4455555544440000000000",
+      "5555554444000000000000",
+      "5555554444000000000000",
+      "5555444400000000000000",
+      "5555444400000000000000"
+    ],
+    "sha256": "7290a8e01fce2fd26dbaf882b733eda7ca6c9a4a6060efcd9d47e5897632a7d9"
+  },
+  "gate2pathdeath.tga": {
+    "name": "gate2pathdeath.tga",
+    "width_cells": 22,
+    "height_cells": 22,
+    "width_world_units": 704,
+    "height_world_units": 704,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 260
+    },
+    "hex_rows": [
+      "0000000000000044445555",
+      "0000000000000044445555",
+      "0000000000004444445555",
+      "0000000000004444445555",
+      "0000000000444444444444",
+      "0000000000444444444444",
+      "0000000044444444444444",
+      "0000000044444444444444",
+      "0000004444444444444400",
+      "0000004444444444444400",
+      "0000444444444444440000",
+      "0000444444444444440000",
+      "0044444444444444000000",
+      "0044444444444444000000",
+      "4444444444444400000000",
+      "4444444444444400000000",
+      "4444444444440000000000",
+      "4444444444440000000000",
+      "5555444444000000000000",
+      "5555444444000000000000",
+      "5555444400000000000000",
+      "5555444400000000000000"
+    ],
+    "sha256": "21597e4a5cc1fdd7da343387be4371e78c1639b2c9f58a89b7a5888a91a6eaca"
+  },
+  "gatelarge1path.tga": {
+    "name": "gatelarge1path.tga",
+    "width_cells": 28,
+    "height_cells": 4,
+    "width_world_units": 896,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 112,
+      "unflyable": 0,
+      "unbuildable": 112
+    },
+    "hex_rows": [
+      "5555555555555555555555555555",
+      "5555555555555555555555555555",
+      "5555555555555555555555555555",
+      "5555555555555555555555555555"
+    ],
+    "sha256": "55809102514df4949915fc059cf28eebb9c565356223bfd8c81324e57602864a"
+  },
+  "gatelarge1pathdeath.tga": {
+    "name": "gatelarge1pathdeath.tga",
+    "width_cells": 28,
+    "height_cells": 4,
+    "width_world_units": 896,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 32,
+      "unflyable": 0,
+      "unbuildable": 112
+    },
+    "hex_rows": [
+      "5555444444444444444444445555",
+      "5555444444444444444444445555",
+      "5555444444444444444444445555",
+      "5555444444444444444444445555"
+    ],
+    "sha256": "462fe68ee17e04f5fcf5d68f5035296ee7301b7a7a70ace1ffe9c1783988ce51"
+  },
+  "icecrownthronegatepath.tga": {
+    "name": "icecrownthronegatepath.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 76,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "5555555555555555",
+      "5555555555555555",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "5544444444444455",
+      "4444444444444455",
+      "4444444444444455",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "1df0514fe46c196a32701d164fa51a9e83d87e0d0405b9cdfad4bfe97437001a"
+  },
+  "largerockspire.tga": {
+    "name": "largerockspire.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 128,
+      "unflyable": 48,
+      "unbuildable": 144
+    },
+    "hex_rows": [
+      "445555555544",
+      "445555555544",
+      "555577775555",
+      "555577775555",
+      "557777777755",
+      "557777777755",
+      "557777777755",
+      "557777777755",
+      "555577775555",
+      "555577775555",
+      "445555555544",
+      "445555555544"
+    ],
+    "sha256": "baf3c99ba57e3c5f35025ab79272a51a08d5dfd2955bac790a496f2fb22c49e3"
+  },
+  "log45.tga": {
+    "name": "log45.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 40
+    },
+    "hex_rows": [
+      "00005555",
+      "00005555",
+      "00555555",
+      "00555555",
+      "55555500",
+      "55555500",
+      "55550000",
+      "55550000"
+    ],
+    "sha256": "29d78cab07e5c5bdf9c1716b72211bc4d7228af00727fd611e149c61a51dee06"
+  },
+  "nagastairssmall0.tga": {
+    "name": "nagastairssmall0.tga",
+    "width_cells": 24,
+    "height_cells": 12,
+    "width_world_units": 768,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 96,
+      "unflyable": 0,
+      "unbuildable": 288
+    },
+    "hex_rows": [
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555"
+    ],
+    "sha256": "5d6017bea6231dabd78489954fd06c3d9ea74578e9fe7d914ed8193c878e1f11"
+  },
+  "nagastairssmall180.tga": {
+    "name": "nagastairssmall180.tga",
+    "width_cells": 24,
+    "height_cells": 12,
+    "width_world_units": 768,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 96,
+      "unflyable": 0,
+      "unbuildable": 288
+    },
+    "hex_rows": [
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555",
+      "555544444444444444445555"
+    ],
+    "sha256": "5d6017bea6231dabd78489954fd06c3d9ea74578e9fe7d914ed8193c878e1f11"
+  },
+  "nagastairssmall270.tga": {
+    "name": "nagastairssmall270.tga",
+    "width_cells": 12,
+    "height_cells": 24,
+    "width_world_units": 384,
+    "height_world_units": 768,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 96,
+      "unflyable": 0,
+      "unbuildable": 288
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "04687d9f9710a12fdcca4b01a429a6274735f75ea631b1bd0f3a69453e7e41cb"
+  },
+  "nagastairssmall90.tga": {
+    "name": "nagastairssmall90.tga",
+    "width_cells": 12,
+    "height_cells": 24,
+    "width_world_units": 384,
+    "height_world_units": 768,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 96,
+      "unflyable": 0,
+      "unbuildable": 288
+    },
+    "hex_rows": [
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "444444444444",
+      "555555555555",
+      "555555555555",
+      "555555555555",
+      "555555555555"
+    ],
+    "sha256": "04687d9f9710a12fdcca4b01a429a6274735f75ea631b1bd0f3a69453e7e41cb"
+  },
+  "rounddoor1path.tga": {
+    "name": "rounddoor1path.tga",
+    "width_cells": 20,
+    "height_cells": 4,
+    "width_world_units": 640,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555"
+    ],
+    "sha256": "75f777176e6021111a4e62e6c6e297f89ef4a9061828681d3cb42dc04ac5a7ec"
+  },
+  "rounddoor1pathdeath.tga": {
+    "name": "rounddoor1pathdeath.tga",
+    "width_cells": 20,
+    "height_cells": 4,
+    "width_world_units": 640,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55444444444455555555",
+      "55444444444455555555",
+      "55444444444455555555",
+      "55444444444455555555"
+    ],
+    "sha256": "ac7b5a713a7a19693616ab47c270eed4d6b8580d9eca2854e1a2cdd059015706"
+  },
+  "rounddoor2path.tga": {
+    "name": "rounddoor2path.tga",
+    "width_cells": 20,
+    "height_cells": 4,
+    "width_world_units": 640,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555",
+      "55555555555555555555"
+    ],
+    "sha256": "75f777176e6021111a4e62e6c6e297f89ef4a9061828681d3cb42dc04ac5a7ec"
+  },
+  "rounddoor2pathdeath.tga": {
+    "name": "rounddoor2pathdeath.tga",
+    "width_cells": 20,
+    "height_cells": 4,
+    "width_world_units": 640,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 80
+    },
+    "hex_rows": [
+      "55555555444444444455",
+      "55555555444444444455",
+      "55555555444444444455",
+      "55555555444444444455"
+    ],
+    "sha256": "140c1f6bd613a5f690fc76ee96e6ce662c00ba8b6bdfc782438ea8678c0c1537"
+  },
+  "shortfence135.tga": {
+    "name": "shortfence135.tga",
+    "width_cells": 4,
+    "height_cells": 4,
+    "width_world_units": 128,
+    "height_world_units": 128,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 8,
+      "unflyable": 0,
+      "unbuildable": 8
+    },
+    "hex_rows": [
+      "0055",
+      "0055",
+      "5500",
+      "5500"
+    ],
+    "sha256": "9c37230debde3b714a659bcaa7a6ec0386ab305a0e31880e12102923038edd95"
+  },
+  "stoneclifframp135.tga": {
+    "name": "stoneclifframp135.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 136
+    },
+    "hex_rows": [
+      "005555444444",
+      "005555444444",
+      "555544444444",
+      "555544444444",
+      "554444444444",
+      "554444444444",
+      "444444444455",
+      "444444444455",
+      "444444445555",
+      "444444445555",
+      "444444555500",
+      "444444555500"
+    ],
+    "sha256": "9a29d04850568938dcb9117cac7e6f95a3f3f523f15999b26f345c3834cb8fcc"
+  },
+  "stoneclifframp135death.tga": {
+    "name": "stoneclifframp135death.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 88,
+      "unflyable": 0,
+      "unbuildable": 136
+    },
+    "hex_rows": [
+      "005555444444",
+      "005555444444",
+      "555555554444",
+      "555555554444",
+      "555555555544",
+      "555555555544",
+      "445555555555",
+      "445555555555",
+      "444455555555",
+      "444455555555",
+      "444444555500",
+      "444444555500"
+    ],
+    "sha256": "1f9a166346107aadad38d894d216ab3c0903aa5351f242215f3f51c05942605f"
+  },
+  "stoneclifframp45.tga": {
+    "name": "stoneclifframp45.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 40,
+      "unflyable": 0,
+      "unbuildable": 136
+    },
+    "hex_rows": [
+      "444444555500",
+      "444444555500",
+      "444444445555",
+      "444444445555",
+      "444444444455",
+      "444444444455",
+      "554444444444",
+      "554444444444",
+      "555544444444",
+      "555544444444",
+      "005555444444",
+      "005555444444"
+    ],
+    "sha256": "6cb4b41fe0fa4ac84732a3ac04fdd18c4623b9fb9da6463255af777b0883c1d7"
+  },
+  "stoneclifframp45death.tga": {
+    "name": "stoneclifframp45death.tga",
+    "width_cells": 12,
+    "height_cells": 12,
+    "width_world_units": 384,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 88,
+      "unflyable": 0,
+      "unbuildable": 136
+    },
+    "hex_rows": [
+      "444444555500",
+      "444444555500",
+      "444455555555",
+      "444455555555",
+      "445555555555",
+      "445555555555",
+      "555555555544",
+      "555555555544",
+      "555555554444",
+      "555555554444",
+      "005555444444",
+      "005555444444"
+    ],
+    "sha256": "08b56b29eb28768e75121930b34332881196e6026aec610e4c37636bc06b306c"
+  },
+  "stonewall1path.tga": {
+    "name": "stonewall1path.tga",
+    "width_cells": 10,
+    "height_cells": 2,
+    "width_world_units": 320,
+    "height_world_units": 64,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 20,
+      "unflyable": 0,
+      "unbuildable": 20
+    },
+    "hex_rows": [
+      "5555555555",
+      "5555555555"
+    ],
+    "sha256": "68f54f829dad414181eff33fd4a12e830cfe6a88e996397178c46005ea87df65"
+  },
+  "stonewall2path.tga": {
+    "name": "stonewall2path.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 20,
+      "unflyable": 0,
+      "unbuildable": 20
+    },
+    "hex_rows": [
+      "5500000000",
+      "5500000000",
+      "0055000000",
+      "0055000000",
+      "0000550000",
+      "0000550000",
+      "0000005500",
+      "0000005500",
+      "0000000055",
+      "0000000055"
+    ],
+    "sha256": "74d1c460e940f15bc44efc0c69f1a5a154a2db0e3ebac391dfaa8defeea9a0e9"
+  },
+  "stonewall3path.tga": {
+    "name": "stonewall3path.tga",
+    "width_cells": 2,
+    "height_cells": 10,
+    "width_world_units": 64,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 20,
+      "unflyable": 0,
+      "unbuildable": 20
+    },
+    "hex_rows": [
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55",
+      "55"
+    ],
+    "sha256": "13158432fab27344f4c9d06e53f0098424ac76d80b8488bfd4b3d6ce8a5a76be"
+  },
+  "stonewall4path.tga": {
+    "name": "stonewall4path.tga",
+    "width_cells": 10,
+    "height_cells": 10,
+    "width_world_units": 320,
+    "height_world_units": 320,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 20,
+      "unflyable": 0,
+      "unbuildable": 20
+    },
+    "hex_rows": [
+      "0000000055",
+      "0000000055",
+      "0000005500",
+      "0000005500",
+      "0000550000",
+      "0000550000",
+      "0055000000",
+      "0055000000",
+      "5500000000",
+      "5500000000"
+    ],
+    "sha256": "397704ddba9129724e6f621b057b835db1452d95079f31596d578d5600767950"
+  },
+  "throne.tga": {
+    "name": "throne.tga",
+    "width_cells": 10,
+    "height_cells": 14,
+    "width_world_units": 320,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 20,
+      "unflyable": 0,
+      "unbuildable": 120
+    },
+    "hex_rows": [
+      "0000000000",
+      "0000000000",
+      "4444444444",
+      "4444444444",
+      "5555555555",
+      "5555555555",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444",
+      "4444444444"
+    ],
+    "sha256": "5e0e6f8de29b6ddc417a84731388064e0e41a6f4ecb99430cc894a0b3a44b963"
+  },
+  "throne135.tga": {
+    "name": "throne135.tga",
+    "width_cells": 14,
+    "height_cells": 14,
+    "width_world_units": 448,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 28,
+      "unflyable": 0,
+      "unbuildable": 142
+    },
+    "hex_rows": [
+      "00004440000000",
+      "00004440000000",
+      "00445555440000",
+      "00445555440000",
+      "44444455554400",
+      "44444455554400",
+      "44444444555544",
+      "44444444555544",
+      "44444444445544",
+      "44444444445544",
+      "44444444444400",
+      "44444444444400",
+      "00444444440000",
+      "00444444440000"
+    ],
+    "sha256": "d72936b53635b4d22ba41fae8d26a4abfe6731f7d72792ad0a6bd2f93cac3f96"
+  },
+  "throne45.tga": {
+    "name": "throne45.tga",
+    "width_cells": 14,
+    "height_cells": 14,
+    "width_world_units": 448,
+    "height_world_units": 448,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 28,
+      "unflyable": 0,
+      "unbuildable": 142
+    },
+    "hex_rows": [
+      "00000044440000",
+      "00000044440000",
+      "00004455554400",
+      "00004455554400",
+      "00445555444444",
+      "00445555444444",
+      "00555544444444",
+      "44555544444444",
+      "44554444444444",
+      "44554444444444",
+      "00444444444444",
+      "00444444444444",
+      "00004444444400",
+      "00004444444400"
+    ],
+    "sha256": "9ae60da2eb291537c902aa62c5d94af78bb9de7aba723251fe704d05b2532497"
+  },
+  "treebridge0.tga": {
+    "name": "treebridge0.tga",
+    "width_cells": 24,
+    "height_cells": 12,
+    "width_world_units": 768,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 96,
+      "unflyable": 0,
+      "unbuildable": 288
+    },
+    "hex_rows": [
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "444444444444444444444444",
+      "555555555555555555555555",
+      "555555555555555555555555"
+    ],
+    "sha256": "0cb8f56a5a2116c0594b49001564194a73c328cce6432d6320db53e111f2f236"
+  },
+  "treebridge0death.tga": {
+    "name": "treebridge0death.tga",
+    "width_cells": 24,
+    "height_cells": 12,
+    "width_world_units": 768,
+    "height_world_units": 384,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 288,
+      "unflyable": 0,
+      "unbuildable": 288
+    },
+    "hex_rows": [
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555",
+      "555555555555555555555555"
+    ],
+    "sha256": "6cd6528d52a681edb0dd96d59f5f007db106244a606c55bf3d2df12a0cff3e59"
+  },
+  "undeadnecropolis.tga": {
+    "name": "undeadnecropolis.tga",
+    "width_cells": 16,
+    "height_cells": 16,
+    "width_world_units": 512,
+    "height_world_units": 512,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 80,
+      "unflyable": 0,
+      "unbuildable": 256
+    },
+    "hex_rows": [
+      "4444444444444444",
+      "4444444444444444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444555555554444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444",
+      "4444444444444444"
+    ],
+    "sha256": "b83852193df65ab4cf79b59165b2e3916dbb68e9fffa12716da7d85a05afdece"
+  },
+  "waterfallbase0.tga": {
+    "name": "waterfallbase0.tga",
+    "width_cells": 8,
+    "height_cells": 8,
+    "width_world_units": 256,
+    "height_world_units": 256,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 64,
+      "unflyable": 0,
+      "unbuildable": 64
+    },
+    "hex_rows": [
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555",
+      "55555555"
+    ],
+    "sha256": "f3d1b354de1867cdda31023d14c2ec2fe15cf5bbc4edf31866d4e3e2d28ad29d"
+  },
+  "waygate.tga": {
+    "name": "waygate.tga",
+    "width_cells": 20,
+    "height_cells": 20,
+    "width_world_units": 640,
+    "height_world_units": 640,
+    "cell_world_units": 32,
+    "flag_bits": {
+      "1": "unwalkable",
+      "2": "unflyable",
+      "4": "unbuildable"
+    },
+    "counts": {
+      "unwalkable": 0,
+      "unflyable": 0,
+      "unbuildable": 400
+    },
+    "hex_rows": [
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444",
+      "44444444444444444444"
+    ],
+    "sha256": "53a89c393b67ba74fdb41c2eeae1fef512deb92b0c88314c2be1858b90b418ea"
+  }
+}
