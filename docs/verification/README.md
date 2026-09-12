@@ -306,7 +306,7 @@ With that architecture, the final density sweep is worker-count deterministic:
 
 At 5,000 units the final one-worker targeting phase is about **12.7x faster** than the naive defense-alert scan with the same checksum. In the 10,000-unit eight-worker case, the separately timed verification checksum accounts for ~13.4 ms of the 41.5 ms total; the other timed simulation phases sum to roughly 28.0 ms. That is useful architectural evidence, not a 10,000-unit support promise: production checksum cadence may be lower than every tick, while richer projectile/effect behavior will add work that this synthetic guaranteed-hit case does not contain.
 
-Projectile entity count and impact/launch structural work are not the dominant cost in this fixture. Long-range target/defense evaluation remains the largest phase even after removing the pathological alert scan, so future combat-density work should continue reporting candidate counts rather than attributing total cost to projectile count alone. The playable verification game now renders the authoritative in-flight guaranteed-hit population instead of drawing ranged attacks as immediate hit lines.
+Projectile entity count and impact/launch structural work were not the dominant cost in this fixture. At the time of this sweep, long-range target/defense evaluation remained the largest phase even after removing the pathological alert scan. The later sticky-target correction below removes most of that work because units with valid engagements no longer re-query ally-defense every tick. The playable verification game now renders the authoritative in-flight guaranteed-hit population instead of drawing ranged attacks as immediate hit lines.
 
 ## Sticky target / first-attacker retaliation regression — 2026-09-12
 
@@ -315,6 +315,19 @@ An interactive verification match exposed rapid target oscillation in melee unit
 The rule is now stricter: ally defense participates only when a unit has no valid current target. Once ordinary acquisition or ally defense selects an enemy, that engagement remains sticky until normal invalidation (death/despawn, untargetability, unreachable attack position, or pursuit-leash escape). A direct attack on the unit may pre-empt an ordinary/ally-defense target once. The first valid hostile attacker in canonical combat-event order becomes a persistent direct-retaliation target; later attackers cannot replace it while it remains valid. The retaliation-lock bit is authoritative and included in the canonical checksum.
 
 Focused regressions cover the observed pattern and the edge cases behind it: a nearby ally being attacked no longer pre-empts an existing castle/other target; an idle unit still uses ally defense and preserves nearest-ally/nearest-attacker ordering; a target chosen through ally defense stays fixed when a different ally is attacked later; the first personal attacker remains locked while another enemy continues hitting the unit; and a lethal hit still leaves a one-tick alert that an otherwise idle nearby ally can consume.
+
+The corrected rule also removes the repeated defense-query cost from the synthetic projectile-density fixture while leaving live/launch/impact projectile counts unchanged. Re-running the same sweep on the exact committed sticky-target state produced:
+
+| Units | Workers | ms/tick | Targeting ms/tick | Checksum ms/tick | Avg live | Peak live | Final checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1,000 | 1 | 2.259 | 0.052 | 1.050 | 5,340 | 5,800 | `1346998528d5c1e9` |
+| 1,000 | 8 | 2.566 | 0.136 | 1.020 | 5,340 | 5,800 | `1346998528d5c1e9` |
+| 5,000 | 1 | 11.761 | 0.276 | 6.154 | 33,550 | 38,600 | `50672cccc8bb831b` |
+| 5,000 | 8 | 11.250 | 0.307 | 6.153 | 33,550 | 38,600 | `50672cccc8bb831b` |
+| 10,000 | 1 | 24.739 | 0.542 | 13.948 | 80,490 | 100,600 | `499530785e31dc12` |
+| 10,000 | 8 | 22.886 | 0.338 | 13.714 | 80,490 | 100,600 | `499530785e31dc12` |
+
+At 10,000 units this cuts one-worker targeting from 88.635 to 0.542 ms/tick and eight-worker targeting from 18.108 to 0.338 ms/tick. The changed checksum is expected because target-state semantics now include the authoritative direct-retaliation lock. The result reinforces the intended architecture: ally-defense indexing remains necessary for genuinely idle units, but active engagements should not pay that query cost or change targets in response to unrelated nearby fights.
 
 ## Current interpretation
 
