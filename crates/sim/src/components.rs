@@ -132,6 +132,18 @@ pub(crate) struct CorpseProducer(pub CorpseProfile);
 pub(crate) struct ProductionCorpseProfile(pub CorpseProfile);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CollisionRadius(pub i32);
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UnitGameplayProperties {
+    pub corpse: Option<CorpseProfile>,
+    pub collision_radius: Option<CollisionRadius>,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionCollisionRadius(pub CollisionRadius);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Corpse {
     pub source_unit: SimId,
     pub source_team: Team,

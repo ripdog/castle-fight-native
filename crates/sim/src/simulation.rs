@@ -14,11 +14,12 @@ use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile,
-        BounceProjectile, BuildingFootprint, BuildingSpawn, Corpse, CorpseDefinitionId,
-        CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
-        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile, NavigationState,
-        Position, ProductionCorpseProfile, ProductionProfile, ProductionState, RetaliationState,
-        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitSpawn,
+        BounceProjectile, BuildingFootprint, BuildingSpawn, CollisionRadius, Corpse,
+        CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
+        MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
+        NavigationState, Position, ProductionCollisionRadius, ProductionCorpseProfile,
+        ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick,
+        SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -181,6 +182,7 @@ pub struct UnitView {
     pub id: SimId,
     pub team: Team,
     pub position: SimPoint,
+    pub collision_radius: i32,
     pub health: i32,
     pub attack_delivery: AttackDelivery,
     pub target: Option<SimId>,
@@ -223,7 +225,8 @@ pub struct Simulation {
     pool: ThreadPool,
     topology: TopologyGrid,
     topology_dirty: bool,
-    pursuit_cache: BTreeMap<(NavCell, NavCell), NavCell>,
+    pursuit_cache: BTreeMap<(NavCell, NavCell, Option<i32>), NavCell>,
+    radius_objective_fields: BTreeMap<(u8, i32), Vec<u32>>,
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
@@ -238,6 +241,11 @@ impl Simulation {
         assert!(config.navigation_cell_size > 0);
         assert!(config.target_pursuit_extra_range >= 0);
         assert!(config.unit_separation_distance >= 0);
+        assert_eq!(
+            config.unit_separation_distance % 2,
+            0,
+            "fallback unit separation must be an even collision diameter"
+        );
         assert!(config.max_separation_per_tick >= 0);
 
         let pool = ThreadPoolBuilder::new()
@@ -260,6 +268,7 @@ impl Simulation {
             topology,
             topology_dirty: false,
             pursuit_cache: BTreeMap::new(),
+            radius_objective_fields: BTreeMap::new(),
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
@@ -279,14 +288,60 @@ impl Simulation {
     }
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
-        validate_unit_spawn(unit);
-        self.spawn_unit_unchecked(unit, None)
+        self.spawn_unit_with_properties(unit, UnitGameplayProperties::default())
     }
 
     pub fn spawn_unit_with_corpse(&mut self, unit: UnitSpawn, corpse: CorpseProfile) -> SimId {
+        self.spawn_unit_with_properties(
+            unit,
+            UnitGameplayProperties {
+                corpse: Some(corpse),
+                collision_radius: None,
+            },
+        )
+    }
+
+    pub fn spawn_unit_with_collision_radius(
+        &mut self,
+        unit: UnitSpawn,
+        collision_radius: CollisionRadius,
+    ) -> SimId {
+        self.spawn_unit_with_properties(
+            unit,
+            UnitGameplayProperties {
+                corpse: None,
+                collision_radius: Some(collision_radius),
+            },
+        )
+    }
+
+    pub fn spawn_unit_with_properties(
+        &mut self,
+        unit: UnitSpawn,
+        properties: UnitGameplayProperties,
+    ) -> SimId {
         validate_unit_spawn(unit);
-        validate_corpse_profile(corpse);
-        self.spawn_unit_unchecked(unit, Some(corpse))
+        if let Some(corpse) = properties.corpse {
+            validate_corpse_profile(corpse);
+        }
+        if let Some(collision_radius) = properties.collision_radius {
+            validate_collision_radius(collision_radius);
+            self.refresh_topology_if_dirty();
+            let source_cell = self.topology.cell_of_point(unit.position);
+            let component = self
+                .topology
+                .component_id(source_cell)
+                .expect("authored collision unit must spawn on traversable topology");
+            assert!(
+                self.topology.circle_is_traversable_in_component(
+                    unit.position,
+                    collision_radius.0,
+                    component,
+                ),
+                "authored collision unit footprint overlaps blocked topology"
+            );
+        }
+        self.spawn_unit_unchecked(unit, properties.corpse, properties.collision_radius)
     }
 
     pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
@@ -299,15 +354,20 @@ impl Simulation {
         building: BuildingSpawn,
         corpse: CorpseProfile,
     ) -> SimId {
-        self.try_spawn_building_with_production_corpse(building, corpse)
-            .expect("invalid authored building placement")
+        self.spawn_building_with_production_properties(
+            building,
+            UnitGameplayProperties {
+                corpse: Some(corpse),
+                collision_radius: None,
+            },
+        )
     }
 
     pub fn try_spawn_building(
         &mut self,
         building: BuildingSpawn,
     ) -> Result<SimId, BuildingPlacementError> {
-        self.try_spawn_building_internal(building, None)
+        self.try_spawn_building_internal(building, None, None)
     }
 
     pub fn try_spawn_building_with_production_corpse(
@@ -315,18 +375,61 @@ impl Simulation {
         building: BuildingSpawn,
         corpse: CorpseProfile,
     ) -> Result<SimId, BuildingPlacementError> {
+        self.try_spawn_building_with_production_properties(
+            building,
+            UnitGameplayProperties {
+                corpse: Some(corpse),
+                collision_radius: None,
+            },
+        )
+    }
+
+    pub fn spawn_building_with_production_collision_radius(
+        &mut self,
+        building: BuildingSpawn,
+        collision_radius: CollisionRadius,
+    ) -> SimId {
+        self.spawn_building_with_production_properties(
+            building,
+            UnitGameplayProperties {
+                corpse: None,
+                collision_radius: Some(collision_radius),
+            },
+        )
+    }
+
+    pub fn spawn_building_with_production_properties(
+        &mut self,
+        building: BuildingSpawn,
+        properties: UnitGameplayProperties,
+    ) -> SimId {
+        self.try_spawn_building_with_production_properties(building, properties)
+            .expect("invalid authored building placement")
+    }
+
+    pub fn try_spawn_building_with_production_properties(
+        &mut self,
+        building: BuildingSpawn,
+        properties: UnitGameplayProperties,
+    ) -> Result<SimId, BuildingPlacementError> {
         assert!(
             building.production.is_some(),
-            "production corpse profile requires a production building"
+            "production unit properties require a production building"
         );
-        validate_corpse_profile(corpse);
-        self.try_spawn_building_internal(building, Some(corpse))
+        if let Some(corpse) = properties.corpse {
+            validate_corpse_profile(corpse);
+        }
+        if let Some(collision_radius) = properties.collision_radius {
+            validate_collision_radius(collision_radius);
+        }
+        self.try_spawn_building_internal(building, properties.corpse, properties.collision_radius)
     }
 
     fn try_spawn_building_internal(
         &mut self,
         building: BuildingSpawn,
         production_corpse: Option<CorpseProfile>,
+        production_collision_radius: Option<CollisionRadius>,
     ) -> Result<SimId, BuildingPlacementError> {
         assert!(building.health > 0);
         assert!(building.team.0 < 2, "verification slice supports two teams");
@@ -384,6 +487,9 @@ impl Simulation {
             entity.insert((production, ProductionState { next_spawn_tick }));
             if let Some(corpse) = production_corpse {
                 entity.insert(ProductionCorpseProfile(corpse));
+            }
+            if let Some(collision_radius) = production_collision_radius {
+                entity.insert(ProductionCollisionRadius(collision_radius));
             }
         }
         if let Some(attack) = building.attack {
@@ -453,9 +559,19 @@ impl Simulation {
             let Some(health) = entity.get::<Health>() else {
                 return false;
             };
-            health.current > 0
-                && entity.get::<BuildingFootprint>().is_none()
-                && footprint_contains_cell(footprint, self.topology.cell_of_point(position.0))
+            if health.current <= 0 || entity.get::<BuildingFootprint>().is_some() {
+                return false;
+            }
+            if let Some(radius) = entity.get::<CollisionRadius>() {
+                let distance_sq = point_to_footprint_distance_sq(
+                    position.0,
+                    footprint,
+                    self.config.navigation_cell_size,
+                );
+                distance_sq == 0 || distance_sq < square_i32(radius.0)
+            } else {
+                footprint_contains_cell(footprint, self.topology.cell_of_point(position.0))
+            }
         })
     }
 
@@ -1351,10 +1467,11 @@ impl Simulation {
 
     #[must_use]
     pub fn units(&self) -> Vec<UnitView> {
+        let default_collision_radius = self.default_collision_radius();
         let mut units: Vec<_> = self
             .world
             .iter_entities()
-            .filter_map(unit_view_from_entity)
+            .filter_map(|entity| unit_view_from_entity(entity, default_collision_radius))
             .collect();
         units.sort_unstable_by_key(|unit| unit.id);
         units
@@ -1373,10 +1490,15 @@ impl Simulation {
 
     #[must_use]
     pub fn unit(&self, id: SimId) -> Option<UnitView> {
+        let default_collision_radius = self.default_collision_radius();
         self.world
             .iter_entities()
-            .filter_map(unit_view_from_entity)
+            .filter_map(|entity| unit_view_from_entity(entity, default_collision_radius))
             .find(|unit| unit.id == id)
+    }
+
+    fn default_collision_radius(&self) -> i32 {
+        self.config.unit_separation_distance / 2
     }
 
     #[must_use]
@@ -1393,7 +1515,12 @@ impl Simulation {
         id
     }
 
-    fn spawn_unit_unchecked(&mut self, unit: UnitSpawn, corpse: Option<CorpseProfile>) -> SimId {
+    fn spawn_unit_unchecked(
+        &mut self,
+        unit: UnitSpawn,
+        corpse: Option<CorpseProfile>,
+        collision_radius: Option<CollisionRadius>,
+    ) -> SimId {
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
             id,
@@ -1414,6 +1541,9 @@ impl Simulation {
         ));
         if let Some(corpse) = corpse {
             entity.insert(CorpseProducer(corpse));
+        }
+        if let Some(collision_radius) = collision_radius {
+            entity.insert(collision_radius);
         }
         id
     }
@@ -1439,6 +1569,7 @@ impl Simulation {
         );
         self.topology_dirty = false;
         self.pursuit_cache.clear();
+        self.radius_objective_fields.clear();
         true
     }
 
@@ -1488,19 +1619,23 @@ impl Simulation {
             &ProductionProfile,
             &ProductionState,
             Option<&ProductionCorpseProfile>,
+            Option<&ProductionCollisionRadius>,
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _)| state.next_spawn_tick <= self.next_tick)
+            .filter(|(_, _, _, _, _, state, _, _)| state.next_spawn_tick <= self.next_tick)
             .map(
-                |(entity, id, team, footprint, profile, state, corpse)| ProductionAttempt {
-                    entity,
-                    id: *id,
-                    team: *team,
-                    footprint: *footprint,
-                    profile: *profile,
-                    corpse: corpse.map(|corpse| corpse.0),
-                    next_spawn_tick: state.next_spawn_tick,
+                |(entity, id, team, footprint, profile, state, corpse, collision_radius)| {
+                    ProductionAttempt {
+                        entity,
+                        id: *id,
+                        team: *team,
+                        footprint: *footprint,
+                        profile: *profile,
+                        corpse: corpse.map(|corpse| corpse.0),
+                        collision_radius: collision_radius.map(|radius| radius.0),
+                        next_spawn_tick: state.next_spawn_tick,
+                    }
                 },
             )
             .collect();
@@ -1516,15 +1651,33 @@ impl Simulation {
             .len()
             .checked_add(attempts.len())
             .expect("production reservation capacity overflow");
-        let mut reservations = SpatialReservationGrid::build(
-            self.config.unit_separation_distance.max(1),
+        let max_existing_radius = units
+            .iter()
+            .map(|unit| unit.collision_radius)
+            .max()
+            .unwrap_or_else(|| self.default_collision_radius());
+        let max_spawn_radius = attempts
+            .iter()
+            .map(|attempt| {
+                attempt
+                    .collision_radius
+                    .map_or(self.default_collision_radius(), |radius| radius.0)
+            })
+            .max()
+            .unwrap_or_else(|| self.default_collision_radius());
+        let reservation_cell_size = max_existing_radius
+            .max(max_spawn_radius)
+            .saturating_mul(2)
+            .max(1);
+        let mut reservations = SpatialReservationGrid::build_with_radii(
+            reservation_cell_size,
             bounds_min,
             bounds_max,
             reservation_capacity,
             units
                 .iter()
                 .enumerate()
-                .map(|(index, unit)| (index, unit.position)),
+                .map(|(index, unit)| (index, unit.position, unit.collision_radius)),
         );
         let mut next_reservation_index = units.len();
         let mut spawned = 0;
@@ -1532,14 +1685,24 @@ impl Simulation {
 
         for attempt in attempts {
             let preferred = preferred_spawn_cell(attempt.team, attempt.footprint);
+            let collision_radius = attempt
+                .collision_radius
+                .map_or(self.default_collision_radius(), |radius| radius.0);
             let spawn =
                 spiral_cells(preferred, attempt.profile.search_radius_cells).find_map(|cell| {
-                    if !self.topology.contains(cell) || self.topology.is_blocked(cell) {
+                    let component = self.topology.component_id(cell)?;
+                    let position = self.topology.center_of_cell(cell);
+                    if attempt.collision_radius.is_some()
+                        && !self.topology.circle_is_traversable_in_component(
+                            position,
+                            collision_radius,
+                            component,
+                        )
+                    {
                         return None;
                     }
-                    let position = self.topology.center_of_cell(cell);
                     reservations
-                        .is_clear(position, self.config.unit_separation_distance)
+                        .is_clear_with_radius(position, collision_radius)
                         .then_some((cell, position))
                 });
 
@@ -1547,8 +1710,9 @@ impl Simulation {
                 self.spawn_unit_unchecked(
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                     attempt.corpse,
+                    attempt.collision_radius,
                 );
-                reservations.insert(next_reservation_index, position);
+                reservations.insert_with_radius(next_reservation_index, position, collision_radius);
                 next_reservation_index += 1;
                 spawned += 1;
             } else {
@@ -1585,10 +1749,11 @@ impl Simulation {
             &MovementProfile,
             &SpawnTick,
             Option<&CorpseProducer>,
+            Option<&CollisionRadius>,
         )>();
         let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _, _, _)| health.current > 0)
             .map(
                 |(
                     entity,
@@ -1605,6 +1770,7 @@ impl Simulation {
                     movement,
                     spawn_tick,
                     corpse,
+                    collision_radius,
                 )| UnitSnapshot {
                     entity,
                     id: *id,
@@ -1621,6 +1787,9 @@ impl Simulation {
                     movement: *movement,
                     spawn_tick: spawn_tick.0,
                     corpse: corpse.map(|corpse| corpse.0),
+                    collision_radius: collision_radius
+                        .map_or(self.default_collision_radius(), |radius| radius.0),
+                    collision_radius_override: collision_radius.map(|radius| radius.0),
                 },
             )
             .collect();
@@ -2805,6 +2974,28 @@ impl Simulation {
         navigation_states: &mut [NavigationState],
     ) -> MovementMetrics {
         let intent_start = Instant::now();
+        let mut radius_objective_keys: Vec<_> = units
+            .iter()
+            .enumerate()
+            .filter_map(|(index, unit)| {
+                (unit_health[index] > 0)
+                    .then_some(unit.collision_radius_override)
+                    .flatten()
+                    .map(|radius| (unit.team.0, radius))
+            })
+            .collect();
+        radius_objective_keys.sort_unstable();
+        radius_objective_keys.dedup();
+        for (team, radius) in radius_objective_keys {
+            if self.radius_objective_fields.contains_key(&(team, radius)) {
+                continue;
+            }
+            let field = self
+                .topology
+                .objective_distance_field_with_radius(team, radius);
+            self.radius_objective_fields.insert((team, radius), field);
+        }
+
         let decisions: Vec<_> = self.pool.install(|| {
             units
                 .par_iter()
@@ -2825,13 +3016,13 @@ impl Simulation {
             let Some(entry) = decision.cache_insert else {
                 continue;
             };
+            let key = (entry.from, entry.target, entry.collision_radius);
             if self.pursuit_cache.len() >= PURSUIT_CACHE_CAPACITY
-                && !self.pursuit_cache.contains_key(&(entry.from, entry.target))
+                && !self.pursuit_cache.contains_key(&key)
             {
                 self.pursuit_cache.clear();
             }
-            self.pursuit_cache
-                .insert((entry.from, entry.target), entry.next);
+            self.pursuit_cache.insert(key, entry.next);
         }
         let intent = intent_start.elapsed();
         let desired_positions: Vec<_> =
@@ -2910,14 +3101,34 @@ impl Simulation {
                 let mut goal =
                     point_attack_envelope_goal(current, target_position, unit.attack.range);
                 let mut cell = self.topology.cell_of_point(goal);
-                if self.topology.is_blocked(cell)
-                    || !self.topology.same_component(source_cell, cell)
-                {
-                    cell = self.topology.cell_of_point(target_position);
-                    if !self.topology.same_component(source_cell, cell) {
-                        return None;
+                let goal_is_traversable = self.position_is_traversable_from(
+                    source_cell,
+                    goal,
+                    unit.collision_radius_override,
+                ) && unit.collision_radius_override.is_none_or(|_| {
+                    self.position_is_traversable_from(
+                        source_cell,
+                        self.topology.center_of_cell(cell),
+                        unit.collision_radius_override,
+                    )
+                });
+                if !goal_is_traversable {
+                    if unit.collision_radius_override.is_some() {
+                        cell = self.nearest_reachable_unit_attack_cell(
+                            source_cell,
+                            current,
+                            target_position,
+                            unit.attack.range,
+                            unit.collision_radius_override,
+                        )?;
+                        goal = self.topology.center_of_cell(cell);
+                    } else {
+                        cell = self.topology.cell_of_point(target_position);
+                        if !self.topology.same_component(source_cell, cell) {
+                            return None;
+                        }
+                        goal = target_position;
                     }
-                    goal = target_position;
                 }
                 pursuit_target = Some(target_id);
                 attack_goal = Some(goal);
@@ -2943,18 +3154,38 @@ impl Simulation {
                     self.config.navigation_cell_size,
                 );
                 let mut cell = self.topology.cell_of_point(goal);
-                if self.topology.is_blocked(cell)
-                    || !self.topology.same_component(source_cell, cell)
-                {
-                    cell = self
-                        .topology
-                        .nearest_reachable_perimeter_cell(source_cell, footprint)?;
-                    goal = building_attack_envelope_goal(
+                let goal_is_traversable = self.position_is_traversable_from(
+                    source_cell,
+                    goal,
+                    unit.collision_radius_override,
+                ) && unit.collision_radius_override.is_none_or(|_| {
+                    self.position_is_traversable_from(
+                        source_cell,
                         self.topology.center_of_cell(cell),
-                        footprint,
-                        unit.attack.range,
-                        self.config.navigation_cell_size,
-                    );
+                        unit.collision_radius_override,
+                    )
+                });
+                if !goal_is_traversable {
+                    if unit.collision_radius_override.is_some() {
+                        cell = self.nearest_reachable_building_attack_cell(
+                            source_cell,
+                            current,
+                            footprint,
+                            unit.attack.range,
+                            unit.collision_radius_override,
+                        )?;
+                        goal = self.topology.center_of_cell(cell);
+                    } else {
+                        cell = self
+                            .topology
+                            .nearest_reachable_perimeter_cell(source_cell, footprint)?;
+                        goal = building_attack_envelope_goal(
+                            self.topology.center_of_cell(cell),
+                            footprint,
+                            unit.attack.range,
+                            self.config.navigation_cell_size,
+                        );
+                    }
                 }
                 pursuit_target = Some(target_id);
                 attack_goal = Some(goal);
@@ -2979,10 +3210,19 @@ impl Simulation {
                 if cell == source_cell {
                     Some(cell)
                 } else {
-                    let cached_fallback = self.pursuit_cache.get(&(source_cell, cell)).copied();
-                    let result = self
-                        .topology
-                        .pursuit_step(source_cell, cell, cached_fallback);
+                    let cache_key = (source_cell, cell, unit.collision_radius_override);
+                    let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
+                    let result = if let Some(radius) = unit.collision_radius_override {
+                        self.topology.pursuit_step_with_radius(
+                            source_cell,
+                            cell,
+                            cached_fallback,
+                            radius,
+                        )
+                    } else {
+                        self.topology
+                            .pursuit_step(source_cell, cell, cached_fallback)
+                    };
                     used_a_star = result.used_a_star;
                     a_star_cache_hit = result.a_star_cache_hit;
                     a_star_expanded_nodes = result.a_star_expanded_nodes;
@@ -2993,13 +3233,24 @@ impl Simulation {
                         cache_insert = Some(PursuitCacheInsert {
                             from: source_cell,
                             target: cell,
+                            collision_radius: unit.collision_radius_override,
                             next,
                         });
                     }
                     result.next_cell
                 }
             }
-            None => self.topology.objective_step(unit.team.0, source_cell),
+            None => {
+                if let Some(radius) = unit.collision_radius_override {
+                    let field = self
+                        .radius_objective_fields
+                        .get(&(unit.team.0, radius))
+                        .expect("radius-aware objective field was not prepared");
+                    self.topology.step_from_distance_field(source_cell, field)
+                } else {
+                    self.topology.objective_step(unit.team.0, source_cell)
+                }
+            }
         };
         let Some(next_cell) = next_cell else {
             return MovementDecision {
@@ -3020,13 +3271,14 @@ impl Simulation {
                 self.topology.center_of_cell(next_cell)
             };
         let candidate = current.step_towards(target_position, movement_speed);
-        let candidate_cell = self.topology.cell_of_point(candidate);
-        let position = if self.topology.is_blocked(candidate_cell)
-            || !self.topology.same_component(source_cell, candidate_cell)
-        {
-            current
-        } else {
+        let position = if self.position_is_traversable_from(
+            source_cell,
+            candidate,
+            unit.collision_radius_override,
+        ) {
             candidate
+        } else {
+            current
         };
         MovementDecision {
             position,
@@ -3046,27 +3298,29 @@ impl Simulation {
         unit_health: &[i32],
         desired_positions: &[SimPoint],
     ) -> Vec<SimPoint> {
-        let separation_distance = self.config.unit_separation_distance;
         let max_separation = self.config.max_separation_per_tick;
-        if separation_distance == 0 || max_separation == 0 {
+        let max_radius = units
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| unit_health[*index] > 0)
+            .map(|(_, unit)| unit.collision_radius)
+            .max()
+            .unwrap_or(0);
+        if max_radius == 0 || max_separation == 0 {
             return desired_positions.to_vec();
         }
 
         let collision_partition = SpatialPartition::global(0);
-        let anticipation_distance = separation_distance
-            .saturating_mul(2)
-            .max(separation_distance);
+        let max_pair_distance = max_radius.saturating_mul(2);
+        let max_anticipation_distance = max_pair_distance.saturating_mul(2);
         let collision_grid = SpatialGrid::build(
-            anticipation_distance.max(1),
+            max_anticipation_distance.max(1),
             desired_positions
                 .iter()
                 .enumerate()
                 .filter(|(index, _)| unit_health[*index] > 0)
                 .map(|(index, position)| (collision_partition, index, *position)),
         );
-        let separation_sq = square_i32(separation_distance);
-        let anticipation_sq = square_i32(anticipation_distance);
-
         self.pool.install(|| {
             units
                 .par_iter()
@@ -3086,15 +3340,25 @@ impl Simulation {
                     let mut push_y = 0_i64;
                     let mut contributions = 0_i64;
 
+                    let query_radius = unit
+                        .collision_radius
+                        .saturating_add(max_radius)
+                        .saturating_mul(2);
                     collision_grid.for_each_candidate(
                         collision_partition,
                         desired,
-                        anticipation_distance,
+                        query_radius,
                         |other_index| {
                             if other_index == index || unit_health[other_index] <= 0 {
                                 return;
                             }
                             let other = desired_positions[other_index];
+                            let separation_distance = unit
+                                .collision_radius
+                                .saturating_add(units[other_index].collision_radius);
+                            let anticipation_distance = separation_distance.saturating_mul(2);
+                            let separation_sq = square_i32(separation_distance);
+                            let anticipation_sq = square_i32(anticipation_distance);
                             let distance_sq = desired.distance_sq(other);
                             if distance_sq >= anticipation_sq {
                                 return;
@@ -3169,7 +3433,12 @@ impl Simulation {
                         i32::try_from(push_y).expect("crowd y offset overflow"),
                     );
                     let offset = SimPoint::new(0, 0).step_towards(raw_offset, max_separation);
-                    self.valid_separated_position(current_cell, desired, offset)
+                    self.valid_separated_position(
+                        current_cell,
+                        desired,
+                        offset,
+                        unit.collision_radius_override,
+                    )
                 })
                 .collect()
         })
@@ -3184,18 +3453,23 @@ impl Simulation {
         desired_positions: &[SimPoint],
         separated_positions: &[SimPoint],
     ) -> Vec<SimPoint> {
-        let minimum_distance = self.config.unit_separation_distance;
-        if minimum_distance == 0 {
+        let max_radius = units
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| unit_health[*index] > 0)
+            .map(|(_, unit)| unit.collision_radius)
+            .max()
+            .unwrap_or(0);
+        if max_radius == 0 {
             return separated_positions.to_vec();
         }
 
-        let entries = units
-            .iter()
-            .enumerate()
-            .filter_map(|(index, unit)| (unit_health[index] > 0).then_some((index, unit.position)));
+        let entries = units.iter().enumerate().filter_map(|(index, unit)| {
+            (unit_health[index] > 0).then_some((index, unit.position, unit.collision_radius))
+        });
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
-        let mut reservations = SpatialReservationGrid::build(
-            minimum_distance.max(1),
+        let mut reservations = SpatialReservationGrid::build_with_radii(
+            max_radius.saturating_mul(2).max(1),
             bounds_min,
             bounds_max,
             units.len(),
@@ -3226,8 +3500,12 @@ impl Simulation {
                 *navigation = NavigationState::default();
             }
 
-            let direct_clear = self.position_is_traversable_from(original_cell, desired)
-                && reservations.is_clear(desired, minimum_distance);
+            let direct_clear = self.position_is_traversable_from(
+                original_cell,
+                desired,
+                unit.collision_radius_override,
+            ) && reservations
+                .is_clear_with_radius(desired, unit.collision_radius);
             let mut avoiding = false;
             if pursuing {
                 if !direct_clear {
@@ -3296,8 +3574,11 @@ impl Simulation {
                     let Some(candidate) = candidate else {
                         continue;
                     };
-                    if self.position_is_traversable_from(original_cell, candidate)
-                        && reservations.is_clear(candidate, minimum_distance)
+                    if self.position_is_traversable_from(
+                        original_cell,
+                        candidate,
+                        unit.collision_radius_override,
+                    ) && reservations.is_clear_with_radius(candidate, unit.collision_radius)
                     {
                         if candidate_side != 0 && candidate_side != navigation.bypass_side {
                             navigation.bypass_side = candidate_side;
@@ -3318,8 +3599,11 @@ impl Simulation {
                 .into_iter()
                 .flatten()
                 {
-                    if self.position_is_traversable_from(original_cell, candidate)
-                        && reservations.is_clear(candidate, minimum_distance)
+                    if self.position_is_traversable_from(
+                        original_cell,
+                        candidate,
+                        unit.collision_radius_override,
+                    ) && reservations.is_clear_with_radius(candidate, unit.collision_radius)
                     {
                         chosen = Some(candidate);
                         break;
@@ -3332,13 +3616,14 @@ impl Simulation {
                     self.find_local_non_overlap_position(
                         unit.position,
                         original_cell,
-                        minimum_distance,
+                        unit.collision_radius,
+                        unit.collision_radius_override,
                         &reservations,
                     )
                 })
                 .unwrap_or(unit.position);
 
-            reservations.insert(index, chosen);
+            reservations.insert_with_radius(index, chosen, unit.collision_radius);
             result[index] = chosen;
         }
 
@@ -3349,10 +3634,11 @@ impl Simulation {
         &self,
         origin: SimPoint,
         original_cell: NavCell,
-        minimum_distance: i32,
+        collision_radius: i32,
+        topology_collision_radius: Option<i32>,
         reservations: &SpatialReservationGrid,
     ) -> Option<SimPoint> {
-        let step = (minimum_distance / 2).max(1);
+        let step = collision_radius.max(1);
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
         let max_radius = [
             origin.x.saturating_sub(bounds_min.x).abs(),
@@ -3374,8 +3660,11 @@ impl Simulation {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
-                    if self.position_is_traversable_from(original_cell, candidate)
-                        && reservations.is_clear(candidate, minimum_distance)
+                    if self.position_is_traversable_from(
+                        original_cell,
+                        candidate,
+                        topology_collision_radius,
+                    ) && reservations.is_clear_with_radius(candidate, collision_radius)
                     {
                         return Some(candidate);
                     }
@@ -3387,8 +3676,11 @@ impl Simulation {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
-                    if self.position_is_traversable_from(original_cell, candidate)
-                        && reservations.is_clear(candidate, minimum_distance)
+                    if self.position_is_traversable_from(
+                        original_cell,
+                        candidate,
+                        topology_collision_radius,
+                    ) && reservations.is_clear_with_radius(candidate, collision_radius)
                     {
                         return Some(candidate);
                     }
@@ -3396,6 +3688,85 @@ impl Simulation {
             }
         }
         None
+    }
+
+    fn nearest_reachable_unit_attack_cell(
+        &self,
+        source_cell: NavCell,
+        current: SimPoint,
+        target: SimPoint,
+        attack_range: i32,
+        collision_radius: Option<i32>,
+    ) -> Option<NavCell> {
+        let cell_size = self.config.navigation_cell_size;
+        let radius_cells = attack_range
+            .saturating_add(cell_size - 1)
+            .div_euclid(cell_size)
+            .saturating_add(1);
+        let target_cell = self.topology.cell_of_point(target);
+        let range_sq = square_i32(attack_range);
+        let mut best: Option<(u64, i32, i32, NavCell)> = None;
+
+        for y in target_cell.y - radius_cells..=target_cell.y + radius_cells {
+            for x in target_cell.x - radius_cells..=target_cell.x + radius_cells {
+                let cell = NavCell::new(x, y);
+                if !self.topology.contains(cell) {
+                    continue;
+                }
+                let position = self.topology.center_of_cell(cell);
+                if position.distance_sq(target) > range_sq
+                    || !self.position_is_traversable_from(source_cell, position, collision_radius)
+                {
+                    continue;
+                }
+                let key = (current.distance_sq(position), y, x, cell);
+                if best.is_none_or(|existing| key < existing) {
+                    best = Some(key);
+                }
+            }
+        }
+        best.map(|(_, _, _, cell)| cell)
+    }
+
+    fn nearest_reachable_building_attack_cell(
+        &self,
+        source_cell: NavCell,
+        current: SimPoint,
+        footprint: BuildingFootprint,
+        attack_range: i32,
+        collision_radius: Option<i32>,
+    ) -> Option<NavCell> {
+        let cell_size = self.config.navigation_cell_size;
+        let radius_cells = attack_range
+            .saturating_add(cell_size - 1)
+            .div_euclid(cell_size)
+            .saturating_add(1);
+        let range_sq = square_i32(attack_range);
+        let mut best: Option<(u64, i32, i32, NavCell)> = None;
+        let min_x = footprint.min_x.saturating_sub(radius_cells);
+        let max_x = footprint.max_x().saturating_add(radius_cells);
+        let min_y = footprint.min_y.saturating_sub(radius_cells);
+        let max_y = footprint.max_y().saturating_add(radius_cells);
+
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let cell = NavCell::new(x, y);
+                if !self.topology.contains(cell) {
+                    continue;
+                }
+                let position = self.topology.center_of_cell(cell);
+                if point_to_footprint_distance_sq(position, footprint, cell_size) > range_sq
+                    || !self.position_is_traversable_from(source_cell, position, collision_radius)
+                {
+                    continue;
+                }
+                let key = (current.distance_sq(position), y, x, cell);
+                if best.is_none_or(|existing| key < existing) {
+                    best = Some(key);
+                }
+            }
+        }
+        best.map(|(_, _, _, cell)| cell)
     }
 
     fn navigation_world_bounds(&self) -> (SimPoint, SimPoint) {
@@ -3416,9 +3787,23 @@ impl Simulation {
         )
     }
 
-    fn position_is_traversable_from(&self, original_cell: NavCell, candidate: SimPoint) -> bool {
-        let cell = self.topology.cell_of_point(candidate);
-        !self.topology.is_blocked(cell) && self.topology.same_component(original_cell, cell)
+    fn position_is_traversable_from(
+        &self,
+        original_cell: NavCell,
+        candidate: SimPoint,
+        collision_radius: Option<i32>,
+    ) -> bool {
+        let Some(component) = self.topology.component_id(original_cell) else {
+            return false;
+        };
+        if let Some(collision_radius) = collision_radius {
+            self.topology
+                .circle_is_traversable_in_component(candidate, collision_radius, component)
+        } else {
+            self.topology
+                .component_id(self.topology.cell_of_point(candidate))
+                == Some(component)
+        }
     }
 
     fn valid_separated_position(
@@ -3426,6 +3811,7 @@ impl Simulation {
         original_cell: NavCell,
         desired: SimPoint,
         offset: SimPoint,
+        collision_radius: Option<i32>,
     ) -> SimPoint {
         let candidates = [
             SimPoint::new(
@@ -3458,8 +3844,7 @@ impl Simulation {
         candidates
             .into_iter()
             .find(|candidate| {
-                let cell = self.topology.cell_of_point(*candidate);
-                !self.topology.is_blocked(cell) && self.topology.same_component(original_cell, cell)
+                self.position_is_traversable_from(original_cell, *candidate, collision_radius)
             })
             .unwrap_or(desired)
     }
@@ -3469,6 +3854,7 @@ impl Simulation {
 struct PursuitCacheInsert {
     from: NavCell,
     target: NavCell,
+    collision_radius: Option<i32>,
     next: NavCell,
 }
 
@@ -3526,6 +3912,8 @@ struct UnitSnapshot {
     movement: MovementProfile,
     spawn_tick: u64,
     corpse: Option<CorpseProfile>,
+    collision_radius: i32,
+    collision_radius_override: Option<i32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3553,6 +3941,7 @@ struct ProductionAttempt {
     footprint: BuildingFootprint,
     profile: ProductionProfile,
     corpse: Option<CorpseProfile>,
+    collision_radius: Option<CollisionRadius>,
     next_spawn_tick: u64,
 }
 
@@ -3937,6 +4326,10 @@ fn validate_unit_template(unit: crate::components::UnitTemplate) {
     assert!(unit.movement.speed_per_tick >= 0);
 }
 
+fn validate_collision_radius(collision_radius: CollisionRadius) {
+    assert!(collision_radius.0 >= 0);
+}
+
 fn validate_unit_spawn(unit: UnitSpawn) {
     validate_unit_template(crate::components::UnitTemplate {
         health: unit.health,
@@ -4033,7 +4426,10 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
     })
 }
 
-fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitView> {
+fn unit_view_from_entity(
+    entity: bevy_ecs::world::EntityRef<'_>,
+    default_collision_radius: i32,
+) -> Option<UnitView> {
     if entity.get::<BuildingFootprint>().is_some() {
         return None;
     }
@@ -4041,6 +4437,9 @@ fn unit_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<UnitV
         id: *entity.get::<SimId>()?,
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
+        collision_radius: entity
+            .get::<CollisionRadius>()
+            .map_or(default_collision_radius, |radius| radius.0),
         health: entity.get::<Health>()?.current,
         attack_delivery: entity.get::<AttackProfile>()?.delivery,
         target: entity.get::<TargetState>()?.current,
@@ -4580,6 +4979,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     navigation: *entity.get::<NavigationState>()?,
                     spawn_tick: *entity.get::<SpawnTick>()?,
                     corpse: entity.get::<CorpseProducer>().map(|corpse| corpse.0),
+                    collision_radius: entity.get::<CollisionRadius>().copied(),
                 }))
             } else {
                 Some(CanonicalEntity::Building(CanonicalBuilding {
@@ -4592,6 +4992,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     production_corpse: entity
                         .get::<ProductionCorpseProfile>()
                         .map(|corpse| corpse.0),
+                    production_collision_radius: entity
+                        .get::<ProductionCollisionRadius>()
+                        .map(|radius| radius.0),
                     attack: entity.get::<AttackProfile>().copied(),
                     cooldown: entity.get::<AttackCooldown>().copied(),
                     target: entity.get::<TargetState>().copied(),
@@ -4644,6 +5047,10 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u64(u64::from(corpse.definition.0));
                     hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
                 }
+                if let Some(collision_radius) = unit.collision_radius {
+                    hash.write_u64(0x434f_4c4c_4953_554e);
+                    hash.write_i32(collision_radius.0);
+                }
             }
             CanonicalEntity::Building(building) => {
                 hash.write_u8(1);
@@ -4677,6 +5084,10 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                         hash.write_u64(0x434f_5250_5345_5052);
                         hash.write_u64(u64::from(corpse.definition.0));
                         hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+                    }
+                    if let Some(collision_radius) = building.production_collision_radius {
+                        hash.write_u64(0x434f_4c4c_4953_5052);
+                        hash.write_i32(collision_radius.0);
                     }
                 } else {
                     hash.write_u8(0);
@@ -4857,6 +5268,7 @@ struct CanonicalUnit {
     navigation: NavigationState,
     spawn_tick: SpawnTick,
     corpse: Option<CorpseProfile>,
+    collision_radius: Option<CollisionRadius>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4868,6 +5280,7 @@ struct CanonicalBuilding {
     production: Option<ProductionProfile>,
     production_state: Option<ProductionState>,
     production_corpse: Option<CorpseProfile>,
+    production_collision_radius: Option<CollisionRadius>,
     attack: Option<AttackProfile>,
     cooldown: Option<AttackCooldown>,
     target: Option<TargetState>,

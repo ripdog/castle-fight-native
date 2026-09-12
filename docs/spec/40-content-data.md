@@ -128,6 +128,8 @@ abilities/passives
 status immunities
 ```
 
+`collision/separation radius` is imported gameplay geometry and MUST remain distinct from presentation mesh size or selection scale. Where the original content exposes this value reliably, conversion SHOULD preserve it as an explicit authoritative radius rather than collapsing all units to one simulation-wide spacing constant.
+
 The simulation should consume compact validated IDs/structures rather than dynamically interpret arbitrary scripts in hot loops.
 
 ## 8. Attack definitions

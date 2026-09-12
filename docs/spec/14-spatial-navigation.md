@@ -244,9 +244,11 @@ Because a memoryless local field can still alternate between equally legal sides
 
 Soft separation is a steering/game-feel mechanism, **not** the correctness boundary. After steering, a deterministic hard reservation/commit pass MUST reject any proposed final position that would overlap another live collision-enabled combat unit. Physical collision is global and MUST NOT be partitioned by navigation connected-component: topology answers whether a route exists, not whether another physical body exists. The resolver may choose a deterministic alternate position or leave the unit at its previous legal position; it MUST NOT resolve pressure by compressing units into overlapping space or teleporting them through blockers.
 
-After a completed movement commit, two ordinary collision-enabled combat units MUST NOT occupy overlapping authoritative collision footprints. Production and building placement SHOULD prevent impossible overpacked states from being created in the first place; when there is no legal movement space, units queue or flow around one another rather than violating the collision invariant.
+Each combat unit may carry an authoritative circular collision radius. Unit-unit legality uses the sum of the two radii; a small and large unit therefore reserve different center distances rather than sharing one global spacing constant. An explicitly authored radius also applies against map bounds and blocked navigation cells: the unit's complete circle must fit on traversable topology. Radius-aware pursuit uses radius-valid path cells and radius-aware attack-envelope fallback positions. Shared objective navigation may cache one derived distance field per distinct authored radius; those fields preserve the strategic objective while excluding cells through which that radius physically cannot pass.
 
-The initial separation distance/strength are verification parameters rather than frozen gameplay constants; they should be tuned from measured congestion/game-feel fixtures.
+After a completed movement commit, two ordinary collision-enabled combat units MUST NOT occupy overlapping authoritative collision footprints. Production and building placement SHOULD prevent impossible overpacked states from being created in the first place; when there is no legal movement space, units queue or flow around one another rather than violating the collision invariant. Production placement MUST test the produced unit's own authored radius both against nearby unit radii and against static topology before spawning it.
+
+The verification fallback for units without imported collision geometry remains the configured global separation diameter split evenly between the two units. That fallback exists for placeholder fixtures/presentation development; imported production content SHOULD author its real collision radius. The initial steering strength remains a verification/game-feel parameter rather than a frozen content rule.
 
 ## 15. No hidden anti-stuck teleportation
 
@@ -342,4 +344,8 @@ Spatial/navigation tests MUST eventually include:
 27. a melee unit arriving behind an occupied engagement flows around the engaged units without repeated side switching and reaches legal attack range;
 28. many melee units converging on one unit target distribute around the target's legal attack envelope rather than remaining in a single tail;
 29. many melee units converging on a large building reach multiple faces of its legal attack envelope without assigned perimeter slots;
-30. a ranged unit already inside maximum range remains at its current legal range rather than backing away toward the outer boundary.
+30. a ranged unit already inside maximum range remains at its current legal range rather than backing away toward the outer boundary;
+31. mixed unit radii enforce pairwise clearance using the sum of the two radii and remain deterministic across worker counts;
+32. an explicitly authored unit radius cannot clip blocked topology or map bounds merely because its center cell is traversable;
+33. a radius-aware pursuer can route around inflated blocker clearance to an alternate legal attack position for both unit and building targets;
+34. radius-aware objective pursuit can temporarily detour away from the objective and still converge through a physically wide-enough route without oscillating.

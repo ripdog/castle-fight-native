@@ -36,6 +36,7 @@ pub struct SpatialGrid {
 #[derive(Debug, Clone, Copy)]
 struct ReservationEntry {
     position: SimPoint,
+    radius: i32,
     bucket: usize,
 }
 
@@ -50,6 +51,7 @@ pub struct SpatialReservationGrid {
     next: Vec<usize>,
     prev: Vec<usize>,
     entries: Vec<Option<ReservationEntry>>,
+    max_radius: i32,
 }
 
 impl SpatialGrid {
@@ -250,9 +252,31 @@ impl SpatialReservationGrid {
             next: vec![NONE; entry_capacity],
             prev: vec![NONE; entry_capacity],
             entries: vec![None; entry_capacity],
+            max_radius: 0,
         };
         for (index, position) in entries {
             grid.insert(index, position);
+        }
+        grid
+    }
+
+    #[must_use]
+    pub fn build_with_radii(
+        cell_size: i32,
+        bounds_min: SimPoint,
+        bounds_max: SimPoint,
+        entry_capacity: usize,
+        entries: impl IntoIterator<Item = (usize, SimPoint, i32)>,
+    ) -> Self {
+        let mut grid = Self::build(
+            cell_size,
+            bounds_min,
+            bounds_max,
+            entry_capacity,
+            std::iter::empty(),
+        );
+        for (index, position, radius) in entries {
+            grid.insert_with_radius(index, position, radius);
         }
         grid
     }
@@ -276,6 +300,11 @@ impl SpatialReservationGrid {
     }
 
     pub fn insert(&mut self, index: usize, position: SimPoint) {
+        self.insert_with_radius(index, position, 0);
+    }
+
+    pub fn insert_with_radius(&mut self, index: usize, position: SimPoint, radius: i32) {
+        assert!(radius >= 0, "reservation radius must be non-negative");
         assert!(
             index < self.entries.len(),
             "reservation index out of bounds"
@@ -294,18 +323,26 @@ impl SpatialReservationGrid {
         if head != NONE {
             self.prev[head] = index;
         }
-        self.entries[index] = Some(ReservationEntry { position, bucket });
+        self.entries[index] = Some(ReservationEntry {
+            position,
+            radius,
+            bucket,
+        });
+        self.max_radius = self.max_radius.max(radius);
     }
 
     #[must_use]
-    pub fn is_clear(&self, position: SimPoint, minimum_distance: i32) -> bool {
-        debug_assert!(minimum_distance >= 0);
-        let minimum_distance_sq = {
-            let distance = i64::from(minimum_distance);
-            (distance * distance) as u64
-        };
-        let min = SimPoint::new(position.x - minimum_distance, position.y - minimum_distance);
-        let max = SimPoint::new(position.x + minimum_distance, position.y + minimum_distance);
+    pub fn is_clear_with_radius(&self, position: SimPoint, radius: i32) -> bool {
+        debug_assert!(radius >= 0);
+        let search_distance = radius.saturating_add(self.max_radius);
+        let min = SimPoint::new(
+            position.x.saturating_sub(search_distance),
+            position.y.saturating_sub(search_distance),
+        );
+        let max = SimPoint::new(
+            position.x.saturating_add(search_distance),
+            position.y.saturating_add(search_distance),
+        );
         let (mut min_x, mut min_y) = cell_of(min, self.cell_size);
         let (mut max_x, mut max_y) = cell_of(max, self.cell_size);
         let grid_max_x = self.min_cell_x + self.width as i32 - 1;
@@ -325,6 +362,11 @@ impl SpatialReservationGrid {
                 while index != NONE {
                     let entry =
                         self.entries[index].expect("reservation list referenced missing entry");
+                    let minimum_distance = radius.saturating_add(entry.radius);
+                    let minimum_distance_sq = {
+                        let distance = i64::from(minimum_distance);
+                        (distance * distance) as u64
+                    };
                     if position.distance_sq(entry.position) < minimum_distance_sq {
                         return false;
                     }
@@ -435,12 +477,26 @@ mod tests {
             2,
             [(0, SimPoint::new(10, 10)), (1, SimPoint::new(30, 10))],
         );
-        assert!(!grid.is_clear(SimPoint::new(12, 10), 5));
-        assert!(grid.is_clear(SimPoint::new(20, 10), 5));
+        assert!(!grid.is_clear_with_radius(SimPoint::new(12, 10), 5));
+        assert!(grid.is_clear_with_radius(SimPoint::new(20, 10), 5));
 
         grid.remove(0);
-        assert!(grid.is_clear(SimPoint::new(12, 10), 5));
+        assert!(grid.is_clear_with_radius(SimPoint::new(12, 10), 5));
         grid.insert(0, SimPoint::new(50, 10));
-        assert!(!grid.is_clear(SimPoint::new(48, 10), 5));
+        assert!(!grid.is_clear_with_radius(SimPoint::new(48, 10), 5));
+    }
+
+    #[test]
+    fn reservation_grid_uses_sum_of_collision_radii() {
+        let grid = SpatialReservationGrid::build_with_radii(
+            20,
+            SimPoint::new(0, 0),
+            SimPoint::new(100, 100),
+            1,
+            [(0, SimPoint::new(20, 20), 10)],
+        );
+
+        assert!(!grid.is_clear_with_radius(SimPoint::new(34, 20), 5));
+        assert!(grid.is_clear_with_radius(SimPoint::new(35, 20), 5));
     }
 }

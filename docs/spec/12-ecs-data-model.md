@@ -77,6 +77,8 @@ MovementProfile     speed/steering/pathing class
 NavigationState     canonical local-avoidance continuity for current pursuit as needed
 ```
 
+`CollisionRadius` is authoritative gameplay geometry, not presentation scale. Unit-unit overlap tests use the sum of both radii; explicitly authored radii also constrain movement/spawn legality against blocked topology and map bounds. The verification client may temporarily omit this component and use the simulation's fallback radius derived from the configured legacy separation diameter, but imported gameplay content SHOULD carry the extracted radius explicitly.
+
 Orientation MAY be authoritative if attack arcs/facing affect gameplay; otherwise facing can remain presentation-derived.
 
 ### 5.3 Combat

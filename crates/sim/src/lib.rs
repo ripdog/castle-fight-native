@@ -7,9 +7,9 @@ mod topology;
 
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CorpseDefinitionId, CorpseProfile,
-    ManaProfile, ModifierId, MovementProfile, ProductionProfile, SimId, SpellcastingProfile,
-    StatusState, Team, UnitSpawn, UnitTemplate,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CollisionRadius, CorpseDefinitionId,
+    CorpseProfile, ManaProfile, ModifierId, MovementProfile, ProductionProfile, SimId,
+    SpellcastingProfile, StatusState, Team, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
@@ -469,6 +469,31 @@ mod tests {
         assert_eq!(corpse.source_unit, produced);
         assert_eq!(corpse.definition, CorpseDefinitionId(19));
         assert_eq!(corpse.expires_tick, None);
+    }
+
+    #[test]
+    fn unit_gameplay_properties_combine_collision_and_corpse_profiles() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_unit(duel_unit(0, 0, 100, 100));
+        let victim = sim.spawn_unit_with_properties(
+            duel_unit(1, world, 0, 100),
+            UnitGameplayProperties {
+                corpse: Some(CorpseProfile {
+                    definition: CorpseDefinitionId(23),
+                    lifetime_ticks: None,
+                }),
+                collision_radius: Some(CollisionRadius(world / 8)),
+            },
+        );
+        assert_eq!(sim.unit(victim).unwrap().collision_radius, world / 8);
+
+        sim.step();
+        sim.step();
+        assert!(sim.unit(victim).is_none());
+        let corpse = sim.corpses()[0];
+        assert_eq!(corpse.source_unit, victim);
+        assert_eq!(corpse.definition, CorpseDefinitionId(23));
     }
 
     #[test]
@@ -1956,6 +1981,33 @@ mod tests {
     }
 
     #[test]
+    fn custom_collision_radius_blocks_building_edge() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        sim.spawn_unit_with_collision_radius(
+            passive_unit(0, 19 * world),
+            CollisionRadius(2 * world),
+        );
+
+        let result =
+            sim.try_spawn_building(passive_building(0, BuildingFootprint::new(20, 0, 1, 1)));
+        assert_eq!(result, Err(BuildingPlacementError::UnitOccupied));
+    }
+
+    #[test]
+    fn production_units_inherit_custom_collision_radius() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        sim.spawn_building_with_production_collision_radius(
+            production_building(0, BuildingFootprint::new(20, 0, 1, 1), 2),
+            CollisionRadius(world / 8),
+        );
+
+        assert_eq!(sim.step().units_spawned, 1);
+        assert_eq!(sim.units()[0].collision_radius, world / 8);
+    }
+
+    #[test]
     fn production_can_delay_its_first_spawn() {
         let mut sim = Simulation::new(SimulationConfig::default(), 1);
         let mut building = production_building(0, BuildingFootprint::new(20, 0, 1, 1), 1);
@@ -1998,6 +2050,201 @@ mod tests {
             sim.unit(first).unwrap().position,
             sim.unit(second).unwrap().position
         );
+    }
+
+    #[test]
+    fn custom_collision_radii_use_pairwise_sum_not_global_spacing() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let first = sim.spawn_unit_with_collision_radius(
+            passive_unit(0, 20 * world),
+            CollisionRadius(world / 8),
+        );
+        let second = sim.spawn_unit_with_collision_radius(
+            passive_unit(0, 20 * world + world / 2),
+            CollisionRadius(world / 8),
+        );
+        let before = (
+            sim.unit(first).unwrap().position,
+            sim.unit(second).unwrap().position,
+        );
+        sim.step();
+        assert_eq!(
+            (
+                sim.unit(first).unwrap().position,
+                sim.unit(second).unwrap().position
+            ),
+            before,
+            "small units should be allowed closer than the legacy global spacing"
+        );
+
+        let mut overlap = Simulation::new(SimulationConfig::default(), 1);
+        let small = overlap.spawn_unit_with_collision_radius(
+            passive_unit(0, 20 * world),
+            CollisionRadius(world / 4),
+        );
+        let large = overlap.spawn_unit_with_collision_radius(
+            passive_unit(0, 20 * world + world / 2),
+            CollisionRadius(world / 2),
+        );
+        overlap.step();
+        let distance_sq = overlap
+            .unit(small)
+            .unwrap()
+            .position
+            .distance_sq(overlap.unit(large).unwrap().position);
+        let required = 3 * world / 4;
+        assert!(distance_sq >= (i64::from(required) * i64::from(required)) as u64);
+    }
+
+    #[test]
+    fn radius_aware_unit_pursuit_finds_alternate_attack_position() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, -10),
+            navigation_max: NavCell::new(50, 10),
+            static_blockers: vec![BuildingFootprint::new(28, 0, 1, 1)],
+            team_objective: [
+                SimPoint::new(45 * 10 * world, 5 * world),
+                SimPoint::new(5 * 10 * world, 5 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let attacker = sim.spawn_unit_with_collision_radius(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(205 * world, 5 * world),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 20 * world,
+                    acquisition_range: 150 * world,
+                    cooldown_ticks: 5,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: 5 * world,
+                },
+            },
+            CollisionRadius(4 * world),
+        );
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(305 * world, 5 * world),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        let mut attacked = false;
+        for _ in 0..80 {
+            sim.step();
+            attacked |= sim
+                .attacks_last_tick()
+                .iter()
+                .any(|event| event.source == attacker && event.target == target);
+            if attacked {
+                break;
+            }
+        }
+        assert!(
+            attacked,
+            "radius-aware pursuer stalled at a blocked nearest attack-envelope point"
+        );
+    }
+
+    #[test]
+    fn radius_aware_building_pursuit_finds_alternate_attack_position() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_cell_size: 10 * world,
+            navigation_min: NavCell::new(0, -10),
+            navigation_max: NavCell::new(50, 10),
+            static_blockers: vec![BuildingFootprint::new(28, 0, 1, 1)],
+            team_objective: [
+                SimPoint::new(45 * 10 * world, 5 * world),
+                SimPoint::new(5 * 10 * world, 5 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let attacker = sim.spawn_unit_with_collision_radius(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(205 * world, 5 * world),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 20 * world,
+                    acquisition_range: 180 * world,
+                    cooldown_ticks: 5,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: 5 * world,
+                },
+            },
+            CollisionRadius(4 * world),
+        );
+        let target = sim.spawn_building(passive_building(1, BuildingFootprint::new(30, 0, 2, 2)));
+
+        let mut attacked = false;
+        for _ in 0..80 {
+            sim.step();
+            attacked |= sim
+                .attacks_last_tick()
+                .iter()
+                .any(|event| event.source == attacker && event.target == target);
+            if attacked {
+                break;
+            }
+        }
+        assert!(
+            attacked,
+            "radius-aware pursuer stalled at a blocked nearest building attack-envelope point"
+        );
+    }
+
+    #[test]
+    fn mixed_collision_radii_are_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                navigation_min: NavCell::new(0, 0),
+                navigation_max: NavCell::new(80, 30),
+                team_objective: [
+                    SimPoint::new(75 * world, 15 * world),
+                    SimPoint::new(5 * world, 15 * world),
+                ],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            for team in 0..=1 {
+                for index in 0..40 {
+                    let x = if team == 0 { 10 } else { 70 };
+                    let y = 2 + index % 20;
+                    let mut unit = passive_unit(team, x * world);
+                    unit.position = SimPoint::new(x * world, y * world);
+                    unit.movement.speed_per_tick = world / 4;
+                    let radius = world / 8 + (index % 3) * world / 16;
+                    sim.spawn_unit_with_collision_radius(unit, CollisionRadius(radius));
+                }
+            }
+            for _ in 0..160 {
+                sim.step();
+            }
+            sim.checksum()
+        }
+
+        assert_eq!(run(1), run(8));
     }
 
     #[test]
