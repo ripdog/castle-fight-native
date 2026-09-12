@@ -56,15 +56,15 @@ WC3MapTranslator currently expects `war3map.w3i` format 33, while this map uses 
 
 ## Base-game data selection
 
-This map records Warcraft III version `2.0.4.23745` and W3I `game_data_set_version = 0`. The matching installed build stores that custom-map balance set under:
+This map records Warcraft III version `2.0.4.23745`, W3I `game_data_set_version = 0` (`Default`), and game-data version `1` (`TFT`). WC3MapTranslator's W3I enum is `Default=0`, `Custom101=1`, `MeleeLatestPatch=2`; for TFT the installed default/custom balance data is the `custom_v1` overlay and `:custom,V1` profile variant:
 
 ```text
-war3.w3mod:_balance\custom_v0.w3mod
+war3.w3mod:_balance\custom_v1.w3mod
 ```
 
-`extract-base-data.sh` therefore caches the `custom_v0` unit/ability/item SLKs and profile files, plus the standard editor metadata, en-US editor/game strings, doodad/destructable data, and all 207 standard pathing TGAs. It intentionally does not copy the whole `war3.w3mod:units` asset tree: only the data tables needed for inheritance are retained, leaving the ignored cache at roughly 11 MiB instead of pulling hundreds of MiB of presentation assets.
+`extract-base-data.sh` caches all three selectable balance overlays (`custom_v0`, `custom_v1`, `melee_v0`) plus the standard editor metadata, en-US editor/game strings, doodad/destructable data, and all 207 standard pathing TGAs. `resolve-base-data.py` selects the overlay/profile variant from W3I instead of assuming one data set. It intentionally does not copy the whole `war3.w3mod:units` asset tree: only the data tables needed for inheritance are retained.
 
-`resolve-base-data.py` merges those sources according to the editor metadata (`UnitMetaData.slk`, `AbilityMetaData.slk`, etc.) and emits a manifest with the exact local source-file hashes used for the committed resolution.
+This distinction is gameplay-significant: resolving this TFT map against `custom_v0` incorrectly produced, for example, Mortar speed `220` instead of the live/default `270`. The generated `xO` effective-unit table provided an independent cross-check that exposed the selection error. The resolver emits the selected W3I label/profile/CASC overlay and exact cache hashes with the committed resolution.
 
 ## Protected archive behavior
 
@@ -123,7 +123,7 @@ The ASCII pathing maps use `#` for blocked and `.` for allowed. WPM bit meanings
 
 ## Important interpretation limits
 
-The inherited object-data gap is now resolved against the exact installed `2.0.4.23745` custom-V0 data set. `resolved/object-fields.tsv` is the complete editor-field view for map objects, while `resolved/base-source-fields.tsv` deliberately also retains source-table columns that do not map one-to-one to editable fields.
+The inherited object-data gap is now resolved against the exact installed `2.0.4.23745` **Default (TFT)** data set (`custom_v1` / `custom,V1`) selected by W3I. `resolved/object-fields.tsv` is the complete editor-field view for map objects, while `resolved/base-source-fields.tsv` deliberately also retains source-table columns that do not map one-to-one to editable fields.
 
 W3P protection creates one remaining object-data ambiguity: 29 unit definitions contain repeated field modifications, and six objects have 14 fields whose repeated values actually disagree. Most conflicting numeric fields have a plausible authored value followed by repeated `0`/`1` sentinels (for example Mortar HP `280,1,1`). The resolver records every candidate and normal last-write result, then uses a narrowly labeled recovery rule for convenience tables: a first numeric magnitude greater than one followed only by zero/one sentinels is recovered from the first value. Conflicting strings are not guessed and retain last-write semantics. `resolved/protection-conflicts.tsv` makes every such choice auditable.
 
@@ -135,7 +135,7 @@ One important protection layer is stronger than generic reachability evidence: t
 
 Unit combat data has a similar but broader protection layer. Generated initializer `jP` contains 549 protected `UnitStat` rows and the visible `cP`/`dP` helpers fully define their encoding, so no VM execution is required to decode them. The table contains 1,887 explicit overrides across HP, armor, defense type, movement speed, and both attacks' base damage/dice/cooldown/range. `UnitStat_applyTo` applies exactly those fields to live units, falling back to ordinary object data where a row carries the no-override sentinel. `resolved/protected-unit-stats.tsv` therefore provides the strongest source for those attack primitives while preserving the fallback and source of each value.
 
-Generated initializer `xO` separately contains one complete effective summary row for each of 162 production buildings and 162 distinct spawned unit IDs, and `applyEffectiveUnitStat` copies those rows into the building catalog. Static object data disagrees with the effective table for 154/162 HP values, 145/162 armor values, 156/160 comparable DPS values, and 100/161 comparable attack ranges; movement speed is mostly intact (155/162 exact matches). Applying the decoded UnitStat overlay first explains almost all of that gap: it matches `xO` for 160/162 HP, all 162 armor values, 157/160 comparable DPS values, 158/161 comparable attack ranges, and 155/162 movement speeds. The remaining mismatches are retained explicitly in `resolved/effective-unit-stats.tsv` as evidence of later/higher-level runtime adjustment. For example Faerie Dragon `e000` is statically HP `1` / armor `0` / range `1`; its decoded UnitStat overlay is HP `460`, armor `2`, attack base/dice `49 + 1d1`, cooldown `1.75`, range `350`, which yields the `xO` DPS summary of approximately `28.57`. Both generated tables are retained rather than collapsing distinct runtime layers into one source.
+Generated initializer `xO` separately contains one complete effective summary row for each of 162 production buildings and 162 distinct spawned unit IDs, and `applyEffectiveUnitStat` copies those rows into the building catalog. With the corrected W3I-selected `custom_v1` fallback, applying the decoded UnitStat overlay reproduces **all 162 HP, all 162 armor, all 162 movement-speed values, and 160/162 DPS summaries**; the two remaining DPS rows are special/no-base-attack cases. Attack range matches 159/161 comparable rows, with two dual-attack/API edge cases retained explicitly. This cross-check is now strong evidence that ordinary production-unit combat inheritance and UnitStat decoding are correct. For example Faerie Dragon `e000` is statically HP `1` / armor `0` / range `1`; its decoded UnitStat overlay is HP `460`, armor `2`, attack base/dice `49 + 1d1`, cooldown `1.75`, range `350`, which yields the `xO` DPS summary of approximately `28.57`.
 
 The absence of a canonical member such as `war3mapUnits.doo`, `war3map.w3q`, or `war3map.imp` means it could not be opened under that standard name in this protected archive. Do not infer from that alone that the original editor project never contained equivalent data; protected-map packaging can remove editor-only sources and hide imported assets.
 

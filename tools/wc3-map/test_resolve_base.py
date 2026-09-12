@@ -50,16 +50,33 @@ class SylkTests(unittest.TestCase):
 
 
 class ProfileTests(unittest.TestCase):
-    def test_custom_v0_variant_wins(self) -> None:
+    def test_selected_profile_variant_wins(self) -> None:
         profile = {
             "hbar": {
                 "Ubertip": "generic",
                 "Ubertip:custom,V0": "custom zero",
+                "Ubertip:custom,V1": "custom one",
                 "Buttonpos": "1,2",
             }
         }
-        self.assertEqual(resolve.profile_value(profile, "hbar", "Ubertip"), "custom zero")
-        self.assertEqual(resolve.selected_index(resolve.profile_value(profile, "hbar", "Buttonpos"), 1), "2")
+        self.assertEqual(resolve.profile_value(profile, "hbar", "Ubertip", "custom,V1"), "custom one")
+        self.assertEqual(resolve.profile_value(profile, "hbar", "Ubertip", "custom,V0"), "custom zero")
+        self.assertEqual(resolve.selected_index(resolve.profile_value(profile, "hbar", "Buttonpos", "custom,V1"), 1), "2")
+
+    def test_w3i_default_tft_selects_custom_v1(self) -> None:
+        selection = resolve.select_game_data({
+            "game_data_set_version": 0,
+            "game_data_version": {"raw": 1},
+        })
+        self.assertEqual(selection.overlay_dir, "custom_v1")
+        self.assertEqual(selection.profile_variant, "custom,V1")
+        self.assertEqual(selection.label, "Default (TFT)")
+
+    def test_w3i_explicit_data_sets_map_to_balance_overlays(self) -> None:
+        custom = resolve.select_game_data({"game_data_set_version": 1, "game_data_version": {"raw": 1}})
+        melee = resolve.select_game_data({"game_data_set_version": 2, "game_data_version": {"raw": 1}})
+        self.assertEqual((custom.overlay_dir, custom.profile_variant), ("custom_v0", "custom,V0"))
+        self.assertEqual((melee.overlay_dir, melee.profile_variant), ("melee_v0", "melee,V0"))
 
     def test_single_quoted_csv_value_is_unquoted(self) -> None:
         self.assertEqual(resolve.selected_index('"Shop Sharing, Allied Bldg."', 0), "Shop Sharing, Allied Bldg.")
@@ -152,9 +169,15 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["protected_unit_stat_rows"], 549)
         self.assertEqual(summary["protected_unit_stat_override_assignments"], 1887)
+        self.assertEqual(summary["selected_game_data_set"]["label"], "Default (TFT)")
+        self.assertEqual(summary["selected_game_data_set"]["profile_variant"], "custom,V1")
         self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["armor"], {"unitstat-match": 162})
-        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["hp"]["unitstat-match"], 160)
-        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["dps"]["unitstat-match"], 157)
+        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["hp"], {"unitstat-match": 162})
+        self.assertEqual(
+            summary["effective_unit_stat_vs_unitstat_comparisons"]["dps"],
+            {"unitstat-match": 160, "unitstat-missing": 2},
+        )
+        self.assertEqual(summary["effective_unit_stat_vs_unitstat_comparisons"]["move_speed"], {"unitstat-match": 162})
 
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
@@ -195,12 +218,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["effective_unit_stat_rows"], 162)
         self.assertEqual(summary["effective_unit_stat_comparisons"]["hp"], {
-            "static-differs": 154,
-            "static-match": 8,
+            "static-differs": 152,
+            "static-match": 10,
         })
         self.assertEqual(summary["effective_unit_stat_comparisons"]["move_speed"], {
-            "static-differs": 7,
-            "static-match": 155,
+            "static-match": 162,
         })
 
         with (self.resolved / "effective-unit-stats.tsv").open(encoding="utf-8") as handle:
@@ -217,6 +239,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(footman["effective_hp"], "250")
         self.assertEqual(footman["static_hp"], "250")
         self.assertEqual(footman["dps_comparison"], "static-match")
+
+        mortar = rows["hmtm"]
+        self.assertEqual(mortar["effective_move_speed"], "270")
+        self.assertEqual(mortar["static_move_speed"], "270")
+        self.assertEqual(mortar["move_speed_comparison"], "static-match")
 
 
 if __name__ == "__main__":

@@ -16,14 +16,23 @@ fi
 "$ROOT/tools/wc3-map/bootstrap-casclib.sh"
 
 rm -rf "$SOURCE"
-mkdir -p "$SOURCE/install" "$SOURCE/base" "$SOURCE/custom_v0" "$SOURCE/enus"
+mkdir -p "$SOURCE/install" "$SOURCE/base" "$SOURCE/custom_v0" "$SOURCE/custom_v1" "$SOURCE/melee_v0" "$SOURCE/enus"
 install -m 0644 "$WC3_INSTALL/.build.info" "$SOURCE/install/.build.info"
 
-# The map's W3I records game_data_set_version=0. Warcraft III 2.0.4 stores
-# that custom-map balance set under _balance/custom_v0.w3mod.
+# Cache every World Editor game-data overlay that W3I can select. The W3I
+# enum is Default=0, Custom101=1, MeleeLatestPatch=2. For TFT maps the default
+# custom data uses custom_v1; custom_v0 is the legacy 1.01/ROC-compatible set.
+# Keeping all three locally lets resolve-base-data.py select from W3I rather
+# than baking one balance assumption into the extraction cache.
 "$CASC" "$WC3_INSTALL" extract-prefix \
     'war3.w3mod:_balance\custom_v0.w3mod:units\' \
     "$SOURCE/custom_v0/units"
+"$CASC" "$WC3_INSTALL" extract-prefix \
+    'war3.w3mod:_balance\custom_v1.w3mod:units\' \
+    "$SOURCE/custom_v1/units"
+"$CASC" "$WC3_INSTALL" extract-prefix \
+    'war3.w3mod:_balance\melee_v0.w3mod:units\' \
+    "$SOURCE/melee_v0/units"
 
 # Base object/editor data. Limit this prefix to text/data tables; the same
 # virtual directory also contains ~180 MiB of presentation assets.

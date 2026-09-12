@@ -4,7 +4,7 @@ units	original	hfoo	hfoo	ua1b	0	0	11	[24,0,0]	0	24	w3p-recovered-first-numeric-s
 units	original	hfoo	hfoo	udef	0	0	2	[4,0,0]	0	4	w3p-recovered-first-numeric-sentinel
 units	original	hfoo	hfoo	uhpm	0	0	420	[250,1,1]	1	250	w3p-recovered-first-numeric-sentinel
 units	original	hmtm	hmtm	ua1b	0	0	51	[67,0,0]	0	67	w3p-recovered-first-numeric-sentinel
-units	original	hmtm	hmtm	ua1r	0	0	1000	[1000,1,1]	1	1000	w3p-recovered-first-numeric-sentinel
+units	original	hmtm	hmtm	ua1r	0	0	1150	[1000,1,1]	1	1000	w3p-recovered-first-numeric-sentinel
 units	original	hmtm	hmtm	uhpm	0	0	360	[280,1,1]	1	280	w3p-recovered-first-numeric-sentinel
 units	original	hrif	hrif	ua1b	0	0	16	[31,0,0]	0	31	w3p-recovered-first-numeric-sentinel
 units	original	hrif	hrif	ua1r	0	0	400	[500,1,1]	1	500	w3p-recovered-first-numeric-sentinel

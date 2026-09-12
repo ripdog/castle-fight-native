@@ -1465,6 +1465,146 @@
     "sha256": "169794f21ab846856b7716f81bf32f99725d78235cdbe5ef9154105eab25f9f3"
   },
   {
+    "path": "custom_v1/units/abilitybuffdata.slk",
+    "bytes": 31125,
+    "sha256": "39ebbe352109eccb16361ad1d123aad596f9868b258c2207898b42b6c692056a"
+  },
+  {
+    "path": "custom_v1/units/abilitydata.slk",
+    "bytes": 862143,
+    "sha256": "052195ebf094e49ded0a0ebc281cada420e30a46a0a40ca83f52748daac8c9d3"
+  },
+  {
+    "path": "custom_v1/units/campaignunitfunc.txt",
+    "bytes": 36662,
+    "sha256": "fdcf893d7ba5d158bf062283a4c174e5b7ea59bf2d8c6f2cb14698c5680220b9"
+  },
+  {
+    "path": "custom_v1/units/humanabilityfunc.txt",
+    "bytes": 5759,
+    "sha256": "e591cb1bc50d8cdedc9a06572c50cd5bc29470bd4045fc2c4fd5aeaef98a762e"
+  },
+  {
+    "path": "custom_v1/units/humanunitfunc.txt",
+    "bytes": 10700,
+    "sha256": "bb7424513c7163106927a959240049bdce9828fe182a070603ee9f9e1209bf3c"
+  },
+  {
+    "path": "custom_v1/units/humanupgradefunc.txt",
+    "bytes": 3304,
+    "sha256": "7ffe0b9e1d747b9530d38d795371c0ddc9d18b4a1f8f117f1882a1a8e84341e5"
+  },
+  {
+    "path": "custom_v1/units/itemabilityfunc.txt",
+    "bytes": 10424,
+    "sha256": "6b6b2b174e25b55e5379c50e66ae2742428a733d38b4143c79dd8ac4a8df0017"
+  },
+  {
+    "path": "custom_v1/units/itemdata.slk",
+    "bytes": 102976,
+    "sha256": "54d04b08f9e8e3068603261acfdf371cb97e9be5ae5b536e06e6eb0d133bd084"
+  },
+  {
+    "path": "custom_v1/units/itemfunc.txt",
+    "bytes": 25027,
+    "sha256": "418f719d970ac96ddbd08c8645fd96269fe3753563148bbfd16091aca3c1642c"
+  },
+  {
+    "path": "custom_v1/units/miscgame.txt",
+    "bytes": 6202,
+    "sha256": "4f948777038b7dd3e5b251e758c45622cb9d5b3244ed0f867ed0bc53e2cbb44e"
+  },
+  {
+    "path": "custom_v1/units/neutralabilityfunc.txt",
+    "bytes": 21688,
+    "sha256": "9f0a5df0169c209f2c3024b4b043e49da783054702f0602c32f9c2163452a3bf"
+  },
+  {
+    "path": "custom_v1/units/neutralunitfunc.txt",
+    "bytes": 67063,
+    "sha256": "7bf9260e7095468a2e6ca7c2ef5f52fa5f3cd918592eea44e3a24b93c8885a97"
+  },
+  {
+    "path": "custom_v1/units/neutralupgradefunc.txt",
+    "bytes": 301,
+    "sha256": "0674d10f78ef95d5741186f1c8c3629a9c30e462522c7afbe72123f5a66b23ee"
+  },
+  {
+    "path": "custom_v1/units/nightelfabilityfunc.txt",
+    "bytes": 6995,
+    "sha256": "78cb940abcc27da7f13a5250277863b6b06900993794e6a8a7fc11939bbb9d54"
+  },
+  {
+    "path": "custom_v1/units/nightelfunitfunc.txt",
+    "bytes": 9568,
+    "sha256": "a080c6e4e4d4b63f788b54fb73883576dfdd0ececc98daf8abc0e7241e435ae2"
+  },
+  {
+    "path": "custom_v1/units/nightelfupgradefunc.txt",
+    "bytes": 3114,
+    "sha256": "b71c7c75c072ef6693ed601b6e7db18f30e3c939640ec143146b25c88c8236e7"
+  },
+  {
+    "path": "custom_v1/units/orcabilityfunc.txt",
+    "bytes": 5521,
+    "sha256": "b0174c4748c1c34a08c56ab8ca367b4c5a6e9212314220532224408edf9aedac"
+  },
+  {
+    "path": "custom_v1/units/orcunitfunc.txt",
+    "bytes": 8718,
+    "sha256": "e5f53dd807a20f607671579625b0c615c25f24bbb97722da71dd55dc426e4f2d"
+  },
+  {
+    "path": "custom_v1/units/orcupgradefunc.txt",
+    "bytes": 2896,
+    "sha256": "d5ac3a5d937df8b0246b77f25c26e75158a5de371d118c7cd3f1656b63ea3a1c"
+  },
+  {
+    "path": "custom_v1/units/undeadabilityfunc.txt",
+    "bytes": 7228,
+    "sha256": "2855f3d9e88c81360249ef35d39f8d94a2f6683d883c1ae2ce253844a909d0b5"
+  },
+  {
+    "path": "custom_v1/units/undeadunitfunc.txt",
+    "bytes": 9359,
+    "sha256": "82d6cfab9d1094a84f985b72fae9a0ee31034fd9053fff018dd9957b71971ef5"
+  },
+  {
+    "path": "custom_v1/units/undeadupgradefunc.txt",
+    "bytes": 2650,
+    "sha256": "f7e07c846494a424bb3fc10844fe2add0ff2bbbbb57483250eb751b994a5e7ec"
+  },
+  {
+    "path": "custom_v1/units/unitabilities.slk",
+    "bytes": 81964,
+    "sha256": "d8dc7516973138f3b376704b2f662b4e12dfe2a4f03dda7507961e176e27639f"
+  },
+  {
+    "path": "custom_v1/units/unitbalance.slk",
+    "bytes": 646266,
+    "sha256": "5247717a564d833ad315d80b4510ce021a61d73f03f49ab072c4bbb3917f9535"
+  },
+  {
+    "path": "custom_v1/units/unitdata.slk",
+    "bytes": 320130,
+    "sha256": "60ae721088aae8f1bba4f399bec7e955665280a7f8bf183e9085de8b482232ea"
+  },
+  {
+    "path": "custom_v1/units/unitui.slk",
+    "bytes": 240355,
+    "sha256": "1548a40e21b9a7d8dcbbb70113fb36a68f408ca68d277c00edbacb07889610d0"
+  },
+  {
+    "path": "custom_v1/units/unitweapons.slk",
+    "bytes": 841122,
+    "sha256": "77e756ddee8190a74194945c91a64fadf57ce8047a4392851b4466a63e61170d"
+  },
+  {
+    "path": "custom_v1/units/upgradedata.slk",
+    "bytes": 36769,
+    "sha256": "2b4bd5cacf7f9c365817e5a1039054a43dfa56b32601d7cfed9483d963dba313"
+  },
+  {
     "path": "enus/doodads/doodadskinstrings.txt",
     "bytes": 36327,
     "sha256": "712630b5792c4fee532f6f2164f956326ced8cd1817f0215006698b7ea5a6277"
@@ -1633,5 +1773,155 @@
     "path": "install/.build.info",
     "bytes": 702,
     "sha256": "d3849761acddd814f09ebced4275d02e0d23e8da43f190c68e57ed14166acf01"
+  },
+  {
+    "path": "melee_v0/units/abilitybuffdata.slk",
+    "bytes": 30865,
+    "sha256": "3217dcff134e7500da3f836ced19a8a02d970a347586d220e7d67909010487a1"
+  },
+  {
+    "path": "melee_v0/units/abilitydata.slk",
+    "bytes": 860086,
+    "sha256": "aed918adf6984598578f5951863a961480cddca7496e1e75c77d69635d0cd996"
+  },
+  {
+    "path": "melee_v0/units/campaignunitfunc.txt",
+    "bytes": 14724,
+    "sha256": "1e1fca636b7ee030a57c799c0dab8087e88b273f1ed79549dcd3c6ddc4fe98d7"
+  },
+  {
+    "path": "melee_v0/units/humanabilityfunc.txt",
+    "bytes": 5385,
+    "sha256": "bd451fafc49a472cf993018ce6f95fe5d4436ca98c3ef756a6525d3e319e943a"
+  },
+  {
+    "path": "melee_v0/units/humanunitfunc.txt",
+    "bytes": 8262,
+    "sha256": "ed49faff773d71a6df0eb0ffd53b9fc63f74b6cff6b1fe4b32c8c4af00c8e9cc"
+  },
+  {
+    "path": "melee_v0/units/humanupgradefunc.txt",
+    "bytes": 2582,
+    "sha256": "c86878e3529f04e29d8cf430796eada08e371b1a70d0ae6ff31c5f9ae7be1519"
+  },
+  {
+    "path": "melee_v0/units/itemabilityfunc.txt",
+    "bytes": 10424,
+    "sha256": "6b6b2b174e25b55e5379c50e66ae2742428a733d38b4143c79dd8ac4a8df0017"
+  },
+  {
+    "path": "melee_v0/units/itemdata.slk",
+    "bytes": 84365,
+    "sha256": "06b267e50b143ddbcf0ce7a68befd87d6652b57c7e23557a4f324f619c882daa"
+  },
+  {
+    "path": "melee_v0/units/itemfunc.txt",
+    "bytes": 10927,
+    "sha256": "8673770f6785913d9de19792400542568cb45a908c189fcfa910e179b8d91d5d"
+  },
+  {
+    "path": "melee_v0/units/miscgame.txt",
+    "bytes": 6043,
+    "sha256": "8e145b2f56a5f96a949f870ff56dee4515ea982644d3cae15bb1db21e10dc75f"
+  },
+  {
+    "path": "melee_v0/units/neutralabilityfunc.txt",
+    "bytes": 21688,
+    "sha256": "9f0a5df0169c209f2c3024b4b043e49da783054702f0602c32f9c2163452a3bf"
+  },
+  {
+    "path": "melee_v0/units/neutralunitfunc.txt",
+    "bytes": 29593,
+    "sha256": "b836d7f7392220347d24003553481131ea388a0ed738bd5816637b88ed3e5fa3"
+  },
+  {
+    "path": "melee_v0/units/neutralupgradefunc.txt",
+    "bytes": 301,
+    "sha256": "0674d10f78ef95d5741186f1c8c3629a9c30e462522c7afbe72123f5a66b23ee"
+  },
+  {
+    "path": "melee_v0/units/nightelfabilityfunc.txt",
+    "bytes": 6638,
+    "sha256": "24941d2378fd473a8fb1b2bc46d131013d7ed3cf4f895e3a77a07cd7c824308c"
+  },
+  {
+    "path": "melee_v0/units/nightelfunitfunc.txt",
+    "bytes": 7609,
+    "sha256": "eb649ee98de18d3ce41536728ce63959e459b7747fa146afeea5c69e3d271a06"
+  },
+  {
+    "path": "melee_v0/units/nightelfupgradefunc.txt",
+    "bytes": 2468,
+    "sha256": "d64b6ddf675eba389bfd45bab59fa39f7943aba8d6c73d2d04a13dd183abc5a1"
+  },
+  {
+    "path": "melee_v0/units/notused_unitdata.slk",
+    "bytes": 157155,
+    "sha256": "1626be8a30249103d6abbec1e95d3a856fef81d5c7a07cef43304c2fdda13b90"
+  },
+  {
+    "path": "melee_v0/units/notused_unitui.slk",
+    "bytes": 260965,
+    "sha256": "2f8ee71045b36b656c62fe064ebd7c27e00d368e1a2f4079d5792d8ead9d7b5d"
+  },
+  {
+    "path": "melee_v0/units/orcabilityfunc.txt",
+    "bytes": 4936,
+    "sha256": "c442514e6da88f1b158a5766dcf192a6b18c516435ec987556cc636b64ffd230"
+  },
+  {
+    "path": "melee_v0/units/orcunitfunc.txt",
+    "bytes": 6065,
+    "sha256": "51ac4fa2014f13ae402f4e303007a1f3c8e9322c84695b600523ac7e79484393"
+  },
+  {
+    "path": "melee_v0/units/orcupgradefunc.txt",
+    "bytes": 2163,
+    "sha256": "ab18e9c387814b428f380a8420f088be72d7e7ba313a006b561aabda2235f071"
+  },
+  {
+    "path": "melee_v0/units/undeadabilityfunc.txt",
+    "bytes": 6831,
+    "sha256": "51b33f4ed15504f9eea6376e9e88a412f577f069c07b648dab0470bede9ed31b"
+  },
+  {
+    "path": "melee_v0/units/undeadunitfunc.txt",
+    "bytes": 6428,
+    "sha256": "103fa1368f71055069a3764ef43ace19d56132811f1d7c72a34e433190ac331a"
+  },
+  {
+    "path": "melee_v0/units/undeadupgradefunc.txt",
+    "bytes": 2143,
+    "sha256": "e9cb217aef6f7329fe8b4c94b078c044b042a19be09b0a3dfa0725a791a8db96"
+  },
+  {
+    "path": "melee_v0/units/unitabilities.slk",
+    "bytes": 43684,
+    "sha256": "fcc169a08584b21b9c1531366c5b6ad60fcac6c1598761cadde826253648cd64"
+  },
+  {
+    "path": "melee_v0/units/unitbalance.slk",
+    "bytes": 351110,
+    "sha256": "f0d42b06c5988e62ba7f8165adb6de71e3a1713cac1576a43f1cd4041f69f272"
+  },
+  {
+    "path": "melee_v0/units/unitdata.slk",
+    "bytes": 310315,
+    "sha256": "9987a1380b9a3f89e7679017890f44d261417f21029570db9f15e11ac9c5e995"
+  },
+  {
+    "path": "melee_v0/units/unitui.slk",
+    "bytes": 232481,
+    "sha256": "3a6e3956f86a3e3f7c0667dcdebd933abb2b2748944c0df77372657daac1e51f"
+  },
+  {
+    "path": "melee_v0/units/unitweapons.slk",
+    "bytes": 454078,
+    "sha256": "6d59ddadd86f04c3398cc8b9dcd10d4f7a34d22a468acbd8588ea443db9dd7e7"
+  },
+  {
+    "path": "melee_v0/units/upgradedata.slk",
+    "bytes": 24004,
+    "sha256": "a7972d9ec94b41e7319d2390bfe295a6c6ecacbcc92b839d99dd0f0ec570078e"
   }
 ]

@@ -6,7 +6,10 @@
   },
   "selected_game_data_set": {
     "w3i_index": 0,
-    "casc_overlay": "war3.w3mod:_balance\\custom_v0.w3mod"
+    "game_data_version": 1,
+    "label": "Default (TFT)",
+    "profile_variant": "custom,V1",
+    "casc_overlay": "war3.w3mod:_balance\\custom_v1.w3mod"
   },
   "map_objects": {
     "units": 613,
@@ -16,11 +19,11 @@
     "destructables": 28,
     "doodads": 7
   },
-  "resolved_field_rows": 148765,
-  "base_source_field_rows": 184817,
+  "resolved_field_rows": 148757,
+  "base_source_field_rows": 185907,
   "protection_conflicts": 14,
   "objects_with_protection_conflicts": 6,
-  "base_data_files": 327,
+  "base_data_files": 385,
   "pathing_textures_extracted": 207,
   "pathing_textures_used_by_map_units": 5,
   "missing_pathing_textures": [],
@@ -62,56 +65,52 @@
   "effective_unit_stat_rows": 162,
   "effective_unit_stat_comparisons": {
     "hp": {
-      "static-differs": 154,
-      "static-match": 8
+      "static-differs": 152,
+      "static-match": 10
     },
     "armor": {
       "static-differs": 145,
       "static-match": 17
     },
     "dps": {
-      "static-differs": 156,
-      "static-match": 4,
+      "static-differs": 155,
+      "static-match": 5,
       "static-missing": 2
     },
     "attack_range": {
-      "static-differs": 100,
-      "static-match": 61,
+      "static-differs": 99,
+      "static-match": 62,
       "static-missing": 1
     },
     "move_speed": {
-      "static-differs": 7,
-      "static-match": 155
+      "static-match": 162
     }
   },
   "effective_unit_stat_vs_unitstat_comparisons": {
     "hp": {
-      "unitstat-differs": 2,
-      "unitstat-match": 160
+      "unitstat-match": 162
     },
     "armor": {
       "unitstat-match": 162
     },
     "dps": {
-      "unitstat-differs": 3,
-      "unitstat-match": 157,
+      "unitstat-match": 160,
       "unitstat-missing": 2
     },
     "attack_range": {
-      "unitstat-differs": 3,
-      "unitstat-match": 158,
+      "unitstat-differs": 2,
+      "unitstat-match": 159,
       "unitstat-missing": 1
     },
     "move_speed": {
-      "unitstat-differs": 7,
-      "unitstat-match": 155
+      "unitstat-match": 162
     }
   },
   "notes": [
     "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
     "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
-    "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
+    "base-source-fields.tsv exposes the W3I-selected custom_v1/base SLK values before map overrides, including computed columns",
     "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
     "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
     "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization"

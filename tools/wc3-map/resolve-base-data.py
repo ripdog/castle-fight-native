@@ -51,6 +51,40 @@ SLK_ALIASES = {
 PATH_CELL_WORLD_UNITS = 32
 
 
+@dataclass(frozen=True)
+class GameDataSelection:
+    data_set_index: int
+    game_data_version: int
+    overlay_dir: str
+    profile_variant: str
+    label: str
+    casc_overlay: str
+
+
+def select_game_data(map_info: dict[str, Any]) -> GameDataSelection:
+    """Resolve W3I's game-data enum to the installed balance overlay.
+
+    WC3MapTranslator exposes the W3I enum as Default=0, Custom101=1,
+    MeleeLatestPatch=2. The map's separate game-data version selects ROC=0 or
+    TFT=1. In current Warcraft III CASC data, TFT Default corresponds to the
+    custom_v1 overlay/profile variant; ROC Default and explicit Custom101 use
+    custom_v0; MeleeLatestPatch uses melee_v0.
+    """
+    data_set = int(map_info.get("game_data_set_version", 0))
+    game_version = int((map_info.get("game_data_version") or {}).get("raw", 1))
+    if data_set == 0:
+        if game_version == 0:
+            return GameDataSelection(0, 0, "custom_v0", "custom,V0", "Default (ROC)", "war3.w3mod:_balance\\custom_v0.w3mod")
+        if game_version == 1:
+            return GameDataSelection(0, 1, "custom_v1", "custom,V1", "Default (TFT)", "war3.w3mod:_balance\\custom_v1.w3mod")
+        raise ValueError(f"unsupported W3I game data version {game_version} for Default data set")
+    if data_set == 1:
+        return GameDataSelection(1, game_version, "custom_v0", "custom,V0", "Custom (1.01)", "war3.w3mod:_balance\\custom_v0.w3mod")
+    if data_set == 2:
+        return GameDataSelection(2, game_version, "melee_v0", "melee,V0", "Melee (Latest Patch)", "war3.w3mod:_balance\\melee_v0.w3mod")
+    raise ValueError(f"unsupported W3I game data set {data_set}")
+
+
 def split_semicolon_record(line: str) -> list[str]:
     fields: list[str] = []
     current: list[str] = []
@@ -176,14 +210,19 @@ def ci_get(mapping: dict[str, Any], key: str) -> Any:
     return None
 
 
-def profile_value(profile: dict[str, dict[str, str]], section: str, field: str) -> Any:
+def profile_value(
+    profile: dict[str, dict[str, str]],
+    section: str,
+    field: str,
+    variant_name: str | None = None,
+) -> Any:
     fields = profile.get(section)
     if fields is None:
         return None
-    # W3I game_data_set_version=0 corresponds to the custom V0 data set.
-    variant = ci_get(fields, f"{field}:custom,V0")
-    if variant is not None:
-        return variant
+    if variant_name:
+        variant = ci_get(fields, f"{field}:{variant_name}")
+        if variant is not None:
+            return variant
     return ci_get(fields, field)
 
 
@@ -276,37 +315,42 @@ def world_edit_strings(path: Path) -> dict[str, str]:
     return values
 
 
-def load_slks(source_root: Path) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, str]]:
+def load_slks(
+    source_root: Path,
+    selection: GameDataSelection,
+) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, str]]:
     base_units = source_root / "base" / "units"
-    custom_units = source_root / "custom_v0" / "units"
+    selected_units = source_root / selection.overlay_dir / "units"
     base_doodads = source_root / "base" / "doodads"
 
     tables: dict[str, dict[str, dict[str, Any]]] = {}
     table_sources: dict[str, str] = {}
 
-    # Prefer custom_v0 rows for tables provided by that data set, then fill
-    # missing rawcodes from the base table. Metadata is always from base.
+    # Prefer the W3I-selected balance overlay for data tables, then fill
+    # missing rawcodes from the generic base table. Metadata stays generic.
     all_paths = list(base_units.glob("*.slk")) + list(base_doodads.glob("*.slk"))
     for path in all_paths:
         stem = path.stem.casefold()
         tables[stem] = parse_slk(path)
         table_sources[stem] = f"base/{path.parent.name}/{path.name}"
 
-    for path in custom_units.glob("*.slk"):
+    if not selected_units.exists():
+        raise ValueError(f"selected Warcraft data overlay is missing from cache: {selected_units}")
+    for path in selected_units.glob("*.slk"):
         stem = path.stem.casefold()
-        custom_rows = parse_slk(path)
+        selected_rows = parse_slk(path)
         if stem in tables:
             merged = dict(tables[stem])
-            merged.update(custom_rows)
+            merged.update(selected_rows)
             tables[stem] = merged
         else:
-            tables[stem] = custom_rows
-        table_sources[stem] = f"custom_v0/units/{path.name} (+ base fallback)"
+            tables[stem] = selected_rows
+        table_sources[stem] = f"{selection.overlay_dir}/units/{path.name} (+ base fallback)"
 
     return tables, table_sources
 
 
-def load_profiles(source_root: Path) -> dict[str, dict[str, str]]:
+def load_profiles(source_root: Path, selection: GameDataSelection) -> dict[str, dict[str, str]]:
     profile: dict[str, dict[str, str]] = {}
 
     # Base non-localized object profiles and skins.
@@ -314,13 +358,13 @@ def load_profiles(source_root: Path) -> dict[str, dict[str, str]]:
         for path in sorted(directory.glob("*.txt")):
             merge_profiles(profile, parse_profile(path))
 
-    # The map explicitly selects custom V0. Its function/profile data takes
-    # precedence over generic base profile data.
-    for path in sorted((source_root / "custom_v0" / "units").glob("*.txt")):
+    # Selected balance function/profile data takes precedence over generic
+    # base profile data.
+    for path in sorted((source_root / selection.overlay_dir / "units").glob("*.txt")):
         merge_profiles(profile, parse_profile(path))
 
-    # Localized labels/tooltips take precedence last. profile_value() itself
-    # prefers :custom,V0 variants where the same field provides variants.
+    # Localized labels/tooltips take precedence last. profile_value() chooses
+    # the W3I-selected :custom/:melee variant where present.
     for directory in (source_root / "enus" / "units", source_root / "enus" / "doodads"):
         for path in sorted(directory.glob("*.txt")):
             merge_profiles(profile, parse_profile(path))
@@ -391,13 +435,14 @@ def base_value_for_metadata(
     column: int,
     tables: dict[str, dict[str, dict[str, Any]]],
     profile: dict[str, dict[str, str]],
+    profile_variant: str,
 ) -> tuple[Any, str, str]:
     slk = str(ci_get(meta, "slk") or "")
     field = str(ci_get(meta, "field") or "")
     raw_index = ci_get(meta, "index")
     index = int(raw_index) if raw_index is not None else -1
     if slk.casefold() == "profile":
-        raw = profile_value(profile, base_rawcode, field)
+        raw = profile_value(profile, base_rawcode, field, profile_variant)
         repeat = int(ci_get(meta, "repeat") or 0)
         if repeat and level > 0 and isinstance(raw, str):
             values = parse_csv_list(raw)
@@ -609,15 +654,13 @@ def main() -> None:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
 
-    tables, table_sources = load_slks(source_root)
-    profile = load_profiles(source_root)
+    map_info = json.loads((map_root / "map-info.json").read_text(encoding="utf-8"))
+    data_selection = select_game_data(map_info)
+    tables, table_sources = load_slks(source_root, data_selection)
+    profile = load_profiles(source_root, data_selection)
     editor_strings = world_edit_strings(source_root / "enus" / "ui" / "worldeditstrings.txt")
     editor_strings.update(world_edit_strings(source_root / "enus" / "ui" / "worldeditgamestrings.txt"))
     build_info = parse_build_info(source_root / "install" / ".build.info")
-    map_info = json.loads((map_root / "map-info.json").read_text(encoding="utf-8"))
-    selected_data_set = int(map_info.get("game_data_set_version", 0))
-    if selected_data_set != 0:
-        raise ValueError(f"this extraction cache contains custom_v0, but W3I selects data set {selected_data_set}")
 
     pathing_textures: dict[str, dict[str, Any]] = {}
     for path in sorted((source_root / "base" / "pathtextures").glob("*.tga")):
@@ -669,7 +712,7 @@ def main() -> None:
                         continue
                     for level, column in metadata_levels(meta, base_levels):
                         value, source_table, source_field = base_value_for_metadata(
-                            meta, base_rawcode, level, column, tables, profile
+                            meta, base_rawcode, level, column, tables, profile, data_selection.profile_variant
                         )
                         value = resolve_string_key(value, editor_strings)
                         if value is None:
@@ -1424,8 +1467,11 @@ def main() -> None:
             "product": build_info.get("Product"),
         },
         "selected_game_data_set": {
-            "w3i_index": selected_data_set,
-            "casc_overlay": "war3.w3mod:_balance\\custom_v0.w3mod",
+            "w3i_index": data_selection.data_set_index,
+            "game_data_version": data_selection.game_data_version,
+            "label": data_selection.label,
+            "profile_variant": data_selection.profile_variant,
+            "casc_overlay": data_selection.casc_overlay,
         },
         "map_objects": dict(Counter(record["category"] for record in object_records)),
         "resolved_field_rows": len(full_rows),
@@ -1460,7 +1506,7 @@ def main() -> None:
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
             "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
-            "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
+            f"base-source-fields.tsv exposes the W3I-selected {data_selection.overlay_dir}/base SLK values before map overrides, including computed columns",
             "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
