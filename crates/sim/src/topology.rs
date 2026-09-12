@@ -375,7 +375,9 @@ impl TopologyGrid {
         from: NavCell,
         target: NavCell,
         cached_fallback: Option<NavCell>,
+        bias: i32,
     ) -> PursuitStep {
+        debug_assert!(bias == -1 || bias == 1);
         if !self.same_component(from, target) {
             return PursuitStep::none();
         }
@@ -388,7 +390,7 @@ impl TopologyGrid {
             };
         }
 
-        if let Some(greedy) = self.greedy_route_first_step(from, target) {
+        if let Some(greedy) = self.greedy_route_first_step(from, target, bias) {
             return PursuitStep {
                 next_cell: Some(greedy),
                 used_a_star: false,
@@ -406,7 +408,7 @@ impl TopologyGrid {
             };
         }
 
-        let (next_cell, a_star_expanded_nodes) = self.a_star_first_step(from, target);
+        let (next_cell, a_star_expanded_nodes) = self.a_star_first_step(from, target, bias);
         PursuitStep {
             next_cell,
             used_a_star: true,
@@ -422,7 +424,9 @@ impl TopologyGrid {
         target: NavCell,
         cached_fallback: Option<NavCell>,
         radius: i32,
+        bias: i32,
     ) -> PursuitStep {
+        debug_assert!(bias == -1 || bias == 1);
         if !self.same_component(from, target) {
             return PursuitStep::none();
         }
@@ -446,7 +450,7 @@ impl TopologyGrid {
             };
         }
 
-        if let Some(greedy) = self.greedy_route_first_step_with_radius(from, target, radius) {
+        if let Some(greedy) = self.greedy_route_first_step_with_radius(from, target, radius, bias) {
             return PursuitStep {
                 next_cell: Some(greedy),
                 used_a_star: false,
@@ -471,7 +475,7 @@ impl TopologyGrid {
         }
 
         let (next_cell, a_star_expanded_nodes) =
-            self.a_star_first_step_with_radius(from, target, radius);
+            self.a_star_first_step_with_radius(from, target, radius, bias);
         PursuitStep {
             next_cell,
             used_a_star: true,
@@ -480,7 +484,13 @@ impl TopologyGrid {
         }
     }
 
-    fn greedy_route_first_step(&self, from: NavCell, target: NavCell) -> Option<NavCell> {
+    fn greedy_route_first_step(
+        &self,
+        from: NavCell,
+        target: NavCell,
+        bias: i32,
+    ) -> Option<NavCell> {
+        debug_assert!(bias == -1 || bias == 1);
         let mut current = from;
         let mut first = None;
         while current != target {
@@ -490,7 +500,13 @@ impl TopologyGrid {
                 .into_iter()
                 .flatten()
                 .filter(|cell| self.same_component(from, *cell))
-                .min_by_key(|cell| (cell_distance_sq(*cell, target), cell.y, cell.x))
+                .min_by_key(|cell| {
+                    (
+                        cell_distance_sq(*cell, target),
+                        -i64::from(bias) * i64::from(cell.y),
+                        -i64::from(bias) * i64::from(cell.x),
+                    )
+                })
                 .filter(|cell| cell_distance_sq(*cell, target) < current_distance)?;
             first.get_or_insert(next);
             current = next;
@@ -503,7 +519,9 @@ impl TopologyGrid {
         from: NavCell,
         target: NavCell,
         radius: i32,
+        bias: i32,
     ) -> Option<NavCell> {
+        debug_assert!(bias == -1 || bias == 1);
         let component = self.component_id(from)?;
         let mut current = from;
         let mut first = None;
@@ -520,7 +538,13 @@ impl TopologyGrid {
                         component,
                     )
                 })
-                .min_by_key(|cell| (cell_distance_sq(*cell, target), cell.y, cell.x))
+                .min_by_key(|cell| {
+                    (
+                        cell_distance_sq(*cell, target),
+                        -i64::from(bias) * i64::from(cell.y),
+                        -i64::from(bias) * i64::from(cell.x),
+                    )
+                })
                 .filter(|cell| cell_distance_sq(*cell, target) < current_distance)?;
             first.get_or_insert(next);
             current = next;
@@ -528,7 +552,13 @@ impl TopologyGrid {
         first
     }
 
-    fn a_star_first_step(&self, from: NavCell, target: NavCell) -> (Option<NavCell>, usize) {
+    fn a_star_first_step(
+        &self,
+        from: NavCell,
+        target: NavCell,
+        bias: i32,
+    ) -> (Option<NavCell>, usize) {
+        debug_assert!(bias == -1 || bias == 1);
         let Some(start) = self.index(from) else {
             return (None, 0);
         };
@@ -543,8 +573,8 @@ impl TopologyGrid {
         open.push(Reverse((
             manhattan(from, target),
             0u32,
-            from.y,
-            from.x,
+            -i64::from(bias) * i64::from(from.y),
+            -i64::from(bias) * i64::from(from.x),
             start,
         )));
 
@@ -584,7 +614,13 @@ impl TopologyGrid {
                 let estimate = next_cost
                     .checked_add(manhattan(neighbor, target))
                     .expect("navigation path estimate overflow");
-                open.push(Reverse((estimate, next_cost, neighbor.y, neighbor.x, next)));
+                open.push(Reverse((
+                    estimate,
+                    next_cost,
+                    -i64::from(bias) * i64::from(neighbor.y),
+                    -i64::from(bias) * i64::from(neighbor.x),
+                    next,
+                )));
             }
         }
 
@@ -596,7 +632,9 @@ impl TopologyGrid {
         from: NavCell,
         target: NavCell,
         radius: i32,
+        bias: i32,
     ) -> (Option<NavCell>, usize) {
+        debug_assert!(bias == -1 || bias == 1);
         let Some(start) = self.index(from) else {
             return (None, 0);
         };
@@ -618,8 +656,8 @@ impl TopologyGrid {
         open.push(Reverse((
             manhattan(from, target),
             0u32,
-            from.y,
-            from.x,
+            -i64::from(bias) * i64::from(from.y),
+            -i64::from(bias) * i64::from(from.x),
             start,
         )));
 
@@ -662,7 +700,13 @@ impl TopologyGrid {
                 let estimate = next_cost
                     .checked_add(manhattan(neighbor, target))
                     .expect("navigation path estimate overflow");
-                open.push(Reverse((estimate, next_cost, neighbor.y, neighbor.x, next)));
+                open.push(Reverse((
+                    estimate,
+                    next_cost,
+                    -i64::from(bias) * i64::from(neighbor.y),
+                    -i64::from(bias) * i64::from(neighbor.x),
+                    next,
+                )));
             }
         }
         (None, expanded_nodes)
@@ -903,6 +947,7 @@ mod tests {
             NavCell::new(5, 3),
             None,
             cell / 2 + 1,
+            -1,
         );
         assert!(result.used_a_star);
         assert!(result.a_star_expanded_nodes > 0);
@@ -949,6 +994,30 @@ mod tests {
     }
 
     #[test]
+    fn opposite_pursuit_biases_split_equal_cost_target_routes() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let grid = TopologyGrid::build(
+            cell,
+            NavCell::new(0, 0),
+            NavCell::new(6, 6),
+            [],
+            [
+                SimPoint::new(6 * cell, 3 * cell),
+                SimPoint::new(0, 3 * cell),
+            ],
+        );
+        let from = NavCell::new(2, 2);
+        let target = NavCell::new(4, 4);
+
+        let low_bias = grid.pursuit_step(from, target, None, -1);
+        let high_bias = grid.pursuit_step(from, target, None, 1);
+        assert_eq!(low_bias.next_cell, Some(NavCell::new(3, 2)));
+        assert_eq!(high_bias.next_cell, Some(NavCell::new(2, 3)));
+        assert!(!low_bias.used_a_star);
+        assert!(!high_bias.used_a_star);
+    }
+
+    #[test]
     fn pursuit_falls_back_to_a_star_when_greedy_progress_is_blocked() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let grid = TopologyGrid::build(
@@ -962,7 +1031,7 @@ mod tests {
             ],
         );
 
-        let result = grid.pursuit_step(NavCell::new(2, 1), NavCell::new(4, 1), None);
+        let result = grid.pursuit_step(NavCell::new(2, 1), NavCell::new(4, 1), None, -1);
         assert_eq!(result.next_cell, Some(NavCell::new(2, 2)));
         assert!(result.used_a_star);
         assert!(result.a_star_expanded_nodes > 0);
@@ -989,7 +1058,7 @@ mod tests {
             if current == target {
                 break;
             }
-            let result = grid.pursuit_step(current, target, None);
+            let result = grid.pursuit_step(current, target, None, -1);
             fallback_count += usize::from(result.used_a_star);
             current = result.next_cell.expect("detour should remain reachable");
         }

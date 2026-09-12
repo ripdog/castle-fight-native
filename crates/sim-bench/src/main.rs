@@ -29,6 +29,8 @@ enum Scenario {
     Slow,
     Radius,
     Traffic,
+    TrafficFlow,
+    TrafficProduction,
     Mixed,
 }
 
@@ -50,6 +52,8 @@ impl Scenario {
             Self::Slow => "slow",
             Self::Radius => "radius",
             Self::Traffic => "traffic",
+            Self::TrafficFlow => "traffic-flow",
+            Self::TrafficProduction => "traffic-production",
             Self::Mixed => "mixed",
         }
     }
@@ -172,7 +176,10 @@ fn main() {
                         result.movement_blocked_percent,
                     );
                 }
-                if scenario == Scenario::Traffic {
+                if matches!(
+                    scenario,
+                    Scenario::Traffic | Scenario::TrafficFlow | Scenario::TrafficProduction
+                ) {
                     println!(
                         "         traffic lower-half={} upper-half={} center-line={}",
                         result.traffic_lower_half_units,
@@ -413,7 +420,10 @@ fn run_case(
     }
     let elapsed = start.elapsed();
 
-    let (traffic_lower_half_units, traffic_upper_half_units) = if scenario == Scenario::Traffic {
+    let (traffic_lower_half_units, traffic_upper_half_units) = if matches!(
+        scenario,
+        Scenario::Traffic | Scenario::TrafficFlow | Scenario::TrafficProduction
+    ) {
         let center_y = 375 * SUBUNITS_PER_WORLD_UNIT;
         simulation
             .units()
@@ -533,7 +543,10 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
             SimPoint::new(100 * world, 0),
         ];
     }
-    if scenario == Scenario::Traffic {
+    if matches!(
+        scenario,
+        Scenario::Traffic | Scenario::TrafficFlow | Scenario::TrafficProduction
+    ) {
         let world = SUBUNITS_PER_WORLD_UNIT;
         config.spatial_cell_size = 40 * world;
         config.navigation_cell_size = 10 * world;
@@ -575,6 +588,8 @@ fn populate_scenario(
         Scenario::Slow => populate_timed_movement_modifier_density(simulation, units),
         Scenario::Radius => populate_mixed_radius_battle(simulation, units),
         Scenario::Traffic => populate_traffic_jam(simulation, units),
+        Scenario::TrafficFlow => populate_traffic_flow(simulation, units, false),
+        Scenario::TrafficProduction => populate_production_fed_traffic(simulation, units),
         Scenario::Mixed => populate_mixed_battle(simulation, units),
     }
 
@@ -588,6 +603,10 @@ fn populate_scenario(
 }
 
 fn populate_traffic_jam(simulation: &mut Simulation, total_units: usize) {
+    populate_traffic_flow(simulation, total_units, true);
+}
+
+fn populate_traffic_flow(simulation: &mut Simulation, total_units: usize, combat: bool) {
     let world = SUBUNITS_PER_WORLD_UNIT;
     let per_team = total_units / 2;
     const ROWS: usize = 40;
@@ -599,8 +618,8 @@ fn populate_traffic_jam(simulation: &mut Simulation, total_units: usize) {
     let attack = AttackProfile {
         delivery: AttackDelivery::Melee,
         damage: 0,
-        range: 14 * world,
-        acquisition_range: 80 * world,
+        range: if combat { 14 * world } else { 0 },
+        acquisition_range: if combat { 80 * world } else { 0 },
         cooldown_ticks: 30,
     };
     let movement = MovementProfile {
@@ -623,6 +642,53 @@ fn populate_traffic_jam(simulation: &mut Simulation, total_units: usize) {
                 health: 1_000_000,
                 attack,
                 movement,
+            });
+        }
+    }
+}
+
+fn populate_production_fed_traffic(simulation: &mut Simulation, requested_units: usize) {
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let mut initial_units = requested_units.saturating_mul(4) / 5;
+    initial_units -= initial_units % 2;
+    populate_traffic_jam(simulation, initial_units.max(2));
+
+    let production = ProductionProfile {
+        initial_delay_ticks: 0,
+        interval_ticks: 30,
+        search_radius_cells: 12,
+        unit: UnitTemplate {
+            health: 1_000_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 14 * world,
+                acquisition_range: 80 * world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: 40 * world / 30,
+            },
+        },
+    };
+
+    for team in 0..2u8 {
+        for index in 0..20 {
+            let column = index % 5;
+            let row = index / 5;
+            let x = if team == 0 {
+                42 + column * 5
+            } else {
+                154 - column * 5
+            };
+            let y = 22 + row * 9;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 4, 4),
+                health: 1_000_000,
+                production: Some(production),
+                attack: None,
+                spellcasting: None,
             });
         }
     }
@@ -1424,7 +1490,7 @@ fn parse_args() -> Args {
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,stun,slow,mixed"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,stun,slow,radius,traffic,traffic-flow,traffic-production,mixed"
                 );
                 println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
@@ -1464,6 +1530,8 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "slow" => Scenario::Slow,
             "radius" => Scenario::Radius,
             "traffic" => Scenario::Traffic,
+            "traffic-flow" => Scenario::TrafficFlow,
+            "traffic-production" => Scenario::TrafficProduction,
             "mixed" => Scenario::Mixed,
             other => panic!("unknown scenario: {other}"),
         })

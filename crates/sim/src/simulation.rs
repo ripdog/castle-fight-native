@@ -229,7 +229,7 @@ pub struct Simulation {
     pool: ThreadPool,
     topology: TopologyGrid,
     topology_dirty: bool,
-    pursuit_cache: BTreeMap<(NavCell, NavCell, Option<i32>), NavCell>,
+    pursuit_cache: BTreeMap<(NavCell, NavCell, Option<i32>, i8), NavCell>,
     radius_objective_fields: BTreeMap<(u8, i32), Vec<u32>>,
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
@@ -3023,7 +3023,12 @@ impl Simulation {
             let Some(entry) = decision.cache_insert else {
                 continue;
             };
-            let key = (entry.from, entry.target, entry.collision_radius);
+            let key = (
+                entry.from,
+                entry.target,
+                entry.collision_radius,
+                entry.route_bias,
+            );
             if self.pursuit_cache.len() >= PURSUIT_CACHE_CAPACITY
                 && !self.pursuit_cache.contains_key(&key)
             {
@@ -3240,7 +3245,15 @@ impl Simulation {
                 if cell == source_cell {
                     Some(cell)
                 } else {
-                    let cache_key = (source_cell, cell, unit.collision_radius_override);
+                    let route_bias = sidestep_sign(unit.id);
+                    let route_bias_key =
+                        i8::try_from(route_bias).expect("route bias must fit signed byte");
+                    let cache_key = (
+                        source_cell,
+                        cell,
+                        unit.collision_radius_override,
+                        route_bias_key,
+                    );
                     let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
                     let result = if let Some(radius) = unit.collision_radius_override {
                         self.topology.pursuit_step_with_radius(
@@ -3248,10 +3261,11 @@ impl Simulation {
                             cell,
                             cached_fallback,
                             radius,
+                            route_bias,
                         )
                     } else {
                         self.topology
-                            .pursuit_step(source_cell, cell, cached_fallback)
+                            .pursuit_step(source_cell, cell, cached_fallback, route_bias)
                     };
                     used_a_star = result.used_a_star;
                     a_star_cache_hit = result.a_star_cache_hit;
@@ -3264,6 +3278,7 @@ impl Simulation {
                             from: source_cell,
                             target: cell,
                             collision_radius: unit.collision_radius_override,
+                            route_bias: route_bias_key,
                             next,
                         });
                     }
@@ -3654,6 +3669,7 @@ impl Simulation {
                         original_cell,
                         unit.collision_radius,
                         unit.collision_radius_override,
+                        sidestep_sign(unit.id),
                         &reservations,
                     )
                 })
@@ -3672,8 +3688,10 @@ impl Simulation {
         original_cell: NavCell,
         collision_radius: i32,
         topology_collision_radius: Option<i32>,
+        search_bias: i32,
         reservations: &SpatialReservationGrid,
     ) -> Option<SimPoint> {
+        debug_assert!(search_bias == -1 || search_bias == 1);
         let step = collision_radius.max(1);
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
         let max_radius = [
@@ -3688,11 +3706,16 @@ impl Simulation {
         .max(step);
         let max_ring = (max_radius + step - 1) / step;
 
+        let order_multiplier = -search_bias;
         for ring in 1..=max_ring {
             let distance = ring.checked_mul(step)?;
-            for x_step in -ring..=ring {
+            for raw_x_step in -ring..=ring {
+                let x_step = raw_x_step.checked_mul(order_multiplier)?;
                 let x = x_step.checked_mul(step)?;
-                for y in [-distance, distance] {
+                for y in [
+                    search_bias.checked_mul(distance)?,
+                    (-search_bias).checked_mul(distance)?,
+                ] {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
@@ -3706,9 +3729,13 @@ impl Simulation {
                     }
                 }
             }
-            for y_step in (-ring + 1)..=(ring - 1) {
+            for raw_y_step in (-ring + 1)..=(ring - 1) {
+                let y_step = raw_y_step.checked_mul(order_multiplier)?;
                 let y = y_step.checked_mul(step)?;
-                for x in [-distance, distance] {
+                for x in [
+                    search_bias.checked_mul(distance)?,
+                    (-search_bias).checked_mul(distance)?,
+                ] {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
@@ -3891,6 +3918,7 @@ struct PursuitCacheInsert {
     from: NavCell,
     target: NavCell,
     collision_radius: Option<i32>,
+    route_bias: i8,
     next: NavCell,
 }
 
