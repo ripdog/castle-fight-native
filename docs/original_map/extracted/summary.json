@@ -80,6 +80,11 @@
     "unique_call_tokens": 5723,
     "call_graph_edges": 29478,
     "resolved_call_graph_edges": 22680,
+    "function_alias_assignments": 57253,
+    "slot_prefix_function_aliases": 2801,
+    "aliased_function_targets": 1886,
+    "function_value_arguments": 308,
+    "function_value_argument_targets": 308,
     "readable_function_names": 4910,
     "direct_map_rawcode_references": 12611,
     "referenced_map_rawcodes": 1332,
@@ -89,7 +94,7 @@
     "rawcodes_with_runtime_mutator_paths": 270,
     "runtime_mutator_sites_with_rawcode_paths": 117,
     "max_runtime_mutator_path_hops": 11,
-    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow or branch execution."
+    "note": "The source is retained verbatim but is W3P-obfuscated; Lua-aware indexes are static, byte-accurate, skip strings/comments, and do not execute map code. Function aliases/value arguments are indexed separately from direct calls. Rawcode-to-mutator traces prove only lexical direct-call reachability, not argument data flow, virtual dispatch, callback execution, or branch execution."
   },
   "plaintext_members_copied": [
     "war3mapMisc.txt",
