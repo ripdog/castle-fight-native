@@ -2628,6 +2628,349 @@ mod tests {
     }
 
     #[test]
+    fn ranged_unit_already_inside_max_range_does_not_back_away() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(20 * world, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 10 * world,
+                },
+                damage: 0,
+                range: 120 * world,
+                acquisition_range: 180 * world,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: 40 * world / 30,
+            },
+        });
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(80 * world, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let start = sim.unit(attacker).unwrap().position;
+        let mut attacked = false;
+        for _ in 0..5 {
+            sim.step();
+            attacked |= sim
+                .attacks_last_tick()
+                .iter()
+                .any(|event| event.source == attacker && event.target == target);
+            assert_eq!(sim.unit(attacker).unwrap().position, start);
+        }
+        assert!(attacked, "in-range ranged unit never attacked");
+    }
+
+    #[test]
+    fn trailing_client_scale_melee_flows_around_engaged_units_without_jitter() {
+        fn run(workers: usize) -> (u64, Option<usize>, usize, i32) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let mut config = SimulationConfig {
+                spatial_cell_size: 40 * world,
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, -40),
+                navigation_max: NavCell::new(100, 40),
+                target_pursuit_extra_range: 30 * world,
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+                ..SimulationConfig::default()
+            };
+            config.static_blockers.clear();
+            let mut sim = Simulation::new(config, workers);
+            let melee = |x_world: i32, y_world: i32| UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(x_world * world, y_world * world),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 14 * world,
+                    acquisition_range: 80 * world,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile {
+                    speed_per_tick: 40 * world / 30,
+                },
+            };
+            for (x, y) in [(237, 0), (241, -10), (241, 10)] {
+                sim.spawn_unit(melee(x, y));
+            }
+            let rear = sim.spawn_unit(melee(229, 0));
+            let target = sim.spawn_unit(UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(250 * world, 0),
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 14 * world,
+                    acquisition_range: 80 * world,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+
+            let mut previous = sim.unit(rear).unwrap().position;
+            let mut previous_dy = 0_i32;
+            let mut reversals = 0usize;
+            let mut max_lateral = 0_i32;
+            let mut attack_tick = None;
+            for tick in 0..120 {
+                sim.step();
+                let view = sim.unit(rear).unwrap();
+                let dy = view.position.y - previous.y;
+                if dy != 0 && previous_dy != 0 && dy.signum() != previous_dy.signum() {
+                    reversals += 1;
+                }
+                if dy != 0 {
+                    previous_dy = dy;
+                }
+                previous = view.position;
+                max_lateral = max_lateral.max(view.position.y.abs());
+                if sim
+                    .attacks_last_tick()
+                    .iter()
+                    .any(|event| event.source == rear && event.target == target)
+                {
+                    attack_tick = Some(tick);
+                    break;
+                }
+            }
+            (sim.checksum(), attack_tick, reversals, max_lateral)
+        }
+
+        let expected = run(1);
+        assert_eq!(run(8), expected, "worker count changed melee crowd flow");
+        let (_, attack_tick, reversals, max_lateral) = expected;
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        assert!(
+            attack_tick.is_some_and(|tick| tick < 60),
+            "rear melee unit never flowed into attack range: {attack_tick:?}"
+        );
+        assert!(
+            reversals <= 2,
+            "rear melee unit jittered between flow directions {reversals} times"
+        );
+        assert!(
+            max_lateral >= 8 * world,
+            "rear melee unit did not flow around the occupied engagement"
+        );
+    }
+
+    #[test]
+    fn melee_group_flows_around_single_unit_attack_envelope() {
+        fn run(workers: usize) -> (u64, usize, u8) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let mut config = SimulationConfig {
+                spatial_cell_size: 40 * world,
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, -40),
+                navigation_max: NavCell::new(100, 40),
+                target_pursuit_extra_range: 30 * world,
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+                ..SimulationConfig::default()
+            };
+            config.static_blockers.clear();
+            let mut sim = Simulation::new(config, workers);
+            let target_position = SimPoint::new(250 * world, 0);
+            let target = sim.spawn_unit(UnitSpawn {
+                team: Team(0),
+                position: target_position,
+                health: 1_000_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+            let attack = AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 14 * world,
+                acquisition_range: 100 * world,
+                cooldown_ticks: 10,
+            };
+            for index in 0..12 {
+                let row = index % 6;
+                let column = index / 6;
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new((300 + column * 8) * world, (-20 + row * 8) * world),
+                    health: 10_000,
+                    attack,
+                    movement: MovementProfile {
+                        speed_per_tick: 40 * world / 30,
+                    },
+                });
+            }
+
+            let mut attackers = Vec::new();
+            let mut side_mask = 0_u8;
+            for _ in 0..240 {
+                sim.step();
+                for event in sim
+                    .attacks_last_tick()
+                    .iter()
+                    .filter(|event| event.target == target)
+                {
+                    if !attackers.contains(&event.source) {
+                        attackers.push(event.source);
+                    }
+                    let dx = event.source_position.x - target_position.x;
+                    let dy = event.source_position.y - target_position.y;
+                    if dx < 0 {
+                        side_mask |= 1;
+                    }
+                    if dx > 0 {
+                        side_mask |= 2;
+                    }
+                    if dy < 0 {
+                        side_mask |= 4;
+                    }
+                    if dy > 0 {
+                        side_mask |= 8;
+                    }
+                }
+            }
+            (sim.checksum(), attackers.len(), side_mask)
+        }
+
+        let expected = run(1);
+        assert_eq!(run(8), expected, "worker count changed unit surround flow");
+        assert!(
+            expected.1 >= 9,
+            "only {} of 12 melee units reached the unit attack envelope",
+            expected.1
+        );
+        assert!(
+            expected.2.count_ones() >= 3,
+            "melee group did not flow around the unit target: {:04b}",
+            expected.2
+        );
+    }
+
+    #[test]
+    fn client_scale_melee_group_flows_around_large_building_attack_envelope() {
+        fn run(workers: usize) -> (u64, usize, u8) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let mut config = SimulationConfig {
+                spatial_cell_size: 40 * world,
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, 0),
+                navigation_max: NavCell::new(100, 74),
+                target_pursuit_extra_range: 30 * world,
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [
+                    SimPoint::new(900 * world, 370 * world),
+                    SimPoint::new(100 * world, 370 * world),
+                ],
+                ..SimulationConfig::default()
+            };
+            config.static_blockers.clear();
+            let mut sim = Simulation::new(config, workers);
+            let footprint = BuildingFootprint::new(30, 34, 7, 7);
+            let building = sim.spawn_building(BuildingSpawn {
+                team: Team(0),
+                footprint,
+                health: 1_000_000,
+                production: None,
+                attack: None,
+                spellcasting: None,
+            });
+            let attack = AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 14 * world,
+                acquisition_range: 180 * world,
+                cooldown_ticks: 10,
+            };
+            for index in 0..24 {
+                let row = index % 8;
+                let column = index / 8;
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new((430 + column * 8) * world, (342 + row * 8) * world),
+                    health: 10_000,
+                    attack,
+                    movement: MovementProfile {
+                        speed_per_tick: 40 * world / 30,
+                    },
+                });
+            }
+
+            let min_x = footprint.min_x * 10 * world;
+            let max_x = (footprint.max_x() + 1) * 10 * world;
+            let min_y = footprint.min_y * 10 * world;
+            let max_y = (footprint.max_y() + 1) * 10 * world;
+            let mut attackers = Vec::new();
+            let mut side_mask = 0_u8;
+            for _ in 0..300 {
+                sim.step();
+                for event in sim
+                    .attacks_last_tick()
+                    .iter()
+                    .filter(|event| event.target == building)
+                {
+                    if !attackers.contains(&event.source) {
+                        attackers.push(event.source);
+                    }
+                    let position = event.source_position;
+                    if position.x < min_x {
+                        side_mask |= 1;
+                    }
+                    if position.x > max_x {
+                        side_mask |= 2;
+                    }
+                    if position.y < min_y {
+                        side_mask |= 4;
+                    }
+                    if position.y > max_y {
+                        side_mask |= 8;
+                    }
+                }
+            }
+            (sim.checksum(), attackers.len(), side_mask)
+        }
+
+        let expected = run(1);
+        assert_eq!(
+            run(8),
+            expected,
+            "worker count changed building surround flow"
+        );
+        assert!(
+            expected.1 >= 20,
+            "only {} of 24 melee units reached the building attack envelope",
+            expected.1
+        );
+        assert!(
+            expected.2.count_ones() >= 3,
+            "melee group reached too few building faces: {:04b}",
+            expected.2
+        );
+    }
+
+    #[test]
     fn worker_count_does_not_change_battle_checksum() {
         let mut expected = None;
         for workers in [1, 2, 4] {

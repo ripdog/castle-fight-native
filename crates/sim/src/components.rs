@@ -133,6 +133,13 @@ pub struct RetaliationState {
     pub attacked_tick: Option<u64>,
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct NavigationState {
+    pub avoidance_target: Option<SimId>,
+    pub bypass_side: i8,
+    pub clear_ticks: u8,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MovementProfile {
     pub speed_per_tick: i32,

@@ -8,6 +8,7 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
+const AVOIDANCE_CLEAR_TICKS: u8 = 3;
 
 use crate::{
     components::{
@@ -15,8 +16,8 @@ use crate::{
         AttackProfile, AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile,
         BounceProjectile, BuildingFootprint, BuildingSpawn, GuaranteedHitProjectile, Health,
         MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
-        Position, ProductionProfile, ProductionState, RetaliationState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, UnitSpawn,
+        NavigationState, Position, ProductionProfile, ProductionState, RetaliationState, SimId,
+        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -553,6 +554,8 @@ impl Simulation {
             .map(|building| building.cooldown_remaining.unwrap_or(0))
             .collect();
         let mut positions: Vec<SimPoint> = units.iter().map(|unit| unit.position).collect();
+        let mut navigation_states: Vec<NavigationState> =
+            units.iter().map(|unit| unit.navigation).collect();
         let mut attackers_this_tick = vec![None; units.len()];
         let mut next_defense_alerts = Vec::new();
 
@@ -840,6 +843,7 @@ impl Simulation {
             &unit_health,
             &building_health,
             &mut positions,
+            &mut navigation_states,
         );
 
         let phase_start = Instant::now();
@@ -1016,6 +1020,9 @@ impl Simulation {
                 .get_mut::<Position>()
                 .expect("unit position missing")
                 .0 = positions[index];
+            *entity
+                .get_mut::<NavigationState>()
+                .expect("unit navigation state missing") = navigation_states[index];
             let mut target_state = entity
                 .get_mut::<TargetState>()
                 .expect("unit target missing");
@@ -1286,6 +1293,7 @@ impl Simulation {
             TargetState::default(),
             RetaliationState::default(),
             StatusState::default(),
+            NavigationState::default(),
             unit.movement,
             SpawnTick(self.next_tick),
         ));
@@ -1436,12 +1444,13 @@ impl Simulation {
             &TargetState,
             &RetaliationState,
             &StatusState,
+            &NavigationState,
             &MovementProfile,
             &SpawnTick,
         )>();
         let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
             .map(
                 |(
                     entity,
@@ -1454,6 +1463,7 @@ impl Simulation {
                     target,
                     retaliation,
                     status,
+                    navigation,
                     movement,
                     spawn_tick,
                 )| UnitSnapshot {
@@ -1468,6 +1478,7 @@ impl Simulation {
                     direct_retaliation_lock: target.direct_retaliation_lock,
                     retaliation: *retaliation,
                     status: *status,
+                    navigation: *navigation,
                     movement: *movement,
                     spawn_tick: spawn_tick.0,
                 },
@@ -2651,6 +2662,7 @@ impl Simulation {
         unit_health: &[i32],
         building_health: &[i32],
         positions: &mut [SimPoint],
+        navigation_states: &mut [NavigationState],
     ) -> MovementMetrics {
         let intent_start = Instant::now();
         let decisions: Vec<_> = self.pool.install(|| {
@@ -2706,8 +2718,8 @@ impl Simulation {
             self.apply_crowd_separation(units, unit_health, &desired_positions);
         let legal_positions = self.enforce_hard_non_overlap(
             units,
-            buildings,
             unit_health,
+            navigation_states,
             &decisions,
             &desired_positions,
             &separated_positions,
@@ -2742,6 +2754,8 @@ impl Simulation {
             return MovementDecision::stationary(current);
         }
         let source_cell = self.topology.cell_of_point(current);
+        let mut pursuit_target = None;
+        let mut attack_goal = None;
 
         let target_cell = unit.target.and_then(|target_id| {
             if let Some(target_index) = find_unit_index(units, target_id) {
@@ -2750,32 +2764,69 @@ impl Simulation {
                 }
                 let target_position = units[target_index].position;
                 if current.distance_sq(target_position) <= unit.attack.range_sq() {
+                    attack_goal = Some(current);
                     return Some(source_cell);
                 }
-                let cell = self.topology.cell_of_point(target_position);
-                self.topology
-                    .same_component(source_cell, cell)
-                    .then_some(cell)
+                let mut goal =
+                    point_attack_envelope_goal(current, target_position, unit.attack.range);
+                let mut cell = self.topology.cell_of_point(goal);
+                if self.topology.is_blocked(cell)
+                    || !self.topology.same_component(source_cell, cell)
+                {
+                    cell = self.topology.cell_of_point(target_position);
+                    if !self.topology.same_component(source_cell, cell) {
+                        return None;
+                    }
+                    goal = target_position;
+                }
+                pursuit_target = Some(target_id);
+                attack_goal = Some(goal);
+                Some(cell)
             } else if let Some(target_index) = find_building_index(buildings, target_id) {
                 if building_health[target_index] <= 0 {
                     return None;
                 }
+                let footprint = buildings[target_index].footprint;
                 if point_to_footprint_distance_sq(
                     current,
-                    buildings[target_index].footprint,
+                    footprint,
                     self.config.navigation_cell_size,
                 ) <= unit.attack.range_sq()
                 {
+                    attack_goal = Some(current);
                     return Some(source_cell);
                 }
-                self.topology.nearest_reachable_perimeter_cell(
-                    source_cell,
-                    buildings[target_index].footprint,
-                )
+                let mut goal = building_attack_envelope_goal(
+                    current,
+                    footprint,
+                    unit.attack.range,
+                    self.config.navigation_cell_size,
+                );
+                let mut cell = self.topology.cell_of_point(goal);
+                if self.topology.is_blocked(cell)
+                    || !self.topology.same_component(source_cell, cell)
+                {
+                    cell = self
+                        .topology
+                        .nearest_reachable_perimeter_cell(source_cell, footprint)?;
+                    goal = building_attack_envelope_goal(
+                        self.topology.center_of_cell(cell),
+                        footprint,
+                        unit.attack.range,
+                        self.config.navigation_cell_size,
+                    );
+                }
+                pursuit_target = Some(target_id);
+                attack_goal = Some(goal);
+                Some(cell)
             } else {
                 None
             }
         });
+
+        if attack_goal == Some(current) {
+            return MovementDecision::stationary(current);
+        }
 
         let mut pursuit_step = false;
         let mut used_a_star = false;
@@ -2783,27 +2834,30 @@ impl Simulation {
         let mut a_star_expanded_nodes = 0;
         let mut cache_insert = None;
         let next_cell = match target_cell {
-            Some(cell) if cell == source_cell => return MovementDecision::stationary(current),
             Some(cell) => {
-                pursuit_step = true;
-                let cached_fallback = self.pursuit_cache.get(&(source_cell, cell)).copied();
-                let result = self
-                    .topology
-                    .pursuit_step(source_cell, cell, cached_fallback);
-                used_a_star = result.used_a_star;
-                a_star_cache_hit = result.a_star_cache_hit;
-                a_star_expanded_nodes = result.a_star_expanded_nodes;
-                if result.used_a_star
-                    && !result.a_star_cache_hit
-                    && let Some(next) = result.next_cell
-                {
-                    cache_insert = Some(PursuitCacheInsert {
-                        from: source_cell,
-                        target: cell,
-                        next,
-                    });
+                pursuit_step = pursuit_target.is_some();
+                if cell == source_cell {
+                    Some(cell)
+                } else {
+                    let cached_fallback = self.pursuit_cache.get(&(source_cell, cell)).copied();
+                    let result = self
+                        .topology
+                        .pursuit_step(source_cell, cell, cached_fallback);
+                    used_a_star = result.used_a_star;
+                    a_star_cache_hit = result.a_star_cache_hit;
+                    a_star_expanded_nodes = result.a_star_expanded_nodes;
+                    if result.used_a_star
+                        && !result.a_star_cache_hit
+                        && let Some(next) = result.next_cell
+                    {
+                        cache_insert = Some(PursuitCacheInsert {
+                            from: source_cell,
+                            target: cell,
+                            next,
+                        });
+                    }
+                    result.next_cell
                 }
-                result.next_cell
             }
             None => self.topology.objective_step(unit.team.0, source_cell),
         };
@@ -2811,13 +2865,20 @@ impl Simulation {
             return MovementDecision {
                 position: current,
                 pursuit_step,
+                pursuit_target,
+                attack_goal,
                 used_a_star,
                 a_star_cache_hit,
                 a_star_expanded_nodes,
                 cache_insert,
             };
         };
-        let target_position = self.topology.center_of_cell(next_cell);
+        let target_position =
+            if pursuit_step && next_cell == target_cell.expect("pursuit target cell disappeared") {
+                attack_goal.expect("pursuit movement missing attack-envelope goal")
+            } else {
+                self.topology.center_of_cell(next_cell)
+            };
         let candidate = current.step_towards(target_position, movement_speed);
         let candidate_cell = self.topology.cell_of_point(candidate);
         let position = if self.topology.is_blocked(candidate_cell)
@@ -2830,6 +2891,8 @@ impl Simulation {
         MovementDecision {
             position,
             pursuit_step,
+            pursuit_target,
+            attack_goal,
             used_a_star,
             a_star_cache_hit,
             a_star_expanded_nodes,
@@ -2850,8 +2913,11 @@ impl Simulation {
         }
 
         let collision_partition = SpatialPartition::global(0);
+        let anticipation_distance = separation_distance
+            .saturating_mul(2)
+            .max(separation_distance);
         let collision_grid = SpatialGrid::build(
-            separation_distance.max(1),
+            anticipation_distance.max(1),
             desired_positions
                 .iter()
                 .enumerate()
@@ -2859,6 +2925,7 @@ impl Simulation {
                 .map(|(index, position)| (collision_partition, index, *position)),
         );
         let separation_sq = square_i32(separation_distance);
+        let anticipation_sq = square_i32(anticipation_distance);
 
         self.pool.install(|| {
             units
@@ -2877,63 +2944,86 @@ impl Simulation {
                     let movement_y = i64::from(desired.y) - i64::from(unit.position.y);
                     let mut push_x = 0_i64;
                     let mut push_y = 0_i64;
-                    let mut overlaps = 0_i64;
+                    let mut contributions = 0_i64;
 
                     collision_grid.for_each_candidate(
                         collision_partition,
                         desired,
-                        separation_distance,
+                        anticipation_distance,
                         |other_index| {
                             if other_index == index || unit_health[other_index] <= 0 {
                                 return;
                             }
                             let other = desired_positions[other_index];
                             let distance_sq = desired.distance_sq(other);
-                            if distance_sq >= separation_sq {
+                            if distance_sq >= anticipation_sq {
                                 return;
                             }
 
-                            let dx = i64::from(desired.x) - i64::from(other.x);
-                            let dy = i64::from(desired.y) - i64::from(other.y);
-                            let (direction_x, direction_y, axis_distance) = if dx == 0 && dy == 0 {
-                                let (x, y) =
-                                    exact_overlap_direction(unit.id, units[other_index].id);
-                                (i64::from(x), i64::from(y), 0_i64)
-                            } else {
-                                (dx.signum(), dy.signum(), dx.abs().max(dy.abs()))
-                            };
-                            let penetration =
-                                (i64::from(separation_distance) - axis_distance).max(1);
-                            push_x += direction_x * penetration;
-                            push_y += direction_y * penetration;
+                            let mut contributed = false;
+                            if distance_sq < separation_sq {
+                                let dx = i64::from(desired.x) - i64::from(other.x);
+                                let dy = i64::from(desired.y) - i64::from(other.y);
+                                let (direction_x, direction_y, axis_distance) =
+                                    if dx == 0 && dy == 0 {
+                                        let (x, y) =
+                                            exact_overlap_direction(unit.id, units[other_index].id);
+                                        (i64::from(x), i64::from(y), 0_i64)
+                                    } else {
+                                        (dx.signum(), dy.signum(), dx.abs().max(dy.abs()))
+                                    };
+                                let penetration =
+                                    (i64::from(separation_distance) - axis_distance).max(1);
+                                push_x += direction_x * penetration;
+                                push_y += direction_y * penetration;
+                                contributed = true;
+                            }
 
-                            if movement_x != 0 || movement_y != 0 {
+                            if (movement_x != 0 || movement_y != 0)
+                                && unit.target != Some(units[other_index].id)
+                            {
                                 let other_move_x =
                                     i64::from(other.x) - i64::from(units[other_index].position.x);
                                 let other_move_y =
                                     i64::from(other.y) - i64::from(units[other_index].position.y);
-                                let to_other_x = i64::from(other.x) - i64::from(unit.position.x);
-                                let to_other_y = i64::from(other.y) - i64::from(unit.position.y);
-                                let other_is_stationary = other_move_x == 0 && other_move_y == 0;
+                                let to_other_x = i64::from(units[other_index].position.x)
+                                    - i64::from(unit.position.x);
+                                let to_other_y = i64::from(units[other_index].position.y)
+                                    - i64::from(unit.position.y);
                                 let other_is_ahead =
                                     movement_x * to_other_x + movement_y * to_other_y > 0;
-                                if other_is_stationary && other_is_ahead {
-                                    let side = i64::from(sidestep_sign(unit.id));
-                                    let perpendicular_x = -movement_y.signum() * side;
-                                    let perpendicular_y = movement_x.signum() * side;
-                                    push_x += perpendicular_x * penetration;
-                                    push_y += perpendicular_y * penetration;
+                                let relative_move_x = movement_x - other_move_x;
+                                let relative_move_y = movement_y - other_move_y;
+                                let closing =
+                                    relative_move_x * to_other_x + relative_move_y * to_other_y > 0;
+                                if other_is_ahead && closing {
+                                    let axis_distance = to_other_x.abs().max(to_other_y.abs());
+                                    let pressure =
+                                        (i64::from(anticipation_distance) - axis_distance).max(1);
+                                    let remembered_side = if unit.navigation.avoidance_target
+                                        == unit.target
+                                        && unit.navigation.bypass_side != 0
+                                    {
+                                        i64::from(unit.navigation.bypass_side)
+                                    } else {
+                                        i64::from(sidestep_sign(unit.id))
+                                    };
+                                    let perpendicular_x = -movement_y.signum() * remembered_side;
+                                    let perpendicular_y = movement_x.signum() * remembered_side;
+                                    push_x += perpendicular_x * pressure;
+                                    push_y += perpendicular_y * pressure;
+                                    contributed = true;
                                 }
                             }
-                            overlaps += 1;
+                            contributions += i64::from(contributed);
                         },
                     );
 
-                    if overlaps == 0 {
+                    if contributions == 0 {
                         return desired;
                     }
-                    push_x /= overlaps;
-                    push_y /= overlaps;
+                    push_x /= contributions;
+                    push_y /= contributions;
                     let raw_offset = SimPoint::new(
                         i32::try_from(push_x).expect("crowd x offset overflow"),
                         i32::try_from(push_y).expect("crowd y offset overflow"),
@@ -2948,8 +3038,8 @@ impl Simulation {
     fn enforce_hard_non_overlap(
         &self,
         units: &[UnitSnapshot],
-        buildings: &[BuildingSnapshot],
         unit_health: &[i32],
+        navigation_states: &mut [NavigationState],
         decisions: &[MovementDecision],
         desired_positions: &[SimPoint],
         separated_positions: &[SimPoint],
@@ -2987,57 +3077,117 @@ impl Simulation {
             let desired = desired_positions[index];
             let separated = separated_positions[index];
             let sidestep_distance = effective_movement_speed(unit).max(lateral).max(1);
-            let preferred_side =
-                perpendicular_step(unit.id, unit.position, desired, sidestep_distance);
-            let opposite_side = SimPoint::new(-preferred_side.x, -preferred_side.y);
-            let preferred_side = offset_point(unit.position, preferred_side.x, preferred_side.y);
-            let opposite_side = offset_point(unit.position, opposite_side.x, opposite_side.y);
-            let pursuing = decisions[index].pursuit_step && desired != unit.position;
-            let persistent_ranged_bypass =
-                pursuing && !matches!(unit.attack.delivery, AttackDelivery::Melee);
+            let pursuing = decisions[index].pursuit_step
+                && decisions[index].pursuit_target.is_some()
+                && desired != unit.position;
+            let pursuit_target = decisions[index].pursuit_target;
+            let navigation = &mut navigation_states[index];
+            if !pursuing || navigation.avoidance_target != pursuit_target {
+                *navigation = NavigationState::default();
+            }
+
             let direct_clear = self.position_is_traversable_from(original_cell, desired)
                 && reservations.is_clear(desired, minimum_distance);
-            let corridor_clear = if persistent_ranged_bypass {
-                self.pursuit_corridor_is_clear(
-                    unit,
-                    units,
-                    buildings,
-                    original_cell,
-                    minimum_distance,
-                    &reservations,
-                )
-            } else {
-                true
-            };
-            let candidates = if persistent_ranged_bypass && (!direct_clear || !corridor_clear) {
-                // Pursuit needs directional persistence around occupied firing/melee lines.
-                // Keep the stable full-speed lateral side until both the immediate step and
-                // a short look-ahead corridor are clear; otherwise direct steering recenters
-                // behind the blocker and produces visible left/right or up/down jitter.
-                [
-                    preferred_side,
-                    opposite_side,
-                    Some(desired),
-                    Some(separated),
-                    Some(unit.position),
-                ]
-            } else {
-                [
-                    Some(separated),
-                    Some(desired),
-                    preferred_side,
-                    opposite_side,
-                    Some(unit.position),
-                ]
-            };
+            let mut avoiding = false;
+            if pursuing {
+                if !direct_clear {
+                    navigation.avoidance_target = pursuit_target;
+                    if navigation.bypass_side == 0 {
+                        navigation.bypass_side =
+                            i8::try_from(sidestep_sign(unit.id)).expect("sidestep sign fits i8");
+                    }
+                    navigation.clear_ticks = 0;
+                    avoiding = true;
+                } else if navigation.avoidance_target == pursuit_target
+                    && navigation.bypass_side != 0
+                {
+                    navigation.clear_ticks = navigation.clear_ticks.saturating_add(1);
+                    if navigation.clear_ticks < AVOIDANCE_CLEAR_TICKS {
+                        avoiding = true;
+                    } else {
+                        *navigation = NavigationState::default();
+                    }
+                }
+            }
 
-            let chosen = candidates
+            let steer_toward = if desired != unit.position {
+                desired
+            } else {
+                decisions[index].attack_goal.unwrap_or(desired)
+            };
+            let default_side = i8::try_from(sidestep_sign(unit.id)).expect("sidestep sign fits i8");
+            let side = if avoiding {
+                navigation.bypass_side
+            } else {
+                default_side
+            };
+            let preferred_tangent =
+                perpendicular_step_with_side(side, unit.position, steer_toward, sidestep_distance);
+            let opposite_tangent =
+                perpendicular_step_with_side(-side, unit.position, steer_toward, sidestep_distance);
+            let preferred_arc =
+                pursuit_arc_step(side, unit.position, steer_toward, sidestep_distance, true);
+            let preferred_back_arc =
+                pursuit_arc_step(side, unit.position, steer_toward, sidestep_distance, false);
+            let opposite_arc =
+                pursuit_arc_step(-side, unit.position, steer_toward, sidestep_distance, true);
+            let preferred_tangent =
+                offset_point(unit.position, preferred_tangent.x, preferred_tangent.y);
+            let opposite_tangent =
+                offset_point(unit.position, opposite_tangent.x, opposite_tangent.y);
+            let preferred_arc = offset_point(unit.position, preferred_arc.x, preferred_arc.y);
+            let preferred_back_arc =
+                offset_point(unit.position, preferred_back_arc.x, preferred_back_arc.y);
+            let opposite_arc = offset_point(unit.position, opposite_arc.x, opposite_arc.y);
+
+            let mut chosen = None;
+            if avoiding {
+                let candidates = [
+                    (preferred_arc, side),
+                    (preferred_tangent, side),
+                    (preferred_back_arc, side),
+                    (opposite_arc, -side),
+                    (opposite_tangent, -side),
+                    (Some(separated), 0),
+                    (Some(desired), 0),
+                    (Some(unit.position), side),
+                ];
+                for (candidate, candidate_side) in candidates {
+                    let Some(candidate) = candidate else {
+                        continue;
+                    };
+                    if self.position_is_traversable_from(original_cell, candidate)
+                        && reservations.is_clear(candidate, minimum_distance)
+                    {
+                        if candidate_side != 0 && candidate_side != navigation.bypass_side {
+                            navigation.bypass_side = candidate_side;
+                            navigation.clear_ticks = 0;
+                        }
+                        chosen = Some(candidate);
+                        break;
+                    }
+                }
+            } else {
+                for candidate in [
+                    Some(separated),
+                    Some(desired),
+                    preferred_tangent,
+                    opposite_tangent,
+                    Some(unit.position),
+                ]
                 .into_iter()
                 .flatten()
-                .find(|candidate| {
-                    self.position_is_traversable_from(original_cell, *candidate)
-                        && reservations.is_clear(*candidate, minimum_distance)
-                })
+                {
+                    if self.position_is_traversable_from(original_cell, candidate)
+                        && reservations.is_clear(candidate, minimum_distance)
+                    {
+                        chosen = Some(candidate);
+                        break;
+                    }
+                }
+            }
+
+            let chosen = chosen
                 .or_else(|| {
                     self.find_local_non_overlap_position(
                         unit.position,
@@ -3053,36 +3203,6 @@ impl Simulation {
         }
 
         result
-    }
-
-    fn pursuit_corridor_is_clear(
-        &self,
-        unit: &UnitSnapshot,
-        units: &[UnitSnapshot],
-        buildings: &[BuildingSnapshot],
-        original_cell: NavCell,
-        minimum_distance: i32,
-        reservations: &SpatialReservationGrid,
-    ) -> bool {
-        let Some(target_id) = unit.target else {
-            return true;
-        };
-        let Some(target_index) = find_unit_index(units, target_id) else {
-            // Building pursuit already aims at a reachable perimeter cell; do not look through
-            // the building footprint itself as though it were dynamic unit congestion.
-            return find_building_index(buildings, target_id).is_some();
-        };
-        let target_position = units[target_index].position;
-        let lookahead_distance = unit
-            .movement
-            .speed_per_tick
-            .saturating_add(minimum_distance)
-            .max(1);
-        let lookahead = unit
-            .position
-            .step_towards(target_position, lookahead_distance);
-        self.position_is_traversable_from(original_cell, lookahead)
-            && reservations.is_clear(lookahead, minimum_distance)
     }
 
     fn find_local_non_overlap_position(
@@ -3216,6 +3336,8 @@ struct PursuitCacheInsert {
 struct MovementDecision {
     position: SimPoint,
     pursuit_step: bool,
+    pursuit_target: Option<SimId>,
+    attack_goal: Option<SimPoint>,
     used_a_star: bool,
     a_star_cache_hit: bool,
     a_star_expanded_nodes: usize,
@@ -3227,6 +3349,8 @@ impl MovementDecision {
         Self {
             position,
             pursuit_step: false,
+            pursuit_target: None,
+            attack_goal: None,
             used_a_star: false,
             a_star_cache_hit: false,
             a_star_expanded_nodes: 0,
@@ -3258,6 +3382,7 @@ struct UnitSnapshot {
     direct_retaliation_lock: bool,
     retaliation: RetaliationState,
     status: StatusState,
+    navigation: NavigationState,
     movement: MovementProfile,
     spawn_tick: u64,
 }
@@ -4074,16 +4199,46 @@ fn sidestep_sign(id: SimId) -> i32 {
     if mixed & 1 == 0 { -1 } else { 1 }
 }
 
-fn perpendicular_step(id: SimId, from: SimPoint, toward: SimPoint, distance: i32) -> SimPoint {
+fn perpendicular_step_with_side(
+    side: i8,
+    from: SimPoint,
+    toward: SimPoint,
+    distance: i32,
+) -> SimPoint {
+    debug_assert!(side == -1 || side == 1);
     let dx = i64::from(toward.x) - i64::from(from.x);
     let dy = i64::from(toward.y) - i64::from(from.y);
     if dx == 0 && dy == 0 {
-        return SimPoint::new(0, sidestep_sign(id) * distance);
+        return SimPoint::new(0, i32::from(side) * distance);
     }
-    let side = i64::from(sidestep_sign(id));
+    let side = i64::from(side);
     let raw = SimPoint::new(
         i32::try_from(-dy * side).expect("sidestep x overflow"),
         i32::try_from(dx * side).expect("sidestep y overflow"),
+    );
+    SimPoint::new(0, 0).step_towards(raw, distance)
+}
+
+fn pursuit_arc_step(
+    side: i8,
+    from: SimPoint,
+    toward: SimPoint,
+    distance: i32,
+    forward: bool,
+) -> SimPoint {
+    debug_assert!(side == -1 || side == 1);
+    let dx = i64::from(toward.x) - i64::from(from.x);
+    let dy = i64::from(toward.y) - i64::from(from.y);
+    if dx == 0 && dy == 0 {
+        return perpendicular_step_with_side(side, from, toward, distance);
+    }
+    let side = i64::from(side);
+    let forward_sign = if forward { 1_i64 } else { -1_i64 };
+    let raw_x = dx * forward_sign - dy * side;
+    let raw_y = dy * forward_sign + dx * side;
+    let raw = SimPoint::new(
+        i32::try_from(raw_x).expect("pursuit arc x overflow"),
+        i32::try_from(raw_y).expect("pursuit arc y overflow"),
     );
     SimPoint::new(0, 0).step_towards(raw, distance)
 }
@@ -4108,6 +4263,51 @@ fn footprint_center_point(footprint: BuildingFootprint, cell_size: i32) -> SimPo
         i32::try_from((min_x + max_x) / 2).expect("building center x overflow"),
         i32::try_from((min_y + max_y) / 2).expect("building center y overflow"),
     )
+}
+
+fn point_attack_envelope_goal(source: SimPoint, target: SimPoint, max_range: i32) -> SimPoint {
+    debug_assert!(max_range >= 0);
+    let distance_sq = source.distance_sq(target);
+    if distance_sq <= square_i32(max_range) {
+        return source;
+    }
+    if max_range == 0 {
+        return target;
+    }
+    let floor_distance = distance_sq.isqrt();
+    let distance = floor_distance + u64::from(floor_distance * floor_distance < distance_sq);
+    let distance = i64::try_from(distance).expect("attack-envelope distance overflow");
+    let dx = i64::from(source.x) - i64::from(target.x);
+    let dy = i64::from(source.y) - i64::from(target.y);
+    let range = i64::from(max_range);
+    SimPoint::new(
+        i32::try_from(i64::from(target.x) + dx * range / distance)
+            .expect("attack-envelope x overflow"),
+        i32::try_from(i64::from(target.y) + dy * range / distance)
+            .expect("attack-envelope y overflow"),
+    )
+}
+
+fn closest_point_on_footprint(
+    point: SimPoint,
+    footprint: BuildingFootprint,
+    cell_size: i32,
+) -> SimPoint {
+    let min_x = footprint.min_x * cell_size;
+    let min_y = footprint.min_y * cell_size;
+    let max_x = (footprint.max_x() + 1) * cell_size;
+    let max_y = (footprint.max_y() + 1) * cell_size;
+    SimPoint::new(point.x.clamp(min_x, max_x), point.y.clamp(min_y, max_y))
+}
+
+fn building_attack_envelope_goal(
+    source: SimPoint,
+    footprint: BuildingFootprint,
+    max_range: i32,
+    cell_size: i32,
+) -> SimPoint {
+    let closest = closest_point_on_footprint(source, footprint, cell_size);
+    point_attack_envelope_goal(source, closest, max_range)
 }
 
 fn point_to_footprint_distance_sq(
@@ -4209,6 +4409,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     target: *entity.get::<TargetState>()?,
                     retaliation: *entity.get::<RetaliationState>()?,
                     status: *entity.get::<StatusState>()?,
+                    navigation: *entity.get::<NavigationState>()?,
                     spawn_tick: *entity.get::<SpawnTick>()?,
                 }))
             } else {
@@ -4258,6 +4459,13 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
                 hash.write_u64(unit.retaliation.attacked_tick.unwrap_or(u64::MAX));
                 hash_status_state(&mut hash, unit.status);
+                hash.write_u64(
+                    unit.navigation
+                        .avoidance_target
+                        .map_or(0, |target| target.0),
+                );
+                hash.write_i32(i32::from(unit.navigation.bypass_side));
+                hash.write_u8(unit.navigation.clear_ticks);
                 hash.write_u64(unit.spawn_tick.0);
             }
             CanonicalEntity::Building(building) => {
@@ -4451,6 +4659,7 @@ struct CanonicalUnit {
     target: TargetState,
     retaliation: RetaliationState,
     status: StatusState,
+    navigation: NavigationState,
     spawn_tick: SpawnTick,
 }
 

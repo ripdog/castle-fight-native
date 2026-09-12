@@ -74,7 +74,7 @@ SimPosition         fixed-point 2D authoritative position
 SimVelocity         fixed-point authoritative velocity
 CollisionRadius     gameplay collision/separation radius
 MovementProfile     speed/steering/pathing class
-NavigationState     current reachable/blocked/stuck metadata as needed
+NavigationState     canonical local-avoidance continuity for current pursuit as needed
 ```
 
 Orientation MAY be authoritative if attack arcs/facing affect gameplay; otherwise facing can remain presentation-derived.
@@ -256,6 +256,7 @@ Examples:
 
 - `Health` is modified by combat/effect resolution, not by arbitrary attack systems;
 - `SimPosition` is modified by movement resolution, not by target acquisition;
+- `NavigationState` is modified by movement resolution and may remember the retained target plus deterministic bypass-side/clear-progress state when local congestion affects later movement;
 - `TargetState` is modified by the targeting phase;
 - topology occupancy is modified by building structural resolution.
 

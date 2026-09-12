@@ -286,24 +286,20 @@ Need determine:
 
 Caging behavior is non-negotiable during these experiments.
 
-## 15. Open question — local crowd steering
+## 15. Partially resolved — local crowd steering
 
-Start simple.
+The current executable rule combines deterministic separation/repulsion, short-range relative-closing anticipation, canonical hard non-overlap reservation, and a tiny authoritative bypass-continuity state. Pursuit targets a legal attack **region** rather than an assigned formation slot, so melee/ranged groups can flow around occupied parts of unit/building attack envelopes naturally. A stable `SimId`-derived side breaks symmetric congestion; the side persists until direct progress has stayed clear for several ticks, preventing rear-of-group left/right jitter without turning dynamic units into strategic blockers.
 
-Candidates:
-
-- deterministic separation/repulsion;
-- reserved local occupancy;
-- velocity-obstacle/RVO-like system implemented with deterministic math;
-- lane-direction bias plus local collision solver.
-
-Evaluation criteria:
+This remains tunable rather than final WC3 compatibility behavior. Evaluate future changes against:
 
 - handles thousands of units;
 - does not produce excessive oscillation;
+- naturally fills available attack positions around both unit and building targets;
 - preserves cages/blocked geometry;
 - deterministic across worker counts;
-- acceptable melee packing/game feel.
+- acceptable melee/ranged packing and game feel.
+
+Reserved attack slots are deliberately not the default solution: they encode formations rather than local flow and do not generalize to arbitrary target sizes, attack ranges, or fights disrupted by other units. A fuller deterministic velocity-obstacle/RVO-like solver remains an option only if measured gameplay still requires it.
 
 Avoid importing a floating-point nondeterministic physics engine into authoritative movement merely for convenience.
 

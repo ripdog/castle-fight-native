@@ -343,7 +343,9 @@ Movement/combat interaction follows these initial rules:
 - an entity killed before movement does not move;
 - a stunned/disabled entity does not perform fresh target acquisition, resolve an ordinary attack, or intentionally move while the disable is active; timed stun uses the exclusive absolute-expiry rule defined in `16-abilities-spellcasting.md`;
 - due ballistic/siege impacts resolve after movement and use post-movement positions;
-- melee and other range-limited attackers pursue a reachable attack position for their selected target rather than steering blindly at the target through blockers;
+- melee and other range-limited attackers pursue a reachable point in the selected target's legal attack envelope rather than steering blindly at one target-center/perimeter point through blockers;
+- maximum range is a legality boundary, not a preferred standoff distance: an attacker already at any closer legal range remains there and may attack without backing away; a future positive minimum-range rule would define the envelope's inner boundary;
+- local congestion may move a pursuer tangentially around occupied parts of the envelope so multiple attackers can naturally surround a unit/building without assigned formation slots;
 - if no attack position is reachable, the target is invalid and is dropped/reacquired.
 
 Windup/backswing and range hysteresis remain compatibility details. Guaranteed-hit target-removal behavior and the initial integer travel-time rule are defined provisionally in §9.2 and may be revised only as an explicit simulation/gameplay rule change.
