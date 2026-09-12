@@ -297,6 +297,47 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(production_rows), 167)
         self.assertEqual({row["static_object_build_time"] for row in production_rows}, {"2"})
 
+    def test_production_corpse_profiles_keep_death_type_capabilities_and_decay_constants(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["production_unit_corpse_rows"], 167)
+        self.assertEqual(summary["production_unit_death_type_counts"], {"0": 38, "1": 2, "2": 24, "3": 103})
+        self.assertEqual(summary["normal_production_unit_death_type_counts"], {"0": 38, "1": 2, "2": 24, "3": 98})
+        self.assertEqual(summary["death_decay_constants"], {
+            "bone_decay": "25", "flesh_decay": "2", "structure_decay": "0.1",
+        })
+
+        with (self.resolved / "death-decay-constants.tsv").open(encoding="utf-8") as handle:
+            constants = {row["constant"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(constants["flesh_decay"]["base_value"], "2")
+        self.assertEqual(constants["flesh_decay"]["map_override"], "")
+        self.assertEqual(constants["flesh_decay"]["effective_source"], "base-default")
+        self.assertEqual(constants["bone_decay"]["base_value"], "88")
+        self.assertEqual(constants["bone_decay"]["map_override"], "25")
+        self.assertEqual(constants["structure_decay"]["base_value"], "30")
+        self.assertEqual(constants["structure_decay"]["map_override"], "0.1")
+
+        with (self.resolved / "production-unit-corpses.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        footman = rows["hfoo"]
+        self.assertEqual(footman["death_type"], "3")
+        self.assertEqual(footman["death_type_label"], "can-raise-decays")
+        self.assertEqual(footman["can_raise"], "1")
+        self.assertEqual(footman["does_decay"], "1")
+        self.assertEqual(footman["death_time"], "3.04")
+        self.assertEqual(footman["death_plus_flesh_plus_bones"], "30.04")
+
+        bear = rows["n029"]
+        self.assertEqual(bear["death_type"], "1")
+        self.assertEqual(bear["can_raise"], "1")
+        self.assertEqual(bear["does_decay"], "0")
+        self.assertEqual(bear["death_plus_flesh_plus_bones"], "")
+
+        light_tank = rows["h06T"]
+        self.assertEqual(light_tank["is_mechanical"], "1")
+        self.assertEqual(light_tank["death_type"], "2")
+        self.assertEqual(light_tank["can_raise"], "0")
+        self.assertEqual(light_tank["does_decay"], "1")
+
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["unresolved_base_objects"], [])

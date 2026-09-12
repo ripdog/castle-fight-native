@@ -1,0 +1,4 @@
+constant	misc_key	base_value	map_override	effective_value	effective_source
+flesh_decay	DecayTime	2		2	base-default
+bone_decay	BoneDecayTime	88	25	25	map-override
+structure_decay	StructureDecayTime	30	0.1	0.1	map-override

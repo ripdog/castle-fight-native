@@ -1,0 +1,168 @@
+building_rawcode	building_names	unit_rawcode	unit_names	campaign_only	is_mechanical	death_type	death_type_label	can_raise	does_decay	death_time	flesh_decay_time	bone_decay_time	death_plus_flesh_plus_bones	death_type_field	death_time_field
+h000	Barracks	hfoo	Footman	0	0	3	can-raise-decays	1	1	3.04	2	25	30.04	udea	udtm
+h002	Spider Egg Clutch	n00U	Black Spider	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h003	Sniper Nest	hrif	Sniper	0	0	3	can-raise-decays	1	1	1.7	2	25	28.7	udea	udtm
+h004	Weapon Lab	hmtm	Mortar	0	0	3	can-raise-decays	1	1	1.5	2	25	28.5	udea	udtm
+h007	Demon Gate	n000	Infernal	0	0	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h009	Dragon Nest	n001	Red Dragon	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h00B	Fountain of Wonders	e000	Faerie Dragon	0	0	0	cant-raise-no-decay	0	0	2.13	2	25		udea	udtm
+h00F	Spawning Grounds	n002	Naga Guardian	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h00J	Swamp Well	n004	Suumpmolk	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h00K	Hjordhejmen	n005	Warlock	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h00Q	Spider Egg Nest	n01N	Giant Spider	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h00R	Spider Egg Hatchery	n01W	Brood Mother	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h00S	Hunter's Hall	e001	Huntress	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h00T	Hall of Honor	n006	Blademaster	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h00V	Bloodelf War Academy	h00U	Bloodthirster	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h00X	Tower of Supreme Magic	h00W	Wizard	0	0	2	cant-raise-decays	0	1	2	2	25	29	udea	udtm
+h00Y	Furbolg Hut	n026	Furbolg Shaman	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h011	Nightelf Siege Factory	e002	Glaive Thrower	0	1	2	cant-raise-decays	0	1	3.34	2	25	30.34	udea	udtm
+h012	Furbolg Abode	n028	Furbolg Elder Shaman	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h013	Ancient of Growth	e006	Dryad	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h015	Gryphon Rock	h016	Gryphon Rider	0	0	0	cant-raise-no-decay	0	0	1.67	2	25		udea	udtm
+h01B	Reptile Pool	n007	Dragon Turtle	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h01C	Altar of Greed	n008	Succubus	0	0	3	can-raise-decays	1	1	3.23	2	25	30.23	udea	udtm
+h01D	Chaos Citadel	n009	Chaos Warrior	0	0	3	can-raise-decays	1	1	2.2	2	25	29.2	udea	udtm
+h01H	Ancient of Life	e009	Keeper of the Grove	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h01I	Lesser Demon Cage	n00A	Satyr	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h01J	Ancient of Eternity	e00C	Ancient Keeper	0	0	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h01K	Temple of Bone	u005	Necromancer	0	0	3	can-raise-decays	1	1	1.5	2	25	28.5	udea	udtm
+h01L	Haunted Mine	u001	Banshee	0	0	3	can-raise-decays	1	1	1.17	2	25	28.17	udea	udtm
+h01N	Crypt	h01U	Vampire	0	0	3	can-raise-decays	1	1	3.04	2	25	30.04	udea	udtm
+h01R	Rotting Hay Cart	n00B	Zombie	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h01S	Dragon Cemetery	u000	Frost Wyrm	0	0	0	cant-raise-no-decay	0	0	2	2	25		udea	udtm
+h01T	Slaughter House	n00E	Flesh Golem	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h01Y	Temple of Snakes	n00H	Winged Serpent	0	0	0	cant-raise-no-decay	0	0	2.1	2	25		udea	udtm
+h01Z	Naga Spring	n00S	Naga Siren	0	0	3	can-raise-decays	1	1	2.33	2	25	29.33	udea	udtm
+h020	Murloc Camp	n00I	Murloc Warrior	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h021	Murloc Village	n00J	Murloc Champion	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h022	Murloc Fortress	n00K	Murloc Assassin	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h023	Ancient of Slumber	n029	Bear	0	0	1	can-raise-no-decay	1	0	1.9	2	25		udea	udtm
+h024	Ancient of Hibernation	n02B	Ancient Bear	0	0	1	can-raise-no-decay	1	0	1.9	2	25		udea	udtm
+h025	Fountain of Blood	n00L	Blood Fiend	0	0	3	can-raise-decays	1	1	1.57	2	25	28.57	udea	udtm
+h026	Greater Demon Cage	z000	Quill Demon	0	0	3	can-raise-decays	1	1	1.7	2	25	28.7	udea	udtm
+h027	Emerald Dragon Roost	n02A	Emerald Dragon	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h028	Monolith	e00F	Mountain Giant	0	0	3	can-raise-decays	1	1	3.34	2	25	30.34	udea	udtm
+h029	Fighters' Hall	o002	Grunt	0	0	3	can-raise-decays	1	1	1.75	2	25	28.75	udea	udtm
+h02B	Shamanic Tent	o003	Shaman	0	0	3	can-raise-decays	1	1	3.37	2	25	30.37	udea	udtm
+h02H	Troll Hut	n00V	Troll Berserker	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h02I	Orcish Siege Factory	o001	Catapult	0	1	2	cant-raise-decays	0	1	3.34	2	25	30.34	udea	udtm
+h02K	Kodo Farm	o007	Kodo	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h02P	Falcon-Clan Encampment	o009	Wyvern Rider	0	0	0	cant-raise-no-decay	0	0	2.1	2	25		udea	udtm
+h02U	Advanced Fighters' Hall	o004	Veteran Grunt	0	0	3	can-raise-decays	1	1	1.75	2	25	28.75	udea	udtm
+h031	Superior Fighters' Hall	o005	Axemaster	0	0	3	can-raise-decays	1	1	1.75	2	25	28.75	udea	udtm
+h032	Royal Spawning Grounds	n00X	Naga Royal Guard	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h035	Melee Kodo Farm	o008	Melee Kodo Rider	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h036	Defensive Kodo Farm	o006	Defensive Kodo Rider	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h037	Chapel	h03B	Crusader	0	0	3	can-raise-decays	1	1	5.1	2	25	32.1	udea	udtm
+h038	Church	h03C	Paladin	0	0	3	can-raise-decays	1	1	5.1	2	25	32.1	udea	udtm
+h039	Stronghold	h03A	Defender	0	0	3	can-raise-decays	1	1	3.04	2	25	30.04	udea	udtm
+h03D	Ranger's Hall	e003	Ranger	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h03E	Amazon's Hall	e004	Amazon	0	0	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h03F	Hall of the Eldest	n00Y	Elder Blademaster	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h03G	Greater Chaos Citadel	n00Z	Chaos Champion	0	0	3	can-raise-decays	1	1	2.2	2	25	29.2	udea	udtm
+h03I	Azure Nest	n010	Azure Drake	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h03J	Ice Troll Voodoo Lounge	o00A	Ice Troll Witch Doctor	0	0	3	can-raise-decays	1	1	1.97	2	25	28.97	udea	udtm
+h03K	Ice Troll Hut	n015	Ice Troll Shadow Priest	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h03M	Defiled Granary	u007	Plague Bearer	0	0	3	can-raise-decays	1	1	2.17	2	25	29.17	udea	udtm
+h03S	Crystal Palace	n014	Ice Queen	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h03T	Ice Claws	n012	Wandigoo	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h03U	Igloo	n011	Hrimthrusa	0	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h03W	Glacier	n016	Magnataur	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h03X	Water Spring	h02W	Lesser Elemental Of Water	0	0	0	cant-raise-no-decay	0	0	1.5	2	25		udea	udtm
+h03Y	Golden Fountain	h02X	Elemental Of Water	0	0	0	cant-raise-no-decay	0	0	1.5	2	25		udea	udtm
+h03Z	Spellbound Fountain	h02Y	Greater Elemental Of Water	0	0	0	cant-raise-no-decay	0	0	1.5	2	25		udea	udtm
+h040	Rock Pile	h034	Elemental Of Earth	0	0	0	cant-raise-no-decay	0	0	1.5	2	25		udea	udtm
+h041	Greater Fissure	h03N	Greater Elemental Of Earth	0	0	0	cant-raise-no-decay	0	0	1.5	2	25		udea	udtm
+h042	Pillar of Globe-Lightning	h03P	Elemental Of Lightning	0	0	0	cant-raise-no-decay	0	0	9.2	2	25		udea	udtm
+h043	Frost Claws	n013	Ancient Wandigoo	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h044	Pillar of St. Elmo's Fire	h03R	Greater Elemental Of Lightning	0	0	0	cant-raise-no-decay	0	0	9.2	2	25		udea	udtm
+h045	Altar of Fire	h02Z	Elemental Of Fire	0	0	0	cant-raise-no-decay	0	0	1.5	2	25		udea	udtm
+h046	Altar of Blaze	u00F	Greater Elemental Of Fire	0	0	2	cant-raise-decays	0	1	1.67	2	25	28.67	udea	udtm
+h049	Snowy Rocks	n017	Frost Wolf	0	0	3	can-raise-decays	1	1	1.75	2	25	28.75	udea	udtm
+h04A	Trapped Gale	o00C	Lesser Elemental Of Wind	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h04B	Temple of Necromancy	u009	Mighty Necromancer	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h04C	Monument of Wind Stream	o00D	Elemental Of Wind	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h04D	Zephyros Memorial	o00E	Greater Elemental Of Wind	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h04E	Tower of Elder Knowledge	h03V	Master Of Elements	0	0	2	cant-raise-decays	0	1	2.8	2	25	29.8	udea	udtm
+h04F	Icy Rocks	n018	Polar Bear	0	0	3	can-raise-decays	1	1	1.97	2	25	28.97	udea	udtm
+h04L	Void Portal	n019	Void Walker	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h04M	Shadow Ancient	n01B	Shadow Drake	0	0	0	cant-raise-no-decay	0	0	2.13	2	25		udea	udtm
+h04N	Portal of the Abyss	n01A	Void Keeper	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h04O	Nether Ancient	n01D	Nether Drake	0	0	0	cant-raise-no-decay	0	0	2.13	2	25		udea	udtm
+h04P	Hell's Portal	n01E	Infernal Tank	0	1	2	cant-raise-decays	0	1	1.67	2	25	28.67	udea	udtm
+h04Q	Hell's Gate	n01F		0	1	2	cant-raise-decays	0	1	1.67	2	25	28.67	udea	udtm
+h04S	Felhound Shrine	n01G	Felhound	0	0	3	can-raise-decays	1	1	2.67	2	25	29.67	udea	udtm
+h04U	Demonic Statue	h04I	Incubus	0	0	3	can-raise-decays	1	1	1.77	2	25	28.77	udea	udtm
+h04V	Ancient of Battle	n01I	Corrupted Ent	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h04W	Corrupted Ancient of War	n01H	Corrupted Treant	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h04Z	Tainted Farm	n01K	Suffocated Zombie	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h054	Graveyard	h05H	Vampire Lord	0	0	3	can-raise-decays	1	1	3.04	2	25	30.04	udea	udtm
+h055	High Citadel of Necromancy	u00D	Lich King	0	0	2	cant-raise-decays	0	1	1.5	2	25	28.5	udea	udtm
+h05D	Gunner's Hall	h0A2	Heavy Gunner	0	0	3	can-raise-decays	1	1	1.7	2	25	28.7	udea	udtm
+h05E	Trapper's Hut	n01O	Troll Trapper	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h05F	Lernaean Fountain	n01P	Ancient Hydra	0	0	2	cant-raise-decays	0	1	2.33	2	25	29.33	udea	udtm
+h05J	Aircraft Factory	h06Q	Roterothopter	0	1	0	cant-raise-no-decay	0	0	2.67	2	25		udea	udtm
+h05M	Demolition Lab	n01V	Lunatic Goblin	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h05T	Gun Smith	z002	Flamegunner	0	0	3	can-raise-decays	1	1	1.7	2	25	28.7	udea	udtm
+h05U	Lumber Mill	n01T	Goblin Shredder	0	1	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h05V	Golem Factory	n01X	Iron Golem	0	1	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h05X	Tank Factory	h06T	Light Tank	0	1	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h069	Spare Part Heap	n01U	Gobbo Machinist	0	1	0	cant-raise-no-decay	0	0	2.5	2	25		udea	udtm
+h06D	Forest Trapper's Hole	n02G	Forest Troll Trapper	0	0	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h06I	Infostealer's Place	o00F	Infostealer	0	0	3	can-raise-decays	1	1	3.37	2	25	30.37	udea	udtm
+h06L	Modern Igloo	n02I	Angry Hrimthrusa	0	0	2	cant-raise-decays	0	1	2	2	25	29	udea	udtm
+h06O	Serenity	e00E	Twins	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h06Y	Dragonhawk Portal	n01Y	Dragonhawk Rider	0	0	0	cant-raise-no-decay	0	0	2.1	2	25		udea	udtm
+h06Z	Protection Center	n02J	Goliath	0	1	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+h070	Highelf Siege Factory	e005	Ballista	0	1	2	cant-raise-decays	0	1	3.34	2	25	30.34	udea	udtm
+h071	Enigma	e00G	Visioneer	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h072	Holy Altar	h074	Holy Warrior	0	0	2	cant-raise-decays	0	1	5.1	2	25	32.1	udea	udtm
+h077	Rocket Lab	n02M	Goblin Rocketeer	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h07D	Moon Altar	e00J	Sage Druid	0	0	3	can-raise-decays	1	1	4.335	2	25	31.335	udea	udtm
+h07L	Guild of Shadows	n020	Royal Assassin	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h07M	House of Shadows	n01Z	Assassin	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h07N	Scorched Mansion	e00A	Avatar of Vengeance	0	0	0	cant-raise-no-decay	0	0	1	2	25		udea	udtm
+h07O	Pillaged Hut	e00B	Avenging Spirit	0	0	0	cant-raise-no-decay	0	0	1.13	2	25		udea	udtm
+h07Q	Blood Shaman Tent	o00G	Blood Shaman	0	0	3	can-raise-decays	1	1	3.37	2	25	30.37	udea	udtm
+h080	Temple of Riptide	n03U	Winged Riptide Serpent	0	0	0	cant-raise-no-decay	0	0	2.1	2	25		udea	udtm
+h088	Moon Shrine	e007	Druid	0	0	3	can-raise-decays	1	1	4.335	2	25	31.335	udea	udtm
+h08X	Archery Range	n022	Archer	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h08Y	Archery Tower	n023	Master Archer	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h092	Spellbreaker Kodo Farm	o00B	Spellbreaker Kodo Rider	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+h097	Precious Golem Factory	n024	Adamant Golem	0	1	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h09B	Heavy Tank Factory	h06S	Heavy Tank	0	1	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h09H	Rocket Tank Factory	h098	Rocket Tank	0	1	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h09I	Assault Tank Factory	h099	Assault Tank	0	1	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h09J	Mine Layer Factory	h06U	Mine Layer	0	1	0	cant-raise-no-decay	0	0	1	2	25		udea	udtm
+h09L	Bomber Factory	h06R	Gyrocopter	0	1	0	cant-raise-no-decay	0	0	2.67	2	25		udea	udtm
+h09P	Arsenal	z003	Flamegunner Sergeant	0	0	3	can-raise-decays	1	1	1.7	2	25	28.7	udea	udtm
+h09X	School of Wizardry	h07B	Sorceress	0	0	3	can-raise-decays	1	1	1.87	2	25	28.87	udea	udtm
+h09Y	Corrupted Ancient of Annihilation	n027	Corrupted Annihilator	0	0	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+h0A1	Marksmen's Encampment	h05C	Marksman	0	0	3	can-raise-decays	1	1	1.7	2	25	28.7	udea	udtm
+h0Z1	Mudcrab Burrow	n0Z1	Mudcrab	1	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h0Z2	Rockcrab Burrow	n0Z2	Rock Crab	1	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h0Z3	Spinecrab Tidepool	n0Z3	Spiny Crab	1	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h0Z4	Hermit Mound	n0Z4	Hermit Crab	1	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+h0Z7	Reef Guardian	n0Z7	Giant Reef Crab	1	0	3	can-raise-decays	1	1	2	2	25	29	udea	udtm
+n02N	Fire Gnoll Hut	n02T	Fire Gnoll	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n02O	Den of the Ogre Lord	n02Y	Ogre Lord	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n02P	Gnoll Tent	n02S	Gnoll	0	0	3	can-raise-decays	1	1	2.2	2	25	29.2	udea	udtm
+n02Q	Harpy Nest	n02W	Harpy	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+n02R	Monstrous Sandkin Burrow	n035	Monstrous Sandkin	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n031	Nest of Harpy Matriarch	n034	Harpies' Matriarch	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+n033	Ogre Den	n02X	Ogre	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n036	Quillboar Yard	n02V	Quillboar	0	0	3	can-raise-decays	1	1	1.37	2	25	28.37	udea	udtm
+n037	Razormane Abode	n02U	Razormane	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n038	Salamander Hatchery	n02Z	Salamander	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n039	Sandkin Burrow	n030	Sandkin	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n03B	Nest of Harpy Witch	n032	Harpy Witch	0	0	0	cant-raise-no-decay	0	0	3	2	25		udea	udtm
+n03D	Bamboo Dojo	n03E	Sagepaw Monk	0	0	3	can-raise-decays	1	1	1.37	2	25	28.37	udea	udtm
+n03F	Brew Hut	n03G	Ironpaw Militia	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n03H	Temple of the Wandering Spark	n03I	Echofoot Mystic	0	0	3	can-raise-decays	1	1	1.37	2	25	28.37	udea	udtm
+n03K	Fighting Tavern	n03J	Ironpaw Guardian	0	0	3	can-raise-decays	1	1	3	2	25	30	udea	udtm
+n03L	Jade Shrine	n03M	Jade Elder	0	0	3	can-raise-decays	1	1	1.37	2	25	28.37	udea	udtm
+n03N	Pandaren Siege Workshop	o00H	Brewshock Catapult	0	1	0	cant-raise-no-decay	0	0	3.34	2	25		udea	udtm
+n03P	Temple of Ten Thousand Drinks	n03O	Drunken Brewmaster	0	0	2	cant-raise-decays	0	1	3	2	25	30	udea	udtm
+n03Q	Cloud Hangar	h07S	Cloud Ship	0	1	0	cant-raise-no-decay	0	0	1.67	2	25		udea	udtm
+n03S	Sagepaw Sanctum	n03T	Sagepaw Soulkeeper	0	0	3	can-raise-decays	1	1	1.37	2	25	28.37	udea	udtm

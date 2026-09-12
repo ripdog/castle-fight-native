@@ -122,6 +122,24 @@
   "building_catalog_upgrade_edges": 90,
   "building_catalog_semantic_rows": 240,
   "building_catalog_two_second_production_build_rows": 167,
+  "production_unit_corpse_rows": 167,
+  "production_unit_death_type_counts": {
+    "0": 38,
+    "1": 2,
+    "2": 24,
+    "3": 103
+  },
+  "normal_production_unit_death_type_counts": {
+    "0": 38,
+    "1": 2,
+    "2": 24,
+    "3": 98
+  },
+  "death_decay_constants": {
+    "bone_decay": "25",
+    "flesh_decay": "2",
+    "structure_decay": "0.1"
+  },
   "notes": [
     "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -133,6 +151,7 @@
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
     "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
     "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
-    "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time"
+    "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
+    "production-unit-corpses.tsv retains Warcraft Death Type capability bits and per-unit Death Time beside the effective flesh/bone decay constants; no-decay removal behavior is not guessed"
   ]
 }

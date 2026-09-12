@@ -661,6 +661,17 @@ def main() -> None:
     editor_strings = world_edit_strings(source_root / "enus" / "ui" / "worldeditstrings.txt")
     editor_strings.update(world_edit_strings(source_root / "enus" / "ui" / "worldeditgamestrings.txt"))
     build_info = parse_build_info(source_root / "install" / ".build.info")
+    base_misc = parse_profile(source_root / "base" / "units" / "miscdata.txt").get("Misc", {})
+    map_misc_path = map_root / "war3mapMisc.txt"
+    map_misc = parse_profile(map_misc_path).get("Misc", {}) if map_misc_path.exists() else {}
+
+    def effective_misc_value(key: str) -> tuple[str, str, str]:
+        base_value = ci_get(base_misc, key)
+        map_value = ci_get(map_misc, key)
+        effective = map_value if map_value is not None else base_value
+        if effective is None:
+            raise ValueError(f"missing Warcraft misc constant: {key}")
+        return str(base_value or ""), str(map_value or ""), str(effective)
 
     pathing_textures: dict[str, dict[str, Any]] = {}
     for path in sorted((source_root / "base" / "pathtextures").glob("*.tga")):
@@ -1792,6 +1803,82 @@ def main() -> None:
         production_building_rows,
     )
 
+    # Resolve global death/decay constants from Blizzard MiscData plus the
+    # map's war3mapMisc overrides. Keep base and override values side-by-side
+    # so native content can distinguish engine defaults from map-authored
+    # compatibility changes.
+    death_constant_specs = [
+        ("flesh_decay", "DecayTime"),
+        ("bone_decay", "BoneDecayTime"),
+        ("structure_decay", "StructureDecayTime"),
+    ]
+    death_constants: dict[str, str] = {}
+    death_constant_rows: list[list[Any]] = []
+    for name, misc_key in death_constant_specs:
+        base_value, map_value, effective_value = effective_misc_value(misc_key)
+        death_constants[name] = effective_value
+        death_constant_rows.append([
+            name, misc_key, base_value, map_value, effective_value,
+            "map-override" if map_value else "base-default",
+        ])
+    write_tsv(
+        output / "death-decay-constants.tsv",
+        ["constant", "misc_key", "base_value", "map_override", "effective_value", "effective_source"],
+        death_constant_rows,
+    )
+
+    death_type_labels = {
+        0: "cant-raise-no-decay",
+        1: "can-raise-no-decay",
+        2: "cant-raise-decays",
+        3: "can-raise-decays",
+    }
+    flesh_decay = numeric(death_constants["flesh_decay"])
+    bone_decay = numeric(death_constants["bone_decay"])
+    if flesh_decay is None or bone_decay is None:
+        raise ValueError("death/decay constants must be numeric")
+
+    production_corpse_rows: list[list[Any]] = []
+    death_type_counts: Counter[int] = Counter()
+    normal_death_type_counts: Counter[int] = Counter()
+    for meta in metadata_rows:
+        unit_rawcode = meta["unit_rawcode"]
+        if not unit_rawcode:
+            continue
+        race = race_by_building[meta["building_rawcode"]]
+        death_type_value = field_lookup(rows_by_object, "units", unit_rawcode, "udea", 0, 0)
+        death_time_value = field_lookup(rows_by_object, "units", unit_rawcode, "udtm", 0, 0)
+        death_type_number = numeric(death_type_value)
+        death_time = numeric(death_time_value)
+        if death_type_number is None or death_type_number != int(death_type_number) or int(death_type_number) not in death_type_labels:
+            raise ValueError(f"invalid death type for production unit {unit_rawcode}: {death_type_value!r}")
+        if death_time is None or death_time < 0:
+            raise ValueError(f"invalid death time for production unit {unit_rawcode}: {death_time_value!r}")
+        death_type = int(death_type_number)
+        can_raise = bool(death_type & 0x1)
+        does_decay = bool(death_type & 0x2)
+        death_type_counts[death_type] += 1
+        if race["campaign_only"] != "1":
+            normal_death_type_counts[death_type] += 1
+        decay_sequence_sum = death_time + flesh_decay + bone_decay if does_decay else None
+        production_corpse_rows.append([
+            meta["building_rawcode"], meta["building_names"], unit_rawcode, meta["unit_names"],
+            race["campaign_only"], meta["is_mechanical"], death_type, death_type_labels[death_type],
+            int(can_raise), int(does_decay), value_as_text(death_time),
+            value_as_text(flesh_decay), value_as_text(bone_decay), value_as_text(decay_sequence_sum),
+            "udea", "udtm",
+        ])
+    write_tsv(
+        output / "production-unit-corpses.tsv",
+        [
+            "building_rawcode", "building_names", "unit_rawcode", "unit_names", "campaign_only", "is_mechanical",
+            "death_type", "death_type_label", "can_raise", "does_decay", "death_time",
+            "flesh_decay_time", "bone_decay_time", "death_plus_flesh_plus_bones",
+            "death_type_field", "death_time_field",
+        ],
+        production_corpse_rows,
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -1893,6 +1980,12 @@ def main() -> None:
         "building_catalog_upgrade_edges": sum(len(values) for values in upgrades_to.values()),
         "building_catalog_semantic_rows": len(semantics_by_building),
         "building_catalog_two_second_production_build_rows": two_second_production_build_count,
+        "production_unit_corpse_rows": len(production_corpse_rows),
+        "production_unit_death_type_counts": {str(key): death_type_counts[key] for key in sorted(death_type_counts)},
+        "normal_production_unit_death_type_counts": {
+            str(key): normal_death_type_counts[key] for key in sorted(normal_death_type_counts)
+        },
+        "death_decay_constants": dict(sorted(death_constants.items())),
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -1905,6 +1998,7 @@ def main() -> None:
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
+            "production-unit-corpses.tsv retains Warcraft Death Type capability bits and per-unit Death Time beside the effective flesh/bone decay constants; no-decay removal behavior is not guessed",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
