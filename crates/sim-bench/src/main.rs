@@ -5,13 +5,15 @@ use std::{
 };
 
 use castle_fight_sim::{
-    Simulation, SimulationConfig, TickTimings, populate_dense_cage_battle, populate_lane_battle,
+    Simulation, SimulationConfig, TickTimings, populate_crossing_crowd, populate_dense_cage_battle,
+    populate_lane_battle,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Scenario {
     Lane,
     Cage,
+    Crowd,
 }
 
 impl Scenario {
@@ -19,6 +21,7 @@ impl Scenario {
         match self {
             Self::Lane => "lane",
             Self::Cage => "cage",
+            Self::Crowd => "crowd",
         }
     }
 }
@@ -35,7 +38,7 @@ struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            scenarios: vec![Scenario::Lane, Scenario::Cage],
+            scenarios: vec![Scenario::Lane, Scenario::Cage, Scenario::Crowd],
             units: vec![1_000, 5_000, 10_000],
             workers: vec![1, 2, 4],
             ticks: 200,
@@ -59,7 +62,7 @@ fn main() {
         println!();
         println!("scenario={}", scenario.name());
         println!(
-            "{:>8} {:>7} {:>9} {:>9} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>18}",
+            "{:>8} {:>7} {:>9} {:>9} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>18}",
             "units",
             "workers",
             "ms/tick",
@@ -68,6 +71,7 @@ fn main() {
             "spatial",
             "target",
             "combat",
+            "crowd",
             "move",
             "checksum",
             "state-hash",
@@ -91,7 +95,7 @@ fn main() {
                 }
 
                 println!(
-                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>18x}{}",
+                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>18x}{}",
                     units,
                     workers,
                     result.ms_per_tick,
@@ -100,6 +104,7 @@ fn main() {
                     result.phase_ms.snapshot_and_spatial,
                     result.phase_ms.targeting,
                     result.phase_ms.combat,
+                    result.phase_ms.crowd_separation,
                     result.phase_ms.movement_and_commit,
                     result.phase_ms.checksum,
                     result.checksum,
@@ -125,6 +130,7 @@ struct PhaseMs {
     snapshot_and_spatial: f64,
     targeting: f64,
     combat: f64,
+    crowd_separation: f64,
     movement_and_commit: f64,
     checksum: f64,
 }
@@ -148,6 +154,7 @@ fn run_case(
     match scenario {
         Scenario::Lane => populate_lane_battle(&mut simulation, units),
         Scenario::Cage => populate_dense_cage_battle(&mut simulation, units),
+        Scenario::Crowd => populate_crossing_crowd(&mut simulation, units),
     }
 
     for _ in 0..warmup {
@@ -181,6 +188,7 @@ fn accumulate_timings(total: &mut TickTimings, tick: TickTimings) {
     total.snapshot_and_spatial += tick.snapshot_and_spatial;
     total.targeting += tick.targeting;
     total.combat += tick.combat;
+    total.crowd_separation += tick.crowd_separation;
     total.movement_and_commit += tick.movement_and_commit;
     total.checksum += tick.checksum;
     total.total += tick.total;
@@ -192,6 +200,7 @@ fn average_phase_ms(total: TickTimings, ticks: u64) -> PhaseMs {
         snapshot_and_spatial: ms_per_tick(total.snapshot_and_spatial, ticks),
         targeting: ms_per_tick(total.targeting, ticks),
         combat: ms_per_tick(total.combat, ticks),
+        crowd_separation: ms_per_tick(total.crowd_separation, ticks),
         movement_and_commit: ms_per_tick(total.movement_and_commit, ticks),
         checksum: ms_per_tick(total.checksum, ticks),
     }
@@ -223,7 +232,7 @@ fn parse_args() -> Args {
             }
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
-                println!("  --scenario lane,cage");
+                println!("  --scenario lane,cage,crowd");
                 println!("  --units 1000,5000,10000");
                 println!("  --workers 1,2,4,8");
                 println!("  --ticks 200");
@@ -248,6 +257,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
         .map(|part| match part {
             "lane" => Scenario::Lane,
             "cage" => Scenario::Cage,
+            "crowd" => Scenario::Crowd,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()

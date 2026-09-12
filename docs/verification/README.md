@@ -17,6 +17,7 @@ Implemented:
 - sticky individual target acquisition with retaliation-on-attack behavior;
 - reachable attack-position filtering and passive-building fallback around cages;
 - deterministic greedy pursuit with A* fallback around blockers;
+- deterministic two-stage crowd separation using immutable movement intents plus local spatial queries;
 - melee attack cooldown/damage resolution;
 - spawn-tick attack suppression and death-before-later-actions ordering;
 - production buildings with deterministic bounded expanding-spiral spawn search;
@@ -24,12 +25,12 @@ Implemented:
 - dedicated Rayon worker pool configurable per simulation instance;
 - cross-worker determinism tests;
 - phase-level tick timing diagnostics;
-- open-lane and dense-cage release benchmarks;
+- open-lane, dense-cage, and crossing-crowd release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos.
 
 Not implemented yet:
 
-- dynamic unit collision/separation and dense crowd resolution;
+- richer unit collision shapes / physically stronger crowd resolution beyond the current separation pass;
 - builder control/items;
 - building attacks, mana, automatic abilities, or legendary abilities;
 - ranged/ballistic/bounce delivery;
@@ -46,7 +47,7 @@ The benchmark remains an architectural scaling probe, not a final game performan
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release -p castle-fight-sim-bench -- \
-  --scenario lane,cage --units 1000,5000,10000 \
+  --scenario lane,cage,crowd --units 1000,5000,10000 \
   --workers 1,2,4,8 --warmup 5 --ticks 20
 ```
 
@@ -108,6 +109,21 @@ This is roughly a **34x improvement** in single-worker cage targeting time and a
 
 At this point checksum generation itself is a visible part of the synthetic tick budget (~1.45 ms at 10,000 units). That is acceptable for verification but suggests production builds should not necessarily compute a full canonical checksum every live tick; periodic checkpoints or incremental/subsystem hashes should be evaluated later without weakening determinism testing.
 
+## Crowd-separation baseline — 2026-09-12
+
+The crowd fixture places two dense opposing populations into an interpenetrating central region. Movement is computed from one immutable snapshot, then a second data-parallel pass applies bounded deterministic separation using a dedicated small-cell spatial grid. Exact position ties use stable `SimId`-derived directions.
+
+| Units | Workers | ms/tick | Crowd separation ms/tick | Final checksum |
+| ---: | ---: | ---: | ---: | --- |
+| 1,000 | 1 | 0.843 | 0.450 | `f11921aedc30f294` |
+| 1,000 | 8 | 0.583 | 0.176 | `f11921aedc30f294` |
+| 5,000 | 1 | 5.321 | 2.930 | `5156a03137d21ba7` |
+| 5,000 | 8 | 2.982 | 0.966 | `5156a03137d21ba7` |
+| 10,000 | 1 | 10.574 | 6.057 | `ed78153b189f4ee3` |
+| 10,000 | 8 | 5.382 | 1.711 | `ed78153b189f4ee3` |
+
+The 10,000-unit separation pass scales by about **3.5x** from one to eight workers while preserving the exact state hash. This is intentionally a hostile overlap fixture rather than a representative match; it gives us a concrete regression target as local collision rules become richer.
+
 ## Current interpretation
 
-The core deterministic architecture remains viable under the first deliberately hostile topology workload. The next meaningful risks are dynamic crowd separation/collision, repeated topology mutations, arbitrary-target pursuit/A* fallback frequency, production churn, and attack/projectile/ability density. Each should receive a deliberately adversarial benchmark before broader game content is built.
+The core deterministic architecture remains viable under deliberately hostile topology and crowd workloads. The next meaningful risks are repeated topology mutations, arbitrary-target pursuit/A* fallback frequency, production churn, and attack/projectile/ability density. Each should receive a deliberately adversarial benchmark before broader game content is built.

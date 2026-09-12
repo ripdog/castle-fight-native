@@ -230,6 +230,10 @@ The game needs deterministic rules for:
 
 The first implementation SHOULD prefer simple, testable steering over physically realistic pushing.
 
+The verification implementation uses a deterministic two-stage crowd pass. Units first compute movement intents from one immutable phase snapshot. A second data-parallel pass queries a small local spatial grid around those intended positions and applies a bounded separation offset. Integer accumulation and stable `SimId`-derived directions resolve exact overlaps, so worker scheduling and neighbor enumeration order cannot alter results. The final separated position is accepted only if it remains traversable and in the unit's original connected navigation component.
+
+The initial separation distance/strength are verification parameters rather than frozen gameplay constants; they should be tuned from measured congestion/game-feel fixtures.
+
 ## 15. No hidden anti-stuck teleportation
 
 Any anti-stuck behavior capable of crossing blockers can destroy caging and other positional strategies.
@@ -310,4 +314,7 @@ Spatial/navigation tests MUST eventually include:
 13. a fully congested search region causes the production attempt to fail with no backlog;
 14. spawn search does not special-case cage connectivity and may select a valid position across an enclosure boundary if reached by the bounded spiral;
 15. builder standing in a lane neither blocks nor steers combat units;
-16. builder cannot complete a cage and is absent from ordinary combat target queries.
+16. builder cannot complete a cage and is absent from ordinary combat target queries;
+17. exact-overlap crowd separation is deterministic across worker counts;
+18. separation cannot move a unit through blocked topology or into another disconnected component;
+19. dense opposing crowds remain benchmarked separately from ordinary lane movement.

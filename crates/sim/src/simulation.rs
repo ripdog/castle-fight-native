@@ -24,6 +24,8 @@ pub struct SimulationConfig {
     pub navigation_min: NavCell,
     pub navigation_max: NavCell,
     pub target_pursuit_extra_range: i32,
+    pub unit_separation_distance: i32,
+    pub max_separation_per_tick: i32,
     pub team_objective: [SimPoint; 2],
 }
 
@@ -35,6 +37,8 @@ impl Default for SimulationConfig {
             navigation_min: NavCell::new(0, -64),
             navigation_max: NavCell::new(120, 64),
             target_pursuit_extra_range: 3 * SUBUNITS_PER_WORLD_UNIT,
+            unit_separation_distance: 3 * SUBUNITS_PER_WORLD_UNIT / 4,
+            max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT / 16,
             team_objective: [
                 SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
                 SimPoint::new(0, 0),
@@ -50,6 +54,7 @@ pub struct TickTimings {
     pub snapshot_and_spatial: Duration,
     pub targeting: Duration,
     pub combat: Duration,
+    pub crowd_separation: Duration,
     pub movement_and_commit: Duration,
     pub checksum: Duration,
     pub total: Duration,
@@ -105,6 +110,8 @@ impl Simulation {
         assert!(config.spatial_cell_size > 0);
         assert!(config.navigation_cell_size > 0);
         assert!(config.target_pursuit_extra_range >= 0);
+        assert!(config.unit_separation_distance >= 0);
+        assert!(config.max_separation_per_tick >= 0);
 
         let pool = ThreadPoolBuilder::new()
             .num_threads(workers)
@@ -274,7 +281,7 @@ impl Simulation {
         let combat = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        self.resolve_movement(
+        let crowd_separation = self.resolve_movement(
             &units,
             &buildings,
             &unit_health,
@@ -357,6 +364,7 @@ impl Simulation {
             snapshot_and_spatial,
             targeting,
             combat,
+            crowd_separation,
             movement_and_commit,
             checksum: checksum_time,
             total: tick_start.elapsed(),
@@ -847,65 +855,234 @@ impl Simulation {
         unit_health: &[i32],
         building_health: &[i32],
         positions: &mut [SimPoint],
-    ) {
-        for (index, unit) in units.iter().enumerate() {
-            if unit_health[index] <= 0 || unit.movement.speed_per_tick == 0 {
-                continue;
-            }
-            let source_cell = self.topology.cell_of_point(positions[index]);
-
-            let target_cell = unit.target.and_then(|target_id| {
-                if let Some(target_index) = find_unit_index(units, target_id) {
-                    if unit_health[target_index] <= 0 {
-                        return None;
-                    }
-                    let target_position = positions[target_index];
-                    if positions[index].distance_sq(target_position) <= unit.attack.range_sq() {
-                        return Some(source_cell);
-                    }
-                    let cell = self.topology.cell_of_point(target_position);
-                    self.topology
-                        .same_component(source_cell, cell)
-                        .then_some(cell)
-                } else if let Some(target_index) = find_building_index(buildings, target_id) {
-                    if building_health[target_index] <= 0 {
-                        return None;
-                    }
-                    if point_to_footprint_distance_sq(
-                        positions[index],
-                        buildings[target_index].footprint,
-                        self.config.navigation_cell_size,
-                    ) <= unit.attack.range_sq()
-                    {
-                        return Some(source_cell);
-                    }
-                    self.topology.nearest_reachable_perimeter_cell(
-                        source_cell,
-                        buildings[target_index].footprint,
+    ) -> Duration {
+        let desired_positions: Vec<_> = self.pool.install(|| {
+            units
+                .par_iter()
+                .enumerate()
+                .map(|(index, unit)| {
+                    self.desired_position(
+                        index,
+                        unit,
+                        units,
+                        buildings,
+                        unit_health,
+                        building_health,
                     )
-                } else {
-                    None
-                }
-            });
+                })
+                .collect()
+        });
 
-            let next_cell = match target_cell {
-                Some(cell) if cell == source_cell => continue,
-                Some(cell) => self.topology.pursuit_step(source_cell, cell),
-                None => self.topology.objective_step(unit.team.0, source_cell),
-            };
-            let Some(next_cell) = next_cell else {
-                continue;
-            };
-            let target_position = self.topology.center_of_cell(next_cell);
-            let candidate =
-                positions[index].step_towards(target_position, unit.movement.speed_per_tick);
-            if !self
-                .topology
-                .is_blocked(self.topology.cell_of_point(candidate))
-            {
-                positions[index] = candidate;
-            }
+        let separation_start = Instant::now();
+        let separated_positions =
+            self.apply_crowd_separation(units, unit_health, &desired_positions);
+        let crowd_separation = separation_start.elapsed();
+        positions.copy_from_slice(&separated_positions);
+        crowd_separation
+    }
+
+    fn desired_position(
+        &self,
+        index: usize,
+        unit: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        unit_health: &[i32],
+        building_health: &[i32],
+    ) -> SimPoint {
+        let current = unit.position;
+        if unit_health[index] <= 0 || unit.movement.speed_per_tick == 0 {
+            return current;
         }
+        let source_cell = self.topology.cell_of_point(current);
+
+        let target_cell = unit.target.and_then(|target_id| {
+            if let Some(target_index) = find_unit_index(units, target_id) {
+                if unit_health[target_index] <= 0 {
+                    return None;
+                }
+                let target_position = units[target_index].position;
+                if current.distance_sq(target_position) <= unit.attack.range_sq() {
+                    return Some(source_cell);
+                }
+                let cell = self.topology.cell_of_point(target_position);
+                self.topology
+                    .same_component(source_cell, cell)
+                    .then_some(cell)
+            } else if let Some(target_index) = find_building_index(buildings, target_id) {
+                if building_health[target_index] <= 0 {
+                    return None;
+                }
+                if point_to_footprint_distance_sq(
+                    current,
+                    buildings[target_index].footprint,
+                    self.config.navigation_cell_size,
+                ) <= unit.attack.range_sq()
+                {
+                    return Some(source_cell);
+                }
+                self.topology.nearest_reachable_perimeter_cell(
+                    source_cell,
+                    buildings[target_index].footprint,
+                )
+            } else {
+                None
+            }
+        });
+
+        let next_cell = match target_cell {
+            Some(cell) if cell == source_cell => return current,
+            Some(cell) => self.topology.pursuit_step(source_cell, cell),
+            None => self.topology.objective_step(unit.team.0, source_cell),
+        };
+        let Some(next_cell) = next_cell else {
+            return current;
+        };
+        let target_position = self.topology.center_of_cell(next_cell);
+        let candidate = current.step_towards(target_position, unit.movement.speed_per_tick);
+        let candidate_cell = self.topology.cell_of_point(candidate);
+        if self.topology.is_blocked(candidate_cell)
+            || !self.topology.same_component(source_cell, candidate_cell)
+        {
+            current
+        } else {
+            candidate
+        }
+    }
+
+    fn apply_crowd_separation(
+        &self,
+        units: &[UnitSnapshot],
+        unit_health: &[i32],
+        desired_positions: &[SimPoint],
+    ) -> Vec<SimPoint> {
+        let separation_distance = self.config.unit_separation_distance;
+        let max_separation = self.config.max_separation_per_tick;
+        if separation_distance == 0 || max_separation == 0 {
+            return desired_positions.to_vec();
+        }
+
+        let collision_grid = SpatialGrid::build(
+            separation_distance.max(1),
+            desired_positions
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| unit_health[*index] > 0)
+                .filter_map(|(index, position)| {
+                    let component = self
+                        .topology
+                        .component_id(self.topology.cell_of_point(*position))?;
+                    Some((SpatialPartition::new(0, component), index, *position))
+                }),
+        );
+        let separation_sq = square_i32(separation_distance);
+
+        self.pool.install(|| {
+            units
+                .par_iter()
+                .enumerate()
+                .map(|(index, unit)| {
+                    if unit_health[index] <= 0 {
+                        return desired_positions[index];
+                    }
+                    let desired = desired_positions[index];
+                    let current_cell = self.topology.cell_of_point(unit.position);
+                    let Some(component) = self.topology.component_id(current_cell) else {
+                        return desired;
+                    };
+                    let partition = SpatialPartition::new(0, component);
+                    let mut push_x = 0_i64;
+                    let mut push_y = 0_i64;
+                    let mut overlaps = 0_i64;
+
+                    collision_grid.for_each_candidate(
+                        partition,
+                        desired,
+                        separation_distance,
+                        |other_index| {
+                            if other_index == index || unit_health[other_index] <= 0 {
+                                return;
+                            }
+                            let other = desired_positions[other_index];
+                            let distance_sq = desired.distance_sq(other);
+                            if distance_sq >= separation_sq {
+                                return;
+                            }
+
+                            let dx = i64::from(desired.x) - i64::from(other.x);
+                            let dy = i64::from(desired.y) - i64::from(other.y);
+                            let (direction_x, direction_y, axis_distance) = if dx == 0 && dy == 0 {
+                                let (x, y) =
+                                    exact_overlap_direction(unit.id, units[other_index].id);
+                                (i64::from(x), i64::from(y), 0_i64)
+                            } else {
+                                (dx.signum(), dy.signum(), dx.abs().max(dy.abs()))
+                            };
+                            let penetration =
+                                (i64::from(separation_distance) - axis_distance).max(1);
+                            push_x += direction_x * penetration;
+                            push_y += direction_y * penetration;
+                            overlaps += 1;
+                        },
+                    );
+
+                    if overlaps == 0 {
+                        return desired;
+                    }
+                    push_x /= overlaps;
+                    push_y /= overlaps;
+                    let raw_offset = SimPoint::new(
+                        i32::try_from(push_x).expect("crowd x offset overflow"),
+                        i32::try_from(push_y).expect("crowd y offset overflow"),
+                    );
+                    let offset = SimPoint::new(0, 0).step_towards(raw_offset, max_separation);
+                    self.valid_separated_position(current_cell, desired, offset)
+                })
+                .collect()
+        })
+    }
+
+    fn valid_separated_position(
+        &self,
+        original_cell: NavCell,
+        desired: SimPoint,
+        offset: SimPoint,
+    ) -> SimPoint {
+        let candidates = [
+            SimPoint::new(
+                desired
+                    .x
+                    .checked_add(offset.x)
+                    .expect("separation x overflow"),
+                desired
+                    .y
+                    .checked_add(offset.y)
+                    .expect("separation y overflow"),
+            ),
+            SimPoint::new(
+                desired
+                    .x
+                    .checked_add(offset.x)
+                    .expect("separation x overflow"),
+                desired.y,
+            ),
+            SimPoint::new(
+                desired.x,
+                desired
+                    .y
+                    .checked_add(offset.y)
+                    .expect("separation y overflow"),
+            ),
+            desired,
+        ];
+
+        candidates
+            .into_iter()
+            .find(|candidate| {
+                let cell = self.topology.cell_of_point(*candidate);
+                !self.topology.is_blocked(cell) && self.topology.same_component(original_cell, cell)
+            })
+            .unwrap_or(desired)
     }
 }
 
@@ -1050,6 +1227,18 @@ fn find_building_index(buildings: &[BuildingSnapshot], id: SimId) -> Option<usiz
     buildings
         .binary_search_by_key(&id, |building| building.id)
         .ok()
+}
+
+fn square_i32(value: i32) -> u64 {
+    let value = i64::from(value);
+    (value * value) as u64
+}
+
+fn exact_overlap_direction(a: SimId, b: SimId) -> (i32, i32) {
+    debug_assert_ne!(a, b);
+    let (low, high, sign) = if a < b { (a.0, b.0, -1) } else { (b.0, a.0, 1) };
+    let axis = (low.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ high.rotate_left(17)) & 1;
+    if axis == 0 { (sign, 0) } else { (0, sign) }
 }
 
 fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {

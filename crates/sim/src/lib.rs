@@ -9,7 +9,7 @@ pub use components::{
     AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile, ProductionProfile, SimId,
     Team, UnitSpawn, UnitTemplate,
 };
-pub use fixture::{populate_dense_cage_battle, populate_lane_battle};
+pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
     BuildingView, Simulation, SimulationConfig, TickResult, TickTimings, UnitView,
@@ -307,6 +307,50 @@ mod tests {
                 -SUBUNITS_PER_WORLD_UNIT / 2,
             )
         );
+    }
+
+    #[test]
+    fn exact_overlap_separates_units() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 4);
+        let moving = |team| UnitSpawn {
+            team: Team(team),
+            position: SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+            },
+        };
+        let first = sim.spawn_unit(moving(0));
+        let second = sim.spawn_unit(moving(0));
+
+        sim.step();
+        assert_ne!(
+            sim.unit(first).unwrap().position,
+            sim.unit(second).unwrap().position
+        );
+    }
+
+    #[test]
+    fn crowd_separation_is_worker_count_independent() {
+        let mut expected = None;
+        for workers in [1, 2, 4, 8] {
+            let mut sim = Simulation::new(SimulationConfig::default(), workers);
+            populate_crossing_crowd(&mut sim, 2_048);
+            for _ in 0..100 {
+                sim.step();
+            }
+
+            match expected {
+                Some(checksum) => assert_eq!(sim.checksum(), checksum, "workers={workers}"),
+                None => expected = Some(sim.checksum()),
+            }
+        }
     }
 
     #[test]
