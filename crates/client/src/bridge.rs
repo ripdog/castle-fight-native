@@ -37,8 +37,11 @@ pub struct UnitSample {
     pub id: SimId,
     pub team: Team,
     pub position: SimPoint,
+    pub collision_radius: i32,
     pub health: i32,
     pub target: Option<SimId>,
+    pub cooldown_remaining: u16,
+    pub stunned_until_tick: u64,
     pub visual_kind: UnitVisualKind,
 }
 
@@ -49,6 +52,12 @@ pub struct BuildingSample {
     pub footprint: BuildingFootprint,
     pub health: i32,
     pub target: Option<SimId>,
+    pub next_spawn_tick: Option<u64>,
+    pub cooldown_remaining: Option<u16>,
+    pub mana_current: Option<i32>,
+    pub mana_maximum: Option<i32>,
+    pub ability_ready_tick: Option<u64>,
+    pub stunned_until_tick: Option<u64>,
     pub visual_kind: BuildingVisualKind,
 }
 
@@ -73,8 +82,11 @@ impl PresentationSnapshot {
                         id: unit.id,
                         team: unit.team,
                         position: unit.position,
+                        collision_radius: unit.collision_radius,
                         health: unit.health,
                         target: unit.target,
+                        cooldown_remaining: unit.cooldown_remaining,
+                        stunned_until_tick: unit.stunned_until_tick,
                         visual_kind: UnitVisualKind::from_delivery(unit.attack_delivery),
                     },
                 )
@@ -101,6 +113,12 @@ impl PresentationSnapshot {
                         footprint: building.footprint,
                         health: building.health,
                         target: building.target,
+                        next_spawn_tick: building.next_spawn_tick,
+                        cooldown_remaining: building.cooldown_remaining,
+                        mana_current: building.mana_current,
+                        mana_maximum: building.mana_maximum,
+                        ability_ready_tick: building.ability_ready_tick,
+                        stunned_until_tick: building.stunned_until_tick,
                         visual_kind,
                     },
                 )

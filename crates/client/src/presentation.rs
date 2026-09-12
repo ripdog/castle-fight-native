@@ -925,7 +925,7 @@ fn update_window_title(
     );
 }
 
-fn sim_point_to_world(point: SimPoint) -> Vec3 {
+pub(crate) fn sim_point_to_world(point: SimPoint) -> Vec3 {
     Vec3::new(
         point.x as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
         0.0,
@@ -933,7 +933,7 @@ fn sim_point_to_world(point: SimPoint) -> Vec3 {
     )
 }
 
-fn sim_point_to_world_lerp(previous: SimPoint, current: SimPoint, alpha: f32) -> Vec3 {
+pub(crate) fn sim_point_to_world_lerp(previous: SimPoint, current: SimPoint, alpha: f32) -> Vec3 {
     sim_point_to_world(previous).lerp(sim_point_to_world(current), alpha)
 }
 

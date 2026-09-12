@@ -355,7 +355,7 @@ fn placement_footprint(metrics: &WorldMetrics, world: Vec3) -> BuildingFootprint
     metrics.footprint_at_world(world, BUILDING_FOOTPRINT_SIZE, BUILDING_FOOTPRINT_SIZE)
 }
 
-fn cursor_over_build_panel(cursor: Vec2) -> bool {
+pub(crate) fn cursor_over_build_panel(cursor: Vec2) -> bool {
     cursor.x >= PANEL_LEFT
         && cursor.x <= PANEL_LEFT + PANEL_WIDTH
         && cursor.y >= PANEL_TOP

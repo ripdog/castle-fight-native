@@ -1,6 +1,7 @@
 mod bridge;
 mod build_ui;
 mod demo;
+mod inspection;
 mod presentation;
 
 use bevy::{
@@ -14,6 +15,7 @@ use castle_fight_sim::Simulation;
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
 use demo::{create_demo_world, production_structure};
+use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
 
 const SIMULATION_HZ: f64 = 30.0;
@@ -54,6 +56,7 @@ fn main() {
         .add_plugins((
             CastlePresentationPlugin::new(options.health_bars),
             BuildUiPlugin,
+            InspectionPlugin,
         ))
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
