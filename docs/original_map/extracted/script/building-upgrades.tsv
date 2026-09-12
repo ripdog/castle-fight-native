@@ -1,0 +1,91 @@
+source_building_rawcode	source_building_rawcode_integer	source_building_names	target_building_rawcode	target_building_rawcode_integer	target_building_names	source_function	byte_offset
+h000	1747988528	Barracks	h039	1747989305	Stronghold	ensureUnitObjectUpgradeMetadataRegistered	4224595
+h002	1747988530	Spider Egg Clutch	h00Q	1747988561	Spider Egg Nest	ensureUnitObjectUpgradeMetadataRegistered	4224712
+h003	1747988531	Sniper Nest	h05D	1747989828	Gunner's Hall	ensureUnitObjectUpgradeMetadataRegistered	4224829
+h003	1747988531	Sniper Nest	h0A1	1747992881	Marksmen's Encampment	ensureUnitObjectUpgradeMetadataRegistered	4224946
+h00F	1747988550	Spawning Grounds	h032	1747989298	Royal Spawning Grounds	ensureUnitObjectUpgradeMetadataRegistered	4225063
+h00J	1747988554	Swamp Well	h05F	1747989830	Lernaean Fountain	ensureUnitObjectUpgradeMetadataRegistered	4225180
+h00Q	1747988561	Spider Egg Nest	h00R	1747988562	Spider Egg Hatchery	ensureUnitObjectUpgradeMetadataRegistered	4225297
+h00S	1747988563	Hunter's Hall	h03D	1747989316	Ranger's Hall	ensureUnitObjectUpgradeMetadataRegistered	4225414
+h00T	1747988564	Hall of Honor	h03F	1747989318	Hall of the Eldest	ensureUnitObjectUpgradeMetadataRegistered	4225531
+h00Y	1747988569	Furbolg Hut	h012	1747988786	Furbolg Abode	ensureUnitObjectUpgradeMetadataRegistered	4225648
+h00Y	1747988569	Furbolg Hut	h071	1747990321	Enigma	ensureUnitObjectUpgradeMetadataRegistered	4225765
+h013	1747988787	Ancient of Growth	h01H	1747988808	Ancient of Life	ensureUnitObjectUpgradeMetadataRegistered	4225882
+h01D	1747988804	Chaos Citadel	h03G	1747989319	Greater Chaos Citadel	ensureUnitObjectUpgradeMetadataRegistered	4225999
+h01H	1747988808	Ancient of Life	h01J	1747988810	Ancient of Eternity	ensureUnitObjectUpgradeMetadataRegistered	4226116
+h01I	1747988809	Lesser Demon Cage	h026	1747989046	Greater Demon Cage	ensureUnitObjectUpgradeMetadataRegistered	4226233
+h01K	1747988811	Temple of Bone	h04B	1747989570	Temple of Necromancy	ensureUnitObjectUpgradeMetadataRegistered	4226350
+h01M	1747988813	Eraser (Level 1)	h01W	1747988823	Eraser (Level 2)	ensureUnitObjectUpgradeMetadataRegistered	4226467
+h01N	1747988814	Crypt	h054	1747989812	Graveyard	ensureUnitObjectUpgradeMetadataRegistered	4226584
+h01P	1747988816	Skull Pile	h056	1747989814	Skull Shrine	ensureUnitObjectUpgradeMetadataRegistered	4226701
+h01R	1747988818	Rotting Hay Cart	h04Z	1747989594	Tainted Farm	ensureUnitObjectUpgradeMetadataRegistered	4226818
+h01W	1747988823	Eraser (Level 2)	h01X	1747988824	Eraser (Level 3)	ensureUnitObjectUpgradeMetadataRegistered	4226935
+h01Y	1747988825	Temple of Snakes	h080	1747990576	Temple of Riptide	ensureUnitObjectUpgradeMetadataRegistered	4227052
+h020	1747989040	Murloc Camp	h021	1747989041	Murloc Village	ensureUnitObjectUpgradeMetadataRegistered	4227169
+h021	1747989041	Murloc Village	h022	1747989042	Murloc Fortress	ensureUnitObjectUpgradeMetadataRegistered	4227286
+h023	1747989043	Ancient of Slumber	h024	1747989044	Ancient of Hibernation	ensureUnitObjectUpgradeMetadataRegistered	4227403
+h026	1747989046	Greater Demon Cage	h06O	1747990095	Serenity	ensureUnitObjectUpgradeMetadataRegistered	4227520
+h029	1747989049	Fighters' Hall	h02U	1747989077	Advanced Fighters' Hall	ensureUnitObjectUpgradeMetadataRegistered	4227637
+h02B	1747989058	Shamanic Tent	h06I	1747990089	Infostealer's Place	ensureUnitObjectUpgradeMetadataRegistered	4227754
+h02B	1747989058	Shamanic Tent	h07Q	1747990353	Blood Shaman Tent	ensureUnitObjectUpgradeMetadataRegistered	4227871
+h02H	1747989064	Troll Hut	h05E	1747989829	Trapper's Hut	ensureUnitObjectUpgradeMetadataRegistered	4227988
+h02K	1747989067	Kodo Farm	h035	1747989301	Melee Kodo Farm	ensureUnitObjectUpgradeMetadataRegistered	4228105
+h02K	1747989067	Kodo Farm	h036	1747989302	Defensive Kodo Farm	ensureUnitObjectUpgradeMetadataRegistered	4228222
+h02K	1747989067	Kodo Farm	h092	1747990834	Spellbreaker Kodo Farm	ensureUnitObjectUpgradeMetadataRegistered	4228339
+h02O	1747989071	Legendary Totem	h07X	1747990360	Stasis Totem	ensureUnitObjectUpgradeMetadataRegistered	4228456
+h02O	1747989071	Legendary Totem	h07Y	1747990361	Healing Totem	ensureUnitObjectUpgradeMetadataRegistered	4228573
+h02O	1747989071	Legendary Totem	h07Z	1747990362	Endurance Totem	ensureUnitObjectUpgradeMetadataRegistered	4228690
+h02U	1747989077	Advanced Fighters' Hall	h031	1747989297	Superior Fighters' Hall	ensureUnitObjectUpgradeMetadataRegistered	4228807
+h037	1747989303	Chapel	h038	1747989304	Church	ensureUnitObjectUpgradeMetadataRegistered	4228924
+h038	1747989304	Church	h072	1747990322	Holy Altar	ensureUnitObjectUpgradeMetadataRegistered	4229041
+h03D	1747989316	Ranger's Hall	h03E	1747989317	Amazon's Hall	ensureUnitObjectUpgradeMetadataRegistered	4229158
+h03K	1747989323	Ice Troll Hut	h03J	1747989322	Ice Troll Voodoo Lounge	ensureUnitObjectUpgradeMetadataRegistered	4229275
+h03T	1747989332	Ice Claws	h043	1747989555	Frost Claws	ensureUnitObjectUpgradeMetadataRegistered	4229392
+h03U	1747989333	Igloo	h06L	1747990092	Modern Igloo	ensureUnitObjectUpgradeMetadataRegistered	4229509
+h03X	1747989336	Water Spring	h03Y	1747989337	Golden Fountain	ensureUnitObjectUpgradeMetadataRegistered	4229626
+h03Y	1747989337	Golden Fountain	h03Z	1747989338	Spellbound Fountain	ensureUnitObjectUpgradeMetadataRegistered	4229743
+h040	1747989552	Rock Pile	h041	1747989553	Greater Fissure	ensureUnitObjectUpgradeMetadataRegistered	4229860
+h042	1747989554	Pillar of Globe-Lightning	h044	1747989556	Pillar of St. Elmo's Fire	ensureUnitObjectUpgradeMetadataRegistered	4229977
+h045	1747989557	Altar of Fire	h046	1747989558	Altar of Blaze	ensureUnitObjectUpgradeMetadataRegistered	4230094
+h046	1747989558	Altar of Blaze	h04E	1747989573	Tower of Elder Knowledge	ensureUnitObjectUpgradeMetadataRegistered	4230211
+h048	1747989560	Frost Launcher	h03L	1747989324	Greater Frost Launcher	ensureUnitObjectUpgradeMetadataRegistered	4230328
+h049	1747989561	Snowy Rocks	h04F	1747989574	Icy Rocks	ensureUnitObjectUpgradeMetadataRegistered	4230445
+h04A	1747989569	Trapped Gale	h04C	1747989571	Monument of Wind Stream	ensureUnitObjectUpgradeMetadataRegistered	4230562
+h04B	1747989570	Temple of Necromancy	h055	1747989813	High Citadel of Necromancy	ensureUnitObjectUpgradeMetadataRegistered	4230679
+h04C	1747989571	Monument of Wind Stream	h04D	1747989572	Zephyros Memorial	ensureUnitObjectUpgradeMetadataRegistered	4230796
+h04F	1747989574	Icy Rocks	h03W	1747989335	Glacier	ensureUnitObjectUpgradeMetadataRegistered	4230913
+h04L	1747989580	Void Portal	h04N	1747989582	Portal of the Abyss	ensureUnitObjectUpgradeMetadataRegistered	4231030
+h04O	1747989583	Nether Ancient	h04M	1747989581	Shadow Ancient	ensureUnitObjectUpgradeMetadataRegistered	4231147
+h04Q	1747989585	Hell's Gate	h04P	1747989584	Hell's Portal	ensureUnitObjectUpgradeMetadataRegistered	4231264
+h04V	1747989590	Ancient of Battle	h04W	1747989591	Corrupted Ancient of War	ensureUnitObjectUpgradeMetadataRegistered	4231381
+h04W	1747989591	Corrupted Ancient of War	h09Y	1747990873	Corrupted Ancient of Annihilation	ensureUnitObjectUpgradeMetadataRegistered	4231498
+h04Z	1747989594	Tainted Farm	h03M	1747989325	Defiled Granary	ensureUnitObjectUpgradeMetadataRegistered	4231615
+h05E	1747989829	Trapper's Hut	h06D	1747990084	Forest Trapper's Hole	ensureUnitObjectUpgradeMetadataRegistered	4231732
+h05J	1747989834	Aircraft Factory	h09L	1747990860	Bomber Factory	ensureUnitObjectUpgradeMetadataRegistered	4231849
+h05M	1747989837	Demolition Lab	h077	1747990327	Rocket Lab	ensureUnitObjectUpgradeMetadataRegistered	4231966
+h05T	1747989844	Gun Smith	h09P	1747990864	Arsenal	ensureUnitObjectUpgradeMetadataRegistered	4232083
+h05U	1747989845	Lumber Mill	h06Z	1747990106	Protection Center	ensureUnitObjectUpgradeMetadataRegistered	4232200
+h05V	1747989846	Golem Factory	h097	1747990839	Precious Golem Factory	ensureUnitObjectUpgradeMetadataRegistered	4232317
+h05X	1747989848	Tank Factory	h09B	1747990850	Heavy Tank Factory	ensureUnitObjectUpgradeMetadataRegistered	4232434
+h05X	1747989848	Tank Factory	h09I	1747990857	Assault Tank Factory	ensureUnitObjectUpgradeMetadataRegistered	4232551
+h05X	1747989848	Tank Factory	h09J	1747990858	Mine Layer Factory	ensureUnitObjectUpgradeMetadataRegistered	4232668
+h05Z	1747989850	Books of Conjuration	h06E	1747990085	Meteor Shower	ensureUnitObjectUpgradeMetadataRegistered	4232785
+h05Z	1747989850	Books of Conjuration	h06F	1747990086	Elemental Rain	ensureUnitObjectUpgradeMetadataRegistered	4232902
+h06J	1747990090	Blue Shield Generator	h05R	1747989842	Red Shield Generator	ensureUnitObjectUpgradeMetadataRegistered	4233019
+h07M	1747990349	House of Shadows	h07L	1747990348	Guild of Shadows	ensureUnitObjectUpgradeMetadataRegistered	4233136
+h07O	1747990351	Pillaged Hut	h07N	1747990350	Scorched Mansion	ensureUnitObjectUpgradeMetadataRegistered	4233253
+h081	1747990577	Tiny Watch Tower	h082	1747990578	Tiny Multishot Tower	ensureUnitObjectUpgradeMetadataRegistered	4233370
+h088	1747990584	Moon Shrine	h07D	1747990340	Moon Altar	ensureUnitObjectUpgradeMetadataRegistered	4233487
+h08X	1747990616	Archery Range	h08Y	1747990617	Archery Tower	ensureUnitObjectUpgradeMetadataRegistered	4233604
+h09B	1747990850	Heavy Tank Factory	h09H	1747990856	Rocket Tank Factory	ensureUnitObjectUpgradeMetadataRegistered	4233721
+h09X	1747990872	School of Wizardry	h00X	1747988568	Tower of Supreme Magic	ensureUnitObjectUpgradeMetadataRegistered	4233838
+h0Z1	1747999281	Mudcrab Burrow	h0Z2	1747999282	Rockcrab Burrow	ensureUnitObjectUpgradeMetadataRegistered	4233955
+n02P	1848652368	Gnoll Tent	n02N	1848652366	Fire Gnoll Hut	ensureUnitObjectUpgradeMetadataRegistered	4234072
+n02Q	1848652369	Harpy Nest	n03B	1848652610	Nest of Harpy Witch	ensureUnitObjectUpgradeMetadataRegistered	4234189
+n033	1848652595	Ogre Den	n02O	1848652367	Den of the Ogre Lord	ensureUnitObjectUpgradeMetadataRegistered	4234306
+n036	1848652598	Quillboar Yard	n037	1848652599	Razormane Abode	ensureUnitObjectUpgradeMetadataRegistered	4234423
+n039	1848652601	Sandkin Burrow	n02R	1848652370	Monstrous Sandkin Burrow	ensureUnitObjectUpgradeMetadataRegistered	4234540
+n03B	1848652610	Nest of Harpy Witch	n031	1848652593	Nest of Harpy Matriarch	ensureUnitObjectUpgradeMetadataRegistered	4234657
+n03D	1848652612	Bamboo Dojo	n03S	1848652627	Sagepaw Sanctum	ensureUnitObjectUpgradeMetadataRegistered	4234774
+n03F	1848652614	Brew Hut	n03K	1848652619	Fighting Tavern	ensureUnitObjectUpgradeMetadataRegistered	4234891
+n03K	1848652619	Fighting Tavern	n03P	1848652624	Temple of Ten Thousand Drinks	ensureUnitObjectUpgradeMetadataRegistered	4235008

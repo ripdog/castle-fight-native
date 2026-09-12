@@ -1,0 +1,241 @@
+building_rawcode	building_rawcode_integer	building_names	unit_rawcode	unit_rawcode_integer	unit_names	gold_cost	lumber_cost	food_used	spawn_build_time	attack_index	defense_index	is_air	is_melee	is_mechanical	is_caster	source_function	byte_offset
+h000	1747988528	Barracks	hfoo	1751543663	Footman	100	0	0	20	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	3943008
+h001	1747988529	Artillery		0		200	380	0	0	2	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3943963
+h002	1747988530	Spider Egg Clutch	n00U	1848651861	Black Spider	160	0	0	23	1	7	0	1	0	0	ensureUnitObjectMetadataRegistered	3944882
+h003	1747988531	Sniper Nest	hrif	1752328550	Sniper	140	0	0	22	1	1	0	0	0	0	ensureUnitObjectMetadataRegistered	3945994
+h004	1747988532	Weapon Lab	hmtm	1752003693	Mortar	210	0	0	25	2	0	0	0	0	0	ensureUnitObjectMetadataRegistered	3947053
+h005	1747988533	Obelisk of Light		0		235	400	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3948130
+h006	1747988534	Watch Tower		0		150	300	0	0	1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3948979
+h007	1747988535	Demon Gate	n000	1848651824	Infernal	500	0	0	40	5	2	0	1	0	0	ensureUnitObjectMetadataRegistered	3949771
+h009	1747988537	Dragon Nest	n001	1848651825	Red Dragon	350	0	0	32	5	2	1	0	0	0	ensureUnitObjectMetadataRegistered	3950829
+h00A	1747988545	Death Pit		0		315	625	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3951898
+h00B	1747988546	Fountain of Wonders	e000	1697656880	Faerie Dragon	260	0	0	28	3	0	1	0	0	1	ensureUnitObjectMetadataRegistered	3952644
+h00F	1747988550	Spawning Grounds	n002	1848651826	Naga Guardian	250	0	0	27	1	2	0	1	0	1	ensureUnitObjectMetadataRegistered	3953876
+h00G	1747988551	Coral Statue		0		250	480	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3955017
+h00I	1747988553	Ancient Pyramide		0		360	600	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3955904
+h00J	1747988554	Swamp Well	n004	1848651828	Suumpmolk	160	0	0	23	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	3956776
+h00K	1747988555	Hjordhejmen	n005	1848651829	Warlock	300	0	0	30	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	3957890
+h00M	1747988557	Oracle of Sirens		0		310	625	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3959179
+h00N	1747988558	Tidal Guardian		0		750	1500	1	0	5	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3959933
+h00Q	1747988561	Spider Egg Nest	n01N	1848652110	Giant Spider	180	0	0	32	1	7	0	1	0	0	ensureUnitObjectMetadataRegistered	3960769
+h00R	1747988562	Spider Egg Hatchery	n01W	1848652119	Brood Mother	190	0	0	41	1	7	0	1	0	1	ensureUnitObjectMetadataRegistered	3962030
+h00S	1747988563	Hunter's Hall	e001	1697656881	Huntress	150	0	0	22	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	3963532
+h00T	1747988564	Hall of Honor	n006	1848651830	Blademaster	220	0	0	26	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	3964645
+h00V	1747988566	Bloodelf War Academy	h00U	1747988565	Bloodthirster	275	0	0	28	3	1	0	0	0	1	ensureUnitObjectMetadataRegistered	3965917
+h00X	1747988568	Tower of Supreme Magic	h00W	1747988567	Wizard	400	360	1	52	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	3967238
+h00Y	1747988569	Furbolg Hut	n026	1848652342	Furbolg Shaman	200	0	0	25	3	0	0	0	0	1	ensureUnitObjectMetadataRegistered	3969053
+h00Z	1747988570	City of Magic		0		240	440	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3970230
+h010	1747988784	Gjallarhorn		0		250	800	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3971004
+h011	1747988785	Nightelf Siege Factory	e002	1697656882	Glaive Thrower	285	0	0	29	2	2	0	0	1	0	ensureUnitObjectMetadataRegistered	3971906
+h012	1747988786	Furbolg Abode	n028	1848652344	Furbolg Elder Shaman	200	0	0	35	3	0	0	0	0	1	ensureUnitObjectMetadataRegistered	3973058
+h013	1747988787	Ancient of Growth	e006	1697656886	Dryad	220	0	0	26	1	1	0	0	0	1	ensureUnitObjectMetadataRegistered	3974368
+h014	1747988788	Arcane Tower		0		250	300	0	0	3	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3975722
+h015	1747988789	Gryphon Rock	h016	1747988790	Gryphon Rider	250	0	0	27	3	1	1	0	0	0	ensureUnitObjectMetadataRegistered	3976602
+h01B	1747988802	Reptile Pool	n007	1848651831	Dragon Turtle	280	0	0	29	2	2	0	0	0	0	ensureUnitObjectMetadataRegistered	3978000
+h01C	1747988803	Altar of Greed	n008	1848651832	Succubus	230	0	0	26	3	0	0	0	0	1	ensureUnitObjectMetadataRegistered	3979217
+h01D	1747988804	Chaos Citadel	n009	1848651833	Chaos Warrior	160	0	0	23	0	1	0	1	0	0	ensureUnitObjectMetadataRegistered	3980406
+h01E	1747988805	Shrine of Destruction		0		850	1800	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3981478
+h01F	1747988806	Volcano		0		340	660	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3982513
+h01H	1747988808	Ancient of Life	e009	1697656889	Keeper of the Grove	220	0	0	37	1	1	0	0	0	1	ensureUnitObjectMetadataRegistered	3983382
+h01I	1747988809	Lesser Demon Cage	n00A	1848651841	Satyr	120	0	0	21	0	0	0	0	0	0	ensureUnitObjectMetadataRegistered	3984965
+h01J	1747988810	Ancient of Eternity	e00C	1697656899	Ancient Keeper	400	400	1	57	5	1	0	0	0	1	ensureUnitObjectMetadataRegistered	3985941
+h01K	1747988811	Temple of Bone	u005	1966092341	Necromancer	210	0	0	25	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	3987738
+h01L	1747988812	Haunted Mine	u001	1966092337	Banshee	290	0	0	29	3	6	0	0	0	1	ensureUnitObjectMetadataRegistered	3988925
+h01M	1747988813	Eraser (Level 1)		0		350	1000	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3990213
+h01N	1747988814	Crypt	h01U	1747988821	Vampire	230	0	0	26	1	5	0	1	0	0	ensureUnitObjectMetadataRegistered	3991071
+h01O	1747988815	Turret of Souls		0		200	300	0	0	5	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3992343
+h01P	1747988816	Skull Pile		0		160	0	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3993355
+h01Q	1747988817	City of Decay		0		650	1800	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3994195
+h01R	1747988818	Rotting Hay Cart	n00B	1848651842	Zombie	120	0	0	21	5	1	0	1	0	0	ensureUnitObjectMetadataRegistered	3995072
+h01S	1747988819	Dragon Cemetery	u000	1966092336	Frost Wyrm	500	0	0	40	0	0	1	0	0	0	ensureUnitObjectMetadataRegistered	3996185
+h01T	1747988820	Slaughter House	n00E	1848651845	Flesh Golem	370	0	0	33	2	1	0	1	0	0	ensureUnitObjectMetadataRegistered	3997358
+h01W	1747988823	Eraser (Level 2)		0		175	350	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3998525
+h01X	1747988824	Eraser (Level 3)		0		175	350	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	3999381
+h01Y	1747988825	Temple of Snakes	n00H	1848651848	Winged Serpent	230	0	0	26	3	0	1	0	0	0	ensureUnitObjectMetadataRegistered	4000245
+h01Z	1747988826	Naga Spring	n00S	1848651859	Naga Siren	350	0	0	32	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4001344
+h020	1747989040	Murloc Camp	n00I	1848651849	Murloc Warrior	170	0	0	23	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4002832
+h021	1747989041	Murloc Village	n00J	1848651850	Murloc Champion	170	0	0	32	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4003916
+h022	1747989042	Murloc Fortress	n00K	1848651851	Murloc Assassin	170	0	0	40	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4005257
+h023	1747989043	Ancient of Slumber	n029	1848652345	Bear	260	0	0	28	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4006756
+h024	1747989044	Ancient of Hibernation	n02B	1848652354	Ancient Bear	230	0	0	39	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4008267
+h025	1747989045	Fountain of Blood	n00L	1848651852	Blood Fiend	270	0	0	28	5	4	0	1	0	0	ensureUnitObjectMetadataRegistered	4009883
+h026	1747989046	Greater Demon Cage	z000	2049978416	Quill Demon	230	0	0	32	0	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4011010
+h027	1747989047	Emerald Dragon Roost	n02A	1848652353	Emerald Dragon	310	0	0	30	5	2	1	0	0	0	ensureUnitObjectMetadataRegistered	4012254
+h028	1747989048	Monolith	e00F	1697656902	Mountain Giant	440	0	0	37	0	3	0	1	0	0	ensureUnitObjectMetadataRegistered	4013396
+h029	1747989049	Fighters' Hall	o002	1865429042	Grunt	110	0	0	20	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4014945
+h02A	1747989057	Ancient of Gale		0		350	650	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4015918
+h02B	1747989058	Shamanic Tent	o003	1865429043	Shaman	170	0	0	23	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4016801
+h02C	1747989059	Ancient Guardian		0		250	500	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4017990
+h02D	1747989060	Ancient of Wonders		0		650	1800	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4018866
+h02H	1747989064	Troll Hut	n00V	1848651862	Troll Berserker	200	0	0	25	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4019776
+h02I	1747989065	Orcish Siege Factory	o001	1865429041	Catapult	380	0	0	34	2	1	0	0	1	0	ensureUnitObjectMetadataRegistered	4020951
+h02K	1747989067	Kodo Farm	o007	1865429047	Kodo	260	0	0	28	1	0	0	1	0	0	ensureUnitObjectMetadataRegistered	4022155
+h02N	1747989070	Serpent Rock		0		270	640	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4023126
+h02O	1747989071	Legendary Totem		0		475	1350	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4024069
+h02P	1747989072	Falcon-Clan Encampment	o009	1865429049	Wyvern Rider	220	0	0	26	1	7	1	0	0	0	ensureUnitObjectMetadataRegistered	4025276
+h02R	1747989074	Ceremonial Totem		0		250	540	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4026491
+h02U	1747989077	Advanced Fighters' Hall	o004	1865429044	Veteran Grunt	100	0	0	25	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4027704
+h031	1747989297	Superior Fighters' Hall	o005	1865429045	Axemaster	240	0	0	37	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4028817
+h032	1747989298	Royal Spawning Grounds	n00X	1848651864	Naga Royal Guard	200	0	0	37	1	2	0	1	0	1	ensureUnitObjectMetadataRegistered	4030066
+h035	1747989301	Melee Kodo Farm	o008	1865429048	Melee Kodo Rider	100	0	0	33	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4031296
+h036	1747989302	Defensive Kodo Farm	o006	1865429046	Defensive Kodo Rider	100	0	0	33	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4032433
+h037	1747989303	Chapel	h03B	1747989314	Crusader	265	0	0	28	4	2	0	1	0	1	ensureUnitObjectMetadataRegistered	4033566
+h038	1747989304	Church	h03C	1747989315	Paladin	260	0	0	41	4	2	0	1	0	1	ensureUnitObjectMetadataRegistered	4034982
+h039	1747989305	Stronghold	h03A	1747989313	Defender	175	0	0	28	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4036661
+h03D	1747989316	Ranger's Hall	e003	1697656883	Ranger	200	0	0	32	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4037986
+h03E	1747989317	Amazon's Hall	e004	1697656884	Amazon	400	375	1	52	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4039166
+h03F	1747989318	Hall of the Eldest	n00Y	1848651865	Elder Blademaster	230	0	0	37	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4040520
+h03G	1747989319	Greater Chaos Citadel	n00Z	1848651866	Chaos Champion	190	0	0	32	0	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4041902
+h03I	1747989321	Azure Nest	n010	1848652080	Azure Drake	280	0	0	29	5	2	1	0	0	0	ensureUnitObjectMetadataRegistered	4043206
+h03J	1747989322	Ice Troll Voodoo Lounge	o00A	1865429057	Ice Troll Witch Doctor	150	0	0	31	3	0	0	0	0	1	ensureUnitObjectMetadataRegistered	4044403
+h03K	1747989323	Ice Troll Hut	n015	1848652085	Ice Troll Shadow Priest	175	0	0	23	3	0	0	0	0	1	ensureUnitObjectMetadataRegistered	4045995
+h03L	1747989324	Greater Frost Launcher		0		290	575	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4047591
+h03M	1747989325	Defiled Granary	u007	1966092343	Plague Bearer	205	0	0	36	5	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4048528
+h03O	1747989327	World Freezer		0		600	1350	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4050031
+h03Q	1747989329	Icy Tower		0		230	300	0	0	0	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4051221
+h03S	1747989331	Crystal Palace	n014	1848652084	Ice Queen	400	0	0	35	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4052223
+h03T	1747989332	Ice Claws	n012	1848652082	Wandigoo	275	0	0	28	1	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4053904
+h03U	1747989333	Igloo	n011	1848652081	Hrimthrusa	160	0	0	23	1	2	0	0	0	0	ensureUnitObjectMetadataRegistered	4055026
+h03W	1747989335	Glacier	n016	1848652086	Magnataur	250	0	0	39	0	7	0	1	0	1	ensureUnitObjectMetadataRegistered	4056261
+h03X	1747989336	Water Spring	h02W	1747989079	Lesser Elemental Of Water	140	0	0	22	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4057666
+h03Y	1747989337	Golden Fountain	h02X	1747989080	Elemental Of Water	180	0	0	31	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4058963
+h03Z	1747989338	Spellbound Fountain	h02Y	1747989081	Greater Elemental Of Water	185	0	0	40	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4060247
+h040	1747989552	Rock Pile	h034	1747989300	Elemental Of Earth	250	0	0	27	2	5	0	1	0	0	ensureUnitObjectMetadataRegistered	4061734
+h041	1747989553	Greater Fissure	h03N	1747989326	Greater Elemental Of Earth	240	0	0	40	2	5	0	1	0	0	ensureUnitObjectMetadataRegistered	4063060
+h042	1747989554	Pillar of Globe-Lightning	h03P	1747989328	Elemental Of Lightning	230	0	0	26	3	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4064409
+h043	1747989555	Frost Claws	n013	1848652083	Ancient Wandigoo	225	0	0	40	1	1	0	1	0	1	ensureUnitObjectMetadataRegistered	4065838
+h044	1747989556	Pillar of St. Elmo's Fire	h03R	1747989330	Greater Elemental Of Lightning	210	0	0	37	3	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4067261
+h045	1747989557	Altar of Fire	h02Z	1747989082	Elemental Of Fire	200	0	0	25	5	2	0	0	0	0	ensureUnitObjectMetadataRegistered	4068700
+h046	1747989558	Altar of Blaze	u00F	1966092358	Greater Elemental Of Fire	220	0	0	36	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4069720
+h047	1747989559	Chilling Mushroom		0		190	350	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4071039
+h048	1747989560	Frost Launcher		0		210	475	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4071884
+h049	1747989561	Snowy Rocks	n017	1848652087	Frost Wolf	115	0	0	20	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4072800
+h04A	1747989569	Trapped Gale	o00C	1865429059	Lesser Elemental Of Wind	130	0	0	21	1	1	1	0	0	0	ensureUnitObjectMetadataRegistered	4073850
+h04B	1747989570	Temple of Necromancy	u009	1966092345	Mighty Necromancer	170	0	0	34	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4074860
+h04C	1747989571	Monument of Wind Stream	o00D	1865429060	Elemental Of Wind	180	0	0	30	1	1	1	0	0	0	ensureUnitObjectMetadataRegistered	4076260
+h04D	1747989572	Zephyros Memorial	o00E	1865429061	Greater Elemental Of Wind	200	0	0	40	1	1	1	0	0	1	ensureUnitObjectMetadataRegistered	4077511
+h04E	1747989573	Tower of Elder Knowledge	h03V	1747989334	Master Of Elements	300	400	1	54	3	7	0	0	0	0	ensureUnitObjectMetadataRegistered	4079104
+h04F	1747989574	Icy Rocks	n018	1848652088	Polar Bear	125	0	0	27	0	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4080904
+h04K	1747989579	Well of Pain		0		270	450	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4082089
+h04L	1747989580	Void Portal	n019	1848652089	Void Walker	190	0	0	24	3	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4083033
+h04M	1747989581	Shadow Ancient	n01B	1848652098	Shadow Drake	165	0	0	35	3	1	1	0	0	1	ensureUnitObjectMetadataRegistered	4084310
+h04N	1747989582	Portal of the Abyss	n01A	1848652097	Void Keeper	190	0	0	34	3	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4085548
+h04O	1747989583	Nether Ancient	n01D	1848652100	Nether Drake	235	0	0	26	3	1	1	0	0	1	ensureUnitObjectMetadataRegistered	4086855
+h04P	1747989584	Hell's Portal	n01E	1848652101	Infernal Tank	150	0	0	37	2	2	0	0	1	0	ensureUnitObjectMetadataRegistered	4088074
+h04Q	1747989585	Hell's Gate	n01F	1848652102		300	0	0	30	2	2	0	0	1	0	ensureUnitObjectMetadataRegistered	4089324
+h04R	1747989586	Forgotten One		0		260	450	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4090402
+h04S	1747989587	Felhound Shrine	n01G	1848652103	Felhound	240	0	0	27	1	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4091213
+h04T	1747989588	Eye of Corruption		0		500	1350	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4092324
+h04U	1747989589	Demonic Statue	h04I	1747989577	Incubus	520	0	0	41	5	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4093198
+h04V	1747989590	Ancient of Battle	n01I	1848652105	Corrupted Ent	125	0	0	21	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4094358
+h04W	1747989591	Corrupted Ancient of War	n01H	1848652104	Corrupted Treant	125	0	0	27	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4095523
+h04Z	1747989594	Tainted Farm	n01K	1848652107	Suffocated Zombie	100	0	0	26	5	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4096839
+h054	1747989812	Graveyard	h05H	1747989832	Vampire Lord	265	0	0	40	1	5	0	1	0	0	ensureUnitObjectMetadataRegistered	4098163
+h055	1747989813	High Citadel of Necromancy	u00D	1966092356	Lich King	370	375	1	52	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4099583
+h056	1747989814	Skull Shrine		0		140	380	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4101386
+h059	1747989817	Golden Shrine of Justice		0		650	1800	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4102178
+h05D	1747989828	Gunner's Hall	h0A2	1747992882	Heavy Gunner	180	0	0	31	1	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4103096
+h05E	1747989829	Trapper's Hut	n01O	1848652111	Troll Trapper	80	0	0	29	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4104288
+h05F	1747989830	Lernaean Fountain	n01P	1848652112	Ancient Hydra	675	1000	1	58	5	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4105580
+h05G	1747989831	Heroic Shrine		0		550	1500	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4107084
+h05I	1747989833	Magic Ruin		0		200	330	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4107993
+h05J	1747989834	Aircraft Factory	h06Q	1747990097	Roterothopter	160	0	0	23	1	0	1	0	1	0	ensureUnitObjectMetadataRegistered	4109162
+h05L	1747989836	Energy Tower		0		240	300	0	0	5	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4110398
+h05M	1747989837	Demolition Lab	n01V	1848652118	Lunatic Goblin	200	0	0	25	5	7	0	1	0	1	ensureUnitObjectMetadataRegistered	4111553
+h05R	1747989842	Red Shield Generator		0		140	130	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4112620
+h05T	1747989844	Gun Smith	z002	2049978418	Flamegunner	220	0	0	26	5	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4113687
+h05U	1747989845	Lumber Mill	n01T	1848652116	Goblin Shredder	375	0	0	33	1	1	0	1	1	0	ensureUnitObjectMetadataRegistered	4114803
+h05V	1747989846	Golem Factory	n01X	1848652120	Iron Golem	270	0	0	28	4	5	0	1	1	0	ensureUnitObjectMetadataRegistered	4116326
+h05X	1747989848	Tank Factory	h06T	1747990100	Light Tank	180	0	0	24	0	2	0	0	1	0	ensureUnitObjectMetadataRegistered	4117655
+h05Z	1747989850	Books of Conjuration		0		340	650	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4118737
+h060	1747990064	Obelisk of Elements		0		245	550	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4119978
+h061	1747990065	Elemental Guard Tower		0		220	300	0	0	5	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4121202
+h062	1747990066	Mana Generator		0		200	250	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4122188
+h063	1747990067	Linker		0		700	1900	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4123074
+h069	1747990073	Spare Part Heap	n01U	1848652117	Gobbo Machinist	200	300	0	30	0	7	1	0	1	0	ensureUnitObjectMetadataRegistered	4124176
+h06D	1747990084	Forest Trapper's Hole	n02G	1848652359	Forest Troll Trapper	450	390	1	52	0	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4125081
+h06E	1747990085	Meteor Shower		0		0	0	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4126700
+h06F	1747990086	Elemental Rain		0		0	0	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4127589
+h06I	1747990089	Infostealer's Place	o00F	1865429062	Infostealer	170	0	0	32	3	0	0	0	0	1	ensureUnitObjectMetadataRegistered	4128458
+h06J	1747990090	Blue Shield Generator		0		160	240	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4129652
+h06L	1747990092	Modern Igloo	n02I	1848652361	Angry Hrimthrusa	550	460	1	52	1	2	0	0	0	0	ensureUnitObjectMetadataRegistered	4130533
+h06O	1747990095	Serenity	e00E	1697656901	Twins	550	1300	1	60	6	6	1	0	0	1	ensureUnitObjectMetadataRegistered	4132025
+h06Y	1747990105	Dragonhawk Portal	n01Y	1848652121	Dragonhawk Rider	310	0	0	30	1	2	1	0	0	1	ensureUnitObjectMetadataRegistered	4133751
+h06Z	1747990106	Protection Center	n02J	1848652362	Goliath	425	400	1	55	4	7	0	0	1	0	ensureUnitObjectMetadataRegistered	4134972
+h070	1747990320	Highelf Siege Factory	e005	1697656885	Ballista	350	0	0	32	2	1	0	0	1	0	ensureUnitObjectMetadataRegistered	4136405
+h071	1747990321	Enigma	e00G	1697656903	Visioneer	300	0	0	40	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4137549
+h072	1747990322	Holy Altar	h074	1747990324	Holy Warrior	200	500	1	51	4	2	0	1	0	1	ensureUnitObjectMetadataRegistered	4138806
+h073	1747990323	Elune's Lantern		0		210	300	0	0	3	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4140629
+h076	1747990326	Discharge Tower		0		240	300	0	0	6	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4141568
+h077	1747990327	Rocket Lab	n02M	1848652365	Goblin Rocketeer	140	0	0	32	2	7	0	0	0	0	ensureUnitObjectMetadataRegistered	4142498
+h079	1747990329	Beacon of the Oasis		0		190	430	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4143576
+h07A	1747990337	Sacred Peyote		0		205	410	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4144438
+h07D	1747990340	Moon Altar	e00J	1697656906	Sage Druid	210	0	0	35	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4145259
+h07E	1747990341	Ballista Tower		0		230	300	0	0	1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4146496
+h07H	1747990344	Obelisk of Wilderness		0		220	300	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4147290
+h07I	1747990345	Starfall Obelisk		0		650	1350	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4148198
+h07L	1747990348	Guild of Shadows	n020	1848652336	Royal Assassin	175	0	0	33	1	1	0	1	0	1	ensureUnitObjectMetadataRegistered	4149077
+h07M	1747990349	House of Shadows	n01Z	1848652122	Assassin	200	0	0	25	1	1	0	1	0	1	ensureUnitObjectMetadataRegistered	4150571
+h07N	1747990350	Scorched Mansion	e00A	1697656897	Avatar of Vengeance	240	0	0	38	3	0	0	1	0	0	ensureUnitObjectMetadataRegistered	4152025
+h07O	1747990351	Pillaged Hut	e00B	1697656898	Avenging Spirit	230	0	0	26	3	0	0	1	0	0	ensureUnitObjectMetadataRegistered	4153427
+h07P	1747990352	Poof Tower		0		230	300	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4154729
+h07Q	1747990353	Blood Shaman Tent	o00G	1865429063	Blood Shaman	190	0	0	33	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4155534
+h07R	1747990354	Thunderpaw Spire		0		260	550	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4156733
+h07T	1747990356	Withering Hall		0		210	400	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4157732
+h07U	1747990357	Vessel of Purity		0		200	500	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4158680
+h07V	1747990358	Celestial Chi Tower		0		475	1250	1	0	5	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4159561
+h07W	1747990359	Snowveil Fountain		0		210	475	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4160397
+h07X	1747990360	Stasis Totem		0		0	0	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4161502
+h07Y	1747990361	Healing Totem		0		0	0	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4162269
+h07Z	1747990362	Endurance Totem		0		0	0	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4163073
+h080	1747990576	Temple of Riptide	n03U	1848652629	Winged Riptide Serpent	210	0	0	37	3	0	1	0	0	0	ensureUnitObjectMetadataRegistered	4163872
+h081	1747990577	Tiny Watch Tower		0		0	300	0	0	1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4165081
+h082	1747990578	Tiny Multishot Tower		0		100	600	0	0	1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4165873
+h088	1747990584	Moon Shrine	e007	1697656887	Druid	190	0	0	24	5	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4166725
+h08P	1747990608	Silver Glade		0		225	600	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4167925
+h08X	1747990616	Archery Range	n022	1848652338	Archer	180	0	0	24	1	7	0	0	0	0	ensureUnitObjectMetadataRegistered	4168905
+h08Y	1747990617	Archery Tower	n023	1848652339	Master Archer	200	0	0	34	1	7	0	0	0	0	ensureUnitObjectMetadataRegistered	4170169
+h092	1747990834	Spellbreaker Kodo Farm	o00B	1865429058	Spellbreaker Kodo Rider	100	0	0	33	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4171451
+h097	1747990839	Precious Golem Factory	n024	1848652340	Adamant Golem	500	385	1	53	4	6	0	1	1	0	ensureUnitObjectMetadataRegistered	4172558
+h09B	1747990850	Heavy Tank Factory	h06S	1747990099	Heavy Tank	200	0	0	34	0	2	0	0	1	0	ensureUnitObjectMetadataRegistered	4173972
+h09H	1747990856	Rocket Tank Factory	h098	1747990840	Rocket Tank	100	0	0	39	0	2	0	0	1	0	ensureUnitObjectMetadataRegistered	4175065
+h09I	1747990857	Assault Tank Factory	h099	1747990841	Assault Tank	200	0	0	34	5	2	0	0	1	0	ensureUnitObjectMetadataRegistered	4176311
+h09J	1747990858	Mine Layer Factory	h06U	1747990101	Mine Layer	150	0	0	31	0	2	0	1	1	1	ensureUnitObjectMetadataRegistered	4177524
+h09L	1747990860	Bomber Factory	h06R	1747990098	Gyrocopter	180	0	0	32	1	0	1	0	1	0	ensureUnitObjectMetadataRegistered	4178785
+h09P	1747990864	Arsenal	z003	2049978419	Flamegunner Sergeant	140	0	0	33	5	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4180012
+h09T	1747990868	Power Plant		0		340	650	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4181396
+h09X	1747990872	School of Wizardry	h07B	1747990338	Sorceress	360	0	0	33	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4182520
+h09Y	1747990873	Corrupted Ancient of Annihilation	n027	1848652343	Corrupted Annihilator	500	375	1	52	0	2	0	1	0	1	ensureUnitObjectMetadataRegistered	4183968
+h0A1	1747992881	Marksmen's Encampment	h05C	1747989827	Marksman	180	0	0	31	1	1	0	0	0	0	ensureUnitObjectMetadataRegistered	4185727
+h0Z1	1747999281	Mudcrab Burrow	n0Z1	1848662577	Mudcrab	100	0	0	20	0	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4186908
+h0Z2	1747999282	Rockcrab Burrow	n0Z2	1848662578	Rock Crab	175	0	0	26	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4187604
+h0Z3	1747999283	Spinecrab Tidepool	n0Z3	1848662579	Spiny Crab	150	0	0	22	1	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4188311
+h0Z4	1747999284	Hermit Mound	n0Z4	1848662580	Hermit Crab	220	0	0	30	0	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4189009
+h0Z5	1747999285	Tidal Cairn		0		180	0	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4189702
+h0Z6	1747999286	Coral Spire		0		150	0	0	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4190324
+h0Z7	1747999287	Reef Guardian	n0Z7	1848662583	Giant Reef Crab	550	1500	1	60	2	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4190945
+n01J	1848652106	Corrupted Protector		0		200	300	0	0	5	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4191657
+n02D	1848652356	Ancient Protector		0		210	300	0	0	2	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4192578
+n02N	1848652366	Fire Gnoll Hut	n02T	1848652372	Fire Gnoll	180	0	0	32	0	0	0	0	0	1	ensureUnitObjectMetadataRegistered	4193576
+n02O	1848652367	Den of the Ogre Lord	n02Y	1848652377	Ogre Lord	200	0	0	38	2	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4194909
+n02P	1848652368	Gnoll Tent	n02S	1848652371	Gnoll	165	0	0	23	0	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4196149
+n02Q	1848652369	Harpy Nest	n02W	1848652375	Harpy	210	0	0	25	1	7	1	0	0	0	ensureUnitObjectMetadataRegistered	4197283
+n02R	1848652370	Monstrous Sandkin Burrow	n035	1848652597	Monstrous Sandkin	230	0	0	38	3	1	0	0	0	1	ensureUnitObjectMetadataRegistered	4198333
+n031	1848652593	Nest of Harpy Matriarch	n034	1848652596	Harpies' Matriarch	415	580	1	56	4	7	1	0	0	0	ensureUnitObjectMetadataRegistered	4199701
+n033	1848652595	Ogre Den	n02X	1848652376	Ogre	260	0	0	27	2	2	0	1	0	0	ensureUnitObjectMetadataRegistered	4201201
+n036	1848652598	Quillboar Yard	n02V	1848652374	Quillboar	130	0	0	21	1	7	0	1	0	0	ensureUnitObjectMetadataRegistered	4202400
+n037	1848652599	Razormane Abode	n02U	1848652373	Razormane	190	0	0	31	1	7	0	1	0	1	ensureUnitObjectMetadataRegistered	4203488
+n038	1848652600	Salamander Hatchery	n02Z	1848652378	Salamander	450	0	0	37	5	2	0	0	0	0	ensureUnitObjectMetadataRegistered	4204777
+n039	1848652601	Sandkin Burrow	n030	1848652592	Sandkin	230	0	0	26	3	1	0	0	0	1	ensureUnitObjectMetadataRegistered	4206067
+n03A	1848652609	Temple of Storm		0		600	1500	1	0	-1	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4207237
+n03B	1848652610	Nest of Harpy Witch	n032	1848652594	Harpy Witch	200	0	0	35	1	7	1	0	0	1	ensureUnitObjectMetadataRegistered	4208136
+n03D	1848652612	Bamboo Dojo	n03E	1848652613	Sagepaw Monk	145	0	0	22	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4209517
+n03F	1848652614	Brew Hut	n03G	1848652615	Ironpaw Militia	190	0	0	23	0	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4210677
+n03H	1848652616	Temple of the Wandering Spark	n03I	1848652617	Echofoot Mystic	240	0	0	27	3	0	0	0	0	0	ensureUnitObjectMetadataRegistered	4211919
+n03K	1848652619	Fighting Tavern	n03J	1848652618	Ironpaw Guardian	180	0	0	33	0	1	0	1	0	0	ensureUnitObjectMetadataRegistered	4213196
+n03L	1848652620	Jade Shrine	n03M	1848652621	Jade Elder	420	0	0	36	0	2	0	0	0	0	ensureUnitObjectMetadataRegistered	4214590
+n03N	1848652622	Pandaren Siege Workshop	o00H	1865429064	Brewshock Catapult	360	0	0	34	2	1	0	0	1	1	ensureUnitObjectMetadataRegistered	4215823
+n03P	1848652624	Temple of Ten Thousand Drinks	n03O	1848652623	Drunken Brewmaster	400	520	1	52	4	5	0	1	0	0	ensureUnitObjectMetadataRegistered	4217144
+n03Q	1848652625	Cloud Hangar	h07S	1747990355	Cloud Ship	380	0	0	34	3	1	1	0	1	0	ensureUnitObjectMetadataRegistered	4218729
+n03S	1848652627	Sagepaw Sanctum	n03T	1848652628	Sagepaw Soulkeeper	170	0	0	31	3	7	0	0	0	1	ensureUnitObjectMetadataRegistered	4219848
+o000	1865429040	Anti Air Tower		0		175	300	0	0	0	-1	0	0	0	0	ensureUnitObjectMetadataRegistered	4221028

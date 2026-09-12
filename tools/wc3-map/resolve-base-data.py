@@ -1641,6 +1641,104 @@ def main() -> None:
         production_ability_rows,
     )
 
+    # Join the map's generated UnitObjectMeta table to its complete race
+    # partition and authored upgrade graph. This is the preferred native import
+    # view for Castle Fight building/production definitions: spawn time and
+    # costs come from the metadata consumed and validated by CFBuilding_setup,
+    # not from generic Warcraft construction-time fields or tooltip parsing.
+    resolved_buildings: dict[str, dict[str, str]] = {}
+    with (output / "buildings.tsv").open(encoding="utf-8", newline="") as handle:
+        resolved_buildings = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    unit_object_metadata_path = map_root / "script" / "unit-object-metadata.tsv"
+    race_buildings_path = map_root / "script" / "race-buildings.tsv"
+    building_upgrades_path = map_root / "script" / "building-upgrades.tsv"
+    metadata_rows: list[dict[str, str]] = []
+    race_by_building: dict[str, dict[str, str]] = {}
+    upgrades_from: dict[str, list[str]] = defaultdict(list)
+    upgrades_to: dict[str, list[str]] = defaultdict(list)
+    xo_buildings: set[str] = set()
+
+    if unit_object_metadata_path.exists():
+        with unit_object_metadata_path.open(encoding="utf-8", newline="") as handle:
+            metadata_rows = list(csv.DictReader(handle, delimiter="\t"))
+    if race_buildings_path.exists():
+        with race_buildings_path.open(encoding="utf-8", newline="") as handle:
+            race_by_building = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+    if building_upgrades_path.exists():
+        with building_upgrades_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                upgrades_to[row["source_building_rawcode"]].append(row["target_building_rawcode"])
+                upgrades_from[row["target_building_rawcode"]].append(row["source_building_rawcode"])
+    if effective_unit_path.exists():
+        with effective_unit_path.open(encoding="utf-8", newline="") as handle:
+            xo_buildings = {row["building_rawcode"] for row in csv.DictReader(handle, delimiter="\t")}
+
+    if metadata_rows and set(race_by_building) != {row["building_rawcode"] for row in metadata_rows}:
+        raise ValueError("generated race catalogs do not exactly partition UnitObjectMeta buildings")
+
+    production_building_rows: list[list[Any]] = []
+    production_building_count = 0
+    campaign_production_count = 0
+    normal_production_count = 0
+    normal_xo_production_count = 0
+    for meta in metadata_rows:
+        building_rawcode = meta["building_rawcode"]
+        building = resolved_buildings.get(building_rawcode)
+        race = race_by_building.get(building_rawcode)
+        if building is None or race is None:
+            raise ValueError(f"UnitObjectMeta building is missing resolved building/race data: {building_rawcode}")
+        if meta["unit_rawcode"] != race["unit_rawcode"]:
+            raise ValueError(
+                f"race and UnitObjectMeta spawn rawcodes disagree for {building_rawcode}: "
+                f"{race['unit_rawcode']} != {meta['unit_rawcode']}"
+            )
+
+        is_production = bool(meta["unit_rawcode"])
+        campaign_only = race["campaign_only"] == "1"
+        in_xo = building_rawcode in xo_buildings
+        if is_production:
+            production_building_count += 1
+            if campaign_only:
+                campaign_production_count += 1
+            else:
+                normal_production_count += 1
+                if in_xo:
+                    normal_xo_production_count += 1
+        if in_xo and (campaign_only or not is_production):
+            raise ValueError(f"xO contains non-normal-production building: {building_rawcode}")
+
+        food_used = int(meta["food_used"])
+        lumber_cost = int(meta["lumber_cost"])
+        production_building_rows.append([
+            race["race_index"], race["race_function"], race["builder_rawcode"], race["builder_names"],
+            int(campaign_only), race["building_order"],
+            building_rawcode, meta["building_names"], "production" if is_production else "non-production",
+            meta["unit_rawcode"], meta["unit_names"],
+            meta["gold_cost"], meta["lumber_cost"], meta["food_used"], int(food_used > 0), int(lumber_cost == 0),
+            meta["spawn_build_time"], meta["attack_index"], meta["defense_index"],
+            meta["is_air"], meta["is_melee"], meta["is_mechanical"], meta["is_caster"], int(in_xo),
+            ",".join(sorted(upgrades_from.get(building_rawcode, []))),
+            ",".join(sorted(upgrades_to.get(building_rawcode, []))),
+            building["gold_cost"], building["lumber_cost"], building["build_time"],
+            building["pathing_texture"], building["footprint_width_cells"], building["footprint_height_cells"],
+            building["footprint_width_world_units"], building["footprint_height_world_units"], building["footprint_hex_rows"],
+        ])
+
+    write_tsv(
+        output / "production-buildings.tsv",
+        [
+            "race_index", "race_function", "builder_rawcode", "builder_names", "campaign_only", "building_order",
+            "building_rawcode", "building_names", "building_kind", "unit_rawcode", "unit_names",
+            "gold_cost", "lumber_cost", "food_used", "is_legendary", "gives_lumber", "spawn_time",
+            "attack_index", "defense_index", "is_air_unit", "is_melee", "is_mechanical", "is_caster", "in_xo_runtime_catalog",
+            "upgrade_from", "upgrade_to", "static_object_gold_cost", "static_object_lumber_cost", "static_object_build_time",
+            "pathing_texture", "footprint_width_cells", "footprint_height_cells", "footprint_width_world_units",
+            "footprint_height_world_units", "footprint_hex_rows",
+        ],
+        production_building_rows,
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -1734,6 +1832,12 @@ def main() -> None:
         "production_unit_unique_abilities": len(production_ability_unique),
         "production_unit_inherited_ability_links": production_ability_inherited_links,
         "production_unit_ability_links_with_protected_runtime_fields": production_ability_runtime_field_links,
+        "building_catalog_rows": len(production_building_rows),
+        "building_catalog_production_rows": production_building_count,
+        "building_catalog_campaign_production_rows": campaign_production_count,
+        "building_catalog_normal_production_rows": normal_production_count,
+        "building_catalog_normal_production_rows_in_xo": normal_xo_production_count,
+        "building_catalog_upgrade_edges": sum(len(values) for values in upgrades_to.values()),
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -1744,6 +1848,7 @@ def main() -> None:
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
+            "production-buildings.tsv joins UnitObjectMeta, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; metadata spawn_time/costs are the CFBuilding runtime source rather than generic Warcraft construction-time fields",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

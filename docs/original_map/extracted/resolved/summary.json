@@ -114,6 +114,12 @@
   "production_unit_unique_abilities": 291,
   "production_unit_inherited_ability_links": 6,
   "production_unit_ability_links_with_protected_runtime_fields": 77,
+  "building_catalog_rows": 240,
+  "building_catalog_production_rows": 167,
+  "building_catalog_campaign_production_rows": 5,
+  "building_catalog_normal_production_rows": 162,
+  "building_catalog_normal_production_rows_in_xo": 162,
+  "building_catalog_upgrade_edges": 90,
   "notes": [
     "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -123,6 +129,7 @@
     "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
     "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-    "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes"
+    "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
+    "production-buildings.tsv joins UnitObjectMeta, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; metadata spawn_time/costs are the CFBuilding runtime source rather than generic Warcraft construction-time fields"
   ]
 }

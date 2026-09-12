@@ -758,6 +758,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     rawcode_mutator_traces = analysis["rawcode_mutator_traces"]
     protected_ability_fields = analysis["protected_ability_fields"]
     jass_add_protected_fields = analysis["jass_add_protected_fields"]
+    unit_object_metadata = analysis["unit_object_metadata"]
+    unit_object_metadata_fingerprint = int(analysis["unit_object_metadata_fingerprint"])
+    unit_object_upgrades = analysis["unit_object_upgrades"]
+    race_buildings = analysis["race_buildings"]
     effective_unit_stats = analysis["effective_unit_stats"]
     protected_unit_stats = analysis["protected_unit_stats"]
     function_aliases = analysis["function_aliases"]
@@ -958,6 +962,85 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 row["byte_offset"],
             ])
 
+    with (script_dir / "unit-object-metadata.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "unit_rawcode", "unit_rawcode_integer", "unit_names",
+            "gold_cost", "lumber_cost", "food_used", "spawn_build_time",
+            "attack_index", "defense_index", "is_air", "is_melee", "is_mechanical", "is_caster",
+            "source_function", "byte_offset",
+        ])
+        for row in unit_object_metadata:
+            building_id = int(row["building_id"])
+            unit_id = int(row["unit_id"])
+            building_rawcode, building_categories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            if building_categories != "units":
+                raise ValueError(f"UnitObjectMeta building {building_rawcode} does not resolve uniquely to a unit/building object")
+            if unit_id:
+                unit_rawcode, unit_categories, _utables, unit_names, _udefs = rawcode_metadata(unit_id)
+                if unit_categories != "units":
+                    raise ValueError(f"UnitObjectMeta spawn {unit_rawcode} does not resolve uniquely to a unit object")
+            else:
+                unit_rawcode = ""
+                unit_names = ""
+            writer.writerow([
+                building_rawcode, building_id, building_names,
+                unit_rawcode, unit_id, unit_names,
+                row["gold_cost"], row["lumber_cost"], row["food_used"], row["spawn_build_time"],
+                row["attack_index"], row["defense_index"],
+                int(bool(row["is_air"])), int(bool(row["is_melee"])), int(bool(row["is_mechanical"])), int(bool(row["is_caster"])),
+                row["source_function"], row["byte_offset"],
+            ])
+
+    with (script_dir / "building-upgrades.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "source_building_rawcode", "source_building_rawcode_integer", "source_building_names",
+            "target_building_rawcode", "target_building_rawcode_integer", "target_building_names",
+            "source_function", "byte_offset",
+        ])
+        for row in unit_object_upgrades:
+            source_id = int(row["source_building_id"])
+            target_id = int(row["target_building_id"])
+            source_rawcode, source_categories, _stables, source_names, _sdefs = rawcode_metadata(source_id)
+            target_rawcode, target_categories, _ttables, target_names, _tdefs = rawcode_metadata(target_id)
+            if source_categories != "units" or target_categories != "units":
+                raise ValueError(f"authored building upgrade does not resolve to unit/building objects: {source_rawcode}->{target_rawcode}")
+            writer.writerow([
+                source_rawcode, source_id, source_names,
+                target_rawcode, target_id, target_names,
+                row["source_function"], row["byte_offset"],
+            ])
+
+    with (script_dir / "race-buildings.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "race_index", "race_function", "builder_rawcode", "builder_rawcode_integer", "builder_names", "campaign_only",
+            "building_order", "building_rawcode", "building_rawcode_integer", "building_names",
+            "unit_rawcode", "unit_rawcode_integer", "unit_names", "byte_offset",
+        ])
+        for row in race_buildings:
+            builder_id = int(row["builder_id"])
+            building_id = int(row["building_id"])
+            unit_id = int(row["unit_id"])
+            builder_rawcode, builder_categories, _brtables, builder_names, _brdefs = rawcode_metadata(builder_id)
+            building_rawcode, building_categories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            if builder_categories != "units" or building_categories != "units":
+                raise ValueError(f"race catalog rawcodes do not resolve to unit/building objects: {builder_rawcode}/{building_rawcode}")
+            if unit_id:
+                unit_rawcode, unit_categories, _utables, unit_names, _udefs = rawcode_metadata(unit_id)
+                if unit_categories != "units":
+                    raise ValueError(f"race catalog spawn {unit_rawcode} does not resolve to a unit object")
+            else:
+                unit_rawcode = ""
+                unit_names = ""
+            writer.writerow([
+                row["race_index"], row["race_function"], builder_rawcode, builder_id, builder_names, int(bool(row["campaign_only"])),
+                row["building_order"], building_rawcode, building_id, building_names,
+                unit_rawcode, unit_id, unit_names, row["byte_offset"],
+            ])
+
     with (script_dir / "effective-unit-stats.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow([
@@ -1128,6 +1211,13 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "protected_ability_jass_add_only_assignments": sum(
             str(row["canonical_relation"]) == "jass-only" for row in jass_add_protected_fields
         ),
+        "unit_object_metadata_rows": len(unit_object_metadata),
+        "unit_object_metadata_production_rows": sum(int(row["unit_id"]) > 0 for row in unit_object_metadata),
+        "unit_object_metadata_fingerprint": unit_object_metadata_fingerprint,
+        "unit_object_upgrade_edges": len(unit_object_upgrades),
+        "race_catalogs": len({int(row["race_index"]) for row in race_buildings}),
+        "race_building_links": len(race_buildings),
+        "campaign_only_race_catalogs": len({int(row["race_index"]) for row in race_buildings if bool(row["campaign_only"])}),
         "effective_unit_stat_rows": len(effective_unit_stats),
         "effective_unit_stat_buildings": len({int(row["building_id"]) for row in effective_unit_stats}),
         "effective_unit_stat_units": len({int(row["unit_id"]) for row in effective_unit_stats}),

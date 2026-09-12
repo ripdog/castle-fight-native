@@ -246,6 +246,41 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(inherited["Aloc"]["name"], "Locust")
         self.assertEqual(inherited["Avul"]["name"], "Invulnerable")
 
+    def test_production_building_catalog_uses_runtime_spawn_metadata_and_race_partition(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["building_catalog_rows"], 240)
+        self.assertEqual(summary["building_catalog_production_rows"], 167)
+        self.assertEqual(summary["building_catalog_campaign_production_rows"], 5)
+        self.assertEqual(summary["building_catalog_normal_production_rows"], 162)
+        self.assertEqual(summary["building_catalog_normal_production_rows_in_xo"], 162)
+        self.assertEqual(summary["building_catalog_upgrade_edges"], 90)
+
+        with (self.resolved / "production-buildings.tsv").open(encoding="utf-8") as handle:
+            rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 240)
+
+        barracks = rows["h000"]
+        self.assertEqual(barracks["builder_names"], "Human Builder")
+        self.assertEqual(barracks["building_kind"], "production")
+        self.assertEqual(barracks["unit_rawcode"], "hfoo")
+        self.assertEqual(barracks["gold_cost"], "100")
+        self.assertEqual(barracks["spawn_time"], "20")
+        self.assertEqual(barracks["static_object_build_time"], "2")
+        self.assertEqual(barracks["upgrade_to"], "h039")
+        self.assertEqual(barracks["in_xo_runtime_catalog"], "1")
+
+        crab = rows["h0Z1"]
+        self.assertEqual(crab["builder_names"], "Critter Builder")
+        self.assertEqual(crab["campaign_only"], "1")
+        self.assertEqual(crab["unit_rawcode"], "n0Z1")
+        self.assertEqual(crab["in_xo_runtime_catalog"], "0")
+        self.assertEqual(crab["upgrade_to"], "h0Z2")
+
+        reef_guardian = rows["h0Z7"]
+        self.assertEqual(reef_guardian["food_used"], "1")
+        self.assertEqual(reef_guardian["is_legendary"], "1")
+        self.assertEqual(reef_guardian["spawn_time"], "60")
+
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["unresolved_base_objects"], [])

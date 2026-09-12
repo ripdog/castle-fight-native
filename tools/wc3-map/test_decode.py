@@ -153,6 +153,60 @@ class LuaIndexTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disagrees with xD table"):
             DECODE.analyze_lua(source, set())
 
+    def test_extracts_generated_unit_object_metadata(self) -> None:
+        source = (
+            'function ensureUnitObjectMetadataRegistered() if(not OR)then OR=true '
+            'PR:HashMap_put(1747988528,UnitObjectMeta_new_UnitObjectMeta(1751543663,"Barracks","bicon","tip","Footman","uicon",100,0,0,20,0,2,false,true,false,false)) '
+            'PR:HashMap_put(1747988529,UnitObjectMeta_new_UnitObjectMeta(0,"Artillery","bicon","tip","","",200,380,0,0,2,(-1),false,false,false,false)) '
+            'end end'
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747988528, 1747988529, 1751543663})
+
+        self.assertEqual(len(indexed["unit_object_metadata"]), 2)
+        barracks, artillery = indexed["unit_object_metadata"]
+        self.assertEqual(barracks["building_id"], 1747988528)
+        self.assertEqual(barracks["unit_id"], 1751543663)
+        self.assertEqual(barracks["gold_cost"], 100)
+        self.assertEqual(barracks["spawn_build_time"], 20)
+        self.assertEqual(barracks["attack_index"], 0)
+        self.assertEqual(barracks["defense_index"], 2)
+        self.assertTrue(barracks["is_melee"])
+        self.assertFalse(barracks["is_air"])
+        self.assertEqual(artillery["unit_id"], 0)
+        self.assertEqual(artillery["lumber_cost"], 380)
+        self.assertEqual(artillery["defense_index"], -1)
+        self.assertIsInstance(indexed["unit_object_metadata_fingerprint"], int)
+
+    def test_extracts_race_membership_and_authored_upgrade_edges(self) -> None:
+        source = (
+            "function raceInit() local race=nil local building=nil "
+            "race=Ke:create151() race.CFRace_builderId=(-1) race.CFRace_isCampaignOnly=false "
+            "race.CFRace_builderId=1479563824 CFRace_CFRace_markCampaignOnly(race) "
+            "building=_I[_d[1]](1747988528,1751543663) "
+            "CFRace_CFRace_registerBuildings__w3p_vmProtect(race,building) end "
+            "function ensureUnitObjectUpgradeMetadataRegistered() if(not CR)then CR=true "
+            "IR[ER]=1747988528 HR[ER]=1747989305 ER=(ER+1) "
+            "DR=authoredUpgradeMix(DR,1747988528) DR=authoredUpgradeMix(DR,1747989305) end end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747988528, 1751543663, 1747989305})
+
+        self.assertEqual(indexed["race_buildings"], [{
+            "race_index": 0,
+            "race_function": "raceInit",
+            "builder_id": 1479563824,
+            "campaign_only": True,
+            "building_order": 0,
+            "building_id": 1747988528,
+            "unit_id": 1751543663,
+            "byte_offset": source.find(b"_I"),
+        }])
+        self.assertEqual(len(indexed["unit_object_upgrades"]), 1)
+        upgrade = indexed["unit_object_upgrades"][0]
+        self.assertEqual(upgrade["source_building_id"], 1747988528)
+        self.assertEqual(upgrade["target_building_id"], 1747989305)
+
     def test_extracts_effective_unit_stat_catalog(self) -> None:
         source = (
             "function xO()local dcs=nil "

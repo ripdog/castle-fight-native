@@ -483,6 +483,23 @@ def _decimal_text(value: Decimal) -> str:
     return text or "0"
 
 
+def _integer_literal_value(tokens: list[LuaToken]) -> int:
+    literal_tokens = tokens
+    if len(literal_tokens) >= 2 and literal_tokens[0].text == "(" and literal_tokens[-1].text == ")":
+        literal_tokens = literal_tokens[1:-1]
+    value = Decimal(_numeric_literal_text(literal_tokens))
+    if value != value.to_integral_value():
+        raise ValueError(f"expected integer Lua literal, got {value}")
+    return int(value)
+
+
+def _boolean_literal_value(tokens: list[LuaToken]) -> bool:
+    if len(tokens) != 1 or tokens[0].kind != "ident" or tokens[0].text not in {"true", "false"}:
+        text = "".join(token.text for token in tokens)
+        raise ValueError(f"expected boolean Lua literal, got {text!r}")
+    return tokens[0].text == "true"
+
+
 def _expect_token(tokens: list[LuaToken], index: int, text: str) -> LuaToken:
     if index >= len(tokens) or tokens[index].text != text:
         actual = tokens[index].text if index < len(tokens) else "<eof>"
@@ -510,6 +527,260 @@ def _parse_scaled_int_to_real(tokens: list[LuaToken], index: int) -> tuple[Decim
         raise ValueError("effective-stat scale denominator must be nonzero")
     _expect_token(tokens, next_index + 2, ")")
     return numerator / denominator, next_index + 3
+
+
+def _wurst_registry_call_arguments(tokens: list[LuaToken], index: int) -> tuple[list[list[LuaToken]], int]:
+    _expect_token(tokens, index, "_I")
+    _expect_token(tokens, index + 1, "[")
+    depth = 0
+    closing = None
+    cursor = index + 1
+    while cursor < len(tokens):
+        token = tokens[cursor]
+        if token.text == "[":
+            depth += 1
+        elif token.text == "]":
+            depth -= 1
+            if depth == 0:
+                closing = cursor
+                break
+        cursor += 1
+    if closing is None or closing + 1 >= len(tokens) or tokens[closing + 1].text != "(":
+        raise ValueError(f"Wurst registry reference at byte {tokens[index].start} has no call")
+    return _parenthesized_arguments(tokens, closing + 1)
+
+
+def _extract_unit_object_metadata(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], int]:
+    """Recover the generated CFBuilding/UnitObjectMeta gameplay metadata table.
+
+    String literals are intentionally skipped by the lexer, but all gameplay
+    arguments to UnitObjectMeta_new_UnitObjectMeta remain exact numeric/boolean
+    literals: spawned unit, costs, food/legendary marker, spawn interval,
+    attack/defense indexes, and air/melee/mechanical/caster flags.
+    """
+    function_name = "ensureUnitObjectMetadataRegistered"
+    body = _function_body_tokens(data, functions, function_name)
+    if body is None:
+        return [], 41
+    function_start, tokens = body
+    rows: list[dict[str, object]] = []
+    seen_buildings: set[int] = set()
+
+    for index, token in enumerate(tokens):
+        if token.kind != "ident" or token.text != "UnitObjectMeta_new_UnitObjectMeta":
+            continue
+        if index < 6:
+            raise ValueError("UnitObjectMeta constructor has no enclosing PR:HashMap_put")
+        prefix = tokens[index - 6 : index]
+        if not (
+            prefix[0].text == "PR"
+            and prefix[1].text == ":"
+            and prefix[2].text == "HashMap_put"
+            and prefix[3].text == "("
+            and prefix[4].kind == "number"
+            and prefix[4].integer_value is not None
+            and prefix[5].text == ","
+        ):
+            raise ValueError(
+                f"UnitObjectMeta constructor at byte {function_start + token.start} is not directly stored in PR"
+            )
+        building_id = int(prefix[4].integer_value)
+        args, next_index = _call_arguments(tokens, index)
+        if len(args) != 16:
+            raise ValueError(f"UnitObjectMeta constructor must have 16 arguments, got {len(args)}")
+        if any(args[arg_index] for arg_index in range(1, 6)):
+            raise ValueError("UnitObjectMeta presentation-string arguments unexpectedly produced lexical tokens")
+        if next_index >= len(tokens) or tokens[next_index].text != ")":
+            raise ValueError("UnitObjectMeta constructor is not the second argument of PR:HashMap_put")
+
+        unit_id = _integer_literal_value(args[0])
+        gold_cost = _integer_literal_value(args[6])
+        lumber_cost = _integer_literal_value(args[7])
+        food_used = _integer_literal_value(args[8])
+        spawn_build_time = _integer_literal_value(args[9])
+        attack_index = _integer_literal_value(args[10])
+        defense_index = _integer_literal_value(args[11])
+        is_air = _boolean_literal_value(args[12])
+        is_melee = _boolean_literal_value(args[13])
+        is_mechanical = _boolean_literal_value(args[14])
+        is_caster = _boolean_literal_value(args[15])
+
+        if building_id in seen_buildings:
+            raise ValueError(f"duplicate UnitObjectMeta building ID: {building_id}")
+        seen_buildings.add(building_id)
+        rows.append({
+            "building_id": building_id,
+            "unit_id": unit_id,
+            "gold_cost": gold_cost,
+            "lumber_cost": lumber_cost,
+            "food_used": food_used,
+            "spawn_build_time": spawn_build_time,
+            "attack_index": attack_index,
+            "defense_index": defense_index,
+            "is_air": is_air,
+            "is_melee": is_melee,
+            "is_mechanical": is_mechanical,
+            "is_caster": is_caster,
+            "byte_offset": function_start + token.start,
+            "source_function": function_name,
+        })
+
+    # Mirror unitObjectMetaMix so downstream validation has a stable source
+    # fingerprint independent of the obfuscated presentation strings.
+    modulus = 1_000_003
+    fingerprint = 41
+
+    def wurst_mod(value: int, divisor: int) -> int:
+        return value % divisor if value >= 0 else -(abs(value) % divisor)
+
+    def mix(accumulator: int, value: int) -> int:
+        encoded = wurst_mod(value, modulus)
+        if encoded < 0:
+            encoded = -encoded + 17
+        return wurst_mod(accumulator * 131 + encoded + 17, modulus)
+
+    for row in rows:
+        for value in (
+            int(row["building_id"]), int(row["unit_id"]), int(row["gold_cost"]), int(row["lumber_cost"]),
+            int(row["food_used"]), int(row["spawn_build_time"]), int(row["attack_index"]), int(row["defense_index"]),
+            int(bool(row["is_air"])), int(bool(row["is_melee"])), int(bool(row["is_mechanical"])), int(bool(row["is_caster"])),
+        ):
+            fingerprint = mix(fingerprint, value)
+
+    return rows, fingerprint
+
+
+def _extract_unit_object_upgrades(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover authored building upgrade edges from the generated metadata table."""
+    function_name = "ensureUnitObjectUpgradeMetadataRegistered"
+    body = _function_body_tokens(data, functions, function_name)
+    if body is None:
+        return []
+    function_start, tokens = body
+    rows: list[dict[str, object]] = []
+    seen: set[tuple[int, int]] = set()
+    index = 0
+    while index + 19 < len(tokens):
+        if not (
+            tokens[index].text == "IR"
+            and tokens[index + 1].text == "["
+            and tokens[index + 2].text == "ER"
+            and tokens[index + 3].text == "]"
+            and tokens[index + 4].text == "="
+            and tokens[index + 5].kind == "number"
+            and tokens[index + 5].integer_value is not None
+            and tokens[index + 6].text == "HR"
+            and tokens[index + 7].text == "["
+            and tokens[index + 8].text == "ER"
+            and tokens[index + 9].text == "]"
+            and tokens[index + 10].text == "="
+            and tokens[index + 11].kind == "number"
+            and tokens[index + 11].integer_value is not None
+            and tokens[index + 12].text == "ER"
+            and tokens[index + 13].text == "="
+            and tokens[index + 14].text == "("
+            and tokens[index + 15].text == "ER"
+            and tokens[index + 16].text == "+"
+            and tokens[index + 17].kind == "number"
+            and tokens[index + 17].integer_value == 1
+            and tokens[index + 18].text == ")"
+        ):
+            index += 1
+            continue
+        source_id = int(tokens[index + 5].integer_value)
+        target_id = int(tokens[index + 11].integer_value)
+        edge = (source_id, target_id)
+        if edge in seen:
+            raise ValueError(f"duplicate authored building upgrade edge: {edge}")
+        seen.add(edge)
+        rows.append({
+            "source_building_id": source_id,
+            "target_building_id": target_id,
+            "source_function": function_name,
+            "byte_offset": function_start + tokens[index].start,
+        })
+        index += 19
+    return rows
+
+
+def _extract_race_buildings(
+    data: bytes,
+    functions: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+) -> list[dict[str, object]]:
+    """Recover race→building membership from generated CFRace initializers."""
+    registrar = "CFRace_CFRace_registerBuildings__w3p_vmProtect"
+    callers = {
+        caller
+        for (caller, callee), count in call_edges.items()
+        if callee == registrar and count > 0 and caller != "<top-level>"
+    }
+    function_order = {str(row["name"]): int(row["start"]) for row in functions}
+    rows: list[dict[str, object]] = []
+    seen_buildings: set[int] = set()
+
+    for race_index, function_name in enumerate(sorted(callers, key=lambda name: function_order.get(name, 1 << 62))):
+        body = _function_body_tokens(data, functions, function_name)
+        if body is None:
+            raise ValueError(f"race registrar caller has no function body: {function_name}")
+        function_start, tokens = body
+        builder_id: int | None = None
+        campaign_only = any(
+            token.kind == "ident" and token.text == "CFRace_CFRace_markCampaignOnly"
+            for token in tokens
+        )
+
+        for index in range(len(tokens) - 4):
+            if (
+                tokens[index].kind == "ident"
+                and tokens[index + 1].text == "."
+                and tokens[index + 2].text == "CFRace_builderId"
+                and tokens[index + 3].text == "="
+                and tokens[index + 4].kind == "number"
+                and tokens[index + 4].integer_value is not None
+                and int(tokens[index + 4].integer_value) > 0
+            ):
+                builder_id = int(tokens[index + 4].integer_value)
+
+        if builder_id is None:
+            raise ValueError(f"race initializer {function_name} has no positive builder rawcode")
+
+        building_order = 0
+        for index, token in enumerate(tokens):
+            if token.kind != "ident" or token.text != "_I":
+                continue
+            args, _next = _wurst_registry_call_arguments(tokens, index)
+            if len(args) not in {1, 2}:
+                continue
+            try:
+                building_id = _integer_literal_value(args[0])
+                unit_id = _integer_literal_value(args[1]) if len(args) == 2 else 0
+            except ValueError:
+                continue
+            if building_id <= 0:
+                continue
+            if building_id in seen_buildings:
+                raise ValueError(f"building {building_id} appears in multiple generated race catalogs")
+            seen_buildings.add(building_id)
+            rows.append({
+                "race_index": race_index,
+                "race_function": function_name,
+                "builder_id": builder_id,
+                "campaign_only": campaign_only,
+                "building_order": building_order,
+                "building_id": building_id,
+                "unit_id": unit_id,
+                "byte_offset": function_start + token.start,
+            })
+            building_order += 1
+
+    return rows
 
 
 def _extract_effective_unit_stats(
@@ -1108,6 +1379,9 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     protected_ability_fields = _extract_protected_ability_fields(data, functions)
     jass_add_protected_fields = _extract_jass_add_protected_fields(data, functions)
     _cross_check_protected_ability_fields(protected_ability_fields, jass_add_protected_fields)
+    unit_object_metadata, unit_object_metadata_fingerprint = _extract_unit_object_metadata(data, functions)
+    unit_object_upgrades = _extract_unit_object_upgrades(data, functions)
+    race_buildings = _extract_race_buildings(data, functions, call_edges)
     effective_unit_stats = _extract_effective_unit_stats(data, functions)
     protected_unit_stats = _extract_protected_unit_stats(data, functions)
 
@@ -1135,6 +1409,10 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "rawcode_mutator_traces": rawcode_mutator_traces,
         "protected_ability_fields": protected_ability_fields,
         "jass_add_protected_fields": jass_add_protected_fields,
+        "unit_object_metadata": unit_object_metadata,
+        "unit_object_metadata_fingerprint": unit_object_metadata_fingerprint,
+        "unit_object_upgrades": unit_object_upgrades,
+        "race_buildings": race_buildings,
         "effective_unit_stats": effective_unit_stats,
         "protected_unit_stats": protected_unit_stats,
         "function_aliases": function_aliases,
