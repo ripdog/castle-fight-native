@@ -1653,8 +1653,10 @@ def main() -> None:
     unit_object_metadata_path = map_root / "script" / "unit-object-metadata.tsv"
     race_buildings_path = map_root / "script" / "race-buildings.tsv"
     building_upgrades_path = map_root / "script" / "building-upgrades.tsv"
+    race_semantics_path = map_root / "script" / "race-building-semantics.tsv"
     metadata_rows: list[dict[str, str]] = []
     race_by_building: dict[str, dict[str, str]] = {}
+    semantics_by_building: dict[str, dict[str, str]] = {}
     upgrades_from: dict[str, list[str]] = defaultdict(list)
     upgrades_to: dict[str, list[str]] = defaultdict(list)
     xo_buildings: set[str] = set()
@@ -1670,24 +1672,47 @@ def main() -> None:
             for row in csv.DictReader(handle, delimiter="\t"):
                 upgrades_to[row["source_building_rawcode"]].append(row["target_building_rawcode"])
                 upgrades_from[row["target_building_rawcode"]].append(row["source_building_rawcode"])
+    if race_semantics_path.exists():
+        with race_semantics_path.open(encoding="utf-8", newline="") as handle:
+            semantics_by_building = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
     if effective_unit_path.exists():
         with effective_unit_path.open(encoding="utf-8", newline="") as handle:
             xo_buildings = {row["building_rawcode"] for row in csv.DictReader(handle, delimiter="\t")}
 
-    if metadata_rows and set(race_by_building) != {row["building_rawcode"] for row in metadata_rows}:
+    metadata_buildings = {row["building_rawcode"] for row in metadata_rows}
+    if metadata_rows and set(race_by_building) != metadata_buildings:
         raise ValueError("generated race catalogs do not exactly partition UnitObjectMeta buildings")
+    if metadata_rows and set(semantics_by_building) != metadata_buildings:
+        raise ValueError("race wrapper semantics do not exactly cover UnitObjectMeta buildings")
+
+    def catalog_income(building_rawcode: str, stack: tuple[str, ...] = ()) -> float:
+        if building_rawcode in stack:
+            raise ValueError(f"cycle in CFBuilding precursor income chain: {' -> '.join(stack + (building_rawcode,))}")
+        meta = next((row for row in metadata_rows if row["building_rawcode"] == building_rawcode), None)
+        semantics = semantics_by_building.get(building_rawcode)
+        if meta is None or semantics is None:
+            raise ValueError(f"missing metadata/semantics while calculating CFBuilding income: {building_rawcode}")
+        gold = numeric(meta["gold_cost"])
+        factor = numeric(semantics["income_factor"])
+        if gold is None or factor is None:
+            raise ValueError(f"non-numeric CFBuilding income inputs for {building_rawcode}")
+        own = gold * factor / 100.0
+        precursor = semantics["precursor_rawcode"]
+        return own + (catalog_income(precursor, stack + (building_rawcode,)) if precursor else 0.0)
 
     production_building_rows: list[list[Any]] = []
     production_building_count = 0
     campaign_production_count = 0
     normal_production_count = 0
     normal_xo_production_count = 0
+    two_second_production_build_count = 0
     for meta in metadata_rows:
         building_rawcode = meta["building_rawcode"]
         building = resolved_buildings.get(building_rawcode)
         race = race_by_building.get(building_rawcode)
-        if building is None or race is None:
-            raise ValueError(f"UnitObjectMeta building is missing resolved building/race data: {building_rawcode}")
+        semantics = semantics_by_building.get(building_rawcode)
+        if building is None or race is None or semantics is None:
+            raise ValueError(f"UnitObjectMeta building is missing resolved building/race/semantic data: {building_rawcode}")
         if meta["unit_rawcode"] != race["unit_rawcode"]:
             raise ValueError(
                 f"race and UnitObjectMeta spawn rawcodes disagree for {building_rawcode}: "
@@ -1699,6 +1724,8 @@ def main() -> None:
         in_xo = building_rawcode in xo_buildings
         if is_production:
             production_building_count += 1
+            if building["build_time"] == "2":
+                two_second_production_build_count += 1
             if campaign_only:
                 campaign_production_count += 1
             else:
@@ -1708,18 +1735,38 @@ def main() -> None:
         if in_xo and (campaign_only or not is_production):
             raise ValueError(f"xO contains non-normal-production building: {building_rawcode}")
 
+        semantic_precursor = semantics["precursor_rawcode"]
+        graph_precursors = sorted(upgrades_from.get(building_rawcode, []))
+        if semantic_precursor:
+            if graph_precursors != [semantic_precursor]:
+                raise ValueError(
+                    f"CFBuilding precursor/upgrades disagree for {building_rawcode}: "
+                    f"semantic={semantic_precursor} graph={graph_precursors}"
+                )
+        elif graph_precursors:
+            raise ValueError(f"upgrade graph has predecessor without CFBuilding precursor for {building_rawcode}: {graph_precursors}")
+
         food_used = int(meta["food_used"])
         lumber_cost = int(meta["lumber_cost"])
+        own_income = float(meta["gold_cost"]) * float(semantics["income_factor"]) / 100.0
+        total_income = catalog_income(building_rawcode)
         production_building_rows.append([
             race["race_index"], race["race_function"], race["builder_rawcode"], race["builder_names"],
             int(campaign_only), race["building_order"],
             building_rawcode, meta["building_names"], "production" if is_production else "non-production",
             meta["unit_rawcode"], meta["unit_names"],
             meta["gold_cost"], meta["lumber_cost"], meta["food_used"], int(food_used > 0), int(lumber_cost == 0),
+            semantics["income_factor_symbol"], semantics["income_factor"], value_as_text(own_income), value_as_text(total_income),
             meta["spawn_build_time"], meta["attack_index"], meta["defense_index"],
             meta["is_air"], meta["is_melee"], meta["is_mechanical"], meta["is_caster"], int(in_xo),
-            ",".join(sorted(upgrades_from.get(building_rawcode, []))),
+            ",".join(graph_precursors),
             ",".join(sorted(upgrades_to.get(building_rawcode, []))),
+            semantics["has_tier_assignment"], semantics["is_legendary_line"], semantics["is_anti_air"],
+            semantics["is_siege"], semantics["is_artillery"], semantics["is_na_only"], semantics["is_ultimate_only"],
+            semantics["no_pp"], semantics["ai_should_ignore"], semantics["provides_active_targeted_spell_shield"],
+            semantics["area_spell"], semantics["multi_target_mult"], semantics["cage_pressure"], semantics["placement_strat"],
+            semantics["spell_dps"], semantics["ai_tower_strength"], semantics["combat_power_factor"],
+            semantics["tags"], semantics["extra_tags"], semantics["override_tags"],
             building["gold_cost"], building["lumber_cost"], building["build_time"],
             building["pathing_texture"], building["footprint_width_cells"], building["footprint_height_cells"],
             building["footprint_width_world_units"], building["footprint_height_world_units"], building["footprint_hex_rows"],
@@ -1730,9 +1777,15 @@ def main() -> None:
         [
             "race_index", "race_function", "builder_rawcode", "builder_names", "campaign_only", "building_order",
             "building_rawcode", "building_names", "building_kind", "unit_rawcode", "unit_names",
-            "gold_cost", "lumber_cost", "food_used", "is_legendary", "gives_lumber", "spawn_time",
+            "gold_cost", "lumber_cost", "food_used", "is_legendary", "gives_lumber",
+            "income_factor_symbol", "income_factor", "own_income_contribution", "catalog_income",
+            "spawn_time",
             "attack_index", "defense_index", "is_air_unit", "is_melee", "is_mechanical", "is_caster", "in_xo_runtime_catalog",
-            "upgrade_from", "upgrade_to", "static_object_gold_cost", "static_object_lumber_cost", "static_object_build_time",
+            "upgrade_from", "upgrade_to", "has_tier_assignment", "is_legendary_line", "is_anti_air", "is_siege",
+            "is_artillery", "is_na_only", "is_ultimate_only", "no_pp", "ai_should_ignore",
+            "provides_active_targeted_spell_shield", "area_spell", "multi_target_mult", "cage_pressure", "placement_strat",
+            "spell_dps", "ai_tower_strength", "combat_power_factor", "tags", "extra_tags", "override_tags",
+            "static_object_gold_cost", "static_object_lumber_cost", "static_object_build_time",
             "pathing_texture", "footprint_width_cells", "footprint_height_cells", "footprint_width_world_units",
             "footprint_height_world_units", "footprint_hex_rows",
         ],
@@ -1838,6 +1891,8 @@ def main() -> None:
         "building_catalog_normal_production_rows": normal_production_count,
         "building_catalog_normal_production_rows_in_xo": normal_xo_production_count,
         "building_catalog_upgrade_edges": sum(len(values) for values in upgrades_to.values()),
+        "building_catalog_semantic_rows": len(semantics_by_building),
+        "building_catalog_two_second_production_build_rows": two_second_production_build_count,
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
@@ -1848,7 +1903,8 @@ def main() -> None:
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
-            "production-buildings.tsv joins UnitObjectMeta, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; metadata spawn_time/costs are the CFBuilding runtime source rather than generic Warcraft construction-time fields",
+            "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
+            "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
         ],
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

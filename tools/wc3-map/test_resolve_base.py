@@ -254,6 +254,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["building_catalog_normal_production_rows"], 162)
         self.assertEqual(summary["building_catalog_normal_production_rows_in_xo"], 162)
         self.assertEqual(summary["building_catalog_upgrade_edges"], 90)
+        self.assertEqual(summary["building_catalog_semantic_rows"], 240)
+        self.assertEqual(summary["building_catalog_two_second_production_build_rows"], 167)
 
         with (self.resolved / "production-buildings.tsv").open(encoding="utf-8") as handle:
             rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -266,8 +268,18 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(barracks["gold_cost"], "100")
         self.assertEqual(barracks["spawn_time"], "20")
         self.assertEqual(barracks["static_object_build_time"], "2")
+        self.assertEqual(barracks["income_factor_symbol"], "gvb")
+        self.assertEqual(barracks["income_factor"], "0.2")
+        self.assertEqual(barracks["own_income_contribution"], "0.2")
+        self.assertEqual(barracks["catalog_income"], "0.2")
+        self.assertEqual(barracks["has_tier_assignment"], "1")
         self.assertEqual(barracks["upgrade_to"], "h039")
         self.assertEqual(barracks["in_xo_runtime_catalog"], "1")
+
+        stronghold = rows["h039"]
+        self.assertEqual(stronghold["upgrade_from"], "h000")
+        self.assertEqual(stronghold["own_income_contribution"], "0.35")
+        self.assertEqual(stronghold["catalog_income"], "0.55")
 
         crab = rows["h0Z1"]
         self.assertEqual(crab["builder_names"], "Critter Builder")
@@ -280,6 +292,10 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(reef_guardian["food_used"], "1")
         self.assertEqual(reef_guardian["is_legendary"], "1")
         self.assertEqual(reef_guardian["spawn_time"], "60")
+
+        production_rows = [row for row in rows.values() if row["building_kind"] == "production"]
+        self.assertEqual(len(production_rows), 167)
+        self.assertEqual({row["static_object_build_time"] for row in production_rows}, {"2"})
 
     def test_resolution_has_no_inheritance_or_pathing_gaps(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))

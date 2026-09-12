@@ -207,6 +207,35 @@ class LuaIndexTests(unittest.TestCase):
         self.assertEqual(upgrade["source_building_id"], 1747988528)
         self.assertEqual(upgrade["target_building_id"], 1747989305)
 
+    def test_extracts_race_building_wrapper_semantics(self) -> None:
+        source = (
+            "function LE() gvb=0.2 fvb=0.18 evb=0.12 dvb=0.09 cvb=0.04 end "
+            "function raceInit() local race=nil local a=nil local b=nil "
+            "race=Ke:create151() race.CFRace_builderId=1479563824 "
+            "a=CFBuilding_CFBuilding_tier(CFBuilding_CFBuilding_incomeFactor(_I[_d[1]](1747988528,1751543663),gvb),tierOne) "
+            "b=CFBuilding_CFBuilding_isAntiAir(CFBuilding_CFBuilding_precursor(CFBuilding_CFBuilding_multiTarget(CFBuilding_CFBuilding_incomeFactor(_I[_d[2]](1747989305,1747989313),fvb),2.5),a)) "
+            "CFBuilding_CFBuilding_extraTags(b,7,15) CFBuilding_CFBuilding_noPP(b) "
+            "CFRace_CFRace_registerBuildings__w3p_vmProtect(race,a,b) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747988528, 1751543663, 1747989305, 1747989313})
+
+        self.assertEqual(indexed["income_factor_constants"], {
+            "gvb": "0.2", "fvb": "0.18", "evb": "0.12", "dvb": "0.09", "cvb": "0.04",
+        })
+        rows = {row["building_id"]: row for row in indexed["race_building_semantics"]}
+        first = rows[1747988528]
+        self.assertEqual(first["income_factor_symbol"], "gvb")
+        self.assertEqual(first["income_factor"], "0.2")
+        self.assertTrue(first["has_tier_assignment"])
+        second = rows[1747989305]
+        self.assertEqual(second["income_factor_symbol"], "fvb")
+        self.assertEqual(second["precursor_building_id"], 1747988528)
+        self.assertTrue(second["is_anti_air"])
+        self.assertTrue(second["no_pp"])
+        self.assertEqual(second["multi_target_mult"], "2.5")
+        self.assertEqual(second["extra_tags"], (7, 15))
+
     def test_extracts_effective_unit_stat_catalog(self) -> None:
         source = (
             "function xO()local dcs=nil "

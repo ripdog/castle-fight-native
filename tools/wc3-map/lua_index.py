@@ -483,11 +483,15 @@ def _decimal_text(value: Decimal) -> str:
     return text or "0"
 
 
-def _integer_literal_value(tokens: list[LuaToken]) -> int:
+def _decimal_literal_value(tokens: list[LuaToken]) -> Decimal:
     literal_tokens = tokens
     if len(literal_tokens) >= 2 and literal_tokens[0].text == "(" and literal_tokens[-1].text == ")":
         literal_tokens = literal_tokens[1:-1]
-    value = Decimal(_numeric_literal_text(literal_tokens))
+    return Decimal(_numeric_literal_text(literal_tokens))
+
+
+def _integer_literal_value(tokens: list[LuaToken]) -> int:
+    value = _decimal_literal_value(tokens)
     if value != value.to_integral_value():
         raise ValueError(f"expected integer Lua literal, got {value}")
     return int(value)
@@ -781,6 +785,237 @@ def _extract_race_buildings(
             building_order += 1
 
     return rows
+
+
+def _extract_income_factor_constants(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> dict[str, str]:
+    """Recover the five CFBuilding income-factor constants initialized by LE."""
+    body = _function_body_tokens(data, functions, "LE")
+    if body is None:
+        return {}
+    _function_start, tokens = body
+    expected = {"gvb", "fvb", "evb", "dvb", "cvb"}
+    values: dict[str, str] = {}
+    for index in range(len(tokens) - 2):
+        token = tokens[index]
+        if token.kind != "ident" or token.text not in expected or tokens[index + 1].text != "=":
+            continue
+        if token.text in values:
+            continue
+        value = _decimal_literal_value([tokens[index + 2]])
+        values[token.text] = _decimal_text(value)
+    if values and set(values) != expected:
+        raise ValueError(f"incomplete CFBuilding income-factor constants: {sorted(values)}")
+    return values
+
+
+def _building_id_from_expression(tokens: list[LuaToken]) -> int | None:
+    found: set[int] = set()
+    for index, token in enumerate(tokens):
+        if token.kind != "ident" or token.text != "_I":
+            continue
+        try:
+            args, _next = _wurst_registry_call_arguments(tokens, index)
+        except ValueError:
+            continue
+        if len(args) not in {1, 2}:
+            continue
+        try:
+            rawcode = _integer_literal_value(args[0])
+        except ValueError:
+            continue
+        if rawcode > 0:
+            found.add(rawcode)
+    if len(found) > 1:
+        raise ValueError(f"building expression contains multiple registry rawcodes: {sorted(found)}")
+    return next(iter(found), None)
+
+
+def _extract_race_building_semantics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    race_buildings: list[dict[str, object]],
+    income_factors: dict[str, str],
+) -> list[dict[str, object]]:
+    """Recover CFBuilding wrapper semantics attached by generated race initializers."""
+    if not race_buildings or not income_factors:
+        return []
+
+    rows_by_function: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in race_buildings:
+        rows_by_function[str(row["race_function"])].append(row)
+
+    flag_wrappers = {
+        "CFBuilding_CFBuilding_isLegendaryLine": "is_legendary_line",
+        "CFBuilding_CFBuilding_isAntiAir": "is_anti_air",
+        "CFBuilding_CFBuilding_isSiege": "is_siege",
+        "CFBuilding_CFBuilding_isArtillery": "is_artillery",
+        "CFBuilding_CFBuilding_isNAOnly": "is_na_only",
+        "CFBuilding_CFBuilding_isUltimateOnly": "is_ultimate_only",
+        "CFBuilding_CFBuilding_noPP": "no_pp",
+        "CFBuilding_CFBuilding_isAiShouldIgnore": "ai_should_ignore",
+        "CFBuilding_CFBuilding_providesActiveTargetedSpellShield": "provides_active_targeted_spell_shield",
+        "CFBuilding_CFBuilding_areaSpell": "area_spell",
+    }
+    value_wrappers = {
+        "CFBuilding_CFBuilding_multiTarget": "multi_target_mult",
+        "CFBuilding_CFBuilding_cagePressure": "cage_pressure",
+        "CFBuilding_CFBuilding_placementStrat": "placement_strat",
+        "CFBuilding_CFBuilding_spellDps": "spell_dps",
+        "CFBuilding_CFBuilding_aiTowerStrength": "ai_tower_strength",
+        "CFBuilding_CFBuilding_combatPowerFactor": "combat_power_factor",
+    }
+    tag_wrappers = {
+        "CFBuilding_CFBuilding_tags": "tags",
+        "CFBuilding_CFBuilding_extraTags": "extra_tags",
+        "CFBuilding_CFBuilding_overrideTags": "override_tags",
+    }
+
+    output: list[dict[str, object]] = []
+    for function_name, race_rows in rows_by_function.items():
+        body = _function_body_tokens(data, functions, function_name)
+        if body is None:
+            raise ValueError(f"race semantics source function is missing: {function_name}")
+        function_start, tokens = body
+        known_buildings = {int(row["building_id"]) for row in race_rows}
+        variable_buildings: dict[str, int] = {}
+
+        # Race code assigns each constructed CFBuilding to a local variable.
+        # Resolve those aliases first so later standalone wrappers such as
+        # extraTags(building, ...) can still be tied back to an exact rawcode.
+        for index in range(len(tokens) - 2):
+            if tokens[index].kind != "ident" or tokens[index + 1].text != "=":
+                continue
+            expression_start = index + 2
+            try:
+                if tokens[expression_start].kind == "ident" and tokens[expression_start].text == "_I":
+                    _args, expression_end = _wurst_registry_call_arguments(tokens, expression_start)
+                elif (
+                    tokens[expression_start].kind == "ident"
+                    and expression_start + 1 < len(tokens)
+                    and tokens[expression_start + 1].text == "("
+                ):
+                    _args, expression_end = _call_arguments(tokens, expression_start)
+                else:
+                    continue
+            except ValueError:
+                continue
+            building_id = _building_id_from_expression(tokens[expression_start:expression_end])
+            if building_id is not None and building_id in known_buildings:
+                variable_buildings[tokens[index].text] = building_id
+
+        semantics: dict[int, dict[str, object]] = {
+            building_id: {
+                "building_id": building_id,
+                "income_factor_symbol": None,
+                "income_factor": None,
+                "precursor_building_id": None,
+                "has_tier_assignment": False,
+                "is_legendary_line": False,
+                "is_anti_air": False,
+                "is_siege": False,
+                "is_artillery": False,
+                "is_na_only": False,
+                "is_ultimate_only": False,
+                "no_pp": False,
+                "ai_should_ignore": False,
+                "provides_active_targeted_spell_shield": False,
+                "area_spell": False,
+                "multi_target_mult": None,
+                "cage_pressure": None,
+                "placement_strat": None,
+                "spell_dps": None,
+                "ai_tower_strength": None,
+                "combat_power_factor": None,
+                "tags": [],
+                "extra_tags": [],
+                "override_tags": [],
+                "source_function": function_name,
+                "first_wrapper_byte_offset": None,
+            }
+            for building_id in known_buildings
+        }
+
+        def building_for_argument(argument: list[LuaToken]) -> int | None:
+            building_id = _building_id_from_expression(argument)
+            if building_id is not None:
+                return building_id
+            if len(argument) == 1 and argument[0].kind == "ident":
+                return variable_buildings.get(argument[0].text)
+            return None
+
+        def set_once(record: dict[str, object], field: str, value: object) -> None:
+            prior = record[field]
+            if prior is not None and prior != value:
+                raise ValueError(
+                    f"conflicting {field} wrappers for building {record['building_id']}: {prior!r} != {value!r}"
+                )
+            record[field] = value
+
+        wrappers = set(flag_wrappers) | set(value_wrappers) | set(tag_wrappers) | {
+            "CFBuilding_CFBuilding_incomeFactor",
+            "CFBuilding_CFBuilding_precursor",
+            "CFBuilding_CFBuilding_tier",
+        }
+        for index, token in enumerate(tokens):
+            if token.kind != "ident" or token.text not in wrappers:
+                continue
+            args, _next = _call_arguments(tokens, index)
+            if not args:
+                raise ValueError(f"{token.text} in {function_name} has no building argument")
+            building_id = building_for_argument(args[0])
+            if building_id is None or building_id not in semantics:
+                continue
+            record = semantics[building_id]
+            if record["first_wrapper_byte_offset"] is None:
+                record["first_wrapper_byte_offset"] = function_start + token.start
+
+            if token.text == "CFBuilding_CFBuilding_incomeFactor":
+                if len(args) != 2 or len(args[1]) != 1 or args[1][0].kind != "ident":
+                    raise ValueError(f"incomeFactor wrapper has unexpected argument shape in {function_name}")
+                symbol = args[1][0].text
+                if symbol not in income_factors:
+                    raise ValueError(f"unknown CFBuilding income factor {symbol!r} in {function_name}")
+                set_once(record, "income_factor_symbol", symbol)
+                set_once(record, "income_factor", income_factors[symbol])
+            elif token.text == "CFBuilding_CFBuilding_precursor":
+                if len(args) != 2:
+                    raise ValueError(f"precursor wrapper has unexpected argument count in {function_name}")
+                parent = building_for_argument(args[1])
+                if parent is None:
+                    raise ValueError(f"precursor wrapper cannot resolve parent building in {function_name}")
+                set_once(record, "precursor_building_id", parent)
+            elif token.text == "CFBuilding_CFBuilding_tier":
+                record["has_tier_assignment"] = True
+            elif token.text in flag_wrappers:
+                record[flag_wrappers[token.text]] = True
+            elif token.text in value_wrappers:
+                if len(args) != 2:
+                    raise ValueError(f"{token.text} has unexpected argument count in {function_name}")
+                value = _decimal_text(_decimal_literal_value(args[1]))
+                set_once(record, value_wrappers[token.text], value)
+            elif token.text in tag_wrappers:
+                values = [_integer_literal_value(argument) for argument in args[1:]]
+                field = tag_wrappers[token.text]
+                existing = list(record[field])
+                if token.text == "CFBuilding_CFBuilding_overrideTags":
+                    existing = []
+                for value in values:
+                    if value not in existing:
+                        existing.append(value)
+                record[field] = existing
+
+        for building_id, record in semantics.items():
+            if record["income_factor"] is None:
+                raise ValueError(f"race building {building_id} has no incomeFactor wrapper in {function_name}")
+            for field in ("tags", "extra_tags", "override_tags"):
+                record[field] = tuple(record[field])
+            output.append(record)
+
+    output.sort(key=lambda row: int(row["building_id"]))
+    return output
 
 
 def _extract_effective_unit_stats(
@@ -1382,6 +1617,10 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     unit_object_metadata, unit_object_metadata_fingerprint = _extract_unit_object_metadata(data, functions)
     unit_object_upgrades = _extract_unit_object_upgrades(data, functions)
     race_buildings = _extract_race_buildings(data, functions, call_edges)
+    income_factor_constants = _extract_income_factor_constants(data, functions)
+    race_building_semantics = _extract_race_building_semantics(
+        data, functions, race_buildings, income_factor_constants
+    )
     effective_unit_stats = _extract_effective_unit_stats(data, functions)
     protected_unit_stats = _extract_protected_unit_stats(data, functions)
 
@@ -1413,6 +1652,8 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "unit_object_metadata_fingerprint": unit_object_metadata_fingerprint,
         "unit_object_upgrades": unit_object_upgrades,
         "race_buildings": race_buildings,
+        "income_factor_constants": income_factor_constants,
+        "race_building_semantics": race_building_semantics,
         "effective_unit_stats": effective_unit_stats,
         "protected_unit_stats": protected_unit_stats,
         "function_aliases": function_aliases,

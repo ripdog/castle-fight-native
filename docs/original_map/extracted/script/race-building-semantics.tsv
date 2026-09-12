@@ -1,0 +1,241 @@
+building_rawcode	building_rawcode_integer	building_names	income_factor_symbol	income_factor	precursor_rawcode	precursor_rawcode_integer	precursor_names	has_tier_assignment	is_legendary_line	is_anti_air	is_siege	is_artillery	is_na_only	is_ultimate_only	no_pp	ai_should_ignore	provides_active_targeted_spell_shield	area_spell	multi_target_mult	cage_pressure	placement_strat	spell_dps	ai_tower_strength	combat_power_factor	tags	extra_tags	override_tags	source_function	first_wrapper_byte_offset
+h000	1747988528	Barracks	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										CK	3575358
+h001	1747988529	Artillery	dvb	0.09		0		1	0	0	0	1	0	0	0	0	0	0										CK	3578354
+h002	1747988530	Spider Egg Clutch	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										IK	3599345
+h003	1747988531	Sniper Nest	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										CK	3575780
+h004	1747988532	Weapon Lab	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										CK	3577331
+h005	1747988533	Obelisk of Light	dvb	0.09		0		1	0	0	0	0	0	0	1	0	0	0										AK	3571599
+h006	1747988534	Watch Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							CK	3578887
+h007	1747988535	Demon Gate	gvb	0.2		0		1	0	1	0	0	0	0	0	0	0	0										kK	3518931
+h009	1747988537	Dragon Nest	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.5									kK	3518669
+h00A	1747988545	Death Pit	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10								aL	3661841
+h00B	1747988546	Fountain of Wonders	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										KK	3612400
+h00F	1747988550	Spawning Grounds	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.35									GK	3593976
+h00G	1747988551	Coral Statue	cvb	0.04		0		1	0	0	0	0	0	0	1	1	0	0										GK	3595820
+h00I	1747988553	Ancient Pyramide	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10								GK	3594947
+h00J	1747988554	Swamp Well	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										GK	3592994
+h00K	1747988555	Hjordhejmen	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0				30						CK	3577804
+h00M	1747988557	Oracle of Sirens	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10						16		GK	3595200
+h00N	1747988558	Tidal Guardian	dvb	0.09		0		1	1	0	0	0	0	0	0	0	0	0		50	3							GK	3595489
+h00Q	1747988561	Spider Egg Nest	gvb	0.2	h002	1747988530	Spider Egg Clutch	0	0	1	0	0	0	0	0	0	0	0										IK	3599573
+h00R	1747988562	Spider Egg Hatchery	gvb	0.2	h00Q	1747988561	Spider Egg Nest	0	0	0	0	0	0	0	0	0	0	0										IK	3599799
+h00S	1747988563	Hunter's Hall	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										KK	3610357
+h00T	1747988564	Hall of Honor	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										AK	3569667
+h00V	1747988566	Bloodelf War Academy	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.59									AK	3570538
+h00X	1747988568	Tower of Supreme Magic	gvb	0.2	h09X	1747990872	School of Wizardry	0	0	0	0	0	0	0	0	0	0	0										AK	3570345
+h00Y	1747988569	Furbolg Hut	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										IK	3599992
+h00Z	1747988570	City of Magic	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10						16		AK	3571311
+h010	1747988784	Gjallarhorn	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0			2					7,16		CK	3578063
+h011	1747988785	Nightelf Siege Factory	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0	1.77									KK	3612623
+h012	1747988786	Furbolg Abode	gvb	0.2	h00Y	1747988569	Furbolg Hut	0	0	0	0	0	0	0	0	0	0	0										IK	3600215
+h013	1747988787	Ancient of Growth	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										IK	3600601
+h014	1747988788	Arcane Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							AK	3571840
+h015	1747988789	Gryphon Rock	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										CK	3577584
+h01B	1747988802	Reptile Pool	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										GK	3594471
+h01C	1747988803	Altar of Greed	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										kK	3518224
+h01D	1747988804	Chaos Citadel	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.25									kK	3517441
+h01E	1747988805	Shrine of Destruction	dvb	0.09		0		1	1	0	0	1	0	0	0	0	0	0										kK	3517937
+h01F	1747988806	Volcano	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10								kK	3519187
+h01H	1747988808	Ancient of Life	gvb	0.2	h013	1747988787	Ancient of Growth	0	0	0	0	0	0	0	0	0	0	0										IK	3600863
+h01I	1747988809	Lesser Demon Cage	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										kK	3516708
+h01J	1747988810	Ancient of Eternity	gvb	0.2	h01H	1747988808	Ancient of Life	0	0	0	0	0	0	0	0	0	0	0										IK	3601056
+h01K	1747988811	Temple of Bone	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										aL	3659640
+h01L	1747988812	Haunted Mine	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										aL	3661102
+h01M	1747988813	Eraser (Level 1)	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10								kK	3519728
+h01N	1747988814	Crypt	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										aL	3660288
+h01O	1747988815	Turret of Souls	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							aL	3662094
+h01P	1747988816	Skull Pile	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0										aL	3660704
+h01Q	1747988817	City of Decay	evb	0.12		0		1	1	0	0	0	0	0	0	0	0	0			3					9		aL	3662348
+h01R	1747988818	Rotting Hay Cart	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										aL	3659027
+h01S	1747988819	Dragon Cemetery	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.5									aL	3661579
+h01T	1747988820	Slaughter House	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										aL	3661325
+h01W	1747988823	Eraser (Level 2)	dvb	0.09	h01M	1747988813	Eraser (Level 1)	0	0	0	0	0	0	0	0	0	0	0		15								kK	3519981
+h01X	1747988824	Eraser (Level 3)	dvb	0.09	h01W	1747988823	Eraser (Level 2)	0	0	0	0	0	0	0	0	0	0	0		20								kK	3520204
+h01Y	1747988825	Temple of Snakes	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.59									GK	3593488
+h01Z	1747988826	Naga Spring	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										GK	3594724
+h020	1747989040	Murloc Camp	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										GK	3592300
+h021	1747989041	Murloc Village	gvb	0.2	h020	1747989040	Murloc Camp	0	0	0	0	0	0	0	0	0	0	0	1.25									GK	3592529
+h022	1747989042	Murloc Fortress	gvb	0.2	h021	1747989041	Murloc Village	0	0	0	0	0	0	0	0	0	0	0	1.3									GK	3592762
+h023	1747989043	Ancient of Slumber	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.3									IK	3601249
+h024	1747989044	Ancient of Hibernation	gvb	0.2	h023	1747989043	Ancient of Slumber	0	0	0	0	0	0	0	0	0	0	0	1.35									IK	3601511
+h025	1747989045	Fountain of Blood	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										kK	3518447
+h026	1747989046	Greater Demon Cage	gvb	0.2	h01I	1747988809	Lesser Demon Cage	0	0	0	0	0	0	0	0	0	0	0	1.25									kK	3516976
+h027	1747989047	Emerald Dragon Roost	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										IK	3601744
+h028	1747989048	Monolith	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										IK	3601967
+h029	1747989049	Fighters' Hall	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										UK	3637126
+h02A	1747989057	Ancient of Gale	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		12								IK	3602477
+h02B	1747989058	Shamanic Tent	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0								7		UK	3637741
+h02C	1747989059	Ancient Guardian	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		8						16		IK	3602189
+h02D	1747989060	Ancient of Wonders	evb	0.12		0		1	1	0	0	0	0	0	0	0	0	0										IK	3602984
+h02H	1747989064	Troll Hut	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										UK	3638384
+h02I	1747989065	Orcish Siege Factory	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0	1.5									UK	3640184
+h02K	1747989067	Kodo Farm	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										UK	3639321
+h02N	1747989070	Serpent Rock	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10								UK	3640477
+h02O	1747989071	Legendary Totem	evb	0.12		0		1	1	0	0	0	0	0	0	0	0	0										UK	3641313
+h02P	1747989072	Falcon-Clan Encampment	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										UK	3639098
+h02R	1747989074	Ceremonial Totem	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								7,16		UK	3640730
+h02U	1747989077	Advanced Fighters' Hall	gvb	0.2	h029	1747989049	Fighters' Hall	0	0	0	0	0	0	0	0	0	0	0										UK	3637355
+h031	1747989297	Superior Fighters' Hall	gvb	0.2	h02U	1747989077	Advanced Fighters' Hall	0	0	0	0	0	0	0	0	0	0	0										UK	3637548
+h032	1747989298	Royal Spawning Grounds	gvb	0.2	h00F	1747988550	Spawning Grounds	0	0	0	0	0	0	0	0	0	0	0	1.35									GK	3594238
+h035	1747989301	Melee Kodo Farm	gvb	0.2	h02K	1747989067	Kodo Farm	0	0	0	0	0	0	0	0	0	0	0							15			UK	3639736
+h036	1747989302	Defensive Kodo Farm	gvb	0.2	h02K	1747989067	Kodo Farm	0	0	0	0	0	0	0	0	0	0	0							15			UK	3639960
+h037	1747989303	Chapel	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0	1.25							7		CK	3576495
+h038	1747989304	Church	gvb	0.2	h037	1747989303	Chapel	0	0	0	0	0	0	0	0	0	0	0	1.25							7		CK	3576832
+h039	1747989305	Stronghold	gvb	0.2	h000	1747988528	Barracks	0	0	0	0	0	0	0	0	0	0	0										CK	3575587
+h03D	1747989316	Ranger's Hall	gvb	0.2	h00S	1747988563	Hunter's Hall	0	0	1	0	0	0	0	0	0	0	0	2.2									KK	3610624
+h03E	1747989317	Amazon's Hall	gvb	0.2	h03D	1747989316	Ranger's Hall	0	0	1	0	0	0	0	0	0	0	0	4.6									KK	3610888
+h03F	1747989318	Hall of the Eldest	gvb	0.2	h00T	1747988564	Hall of Honor	0	0	0	0	0	0	0	0	0	0	0										AK	3569890
+h03G	1747989319	Greater Chaos Citadel	gvb	0.2	h01D	1747988804	Chaos Citadel	0	0	0	0	0	0	0	0	0	0	0	1.35									kK	3517704
+h03I	1747989321	Azure Nest	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.5									QK	3626344
+h03J	1747989322	Ice Troll Voodoo Lounge	gvb	0.2	h03K	1747989323	Ice Troll Hut	0	0	0	0	0	0	0	0	0	0	0										QK	3625021
+h03K	1747989323	Ice Troll Hut	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										QK	3624798
+h03L	1747989324	Greater Frost Launcher	dvb	0.09	h048	1747989560	Frost Launcher	0	0	0	0	0	0	0	0	0	0	0										QK	3626160
+h03M	1747989325	Defiled Granary	gvb	0.2	h04Z	1747989594	Tainted Farm	0	0	0	0	0	0	0	0	0	0	0										aL	3659447
+h03O	1747989327	World Freezer	dvb	0.09		0		1	1	0	0	0	0	0	0	0	0	0			3							QK	3627330
+h03Q	1747989329	Icy Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							QK	3627076
+h03S	1747989331	Crystal Palace	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										QK	3626606
+h03T	1747989332	Ice Claws	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										QK	3625214
+h03U	1747989333	Igloo	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										QK	3624310
+h03W	1747989335	Glacier	gvb	0.2	h04F	1747989574	Icy Rocks	0	0	0	0	0	0	0	0	0	0	0	1.4									QK	3624078
+h03X	1747989336	Water Spring	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										wK	3555805
+h03Y	1747989337	Golden Fountain	gvb	0.2	h03X	1747989336	Water Spring	0	0	0	0	0	0	0	0	0	0	0										wK	3556028
+h03Z	1747989338	Spellbound Fountain	gvb	0.2	h03Y	1747989337	Golden Fountain	0	0	0	0	0	0	0	0	0	0	0										wK	3556221
+h040	1747989552	Rock Pile	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										wK	3557551
+h041	1747989553	Greater Fissure	fvb	0.18	h040	1747989552	Rock Pile	0	0	0	1	0	0	0	0	0	0	0										wK	3557805
+h042	1747989554	Pillar of Globe-Lightning	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0				53						wK	3557062
+h043	1747989555	Frost Claws	gvb	0.2	h03T	1747989332	Ice Claws	0	0	0	0	0	0	0	0	0	0	0										QK	3625437
+h044	1747989556	Pillar of St. Elmo's Fire	gvb	0.2	h042	1747989554	Pillar of Globe-Lightning	0	0	0	0	0	0	0	0	0	0	0				114						wK	3557321
+h045	1747989557	Altar of Fire	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										wK	3556414
+h046	1747989558	Altar of Blaze	gvb	0.2	h045	1747989557	Altar of Fire	0	0	0	0	0	0	0	0	0	0	0										wK	3556676
+h047	1747989559	Chilling Mushroom	dvb	0.09		0		1	0	1	0	0	0	0	0	0	0	0										QK	3626829
+h048	1747989560	Frost Launcher	dvb	0.09		0		1	0	0	0	1	0	0	0	0	0	0										QK	3625911
+h049	1747989561	Snowy Rocks	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										QK	3623616
+h04A	1747989569	Trapped Gale	gvb	0.2		0		1	0	1	0	0	0	0	0	0	0	0							13			wK	3554989
+h04B	1747989570	Temple of Necromancy	gvb	0.2	h01K	1747988811	Temple of Bone	0	0	0	0	0	0	0	0	0	0	0										aL	3659902
+h04C	1747989571	Monument of Wind Stream	gvb	0.2	h04A	1747989569	Trapped Gale	0	0	1	0	0	0	0	0	0	0	0							14			wK	3555285
+h04D	1747989572	Zephyros Memorial	gvb	0.2	h04C	1747989571	Monument of Wind Stream	0	0	1	0	0	0	0	0	0	0	0							14			wK	3555545
+h04E	1747989573	Tower of Elder Knowledge	gvb	0.2	h046	1747989558	Altar of Blaze	0	0	0	0	0	0	0	0	0	0	0										wK	3556869
+h04F	1747989574	Icy Rocks	gvb	0.2	h049	1747989561	Snowy Rocks	0	0	0	0	0	0	0	0	0	0	0	1.27									QK	3623845
+h04K	1747989579	Well of Pain	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		2								nK	3533521
+h04L	1747989580	Void Portal	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										nK	3531729
+h04M	1747989581	Shadow Ancient	gvb	0.2	h04O	1747989583	Nether Ancient	0	0	0	0	0	0	0	0	0	0	0										nK	3532366
+h04N	1747989582	Portal of the Abyss	gvb	0.2	h04L	1747989580	Void Portal	0	0	0	0	0	0	0	0	0	0	0										nK	3531951
+h04O	1747989583	Nether Ancient	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										nK	3532144
+h04P	1747989584	Hell's Portal	fvb	0.18	h04Q	1747989585	Hell's Gate	0	0	0	1	0	0	0	0	0	0	0										nK	3532812
+h04Q	1747989585	Hell's Gate	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										nK	3532558
+h04R	1747989586	Forgotten One	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		10								nK	3533773
+h04S	1747989587	Felhound Shrine	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										nK	3533036
+h04T	1747989588	Eye of Corruption	evb	0.12		0		1	1	0	0	0	0	0	1	0	0	0										nK	3534280
+h04U	1747989589	Demonic Statue	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	1.5									nK	3533259
+h04V	1747989590	Ancient of Battle	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										nK	3530996
+h04W	1747989591	Corrupted Ancient of War	gvb	0.2	h04V	1747989590	Ancient of Battle	0	0	0	0	0	0	0	0	0	0	0	1.25									nK	3531264
+h04Z	1747989594	Tainted Farm	gvb	0.2	h01R	1747988818	Rotting Hay Cart	0	0	0	0	0	0	0	0	0	0	0										aL	3659254
+h054	1747989812	Graveyard	gvb	0.2	h01N	1747988814	Crypt	0	0	0	0	0	0	0	0	0	0	0										aL	3660511
+h055	1747989813	High Citadel of Necromancy	gvb	0.2	h04B	1747989570	Temple of Necromancy	0	0	0	0	0	0	0	0	0	0	0										aL	3660095
+h056	1747989814	Skull Shrine	evb	0.12	h01P	1747988816	Skull Pile	0	0	0	0	0	0	0	0	0	0	0										aL	3660918
+h059	1747989817	Golden Shrine of Justice	evb	0.12		0		1	1	0	0	0	0	0	1	0	0	0										AK	3572093
+h05D	1747989828	Gunner's Hall	gvb	0.2	h003	1747988531	Sniper Nest	0	0	0	0	0	0	0	0	0	0	0	1.5									CK	3576263
+h05E	1747989829	Trapper's Hut	gvb	0.2	h02H	1747989064	Troll Hut	0	0	1	0	0	0	0	0	0	0	0										UK	3638646
+h05F	1747989830	Lernaean Fountain	gvb	0.2	h00J	1747988554	Swamp Well	0	0	0	0	0	0	0	0	0	0	0	1.5									GK	3593256
+h05G	1747989831	Heroic Shrine	evb	0.12		0		1	1	0	0	0	0	0	1	0	0	0										CK	3579642
+h05I	1747989833	Magic Ruin	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		5						16		kK	3519440
+h05J	1747989834	Aircraft Factory	gvb	0.2		0		1	0	1	0	0	0	0	0	0	0	0							13			EK	3582578
+h05L	1747989836	Energy Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1		1.45					EK	3586986
+h05M	1747989837	Demolition Lab	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										EK	3584228
+h05R	1747989842	Red Shield Generator	evb	0.12	h06J	1747990090	Blue Shield Generator	0	0	0	0	0	0	0	0	0	1	0		-10						7		EK	3586379
+h05T	1747989844	Gun Smith	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										EK	3584674
+h05U	1747989845	Lumber Mill	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										EK	3585545
+h05V	1747989846	Golem Factory	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										EK	3585090
+h05X	1747989848	Tank Factory	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										EK	3583163
+h05Z	1747989850	Books of Conjuration	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0										wK	3558534
+h060	1747990064	Obelisk of Elements	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								7,16		wK	3558282
+h061	1747990065	Elemental Guard Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							wK	3559253
+h062	1747990066	Mana Generator	evb	0.12		0		1	0	0	0	0	0	0	0	1	0	0										wK	3558029
+h063	1747990067	Linker	evb	0.12		0		1	1	0	0	0	0	0	1	0	0	0										wK	3559759
+h069	1747990073	Spare Part Heap	evb	0.12		0		1	0	0	0	0	0	0	1	0	0	0									8	EK	3586697
+h06D	1747990084	Forest Trapper's Hole	gvb	0.2	h05E	1747989829	Trapper's Hut	0	0	1	0	0	0	0	0	0	0	0										UK	3638872
+h06E	1747990085	Meteor Shower	dvb	0.09	h05Z	1747989850	Books of Conjuration	0	0	1	0	0	0	0	0	0	0	1										wK	3559003
+h06F	1747990086	Elemental Rain	dvb	0.09	h05Z	1747989850	Books of Conjuration	0	0	0	0	0	0	0	0	0	0	1		10								wK	3558748
+h06I	1747990089	Infostealer's Place	gvb	0.2	h02B	1747989058	Shamanic Tent	0	0	0	0	0	0	0	0	0	0	0										UK	3637999
+h06J	1747990090	Blue Shield Generator	evb	0.12		0		1	0	0	0	0	0	0	0	0	1	0		-5						7		EK	3586032
+h06L	1747990092	Modern Igloo	gvb	0.2	h03U	1747989333	Igloo	0	0	1	0	0	0	0	0	0	0	0										QK	3624572
+h06O	1747990095	Serenity	gvb	0.2	h026	1747989046	Greater Demon Cage	0	0	0	0	0	0	0	0	0	0	0	1.3									kK	3517209
+h06Y	1747990105	Dragonhawk Portal	gvb	0.2		0		1	0	1	0	0	0	0	0	0	0	0										AK	3570801
+h06Z	1747990106	Protection Center	gvb	0.2	h05U	1747989845	Lumber Mill	0	0	1	0	0	0	0	0	0	0	0										EK	3585807
+h070	1747990320	Highelf Siege Factory	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										AK	3571057
+h071	1747990321	Enigma	gvb	0.2	h00Y	1747988569	Furbolg Hut	0	0	0	0	0	0	0	0	0	0	0										IK	3600408
+h072	1747990322	Holy Altar	evb	0.12	h038	1747989304	Church	0	0	0	0	0	0	0	0	0	0	0	1.4									CK	3577100
+h073	1747990323	Elune's Lantern	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							KK	3613415
+h076	1747990326	Discharge Tower	cvb	0.04		0		1	0	0	0	0	0	1	0	0	0	0										wK	3559507
+h077	1747990327	Rocket Lab	fvb	0.18	h05M	1747989837	Demolition Lab	0	0	0	1	0	0	0	0	0	0	0										EK	3584451
+h079	1747990329	Beacon of the Oasis	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								16		qK	3543936
+h07A	1747990337	Sacred Peyote	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		5								qK	3543684
+h07D	1747990340	Moon Altar	gvb	0.2	h088	1747990584	Moon Shrine	0	0	0	0	0	0	0	0	0	0	0										KK	3611376
+h07E	1747990341	Ballista Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							qK	3544186
+h07H	1747990344	Obelisk of Wilderness	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								7		KK	3613166
+h07I	1747990345	Starfall Obelisk	dvb	0.09		0		1	1	0	0	0	0	0	0	0	0	0		25								KK	3613669
+h07L	1747990348	Guild of Shadows	gvb	0.2	h07M	1747990349	House of Shadows	0	0	0	0	0	0	0	0	0	0	0										KK	3611792
+h07M	1747990349	House of Shadows	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										KK	3611569
+h07N	1747990350	Scorched Mansion	gvb	0.2	h07O	1747990351	Pillaged Hut	0	0	0	0	0	0	0	0	0	0	0										KK	3612208
+h07O	1747990351	Pillaged Hut	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										KK	3611985
+h07P	1747990352	Poof Tower	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							WK	3649501
+h07Q	1747990353	Blood Shaman Tent	gvb	0.2	h02B	1747989058	Shamanic Tent	0	0	0	0	0	0	0	0	0	0	0										UK	3638191
+h07R	1747990354	Thunderpaw Spire	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								7		WK	3649252
+h07T	1747990356	Withering Hall	dvb	0.09		0		1	0	0	0	0	0	0	0	0	0	0		5								WK	3649000
+h07U	1747990357	Vessel of Purity	evb	0.12		0		1	0	0	0	0	1	0	0	0	0	0								9,17		CK	3578603
+h07V	1747990358	Celestial Chi Tower	cvb	0.04		0		1	1	0	0	0	0	0	0	0	0	0			3							WK	3649755
+h07W	1747990359	Snowveil Fountain	dvb	0.09		0		1	0	0	0	0	1	0	0	0	0	0								7		QK	3625630
+h07X	1747990360	Stasis Totem	evb	0.12	h02O	1747989071	Legendary Totem	0	0	0	0	0	0	0	0	0	0	0										UK	3641566
+h07Y	1747990361	Healing Totem	evb	0.12	h02O	1747989071	Legendary Totem	0	0	0	0	0	0	0	0	0	0	0										UK	3641750
+h07Z	1747990362	Endurance Totem	evb	0.12	h02O	1747989071	Legendary Totem	0	0	0	0	0	0	0	0	0	0	0										UK	3641934
+h080	1747990576	Temple of Riptide	gvb	0.2	h01Y	1747988825	Temple of Snakes	0	0	1	0	0	0	0	0	0	0	0										GK	3593751
+h081	1747990577	Tiny Watch Tower	cvb	0.04		0		0	0	0	0	0	0	0	0	1	0	0			1							CK	3579141
+h082	1747990578	Tiny Multishot Tower	cvb	0.04	h081	1747990577	Tiny Watch Tower	0	0	0	0	0	0	0	0	0	0	0			1							CK	3579368
+h088	1747990584	Moon Shrine	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										KK	3611153
+h08P	1747990608	Silver Glade	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								7		KK	3612917
+h08X	1747990616	Archery Range	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										AK	3569245
+h08Y	1747990617	Archery Tower	gvb	0.2	h08X	1747990616	Archery Range	0	0	0	0	0	0	0	0	0	0	0										AK	3569474
+h092	1747990834	Spellbreaker Kodo Farm	gvb	0.2	h02K	1747989067	Kodo Farm	0	0	0	0	0	0	0	0	0	0	0										UK	3639543
+h097	1747990839	Precious Golem Factory	gvb	0.2	h05V	1747989846	Golem Factory	0	0	0	0	0	0	0	0	0	0	0										EK	3585352
+h09B	1747990850	Heavy Tank Factory	gvb	0.2	h05X	1747989848	Tank Factory	0	0	0	0	0	0	0	0	0	0	0										EK	3583810
+h09H	1747990856	Rocket Tank Factory	gvb	0.2	h09B	1747990850	Heavy Tank Factory	0	0	1	0	0	0	0	0	0	0	0										EK	3584003
+h09I	1747990857	Assault Tank Factory	gvb	0.2	h05X	1747989848	Tank Factory	0	0	0	0	0	0	0	0	0	0	0	1.5									EK	3583578
+h09J	1747990858	Mine Layer Factory	gvb	0.2	h05X	1747989848	Tank Factory	0	0	0	0	0	0	0	0	0	0	0										EK	3583385
+h09L	1747990860	Bomber Factory	gvb	0.2	h05J	1747989834	Aircraft Factory	0	0	1	1	0	0	0	0	0	0	0							13			EK	3582874
+h09P	1747990864	Arsenal	gvb	0.2	h05T	1747989844	Gun Smith	0	0	0	0	0	0	0	0	0	0	0										EK	3584897
+h09T	1747990868	Power Plant	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0			4					7		EK	3587284
+h09X	1747990872	School of Wizardry	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										AK	3570083
+h09Y	1747990873	Corrupted Ancient of Annihilation	gvb	0.2	h04W	1747989591	Corrupted Ancient of War	0	0	0	0	0	0	0	0	0	0	0	1.4									nK	3531497
+h0A1	1747992881	Marksmen's Encampment	gvb	0.2	h003	1747988531	Sniper Nest	0	0	1	0	0	0	0	0	0	0	0							13			CK	3576003
+h0Z1	1747999281	Mudcrab Burrow	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										pK	3538759
+h0Z2	1747999282	Rockcrab Burrow	gvb	0.2	h0Z1	1747999281	Mudcrab Burrow	0	0	0	0	0	0	0	0	0	0	0										pK	3538987
+h0Z3	1747999283	Spinecrab Tidepool	gvb	0.2		0		1	0	1	0	0	0	0	0	0	0	0										pK	3539180
+h0Z4	1747999284	Hermit Mound	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										pK	3539436
+h0Z5	1747999285	Tidal Cairn	evb	0.12		0		1	0	0	0	0	0	0	0	0	0	0								7,15		pK	3539659
+h0Z6	1747999286	Coral Spire	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0										pK	3539914
+h0Z7	1747999287	Reef Guardian	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0						1.15				pK	3540128
+n01J	1848652106	Corrupted Protector	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							nK	3534026
+n02D	1848652356	Ancient Protector	cvb	0.04		0		1	0	0	0	0	0	0	0	0	0	0			1							IK	3602730
+n02N	1848652366	Fire Gnoll Hut	gvb	0.2	n02P	1848652368	Gnoll Tent	0	0	1	0	0	0	0	0	0	0	0										qK	3541693
+n02O	1848652367	Den of the Ogre Lord	fvb	0.18	n033	1848652595	Ogre Den	0	0	0	1	0	0	0	0	0	0	0										qK	3543237
+n02P	1848652368	Gnoll Tent	gvb	0.2		0		1	0	1	0	0	0	0	0	0	0	0										qK	3541437
+n02Q	1848652369	Harpy Nest	gvb	0.2		0		1	1	0	0	0	0	0	0	0	0	0										qK	3541919
+n02R	1848652370	Monstrous Sandkin Burrow	gvb	0.2	n039	1848652601	Sandkin Burrow	0	0	0	0	0	0	0	0	0	0	0										qK	3542790
+n031	1848652593	Nest of Harpy Matriarch	gvb	0.2	n03B	1848652610	Nest of Harpy Witch	0	0	0	0	0	0	0	0	0	0	0										qK	3542374
+n033	1848652595	Ogre Den	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0										qK	3542983
+n036	1848652598	Quillboar Yard	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										qK	3541015
+n037	1848652599	Razormane Abode	gvb	0.2	n036	1848652598	Quillboar Yard	0	0	0	0	0	0	0	0	0	0	0										qK	3541244
+n038	1848652600	Salamander Hatchery	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										qK	3543461
+n039	1848652601	Sandkin Burrow	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										qK	3542567
+n03A	1848652609	Temple of Storm	evb	0.12		0		1	1	0	0	0	0	0	0	0	0	0							9			qK	3544440
+n03B	1848652610	Nest of Harpy Witch	gvb	0.2	n02Q	1848652369	Harpy Nest	0	0	0	0	0	0	0	0	0	0	0										qK	3542181
+n03D	1848652612	Bamboo Dojo	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										WK	3646928
+n03F	1848652614	Brew Hut	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										WK	3647350
+n03H	1848652616	Temple of the Wandering Spark	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0										WK	3647959
+n03K	1848652619	Fighting Tavern	gvb	0.2	n03F	1848652614	Brew Hut	0	0	0	0	0	0	0	0	0	0	0										WK	3647573
+n03L	1848652620	Jade Shrine	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	2.47									WK	3648737
+n03N	1848652622	Pandaren Siege Workshop	fvb	0.18		0		1	0	0	1	0	0	0	0	0	0	0	1.5									WK	3648182
+n03P	1848652624	Temple of Ten Thousand Drinks	gvb	0.2	n03K	1848652619	Fighting Tavern	0	0	0	0	0	0	0	0	0	0	0										WK	3647766
+n03Q	1848652625	Cloud Hangar	gvb	0.2		0		1	0	0	0	0	0	0	0	0	0	0	2.2									WK	3648475
+n03S	1848652627	Sagepaw Sanctum	gvb	0.2	n03D	1848652612	Bamboo Dojo	0	0	0	0	0	0	0	0	0	0	0										WK	3647157
+o000	1865429040	Anti Air Tower	cvb	0.04		0		1	0	1	0	0	0	0	0	0	0	0			1		0.65					UK	3640982

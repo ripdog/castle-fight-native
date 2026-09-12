@@ -762,6 +762,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     unit_object_metadata_fingerprint = int(analysis["unit_object_metadata_fingerprint"])
     unit_object_upgrades = analysis["unit_object_upgrades"]
     race_buildings = analysis["race_buildings"]
+    income_factor_constants = analysis["income_factor_constants"]
+    race_building_semantics = analysis["race_building_semantics"]
     effective_unit_stats = analysis["effective_unit_stats"]
     protected_unit_stats = analysis["protected_unit_stats"]
     function_aliases = analysis["function_aliases"]
@@ -1041,6 +1043,65 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 unit_rawcode, unit_id, unit_names, row["byte_offset"],
             ])
 
+    upgrade_pairs = {
+        (int(row["source_building_id"]), int(row["target_building_id"]))
+        for row in unit_object_upgrades
+    }
+    semantic_precursor_pairs = {
+        (int(row["precursor_building_id"]), int(row["building_id"]))
+        for row in race_building_semantics
+        if row["precursor_building_id"] is not None
+    }
+    if semantic_precursor_pairs != upgrade_pairs:
+        missing_from_semantics = sorted(upgrade_pairs - semantic_precursor_pairs)
+        missing_from_upgrades = sorted(semantic_precursor_pairs - upgrade_pairs)
+        raise ValueError(
+            "race precursor wrappers disagree with authored upgrade metadata: "
+            f"missing_from_semantics={missing_from_semantics[:10]} "
+            f"missing_from_upgrades={missing_from_upgrades[:10]}"
+        )
+
+    with (script_dir / "race-building-semantics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "income_factor_symbol", "income_factor", "precursor_rawcode", "precursor_rawcode_integer", "precursor_names",
+            "has_tier_assignment", "is_legendary_line", "is_anti_air", "is_siege", "is_artillery",
+            "is_na_only", "is_ultimate_only", "no_pp", "ai_should_ignore",
+            "provides_active_targeted_spell_shield", "area_spell",
+            "multi_target_mult", "cage_pressure", "placement_strat", "spell_dps", "ai_tower_strength",
+            "combat_power_factor", "tags", "extra_tags", "override_tags",
+            "source_function", "first_wrapper_byte_offset",
+        ])
+        for row in race_building_semantics:
+            building_id = int(row["building_id"])
+            building_rawcode, building_categories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            if building_categories != "units":
+                raise ValueError(f"race building semantic {building_rawcode} does not resolve to a unit/building object")
+            precursor_id = int(row["precursor_building_id"] or 0)
+            if precursor_id:
+                precursor_rawcode, precursor_categories, _ptables, precursor_names, _pdefs = rawcode_metadata(precursor_id)
+                if precursor_categories != "units":
+                    raise ValueError(f"race building precursor {precursor_rawcode} does not resolve to a unit/building object")
+            else:
+                precursor_rawcode = ""
+                precursor_names = ""
+            writer.writerow([
+                building_rawcode, building_id, building_names,
+                row["income_factor_symbol"], row["income_factor"],
+                precursor_rawcode, precursor_id, precursor_names,
+                int(bool(row["has_tier_assignment"])), int(bool(row["is_legendary_line"])),
+                int(bool(row["is_anti_air"])), int(bool(row["is_siege"])), int(bool(row["is_artillery"])),
+                int(bool(row["is_na_only"])), int(bool(row["is_ultimate_only"])), int(bool(row["no_pp"])),
+                int(bool(row["ai_should_ignore"])), int(bool(row["provides_active_targeted_spell_shield"])),
+                int(bool(row["area_spell"])), row["multi_target_mult"] or "", row["cage_pressure"] or "",
+                row["placement_strat"] or "", row["spell_dps"] or "", row["ai_tower_strength"] or "",
+                row["combat_power_factor"] or "", ",".join(str(value) for value in row["tags"]),
+                ",".join(str(value) for value in row["extra_tags"]),
+                ",".join(str(value) for value in row["override_tags"]),
+                row["source_function"], row["first_wrapper_byte_offset"],
+            ])
+
     with (script_dir / "effective-unit-stats.tsv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow([
@@ -1218,6 +1279,9 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "race_catalogs": len({int(row["race_index"]) for row in race_buildings}),
         "race_building_links": len(race_buildings),
         "campaign_only_race_catalogs": len({int(row["race_index"]) for row in race_buildings if bool(row["campaign_only"])}),
+        "race_building_semantic_rows": len(race_building_semantics),
+        "race_building_precursor_edges": len(semantic_precursor_pairs),
+        "income_factor_constants": dict(sorted(income_factor_constants.items())),
         "effective_unit_stat_rows": len(effective_unit_stats),
         "effective_unit_stat_buildings": len({int(row["building_id"]) for row in effective_unit_stats}),
         "effective_unit_stat_units": len({int(row["unit_id"]) for row in effective_unit_stats}),
