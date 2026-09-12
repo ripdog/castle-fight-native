@@ -1,0 +1,163 @@
+building_rawcode	building_names	unit_rawcode	unit_names	effective_hp	static_hp	hp_comparison	effective_armor	static_armor	armor_comparison	effective_dps	static_attack1_dps	dps_comparison	effective_attack_range	static_attack1_range	attack_range_comparison	effective_move_speed	static_move_speed	move_speed_comparison	spawns_per_cycle	can_hit_air	source_function	byte_offset
+h000	Barracks	hfoo	Footman	250	250	static-match	4	4	static-match	18.88	18.88888888888889	static-match	90	90	static-match	270	270	static-match	1	0	xO	3872225
+h002	Spider Egg Clutch	n00U	Black Spider	250	1	static-differs	1	0	static-differs	30.5	0.010101010101010102	static-differs	100	100	static-match	330	330	static-match	2	0	xO	3872625
+h003	Sniper Nest	hrif	Sniper	270	270	static-match	0	0	static-match	22.66	22.666666666666668	static-match	500	500	static-match	270	270	static-match	1	1	xO	3873026
+h004	Weapon Lab	hmtm	Mortar	280	280	static-match	0	0	static-match	21.14	21.142857142857142	static-match	1000	1000	static-match	270	220	static-differs	1	0	xO	3873424
+h007	Demon Gate	n000	Infernal	1600	1	static-differs	7	0	static-differs	90.74	0.7407407407407407	static-differs	100	100	static-match	300	300	static-match	1	1	xO	3873824
+h009	Dragon Nest	n001	Red Dragon	800	1	static-differs	6	6	static-match	50	0.010101010101010102	static-differs	400	1	static-differs	320	320	static-match	1	1	xO	3874225
+h00B	Fountain of Wonders	e000	Faerie Dragon	460	1	static-differs	2	0	static-differs	28.57	0.5714285714285714	static-differs	350	1	static-differs	350	350	static-match	1	1	xO	3874625
+h00F	Spawning Grounds	n002	Naga Guardian	625	1	static-differs	6	0	static-differs	51.78	0.010101010101010102	static-differs	128	128	static-match	280	280	static-match	1	0	xO	3875025
+h00J	Swamp Well	n004	Suumpmolk	380	1	static-differs	3	0	static-differs	27.14	0.010101010101010102	static-differs	325	1	static-differs	280	280	static-match	1	1	xO	3875426
+h00K	Hjordhejmen	n005	Warlock	320	1	static-differs	1	0	static-differs	17.5	1.3888888888888888	static-differs	160	1	static-differs	300	300	static-match	1	1	xO	3875826
+h00Q	Spider Egg Nest	n01N	Giant Spider	500	1	static-differs	4	0	static-differs	53.84	0.010101010101010102	static-differs	100	100	static-match	330	330	static-match	2	0	xO	3876226
+h00R	Spider Egg Hatchery	n01W	Brood Mother	900	1	static-differs	6	0	static-differs	66.66	0.010101010101010102	static-differs	100	100	static-match	330	330	static-match	2	0	xO	3876627
+h00S	Hunter's Hall	e001	Huntress	300	1	static-differs	1	0	static-differs	27.66	0.6666666666666666	static-differs	400	1	static-differs	300	300	static-match	1	1	xO	3877028
+h00T	Hall of Honor	n006	Blademaster	400	1	static-differs	7	0	static-differs	39.28	0.010101010101010102	static-differs	100	1	static-differs	325	325	static-match	1	0	xO	3877428
+h00V	Bloodelf War Academy	h00U	Bloodthirster	525	1	static-differs	3	3	static-match	38.33	0.010101010101010102	static-differs	390	1	static-differs	300	300	static-match	1	1	xO	3877829
+h00X	Tower of Supreme Magic	h00W	Wizard	850	1	static-differs	4	0	static-differs	55.55	0.010101010101010102	static-differs	650	1	static-differs	290	290	static-match	1	1	xO	3878229
+h00Y	Furbolg Hut	n026	Furbolg Shaman	450	1	static-differs	1	0	static-differs	37.5	0.010101010101010102	static-differs	400	1	static-differs	280	280	static-match	1	1	xO	3878629
+h011	Nightelf Siege Factory	e002	Glaive Thrower	400	1	static-differs	2	2	static-match	26.42	0.2857142857142857	static-differs	1000	1000	static-match	250	250	static-match	1	0	xO	3879029
+h012	Furbolg Abode	n028	Furbolg Elder Shaman	650	1	static-differs	3	3	static-match	58.92	0.010101010101010102	static-differs	450	1	static-differs	280	280	static-match	1	1	xO	3879431
+h013	Ancient of Growth	e006	Dryad	500	1	static-differs	3	0	static-differs	37.5	0.010101010101010102	static-differs	400	1	static-differs	310	310	static-match	1	1	xO	3879831
+h015	Gryphon Rock	h016	Gryphon Rider	500	1	static-differs	2	0	static-differs	23.75	0.45454545454545453	static-differs	450	450	static-match	320	270	static-differs	1	1	xO	3880231
+h01B	Reptile Pool	n007	Dragon Turtle	650	1	static-differs	8	0	static-differs	54.28	0.5714285714285714	static-differs	550	1	static-differs	270	270	static-match	1	1	xO	3880631
+h01C	Altar of Greed	n008	Succubus	450	1	static-differs	2	0	static-differs	47.03	0.7407407407407407	static-differs	360	1	static-differs	320	320	static-match	1	1	xO	3881031
+h01D	Chaos Citadel	n009	Chaos Warrior	400	1	static-differs	5	0	static-differs	27.77	0.7407407407407407	static-differs	100	100	static-match	320	320	static-match	1	0	xO	3881431
+h01H	Ancient of Life	e009	Keeper of the Grove	700	1	static-differs	5	0	static-differs	75	0.010101010101010102	static-differs	450	1	static-differs	300	300	static-match	1	1	xO	3881832
+h01I	Lesser Demon Cage	n00A	Satyr	250	1	static-differs	3	0	static-differs	20.74	0.7407407407407407	static-differs	275	1	static-differs	320	320	static-match	1	1	xO	3882232
+h01J	Ancient of Eternity	e00C	Ancient Keeper	1000	1	static-differs	7	0	static-differs	69.04	0.010101010101010102	static-differs	550	1	static-differs	290	290	static-match	1	1	xO	3882632
+h01K	Temple of Bone	u005	Necromancer	300	1	static-differs	1	0	static-differs	30.55	0.5555555555555556	static-differs	380	1	static-differs	270	270	static-match	1	1	xO	3883033
+h01L	Haunted Mine	u001	Banshee	310	1	static-differs	2	0	static-differs	48.21	0.7142857142857143	static-differs	350	1	static-differs	270	270	static-match	1	1	xO	3883433
+h01N	Crypt	h01U	Vampire	475	1	static-differs	3	0	static-differs	35.18	0.7407407407407407	static-differs	110	1	static-differs	270	270	static-match	1	0	xO	3883833
+h01R	Rotting Hay Cart	n00B	Zombie	265	1	static-differs	3	0	static-differs	15.5	0.010101010101010102	static-differs	100	100	static-match	230	230	static-match	1	0	xO	3884234
+h01S	Dragon Cemetery	u000	Frost Wyrm	1200	1	static-differs	5	0	static-differs	77.77	0.010101010101010102	static-differs	325	1	static-differs	270	220	static-differs	1	1	xO	3884635
+h01T	Slaughter House	n00E	Flesh Golem	1200	1	static-differs	15	0	static-differs	94	0.030303030303030304	static-differs	120	1	static-differs	320	320	static-match	1	0	xO	3885036
+h01Y	Temple of Snakes	n00H	Winged Serpent	450	1	static-differs	2	0	static-differs	33.33	0.010101010101010102	static-differs	420	1	static-differs	350	350	static-match	1	1	xO	3885439
+h01Z	Naga Spring	n00S	Naga Siren	550	1	static-differs	3	0	static-differs	50	0.010101010101010102	static-differs	400	1	static-differs	290	290	static-match	1	1	xO	3885839
+h020	Murloc Camp	n00I	Murloc Warrior	325	1	static-differs	4	0	static-differs	24	0.010101010101010102	static-differs	90	90	static-match	280	280	static-match	2	0	xO	3886239
+h021	Murloc Village	n00J	Murloc Champion	520	1	static-differs	6	0	static-differs	36	0.010101010101010102	static-differs	90	90	static-match	280	280	static-match	2	0	xO	3886639
+h022	Murloc Fortress	n00K	Murloc Assassin	750	1	static-differs	8	0	static-differs	50	0.010101010101010102	static-differs	90	90	static-match	280	280	static-match	2	0	xO	3887039
+h023	Ancient of Slumber	n029	Bear	675	1	static-differs	5	0	static-differs	48.57	0.010101010101010102	static-differs	128	128	static-match	270	270	static-match	1	0	xO	3887439
+h024	Ancient of Hibernation	n02B	Ancient Bear	1100	1	static-differs	8	0	static-differs	57.5	0.010101010101010102	static-differs	128	128	static-match	270	270	static-match	1	0	xO	3887840
+h025	Fountain of Blood	n00L	Blood Fiend	640	1	static-differs	5	0	static-differs	45.83	0.010101010101010102	static-differs	100	100	static-match	350	350	static-match	1	0	xO	3888242
+h026	Greater Demon Cage	z000	Quill Demon	725	1	static-differs	4	0	static-differs	65	0.010101010101010102	static-differs	340	1	static-differs	320	320	static-match	1	1	xO	3888643
+h027	Emerald Dragon Roost	n02A	Emerald Dragon	700	1	static-differs	5	0	static-differs	46.42	0.010101010101010102	static-differs	250	1	static-differs	330	330	static-match	1	1	xO	3889043
+h028	Monolith	e00F	Mountain Giant	800	1	static-differs	8	0	static-differs	83.33	0.010101010101010102	static-differs	277	128	static-differs	250	250	static-match	1	0	xO	3889443
+h029	Fighters' Hall	o002	Grunt	325	1	static-differs	4	0	static-differs	18.33	0.010101010101010102	static-differs	100	100	static-match	270	270	static-match	1	0	xO	3889844
+h02B	Shamanic Tent	o003	Shaman	340	1	static-differs	1	0	static-differs	26.31	0.010101010101010102	static-differs	350	1	static-differs	270	270	static-match	1	1	xO	3890245
+h02H	Troll Hut	n00V	Troll Berserker	450	450	static-match	3	0	static-differs	30	0.010101010101010102	static-differs	300	1	static-differs	270	270	static-match	1	1	xO	3890645
+h02I	Orcish Siege Factory	o001	Catapult	475	1	static-differs	5	0	static-differs	27	0.010101010101010102	static-differs	1000	1	static-differs	220	180	static-differs	1	0	xO	3891045
+h02K	Kodo Farm	o007	Kodo	1000	790	static-differs	6	0	static-differs	24.3	0.8333333333333334	static-differs	100	1	static-differs	250	250	static-match	1	0	xO	3891447
+h02P	Falcon-Clan Encampment	o009	Wyvern Rider	400	1	static-differs	2	0	static-differs	34	0.010101010101010102	static-differs	430	1	static-differs	330	330	static-match	1	1	xO	3891849
+h02U	Advanced Fighters' Hall	o004	Veteran Grunt	575	1	static-differs	6	0	static-differs	30.76	0.010101010101010102	static-differs	100	100	static-match	290	290	static-match	1	0	xO	3892249
+h031	Superior Fighters' Hall	o005	Axemaster	1000	1	static-differs	10	0	static-differs	70	0.010101010101010102	static-differs	100	100	static-match	320	320	static-match	1	0	xO	3892650
+h032	Royal Spawning Grounds	n00X	Naga Royal Guard	1100	1	static-differs	9	0	static-differs	94.16	0.010101010101010102	static-differs	128	128	static-match	280	280	static-match	1	0	xO	3893053
+h035	Melee Kodo Farm	o008	Melee Kodo Rider	1200	1	static-differs	7	0	static-differs	33.33	0.010101010101010102	static-differs	200	1	static-differs	250	250	static-match	1	1	xO	3893455
+h036	Defensive Kodo Farm	o006	Defensive Kodo Rider	1200	1	static-differs	7	0	static-differs	33.33	0.010101010101010102	static-differs	200	1	static-differs	250	250	static-match	1	1	xO	3893856
+h037	Chapel	h03B	Crusader	600	1	static-differs	6	0	static-differs	42.85	0.010101010101010102	static-differs	100	100	static-match	340	340	static-match	1	0	xO	3894257
+h038	Church	h03C	Paladin	850	1	static-differs	9	0	static-differs	67.85	0.010101010101010102	static-differs	100	100	static-match	340	340	static-match	1	0	xO	3894658
+h039	Stronghold	h03A	Defender	575	1	static-differs	7	0	static-differs	38.88	0.7407407407407407	static-differs	90	90	static-match	250	250	static-match	1	0	xO	3895059
+h03D	Ranger's Hall	e003	Ranger	500	1	static-differs	3	0	static-differs	62.5	0.010101010101010102	static-differs	425	1	static-differs	300	300	static-match	1	1	xO	3895459
+h03E	Amazon's Hall	e004	Amazon	900	1	static-differs	5	0	static-differs	100	0.010101010101010102	static-differs	460	1	static-differs	300	300	static-match	1	1	xO	3895859
+h03F	Hall of the Eldest	n00Y	Elder Blademaster	800	1	static-differs	10	0	static-differs	90	0.010101010101010102	static-differs	120	1	static-differs	340	340	static-match	1	0	xO	3896260
+h03G	Greater Chaos Citadel	n00Z	Chaos Champion	850	1	static-differs	8	0	static-differs	59.25	0.7407407407407407	static-differs	100	100	static-match	320	320	static-match	1	0	xO	3896662
+h03I	Azure Nest	n010	Azure Drake	650	1	static-differs	4	0	static-differs	33.33	0.5555555555555556	static-differs	250	1	static-differs	350	350	static-match	1	1	xO	3897063
+h03J	Ice Troll Voodoo Lounge	o00A	Ice Troll Witch Doctor	650	1	static-differs	3	0	static-differs	48.46	0.010101010101010102	static-differs	370	1	static-differs	270	270	static-match	1	1	xO	3897463
+h03K	Ice Troll Hut	n015	Ice Troll Shadow Priest	350	1	static-differs	1	0	static-differs	27.77	0.5555555555555556	static-differs	350	1	static-differs	270	270	static-match	1	1	xO	3897863
+h03M	Defiled Granary	u007	Plague Bearer	1050	1	static-differs	6	0	static-differs	52.5	0.010101010101010102	static-differs	128	128	static-match	260	260	static-match	1	0	xO	3898263
+h03S	Crystal Palace	n014	Ice Queen	650	1	static-differs	4	0	static-differs	56.66	1.0	static-differs	450	1	static-differs	290	290	static-match	1	1	xO	3898665
+h03T	Ice Claws	n012	Wandigoo	800	1	static-differs	5	0	static-differs	46.42	0.010101010101010102	static-differs	128	128	static-match	320	320	static-match	1	0	xO	3899065
+h03U	Igloo	n011	Hrimthrusa	325	1	static-differs	2	0	static-differs	33.84	0.010101010101010102	static-differs	380	1	static-differs	300	300	static-match	1	1	xO	3899466
+h03W	Glacier	n016	Magnataur	1200	1	static-differs	8	0	static-differs	90	0.6666666666666666	static-differs	128	128	static-match	330	330	static-match	1	0	xO	3899866
+h03X	Water Spring	h02W	Lesser Elemental Of Water	300	1	static-differs	1	0	static-differs	28.75	0.030303030303030304	static-differs	30	30	static-match	270	270	static-match	1	1	xO	3900268
+h03Y	Golden Fountain	h02X	Elemental Of Water	500	1	static-differs	3	0	static-differs	44.37	0.020202020202020204	static-differs	30	30	static-match	270	270	static-match	1	1	xO	3900667
+h03Z	Spellbound Fountain	h02Y	Greater Elemental Of Water	650	1	static-differs	7	0	static-differs	66.66	0.010101010101010102	static-differs	30	30	static-match	270	270	static-match	1	1	xO	3901066
+h040	Rock Pile	h034	Elemental Of Earth	450	450	static-match	4	0	static-differs	50	0.6666666666666666	static-differs	10	1	static-differs	240	240	static-match	1	0	xO	3901465
+h041	Greater Fissure	h03N	Greater Elemental Of Earth	950	1	static-differs	8	0	static-differs	83.33	0.010101010101010102	static-differs	10	1	static-differs	240	240	static-match	1	0	xO	3901865
+h042	Pillar of Globe-Lightning	h03P	Elemental Of Lightning	450	450	static-match	3	0	static-differs	0.58	0.010101010101010102	static-differs	350	1	static-differs	255	255	static-match	1	1	xO	3902265
+h043	Frost Claws	n013	Ancient Wandigoo	1500	1	static-differs	7	0	static-differs	78.57	0.010101010101010102	static-differs	128	128	static-match	320	320	static-match	1	0	xO	3902663
+h044	Pillar of St. Elmo's Fire	h03R	Greater Elemental Of Lightning	800	1	static-differs	9	0	static-differs	0.47	0.010101010101010102	static-differs	400	1	static-differs	255	255	static-match	1	1	xO	3903065
+h045	Altar of Fire	h02Z	Elemental Of Fire	625	1	static-differs	5	0	static-differs	34.61	0.010101010101010102	static-differs	400	1	static-differs	260	260	static-match	1	1	xO	3903463
+h046	Altar of Blaze	u00F	Greater Elemental Of Fire	15	1	static-differs	0	0	static-match	10	10.0	static-match	90	90	static-match	270	270	static-match	1	0	xO	3903863
+h049	Snowy Rocks	n017	Frost Wolf	280	1	static-differs	4	0	static-differs	20	0.010101010101010102	static-differs	100	100	static-match	330	330	static-match	1	0	xO	3904260
+h04A	Trapped Gale	o00C	Lesser Elemental Of Wind	350	1	static-differs	2	0	static-differs	26.66	0.010101010101010102	static-differs	400	1	static-differs	300	300	static-match	1	1	xO	3904661
+h04B	Temple of Necromancy	u009	Mighty Necromancer	550	1	static-differs	3	0	static-differs	46.87	0.010101010101010102	static-differs	400	1	static-differs	270	270	static-match	1	1	xO	3905061
+h04C	Monument of Wind Stream	o00D	Elemental Of Wind	550	1	static-differs	4	0	static-differs	43.33	0.010101010101010102	static-differs	450	450	static-match	300	300	static-match	1	1	xO	3905461
+h04D	Zephyros Memorial	o00E	Greater Elemental Of Wind	1300	1	static-differs	9	0	static-differs	55	0.010101010101010102	static-differs	450	450	static-match	300	300	static-match	1	1	xO	3905861
+h04E	Tower of Elder Knowledge	h03V	Master Of Elements	1200	1	static-differs	8	0	static-differs	70.58	0.030303030303030304	static-differs	500	1	static-differs	280	280	static-match	1	1	xO	3906262
+h04F	Icy Rocks	n018	Polar Bear	550	1	static-differs	5	0	static-differs	43.33	0.010101010101010102	static-differs	128	128	static-match	330	330	static-match	1	0	xO	3906663
+h04L	Void Portal	n019	Void Walker	375	1	static-differs	2	0	static-differs	25	0.625	static-differs	380	1	static-differs	270	270	static-match	1	1	xO	3907064
+h04M	Shadow Ancient	n01B	Shadow Drake	700	1	static-differs	4	0	static-differs	45.83	0.5555555555555556	static-differs	400	400	static-match	350	350	static-match	1	1	xO	3907464
+h04N	Portal of the Abyss	n01A	Void Keeper	740	1	static-differs	4	0	static-differs	50	0.625	static-differs	400	1	static-differs	270	270	static-match	1	1	xO	3907864
+h04O	Nether Ancient	n01D	Nether Drake	425	1	static-differs	2	2	static-match	26.38	0.5555555555555556	static-differs	400	400	static-match	350	350	static-match	1	1	xO	3908264
+h04P	Hell's Portal	n01E	Infernal Tank	850	1	static-differs	4	0	static-differs	57.14	0.010101010101010102	static-differs	600	600	static-match	290	290	static-match	1	0	xO	3908664
+h04Q	Hell's Gate	n01F		600	1	static-differs	3	0	static-differs	45.31	0.625	static-differs	600	600	static-match	290	290	static-match	1	0	xO	3909065
+h04S	Felhound Shrine	n01G	Felhound	650	1	static-differs	7	0	static-differs	42.96	0.7407407407407407	static-differs	100	100	static-match	330	330	static-match	1	0	xO	3909466
+h04U	Demonic Statue	h04I	Incubus	1000	1	static-differs	4	0	static-differs	57.94	0.010101010101010102	static-differs	520	1	static-differs	320	320	static-match	1	1	xO	3909867
+h04V	Ancient of Battle	n01I	Corrupted Ent	320	1	static-differs	4	0	static-differs	19.62	1.111111111111111	static-differs	100	100	static-match	300	300	static-match	1	0	xO	3910268
+h04W	Corrupted Ancient of War	n01H	Corrupted Treant	640	1	static-differs	5	0	static-differs	38.88	0.7407407407407407	static-differs	100	100	static-match	300	300	static-match	1	0	xO	3910669
+h04Z	Tainted Farm	n01K	Suffocated Zombie	500	1	static-differs	5	0	static-differs	27.5	0.010101010101010102	static-differs	100	100	static-match	245	245	static-match	1	0	xO	3911070
+h054	Graveyard	h05H	Vampire Lord	700	1	static-differs	5	0	static-differs	69.04	0.010101010101010102	static-differs	110	1	static-differs	310	310	static-match	1	0	xO	3911471
+h055	High Citadel of Necromancy	u00D	Lich King	950	1	static-differs	8	0	static-differs	66.66	0.5555555555555556	static-differs	500	1	static-differs	300	300	static-match	1	1	xO	3911872
+h05D	Gunner's Hall	h0A2	Heavy Gunner	500	1	static-differs	3	0	static-differs	47.05	0.010101010101010102	static-differs	550	1	static-differs	270	270	static-match	1	0	xO	3912272
+h05E	Trapper's Hut	n01O	Troll Trapper	600	1	static-differs	4	0	static-differs	38.33	0.010101010101010102	static-differs	325	1	static-differs	270	270	static-match	1	1	xO	3912673
+h05F	Lernaean Fountain	n01P	Ancient Hydra	1750	1	static-differs	9	0	static-differs	133.33	0.6666666666666666	static-differs	500	500	static-match	350	350	static-match	1	1	xO	3913073
+h05J	Aircraft Factory	h06Q	Roterothopter	300	1	static-differs	4	0	static-differs	25	0.010101010101010102	static-differs	999	500	static-differs	400	320	static-differs	1	1	xO	3913475
+h05M	Demolition Lab	n01V	Lunatic Goblin	175	1	static-differs	0	0	static-match	2.5		static-missing	50	1	static-differs	330	330	static-match	1	0	xO	3913875
+h05T	Gun Smith	z002	Flamegunner	500	1	static-differs	4	0	static-differs	37.77	1.1111111111111112	static-differs	70	1	static-differs	270	270	static-match	1	0	xO	3914272
+h05U	Lumber Mill	n01T	Goblin Shredder	1000	1	static-differs	9	0	static-differs	56.66	0.010101010101010102	static-differs	80	1	static-differs	300	300	static-match	1	0	xO	3914672
+h05V	Golem Factory	n01X	Iron Golem	525	1	static-differs	6	0	static-differs	46.66	0.010101010101010102	static-differs	100	100	static-match	270	270	static-match	1	0	xO	3915073
+h05X	Tank Factory	h06T	Light Tank	400	1	static-differs	5	0	static-differs	33.33	2.857142857142857	static-differs	375	1	static-differs	270	270	static-match	1	0	xO	3915474
+h069	Spare Part Heap	n01U	Gobbo Machinist	125	80	static-differs	1	1	static-match	8.5	13.0	static-differs	500	1	static-differs	500	500	static-match	1	0	xO	3915875
+h06D	Forest Trapper's Hole	n02G	Forest Troll Trapper	1600	1	static-differs	10	0	static-differs	105.66	0.010101010101010102	static-differs	550	1	static-differs	270	270	static-match	1	1	xO	3916275
+h06I	Infostealer's Place	o00F	Infostealer	750	1	static-differs	4	0	static-differs	60	0.010101010101010102	static-differs	450	1	static-differs	270	270	static-match	1	1	xO	3916678
+h06L	Modern Igloo	n02I	Angry Hrimthrusa	1600	1	static-differs	10	0	static-differs	110	0.010101010101010102	static-differs	400	400	static-match	270	270	static-match	1	1	xO	3917078
+h06O	Serenity	e00E	Twins	120	120	static-match	0	0	static-match	0		static-missing	0	-	static-missing	0	0	static-match	1	0	xO	3917481
+h06Y	Dragonhawk Portal	n01Y	Dragonhawk Rider	650	1	static-differs	3	0	static-differs	46.66	0.010101010101010102	static-differs	450	1	static-differs	330	330	static-match	1	1	xO	3917873
+h06Z	Protection Center	n02J	Goliath	1950	1	static-differs	20	0	static-differs	750	0.010101010101010102	static-differs	50	50	static-match	250	250	static-match	1	1	xO	3918273
+h070	Highelf Siege Factory	e005	Ballista	500	1	static-differs	3	0	static-differs	31.25	0.010101010101010102	static-differs	850	850	static-match	250	250	static-match	1	0	xO	3918675
+h071	Enigma	e00G	Visioneer	900	1	static-differs	8	0	static-differs	32.5	0.010101010101010102	static-differs	1000	1000	static-match	310	310	static-match	1	1	xO	3919076
+h072	Holy Altar	h074	Holy Warrior	1400	1	static-differs	12	0	static-differs	87.09	0.010101010101010102	static-differs	100	100	static-match	300	300	static-match	1	0	xO	3919477
+h077	Rocket Lab	n02M	Goblin Rocketeer	370	1	static-differs	3	0	static-differs	29.81	0.010101010101010102	static-differs	1100	1	static-differs	330	330	static-match	1	0	xO	3919880
+h07D	Moon Altar	e00J	Sage Druid	550	1	static-differs	3	0	static-differs	46.87	0.625	static-differs	375	1	static-differs	285	285	static-match	1	1	xO	3920282
+h07L	Guild of Shadows	n020	Royal Assassin	575	1	static-differs	2	2	static-match	60	0.010101010101010102	static-differs	100	1	static-differs	330	330	static-match	1	0	xO	3920682
+h07M	House of Shadows	n01Z	Assassin	375	1	static-differs	1	1	static-match	30	0.010101010101010102	static-differs	100	100	static-match	320	320	static-match	1	0	xO	3921083
+h07N	Scorched Mansion	e00A	Avatar of Vengeance	700	1	static-differs	8	0	static-differs	77.77	0.010101010101010102	static-differs	50	1	static-differs	340	340	static-match	1	0	xO	3921484
+h07O	Pillaged Hut	e00B	Avenging Spirit	425	1	static-differs	5	5	static-match	37.5	0.010101010101010102	static-differs	100	1	static-differs	340	340	static-match	1	0	xO	3921884
+h07Q	Blood Shaman Tent	o00G	Blood Shaman	660	1	static-differs	3	0	static-differs	62.96	0.010101010101010102	static-differs	380	1	static-differs	270	270	static-match	1	1	xO	3922285
+h080	Temple of Riptide	n03U	Winged Riptide Serpent	580	1	static-differs	2	0	static-differs	46.66	0.010101010101010102	static-differs	520	1	static-differs	350	350	static-match	1	1	xO	3922685
+h088	Moon Shrine	e007	Druid	325	1	static-differs	1	0	static-differs	31.25	0.625	static-differs	375	1	static-differs	285	285	static-match	1	1	xO	3923085
+h08X	Archery Range	n022	Archer	320	1	static-differs	2	0	static-differs	28.84	0.010101010101010102	static-differs	450	1	static-differs	300	300	static-match	1	1	xO	3923485
+h08Y	Archery Tower	n023	Master Archer	525	1	static-differs	4	0	static-differs	84.15	0.010101010101010102	static-differs	500	650	static-differs	300	300	static-match	1	1	xO	3923885
+h092	Spellbreaker Kodo Farm	o00B	Spellbreaker Kodo Rider	1200	1	static-differs	7	0	static-differs	33.33	0.010101010101010102	static-differs	200	1	static-differs	250	250	static-match	1	1	xO	3924285
+h097	Precious Golem Factory	n024	Adamant Golem	950	1	static-differs	15	0	static-differs	92.59	0.7407407407407407	static-differs	100	100	static-match	270	270	static-match	1	0	xO	3924686
+h09B	Heavy Tank Factory	h06S	Heavy Tank	800	1	static-differs	12	0	static-differs	61.9	0.47619047619047616	static-differs	400	1	static-differs	270	270	static-match	1	0	xO	3925088
+h09H	Rocket Tank Factory	h098	Rocket Tank	900	1	static-differs	12	0	static-differs	76.19	0.47619047619047616	static-differs	400	1	static-differs	270	270	static-match	1	0	xO	3925490
+h09I	Assault Tank Factory	h099	Assault Tank	700	700	static-match	8	0	static-differs	50	0.47619047619047616	static-differs	550	1	static-differs	270	270	static-match	1	0	xO	3925892
+h09J	Mine Layer Factory	h06U	Mine Layer	600	1	static-differs	7	0	static-differs	42.85	0.47619047619047616	static-differs	100	1	static-differs	300	300	static-match	1	0	xO	3926293
+h09L	Bomber Factory	h06R	Gyrocopter	625	1	static-differs	6	0	static-differs	45	0.010101010101010102	static-differs	500	500	static-match	400	320	static-differs	1	1	xO	3926694
+h09P	Arsenal	z003	Flamegunner Sergeant	700	1	static-differs	7	0	static-differs	66.66	1.1111111111111112	static-differs	70	1	static-differs	270	270	static-match	1	0	xO	3927094
+h09X	School of Wizardry	h07B	Sorceress	550	1	static-differs	2	0	static-differs	27.77	0.010101010101010102	static-differs	500	1	static-differs	300	300	static-match	1	1	xO	3927494
+h09Y	Corrupted Ancient of Annihilation	n027	Corrupted Annihilator	1800	1	static-differs	8	0	static-differs	111.11	0.7407407407407407	static-differs	100	100	static-match	300	300	static-match	1	0	xO	3927894
+h0A1	Marksmen's Encampment	h05C	Marksman	450	1	static-differs	1	0	static-differs	69	0.010101010101010102	static-differs	800	800	static-match	200	200	static-match	1	1	xO	3928297
+n02N	Fire Gnoll Hut	n02T	Fire Gnoll	550	1	static-differs	4	0	static-differs	79.31	0.010101010101010102	static-differs	385	1	static-differs	270	270	static-match	1	1	xO	3928697
+n02O	Den of the Ogre Lord	n02Y	Ogre Lord	1200	1	static-differs	7	0	static-differs	70	0.010101010101010102	static-differs	80	1	static-differs	280	280	static-match	1	0	xO	3929097
+n02P	Gnoll Tent	n02S	Gnoll	320	1	static-differs	3	0	static-differs	31.25	0.625	static-differs	360	1	static-differs	260	260	static-match	1	1	xO	3929498
+n02Q	Harpy Nest	n02W	Harpy	380	1	static-differs	1	1	static-match	32.5	0.010101010101010102	static-differs	280	280	static-match	320	320	static-match	1	1	xO	3929898
+n02R	Monstrous Sandkin Burrow	n035	Monstrous Sandkin	875	1	static-differs	8	0	static-differs	75.75	0.010101010101010102	static-differs	375	1	static-differs	300	300	static-match	1	0	xO	3930298
+n031	Nest of Harpy Matriarch	n034	Harpies' Matriarch	1100	1	static-differs	4	0	static-differs	75.14	0.010101010101010102	static-differs	625	625	static-match	310	310	static-match	1	1	xO	3930699
+n033	Ogre Den	n02X	Ogre	650	1	static-differs	5	0	static-differs	42.3	0.010101010101010102	static-differs	60	1	static-differs	270	270	static-match	1	0	xO	3931100
+n036	Quillboar Yard	n02V	Quillboar	350	1	static-differs	3	0	static-differs	23.68	0.010101010101010102	static-differs	68	1	static-differs	300	300	static-match	1	0	xO	3931500
+n037	Razormane Abode	n02U	Razormane	800	1	static-differs	8	0	static-differs	56.52	0.010101010101010102	static-differs	64	1	static-differs	270	270	static-match	1	0	xO	3931900
+n038	Salamander Hatchery	n02Z	Salamander	950	1	static-differs	6	6	static-match	63.75	0.010101010101010102	static-differs	430	1	static-differs	270	270	static-match	1	1	xO	3932300
+n039	Sandkin Burrow	n030	Sandkin	510	1	static-differs	5	0	static-differs	38.46	0.010101010101010102	static-differs	325	1	static-differs	300	300	static-match	1	0	xO	3932700
+n03B	Nest of Harpy Witch	n032	Harpy Witch	700	1	static-differs	3	0	static-differs	54.28	0.010101010101010102	static-differs	320	320	static-match	320	320	static-match	1	1	xO	3933101
+n03D	Bamboo Dojo	n03E	Sagepaw Monk	350	1	static-differs	3	0	static-differs	18.75	0.010101010101010102	static-differs	350	1	static-differs	280	280	static-match	1	1	xO	3933501
+n03F	Brew Hut	n03G	Ironpaw Militia	475	1	static-differs	4	0	static-differs	40.71	0.010101010101010102	static-differs	60	1	static-differs	280	280	static-match	1	0	xO	3933901
+n03H	Temple of the Wandering Spark	n03I	Echofoot Mystic	430	1	static-differs	2	0	static-differs	56.5	0.010101010101010102	static-differs	180	1	static-differs	270	270	static-match	1	1	xO	3934301
+n03K	Fighting Tavern	n03J	Ironpaw Guardian	690	1	static-differs	6	0	static-differs	76.25	0.010101010101010102	static-differs	90	1	static-differs	280	280	static-match	1	0	xO	3934701
+n03L	Jade Shrine	n03M	Jade Elder	825	1	static-differs	6	0	static-differs	65.76	0.010101010101010102	static-differs	360	1	static-differs	280	280	static-match	1	1	xO	3935101
+n03N	Pandaren Siege Workshop	o00H	Brewshock Catapult	475	1	static-differs	6	0	static-differs	20.83	0.010101010101010102	static-differs	1000	1	static-differs	220	180	static-differs	1	0	xO	3935501
+n03P	Temple of Ten Thousand Drinks	n03O	Drunken Brewmaster	1200	1	static-differs	6	0	static-differs	184.09	0.010101010101010102	static-differs	60	1	static-differs	220	220	static-match	1	0	xO	3935903
+n03Q	Cloud Hangar	h07S	Cloud Ship	520	1	static-differs	7	0	static-differs	43.14	0.010101010101010102	static-differs	530	1	static-differs	300	300	static-match	1	1	xO	3936305
+n03S	Sagepaw Sanctum	n03T	Sagepaw Soulkeeper	550	1	static-differs	5	0	static-differs	52.08	0.010101010101010102	static-differs	350	1	static-differs	280	280	static-match	1	1	xO	3936705

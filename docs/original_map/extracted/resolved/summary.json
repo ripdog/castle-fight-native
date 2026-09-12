@@ -41,11 +41,37 @@
     "static-differs": 16,
     "static-match": 1
   },
+  "effective_unit_stat_rows": 162,
+  "effective_unit_stat_comparisons": {
+    "hp": {
+      "static-differs": 154,
+      "static-match": 8
+    },
+    "armor": {
+      "static-differs": 145,
+      "static-match": 17
+    },
+    "dps": {
+      "static-differs": 156,
+      "static-match": 4,
+      "static-missing": 2
+    },
+    "attack_range": {
+      "static-differs": 100,
+      "static-match": 61,
+      "static-missing": 1
+    },
+    "move_speed": {
+      "static-differs": 7,
+      "static-match": 155
+    }
+  },
   "notes": [
     "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
     "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
     "base-source-fields.tsv exposes selected custom_v0/base SLK values before map overrides, including computed columns",
-    "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source"
+    "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
+    "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization"
   ]
 }
