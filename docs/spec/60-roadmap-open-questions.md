@@ -339,11 +339,13 @@ The initial rules establish that a candidate requiring pursuit is invalid when t
 
 Current-target behavior is now also defined: combat-unit engagements are sticky. A closer/new enemy and nearby ally-defense alerts do not replace a valid current unit target. Building targets are the exception: an actual attack on a nearby allied unit may make an attacker abandon the building and engage that ally's valid attacker, so units pounding a castle can peel off to fight arriving defenders. Mere defender proximity does not trigger this; the ally-defense rule still requires a resolved attack. A valid direct attacker can pre-empt a non-retaliation-locked target once; the first hostile attack in canonical combat-event order becomes the unit's direct-retaliation target, and later attackers cannot replace it while that target remains valid. Dead, disappeared, invisible, invulnerable, unattackable, unreachable, or sufficiently distant retreating targets are dropped and clear the direct-retaliation lock. The verification implementation starts with a provisional three-tile extra pursuit allowance.
 
+Attack-building source behavior is now executable as well. Each attack building has independent target/cooldown state, ignores navigation reachability, measures range from its authoritative footprint, prefers hostile combat units over buildings for fresh acquisition, and retains a valid target while it remains inside acquisition range. Attack-building intents share the canonical ordinary-attack stream with unit intents; source death cancels a later unresolved building action while already-launched projectiles persist. The attack building itself does not currently use unit-style self-retaliation or ally-defense retargeting.
+
 Compatibility work still needs to investigate/decide:
 
 - finer target priority classes, including attack-capable buildings/objectives;
 - exact acquisition/pursuit distances per unit/content type;
-- whether attack buildings use the same base acquisition rules as units;
+- whether observed Castle Fight attack-building priority/retention behavior requires revising the provisional static acquisition rule;
 - explicit taunt/forced-target mechanics, while preserving the rule that builder-held item damage does not create ordinary retaliation;
 - detailed air/ground/building preferences.
 

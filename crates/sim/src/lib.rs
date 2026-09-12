@@ -59,6 +59,21 @@ mod tests {
             footprint,
             health: 10_000,
             production: None,
+            attack: None,
+        }
+    }
+
+    fn attack_building(
+        team: u8,
+        footprint: BuildingFootprint,
+        attack: AttackProfile,
+    ) -> BuildingSpawn {
+        BuildingSpawn {
+            team: Team(team),
+            footprint,
+            health: 10_000,
+            production: None,
+            attack: Some(attack),
         }
     }
 
@@ -87,6 +102,7 @@ mod tests {
                     movement: MovementProfile { speed_per_tick: 0 },
                 },
             }),
+            attack: None,
         }
     }
 
@@ -479,6 +495,213 @@ mod tests {
                 .distance_sq(sim.unit(nearby).unwrap().position)
                 >= (i64::from(minimum_distance) * i64::from(minimum_distance)) as u64
         );
+    }
+
+    #[test]
+    fn ranged_attack_building_targets_caged_unit_without_navigation_route() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let tower = sim.spawn_building(attack_building(
+            0,
+            BuildingFootprint::new(4, 0, 2, 2),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 2 * cell,
+                },
+                damage: 3,
+                range: 20 * cell,
+                acquisition_range: 20 * cell,
+                cooldown_ticks: 30,
+            },
+        ));
+        let target = sim.spawn_unit(passive_unit(1, 12 * cell));
+        for footprint in [
+            BuildingFootprint::new(11, -1, 1, 3),
+            BuildingFootprint::new(13, -1, 1, 3),
+            BuildingFootprint::new(12, -1, 1, 1),
+            BuildingFootprint::new(12, 1, 1, 1),
+        ] {
+            sim.spawn_building(passive_building(1, footprint));
+        }
+
+        let acquire = sim.step();
+        assert_eq!(acquire.attacks_resolved, 0);
+        assert_eq!(sim.building(tower).unwrap().target, Some(target));
+
+        let launch = sim.step();
+        assert_eq!(launch.attacks_resolved, 1);
+        assert_eq!(launch.projectiles_launched, 1);
+        assert_eq!(sim.projectiles()[0].source, tower);
+        assert_eq!(sim.unit(target).unwrap().health, 10_000);
+
+        while sim.projectile_count() != 0 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(target).unwrap().health, 9_997);
+    }
+
+    #[test]
+    fn attack_buildings_choose_targets_independently() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 4);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: 4 * cell,
+            },
+            damage: 1,
+            range: 30 * cell,
+            acquisition_range: 30 * cell,
+            cooldown_ticks: 30,
+        };
+        let left_tower = sim.spawn_building(attack_building(
+            0,
+            BuildingFootprint::new(10, 0, 1, 1),
+            attack,
+        ));
+        let right_tower = sim.spawn_building(attack_building(
+            0,
+            BuildingFootprint::new(30, 0, 1, 1),
+            attack,
+        ));
+        let left_target = sim.spawn_unit(passive_unit(1, 13 * cell));
+        let right_target = sim.spawn_unit(passive_unit(1, 33 * cell));
+
+        sim.step();
+        assert_eq!(sim.building(left_tower).unwrap().target, Some(left_target));
+        assert_eq!(
+            sim.building(right_tower).unwrap().target,
+            Some(right_target)
+        );
+    }
+
+    #[test]
+    fn attack_building_worker_count_is_deterministic() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut expected = None;
+        for workers in [1, 2, 8] {
+            let mut sim = Simulation::new(SimulationConfig::default(), workers);
+            let attack = AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 8 * cell,
+                },
+                damage: 1,
+                range: 100 * cell,
+                acquisition_range: 100 * cell,
+                cooldown_ticks: 2,
+            };
+            for (team, x) in [(0, 10), (0, 20), (1, 100), (1, 110)] {
+                sim.spawn_building(attack_building(
+                    team,
+                    BuildingFootprint::new(x, -10, 1, 1),
+                    attack,
+                ));
+            }
+            for index in 0..20 {
+                let team = (index % 2) as u8;
+                let x = if team == 0 { 45 } else { 75 };
+                sim.spawn_unit(UnitSpawn {
+                    team: Team(team),
+                    position: SimPoint::new(x * cell, (index - 10) * cell),
+                    ..passive_unit(team, x * cell)
+                });
+            }
+            for _ in 0..20 {
+                sim.step();
+            }
+            match expected {
+                None => expected = Some(sim.checksum()),
+                Some(checksum) => assert_eq!(sim.checksum(), checksum),
+            }
+        }
+    }
+
+    #[test]
+    fn unit_retaliates_against_attack_building_after_resolved_hit() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        });
+        let decoy = sim.spawn_unit(passive_unit(1, 12 * cell));
+        let tower = sim.spawn_building(attack_building(
+            1,
+            BuildingFootprint::new(14, 0, 1, 1),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 10 * cell,
+                },
+                damage: 1,
+                range: 8 * cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 30,
+            },
+        ));
+
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(decoy));
+        sim.step();
+        assert_eq!(sim.projectile_count(), 1);
+        let impact = sim.step();
+        assert_eq!(impact.projectile_impacts, 1);
+        assert_eq!(sim.unit(defender).unwrap().health, 99);
+        assert_eq!(sim.unit(defender).unwrap().last_attacker, Some(tower));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(tower));
+    }
+
+    #[test]
+    fn earlier_unit_kill_cancels_later_attack_building_action() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 3 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let tower = sim.spawn_building(BuildingSpawn {
+            team: Team(1),
+            footprint: BuildingFootprint::new(11, 0, 1, 1),
+            health: 1,
+            production: None,
+            attack: Some(AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 4 * cell,
+                },
+                damage: 100,
+                range: 3 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 30,
+            }),
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(attacker).unwrap().target, Some(tower));
+        assert_eq!(sim.building(tower).unwrap().target, Some(attacker));
+        let combat = sim.step();
+        assert_eq!(combat.attacks_resolved, 1);
+        assert_eq!(combat.projectiles_launched, 0);
+        assert!(sim.building(tower).is_none());
+        assert_eq!(sim.unit(attacker).unwrap().health, 100);
     }
 
     #[test]

@@ -22,6 +22,7 @@ enum Scenario {
     Projectile,
     Ballistic,
     Bounce,
+    Tower,
 }
 
 impl Scenario {
@@ -36,6 +37,7 @@ impl Scenario {
             Self::Projectile => "projectile",
             Self::Ballistic => "ballistic",
             Self::Bounce => "bounce",
+            Self::Tower => "tower",
         }
     }
 }
@@ -295,6 +297,7 @@ impl ScenarioState {
                         footprint: *footprint,
                         health: 1_000_000,
                         production: None,
+                        attack: None,
                     }));
                 }
             }
@@ -406,6 +409,7 @@ fn populate_scenario(
         Scenario::Projectile => populate_projectile_density_battle(simulation, units),
         Scenario::Ballistic => populate_ballistic_density_battle(simulation, units),
         Scenario::Bounce => populate_bounce_density_battle(simulation, units),
+        Scenario::Tower => populate_attack_building_density(simulation, units),
     }
 
     match scenario {
@@ -566,6 +570,68 @@ fn populate_bounce_density_battle(simulation: &mut Simulation, total_units: usiz
     }
 }
 
+fn populate_attack_building_density(simulation: &mut Simulation, total_units: usize) {
+    let tower_count = (total_units / 4).clamp(2, 500);
+    let per_team_towers = tower_count.div_ceil(2);
+    let tower_attack = AttackProfile {
+        delivery: AttackDelivery::RangedGuaranteedHit {
+            speed_per_tick: 10 * SUBUNITS_PER_WORLD_UNIT,
+        },
+        damage: 1,
+        range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 100 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 1,
+    };
+    for team in 0..2u8 {
+        for index in 0..per_team_towers {
+            if team == 1 && per_team_towers + index >= tower_count {
+                break;
+            }
+            let column = (index % 50) as i32;
+            let row = (index / 50) as i32;
+            let x = if team == 0 { 5 + column } else { 115 - column };
+            let y = -60 + row * 2;
+            simulation.spawn_building(BuildingSpawn {
+                team: Team(team),
+                footprint: BuildingFootprint::new(x, y, 1, 1),
+                health: 1_000_000_000,
+                production: None,
+                attack: Some(tower_attack),
+            });
+        }
+    }
+
+    let per_team_units = total_units / 2;
+    let rows = 100usize.min(per_team_units.max(1));
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let passive_attack = AttackProfile {
+        delivery: AttackDelivery::Melee,
+        damage: 0,
+        range: 0,
+        acquisition_range: 0,
+        cooldown_ticks: 1,
+    };
+    for team in 0..2u8 {
+        for index in 0..per_team_units {
+            let row = (index % rows) as i32;
+            let column = (index / rows) as i32;
+            let y = (row - rows as i32 / 2) * spacing;
+            let x = if team == 0 {
+                45 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                75 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            simulation.spawn_unit(UnitSpawn {
+                team: Team(team),
+                position: SimPoint::new(x, y),
+                health: 1_000_000_000,
+                attack: passive_attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+        }
+    }
+}
+
 fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
     let total_buildings = (scale / 100).clamp(2, 100);
     let per_team = total_buildings.div_ceil(2);
@@ -605,6 +671,7 @@ fn populate_production_churn(simulation: &mut Simulation, scale: usize) {
                 footprint: BuildingFootprint::new(x, y, 1, 1),
                 health: 1_000_000,
                 production: Some(production),
+                attack: None,
             });
         }
     }
@@ -693,7 +760,7 @@ fn parse_args() -> Args {
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower"
                 );
                 println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
@@ -727,6 +794,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "projectile" => Scenario::Projectile,
             "ballistic" => Scenario::Ballistic,
             "bounce" => Scenario::Bounce,
+            "tower" => Scenario::Tower,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()

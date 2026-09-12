@@ -111,6 +111,7 @@ pub fn populate_dense_cage_battle(simulation: &mut Simulation, total_units: usiz
             footprint,
             health: 1_000_000_000,
             production: None,
+            attack: None,
         });
     }
 

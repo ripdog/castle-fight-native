@@ -182,12 +182,14 @@ fn setup(mut commands: Commands) {
         footprint: PLAYER_CASTLE,
         health: 500,
         production: None,
+        attack: None,
     });
     let enemy_castle = simulation.spawn_building(BuildingSpawn {
         team: Team(1),
         footprint: ENEMY_CASTLE,
         health: 500,
         production: None,
+        attack: None,
     });
 
     commands.insert_resource(GameState {
@@ -451,6 +453,7 @@ fn production_building(
             search_radius_cells: 12,
             unit: unit_template(kind),
         }),
+        attack: None,
     }
 }
 
@@ -888,6 +891,7 @@ mod tests {
             footprint: BuildingFootprint::new(10, 0, 2, 2),
             health: 100,
             production: None,
+            attack: None,
         });
         let mut state = GameState {
             simulation,

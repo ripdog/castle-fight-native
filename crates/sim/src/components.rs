@@ -218,4 +218,5 @@ pub struct BuildingSpawn {
     pub footprint: BuildingFootprint,
     pub health: i32,
     pub production: Option<ProductionProfile>,
+    pub attack: Option<AttackProfile>,
 }

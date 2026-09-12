@@ -127,6 +127,25 @@ Ally-defense alerts are considered while `A` has no valid current target **or** 
 
 Builder-held item damage and other explicitly non-retaliatory effect sources MUST NOT populate self-retaliation or nearby-ally defense alerts.
 
+### 7.1 Attack-building source behavior
+
+Attack-capable buildings are authoritative combat entities with independent `AttackProfile`, cooldown, target state, and spawn tick. They participate in the same canonical ordinary-attack stream as units; there is no separate scheduler-dependent "tower phase". A building cannot perform an ordinary attack on its spawn tick, death before its canonical intent resolves cancels that intent, and an already-launched persistent projectile survives later source death exactly as for a unit source.
+
+The current verification acquisition rule for an attack building is provisional but explicit:
+
+- navigation reachability is irrelevant because the source does not move;
+- range/acquisition distance is measured from the source building's authoritative footprint, using point-to-footprint distance for unit targets and footprint-to-footprint distance for building targets;
+- living hostile combat units are preferred over hostile buildings for fresh acquisition;
+- within the same class, lower squared distance then lower stable `SimId` wins;
+- a valid target is retained while it remains hostile/alive and inside the building's acquisition range;
+- attack buildings do not currently run unit-style self-retaliation or nearby-ally-defense retargeting for their own target state.
+
+Candidate discovery MAY use an expanded center-radius broad-phase query, but exact footprint distance determines eligibility. Changing spatial-cell size or bucket iteration MUST NOT change the selected target. A ranged attack building may therefore attack a caged unit with no ground route when the ordinary attack rules otherwise allow the target.
+
+For projectile delivery, the current verification launch position is the building footprint center while attack-range/travel distance uses the same exact footprint-distance rule used by the intent. This is provisional presentation/compatibility behavior and MUST remain explicit if revised.
+
+Damage caused by an attack building is otherwise ordinary combat damage. Its building `SimId` is the damage source, so a struck unit may establish that building as its first direct-retaliation target and nearby allies may consume the corresponding defense alert when the attacker is valid/reachable under their own rules.
+
 ## 8. Combat intent
 
 A targeting decision alone does not mutate the victim.
