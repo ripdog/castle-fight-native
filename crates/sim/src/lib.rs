@@ -879,7 +879,7 @@ mod tests {
     }
 
     #[test]
-    fn nearby_ally_attack_preempts_defenceless_target() {
+    fn nearby_ally_attack_does_not_preempt_existing_target() {
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let defender = sim.spawn_unit(UnitSpawn {
             team: Team(0),
@@ -919,13 +919,18 @@ mod tests {
         assert_eq!(sim.unit(attacker).unwrap().target, Some(ally));
         assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
         sim.step();
-        assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
+        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+        assert_ne!(sim.unit(defender).unwrap().target, Some(attacker));
     }
 
     #[test]
-    fn ally_defense_orders_nearest_ally_then_nearest_attacker() {
+    fn ally_defense_orders_nearest_ally_then_nearest_attacker_when_idle() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
-        let mut sim = Simulation::new(SimulationConfig::default(), 4);
+        let config = SimulationConfig {
+            team_objective: [SimPoint::new(10 * cell, 0), SimPoint::new(0, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 4);
         let defender = sim.spawn_unit(UnitSpawn {
             team: Team(0),
             position: SimPoint::new(10 * cell, 0),
@@ -933,8 +938,8 @@ mod tests {
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
                 damage: 0,
-                range: cell,
-                acquisition_range: 8 * cell,
+                range: 3 * cell,
+                acquisition_range: 4 * cell,
                 cooldown_ticks: 30,
             },
             movement: MovementProfile {
@@ -943,21 +948,20 @@ mod tests {
         });
         let near_ally = sim.spawn_unit(UnitSpawn {
             team: Team(0),
-            position: SimPoint::new(10 * cell, 2 * cell),
+            position: SimPoint::new(10 * cell, 3 * cell),
             ..passive_unit(0, 0)
         });
         let far_ally = sim.spawn_unit(UnitSpawn {
             team: Team(0),
-            position: SimPoint::new(13 * cell, 0),
+            position: SimPoint::new(14 * cell, 0),
             ..passive_unit(0, 0)
         });
-        let castle = sim.spawn_building(passive_building(1, BuildingFootprint::new(11, 0, 1, 1)));
         sim.step();
-        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+        assert_eq!(sim.unit(defender).unwrap().target, None);
 
         let attacker_for_near_ally_farther = sim.spawn_unit(UnitSpawn {
             team: Team(1),
-            position: SimPoint::new(10 * cell, 4 * cell),
+            position: SimPoint::new(10 * cell, 5 * cell),
             health: 1_000,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -970,7 +974,7 @@ mod tests {
         });
         let attacker_for_near_ally_closer = sim.spawn_unit(UnitSpawn {
             team: Team(1),
-            position: SimPoint::new(11 * cell, 2 * cell),
+            position: SimPoint::new(11 * cell, 4 * cell),
             health: 1_000,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -983,7 +987,7 @@ mod tests {
         });
         let attacker_for_far_ally = sim.spawn_unit(UnitSpawn {
             team: Team(1),
-            position: SimPoint::new(12 * cell, 0),
+            position: SimPoint::new(15 * cell, 0),
             health: 1_000,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -996,6 +1000,7 @@ mod tests {
         });
 
         sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, None);
         sim.step();
         assert_eq!(
             sim.unit(attacker_for_near_ally_farther).unwrap().target,
@@ -1009,6 +1014,7 @@ mod tests {
             sim.unit(attacker_for_far_ally).unwrap().target,
             Some(far_ally)
         );
+        assert_eq!(sim.unit(defender).unwrap().target, None);
         sim.step();
         assert_eq!(
             sim.unit(defender).unwrap().target,
@@ -1017,26 +1023,169 @@ mod tests {
     }
 
     #[test]
-    fn lethal_hit_still_alerts_nearby_ally() {
+    fn ally_defense_target_stays_sticky_when_other_allies_are_attacked() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            team_objective: [SimPoint::new(10 * cell, 0), SimPoint::new(0, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 3 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        });
+        let right_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 3 * cell),
+            ..passive_unit(0, 0)
+        });
+        let left_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(6 * cell, 0),
+            ..passive_unit(0, 0)
+        });
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, None);
+
+        let right_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(10 * cell, 5 * cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(right_attacker).unwrap().target, Some(right_ally));
+        assert_eq!(sim.unit(defender).unwrap().target, None);
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(right_attacker));
+
+        let left_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(4 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(left_attacker).unwrap().target, Some(left_ally));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(right_attacker));
+        assert_ne!(sim.unit(defender).unwrap().target, Some(left_attacker));
+    }
+
+    #[test]
+    fn first_personal_attacker_stays_locked_despite_later_attackers() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let defender = sim.spawn_unit(UnitSpawn {
             team: Team(0),
-            position: SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let passive = sim.spawn_unit(passive_unit(1, 12 * cell));
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(passive));
+
+        let first_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(9 * cell, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 100,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let later_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(11 * cell, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(passive));
+        assert_eq!(
+            sim.unit(defender).unwrap().last_attacker,
+            Some(first_attacker)
+        );
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(first_attacker));
+        assert_eq!(
+            sim.unit(defender).unwrap().last_attacker,
+            Some(later_attacker)
+        );
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(first_attacker));
+    }
+
+    #[test]
+    fn lethal_hit_still_alerts_idle_nearby_ally() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
             health: 100,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
                 damage: 0,
-                range: SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                range: 3 * cell,
+                acquisition_range: 4 * cell,
                 cooldown_ticks: 30,
             },
             movement: MovementProfile {
-                speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+                speed_per_tick: cell / 8,
             },
         });
         let ally = sim.spawn_unit(UnitSpawn {
             team: Team(0),
-            position: SimPoint::new(12 * SUBUNITS_PER_WORLD_UNIT, 0),
+            position: SimPoint::new(10 * cell, 3 * cell),
             health: 1,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -1047,19 +1196,18 @@ mod tests {
             },
             movement: MovementProfile { speed_per_tick: 0 },
         });
-        let castle = sim.spawn_building(passive_building(1, BuildingFootprint::new(11, 0, 1, 1)));
         sim.step();
-        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
+        assert_eq!(sim.unit(defender).unwrap().target, None);
 
         let attacker = sim.spawn_unit(UnitSpawn {
             team: Team(1),
-            position: SimPoint::new(12 * SUBUNITS_PER_WORLD_UNIT, SUBUNITS_PER_WORLD_UNIT),
+            position: SimPoint::new(10 * cell, 5 * cell),
             health: 100,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
                 damage: 1,
-                range: 2 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                range: 2 * cell,
+                acquisition_range: 3 * cell,
                 cooldown_ticks: 1,
             },
             movement: MovementProfile { speed_per_tick: 0 },
@@ -1067,6 +1215,7 @@ mod tests {
         sim.step();
         sim.step();
         assert!(sim.unit(ally).is_none());
+        assert_eq!(sim.unit(defender).unwrap().target, None);
         sim.step();
         assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
     }

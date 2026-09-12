@@ -178,7 +178,7 @@ The cage fixture is now dominated by crowd separation rather than targeting. It 
 
 ## Engagement/defense clarification — 2026-09-12
 
-The targeting verification now includes canonical one-tick defense alerts. An actual hit can cause idle nearby allies, or allies fighting a target that is not fighting them back, to switch to the attacker on the following targeting phase. Mutual engagements remain sticky, direct self-retaliation outranks ally defense, passive castles/buildings are defenceless targets, and the alert survives a lethal hit so nearby allies may still react to the killer.
+The targeting verification now includes canonical one-tick defense alerts. The first implementation allowed ally-defense alerts to pre-empt a valid current target when that target was not fighting back; later interactive verification showed that rule could make idle melee units revolve rapidly between different nearby attackers. That behavior is superseded by the sticky-target regression described below. Defense alerts still survive lethal hits so an idle nearby ally may react to the killer.
 
 Crowd steering also now adds a deterministic lateral sidestep when a moving unit is queued directly behind a stationary engagement. A mirrored three-on-three melee-column fixture verifies that the front pair remain engaged while rear units leave the centerline and eventually reach attack range rather than forming a permanent queue.
 
@@ -307,6 +307,14 @@ With that architecture, the final density sweep is worker-count deterministic:
 At 5,000 units the final one-worker targeting phase is about **12.7x faster** than the naive defense-alert scan with the same checksum. In the 10,000-unit eight-worker case, the separately timed verification checksum accounts for ~13.4 ms of the 41.5 ms total; the other timed simulation phases sum to roughly 28.0 ms. That is useful architectural evidence, not a 10,000-unit support promise: production checksum cadence may be lower than every tick, while richer projectile/effect behavior will add work that this synthetic guaranteed-hit case does not contain.
 
 Projectile entity count and impact/launch structural work are not the dominant cost in this fixture. Long-range target/defense evaluation remains the largest phase even after removing the pathological alert scan, so future combat-density work should continue reporting candidate counts rather than attributing total cost to projectile count alone. The playable verification game now renders the authoritative in-flight guaranteed-hit population instead of drawing ranged attacks as immediate hit lines.
+
+## Sticky target / first-attacker retaliation regression — 2026-09-12
+
+An interactive verification match exposed rapid target oscillation in melee units positioned between two separate fights. The affected units had initially chosen attackers through nearby-ally defense, then alternated between enemies on opposite sides as fresh ally-defense alerts arrived. The root cause was intentional selector logic that let ally defense pre-empt any valid current target that was not actively targeting the defender.
+
+The rule is now stricter: ally defense participates only when a unit has no valid current target. Once ordinary acquisition or ally defense selects an enemy, that engagement remains sticky until normal invalidation (death/despawn, untargetability, unreachable attack position, or pursuit-leash escape). A direct attack on the unit may pre-empt an ordinary/ally-defense target once. The first valid hostile attacker in canonical combat-event order becomes a persistent direct-retaliation target; later attackers cannot replace it while it remains valid. The retaliation-lock bit is authoritative and included in the canonical checksum.
+
+Focused regressions cover the observed pattern and the edge cases behind it: a nearby ally being attacked no longer pre-empts an existing castle/other target; an idle unit still uses ally defense and preserves nearest-ally/nearest-attacker ordering; a target chosen through ally defense stays fixed when a different ally is attacked later; the first personal attacker remains locked while another enemy continues hitting the unit; and a lethal hit still leaves a one-tick alert that an otherwise idle nearby ally can consume.
 
 ## Current interpretation
 

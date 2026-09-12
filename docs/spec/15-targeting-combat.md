@@ -18,6 +18,7 @@ Conceptual form:
 pub struct TargetState {
     pub current: Option<SimId>,
     pub acquired_tick: Option<Tick>,
+    pub direct_retaliation_lock: bool,
 }
 ```
 
@@ -32,13 +33,13 @@ Targeting is **engagement-sticky**, not a continuous closest-target search.
 Each targeting phase conceptually performs:
 
 1. resolve the existing `SimId` target;
-2. drop it if it is dead, disappeared, invisible/untargetable, no longer attackable by any applicable attack, unreachable from any valid attack position, or beyond the pursuit leash;
-3. if the current target is valid and is actively fighting this unit back, retain that mutual engagement unless an explicit forced-target rule overrides it;
-4. otherwise, if another valid enemy actually attacked this unit during the preceding combat resolution, switch to that attacker;
-5. otherwise, if this unit is idle or its current target is not fighting it back and a nearby ally was actually attacked during the preceding combat resolution, switch to a valid attacker of that ally;
-6. otherwise retain the valid current target;
-7. if there is no retained target, prefer a recent valid self-attacker, then a valid nearby ally-defense attacker, otherwise query nearby candidates and acquire a fresh target;
-8. store the selected target or `None`.
+2. drop it if it is dead, disappeared, invisible/untargetable, no longer attackable by any applicable attack, unreachable from any valid attack position, or beyond the pursuit leash; clearing any direct-retaliation lock with it;
+3. if the current target is valid and already carries a direct-retaliation lock, retain it unless an explicit forced-target rule overrides it;
+4. otherwise, if a valid enemy actually attacked this unit during the preceding combat resolution, switch to the first such attacker in canonical combat-event order and set the direct-retaliation lock; if that attacker is already the current target, retain it and set the lock;
+5. otherwise retain the valid current target without consulting ally-defense alerts;
+6. if there is no retained target, prefer a recent valid self-attacker and set the direct-retaliation lock;
+7. otherwise, while idle, consider a valid nearby ally-defense attacker; if none exists, query nearby candidates and acquire a fresh target;
+8. store the selected target or `None` and its lock state.
 
 An enemy merely selecting, approaching, or standing near a unit does not trigger retaliation or ally defense. Both rules are caused by an actual resolved attack. In the deterministic phased implementation, an attack resolved on tick `N` can affect target selection on tick `N+1`.
 
@@ -48,7 +49,7 @@ The verification implementation accelerates this exact ordering with derived one
 
 A one-tick canonical defense alert survives the victim dying from the triggering attack, so nearby allies may still react to the killer on the following targeting phase.
 
-A newly visible closer unit MUST NOT cause gratuitous retargeting while the existing engagement remains valid.
+A newly visible closer unit MUST NOT cause gratuitous retargeting while the existing engagement remains valid. An ally-defense alert likewise MUST NOT pre-empt any valid current target; ally defense is an idle-target acquisition mechanism only.
 
 ## 4. Candidate discovery
 
@@ -104,7 +105,7 @@ If two candidates are otherwise identical, the project explicitly accepts stable
 
 ## 7. Target retention
 
-A valid engagement is retained until a defined break condition occurs or a higher-priority self-retaliation/ally-defense rule applies.
+A valid engagement is retained until a defined break condition occurs, a first direct attacker establishes a direct-retaliation target, or an explicit forced-target rule applies. Ally defense never pre-empts a valid current target.
 
 A current target is dropped when, as applicable:
 
@@ -117,9 +118,11 @@ A current target is dropped when, as applicable:
 
 A short pursuit leash is part of standard behavior: units chase a retreating target for only a modest distance before giving up. The verification implementation initially uses a **3-tile extra pursuit allowance** beyond ordinary attack range, while never making retention shorter than the unit's normal acquisition range. The exact content-compatible value may be tuned later.
 
-Retaliation and ally defense have one important guard: if current target `B` is itself attacking `A`, then `A` stays engaged with `B` even if another unit `C` attacks `A` or a nearby ally. `C` only pre-empts `B` when `B` is not fighting `A` back and `C` is a valid target that `A` is capable of attacking.
+Direct retaliation has a one-time lock rule. If unit `A` has no direct-retaliation lock and valid enemy `C` is the first hostile entity to actually attack `A` in canonical combat-event order, `A` switches to `C` on the next targeting phase and marks `C` as its direct-retaliation target. While `C` remains valid, later attackers do not replace it. The lock is cleared only when `C` fails the ordinary target-retention rules or an explicit forced-target rule overrides it.
 
-A passive castle/building is therefore a defenceless current target for these rules. A unit attacking somebody else is likewise not fighting `A` back, even though it is generally combat-capable.
+If the current target is already the first direct attacker, the same target is retained and becomes locked. If several enemies first attack `A` during the same tick, canonical combat resolution order defines which attack is first; worker completion or spatial enumeration order MUST NOT participate.
+
+Ally-defense alerts are considered only while `A` has no valid current target. Once ally defense or ordinary acquisition chooses a valid enemy, attacks on other nearby allies cannot make `A` revolve between those attackers.
 
 Builder-held item damage and other explicitly non-retaliatory effect sources MUST NOT populate self-retaliation or nearby-ally defense alerts.
 

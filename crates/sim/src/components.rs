@@ -74,6 +74,7 @@ pub struct AttackCooldown {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TargetState {
     pub current: Option<SimId>,
+    pub direct_retaliation_lock: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
