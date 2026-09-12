@@ -1,0 +1,251 @@
+{
+  "original": {
+    "ZSas": [
+      {
+        "id": "dmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "dptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "none"
+      }
+    ],
+    "ZObz": [
+      {
+        "id": "dptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "PathTextures\\4x4Default.tga"
+      },
+      {
+        "id": "dmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 2
+      }
+    ],
+    "YOlb": [
+      {
+        "id": "dfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Cinematic\\TownBurningFireEmitterBlue\\TownBurningFireEmitterBlue.mdl"
+      }
+    ]
+  },
+  "custom": {
+    "D000:YSw0": [
+      {
+        "id": "dnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Wall Hori -|"
+      },
+      {
+        "id": "dfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall90\\RuinsWall900.mdl"
+      },
+      {
+        "id": "dtil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "A,Y,X,J,*"
+      },
+      {
+        "id": "dmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dsmm",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 0
+      },
+      {
+        "id": "dptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "PathTextures\\StoneWall3Path.tga"
+      }
+    ],
+    "D001:YSw0": [
+      {
+        "id": "dnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Wall Hori |-|"
+      },
+      {
+        "id": "dfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall90\\RuinsWall902.mdl"
+      },
+      {
+        "id": "dtil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "A,Y,X,J,*"
+      },
+      {
+        "id": "dmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dsmm",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 0
+      },
+      {
+        "id": "dptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "PathTextures\\StoneWall3Path.tga"
+      }
+    ],
+    "D002:YSw0": [
+      {
+        "id": "dnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Wall Vert -|"
+      },
+      {
+        "id": "dfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall0\\RuinsWall00.mdl"
+      },
+      {
+        "id": "dtil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "A,Y,X,J,*"
+      },
+      {
+        "id": "dmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dsmm",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 0
+      },
+      {
+        "id": "dptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "PathTextures\\StoneWall1Path.tga"
+      }
+    ],
+    "D003:YSw0": [
+      {
+        "id": "dnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Wall Vert |-|"
+      },
+      {
+        "id": "dfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall0\\RuinsWall02.mdl"
+      },
+      {
+        "id": "dtil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "A,Y,X,J,*"
+      },
+      {
+        "id": "dmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "dsmm",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 0
+      },
+      {
+        "id": "dptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "PathTextures\\StoneWall1Path.tga"
+      }
+    ]
+  }
+}

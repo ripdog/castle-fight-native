@@ -1,0 +1,2 @@
+# Extracted map evidence intentionally preserves source whitespace and TSV empty columns.
+docs/original_map/extracted/** -whitespace

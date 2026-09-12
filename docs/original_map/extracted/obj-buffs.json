@@ -1,0 +1,2774 @@
+{
+  "original": {
+    "BNic": [
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit will explode upon death"
+      }
+    ],
+    "Bbof": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Burning"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is burning"
+      }
+    ],
+    "Bweb": [
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "mdx\\sfx\\Web.mdx"
+      }
+    ],
+    "Xbdt": [
+      {
+        "id": "feat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ]
+  },
+  "custom": {
+    "B000:Bblo": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNTransmute.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Holy Power"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its attackspeed increased."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Undead\\DevourMagic\\DevourMagicBirthMissile.mdl,Abilities\\Spells\\Items\\ClarityPotion\\ClarityTarget"
+      }
+    ],
+    "B001:Bapl": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Rot"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is rotting."
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "chest"
+      }
+    ],
+    "B002:BHfs": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "other"
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNPossession.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Fear of the Banshee"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "The presence of a banshee decreases the damage of this unit."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B003:Bapl": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Plague"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is plagued. It is slowed and takes damage over time."
+      }
+    ],
+    "B004:Bbof": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "human"
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNRegenerationAura.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Weaken Soul"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This units soul is weakened. It has reduced armor."
+      },
+      {
+        "id": "fspd",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 2
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Orc\\SpiritLink\\SpiritLinkTarget.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "origin"
+      }
+    ],
+    "B005:BPSE": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Soul Taken"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\NightElf\\shadowstrike\\shadowstrike.mdl"
+      }
+    ],
+    "B006:Bbsk": [
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Weapons\\VengeanceMissile\\VengeanceMissile.mdl,Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSLeft.mdl"
+      }
+    ],
+    "B007:Bblo": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNBerserkForTrolls.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Berserk"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its attack and movement speed increased but receives more damage."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSLeft.mdl,Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSLeft.mdl"
+      }
+    ],
+    "B008:BOac": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNDrum.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Drum'n'Bass Beats"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is listening to Drum'n'Bass beats. The powerful basses boost its attack damage."
+      }
+    ],
+    "B009:Binf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNMetamorphosis.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Shaman's Buff"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is buffed by a shaman. It has increased armor and damage."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Orc\\Bloodlust\\BloodlustTarget.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "head"
+      }
+    ],
+    "B00A:BOsf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNLobstrokkBlue.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Summoned Lobster"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is summoned."
+      },
+      {
+        "id": "feat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Objects\\Spawnmodels\\Naga\\NagaDeath\\NagaDeath.mdl"
+      }
+    ],
+    "B00B:BPSE": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Dummy insta kill"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00C:BNab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNBanish.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Serpent Rock Poison"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is poisoned."
+      }
+    ],
+    "B00D:BPSE": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Stasis"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit can't move."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Other\\Incinerate\\IncinerateBuff.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "head"
+      }
+    ],
+    "B00E:BHad": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpThree.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Song of Shields"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has increased armor."
+      }
+    ],
+    "B00F:BHad": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNThoriumMelee.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Aggressive Warsong"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has increased damage."
+      }
+    ],
+    "B00G:Bcri": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNEnvenomedSpear.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Poison"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is poisoned. It has its attack- and movementspeed reduced and takes damage over time."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Weapons\\PoisonSting\\PoisonStingTarget.mdl"
+      }
+    ],
+    "B00H:BNbr": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNOrbOfVenom.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Double Damage"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is dealing freaking wicked damage."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Other\\Parasite\\ParasiteTarget.mdl"
+      }
+    ],
+    "B00I:BNbr": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHeartOfSearinox.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Quad Damage"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "WTF?!"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Human\\ManaFlare\\ManaFlareBase.mdl"
+      }
+    ],
+    "B00J:Binf": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Blessing"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is blessed. It has insane health regeneration and increased armor."
+      }
+    ],
+    "B00K:Broa": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Battle Cry"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its damage increased."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Environment\\SmallBuildingFire\\SmallBuildingFire2.mdl"
+      }
+    ],
+    "B00L:BOac": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHornOfFog.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Drum'n'Bass Bassline"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is listening to a Drum'n'Bass bassline. The powerful basses boost its movement and attackspeed."
+      }
+    ],
+    "B00M:BEer": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNFreezingBreath.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Frozen"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is frozen to the ground. It can't move and receives damage over time."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Undead\\FreezingBreath\\FreezingBreathTargetArt.mdl"
+      }
+    ],
+    "B00N:BHab": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Crystal Aura"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effect of Crystal Aura. It has increased mana regeneration."
+      }
+    ],
+    "B00O:BNic": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "undead"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Burning Soul"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit will damage units aroud"
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrupted: Void Walker"
+      }
+    ],
+    "B00P:Bcri": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNCurse.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrupted Speed"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "The attackspeed of this unit is increased."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrupted: Felhound"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      }
+    ],
+    "B00Q:Bhea": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "undead"
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNImprovedUnholyArmor.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "|c00ff0000Corrupt Armor|r"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has major problems with its defense."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrupted: Eye of Corruption"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Undead\\Possession\\PossessionTarget.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "chest"
+      }
+    ],
+    "B00R:Bcri": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNUpgradeRegenerationAura.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Broken Weapon"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "The damage of this unit is decreased."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrupted: Ent"
+      }
+    ],
+    "B00S:BNpi": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "undead"
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrupted: Void Walker"
+      },
+      {
+        "id": "fsat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Human\\Heal\\HealTarget.mdl"
+      },
+      {
+        "id": "fspt",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "origin"
+      }
+    ],
+    "B00T:Bphx": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing"
+      }
+    ],
+    "B00U:Bapl": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Greater Plague"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is plagued. It is slowed and takes damage over time."
+      },
+      {
+        "id": "fta1",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "chest"
+      },
+      {
+        "id": "ftac",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 2
+      }
+    ],
+    "B00V:BEah": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Quill Aura"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effect of quill aura. Melee attackers receive damage."
+      }
+    ],
+    "B00W:BHfs": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "other"
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNDoom.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Inner Void"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its armor reduced."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\NightElf\\FaerieDragonInvis\\FaerieDragon_Invis.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "origin"
+      }
+    ],
+    "B00X:Bens": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNFrostBolt.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Frozen"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is frozen to the ground and cannot move"
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Shroom Frozen"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Weapons\\ZigguratFrostMissile\\ZigguratFrostMissile.mdl"
+      }
+    ],
+    "B00Y:BOae": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNDemolish.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Tribal Blessing: Demolish"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit got buffed by a Ceremonial Totem. It does increased damage to buildings."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00Z:BOae": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNCriticalStrike.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Tribal Blessing: Critical Strike"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit got buffed by a Ceremonial Totem. It deals critical damage from time to time."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B010:BOae": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNEvasion.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Tribal Blessing: Evasion"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit got buffed by a Ceremonial Totem. It evades some attacks."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B011:BHab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNOrbOfDarkness.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Chamber of Darkness"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit can release a burst of magic damaging all units around him."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B012:BOwk": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Stealth"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is stealthed. It is invisible and will deal bonus damage on its first hit."
+      }
+    ],
+    "B013:BUau": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHealthStone.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Vitality Aura"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit regenerates faster."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B014:Bcri": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNLament.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Freezing Cold"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit acts very slowly."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Undead\\FrostArmor\\FrostArmorDamage.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "chest"
+      }
+    ],
+    "B015:Bcri": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNFrost.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Frozen"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is stunned"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Weapons\\ZigguratFrostMissile\\ZigguratFrostMissile.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "chest"
+      }
+    ],
+    "B016:Bdef": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNElunesBlessing.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Elune's Protection"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its armor increased."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B017:Bbar": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNBearForm.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Blessing of the Wilderness"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is resistant to spells and attacks."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B018:BNcs": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNUnholyFrenzy.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Solar Attack"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is paralysed"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Items\\PotionOfOmniscience\\CrystalBallCaster.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "head"
+      }
+    ],
+    "B019:Bphx": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNAuraOfDarkness.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Targeted"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "A spell is cast onto this unit"
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Default"
+      }
+    ],
+    "B01A:Bphx": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing"
+      }
+    ],
+    "B01B:BHad": [
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its armor increased."
+      }
+    ],
+    "B01C:Bdef": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Scroll of Stone"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its armor increased."
+      }
+    ],
+    "B01D:Bpxf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNFireForTheCannon.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Firebolt"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit was hit by a firebolt and receives damage over time."
+      }
+    ],
+    "B01E:Basl": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNOrbOfLightning.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Lightning"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has a chance on each attack to release a chainlightning onto its target."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01F:BHds": [
+      {
+        "id": "frac",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "other"
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNAntiMagicShell.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Spell Protection"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit receives less damage from spells."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01G:BHab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNOrbofSlowness.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Red Energy Shield"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Orc\\Voodoo\\VoodooAuraTarget.mdl"
+      }
+    ],
+    "B01H:BHab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNNeutralManaShield.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Energy Shield"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is shielded"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Human\\ManaShield\\ManaShieldCaster.mdl"
+      }
+    ],
+    "B01I:BHab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNControlMagic.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Powered"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This building has its ability cooldown reduced"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01J:BOac": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNControlMagic.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Empowered"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has increased health"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01K:BHab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNImbuedMasonry.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Power Armor"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This building has its armor increased and spawns stronger units"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01L:Bakb": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNStaffOfTeleportation.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Power Ammo"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its damage increased"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01M:Bpxf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNResurrection.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Ray of Light"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is hit by a ray of light"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01N:Bpxf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNClusterRockets.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Rocket"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is hit by a rocket"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01O:Bpxf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNWandOfNeutralization.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Blasted"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is hit by a blast staff"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01P:Bslo": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Astral Chains"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is slowed"
+      }
+    ],
+    "B01Q:BIcb": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNWandOfNeutralization.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Fragrance of Shadows"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its armor reduced"
+      }
+    ],
+    "B01R:BNht": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Howl"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has its damage and armor decreased"
+      }
+    ],
+    "B01S:BUim": [
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is stunned"
+      }
+    ],
+    "B01T:BNpa": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNSkillz.tga"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Targeted"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is targeted by a spell"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01U:Basl": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHumanMissileUpTwo.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Explosive Shells"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit deals splash damage"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B01V:Bphx": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing"
+      }
+    ],
+    "B01W:BHtc": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNEarthquake.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Earthquake"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is slowed by earthquake."
+      }
+    ],
+    "B01X:Bphx": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ui\\widgets\\escmenu\\human\\blank-background.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing -.-"
+      }
+    ],
+    "B01Y:BHtc": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNDizzy.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Astral Grenade"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit stunned by Astral Grenade. It's reduced attack and movements speed."
+      }
+    ],
+    "B01Z:BOae": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNTornado.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Cyclone"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effects of Cyclone. Its movement and attack speed rate are decreased."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "NAT: Ancient of Gale (cyclone buff)"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Other\\Tornado\\TornadoElementalSmall.mdl"
+      }
+    ],
+    "B020:BHab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNOrbOfDarkness.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Curse of Nature"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Mana regeneration of this unit has been decreased."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B021:BOsf": [
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Summoned Treant"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is summoned."
+      },
+      {
+        "id": "feat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Objects\\Spawnmodels\\NightElf\\EntBirthTarget\\EntBirthTarget.mdl"
+      }
+    ],
+    "B022:BNpa": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNSpiderBlue.blp"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Weapons\\CryptFiendMissile\\CryptFiendMissile.mdl"
+      }
+    ],
+    "B023:Basl": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNCorrosiveBreath.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Corrosive Breath"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Armor of this unit is decreased."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B024:BUau": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNRegeneration.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Natures Aura"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effect of Natures Aura; it has an increased hit point regeneration."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Natures Aura"
+      }
+    ],
+    "B025:Binf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ui\\widgets\\escmenu\\human\\blank-background.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Nothing -.-"
+      },
+      {
+        "id": "fspd",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 0
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "ftac",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 0
+      }
+    ],
+    "B026:BOae": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNLocustSwarm.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Squall"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effects of Squall; it has an decreased movement speed and attack rate."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Squall"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Other\\Tornado\\Tornado_Target.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "chest"
+      }
+    ],
+    "B027:Bbar": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNThoriumArmor.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Haste"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has attack speed and movement speed increased."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ELE: Enchant (Haste)"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B028:BNcs": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNUnholyFrenzy.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Lightning Shield"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is blinded"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Items\\AIlb\\AIlbSpecialArt.mdl"
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "head"
+      }
+    ],
+    "B029:Bfro": [],
+    "B02A:BHad": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNCleavingAttack.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "|cff00ff00Forged Weapon|r"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effects of Forged Weapon; it has splash damage."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Forged Weapon"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B02B:BHad": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNAvatarOn.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Haste"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effects of Haste; it has increased attack and movement speed."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Haste"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B02C:BHad": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHardenedSkin.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "|cff00ff00Rock Shield|r"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effects of Rock Shield; it has increased armor."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Rock Shield"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B02D:Basl": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNWirtsLeg.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Wisp Strike"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit slowed. His movement is decreased."
+      }
+    ],
+    "B02U:BOae": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNCryptFiendBurrow.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Quicksand"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is trapped by Quicksand; it has decreased movement speed and attack rate."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Quicksand"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B02S:BUts": [
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Quills"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "none.mdl,none.mdl,none.mdl,none.mdl"
+      }
+    ],
+    "B02T:Bblo": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNChemicalRage.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Ogre's rage"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Ogre performs series of surprisingly quick moves."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta0",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "fta1",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B02W:Bcri": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNDizzy.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Slowed by sandshield"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "The attackspeed of this unit is decreased."
+      },
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Sandshield"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B02O:BNdh": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\PassiveButtons\\PASBTNGenericSpellImmunity.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Blind"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has 90% miss chance and moves very slow."
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Undead\\Possession\\PossessionTarget.mdl"
+      }
+    ],
+    "B02R:Bclf": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNWallOfFire.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Sandstorm"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is caught by sandstorm."
+      }
+    ],
+    "B02Q:BNab": [
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNHealingSpray.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Salamanders poison"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Unit is poisoned by salamander"
+      },
+      {
+        "id": "fspd",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 2
+      }
+    ],
+    "B02E:BOae": [
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Zen Field"
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNAcorn.blp"
+      },
+      {
+        "id": "ftip",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "|cffd45e19Zen Field|r"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit is under the effects of Zen Field; it has a decreased attack rate by 20%."
+      }
+    ],
+    "B02F:BOac": [
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Free Beer"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This unit has improved morale; it has increased attack damage."
+      },
+      {
+        "id": "fart",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ReplaceableTextures\\CommandButtons\\BTNStrongDrink.blp"
+      }
+    ],
+    "B02G:BHad": [
+      {
+        "id": "fnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Coral Armor Aura"
+      },
+      {
+        "id": "ftat",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      },
+      {
+        "id": "fube",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "This building is under the effects of Coral Armor Aura; it has increased armor (+8)."
+      }
+    ]
+  }
+}

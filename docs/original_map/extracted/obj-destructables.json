@@ -1,0 +1,1559 @@
+{
+  "original": {
+    "ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.97
+      }
+    ],
+    "ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.97
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ]
+  },
+  "custom": {
+    "B000:KTtw": [],
+    "B001:DTsh": [
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "PathTextures\\2x2Default.tga"
+      }
+    ],
+    "B002:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall0\\RuinsWall00.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "WALL -|"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B003:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall0\\RuinsWall02.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "WALL |-|"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B004:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall90\\RuinsWall900.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "WALL -|"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B005:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall90\\RuinsWall902.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "WALL |-|"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B006:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Structures\\RuinsArchway0_\\RuinsArchway0_.mdl"
+      },
+      {
+        "id": "bfxr",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 180
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "ARCHWAY"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bshd",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B007:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceCrownWall0\\IceCrownWall00.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "BWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B008:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceCrownWall0\\IceCrownWall02.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "BWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B009:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceCrownWall90\\IceCrownWall900.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "BWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00A:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceCrownWall90\\IceCrownWall902.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "BWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00B:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\LordaeronSummer\\Terrain\\StoneWall90\\StoneWall902.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "SWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00C:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\LordaeronSummer\\Terrain\\StoneWall90\\StoneWall900.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "SWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00D:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\LordaeronSummer\\Terrain\\StoneWall0\\StoneWall02.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "SWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B00E:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\LordaeronSummer\\Terrain\\StoneWall0\\StoneWall00.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.2
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "SWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B00F:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Underground\\Structures\\UndergroundArchway1\\UndergroundArchway1.mdl"
+      },
+      {
+        "id": "bfxr",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 180
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "SARCHWAY"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bshd",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00G:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Structures\\IC_IceArch\\IC_IceArch.mdl"
+      },
+      {
+        "id": "bfxr",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 180
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "BARCHWAY"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bshd",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00H:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bvcb",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcg",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcr",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 100
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall0\\RuinsWall00.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "LWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B00I:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bvcb",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 50
+      },
+      {
+        "id": "bvcg",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 50
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Underground\\Structures\\UndergroundArchway1\\UndergroundArchway1.mdl"
+      },
+      {
+        "id": "bfxr",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 180
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 3
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "LARCHWAY"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bshd",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00J:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bvcb",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcg",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcr",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 100
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall0\\RuinsWall02.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "LWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B00K:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bvcb",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcg",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcr",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 100
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall90\\RuinsWall900.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "LWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00L:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bvcb",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcg",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 20
+      },
+      {
+        "id": "bvcr",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 100
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Ruins\\Terrain\\RuinsWall90\\RuinsWall902.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 1.1
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "LWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00M:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceGate\\IceGate.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "IWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B00N:ZTw0": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceGate\\IceGate.mdl"
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "IWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      }
+    ],
+    "B00O:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceGate\\IceGate.mdl"
+      },
+      {
+        "id": "bfxr",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 180
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "IWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ],
+    "B00P:ZTw2": [
+      {
+        "id": "bhps",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 20000
+      },
+      {
+        "id": "btar",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      },
+      {
+        "id": "bfil",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "Doodads\\Icecrown\\Terrain\\IceGate\\IceGate.mdl"
+      },
+      {
+        "id": "bfxr",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 180
+      },
+      {
+        "id": "bmas",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bmis",
+        "type": "unreal",
+        "level": 0,
+        "column": 0,
+        "value": 0.5
+      },
+      {
+        "id": "bnam",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": "IWALL"
+      },
+      {
+        "id": "bvar",
+        "type": "int",
+        "level": 0,
+        "column": 0,
+        "value": 1
+      },
+      {
+        "id": "bptx",
+        "type": "string",
+        "level": 0,
+        "column": 0,
+        "value": ""
+      }
+    ]
+  }
+}

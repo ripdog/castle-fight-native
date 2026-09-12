@@ -1,0 +1,36 @@
+{
+  "signature": "MP3W",
+  "version": 0,
+  "width_cells": 528,
+  "height_cells": 256,
+  "cells_per_terrain_tile": 4,
+  "bytes": 135168,
+  "flag_semantics": {
+    "0x01": "unused_0x01",
+    "0x02": "no_walk",
+    "0x04": "no_fly",
+    "0x08": "no_build",
+    "0x10": "unused_0x10",
+    "0x20": "blight",
+    "0x40": "no_water",
+    "0x80": "unknown_0x80"
+  },
+  "flag_counts": {
+    "unused_0x01": 0,
+    "no_walk": 57484,
+    "no_fly": 49152,
+    "no_build": 77316,
+    "unused_0x10": 0,
+    "blight": 0,
+    "no_water": 131188,
+    "unknown_0x80": 56480
+  },
+  "value_histogram": {
+    "0x08": 2976,
+    "0x0a": 1004,
+    "0x40": 57852,
+    "0x48": 16856,
+    "0xca": 7328,
+    "0xce": 49152
+  }
+}

@@ -1,0 +1,87 @@
+[
+  {
+    "name": "war3map.doo",
+    "bytes": 96144,
+    "sha256": "c1f63b8d6f70ef6f373290aa98dc37654e9b40a8ac0ae1dc0526266e26f1380e"
+  },
+  {
+    "name": "war3map.lua",
+    "bytes": 11811705,
+    "sha256": "e478835f6c2bd79320f463472a7f043bf1d40770c74c3647cdfed655ed33874a"
+  },
+  {
+    "name": "war3map.mmp",
+    "bytes": 328,
+    "sha256": "af5fe5e6c8945e550be14fbad1db04dc2a39be0b5b30305c2665fad92414048b"
+  },
+  {
+    "name": "war3map.shd",
+    "bytes": 135168,
+    "sha256": "cac216bd07737afdd8a117e06b393b982e6cdac046041254f4c1e1e841384925"
+  },
+  {
+    "name": "war3map.w3a",
+    "bytes": 247445,
+    "sha256": "fb806a768eec19b2210cbf2ebc43ad4d6032e896e6711ae97fbb996ff72d2986"
+  },
+  {
+    "name": "war3map.w3b",
+    "bytes": 5177,
+    "sha256": "a08d581732918da2294fdd3e9b8df95e40453b9668dfa978f370c70f8b0eedcb"
+  },
+  {
+    "name": "war3map.w3d",
+    "bytes": 1399,
+    "sha256": "a62ce2602a6a36f14d3c752cf4beb58110ab10d011d8a4ec4677610b359dbce6"
+  },
+  {
+    "name": "war3map.w3e",
+    "bytes": 69245,
+    "sha256": "51411c147786058bbb634aa9e00eb206465c9fc3c81ea2c5d1b563db2f7e6a90"
+  },
+  {
+    "name": "war3map.w3h",
+    "bytes": 18177,
+    "sha256": "5478e332e81d02ecff118bb6d5db14bc7e88cb7cc84e60821f24d421e69eaf90"
+  },
+  {
+    "name": "war3map.w3i",
+    "bytes": 771,
+    "sha256": "ff26e0236a901877cf143630d4aed642652019e293259de213e201af17609257"
+  },
+  {
+    "name": "war3map.w3t",
+    "bytes": 7983,
+    "sha256": "caac22be01d8f0570f8139da10de49cd0a929b6c1f0a5ac694273fa57e511145"
+  },
+  {
+    "name": "war3map.w3u",
+    "bytes": 681589,
+    "sha256": "99cb5b373e60bb6ae5206b739fad539343fd7eb18b0d506dbc124432c33df57f"
+  },
+  {
+    "name": "war3map.wpm",
+    "bytes": 135184,
+    "sha256": "7fb6f8ef6205730ebfd54fd3716c31a1669c2e12d4964bd8eb1906835f1e0a8e"
+  },
+  {
+    "name": "war3map.wts",
+    "bytes": 327593,
+    "sha256": "e77fed90a1e9150f96cff37e501bdc32a2be026bd6cb9b4110e8a918b0ff0cd0"
+  },
+  {
+    "name": "war3mapMap.blp",
+    "bytes": 192447,
+    "sha256": "363761bda09a4e34024b5417f6aeef6e6087fafa40f7071e67e433c99846d078"
+  },
+  {
+    "name": "war3mapMisc.txt",
+    "bytes": 1324,
+    "sha256": "f0653d55ebeca0afc702321c860e85e72370debdcffc01d410379db707df6923"
+  },
+  {
+    "name": "war3mapSkin.txt",
+    "bytes": 5672,
+    "sha256": "f08ce9ae4dce23a12d8244219bb3e229360d192aa865e84c79aa8bb28fca69db"
+  }
+]

@@ -1,0 +1,113 @@
+[CustomSkin]
+MasterFont=universal.ttf
+MasterFontBold=universal.ttf
+MessageFont=universal.ttf
+ChatFont=universal.ttf
+EscMenuTextFont=universal.ttf
+InfoPanelTextFont=universal.ttf
+TextTagFont=universal.ttf
+
+MasterFont:enUS=universal.ttf
+MasterFontBold:enUS=universal.ttf
+MessageFont:enUS=universal.ttf
+ChatFont:enUS=universal.ttf
+EscMenuTextFont:enUS=universal.ttf
+InfoPanelTextFont:enUS=universal.ttf
+TextTagFont:enUS=universal.ttf
+
+MasterFont:deDE=universal.ttf
+MasterFontBold:deDE=universal.ttf
+MessageFont:deDE=universal.ttf
+ChatFont:deDE=universal.ttf
+EscMenuTextFont:deDE=universal.ttf
+InfoPanelTextFont:deDE=universal.ttf
+TextTagFont:deDE=universal.ttf
+
+MasterFont:ruRU=universal.ttf
+MasterFontBold:ruRU=universal.ttf
+MessageFont:ruRU=universal.ttf
+ChatFont:ruRU=universal.ttf
+EscMenuTextFont:ruRU=universal.ttf
+InfoPanelTextFont:ruRU=universal.ttf
+TextTagFont:ruRU=universal.ttf
+
+MasterFont:zhCN=universal.ttf
+MasterFontBold:zhCN=universal.ttf
+MessageFont:zhCN=universal.ttf
+ChatFont:zhCN=universal.ttf
+EscMenuTextFont:zhCN=universal.ttf
+InfoPanelTextFont:zhCN=universal.ttf
+TextTagFont:zhCN=universal.ttf
+
+MasterFont:zhTW=universal.ttf
+MasterFontBold:zhTW=universal.ttf
+MessageFont:zhTW=universal.ttf
+ChatFont:zhTW=universal.ttf
+EscMenuTextFont:zhTW=universal.ttf
+InfoPanelTextFont:zhTW=universal.ttf
+TextTagFont:zhTW=universal.ttf
+
+MasterFont:koKR=universal.ttf
+MasterFontBold:koKR=universal.ttf
+MessageFont:koKR=universal.ttf
+ChatFont:koKR=universal.ttf
+EscMenuTextFont:koKR=universal.ttf
+InfoPanelTextFont:koKR=universal.ttf
+TextTagFont:koKR=universal.ttf
+
+MasterFont:jaJP=universal.ttf
+MasterFontBold:jaJP=universal.ttf
+MessageFont:jaJP=universal.ttf
+ChatFont:jaJP=universal.ttf
+EscMenuTextFont:jaJP=universal.ttf
+InfoPanelTextFont:jaJP=universal.ttf
+TextTagFont:jaJP=universal.ttf
+
+InfoPanelIconArmorDivine=UI\Widgets\Console\Human\infocard-armor-hero.blp
+InfoPanelIconArmorHero=war3mapimported\infocard-neutral-armor-hero.blp
+InfoPanelIconArmorHeroNeutral=war3mapimported\infocard-neutral-armor-hero.blp
+SupplyIcon=UI\Feedback\Resources\ResourceManaStone.blp
+ToolTipSupplyIcon=UI\Widgets\ToolTips\Human\ToolTipStonesIcon.blp
+
+[Errors]
+Nofood=Need to up Legendaries limit.,Need to up Legendaries limit.,Need to up Legendaries limit.,Need to up Legendaries limit.
+
+[FrameDef]
+ARMORTIP_DIVINE=damage received from:|n|cffFFFF00Chaos: 100%|r|n|cff00FF00Hero: 40%|nOthers: 25%|nSpells: 25%|nSiege: 20%|r
+ARMORTIP_FORT=damage received from:|n|cffFF0000Siege: 160%|r|n|cffFFFF00Chaos: 100%|n|cffFFFF00Spells: 100%|r|n|cff00FF00Hero: 60%|nNormal: 50%|nPierce: 50%|nMagic: 40%|r
+ARMORTIP_HERO=damage received from:|n|cffFFFF00Chaos: 100%|r|n|cff00FF00Spells: 70%|n|cff00FF00Others: 60%|nSiege: 40%|r
+ARMORTIP_LARGE=damage received from:|n|cffFF0000Magic: 175%|r|n|cffFFFF00Hero: 110%|nNormal: 100%|nChaos: 100%|r|n|cffFFFF00Spells: 100%|r|n|cff00FF00Pierce: 70%|nSiege: 70%|r
+ARMORTIP_MEDIUM=damage received from:|n|cffFF0000Normal: 175%|r|n|cffFFFF00Hero: 110%|nPierce: 100%|nChaos: 100%|nSpells: 100%|r|n|cff00FF00Magic: 70%|nSiege: 70%|r
+ARMORTIP_NONE=damage received from:|n|cffFFFF00Hero: 110%|nNormal: 105%|nPierce: 105%|nMagic: 105%|nChaos: 100%|nSpells: 100%|nSiege: 100%|r
+ARMORTIP_NORMAL=damage received from:|n|cffFF0000Normal: 175%|r|n|cffFFFF00Hero: 110%|nPierce: 100%|nChaos: 100%|nSpells: 100%|r|n|cff00FF00Magic: 70%|nSiege: 70%|r
+ARMORTIP_SMALL=damage received from:|n|cffFF0000Pierce: 175%|r|n|cffFFFF00Hero: 110%|nMagic: 100%|nChaos: 100%|nSpells: 100%|r|n|cff00FF00Normal: 70%|nSiege: 70%|r
+COLON_FOOD=|c008000ffLegendaries|r:
+COLON_GOLD=|c00ffdc00Gold|r:
+COLON_GOLD_INCOME_RATE=Fun:
+COLON_LUMBER=|c0000c850Lumber|r:
+COLON_PROVIDED=|c008000ffLegendaries limit|r: 
+DAMAGETIP_CHAOS=damage against:|n|cffFFFF00All armor types: 100%|r
+DAMAGETIP_HERO=damage against:|n|cff00FF00Unarmored: 110%|nLight: 110%|nMedium: 110%|nHeavy: 110%|r|n|cffFF0000Fortified: 60%|nHero: 60%|nDivine: 40%|r
+DAMAGETIP_MAGIC=damage against:|n|cff00FF00Heavy: 175%|r|n|cffFFFF00Unarmored: 105%|nLight: 100%|r|n|cffFF0000Medium: 70%|nHero: 60%|nFortified: 40%|nDivine: 25%|r
+DAMAGETIP_MELEE=damage against:|n|cff00FF00Medium: 175%|r|n|cffFFFF00Unarmored: 105%|nHeavy: 100%|r|n|cffFF0000Light: 70%|nHero: 60%|nFortified: 50%|nDivine: 25%|r
+DAMAGETIP_NORMAL=damage against:|n|cff00FF00Medium: 175%|r|n|cffFFFF00Unarmored: 105%|nHeavy: 100%|r|n|cffFF0000Light: 70%|nHero: 60%|nFortified: 50%|nDivine: 25%|r
+DAMAGETIP_PIERCE=damage against:|n|cff00FF00Light: 175%|r|n|cffFFFF00Unarmored: 105%|nMedium: 100%|r|n|cffFF0000Heavy: 70%|nHero: 60%|nFortified: 50%|nDivine: 25%|r
+DAMAGETIP_SIEGE=damage against:|n|cff00FF00Fortified: 160%|r|n|cffFFFF00Unarmored: 100%|r|n|cffFF0000Others: 70%|nHero: 40%|nDivine: 20%|r
+GOLD=|c00ffdc00Gold|r
+IDLE_PEON=Your Builder (|Cfffed312F8|R)
+IDLE_PEON_DESC=Jump to your Builder
+INVULNERABLE=|Cffff0000Invulnerable|R
+KEY_QUESTS=|cff80FF00Manual|r (|Cfffed312F9|R)
+LUMBER=|c0000c850Lumber|r
+QUESTS=|c0000ff40Castle Fight|r
+QUESTSMAIN=Modes & Mods:
+QUESTSOPTIONAL=Hints:
+RESOURCE_UBERTIP_GOLD=|c00ffdc00You gain gold by income.|r
+RESOURCE_UBERTIP_LUMBER=|c0000c850You gain lumber by building structures that produce units.|r
+RESOURCE_UBERTIP_SUPPLY=|c008000ffYou may increase your limit of Legendaries by buying Cheese in Main Castle.|r
+RESOURCE_UBERTIP_UPKEEP=by |cffffcc00Frotty |rand|cffffcc00 wTc[JediMaster]|r
+RESOURCE_UBERTIP_UPKEEP_INFO=.
+RESOURCE_UBERTIP_UPKEEP_INFO_WOOD=.
+UPKEEP_NONE=|cffffcc00CF:DE|r
+UPPER_BUTTON_QUEST_TIP=|cff80FF00Manual|r (|Cfffed312F9|R)
+UPPER_BUTTON_QUEST_UBER=Contains useful information about this map.

@@ -1,0 +1,89 @@
+{
+  "source_map": "docs/original_map/5329_Castle_Fight_DE_beta9.27_w3p.w3x",
+  "archive": {
+    "sha256": "9e3519bbc2a0fb6145460dd8b5730e9a35b2fd5923d63404eaf31e3618208a88",
+    "bytes": 15934076,
+    "header_signature": "HM3W",
+    "header_value_at_0x04": 32,
+    "header_map_name": "Castle Fight DE Beta 9.27",
+    "mpq_offset": 512
+  },
+  "canonical_members": 17,
+  "map_info": {
+    "name": "Castle Fight DE Beta 9.27",
+    "author": "Frotty",
+    "format_version": 31,
+    "game_version": {
+      "major": 2,
+      "minor": 0,
+      "patch": 4,
+      "build": 23745,
+      "display": "2.0.4.23745"
+    },
+    "playable_size_tiles": {
+      "width": 100,
+      "height": 56
+    },
+    "total_size_tiles": {
+      "width": 132,
+      "height": 64
+    },
+    "player_count": 6,
+    "force_count": 2
+  },
+  "pathing": {
+    "width_cells": 528,
+    "height_cells": 256,
+    "flag_counts": {
+      "unused_0x01": 0,
+      "no_walk": 57484,
+      "no_fly": 49152,
+      "no_build": 77316,
+      "unused_0x10": 0,
+      "blight": 0,
+      "no_water": 131188,
+      "unknown_0x80": 56480
+    }
+  },
+  "objects": {
+    "units": {
+      "original": 28,
+      "custom": 585
+    },
+    "items": {
+      "original": 0,
+      "custom": 16
+    },
+    "abilities": {
+      "original": 14,
+      "custom": 709
+    },
+    "buffs": {
+      "original": 4,
+      "custom": 96
+    },
+    "destructables": {
+      "original": 2,
+      "custom": 26
+    },
+    "doodads": {
+      "original": 3,
+      "custom": 4
+    }
+  },
+  "script": {
+    "bytes": 11811705,
+    "line_count": 2,
+    "w3p_marker": true,
+    "function_definitions": 5708,
+    "unique_function_names": 5708,
+    "unique_call_tokens": 7688,
+    "readable_function_names": 4810,
+    "note": "The source is retained verbatim but is W3P-obfuscated; indexes are static and do not execute map code."
+  },
+  "plaintext_members_copied": [
+    "war3mapMisc.txt",
+    "war3mapSkin.txt",
+    "war3map.wts"
+  ]
+}

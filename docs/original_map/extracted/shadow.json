@@ -1,0 +1,9 @@
+{
+  "bytes": 135168,
+  "expected_from_pathing_dimensions": 135168,
+  "matches_pathing_dimensions": true,
+  "value_histogram": {
+    "0x00": 122331,
+    "0xff": 12837
+  }
+}
