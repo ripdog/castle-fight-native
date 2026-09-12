@@ -879,7 +879,7 @@ mod tests {
     }
 
     #[test]
-    fn nearby_ally_attack_does_not_preempt_existing_target() {
+    fn nearby_ally_attack_preempts_building_target() {
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let defender = sim.spawn_unit(UnitSpawn {
             team: Team(0),
@@ -919,8 +919,65 @@ mod tests {
         assert_eq!(sim.unit(attacker).unwrap().target, Some(ally));
         assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
         sim.step();
-        assert_eq!(sim.unit(defender).unwrap().target, Some(castle));
-        assert_ne!(sim.unit(defender).unwrap().target, Some(attacker));
+        assert_eq!(sim.unit(defender).unwrap().target, Some(attacker));
+    }
+
+    #[test]
+    fn castle_attackers_peel_to_arriving_defender_after_attack() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let castle = sim.spawn_building(passive_building(0, BuildingFootprint::new(10, -1, 2, 3)));
+        let castle_attacker = |y: i32| UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(8 * cell, y),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 3 * cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let directly_attacked = sim.spawn_unit(castle_attacker(0));
+        let nearby_attacker = sim.spawn_unit(castle_attacker(2 * cell));
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(castle));
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(castle));
+
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(7 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step(); // defender is spawn-tick suppressed
+        assert_eq!(sim.unit(defender).unwrap().target, Some(directly_attacked));
+        assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(castle));
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(castle));
+
+        sim.step(); // defender actually attacks the first castle attacker
+        assert_eq!(
+            sim.unit(directly_attacked).unwrap().last_attacker,
+            Some(defender)
+        );
+        assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(castle));
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(castle));
+
+        sim.step(); // direct retaliation + nearby ally defense both peel off the castle
+        assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(defender));
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(defender));
     }
 
     #[test]

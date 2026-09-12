@@ -1017,6 +1017,24 @@ impl Simulation {
                         {
                             return TargetDecision::without_defense(Some(attacker), true);
                         }
+                        if find_building_index(buildings, current).is_some() {
+                            let defense = self.recent_ally_defense_target(
+                                unit,
+                                units,
+                                buildings,
+                                defense_attacker_grid,
+                                defense_victims,
+                                alert_grid,
+                            );
+                            if let Some(attacker) = defense.target {
+                                return TargetDecision::with_defense(
+                                    Some(attacker),
+                                    false,
+                                    defense,
+                                );
+                            }
+                            return TargetDecision::with_defense(Some(current), false, defense);
+                        }
                         return TargetDecision::without_defense(Some(current), false);
                     }
 
