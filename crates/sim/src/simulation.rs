@@ -238,6 +238,7 @@ pub struct UnitView {
     pub attack_targets: AttackTargetMask,
     pub target: Option<SimId>,
     pub direct_retaliation_lock: bool,
+    pub ally_defense_lock: bool,
     pub last_attacker: Option<SimId>,
     pub last_attacked_tick: Option<u64>,
     pub cooldown_remaining: u16,
@@ -932,6 +933,7 @@ impl Simulation {
         for (unit, decision) in units.iter_mut().zip(&target_selection.decisions) {
             unit.target = decision.target;
             unit.direct_retaliation_lock = decision.direct_retaliation_lock;
+            unit.ally_defense_lock = decision.ally_defense_lock;
         }
         let building_target_selection = self.select_building_targets(&buildings, &units, &grid);
         for (building, target) in buildings
@@ -1692,6 +1694,7 @@ impl Simulation {
             target_state.current = live_target;
             target_state.direct_retaliation_lock =
                 live_target.is_some() && unit.direct_retaliation_lock;
+            target_state.ally_defense_lock = live_target.is_some() && unit.ally_defense_lock;
             *entity
                 .get_mut::<RetaliationState>()
                 .expect("unit retaliation state missing") = match attackers_this_tick[index] {
@@ -1764,6 +1767,7 @@ impl Simulation {
                         .expect("attack building target missing");
                     target_state.current = live_target;
                     target_state.direct_retaliation_lock = false;
+                    target_state.ally_defense_lock = false;
                 }
                 if building.attack.is_some() || building.spellcasting.is_some() {
                     *entity
@@ -2522,6 +2526,7 @@ impl Simulation {
                         attack_sequence,
                         target: target.current,
                         direct_retaliation_lock: target.direct_retaliation_lock,
+                        ally_defense_lock: target.ally_defense_lock,
                         retaliation: *retaliation,
                         status: *status,
                         navigation: *navigation,
@@ -3177,7 +3182,9 @@ impl Simulation {
             .target
             .filter(|target| self.current_target_retainable_for(unit, *target, units, buildings));
         if let Some(current) = current
-            && (unit.direct_retaliation_lock || find_building_index(buildings, current).is_none())
+            && (unit.direct_retaliation_lock
+                || unit.ally_defense_lock
+                || find_building_index(buildings, current).is_none())
         {
             return false;
         }
@@ -3199,7 +3206,7 @@ impl Simulation {
                 .par_iter()
                 .map(|unit| {
                     if unit.health <= 0 {
-                        return TargetDecision::without_defense(None, false);
+                        return TargetDecision::without_defense(None, false, false);
                     }
                     let current = unit.target.filter(|target| {
                         self.current_target_retainable_for(unit, *target, units, buildings)
@@ -3208,17 +3215,21 @@ impl Simulation {
                         return TargetDecision::without_defense(
                             current,
                             current.is_some() && unit.direct_retaliation_lock,
+                            current.is_some() && unit.ally_defense_lock,
                         );
                     }
 
                     if let Some(current) = current {
                         if unit.direct_retaliation_lock {
-                            return TargetDecision::without_defense(Some(current), true);
+                            return TargetDecision::without_defense(Some(current), true, false);
                         }
                         if let Some(attacker) =
                             self.recent_retaliation_target(unit, units, buildings)
                         {
-                            return TargetDecision::without_defense(Some(attacker), true);
+                            return TargetDecision::without_defense(Some(attacker), true, false);
+                        }
+                        if unit.ally_defense_lock {
+                            return TargetDecision::without_defense(Some(current), false, true);
                         }
                         if find_building_index(buildings, current).is_some() {
                             let defense = self.recent_ally_defense_target(
@@ -3233,16 +3244,22 @@ impl Simulation {
                                 return TargetDecision::with_defense(
                                     Some(attacker),
                                     false,
+                                    true,
                                     defense,
                                 );
                             }
-                            return TargetDecision::with_defense(Some(current), false, defense);
+                            return TargetDecision::with_defense(
+                                Some(current),
+                                false,
+                                false,
+                                defense,
+                            );
                         }
-                        return TargetDecision::without_defense(Some(current), false);
+                        return TargetDecision::without_defense(Some(current), false, false);
                     }
 
                     if let Some(attacker) = self.recent_retaliation_target(unit, units, buildings) {
-                        return TargetDecision::without_defense(Some(attacker), true);
+                        return TargetDecision::without_defense(Some(attacker), true, false);
                     }
                     let defense = self.recent_ally_defense_target(
                         unit,
@@ -3253,11 +3270,12 @@ impl Simulation {
                         alert_grid,
                     );
                     if let Some(attacker) = defense.target {
-                        return TargetDecision::with_defense(Some(attacker), false, defense);
+                        return TargetDecision::with_defense(Some(attacker), false, true, defense);
                     }
 
                     TargetDecision::with_defense(
                         self.acquire_target(unit, units, buildings, grid),
+                        false,
                         false,
                         defense,
                     )
@@ -3566,9 +3584,43 @@ impl Simulation {
     ) -> bool {
         if source.direct_retaliation_lock {
             self.direct_retaliation_target_retainable_for(source, target_id, units, buildings)
+        } else if source.ally_defense_lock {
+            self.ally_defense_target_retainable_for(source, target_id, units, buildings)
         } else {
             self.target_retainable_for(source, target_id, units, buildings)
         }
+    }
+
+    fn ally_defense_target_retainable_for(
+        &self,
+        source: &UnitSnapshot,
+        target_id: SimId,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> bool {
+        if let Some(index) = find_unit_index(units, target_id) {
+            let target = &units[index];
+            return source.team != target.team
+                && target.health > 0
+                && self.unit_target_reachable(
+                    source,
+                    target,
+                    source.position.distance_sq(target.position),
+                    u64::MAX,
+                );
+        }
+        if let Some(index) = find_building_index(buildings, target_id) {
+            let target = &buildings[index];
+            let distance_sq = point_to_footprint_distance_sq(
+                source.position,
+                target.footprint,
+                self.config.navigation_cell_size,
+            );
+            return source.team != target.team
+                && target.health > 0
+                && self.building_target_reachable(source, target, distance_sq, u64::MAX);
+        }
+        false
     }
 
     fn direct_retaliation_target_retainable_for(
@@ -5529,6 +5581,7 @@ struct UnitSnapshot {
     attack_sequence: u64,
     target: Option<SimId>,
     direct_retaliation_lock: bool,
+    ally_defense_lock: bool,
     retaliation: RetaliationState,
     status: StatusState,
     navigation: NavigationState,
@@ -5828,14 +5881,20 @@ struct DefenseSearchContext<'a> {
 struct TargetDecision {
     target: Option<SimId>,
     direct_retaliation_lock: bool,
+    ally_defense_lock: bool,
     defense_query: DefenseTargetSearch,
 }
 
 impl TargetDecision {
-    const fn without_defense(target: Option<SimId>, direct_retaliation_lock: bool) -> Self {
+    const fn without_defense(
+        target: Option<SimId>,
+        direct_retaliation_lock: bool,
+        ally_defense_lock: bool,
+    ) -> Self {
         Self {
             target,
             direct_retaliation_lock,
+            ally_defense_lock,
             defense_query: DefenseTargetSearch {
                 target: None,
                 queried: false,
@@ -5848,11 +5907,13 @@ impl TargetDecision {
     const fn with_defense(
         target: Option<SimId>,
         direct_retaliation_lock: bool,
+        ally_defense_lock: bool,
         defense_query: DefenseTargetSearch,
     ) -> Self {
         Self {
             target,
             direct_retaliation_lock,
+            ally_defense_lock,
             defense_query,
         }
     }
@@ -6214,6 +6275,7 @@ fn unit_view_from_entity(
         attack_targets: *entity.get::<AttackTargetMask>()?,
         target: entity.get::<TargetState>()?.current,
         direct_retaliation_lock: entity.get::<TargetState>()?.direct_retaliation_lock,
+        ally_defense_lock: entity.get::<TargetState>()?.ally_defense_lock,
         last_attacker: entity.get::<RetaliationState>()?.attacker,
         last_attacked_tick: entity.get::<RetaliationState>()?.attacked_tick,
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
@@ -7375,6 +7437,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(unit.attack_sequence.0);
                 hash.write_u64(unit.target.current.map_or(0, |target| target.0));
                 hash.write_u8(u8::from(unit.target.direct_retaliation_lock));
+                hash.write_u8(u8::from(unit.target.ally_defense_lock));
                 hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
                 hash.write_u64(unit.retaliation.attacked_tick.unwrap_or(u64::MAX));
                 hash_status_state(&mut hash, unit.status);
@@ -7518,6 +7581,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                         .expect("attack building missing target state");
                     hash.write_u64(target.current.map_or(0, |target| target.0));
                     hash.write_u8(u8::from(target.direct_retaliation_lock));
+                    hash.write_u8(u8::from(target.ally_defense_lock));
                     hash.write_u64(
                         building
                             .spawn_tick

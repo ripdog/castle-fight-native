@@ -351,6 +351,10 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
                 "No"
             }
         ),
+        format!(
+            "Ally defense lock: {}",
+            if unit.ally_defense_lock { "Yes" } else { "No" }
+        ),
         format!("Last attacker: {}", target_label(unit.last_attacker)),
         format!(
             "Last attacked: {}",
@@ -412,10 +416,15 @@ fn unit_order_label(unit: &UnitSample, tick: u64) -> String {
     if unit.stunned_until_tick > tick {
         return "Disabled/stunned".into();
     }
-    match (unit.target, unit.direct_retaliation_lock) {
-        (Some(target), true) => format!("Direct retaliation against #{}", target.0),
-        (Some(target), false) => format!("Engaging target #{}", target.0),
-        (None, _) => "Advancing toward enemy objective".into(),
+    match (
+        unit.target,
+        unit.direct_retaliation_lock,
+        unit.ally_defense_lock,
+    ) {
+        (Some(target), true, _) => format!("Direct retaliation against #{}", target.0),
+        (Some(target), false, true) => format!("Defending ally against #{}", target.0),
+        (Some(target), false, false) => format!("Engaging target #{}", target.0),
+        (None, _, _) => "Advancing toward enemy objective".into(),
     }
 }
 
@@ -553,6 +562,7 @@ mod tests {
                 health: 50,
                 target: None,
                 direct_retaliation_lock: false,
+                ally_defense_lock: false,
                 last_attacker: None,
                 last_attacked_tick: None,
                 cooldown_remaining: 0,
@@ -631,6 +641,7 @@ mod tests {
                 health: 50,
                 target: None,
                 direct_retaliation_lock: false,
+                ally_defense_lock: false,
                 last_attacker: None,
                 last_attacked_tick: None,
                 cooldown_remaining: 0,

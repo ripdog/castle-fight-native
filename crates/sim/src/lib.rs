@@ -4518,6 +4518,182 @@ mod tests {
     }
 
     #[test]
+    fn ally_defense_lock_ignores_later_defense_requests_until_self_attacked() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 4 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        });
+        let first_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(13 * cell, 0),
+            health: 1_000,
+            ..passive_unit(0, 0)
+        });
+        let first_attacker = sim.spawn_building(attack_building(
+            1,
+            BuildingFootprint::new(17, 0, 1, 1),
+            AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 5 * cell,
+                acquisition_range: 5 * cell,
+                cooldown_ticks: 1,
+            },
+        ));
+
+        sim.step();
+        sim.step();
+        assert_eq!(
+            sim.unit(first_ally).unwrap().last_attacker,
+            Some(first_attacker)
+        );
+        sim.step();
+        let defender_view = sim.unit(defender).unwrap();
+        assert_eq!(defender_view.target, Some(first_attacker));
+        assert!(defender_view.ally_defense_lock);
+        assert!(!defender_view.direct_retaliation_lock);
+
+        let second_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 2 * cell),
+            health: 1_000,
+            ..passive_unit(0, 0)
+        });
+        let second_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(10 * cell, 3 * cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: cell,
+                acquisition_range: 2 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        sim.step();
+        assert_eq!(
+            sim.unit(second_ally).unwrap().last_attacker,
+            Some(second_attacker)
+        );
+        sim.step();
+        let defender_view = sim.unit(defender).unwrap();
+        assert_eq!(defender_view.target, Some(first_attacker));
+        assert!(defender_view.ally_defense_lock);
+
+        let self_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(10 * cell, -cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 2 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(
+            sim.unit(defender).unwrap().last_attacker,
+            Some(self_attacker)
+        );
+        sim.step();
+        let defender_view = sim.unit(defender).unwrap();
+        assert_eq!(defender_view.target, Some(self_attacker));
+        assert!(defender_view.direct_retaliation_lock);
+        assert!(!defender_view.ally_defense_lock);
+    }
+
+    #[test]
+    fn ally_defense_lock_ignores_ordinary_pursuit_leash() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            team_objective: [SimPoint::new(120 * cell, 0), SimPoint::new(30 * cell, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(30 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 3 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 4,
+            },
+        });
+        let ally = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(33 * cell, 0),
+            health: 1,
+            ..passive_unit(1, 0)
+        });
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(34 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: cell,
+                acquisition_range: cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: 2 * cell,
+            },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, None);
+        sim.step();
+        assert!(sim.unit(ally).is_none());
+        assert_eq!(sim.unit(defender).unwrap().target, None);
+
+        sim.step();
+        let defender_view = sim.unit(defender).unwrap();
+        assert_eq!(defender_view.target, Some(attacker));
+        assert!(defender_view.ally_defense_lock);
+
+        for _ in 0..4 {
+            sim.step();
+        }
+        let defender_view = sim.unit(defender).unwrap();
+        let attacker_view = sim.unit(attacker).unwrap();
+        assert!(
+            (attacker_view.position.x - defender_view.position.x).abs() > 6 * cell,
+            "fixture did not move the defense target beyond the ordinary pursuit leash"
+        );
+        assert_eq!(defender_view.target, Some(attacker));
+        assert!(defender_view.ally_defense_lock);
+        assert!(!defender_view.direct_retaliation_lock);
+    }
+
+    #[test]
     fn first_personal_attacker_stays_locked_despite_later_attackers() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
