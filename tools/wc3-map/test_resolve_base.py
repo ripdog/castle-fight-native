@@ -133,6 +133,72 @@ class ResolvedEvidenceTests(unittest.TestCase):
         cls.root = Path(__file__).resolve().parents[2]
         cls.resolved = cls.root / "docs" / "original_map" / "extracted" / "resolved"
 
+    def test_wurst_generated_object_marker_is_classified_as_compiler_provenance(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["unknown_map_field_ids"], {})
+        self.assertEqual(summary["wurst_generated_object_marker_rows"], 1309)
+        self.assertEqual(summary["wurst_generated_object_marker_value"], 42)
+        with (self.resolved / "object-fields.tsv").open(encoding="utf-8") as handle:
+            marker = next(row for row in csv.DictReader(handle, delimiter="\t") if row["field_id"] == "wurs")
+        self.assertEqual(marker["field_name"], "GENERATED_BY_WURST")
+        self.assertEqual(marker["display_name"], "Wurst generated-object marker")
+        self.assertEqual(marker["source_table"], "WurstCompiler")
+        self.assertEqual(marker["recovered_value_json"], "42")
+
+    def test_resolved_items_keep_helper_recipe_and_attached_ability_multiplicity(self) -> None:
+        with (self.resolved / "items.tsv").open(encoding="utf-8") as handle:
+            items = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(items["I001"]["name"], "Blast Staff")
+        self.assertEqual(items["I001"]["abilities"], "A02D")
+        self.assertEqual(items["I001"]["gold_cost"], "150")
+        self.assertEqual(items["I001"]["lumber_cost"], "300")
+        self.assertEqual(items["I002"]["name"], "Multi Blast Staff")
+        self.assertEqual(items["I002"]["abilities"], "A02D,A02D,A02D,A02D")
+        self.assertEqual(items["I002"]["gold_cost"], "600")
+        self.assertEqual(items["I002"]["lumber_cost"], "1200")
+
+    def test_castle_shop_and_scripted_item_mechanics_are_native_ready(self) -> None:
+        with (self.resolved / "castle-shop-items.tsv").open(encoding="utf-8") as handle:
+            shop = {row["item_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(shop), 10)
+        self.assertEqual(shop["I004"]["gold_cost"], "1750")
+        self.assertEqual(shop["I004"]["stock_regen"], "210")
+        orb_abilities = json.loads(shop["I006"]["ability_objects_json"])
+        self.assertEqual(orb_abilities[0]["rawcode"], "A02H")
+        self.assertEqual(orb_abilities[0]["levels"][0]["cooldown"], "60.0")
+        self.assertEqual(orb_abilities[0]["levels"][0]["static_cooldown"], "99")
+
+        with (self.resolved / "item-mechanics.tsv").open(encoding="utf-8") as handle:
+            mechanics = list(csv.DictReader(handle, delimiter="\t"))
+        by_kind = {(row["item_rawcode"], row["mechanic_kind"]): row for row in mechanics}
+
+        cheese = json.loads(by_kind[("I004", "legendary-slot-or-refund-on-pickup")]["parameters_json"])
+        self.assertEqual(cheese["food_cap_delta_when_active"], 1)
+        self.assertEqual(cheese["refund_gold_when_inactive"], 1750)
+
+        recipe = by_kind[("I001", "four-copy-inventory-upgrade")]
+        self.assertEqual(recipe["related_item_rawcodes"], "I002,I001")
+        recipe_parameters = json.loads(recipe["parameters_json"])
+        self.assertEqual(recipe_parameters["required_count"], 4)
+        self.assertEqual(recipe_parameters["add_item_rawcode"], "I002")
+        result_item = json.loads(recipe["related_item_objects_json"])[0]
+        self.assertEqual(result_item["name"], "Multi Blast Staff")
+        self.assertEqual(result_item["abilities"], ["A02D", "A02D", "A02D", "A02D"])
+
+        orb = by_kind[("I006", "target-triggered-scaling-dummy-effect")]
+        self.assertEqual(orb["trigger_ability_rawcodes"], "A02H")
+        orb_effect = json.loads(orb["effect_ability_objects_json"])[0]
+        self.assertEqual(orb_effect["rawcode"], "cfOL")
+        self.assertEqual([level["data_fields_labeled"]["Number of Targets Hit"] for level in orb_effect["levels"]], [4, 6, 8, 10, 12])
+        self.assertTrue(all(level["data_fields_labeled"]["Damage per Target"] == 1000 for level in orb_effect["levels"]))
+
+        stone = json.loads(by_kind[("I005", "point-triggered-dummy-effect")]["effect_ability_objects_json"])[0]["levels"][0]
+        self.assertEqual(stone["duration_normal"], "30")
+        self.assertEqual(stone["data_fields_labeled"], {"Defense Bonus": 8, "Hit Points Gained": 400, "Mana Points Gained": 200})
+        speed = json.loads(by_kind[("I00F", "point-triggered-dummy-effect")]["effect_ability_objects_json"])[0]["levels"][0]
+        self.assertEqual(speed["duration_normal"], "15")
+        self.assertEqual(speed["data_fields_labeled"]["Movement Speed Increase"], 2)
+
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
             units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}

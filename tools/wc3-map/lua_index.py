@@ -2955,6 +2955,325 @@ def _extract_building_spell_mechanics(
     return rows
 
 
+def _extract_castle_item_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    function_aliases: list[dict[str, object]],
+) -> dict[str, object]:
+    """Recover Castle shop inventory plus item-specific scripted runtime behavior."""
+    def body(name: str) -> tuple[int, list[LuaToken]] | None:
+        return _function_body_tokens(data, functions, name)
+
+    shop_slots: list[dict[str, object]] = []
+    slot_body = body("castleItemIdForSlot")
+    if slot_body is not None:
+        _start, tokens = slot_body
+        for index in range(len(tokens) - 6):
+            if tokens[index].text != "==" or tokens[index + 1].kind != "number":
+                continue
+            if tokens[index + 1].integer_value is None:
+                continue
+            slot = int(tokens[index + 1].integer_value)
+            for cursor in range(index + 2, min(index + 12, len(tokens) - 1)):
+                if tokens[cursor].text == "return" and tokens[cursor + 1].kind == "number":
+                    item_id = _integer_literal_value([tokens[cursor + 1]])
+                    shop_slots.append({
+                        "slot": slot,
+                        "item_id": item_id,
+                        "function": "castleItemIdForSlot",
+                        "byte_offset": _start + tokens[index].start,
+                    })
+                    break
+        shop_slots.sort(key=lambda row: int(row["slot"]))
+
+    # The item subsystem stores its constants in the trigger initializer TH,
+    # then refers to those globals from UH/ZH. Resolve that small generated
+    # constant environment first rather than requiring literals at each use.
+    constants: dict[str, int | Decimal] = {}
+    setup_body = body("TH")
+    if setup_body is not None:
+        _start, tokens = setup_body
+        for index in range(len(tokens) - 2):
+            if tokens[index].kind != "ident" or tokens[index + 1].text != "=":
+                continue
+            rhs = tokens[index + 2]
+            if rhs.kind != "number":
+                continue
+            if rhs.integer_value is not None:
+                constants[tokens[index].text] = int(rhs.integer_value)
+                continue
+            try:
+                constants[tokens[index].text] = Decimal(rhs.text)
+            except InvalidOperation:
+                continue
+
+    def resolved_integer(token: LuaToken) -> int | None:
+        if token.kind == "number" and token.integer_value is not None:
+            return int(token.integer_value)
+        if token.kind == "ident":
+            value = constants.get(token.text)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, Decimal) and value == value.to_integral_value():
+                return int(value)
+        return None
+
+    item_values: dict[int, int] = {}
+    value_body = body("UH")
+    if value_body is not None:
+        _start, tokens = value_body
+        for index in range(len(tokens) - 4):
+            if tokens[index].text != "==":
+                continue
+            item_id = resolved_integer(tokens[index + 1])
+            if item_id is None:
+                continue
+            for cursor in range(index + 2, min(index + 12, len(tokens) - 1)):
+                if tokens[cursor].text != "return":
+                    continue
+                value = resolved_integer(tokens[cursor + 1])
+                if value is not None:
+                    item_values[item_id] = value
+                break
+
+    pickup: dict[str, object] = {
+        "gold_item_rawcode_integer": None,
+        "cheese_item_rawcode_integer": None,
+        "blast_staff_rawcode_integer": None,
+        "multi_blast_staff_rawcode_integer": None,
+        "gold_amount_formula": "floor(((qGb[player_id] + 4) * 0.25) * (8 + pIb))",
+        "gold_item_consumed": True,
+        "blast_staff_recipe_required_count": 4,
+        "blast_staff_recipe_removes_rawcode": None,
+        "blast_staff_recipe_adds_rawcode": None,
+        "cheese_no_cheese_mode_flag": "HGb",
+        "cheese_legendary_mode_enabled_flag": "GGb",
+        "cheese_food_cap_delta": 1,
+        "cheese_refund_amount": None,
+        "damage_aura_carrier_rawcode_integer": 1697656888,
+        "double_damage_aura_ability_rawcode_integer": 1093678660,
+        "quad_damage_aura_ability_rawcode_integer": 1093678659,
+        "damage_aura_lifetime_seconds": 29,
+    }
+    pickup_body = body("ZH")
+    if pickup_body is not None:
+        pickup["gold_item_rawcode_integer"] = constants.get("tab")
+        pickup["cheese_item_rawcode_integer"] = constants.get("sab")
+        pickup["blast_staff_rawcode_integer"] = constants.get("rab")
+        pickup["multi_blast_staff_rawcode_integer"] = constants.get("qab")
+        pickup["blast_staff_recipe_removes_rawcode"] = constants.get("rab")
+        pickup["blast_staff_recipe_adds_rawcode"] = constants.get("qab")
+        pickup["cheese_refund_amount"] = constants.get("pab")
+        pickup["damage_aura_lifetime_seconds"] = constants.get("oab")
+        pickup["blast_staff_recipe_required_count"] = constants.get("nab")
+        pickup["item_inventory_slot_max_index"] = constants.get("mab")
+
+    # Resolve the generated OnCast listener classes back to their concrete
+    # handlers, then recover the Castle item's three script-routed spell paths.
+    listener_handler_by_class: dict[str, str] = {}
+    for alias in function_aliases:
+        alias_name = str(alias["alias"])
+        suffix = ".OnCastListener_fireEx"
+        if alias_name.endswith(suffix):
+            listener_handler_by_class[alias_name[: -len(suffix)]] = str(alias["target_function"])
+
+    # Global scalar constants such as Z6/V6 are initialized in small generated
+    # setup functions. Keep only variables with one unambiguous positive value.
+    constant_candidates: dict[str, set[int | Decimal]] = defaultdict(set)
+    for function in functions:
+        function_name = str(function["name"])
+        function_body = body(function_name)
+        if function_body is None:
+            continue
+        _function_start, tokens = function_body
+        for index in range(len(tokens) - 2):
+            if tokens[index].kind != "ident" or tokens[index + 1].text != "=":
+                continue
+            rhs = tokens[index + 2]
+            if rhs.kind != "number":
+                continue
+            if rhs.integer_value is not None:
+                value: int | Decimal = int(rhs.integer_value)
+            else:
+                try:
+                    value = Decimal(rhs.text)
+                except InvalidOperation:
+                    continue
+            if value != 0:
+                constant_candidates[tokens[index].text].add(value)
+    global_constants = {
+        name: next(iter(values))
+        for name, values in constant_candidates.items()
+        if len(values) == 1
+    }
+
+    registrations: list[dict[str, object]] = []
+    for function in functions:
+        function_name = str(function["name"])
+        function_body = body(function_name)
+        if function_body is None:
+            continue
+        function_start, tokens = function_body
+        integer_variables: dict[str, int] = {}
+        variable_classes: dict[str, str] = {}
+        for index, token in enumerate(tokens):
+            if token.kind == "ident" and index + 2 < len(tokens) and tokens[index + 1].text == "=":
+                rhs = tokens[index + 2]
+                if rhs.kind == "number" and rhs.integer_value is not None:
+                    integer_variables[token.text] = int(rhs.integer_value)
+                elif rhs.kind == "ident" and rhs.text in integer_variables:
+                    integer_variables[token.text] = integer_variables[rhs.text]
+                if (
+                    rhs.kind == "ident"
+                    and rhs.text in listener_handler_by_class
+                    and index + 5 < len(tokens)
+                    and tokens[index + 3].text == ":"
+                    and tokens[index + 4].kind == "ident"
+                    and tokens[index + 4].text.startswith("create")
+                    and tokens[index + 5].text == "("
+                ):
+                    variable_classes[token.text] = rhs.text
+            if token.kind != "ident" or token.text != "EventListener_addSpellInternal":
+                continue
+            try:
+                args, _next = _call_arguments(tokens, index)
+            except ValueError:
+                continue
+            if len(args) != 3 or len(args[2]) != 1 or args[2][0].kind != "ident":
+                continue
+            closure_variable = args[2][0].text
+            closure_class = variable_classes.get(closure_variable)
+            if closure_class is None:
+                continue
+            ability_id: int | None = None
+            if len(args[1]) == 1:
+                ability_token = args[1][0]
+                if ability_token.kind == "number" and ability_token.integer_value is not None:
+                    ability_id = int(ability_token.integer_value)
+                elif ability_token.kind == "ident":
+                    ability_id = integer_variables.get(ability_token.text)
+            if ability_id is None:
+                continue
+            registrations.append({
+                "trigger_ability_id": ability_id,
+                "handler_function": listener_handler_by_class[closure_class],
+                "registration_function": function_name,
+                "byte_offset": function_start + token.start,
+            })
+
+    item_spell_mechanics: list[dict[str, object]] = []
+    for registration in registrations:
+        handler_name = str(registration["handler_function"])
+        handler_body = body(handler_name)
+        if handler_body is None:
+            continue
+        _handler_start, tokens = handler_body
+
+        def calls(callee: str) -> list[list[list[LuaToken]]]:
+            result: list[list[list[LuaToken]]] = []
+            for index, token in enumerate(tokens):
+                if token.kind == "ident" and token.text == callee:
+                    try:
+                        args, _next = _call_arguments(tokens, index)
+                    except ValueError:
+                        continue
+                    result.append(args)
+            return result
+
+        # Scroll of Stone/Speed: point cast -> e008 dummy -> hidden effect
+        # ability -> immediate order -> one-second timed life.
+        create_calls = calls("createUnit")
+        ability_calls = calls("addProtectedAbility")
+        order_calls = calls("unit_issueImmediateOrderById")
+        life_calls = calls("__wurst_safe_UnitApplyTimedLife")
+        if create_calls and ability_calls and order_calls and life_calls:
+            carrier_id = resolved_integer(create_calls[0][1][0]) if len(create_calls[0]) > 1 and len(create_calls[0][1]) == 1 else None
+            effect_id = resolved_integer(ability_calls[0][1][0]) if len(ability_calls[0]) > 1 and len(ability_calls[0][1]) == 1 else None
+            order_id = resolved_integer(order_calls[0][1][0]) if len(order_calls[0]) > 1 and len(order_calls[0][1]) == 1 else None
+            lifetime: str | None = None
+            if len(life_calls[0]) > 2:
+                try:
+                    lifetime = _numeric_literal_text(life_calls[0][2])
+                except ValueError:
+                    lifetime = None
+            if carrier_id is not None and effect_id is not None and order_id is not None and lifetime is not None:
+                item_spell_mechanics.append({
+                    "trigger_ability_id": int(registration["trigger_ability_id"]),
+                    "mechanic_kind": "point-triggered-dummy-effect",
+                    "effect_ability_ids": [effect_id],
+                    "parameters": {
+                        "carrier_unit_rawcode_integer": carrier_id,
+                        "order_id": order_id,
+                        "dummy_lifetime_seconds": lifetime,
+                    },
+                    "source_functions": [str(registration["registration_function"]), handler_name],
+                    "byte_offset": int(registration["byte_offset"]),
+                })
+                continue
+
+        # Orb of Lightning: target cast through DummyCaster, with the effect
+        # level scaling from round minutes. The configured delay is post-cast
+        # dummy recycle time, not a cast delay.
+        cast_calls = calls("DummyCaster_DummyCaster_castTarget")
+        if cast_calls:
+            args = cast_calls[0]
+            if len(args) >= 5:
+                def global_integer(argument: list[LuaToken]) -> int | None:
+                    if len(argument) != 1:
+                        return None
+                    token = argument[0]
+                    if token.kind == "number" and token.integer_value is not None:
+                        return int(token.integer_value)
+                    if token.kind == "ident":
+                        value = global_constants.get(token.text)
+                        if isinstance(value, int):
+                            return value
+                    return None
+
+                effect_id = global_integer(args[1])
+                order_id = global_integer(args[3])
+                recycle_delay: str | None = None
+                delay_calls = calls("DummyCaster_DummyCaster_delay")
+                if delay_calls and len(delay_calls[0]) > 1 and len(delay_calls[0][1]) == 1:
+                    token = delay_calls[0][1][0]
+                    if token.kind == "ident" and token.text in global_constants:
+                        recycle_delay = str(global_constants[token.text])
+                    elif token.kind == "number":
+                        recycle_delay = token.text
+                level_step_minutes: int | None = None
+                for index, token in enumerate(tokens):
+                    if token.kind == "ident" and token.text == "__wurst_intDiv":
+                        try:
+                            div_args, _next = _call_arguments(tokens, index)
+                        except ValueError:
+                            continue
+                        if len(div_args) == 2 and len(div_args[1]) == 1:
+                            level_step_minutes = resolved_integer(div_args[1][0])
+                            if level_step_minutes is not None:
+                                break
+                if effect_id is not None and order_id is not None and level_step_minutes is not None:
+                    item_spell_mechanics.append({
+                        "trigger_ability_id": int(registration["trigger_ability_id"]),
+                        "mechanic_kind": "target-triggered-scaling-dummy-effect",
+                        "effect_ability_ids": [effect_id],
+                        "parameters": {
+                            "order_id": order_id,
+                            "effect_level_formula": f"1 + floor(round_minutes / {level_step_minutes})",
+                            "effect_level_step_minutes": level_step_minutes,
+                            "dummy_recycle_delay_seconds": recycle_delay,
+                        },
+                        "source_functions": [str(registration["registration_function"]), handler_name],
+                        "byte_offset": int(registration["byte_offset"]),
+                    })
+
+    return {
+        "shop_slots": shop_slots,
+        "item_values": item_values,
+        "pickup": pickup,
+        "item_spell_mechanics": item_spell_mechanics,
+    }
+
+
 def _extract_protected_filter_bindings(
     data: bytes,
     functions: list[dict[str, object]],
@@ -3237,6 +3556,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     )
     function_aliases, function_value_arguments = _function_value_links(data, functions)
     protected_filter_bindings = _extract_protected_filter_bindings(data, functions)
+    castle_item_mechanics = _extract_castle_item_mechanics(data, functions, function_aliases)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
     unit_spell_mechanics = _extract_unit_spell_mechanics(
@@ -3280,6 +3600,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
             "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
         "protected_filter_bindings": protected_filter_bindings,
+        "castle_item_mechanics": castle_item_mechanics,
         "building_spell_registrations": building_spell_registrations,
         "unit_spell_registrations": unit_spell_registrations,
         "unit_spell_mechanics": unit_spell_mechanics,

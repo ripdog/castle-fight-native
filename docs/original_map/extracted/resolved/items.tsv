@@ -1,0 +1,30 @@
+table	rawcode	base_rawcode	name	description	tip	ubertip	gold_cost	lumber_cost	class	level	old_level	uses	stack_max	stock_max	stock_initial	stock_start	stock_regen	abilities	cooldown_group	usable	perishable	powerup	droppable	drop_on_death	pawnable	sellable	protection_conflict_fields
+custom	IcfS	will	Portable Cloud Machine	Global range. Disables tower attacks in the target area for 12 seconds.	Portable Cloud Machine	Disables tower attacks in the target area for 12 seconds.	0	0	Charged	2	3	4	4	1	1	0	120	AcfS	AIil	1	1	0	0	0	1	1	0
+custom	IM01	will	Bird Food	This inventory slot is occupied by feed for your feathered friend.	Bird Food	Occupies an inventory slot. Bird Food is consumed over time: 10, 7.5, 5, 2.5, 2, then 1 minute between removals.	0	0	Charged	2	3	1	1	1	1	0	120		AIil	0	0	0	0	0	1	1	0
+custom	IM02	tsct	Towerless Token	"Builds your one tiny guard tower.
+|cffFFFF80Attack Type:|cffFFFF00 Pierce|n|cffFFFF80Range:|cffFFFF00 900|n|cffFFFF80Average DPS:|cffFFFF00 45|r"	Towerless Token	Builds your one tiny guard tower.	0	0	Purchasable	1	0	1	1	3	1	0	30	AM04	AIbl	1	1	0	0	0	1	1	0
+custom	I000	rst1	Gold	Gold	Gold	Gold	0	0	Charged	1	2	-	0	1	1	0	120		AIs3	0	0	1	1	0	1	1	0
+custom	I001	bgst	Blast Staff	"Launches one magic projectile per second at a random nearby enemy.
+Projectiles deal 60 |cff8080ffspell damage|r.
+
+|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r"	Buy Blast Staff	"Launches one magic projectile per second at a random nearby enemy.
+Projectiles deal 60 |cff8080ffspell damage|r.
+
+|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r"	150	300	Permanent	4	8	-	0	1	1	30	300	A02D	AIs6	0	0	0	1	0	1	1	0
+custom	I002	bgst	Multi Blast Staff	Launches four magic projectiles per second at a random nearby enemy. One projectile deals 60 spell damage.	Buy Blast Staff	"Launches four magic projectiles per second at a random nearby enemy. One projectile deals 60 |cff8080ffspell damage|r.
+
+|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r"	600	1200	Permanent	4	8	-	0	1	1	30	300	A02D,A02D,A02D,A02D	AIs6	0	0	0	1	0	1	1	0
+custom	I003	ajen	Drum'n'Bass Bass Drums	Gives all allied units +33% damage.	Buy Drum'n'Bass Bass Drums	Gives all allied units +33% damage. |cffFF0000Does not stack, dont buy twice!|r	650	0	Permanent	5	7	-	0	1	1	30	3600	A02F	AOae	0	0	0	1	0	1	1	0
+custom	I004	lmbr	Cheese	Allowing you to build one more legendary structure.	Buy Cheese	Allowing you to build one more legendary structure.	1750	0	Permanent	0	0	1	5	2	1	30	210		AIlu	1	1	1	1	0	1	0	0
+custom	I005	sres	Scroll of Stone	When used, the scroll heals 400 hitpoints, 200 mana and gives 8 bonus armor for 30 seconds to all allied units in a huge area.	Buy Scroll of Stone	When used, the scroll heals 400 hitpoints, 200 mana and gives 8 bonus armor for 30 seconds to all allied units in a huge area.	150	0	Charged	5	7	1	5	2	1	30	180	A08Y	A02G	1	1	0	1	0	1	1	0
+custom	I006	thdm	Orb of Lightning	"Allows your worker to fire a chainlightning at target enemy unit once every minute. The chainlightning hits [4, 6, 8, 10, 12] targets, dealing 1000 damage to the first target. The number of targets scales with the round timer [0, 5, 10, 15, 20] minutes.
+
+|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r"	Buy Orb of Lightning	"Allows your worker to fire a chainlightning at target enemy unit once every minute. The chainlightning hits [4, 6, 8, 10, 12] targets, dealing 1000 damage to the first target. The number of targets scales with the round timer [0, 5, 10, 15, 20] minutes.
+
+|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r"	550	0	Permanent	0	0	-	0	1	1	0	150	A02H	AOcl	1	0	0	1	0	1	1	0
+custom	I007	sror	Quad Damage	Increases the damage of all allied units by 300% for 30 seconds.	Buy Quad Damage	Increases the damage of all allied units by 300% for 30 seconds.	1400	0	Charged	3	3	1	5	1	1	600	120	A03E	A03E	1	1	1	1	0	1	1	0
+custom	I008	sror	Double Damage	Increases the damage of all allied units by 100% for 30 seconds.	Buy Double Damage	Increases the damage of all allied units by 100% for 30 seconds.	600	0	Charged	3	3	1	5	1	1	300	120	A03F	A03F	1	1	1	1	0	1	1	0
+custom	I009	bgst	Rune of Repair	Repairs buildings near the worker. Stacks with other Runes and Coral Statues.	Buy Rune of Repair	Repairs buildings near the worker. Stacks with other Runes and Coral Statues.	400	0	Permanent	4	8	-	0	1	1	30	180	A008	AIs6	0	0	0	1	0	1	1	0
+custom	I00A	ward	Drum'n'Bass Bassline Generator	Increases the movementspeed of all friendly units by 15% and their attackspeed by 30%.	Buy Drum'n'Bass Bassline Generator	Increases the movementspeed of all friendly units by 15% and their attackspeed by 30%. |cffFF0000Does not stack, dont buy twice!|r	600	0	Permanent	5	7	-	0	1	1	30	3600	A03T	AOac	0	0	0	1	0	1	1	0
+custom	I00C	rat9	Explode Mine	Boosts attack damage by 8.	Explode	Explodes this mine to free space for your buildings	400	0	Permanent	3	4	-	0	1	1	0	120	AIt9	AIat	0	0	0	1	0	1	1	0
+custom	I00F	sres	Scroll of Speed	When used, the scroll increases movespeed by up to 2x for 15 seconds of all allied units in a huge area.	Buy Scroll of Speed	When used, the scroll increases movespeed by up to 2x for 15 seconds of all allied units in a huge area.	100	0	Charged	5	7	1	5	1	1	30	160	A0HJ	AIsa	1	1	0	1	0	1	1	0

@@ -354,6 +354,72 @@ class LuaIndexTests(unittest.TestCase):
         self.assertEqual(bindings["RX"]["predicate"], "alive-combat-sapper;ally-of-mIb")
         self.assertEqual(bindings["SX"]["resolution_status"], "resolved")
 
+    def test_recovers_castle_item_globals_shop_values_and_pickup_recipe(self) -> None:
+        source = (
+            "function TH() tab=1227894832 sab=1227894836 rab=1227894833 qab=1227894834 "
+            "pab=1750 oab=29. nab=4 mab=5 end "
+            "function UH(id) if(id==sab)then return pab elseif(id==1227894840)then return 600 "
+            "elseif(id==rab)then return 150 else return 0 end end "
+            "function ZH() local x=nil x=item_getTypeId(nil) if(x==tab)then return end "
+            "if(x==sab)then return end if((x==rab)and(count(nil,rab)==nab))then swap(nil,rab,qab)end end "
+            "function castleItemIdForSlot(slot) if(slot==0)then return 1227894840 "
+            "elseif(slot==4)then return 1227894836 elseif(slot==7)then return 1227894833 end return 0 end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1227894832, 1227894833, 1227894834, 1227894836, 1227894840})
+        mechanics = indexed["castle_item_mechanics"]
+
+        self.assertEqual(
+            [(row["slot"], row["item_id"]) for row in mechanics["shop_slots"]],
+            [(0, 1227894840), (4, 1227894836), (7, 1227894833)],
+        )
+        self.assertEqual(mechanics["item_values"][1227894836], 1750)
+        self.assertEqual(mechanics["item_values"][1227894833], 150)
+        self.assertEqual(mechanics["pickup"]["gold_item_rawcode_integer"], 1227894832)
+        self.assertEqual(mechanics["pickup"]["cheese_item_rawcode_integer"], 1227894836)
+        self.assertEqual(mechanics["pickup"]["blast_staff_recipe_removes_rawcode"], 1227894833)
+        self.assertEqual(mechanics["pickup"]["blast_staff_recipe_adds_rawcode"], 1227894834)
+        self.assertEqual(mechanics["pickup"]["cheese_refund_amount"], 1750)
+        self.assertEqual(mechanics["pickup"]["damage_aura_lifetime_seconds"], 29)
+        self.assertEqual(mechanics["pickup"]["blast_staff_recipe_required_count"], 4)
+        self.assertEqual(mechanics["pickup"]["item_inventory_slot_max_index"], 5)
+
+    def test_recovers_castle_item_script_routed_spell_effects(self) -> None:
+        source = (
+            "function stoneHandler(a,b,c) local d=nil d=createUnit(a,1697656888,c,{0.}) "
+            "addProtectedAbility(d,1093677639) unit_issueImmediateOrderById(d,852269) "
+            "__wurst_safe_UnitApplyTimedLife(d,1112820806,1.) end "
+            "Jy.OnCastListener_fireEx=stoneHandler "
+            "function gL() local c=nil c=Jy:create1() EventListener_addSpellInternal(nil,1093679193,c) end "
+            "function orbHandler(a,b,c) local lvl=nil local dc=nil lvl=(1+__wurst_intDiv(VGb,5)) "
+            "dc=DummyCaster_new_DummyCaster() DummyCaster_DummyCaster_delay(dc,Y6) "
+            "DummyCaster_DummyCaster_castTarget(dc,Z6,lvl,V6,c) end "
+            "lr.OnCastListener_fireEx=orbHandler "
+            "function iJ() local c=nil local trigger=nil e7=1093677640 Z6=1667649356 Y6=15. "
+            "trigger=e7 c=lr:create2() EventListener_addSpellInternal(nil,trigger,c) end "
+            "function kJ() V6=852119 end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(
+            source,
+            {1093677639, 1093677640, 1093679193, 1667649356, 1697656888},
+        )
+        mechanics = {row["trigger_ability_id"]: row for row in indexed["castle_item_mechanics"]["item_spell_mechanics"]}
+
+        stone = mechanics[1093679193]
+        self.assertEqual(stone["mechanic_kind"], "point-triggered-dummy-effect")
+        self.assertEqual(stone["effect_ability_ids"], [1093677639])
+        self.assertEqual(stone["parameters"]["carrier_unit_rawcode_integer"], 1697656888)
+        self.assertEqual(stone["parameters"]["order_id"], 852269)
+        self.assertEqual(stone["parameters"]["dummy_lifetime_seconds"], "1.")
+
+        orb = mechanics[1093677640]
+        self.assertEqual(orb["mechanic_kind"], "target-triggered-scaling-dummy-effect")
+        self.assertEqual(orb["effect_ability_ids"], [1667649356])
+        self.assertEqual(orb["parameters"]["order_id"], 852119)
+        self.assertEqual(orb["parameters"]["effect_level_formula"], "1 + floor(round_minutes / 5)")
+        self.assertEqual(orb["parameters"]["dummy_recycle_delay_seconds"], "15")
+
     def test_recovers_building_spell_registration_from_closure_dispatch(self) -> None:
         source = (
             "function handler(building) return building end "

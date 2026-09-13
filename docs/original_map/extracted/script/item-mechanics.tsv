@@ -1,0 +1,6 @@
+item_rawcode	item_rawcode_integer	item_name	mechanic_kind	linked_ability_rawcodes	parameters_json	source_functions	evidence_kind
+I000	1227894832	Gold	gold-pickup-scaling		"{""gold_amount_formula"":""floor(((qGb[player_id] + 4) * 0.25) * (8 + pIb))"",""gold_item_consumed"":true}"	ZH	script-direct
+I004	1227894836	Cheese	legendary-slot-or-refund-on-pickup		"{""active_when_no_cheese_mode"":false,""food_cap_delta_when_active"":1,""legendary_mode_enabled_flag"":""GGb"",""no_cheese_mode_flag"":""HGb"",""refund_gold_when_inactive"":1750}"	ZH,YH	script-direct
+I001	1227894833	Blast Staff	four-copy-inventory-upgrade		"{""add_item_rawcode"":""I002"",""inventory_slot_max_index"":5,""remove_item_rawcode"":""I001"",""required_count"":4}"	ZH,VH,WH	script-direct
+I008	1227894840	Double Damage	temporary-double-damage-aura-carrier	A06D	"{""aura_ability_rawcode"":""A06D"",""carrier_unit_rawcode"":""e008"",""lifetime_seconds"":""29""}"	ZH	script-direct
+I007	1227894839	Quad Damage	temporary-quad-damage-aura-carrier	A06C	"{""aura_ability_rawcode"":""A06C"",""carrier_unit_rawcode"":""e008"",""lifetime_seconds"":""29""}"	ZH	script-direct

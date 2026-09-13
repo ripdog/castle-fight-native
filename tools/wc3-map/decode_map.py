@@ -770,6 +770,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     protected_filter_bindings = analysis["protected_filter_bindings"]
+    castle_item_mechanics = analysis["castle_item_mechanics"]
     building_spell_registrations = analysis["building_spell_registrations"]
     unit_spell_registrations = analysis["unit_spell_registrations"]
     unit_spell_mechanics = analysis["unit_spell_mechanics"]
@@ -976,6 +977,127 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             writer.writerow([
                 row["symbol"], row["initializer_function"], row["resolved_function"], row["predicate"],
                 row["resolution_status"], row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "castle-shop-items.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "slot", "item_rawcode", "item_rawcode_integer", "item_name", "script_item_value",
+            "source_function", "byte_offset",
+        ])
+        for row in castle_item_mechanics["shop_slots"]:
+            item_id = int(row["item_id"])
+            item_rawcode, categories, _tables, item_name, _defs = rawcode_metadata(item_id)
+            if categories != "items":
+                raise ValueError(f"castle shop slot resolves to non-item rawcode: {item_rawcode}")
+            writer.writerow([
+                row["slot"], item_rawcode, item_id, item_name,
+                castle_item_mechanics["item_values"].get(item_id, ""),
+                row["function"], row["byte_offset"],
+            ])
+
+    pickup = castle_item_mechanics["pickup"]
+    pickup_rows = [
+        {
+            "item_id": pickup["gold_item_rawcode_integer"],
+            "mechanic_kind": "gold-pickup-scaling",
+            "linked_ability_ids": [],
+            "parameters": {
+                "gold_amount_formula": pickup["gold_amount_formula"],
+                "gold_item_consumed": pickup["gold_item_consumed"],
+            },
+            "source_functions": ["ZH"],
+        },
+        {
+            "item_id": pickup["cheese_item_rawcode_integer"],
+            "mechanic_kind": "legendary-slot-or-refund-on-pickup",
+            "linked_ability_ids": [],
+            "parameters": {
+                "active_when_no_cheese_mode": False,
+                "no_cheese_mode_flag": pickup["cheese_no_cheese_mode_flag"],
+                "legendary_mode_enabled_flag": pickup["cheese_legendary_mode_enabled_flag"],
+                "food_cap_delta_when_active": pickup["cheese_food_cap_delta"],
+                "refund_gold_when_inactive": pickup["cheese_refund_amount"],
+            },
+            "source_functions": ["ZH", "YH"],
+        },
+        {
+            "item_id": pickup["blast_staff_rawcode_integer"],
+            "mechanic_kind": "four-copy-inventory-upgrade",
+            "linked_ability_ids": [],
+            "parameters": {
+                "required_count": pickup["blast_staff_recipe_required_count"],
+                "remove_item_rawcode": rawcode_text(int(pickup["blast_staff_recipe_removes_rawcode"])),
+                "add_item_rawcode": rawcode_text(int(pickup["blast_staff_recipe_adds_rawcode"])),
+                "inventory_slot_max_index": pickup["item_inventory_slot_max_index"],
+            },
+            "source_functions": ["ZH", "VH", "WH"],
+        },
+        {
+            "item_id": 1227894840,
+            "mechanic_kind": "temporary-double-damage-aura-carrier",
+            "linked_ability_ids": [pickup["double_damage_aura_ability_rawcode_integer"]],
+            "parameters": {
+                "carrier_unit_rawcode": rawcode_text(int(pickup["damage_aura_carrier_rawcode_integer"])),
+                "aura_ability_rawcode": rawcode_text(int(pickup["double_damage_aura_ability_rawcode_integer"])),
+                "lifetime_seconds": pickup["damage_aura_lifetime_seconds"],
+            },
+            "source_functions": ["ZH"],
+        },
+        {
+            "item_id": 1227894839,
+            "mechanic_kind": "temporary-quad-damage-aura-carrier",
+            "linked_ability_ids": [pickup["quad_damage_aura_ability_rawcode_integer"]],
+            "parameters": {
+                "carrier_unit_rawcode": rawcode_text(int(pickup["damage_aura_carrier_rawcode_integer"])),
+                "aura_ability_rawcode": rawcode_text(int(pickup["quad_damage_aura_ability_rawcode_integer"])),
+                "lifetime_seconds": pickup["damage_aura_lifetime_seconds"],
+            },
+            "source_functions": ["ZH"],
+        },
+    ]
+    with (script_dir / "item-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "item_rawcode", "item_rawcode_integer", "item_name", "mechanic_kind",
+            "linked_ability_rawcodes", "parameters_json", "source_functions", "evidence_kind",
+        ])
+        for row in pickup_rows:
+            item_id = int(row["item_id"])
+            item_rawcode, categories, _tables, item_name, _defs = rawcode_metadata(item_id)
+            if categories != "items":
+                raise ValueError(f"item mechanic resolves to non-item rawcode: {item_rawcode}")
+            writer.writerow([
+                item_rawcode, item_id, item_name, row["mechanic_kind"],
+                ",".join(rawcode_text(int(value)) for value in row["linked_ability_ids"]),
+                script_json(row["parameters"]), ",".join(row["source_functions"]), "script-direct",
+            ])
+
+    with (script_dir / "item-spell-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "trigger_ability_rawcode", "trigger_ability_rawcode_integer", "trigger_ability_name",
+            "mechanic_kind", "effect_ability_rawcodes", "parameters_json", "source_functions",
+            "evidence_kind", "byte_offset",
+        ])
+        for row in castle_item_mechanics["item_spell_mechanics"]:
+            trigger_id = int(row["trigger_ability_id"])
+            trigger_rawcode, categories, _tables, trigger_name, _defs = rawcode_metadata(trigger_id)
+            if categories != "abilities":
+                raise ValueError(f"item spell trigger resolves to non-ability rawcode: {trigger_rawcode}")
+            effect_rawcodes: list[str] = []
+            for effect_id in row["effect_ability_ids"]:
+                effect_rawcode, effect_categories, _etables, _ename, _edefs = rawcode_metadata(int(effect_id))
+                if effect_categories != "abilities":
+                    raise ValueError(f"item spell effect resolves to non-ability rawcode: {effect_rawcode}")
+                effect_rawcodes.append(effect_rawcode)
+            parameters = dict(row["parameters"])
+            carrier_id = parameters.pop("carrier_unit_rawcode_integer", None)
+            if carrier_id is not None:
+                parameters["carrier_unit_rawcode"] = rawcode_text(int(carrier_id))
+            writer.writerow([
+                trigger_rawcode, trigger_id, trigger_name, row["mechanic_kind"], ",".join(effect_rawcodes),
+                script_json(parameters), ",".join(row["source_functions"]), "script-direct", row["byte_offset"],
             ])
 
     with (script_dir / "corpse-building-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:

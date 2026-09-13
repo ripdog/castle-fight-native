@@ -1,0 +1,11 @@
+slot	item_rawcode	item_rawcode_integer	item_name	script_item_value	source_function	byte_offset
+0	I008	1227894840	Double Damage	600	castleItemIdForSlot	3675691
+1	I007	1227894839	Quad Damage	1400	castleItemIdForSlot	3675728
+2	I006	1227894838	Orb of Lightning		castleItemIdForSlot	3675765
+3	I003	1227894835	Drum'n'Bass Bass Drums	650	castleItemIdForSlot	3675802
+4	I004	1227894836	Cheese	1750	castleItemIdForSlot	3675839
+5	I005	1227894837	Scroll of Stone	150	castleItemIdForSlot	3675876
+6	I00A	1227894849	Drum'n'Bass Bassline Generator	600	castleItemIdForSlot	3675913
+7	I001	1227894833	Blast Staff	150	castleItemIdForSlot	3675950
+8	I009	1227894841	Rune of Repair	400	castleItemIdForSlot	3675987
+9	I00F	1227894854	Scroll of Speed		castleItemIdForSlot	3676024

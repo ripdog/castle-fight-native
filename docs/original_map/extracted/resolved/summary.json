@@ -32,9 +32,9 @@
   "unresolved_placed_object_types": [],
   "missing_placed_pathing_textures": [],
   "unresolved_base_objects": [],
-  "unknown_map_field_ids": {
-    "wurs": 1309
-  },
+  "unknown_map_field_ids": {},
+  "wurst_generated_object_marker_rows": 1309,
+  "wurst_generated_object_marker_value": 42,
   "protected_ability_runtime_fields": 452,
   "protected_ability_runtime_field_comparisons": {
     "static-differs": 452
@@ -169,6 +169,11 @@
   },
   "protected_filter_binding_rows": 22,
   "protected_filter_binding_resolved_rows": 6,
+  "resolved_item_rows": 16,
+  "castle_shop_item_rows": 10,
+  "scripted_item_pickup_mechanic_rows": 5,
+  "scripted_item_spell_mechanic_rows": 3,
+  "resolved_item_mechanic_rows": 8,
   "element_building_bucket_rows": 12,
   "scripted_building_spell_rows": 15,
   "scripted_building_spell_mana_timed_rows": 15,
@@ -203,7 +208,7 @@
     "structure_decay": "0.1"
   },
   "notes": [
-    "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
+    "object-fields.tsv preserves base, every map candidate, last-write and recovered values; the non-WC3 field wurs is classified as Wurst compiler provenance (GENERATED_BY_WURST=42), not gameplay data",
     "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
     "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
     "base-source-fields.tsv exposes the W3I-selected custom_v1/base SLK values before map overrides, including computed columns",
@@ -215,6 +220,8 @@
     "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
     "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
     "protected-filter-bindings.tsv resolves the W3P Filter wrapper SX to generated predicate vL using static Wurst emission order; its predicate is alive combat sapper and enemy of the subsystem owner, so Master of Elements and Snowveil no longer depend on an opaque target-filter symbol",
+    "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
+    "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
     "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
     "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
     "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",

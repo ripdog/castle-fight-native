@@ -49,6 +49,8 @@ SLK_ALIASES = {
 }
 
 PATH_CELL_WORLD_UNITS = 32
+WURST_GENERATED_FIELD_ID = "wurs"
+WURST_GENERATED_MARKER = 42
 
 
 @dataclass(frozen=True)
@@ -695,6 +697,16 @@ def main() -> None:
             continue
         objects_data = repaired_object_data(object_path)
         metadata = load_metadata(category, source_root, tables)
+        # Wurst's compile-time object API adds this non-WC3 metadata field to
+        # every newly created object definition. Its compiler source defines
+        # GENERATED_BY_WURST = 42 and later uses the marker to identify/remove
+        # generated objects; it is provenance, not a gameplay/editor field.
+        metadata[WURST_GENERATED_FIELD_ID] = {
+            "field": "GENERATED_BY_WURST",
+            "displayName": "Wurst generated-object marker",
+            "type": "int",
+            "slk": "WurstCompiler",
+        }
 
         for table, objects in objects_data.items():
             for object_key, modifications in objects.items():
@@ -802,6 +814,15 @@ def main() -> None:
                     ),
                 })
 
+    wurst_marker_rows = [row for row in full_rows if row["field_id"] == WURST_GENERATED_FIELD_ID]
+    invalid_wurst_markers = [
+        (row["category"], row["rawcode"], row["recovered_value"])
+        for row in wurst_marker_rows
+        if row["recovered_value"] != WURST_GENERATED_MARKER
+    ]
+    if invalid_wurst_markers:
+        raise ValueError(f"unexpected Wurst generated-object marker values: {invalid_wurst_markers[:10]}")
+
     write_tsv(
         output / "object-fields.tsv",
         [
@@ -855,6 +876,35 @@ def main() -> None:
             "category", "table", "rawcode", "base_rawcode", "name", "modification_count", "canonical_modification_count",
             "duplicate_modification_count", "protection_conflict_count",
         ]] for record in object_records),
+    )
+
+    # Compact normalized item view. Keep all authored map items, including
+    # helper/result items that are not directly sold by the Castle shop.
+    item_fields = {
+        "name": "unam", "description": "ides", "tip": "utip", "ubertip": "utub",
+        "gold_cost": "igol", "lumber_cost": "ilum", "class": "icla", "level": "ilev",
+        "old_level": "ilvo", "uses": "iuse", "stack_max": "ista", "stock_max": "isto",
+        "stock_initial": "isit", "stock_start": "isst", "stock_regen": "istr", "abilities": "iabi",
+        "cooldown_group": "icid", "usable": "iusa", "perishable": "iper", "powerup": "ipow",
+        "droppable": "idro", "drop_on_death": "idrp", "pawnable": "ipaw", "sellable": "isel",
+    }
+    item_records = [record for record in object_records if record["category"] == "items"]
+    item_rows: list[list[Any]] = []
+    for record in item_records:
+        rawcode = str(record["rawcode"])
+        values = {
+            name: value_as_text(field_lookup(rows_by_object, "items", rawcode, field_id))
+            for name, field_id in item_fields.items()
+        }
+        item_rows.append([
+            record["table"], rawcode, record["base_rawcode"],
+            *[values[name] for name in item_fields],
+            record["protection_conflict_count"],
+        ])
+    write_tsv(
+        output / "items.tsv",
+        ["table", "rawcode", "base_rawcode", *item_fields.keys(), "protection_conflict_fields"],
+        item_rows,
     )
 
     # Compact normalized unit view. The raw resolved table above remains the
@@ -2431,6 +2481,138 @@ def main() -> None:
         ],
     )
 
+    def ability_object(rawcode: str) -> dict[str, Any]:
+        levels: list[dict[str, Any]] = []
+        for definition in sorted(ability_levels.get(rawcode, []), key=lambda value: int(value["level"])):
+            level = int(definition["level"])
+            levels.append({
+                "level": level,
+                "name": definition["name"],
+                "mana_cost": protected_ability_values.get((rawcode, level, "mana_cost"), definition["mana_cost"]),
+                "cooldown": protected_ability_values.get((rawcode, level, "cooldown"), definition["cooldown"]),
+                "static_mana_cost": definition["mana_cost"],
+                "static_cooldown": definition["cooldown"],
+                "range": definition["range"],
+                "area": definition["area"],
+                "duration_normal": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "adur", level, 0)),
+                "duration_hero": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "ahdu", level, 0)),
+                "targets": definition["targets"],
+                "buffs": definition["buffs"],
+                "data_fields_labeled": json.loads(definition["data_fields_labeled_json"] or "{}"),
+            })
+        return {"rawcode": rawcode, "levels": levels}
+
+    normalized_items: dict[str, dict[str, str]] = {}
+    with (output / "items.tsv").open(encoding="utf-8", newline="") as handle:
+        normalized_items = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+
+    def compact_item_object(rawcode: str) -> dict[str, Any]:
+        definition = normalized_items.get(rawcode, {})
+        abilities = rawcode_list(definition.get("abilities", ""))
+        return {
+            "rawcode": rawcode,
+            "name": definition.get("name", ""),
+            "gold_cost": definition.get("gold_cost", ""),
+            "lumber_cost": definition.get("lumber_cost", ""),
+            "abilities": abilities,
+            "ability_objects": [ability_object(ability) for ability in abilities],
+            "tip": definition.get("tip", ""),
+            "ubertip": definition.get("ubertip", ""),
+        }
+
+    castle_shop_path = map_root / "script" / "castle-shop-items.tsv"
+    castle_shop_rows: list[dict[str, str]] = []
+    if castle_shop_path.exists():
+        with castle_shop_path.open(encoding="utf-8", newline="") as handle:
+            castle_shop_rows = list(csv.DictReader(handle, delimiter="\t"))
+    resolved_shop_rows: list[list[Any]] = []
+    shop_item_by_trigger_ability: dict[str, dict[str, str]] = {}
+    for row in castle_shop_rows:
+        item_rawcode = row["item_rawcode"]
+        item = normalized_items.get(item_rawcode, {})
+        abilities = rawcode_list(item.get("abilities", ""))
+        for ability in abilities:
+            shop_item_by_trigger_ability.setdefault(ability, row)
+        resolved_shop_rows.append([
+            row["slot"], item_rawcode, row["item_rawcode_integer"], item.get("name", row["item_name"]), row["script_item_value"],
+            item.get("gold_cost", ""), item.get("lumber_cost", ""), item.get("class", ""), item.get("uses", ""),
+            item.get("stack_max", ""), item.get("stock_max", ""), item.get("stock_initial", ""), item.get("stock_start", ""),
+            item.get("stock_regen", ""), item.get("cooldown_group", ""), item.get("usable", ""), item.get("perishable", ""),
+            item.get("powerup", ""), item.get("abilities", ""),
+            json.dumps([ability_object(ability) for ability in abilities], separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+            item.get("description", ""), item.get("tip", ""), item.get("ubertip", ""), row["source_function"], row["byte_offset"],
+        ])
+    write_tsv(
+        output / "castle-shop-items.tsv",
+        [
+            "slot", "item_rawcode", "item_rawcode_integer", "item_name", "script_item_value",
+            "gold_cost", "lumber_cost", "class", "uses", "stack_max", "stock_max", "stock_initial", "stock_start", "stock_regen",
+            "cooldown_group", "usable", "perishable", "powerup", "ability_rawcodes", "ability_objects_json",
+            "description", "tip", "ubertip", "source_function", "byte_offset",
+        ],
+        resolved_shop_rows,
+    )
+
+    item_mechanics_path = map_root / "script" / "item-mechanics.tsv"
+    item_mechanic_rows: list[dict[str, str]] = []
+    if item_mechanics_path.exists():
+        with item_mechanics_path.open(encoding="utf-8", newline="") as handle:
+            item_mechanic_rows = list(csv.DictReader(handle, delimiter="\t"))
+    item_spell_path = map_root / "script" / "item-spell-mechanics.tsv"
+    item_spell_rows: list[dict[str, str]] = []
+    if item_spell_path.exists():
+        with item_spell_path.open(encoding="utf-8", newline="") as handle:
+            item_spell_rows = list(csv.DictReader(handle, delimiter="\t"))
+
+    resolved_item_mechanics: list[list[Any]] = []
+
+    def related_items(parameters: dict[str, Any]) -> tuple[str, str]:
+        rawcodes = list(dict.fromkeys(
+            str(value)
+            for key, value in parameters.items()
+            if key.endswith("item_rawcode") and isinstance(value, str) and value
+        ))
+        return (
+            ",".join(rawcodes),
+            json.dumps([compact_item_object(rawcode) for rawcode in rawcodes], separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+        )
+
+    for row in item_mechanic_rows:
+        effects = rawcode_list(row["linked_ability_rawcodes"])
+        parameters = json.loads(row["parameters_json"] or "{}")
+        related_rawcodes, related_json = related_items(parameters)
+        resolved_item_mechanics.append([
+            row["item_rawcode"], row["item_rawcode_integer"], row["item_name"], row["mechanic_kind"],
+            "", row["linked_ability_rawcodes"], "[]",
+            json.dumps([ability_object(rawcode) for rawcode in effects], separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+            related_rawcodes, related_json, row["parameters_json"], row["source_functions"], row["evidence_kind"],
+        ])
+
+    for row in item_spell_rows:
+        shop_item = shop_item_by_trigger_ability.get(row["trigger_ability_rawcode"])
+        if shop_item is None:
+            continue
+        effects = rawcode_list(row["effect_ability_rawcodes"])
+        parameters = json.loads(row["parameters_json"] or "{}")
+        related_rawcodes, related_json = related_items(parameters)
+        resolved_item_mechanics.append([
+            shop_item["item_rawcode"], shop_item["item_rawcode_integer"], shop_item["item_name"], row["mechanic_kind"],
+            row["trigger_ability_rawcode"], row["effect_ability_rawcodes"],
+            json.dumps([ability_object(row["trigger_ability_rawcode"])], separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+            json.dumps([ability_object(rawcode) for rawcode in effects], separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+            related_rawcodes, related_json, row["parameters_json"], row["source_functions"], row["evidence_kind"],
+        ])
+
+    write_tsv(
+        output / "item-mechanics.tsv",
+        [
+            "item_rawcode", "item_rawcode_integer", "item_name", "mechanic_kind",
+            "trigger_ability_rawcodes", "effect_ability_rawcodes", "trigger_ability_objects_json", "effect_ability_objects_json",
+            "related_item_rawcodes", "related_item_objects_json", "parameters_json", "source_functions", "evidence_kind",
+        ],
+        resolved_item_mechanics,
+    )
+
     # Join the map's generated UnitObjectMeta table to its complete race
     # partition and authored upgrade graph. This is the preferred native import
     # view for Castle Fight building/production definitions: spawn time and
@@ -2956,6 +3138,8 @@ def main() -> None:
         "missing_placed_pathing_textures": sorted(missing_placed_pathing),
         "unresolved_base_objects": unresolved_base_objects,
         "unknown_map_field_ids": dict(sorted(unknown_map_fields.items())),
+        "wurst_generated_object_marker_rows": len(wurst_marker_rows),
+        "wurst_generated_object_marker_value": WURST_GENERATED_MARKER,
         "protected_ability_runtime_fields": len(protected_rows),
         "protected_ability_runtime_field_comparisons": dict(sorted(protected_comparisons.items())),
         "protected_ability_jass_add_fields": len(protected_jass_rows),
@@ -2990,6 +3174,11 @@ def main() -> None:
         "scripted_unit_spell_semantic_kind_counts": dict(sorted(unit_spell_semantic_kind_counts.items())),
         "protected_filter_binding_rows": len(protected_filter_rows),
         "protected_filter_binding_resolved_rows": len(protected_filters_by_symbol),
+        "resolved_item_rows": len(item_rows),
+        "castle_shop_item_rows": len(castle_shop_rows),
+        "scripted_item_pickup_mechanic_rows": len(item_mechanic_rows),
+        "scripted_item_spell_mechanic_rows": len(item_spell_rows),
+        "resolved_item_mechanic_rows": len(resolved_item_mechanics),
         "element_building_bucket_rows": len(element_bucket_rows),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
@@ -3016,7 +3205,7 @@ def main() -> None:
         },
         "death_decay_constants": dict(sorted(death_constants.items())),
         "notes": [
-            "object-fields.tsv preserves base, every map candidate, last-write and recovered values",
+            "object-fields.tsv preserves base, every map candidate, last-write and recovered values; the non-WC3 field wurs is classified as Wurst compiler provenance (GENERATED_BY_WURST=42), not gameplay data",
             "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
             "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
             f"base-source-fields.tsv exposes the W3I-selected {data_selection.overlay_dir}/base SLK values before map overrides, including computed columns",
@@ -3028,6 +3217,8 @@ def main() -> None:
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
             "protected-filter-bindings.tsv resolves the W3P Filter wrapper SX to generated predicate vL using static Wurst emission order; its predicate is alive combat sapper and enemy of the subsystem owner, so Master of Elements and Snowveil no longer depend on an opaque target-filter symbol",
+            "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
+            "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
             "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
             "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
