@@ -5,6 +5,7 @@ members = [
     "crates/sim-bench",
     "crates/debug-viewer",
     "crates/client",
+    "crates/wc3-assets",
 ]
 
 [workspace.package]
