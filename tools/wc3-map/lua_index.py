@@ -5697,6 +5697,7 @@ def _extract_runtime_system_mechanics(
         "createVision",
         "YF", "isCastleProtected", "completeRoundStart", "yd",
         "DamageListener_addListener_CastleProtection_onEvent_addListener_CastleProtection",
+        "nK", "DamageListener_addListener_RaceCorrupted_onEvent_addListener_RaceCorrupted",
         "TI", "startObeliskOfLight", "stopObeliskOfLight",
         "CallbackSingle_doAfter_ObeliskOfLight_call_doAfter_ObeliskOfLight",
         "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight",
@@ -6806,6 +6807,58 @@ def _extract_runtime_system_mechanics(
             castle_protect_init_start, castle_protect_pred_start, round_start_start,
             round_tick_start, castle_protect_damage_start,
         ),
+    })
+
+    # Eye of Corruption. Corrupted race setup installs one global listener and
+    # records B00Q plus a 1.12 multiplier. Any positive non-attack damage event
+    # whose target currently has that buff rewrites the current damage instance
+    # to 112% of its prior value. The native A02C aura supplies the separate -6
+    # armor component; this row preserves the script-only spell vulnerability.
+    corrupted_setup_start, corrupted_setup_source, corrupted_setup_tokens = source("nK")
+    corrupted_damage_start, corrupted_damage_source, corrupted_damage_tokens = source(
+        "DamageListener_addListener_RaceCorrupted_onEvent_addListener_RaceCorrupted"
+    )
+    if b"B1=1110454353 A1=1.12" not in corrupted_setup_source:
+        raise ValueError("Eye of Corruption buff/damage multiplier constants changed")
+    if "DamageEvent_addListener" not in corrupted_setup_tokens:
+        raise ValueError("Eye of Corruption damage-listener registration changed")
+    if not {
+        "DamageEvent_getTarget", "DamageEvent_getAmount", "DamageEvent_getType",
+        "unit_getAbilityLevel", "DamageInstance_DamageInstance_setAmount",
+    }.issubset(corrupted_damage_tokens):
+        raise ValueError("Eye of Corruption damage listener calls changed")
+    for fragment in (
+        b"DamageEvent_getAmount()>0.",
+        b"not(DamageEvent_getType()==0)",
+        b"unit_getAbilityLevel(pmn,B1)>0",
+        b"qmn=(DamageEvent_getAmount()*A1)",
+        b"DamageInstance_DamageInstance_setAmount(khb,qmn)",
+    ):
+        if fragment not in corrupted_damage_source:
+            raise ValueError("Eye of Corruption damage listener semantics changed")
+    rows.append({
+        "system_id": "corrupted-eye-of-corruption-spell-vulnerability",
+        "mechanic_kind": "buff-marker-non-attack-current-damage-multiplier",
+        "trigger": "positive-non-attack-damage-event-target-with-B00Q",
+        "parameters": {
+            "source_building_unit_id": 1747989588,
+            "aura_ability_id": 1093677635,
+            "target_buff_id": 1110454353,
+            "positive_damage_only": True,
+            "excluded_damage_event_type": 0,
+            "excluded_damage_event_semantics": "attack-damage",
+            "damage_multiplier": 1.12,
+            "extra_damage_fraction": 0.12,
+            "modifies_current_damage_instance": True,
+            "requires_target_buff_presence": True,
+            "multiple_source_buildings_do_not_stack_script_multiplier": True,
+        },
+        "related_rawcode_ids": [1747989588, 1093677635, 1110454353],
+        "source_functions": [
+            "nK", "DamageListener_addListener_RaceCorrupted_onEvent_addListener_RaceCorrupted",
+        ],
+        "evidence_kind": "exact-race-setup-listener-registration-buff-gate-and-current-damage-rewrite",
+        "byte_offset": min(corrupted_setup_start, corrupted_damage_start),
     })
 
     # Obelisk of Light. Construction creates one persistent invisible spell

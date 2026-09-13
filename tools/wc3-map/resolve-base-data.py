@@ -2509,6 +2509,43 @@ def main() -> None:
                     if numeric(parameters["protection_duration_seconds"]) != 15:
                         raise ValueError(f"Castle protection duration changed: {parameters}")
                     parameters["round_time_formula"] = "VGb * 60 + UGb"
+                elif system_id == "corrupted-eye-of-corruption-spell-vulnerability":
+                    eye = static_units.get("h04T")
+                    if eye is None:
+                        raise ValueError("Eye of Corruption h04T is missing")
+                    aura = ability_level_one("A02C")
+                    aura_fields = json.loads(aura["data_fields_labeled_json"])
+                    aura_buffs = rawcode_list(aura["buffs"])
+                    if "A02C" not in rawcode_list(eye["abilities"]):
+                        raise ValueError(f"Eye of Corruption lost A02C: {eye['abilities']}")
+                    if aura_buffs != ["B00Q"]:
+                        raise ValueError(f"Eye of Corruption A02C buff changed: {aura_buffs}")
+                    if numeric(aura_fields.get("Armor Bonus")) != -6 or numeric(aura["area"]) != 99999:
+                        raise ValueError(f"Eye of Corruption A02C aura fields changed: {aura}")
+                    if numeric(parameters["damage_multiplier"]) != 1.12:
+                        raise ValueError(f"Eye of Corruption runtime multiplier changed: {parameters}")
+                    tooltip = eye["ubertip"]
+                    if (
+                        "|cffffff006|r less armor" not in tooltip
+                        or "|cffffff0012|r% more spell damage" not in tooltip
+                    ):
+                        raise ValueError(f"Eye of Corruption tooltip semantics changed: {tooltip}")
+                    parameters["source_building_rawcode"] = "h04T"
+                    parameters["source_building_name"] = eye["name"]
+                    parameters["source_building_tooltip"] = tooltip
+                    parameters["aura_ability_rawcode"] = "A02C"
+                    parameters["aura_ability_name"] = aura["name"]
+                    parameters["aura_ability_base_rawcode"] = aura["base_rawcode"]
+                    parameters["aura_area"] = numeric(aura["area"])
+                    parameters["aura_targets"] = aura["targets"]
+                    parameters["aura_buff_rawcodes"] = aura_buffs
+                    parameters["aura_object_data"] = aura_fields
+                    parameters["aura_armor_bonus"] = numeric(aura_fields.get("Armor Bonus"))
+                    parameters["target_buff_rawcode"] = "B00Q"
+                    parameters["tooltip_spell_damage_taken_bonus_percent"] = 12
+                    parameters["tooltip_multiple_buildings_no_additional_benefit"] = (
+                        "Multiples of this building offer no additional benefit." in tooltip
+                    )
                 elif system_id == "obelisk-of-light-cleansing-light":
                     obelisk = static_units.get("h005")
                     if obelisk is None:
@@ -4395,7 +4432,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
-            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
+            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

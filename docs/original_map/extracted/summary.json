@@ -141,10 +141,11 @@
     "building_improvement_spawn_mechanic_kinds": {
       "unreachable-production-spawn-branch-keyed-by-A0EL": 1
     },
-    "runtime_system_mechanics": 18,
+    "runtime_system_mechanics": 19,
     "runtime_system_mechanic_kinds": {
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
       "body-replacement-plus-independent-random-trait-groups": 1,
+      "buff-marker-non-attack-current-damage-multiplier": 1,
       "builder-point-cast-team-coordinated-area-execution": 1,
       "builder-point-teleport-clamped-to-own-castle": 1,
       "building-random-enemy-base-attack-ground-controller": 1,

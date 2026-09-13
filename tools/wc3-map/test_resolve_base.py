@@ -512,9 +512,10 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 18)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 19)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
+            "buff-marker-non-attack-current-damage-multiplier": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
             "builder-point-teleport-clamped-to-own-castle": 1,
             "builder-point-cast-team-coordinated-area-execution": 1,
@@ -535,7 +536,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 18)
+        self.assertEqual(len(rows), 19)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -726,6 +727,19 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(castle_protection["damage_rewrite"], 0)
         self.assertTrue(castle_protection["positive_damage_only"])
         self.assertEqual(castle_protection["round_time_formula"], "VGb * 60 + UGb")
+
+        corruption = json.loads(rows["corrupted-eye-of-corruption-spell-vulnerability"]["parameters_json"])
+        self.assertEqual(corruption["source_building_rawcode"], "h04T")
+        self.assertEqual(corruption["aura_ability_rawcode"], "A02C")
+        self.assertEqual(corruption["target_buff_rawcode"], "B00Q")
+        self.assertEqual(corruption["aura_armor_bonus"], -6)
+        self.assertEqual(corruption["aura_area"], 99999)
+        self.assertEqual(corruption["damage_multiplier"], 1.12)
+        self.assertEqual(corruption["extra_damage_fraction"], 0.12)
+        self.assertTrue(corruption["positive_damage_only"])
+        self.assertEqual(corruption["excluded_damage_event_type"], 0)
+        self.assertTrue(corruption["multiple_source_buildings_do_not_stack_script_multiplier"])
+        self.assertTrue(corruption["tooltip_multiple_buildings_no_additional_benefit"])
 
         obelisk = json.loads(rows["obelisk-of-light-cleansing-light"]["parameters_json"])
         self.assertEqual(obelisk["building_rawcode"], "h005")
