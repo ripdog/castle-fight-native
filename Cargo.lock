@@ -1923,6 +1923,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "castle-fight-sim",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

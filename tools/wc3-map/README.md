@@ -21,6 +21,18 @@ The pipeline uses three ignored working locations:
 
 None of these directories is required in git. `.local-tools/` and `.map-work/` are reproducible from the checked-in scripts/map. `.wc3-base/` must be repopulated from a Warcraft III install before inherited data can be regenerated.
 
+## Terrain presentation assets
+
+The committed `terrain.json` also provides the exact ground/cliff palette rawcodes used by Castle Fight. To copy only those terrain atlases from a local Warcraft III installation and convert them for the native client, run:
+
+```sh
+WC3_INSTALL=/mnt/gamessd_linux/Games/Warcraft3 python tools/wc3-map/extract_terrain_textures.py
+```
+
+The terrain asset extractor resolves each palette rawcode through Warcraft's `TerrainArt/Terrain.slk` or `TerrainArt/CliffTypes.slk`, then copies only the referenced classic terrain textures. It does not scan unit/model directories and is intentionally separate from the general unit/model asset extraction work. Current Warcraft installations expose the classic terrain atlases as DDS; the tool also probes BLP/TGA/PNG and uses ImageMagick or ffmpeg for conversion without adding a second in-repository BLP decoder.
+
+Generated files live under ignored `assets/wc3/terrain/`: PNG ground/cliff atlases plus `manifest.json` recording the rawcode-to-CASC provenance and atlas shape. No Blizzard texture is committed. When this generated directory is present, the 3D client uses the ground atlases with Warcraft's tilepoint blend masks and variation selection; without it, the existing procedural solid-color terrain remains the fallback. Cliff atlases are extracted and recorded now, while cliff-face mesh/texturing remains separate from the smooth authoritative height surface used by the current client.
+
 ## Source-built third-party tools
 
 Only open-source tooling is fetched, pinned, license-checked, and built locally.

@@ -16,7 +16,7 @@ use castle_fight_sim::{
 use crate::{
     SimulationPlayback,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
-    terrain::TerrainSurface,
+    terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
 };
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
@@ -382,12 +382,21 @@ impl Plugin for CastlePresentationPlugin {
 
 fn setup_scene(
     mut commands: Commands,
-    metrics: Res<WorldMetrics>,
-    terrain: Res<TerrainSurface>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    world: (
+        Res<WorldMetrics>,
+        Res<TerrainSurface>,
+        Res<TerrainTextureLayout>,
+        Res<TerrainTextureSet>,
+    ),
+    assets: (
+        Res<AssetServer>,
+        ResMut<Assets<Mesh>>,
+        ResMut<Assets<StandardMaterial>>,
+    ),
     mut gizmo_configs: ResMut<GizmoConfigStore>,
 ) {
+    let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
+    let (asset_server, mut meshes, mut materials) = assets;
     let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
     health_bar_config.line.width = 6.0;
     health_bar_config.line.perspective = false;
@@ -564,6 +573,32 @@ fn setup_scene(
         MeshMaterial3d(ground_material),
         Transform::IDENTITY,
     ));
+
+    if terrain_textures.is_available() {
+        match terrain.textured_meshes(&terrain_texture_layout, &terrain_textures) {
+            Ok(texture_meshes) => {
+                for texture_mesh in texture_meshes {
+                    let atlas = terrain_textures
+                        .atlas(texture_mesh.palette_index)
+                        .expect("validated terrain texture mesh references a known atlas");
+                    let material = materials.add(StandardMaterial {
+                        base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
+                        alpha_mode: AlphaMode::Blend,
+                        perceptual_roughness: 0.95,
+                        ..default()
+                    });
+                    commands.spawn((
+                        Mesh3d(meshes.add(texture_mesh.mesh)),
+                        MeshMaterial3d(material),
+                        Transform::IDENTITY,
+                    ));
+                }
+            }
+            Err(error) => {
+                eprintln!("warning: failed to build WC3 terrain texture meshes: {error}");
+            }
+        }
+    }
 
     let blocker_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.085, 0.09, 0.095),

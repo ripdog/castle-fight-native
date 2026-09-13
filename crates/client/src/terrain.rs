@@ -1,11 +1,23 @@
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
+
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
 use castle_fight_sim::{SUBUNITS_PER_WORLD_UNIT, TerrainElevationMap, TerrainElevationSample};
+use serde::Deserialize;
 
 const HEIGHT_QUARTERS_PER_WORLD_UNIT: f32 = 4.0;
+const TERRAIN_TEXTURE_MANIFEST: &str = "wc3/terrain/manifest.json";
+const TERRAIN_TEXTURE_ASSET_PREFIX: &str = "wc3/terrain";
+const TERRAIN_TEXTURE_BASE_OFFSET: f32 = 0.04;
+const TERRAIN_TEXTURE_PRIORITY_OFFSET: f32 = 0.025;
+const WC3_BLEND_ATLAS_SIDE: u32 = 4;
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainSurface {
@@ -13,6 +25,84 @@ pub struct TerrainSurface {
     origin_world: Vec2,
     tile_world: f32,
     max_world: Vec2,
+}
+
+#[derive(Resource, Debug, Clone)]
+pub struct TerrainTextureLayout {
+    width_tiles: u32,
+    height_tiles: u32,
+    tile_palette: Vec<String>,
+    ground_texture: Vec<u8>,
+    ground_variation: Vec<u8>,
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+pub struct TerrainTextureSet {
+    ground: BTreeMap<usize, TerrainGroundAtlas>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TerrainGroundAtlas {
+    rawcode: String,
+    asset_path: String,
+    width: u32,
+    height: u32,
+    extended: bool,
+}
+
+#[derive(Debug)]
+pub struct TerrainTextureMesh {
+    pub palette_index: usize,
+    pub mesh: Mesh,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TerrainTextureLayer {
+    palette_index: usize,
+    variation: u8,
+}
+
+#[derive(Default)]
+struct TerrainMeshBuilder {
+    positions: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Wc3TerrainTextureJson {
+    tile_palette: Vec<String>,
+    map: Wc3TerrainTextureMap,
+    ground_texture: Vec<u8>,
+    ground_variation: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Wc3TerrainTextureMap {
+    width: u32,
+    height: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct TerrainTextureManifest {
+    schema_version: u32,
+    ground: Vec<TerrainGroundManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TerrainGroundManifestEntry {
+    rawcode: String,
+    palette_index: usize,
+    png: String,
+    width: u32,
+    height: u32,
+    atlas: TerrainGroundManifestAtlas,
+}
+
+#[derive(Debug, Deserialize)]
+struct TerrainGroundManifestAtlas {
+    extended: bool,
 }
 
 impl TerrainSurface {
@@ -138,6 +228,398 @@ impl TerrainSurface {
         .with_inserted_indices(Indices::U32(indices))
         .with_computed_smooth_normals()
     }
+
+    pub fn textured_meshes(
+        &self,
+        layout: &TerrainTextureLayout,
+        textures: &TerrainTextureSet,
+    ) -> Result<Vec<TerrainTextureMesh>, String> {
+        if layout.width_tiles != self.elevation.width_tiles()
+            || layout.height_tiles != self.elevation.height_tiles()
+        {
+            return Err("terrain texture layout dimensions do not match elevation map".into());
+        }
+        textures.validate_for(layout)?;
+
+        let mut builders: BTreeMap<usize, TerrainMeshBuilder> = BTreeMap::new();
+        for y in 0..layout.height_tiles {
+            for x in 0..layout.width_tiles {
+                for layer in layout.layers_for_cell(x, y, textures)? {
+                    let atlas = textures
+                        .ground
+                        .get(&layer.palette_index)
+                        .expect("validated terrain texture set contains palette entry");
+                    let uvs = atlas_uvs(atlas, layer.variation)?;
+                    builders.entry(layer.palette_index).or_default().push_quad(
+                        self,
+                        x,
+                        y,
+                        layer.palette_index,
+                        uvs,
+                    )?;
+                }
+            }
+        }
+
+        Ok(builders
+            .into_iter()
+            .filter_map(|(palette_index, builder)| {
+                builder.finish().map(|mesh| TerrainTextureMesh {
+                    palette_index,
+                    mesh,
+                })
+            })
+            .collect())
+    }
+}
+
+impl TerrainTextureLayout {
+    pub fn from_wc3_terrain_json(json: &str) -> Result<Self, String> {
+        let terrain: Wc3TerrainTextureJson =
+            serde_json::from_str(json).map_err(|error| error.to_string())?;
+        if terrain.map.width == 0 || terrain.map.height == 0 || terrain.tile_palette.is_empty() {
+            return Err("terrain texture layout has invalid dimensions or empty palette".into());
+        }
+        let expected = usize::try_from(terrain.map.width + 1)
+            .ok()
+            .and_then(|width| {
+                usize::try_from(terrain.map.height + 1)
+                    .ok()
+                    .and_then(|height| width.checked_mul(height))
+            })
+            .ok_or_else(|| "terrain texture layout sample count overflow".to_owned())?;
+        if terrain.ground_texture.len() != expected || terrain.ground_variation.len() != expected {
+            return Err(format!(
+                "terrain texture layout expected {expected} tilepoints but got {} textures and {} variations",
+                terrain.ground_texture.len(),
+                terrain.ground_variation.len()
+            ));
+        }
+        for (index, palette_index) in terrain.ground_texture.iter().copied().enumerate() {
+            if usize::from(palette_index) >= terrain.tile_palette.len() {
+                return Err(format!(
+                    "terrain tilepoint {index} references palette index {palette_index}, but palette has {} entries",
+                    terrain.tile_palette.len()
+                ));
+            }
+        }
+        for (index, variation) in terrain.ground_variation.iter().copied().enumerate() {
+            if variation & 0b111 != 0 {
+                return Err(format!(
+                    "terrain tilepoint {index} has unmasked WC3 ground variation {variation}"
+                ));
+            }
+        }
+
+        Ok(Self {
+            width_tiles: terrain.map.width,
+            height_tiles: terrain.map.height,
+            tile_palette: terrain.tile_palette,
+            ground_texture: terrain.ground_texture,
+            ground_variation: terrain.ground_variation,
+        })
+    }
+
+    fn layers_for_cell(
+        &self,
+        x: u32,
+        y: u32,
+        textures: &TerrainTextureSet,
+    ) -> Result<Vec<TerrainTextureLayer>, String> {
+        let bottom_left = self.texture_at(x, y)?;
+        let bottom_right = self.texture_at(x + 1, y)?;
+        let top_left = self.texture_at(x, y + 1)?;
+        let top_right = self.texture_at(x + 1, y + 1)?;
+        let corners = [bottom_left, bottom_right, top_right, top_left];
+
+        let mut unique = corners;
+        unique.sort_unstable();
+        let unique_len = {
+            let mut write = 0;
+            for read in 0..unique.len() {
+                if read == 0 || unique[read] != unique[read - 1] {
+                    unique[write] = unique[read];
+                    write += 1;
+                }
+            }
+            write
+        };
+
+        let base_index = unique[0];
+        let base_atlas = textures.ground.get(&base_index).ok_or_else(|| {
+            format!("missing generated terrain texture for palette index {base_index}")
+        })?;
+        let detail = self.variation_at(x, y)? >> 3;
+        let mut layers = Vec::with_capacity(unique_len);
+        layers.push(TerrainTextureLayer {
+            palette_index: base_index,
+            variation: full_tile_variation(base_atlas.extended, detail),
+        });
+
+        for &palette_index in unique.iter().take(unique_len).skip(1) {
+            let mut mask = 0_u8;
+            mask |= u8::from(bottom_right == palette_index);
+            mask |= u8::from(bottom_left == palette_index) << 1;
+            mask |= u8::from(top_right == palette_index) << 2;
+            mask |= u8::from(top_left == palette_index) << 3;
+            layers.push(TerrainTextureLayer {
+                palette_index,
+                variation: mask,
+            });
+        }
+        Ok(layers)
+    }
+
+    fn texture_at(&self, x: u32, y_from_bottom: u32) -> Result<usize, String> {
+        let index = self.tilepoint_index(x, y_from_bottom)?;
+        Ok(usize::from(self.ground_texture[index]))
+    }
+
+    fn variation_at(&self, x: u32, y_from_bottom: u32) -> Result<u8, String> {
+        let index = self.tilepoint_index(x, y_from_bottom)?;
+        Ok(self.ground_variation[index])
+    }
+
+    fn tilepoint_index(&self, x: u32, y_from_bottom: u32) -> Result<usize, String> {
+        if x > self.width_tiles || y_from_bottom > self.height_tiles {
+            return Err(format!(
+                "terrain tilepoint ({x}, {y_from_bottom}) is outside {}x{} tile map",
+                self.width_tiles, self.height_tiles
+            ));
+        }
+        let row_from_top = self.height_tiles - y_from_bottom;
+        let row_width = usize::try_from(self.width_tiles + 1)
+            .map_err(|_| "terrain row width overflow".to_owned())?;
+        usize::try_from(row_from_top)
+            .ok()
+            .and_then(|row| row.checked_mul(row_width))
+            .and_then(|base| {
+                usize::try_from(x)
+                    .ok()
+                    .and_then(|column| base.checked_add(column))
+            })
+            .ok_or_else(|| "terrain tilepoint index overflow".to_owned())
+    }
+}
+
+#[must_use]
+pub fn client_asset_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
+
+impl TerrainTextureSet {
+    #[must_use]
+    pub fn load_default() -> Self {
+        let asset_root = client_asset_root();
+        let path = asset_root.join(TERRAIN_TEXTURE_MANIFEST);
+        if !path.is_file() {
+            return Self::default();
+        }
+        match Self::load_manifest(&path, TERRAIN_TEXTURE_ASSET_PREFIX) {
+            Ok(textures) => textures,
+            Err(error) => {
+                eprintln!("warning: ignoring generated WC3 terrain textures: {error}");
+                Self::default()
+            }
+        }
+    }
+
+    pub fn load_manifest(path: &Path, asset_prefix: &str) -> Result<Self, String> {
+        let json = fs::read_to_string(path)
+            .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
+        let manifest: TerrainTextureManifest = serde_json::from_str(&json)
+            .map_err(|error| format!("invalid terrain manifest: {error}"))?;
+        if manifest.schema_version != 1 {
+            return Err(format!(
+                "unsupported terrain texture manifest schema {}",
+                manifest.schema_version
+            ));
+        }
+
+        let mut ground = BTreeMap::new();
+        for entry in manifest.ground {
+            if entry.width == 0 || entry.height == 0 || entry.height % WC3_BLEND_ATLAS_SIDE != 0 {
+                return Err(format!(
+                    "terrain texture {} has invalid dimensions {}x{}",
+                    entry.rawcode, entry.width, entry.height
+                ));
+            }
+            let expected_extended = entry.width == entry.height.saturating_mul(2);
+            if entry.width != entry.height && !expected_extended {
+                return Err(format!(
+                    "terrain texture {} is neither square nor extended: {}x{}",
+                    entry.rawcode, entry.width, entry.height
+                ));
+            }
+            if expected_extended != entry.atlas.extended {
+                return Err(format!(
+                    "terrain texture {} manifest has inconsistent extended flag",
+                    entry.rawcode
+                ));
+            }
+            if ground.contains_key(&entry.palette_index) {
+                return Err(format!(
+                    "duplicate generated terrain palette index {}",
+                    entry.palette_index
+                ));
+            }
+            let png = entry.png.replace('\\', "/");
+            ground.insert(
+                entry.palette_index,
+                TerrainGroundAtlas {
+                    rawcode: entry.rawcode,
+                    asset_path: format!("{asset_prefix}/{png}"),
+                    width: entry.width,
+                    height: entry.height,
+                    extended: entry.atlas.extended,
+                },
+            );
+        }
+        Ok(Self { ground })
+    }
+
+    #[must_use]
+    pub fn is_available(&self) -> bool {
+        !self.ground.is_empty()
+    }
+
+    pub fn validate_for(&self, layout: &TerrainTextureLayout) -> Result<(), String> {
+        for (palette_index, rawcode) in layout.tile_palette.iter().enumerate() {
+            let Some(atlas) = self.ground.get(&palette_index) else {
+                return Err(format!(
+                    "generated terrain manifest is missing palette {palette_index} ({rawcode})"
+                ));
+            };
+            if atlas.rawcode != *rawcode {
+                return Err(format!(
+                    "generated terrain palette {palette_index} is {} but map expects {rawcode}",
+                    atlas.rawcode
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn atlas(&self, palette_index: usize) -> Option<&TerrainGroundAtlas> {
+        self.ground.get(&palette_index)
+    }
+}
+
+impl TerrainGroundAtlas {
+    #[must_use]
+    pub fn asset_path(&self) -> &str {
+        &self.asset_path
+    }
+}
+
+impl TerrainMeshBuilder {
+    fn push_quad(
+        &mut self,
+        terrain: &TerrainSurface,
+        x: u32,
+        y: u32,
+        palette_index: usize,
+        uvs: [[f32; 2]; 4],
+    ) -> Result<(), String> {
+        let base_index = u32::try_from(self.positions.len())
+            .map_err(|_| "terrain texture mesh has too many vertices".to_owned())?;
+        let y_offset =
+            TERRAIN_TEXTURE_BASE_OFFSET + palette_index as f32 * TERRAIN_TEXTURE_PRIORITY_OFFSET;
+        let position = |vertex_x: u32, vertex_y: u32| -> Result<[f32; 3], String> {
+            let sample = terrain
+                .elevation
+                .vertex_sample(vertex_x, vertex_y)
+                .ok_or_else(|| format!("missing terrain vertex ({vertex_x}, {vertex_y})"))?;
+            Ok([
+                terrain.origin_world.x + vertex_x as f32 * terrain.tile_world,
+                sample_display_height(sample) + y_offset,
+                terrain.origin_world.y + vertex_y as f32 * terrain.tile_world,
+            ])
+        };
+
+        self.positions.extend_from_slice(&[
+            position(x, y)?,
+            position(x, y + 1)?,
+            position(x + 1, y)?,
+            position(x + 1, y + 1)?,
+        ]);
+        self.uvs.extend_from_slice(&uvs);
+        self.indices.extend_from_slice(&[
+            base_index,
+            base_index + 1,
+            base_index + 2,
+            base_index + 2,
+            base_index + 1,
+            base_index + 3,
+        ]);
+        Ok(())
+    }
+
+    fn finish(self) -> Option<Mesh> {
+        if self.positions.is_empty() {
+            return None;
+        }
+        Some(
+            Mesh::new(
+                PrimitiveTopology::TriangleList,
+                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
+            .with_inserted_indices(Indices::U32(self.indices))
+            .with_computed_smooth_normals(),
+        )
+    }
+}
+
+fn full_tile_variation(extended: bool, detail: u8) -> u8 {
+    if extended {
+        if detail <= 15 {
+            16 + detail
+        } else if detail == 16 {
+            15
+        } else {
+            0
+        }
+    } else if detail == 0 {
+        0
+    } else {
+        15
+    }
+}
+
+fn atlas_uvs(atlas: &TerrainGroundAtlas, variation: u8) -> Result<[[f32; 2]; 4], String> {
+    if variation >= 16 && !atlas.extended {
+        return Err(format!(
+            "square terrain texture {} cannot sample variation {variation}",
+            atlas.rawcode
+        ));
+    }
+    if variation >= 32 {
+        return Err(format!(
+            "terrain texture {} cannot sample variation {variation}",
+            atlas.rawcode
+        ));
+    }
+
+    let local = u32::from(variation % 16);
+    let square_offset = if variation >= 16 {
+        WC3_BLEND_ATLAS_SIDE
+    } else {
+        0
+    };
+    let column = square_offset + local % WC3_BLEND_ATLAS_SIDE;
+    let row = local / WC3_BLEND_ATLAS_SIDE;
+    let tile_pixels = atlas.height / WC3_BLEND_ATLAS_SIDE;
+    let half_pixel_u = 0.5 / atlas.width as f32;
+    let half_pixel_v = 0.5 / atlas.height as f32;
+    let u0 = column as f32 * tile_pixels as f32 / atlas.width as f32 + half_pixel_u;
+    let u1 = (column + 1) as f32 * tile_pixels as f32 / atlas.width as f32 - half_pixel_u;
+    let v0 = row as f32 * tile_pixels as f32 / atlas.height as f32 + half_pixel_v;
+    let v1 = (row + 1) as f32 * tile_pixels as f32 / atlas.height as f32 - half_pixel_v;
+
+    Ok([[u0, v1], [u0, v0], [u1, v1], [u1, v0]])
 }
 
 fn sample_height(sample: Option<TerrainElevationSample>) -> f32 {
@@ -159,6 +641,13 @@ mod tests {
             ))
             .unwrap(),
         )
+    }
+
+    fn original_texture_layout() -> TerrainTextureLayout {
+        TerrainTextureLayout::from_wc3_terrain_json(include_str!(
+            "../../../docs/original_map/extracted/terrain.json"
+        ))
+        .unwrap()
     }
 
     #[test]
@@ -187,5 +676,41 @@ mod tests {
         let corner = terrain.height_at_world(terrain.world_min());
         let outside = terrain.height_at_world(Vec2::new(-100_000.0, -100_000.0));
         assert_eq!(outside, corner);
+    }
+
+    #[test]
+    fn original_texture_layout_matches_terrain_dimensions_and_palette() {
+        let layout = original_texture_layout();
+        assert_eq!(layout.width_tiles, 132);
+        assert_eq!(layout.height_tiles, 64);
+        assert_eq!(layout.tile_palette[0], "Zdtr");
+        assert_eq!(layout.tile_palette[4], "Agrd");
+        assert_eq!(layout.tile_palette[9], "Nice");
+    }
+
+    #[test]
+    fn full_tile_variation_matches_wc3_extended_and_square_rules() {
+        assert_eq!(full_tile_variation(true, 0), 16);
+        assert_eq!(full_tile_variation(true, 10), 26);
+        assert_eq!(full_tile_variation(true, 16), 15);
+        assert_eq!(full_tile_variation(true, 17), 0);
+        assert_eq!(full_tile_variation(false, 0), 0);
+        assert_eq!(full_tile_variation(false, 1), 15);
+    }
+
+    #[test]
+    fn atlas_uvs_select_left_and_right_four_by_four_squares() {
+        let atlas = TerrainGroundAtlas {
+            rawcode: "test".into(),
+            asset_path: "unused.png".into(),
+            width: 512,
+            height: 256,
+            extended: true,
+        };
+        let blend = atlas_uvs(&atlas, 0).unwrap();
+        let full = atlas_uvs(&atlas, 16).unwrap();
+        assert!(blend[0][0] < 0.125);
+        assert!(full[0][0] > 0.5);
+        assert!(blend[0][1] > blend[1][1]);
     }
 }

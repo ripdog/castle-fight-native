@@ -6,6 +6,7 @@ mod presentation;
 mod terrain;
 
 use bevy::{
+    asset::AssetPlugin,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
     time::Fixed,
@@ -18,7 +19,7 @@ use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
 use demo::{create_demo_world, try_spawn_demo_building};
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
-use terrain::TerrainSurface;
+use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 
 const SIMULATION_HZ: f64 = 30.0;
 
@@ -55,6 +56,12 @@ fn main() {
         PresentMode::AutoVsync
     };
 
+    let terrain_texture_layout = TerrainTextureLayout::from_wc3_terrain_json(include_str!(
+        "../../../docs/original_map/extracted/terrain.json"
+    ))
+    .expect("committed Warcraft terrain texture layout must be valid");
+    let terrain_textures = TerrainTextureSet::load_default();
+
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
         .insert_resource(Time::<Fixed>::from_hz(SIMULATION_HZ))
@@ -65,15 +72,24 @@ fn main() {
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
         .insert_resource(TerrainSurface::new(demo.terrain))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Castle Fight Native 3D".into(),
-                resolution: (1440, 900).into(),
-                present_mode,
-                ..default()
-            }),
-            ..default()
-        }))
+        .insert_resource(terrain_texture_layout)
+        .insert_resource(terrain_textures)
+        .add_plugins(
+            DefaultPlugins
+                .set(AssetPlugin {
+                    file_path: client_asset_root().to_string_lossy().into_owned(),
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Castle Fight Native 3D".into(),
+                        resolution: (1440, 900).into(),
+                        present_mode,
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
             CastlePresentationPlugin::new(options.health_bars),
