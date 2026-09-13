@@ -478,18 +478,21 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 6)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 9)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
+            "building-random-enemy-base-attack-ground-controller": 1,
             "per-player-building-count-income-multiplier": 1,
+            "summoned-carrier-random-unit-replacement": 1,
+            "team-constructed-building-count-to-spell-level": 1,
             "team-presence-gated-owner-scaled-elemental-death-heal": 1,
             "team-shrine-independent-clone-rolls-and-train-transformations": 1,
             "team-stacked-one-time-delayed-unit-revival": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 6)
+        self.assertEqual(len(rows), 9)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -572,6 +575,40 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(treasure["count_10_plus_marginal_multiplier_per_box"], 0.0625)
         self.assertTrue(treasure["applied_before_progressive_income_tax"])
+
+        artillery = json.loads(rows["human-artillery-auto-bombardment"]["parameters_json"])
+        self.assertEqual(artillery["runtime_hp"], 700)
+        self.assertEqual((artillery["attack_min"], artillery["attack_max"]), (300, 400))
+        self.assertEqual(artillery["native_attack_cooldown_seconds"], 15)
+        self.assertEqual(artillery["maintenance_interval_seconds"], 9)
+        self.assertEqual(artillery["intercepted_order_id"], 851971)
+        self.assertEqual(artillery["forced_order_id"], 851984)
+        self.assertEqual(artillery["full_aoe_radius"], 60)
+        self.assertEqual(artillery["half_aoe_radius"], 150)
+        self.assertEqual(artillery["quarter_aoe_radius"], 320)
+
+        skeletons = json.loads(rows["raise-dead-skeleton-randomization"]["parameters_json"])
+        self.assertEqual(
+            [unit["rawcode"] for unit in skeletons["resolved_skeleton_table"]],
+            ["u002", "n00D", "u00A", "n00C", "u00B", "n01L", "u003", "n01M"],
+        )
+        self.assertEqual(skeletons["necromancer_table_indexes"], [0, 1, 2])
+        self.assertEqual(skeletons["mighty_necromancer_table_indexes"], [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(skeletons["lich_king_general_probability_percent"], 12.5)
+        self.assertEqual(skeletons["lich_king_each_other_probability_percent"], 21.875)
+        self.assertEqual(skeletons["lich_king_bonus_damage_object_data"]["Attack Bonus"], 12)
+        self.assertEqual(skeletons["lich_king_bonus_armor_object_data"]["Defense Bonus"], 3)
+
+        gjallar = json.loads(rows["gjallarhorn-team-count-scaling"]["parameters_json"])
+        self.assertEqual(gjallar["counter_scope"], "team")
+        self.assertEqual(gjallar["effect_level_formula"], "min(4, team_constructed_gjallarhorn_count)")
+        self.assertTrue(gjallar["counter_resets_on_round_signal"])
+        self.assertFalse(gjallar["counter_decrement_on_building_death"])
+        self.assertEqual(
+            [level["attack_speed_increase"] for level in gjallar["resolved_effect_levels"]],
+            [0.4, 0.45, 0.5, 0.55],
+        )
+        self.assertTrue(all(level["duration_seconds"] == 60 for level in gjallar["resolved_effect_levels"]))
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

@@ -149,11 +149,14 @@
     "verified-visual-only": 1
   },
   "building_improvement_spawn_mechanic_rows": 1,
-  "runtime_system_mechanic_rows": 6,
+  "runtime_system_mechanic_rows": 9,
   "runtime_system_mechanic_kinds": {
     "area-building-buffs-cleanse-and-spawn-augmentation": 1,
     "body-replacement-plus-independent-random-trait-groups": 1,
+    "building-random-enemy-base-attack-ground-controller": 1,
     "per-player-building-count-income-multiplier": 1,
+    "summoned-carrier-random-unit-replacement": 1,
+    "team-constructed-building-count-to-spell-level": 1,
     "team-presence-gated-owner-scaled-elemental-death-heal": 1,
     "team-shrine-independent-clone-rolls-and-train-transformations": 1,
     "team-stacked-one-time-delayed-unit-revival": 1

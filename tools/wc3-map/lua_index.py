@@ -5436,7 +5436,15 @@ def _extract_runtime_system_mechanics(
         "CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler",
         "markShrineReviveBlocked", "onBuildingFinished", "acquireLinker", "eleLinkerHealAmount", "changeEleBuildingCount", "wL",
         "GH", "calcTreasureBoxMultiplier", "rawIncomeWithTreasureBox", "acquireTreasureBox", "SE",
-        "applyTreasureBoxModeEnabled", "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+        "applyTreasureBoxModeEnabled", "AH", "registerHumanArtillery",
+        "ForGroupCallback_forEachIn_HumanArtilleryRuntime_callback_forEachIn_HumanArtilleryRuntime",
+        "EventListener_add_HumanArtilleryRuntime_onEvent_add_HumanArtilleryRuntime1",
+        "EventListener_add_HumanArtilleryRuntime_onEvent_add_HumanArtilleryRuntime2",
+        "cG", "replaceChaosPortalSummon", "onChaosPortalUnitSummoned",
+        "mH", "EventListener_add_GjallarHorn_onEvent_add_GjallarHorn",
+        "Action_watch_GjallarHorn_run_watch_GjallarHorn",
+        "BuildingSpellClosure_registerBuildingSpell_GjallarHorn_cast_registerBuildingSpell_GjallarHorn",
+        "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
     }
     if not required.issubset(available):
         return []
@@ -5823,6 +5831,178 @@ def _extract_runtime_system_mechanics(
             treasure_init_start, multiplier_start, income_start, treasure_acquire_start,
             treasure_remove_start, treasure_mode_start,
         ),
+    })
+
+    # Human Artillery. The h001 building is registered on construction and
+    # forced to issue attack-ground at a random point inside the enemy castle
+    # rectangle. A 9-second maintenance timer reissues the order to every live
+    # registered Artillery, while any externally issued smart order is
+    # immediately converted back into the same random attack-ground order.
+    artillery_init_start, artillery_init_source, artillery_init_tokens = source("AH")
+    artillery_register_start, artillery_register_source, artillery_register_tokens = source("registerHumanArtillery")
+    artillery_tick_start, artillery_tick_source, artillery_tick_tokens = source(
+        "ForGroupCallback_forEachIn_HumanArtilleryRuntime_callback_forEachIn_HumanArtilleryRuntime"
+    )
+    artillery_target_start, artillery_target_source, artillery_target_tokens = source(
+        "EventListener_add_HumanArtilleryRuntime_onEvent_add_HumanArtilleryRuntime1"
+    )
+    artillery_point_start, artillery_point_source, artillery_point_tokens = source(
+        "EventListener_add_HumanArtilleryRuntime_onEvent_add_HumanArtilleryRuntime2"
+    )
+    if b"ncb=1747988529 mcb=851971 lcb=_Dr()" not in artillery_init_source:
+        raise ValueError("Human Artillery unit/smart-order constants changed")
+    if b"TimerStart(aEq,9.,true" not in artillery_init_source:
+        raise ValueError("Human Artillery maintenance interval changed")
+    if not {"EVENT_PLAYER_UNIT_CONSTRUCT_FINISH", "EVENT_PLAYER_UNIT_ISSUED_TARGET_ORDER", "EVENT_PLAYER_UNIT_ISSUED_POINT_ORDER"}.issubset(artillery_init_tokens):
+        raise ValueError("Human Artillery event registration changed")
+    if not {"enemyCastleRect", "851984", "GetRandomReal", "group_add"}.issubset(artillery_register_tokens):
+        raise ValueError("Human Artillery initial bombardment registration changed")
+    if b"unit_issuePointOrderById(gEq,851984" not in artillery_register_source:
+        raise ValueError("Human Artillery initial attack-ground order changed")
+    if not {"851984", "enemyCastleRect", "GetRandomReal"}.issubset(artillery_tick_tokens):
+        raise ValueError("Human Artillery maintenance bombardment changed")
+    for event_source in (artillery_target_source, artillery_point_source):
+        if b"unit_getTypeId" not in event_source or b"GetIssuedOrderId()==mcb" not in event_source:
+            raise ValueError("Human Artillery smart-order interception changed")
+        if b"unit_issuePointOrderById" not in event_source or b"851984" not in event_source:
+            raise ValueError("Human Artillery smart-order redirect changed")
+    rows.append({
+        "system_id": "human-artillery-auto-bombardment",
+        "mechanic_kind": "building-random-enemy-base-attack-ground-controller",
+        "trigger": "construction-plus-periodic-order-maintenance-plus-smart-order-intercept",
+        "parameters": {
+            "artillery_unit_id": 1747988529,
+            "maintenance_interval_seconds": 9,
+            "intercepted_order_id": 851971,
+            "intercepted_order_name": "smart",
+            "forced_order_id": 851984,
+            "forced_order_name": "attackground",
+            "target_region": "enemy-castle-rect-by-team",
+            "target_point_distribution": "uniform-random-x-and-y-within-enemy-castle-rect",
+            "initial_order_on_construction": True,
+            "periodically_reissues_for_live_registered_buildings": True,
+            "smart_point_or_target_orders_are_redirected": True,
+        },
+        "related_rawcode_ids": [1747988529, 1093677643],
+        "source_functions": [
+            "AH", "registerHumanArtillery",
+            "ForGroupCallback_forEachIn_HumanArtilleryRuntime_callback_forEachIn_HumanArtilleryRuntime",
+            "EventListener_add_HumanArtilleryRuntime_onEvent_add_HumanArtilleryRuntime1",
+            "EventListener_add_HumanArtilleryRuntime_onEvent_add_HumanArtilleryRuntime2",
+            "enemyCastleRect",
+        ],
+        "evidence_kind": "exact-construction-registration-periodic-order-and-order-intercept",
+        "byte_offset": min(
+            artillery_init_start, artillery_register_start, artillery_tick_start,
+            artillery_target_start, artillery_point_start,
+        ),
+    })
+
+    # Chaos Portal / Raise Dead summon replacement. Warcraft Raise Dead creates
+    # carrier units u004/u008/u00E; the map immediately replaces them with a
+    # random skeleton from an eight-entry table and orders the result to attack.
+    # Lich King's u00E carrier draws only Greater results (or the General) and
+    # receives the explicit +12 attack / +3 armor ability pair.
+    chaos_init_start, chaos_init_source, chaos_init_tokens = source("cG")
+    chaos_replace_start, chaos_replace_source, chaos_replace_tokens = source("replaceChaosPortalSummon")
+    chaos_summon_start, chaos_summon_source, chaos_summon_tokens = source("onChaosPortalUnitSummoned")
+    chaos_table = [1966092338, 1848651844, 1966092353, 1848651843, 1966092354, 1848652108, 1966092339, 1848652109]
+    expected_chaos_table = (
+        b"ajb[0]=1966092338 ajb[1]=1848651844 ajb[2]=1966092353 ajb[3]=1848651843 "
+        b"ajb[4]=1966092354 ajb[5]=1848652108 ajb[6]=1966092339 ajb[7]=1848652109"
+    )
+    if expected_chaos_table not in chaos_init_source or "EVENT_PLAYER_UNIT_SUMMON" not in chaos_init_tokens:
+        raise ValueError("Chaos Portal skeleton replacement table/registration changed")
+    if not {"__wurst_safe_ReplaceUnitBJ", "orderCodeAttack"}.issubset(chaos_replace_tokens):
+        raise ValueError("Chaos Portal replacement primitive changed")
+    if b"__wurst_safe_ReplaceUnitBJ(yeq,zeq,2)" not in chaos_replace_source:
+        raise ValueError("Chaos Portal replacement method changed")
+    for carrier in (1966092340, 1966092344, 1966092357):
+        if str(carrier) not in chaos_summon_tokens:
+            raise ValueError(f"Chaos Portal carrier missing from summon handler: {carrier}")
+    if b"ajb[GetRandomInt(0,2)]" not in chaos_summon_source:
+        raise ValueError("Necromancer skeleton selection range changed")
+    if b"ajb[GetRandomInt(0,6)]" not in chaos_summon_source:
+        raise ValueError("Mighty Necromancer skeleton selection range changed")
+    if b"Deq=GetRandomInt(0,7)if(Deq==0)then Deq=7 else Deq=GetRandomInt(3,6)end" not in chaos_summon_source:
+        raise ValueError("Lich King skeleton selection distribution changed")
+    if b"addProtectedAbility(Feq,1093679160)" not in chaos_summon_source or b"addProtectedAbility(Geq,1093679161)" not in chaos_summon_source:
+        raise ValueError("Lich King summoned-skeleton bonus abilities changed")
+    rows.append({
+        "system_id": "raise-dead-skeleton-randomization",
+        "mechanic_kind": "summoned-carrier-random-unit-replacement",
+        "trigger": "player-unit-summon",
+        "parameters": {
+            "replacement_method": 2,
+            "replacement_orders_attack": True,
+            "skeleton_table_unit_ids": chaos_table,
+            "necromancer_carrier_unit_id": 1966092340,
+            "necromancer_table_indexes": [0, 1, 2],
+            "necromancer_distribution": "uniform",
+            "mighty_necromancer_carrier_unit_id": 1966092344,
+            "mighty_necromancer_table_indexes": [0, 1, 2, 3, 4, 5, 6],
+            "mighty_necromancer_distribution": "uniform",
+            "lich_king_carrier_unit_id": 1966092357,
+            "lich_king_general_table_index": 7,
+            "lich_king_general_probability_percent": 12.5,
+            "lich_king_other_table_indexes": [3, 4, 5, 6],
+            "lich_king_each_other_probability_percent": 21.875,
+            "lich_king_bonus_damage_ability_id": 1093679160,
+            "lich_king_bonus_armor_ability_id": 1093679161,
+        },
+        "related_rawcode_ids": [
+            *chaos_table, 1966092340, 1966092344, 1966092357, 1093679160, 1093679161,
+        ],
+        "source_functions": ["cG", "replaceChaosPortalSummon", "onChaosPortalUnitSummoned"],
+        "evidence_kind": "exact-summon-carriers-replacement-table-random-branches-and-bonus-abilities",
+        "byte_offset": min(chaos_init_start, chaos_replace_start, chaos_summon_start),
+    })
+
+    # Gjallarhorn building-count scaling. The ordinary building-spell row owns
+    # the cast itself, but its effect level reads a separate team-scoped counter
+    # incremented by each constructed h010. The counter is reset by the watched
+    # round signal and the cast clamps the resulting level to four.
+    gjallar_init_start, gjallar_init_source, gjallar_init_tokens = source("mH")
+    gjallar_construct_start, gjallar_construct_source, gjallar_construct_tokens = source(
+        "EventListener_add_GjallarHorn_onEvent_add_GjallarHorn"
+    )
+    gjallar_reset_start, gjallar_reset_source, gjallar_reset_tokens = source(
+        "Action_watch_GjallarHorn_run_watch_GjallarHorn"
+    )
+    gjallar_cast_start, gjallar_cast_source, gjallar_cast_tokens = source(
+        "BuildingSpellClosure_registerBuildingSpell_GjallarHorn_cast_registerBuildingSpell_GjallarHorn"
+    )
+    if not {"1747988784", "1093677387", "EVENT_PLAYER_UNIT_CONSTRUCT_FINISH"}.issubset(gjallar_init_tokens):
+        raise ValueError("Gjallarhorn spell/lifecycle registration changed")
+    if b"unit_getTypeId(nym)==1747988784" not in gjallar_construct_source or b"Icb[pym]=(__wurst_ensureInt(Icb[pym])+1)" not in gjallar_construct_source:
+        raise ValueError("Gjallarhorn team counter increment changed")
+    if b"while true do if(tym>3)then break end Icb[tym]=0" not in gjallar_reset_source:
+        raise ValueError("Gjallarhorn round-reset counter clearing changed")
+    if b"Wxm=min(4,__wurst_ensureInt(Icb[__wurst_ensureInt(lGb[player_getId(Vxm)])]))" not in gjallar_cast_source:
+        raise ValueError("Gjallarhorn cast-level counter formula changed")
+    rows.append({
+        "system_id": "gjallarhorn-team-count-scaling",
+        "mechanic_kind": "team-constructed-building-count-to-spell-level",
+        "trigger": "building-construction-and-round-reset-consumed-by-spell-cast",
+        "parameters": {
+            "gjallarhorn_unit_id": 1747988784,
+            "gjallarhorn_trigger_ability_id": 1093677387,
+            "counter_scope": "team",
+            "increment_per_constructed_gjallarhorn": 1,
+            "effect_level_formula": "min(4, team_constructed_gjallarhorn_count)",
+            "maximum_effect_level": 4,
+            "counter_resets_on_round_signal": True,
+            "counter_decrement_on_building_death": False,
+            "building_spell_row_owns_cast_delivery": True,
+        },
+        "related_rawcode_ids": [1747988784, 1093677387, 1093677366],
+        "source_functions": [
+            "mH", "EventListener_add_GjallarHorn_onEvent_add_GjallarHorn",
+            "Action_watch_GjallarHorn_run_watch_GjallarHorn",
+            "BuildingSpellClosure_registerBuildingSpell_GjallarHorn_cast_registerBuildingSpell_GjallarHorn",
+        ],
+        "evidence_kind": "exact-construct-counter-round-reset-and-spell-level-consumer",
+        "byte_offset": min(gjallar_init_start, gjallar_construct_start, gjallar_reset_start, gjallar_cast_start),
     })
 
     # Blood Fiend procedural generation. The trained n00L carrier is first

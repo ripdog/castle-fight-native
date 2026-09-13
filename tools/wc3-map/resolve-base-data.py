@@ -2291,6 +2291,86 @@ def main() -> None:
                         raise ValueError(f"Treasure Box linear-tail increment changed: {parameters}")
                     parameters["treasure_box_name"] = treasure["name"]
                     parameters["treasure_box_tooltip"] = tooltip
+                elif system_id == "human-artillery-auto-bombardment":
+                    artillery = static_units.get("h001")
+                    protected = protected_unit_applied.get("h001")
+                    burning_oil = ability_level_one("A02K")
+                    if artillery is None or protected is None:
+                        raise ValueError("Human Artillery runtime system is missing h001 protected stats")
+                    if (
+                        numeric(protected["hp"]) != 700
+                        or numeric(protected["attack1_min"]) != 300
+                        or numeric(protected["attack1_max"]) != 400
+                        or numeric(protected["attack1_cooldown"]) != 15
+                        or numeric(protected["attack1_range"]) != 99999
+                    ):
+                        raise ValueError(f"Human Artillery protected weapon profile changed: {protected}")
+                    parameters["artillery_name"] = artillery["name"]
+                    parameters["artillery_tooltip"] = artillery["ubertip"]
+                    parameters["runtime_hp"] = numeric(protected["hp"])
+                    parameters["attack_type"] = artillery["attack1_type"]
+                    parameters["weapon_type"] = artillery["attack1_weapon_type"]
+                    parameters["attack_min"] = numeric(protected["attack1_min"])
+                    parameters["attack_max"] = numeric(protected["attack1_max"])
+                    parameters["attack_average"] = numeric(protected["attack1_avg"])
+                    parameters["native_attack_cooldown_seconds"] = numeric(protected["attack1_cooldown"])
+                    parameters["attack_range"] = numeric(protected["attack1_range"])
+                    parameters["full_aoe_radius"] = numeric(artillery["attack1_full_aoe"])
+                    parameters["half_aoe_radius"] = numeric(artillery["attack1_half_aoe"])
+                    parameters["quarter_aoe_radius"] = numeric(artillery["attack1_quarter_aoe"])
+                    parameters["half_aoe_damage_factor"] = numeric(artillery["attack1_half_factor"])
+                    parameters["quarter_aoe_damage_factor"] = numeric(artillery["attack1_quarter_factor"])
+                    parameters["burning_oil_ability_rawcode"] = "A02K"
+                    parameters["burning_oil_object_data"] = json.loads(burning_oil["data_fields_labeled_json"])
+                elif system_id == "raise-dead-skeleton-randomization":
+                    skeletons: list[dict[str, Any]] = []
+                    for unit_id in parameters["skeleton_table_unit_ids"]:
+                        rawcode = integer_rawcode(int(unit_id))
+                        unit = static_units.get(rawcode)
+                        protected = protected_unit_applied.get(rawcode)
+                        if unit is None or protected is None:
+                            raise ValueError(f"Raise Dead skeleton is missing protected runtime stats: {rawcode}")
+                        skeletons.append({
+                            "rawcode": rawcode,
+                            "name": unit["name"],
+                            "hp": numeric(protected["hp"]),
+                            "armor": numeric(protected["armor"]),
+                            "attack1_min": numeric(protected["attack1_min"]),
+                            "attack1_max": numeric(protected["attack1_max"]),
+                            "attack1_cooldown": numeric(protected["attack1_cooldown"]),
+                            "attack1_range": numeric(protected["attack1_range"]),
+                        })
+                    damage_bonus = ability_level_one("A088")
+                    armor_bonus = ability_level_one("A089")
+                    damage_fields = json.loads(damage_bonus["data_fields_labeled_json"])
+                    armor_fields = json.loads(armor_bonus["data_fields_labeled_json"])
+                    if numeric(damage_fields.get("Attack Bonus")) != 12 or numeric(armor_fields.get("Defense Bonus")) != 3:
+                        raise ValueError("Lich King summoned-skeleton bonus object data changed")
+                    parameters["resolved_skeleton_table"] = skeletons
+                    parameters["lich_king_bonus_damage_ability_rawcode"] = "A088"
+                    parameters["lich_king_bonus_damage_object_data"] = damage_fields
+                    parameters["lich_king_bonus_armor_ability_rawcode"] = "A089"
+                    parameters["lich_king_bonus_armor_object_data"] = armor_fields
+                elif system_id == "gjallarhorn-team-count-scaling":
+                    gjallar = static_units.get("h010")
+                    if gjallar is None:
+                        raise ValueError("Gjallarhorn runtime counter system is missing h010")
+                    levels: list[dict[str, Any]] = []
+                    for level in range(1, 5):
+                        buff = next((row for row in ability_levels.get("A016", []) if row["level"] == str(level)), None)
+                        if buff is None:
+                            raise ValueError(f"Gjallarhorn buff level missing: {level}")
+                        fields = json.loads(buff["data_fields_labeled_json"])
+                        levels.append({
+                            "level": level,
+                            "attack_speed_increase": numeric(fields.get("Attack Speed Increase (%)")),
+                            "duration_seconds": numeric(field_lookup(rows_by_object, "abilities", "A016", "adur", level, 0)),
+                        })
+                    if [row["attack_speed_increase"] for row in levels] != [0.4, 0.45, 0.5, 0.55]:
+                        raise ValueError(f"Gjallarhorn buff levels changed: {levels}")
+                    parameters["gjallarhorn_name"] = gjallar["name"]
+                    parameters["gjallarhorn_tooltip"] = gjallar["ubertip"]
+                    parameters["resolved_effect_levels"] = levels
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 
