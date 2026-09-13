@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     fs, io,
     path::{Path, PathBuf},
@@ -16,7 +16,7 @@ use whiteout::{
     textures::{BlpParser, DdsParser, PngWriter, Texture, TgaParser},
 };
 
-use crate::catalog::{CATALOG_VERSION, UnitAssetSpec};
+use crate::catalog::{CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec};
 
 const GL_ARRAY_BUFFER: u32 = 34_962;
 const GL_ELEMENT_ARRAY_BUFFER: u32 = 34_963;
@@ -48,6 +48,49 @@ pub struct UnitManifest {
     pub source_model: String,
     pub fallback_to_base_art: bool,
     pub gltf: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DoodadAssetManifest {
+    pub schema_version: u32,
+    pub castle_fight_catalog_version: &'static str,
+    pub wc3_version: Option<String>,
+    pub art_mode: &'static str,
+    pub objects: Vec<DoodadObjectManifest>,
+    pub models: Vec<ModelManifest>,
+    pub failures: Vec<DoodadFailureManifest>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DoodadObjectManifest {
+    pub rawcode: String,
+    pub object_kind: String,
+    pub name: String,
+    pub placements: Vec<DoodadPlacementManifest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DoodadPlacementManifest {
+    pub editor_id: u32,
+    pub position: [f32; 3],
+    pub angle_degrees: f32,
+    pub scale: [f32; 3],
+    pub visible: bool,
+    pub solid: bool,
+    pub fixed_z: bool,
+    pub variation: u32,
+    pub requested_model: Option<String>,
+    pub source_model: Option<String>,
+    pub fallback_to_base_art: bool,
+    pub gltf: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DoodadFailureManifest {
+    pub rawcode: String,
+    pub variation: u32,
+    pub source_model: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -93,6 +136,8 @@ pub struct Exporter {
     keep_source: bool,
     wc3_version: Option<String>,
     unit_skin: UnitSkinCatalog,
+    doodad_skin: DoodadSkinCatalog,
+    destructable_skin: DoodadSkinCatalog,
     texture_cache: BTreeMap<String, TextureManifest>,
 }
 
@@ -106,6 +151,14 @@ struct ResolvedUnit {
     scale: f32,
 }
 
+#[derive(Debug, Clone)]
+struct ResolvedDoodadVariant {
+    requested_model: Option<String>,
+    source_model: Option<String>,
+    fallback_to_base_art: bool,
+    replaceable_textures: BTreeMap<u32, String>,
+}
+
 #[derive(Debug, Default)]
 struct UnitSkinProfile {
     file: Option<String>,
@@ -115,6 +168,17 @@ struct UnitSkinProfile {
 }
 
 type UnitSkinCatalog = BTreeMap<String, UnitSkinProfile>;
+
+#[derive(Debug, Default)]
+struct DoodadSkinProfile {
+    file: Option<String>,
+    file_sd: Option<String>,
+    num_variations: Option<u32>,
+    replaceable_texture_id: Option<u32>,
+    replaceable_texture: Option<String>,
+}
+
+type DoodadSkinCatalog = BTreeMap<String, DoodadSkinProfile>;
 
 impl Exporter {
     pub fn open(
@@ -133,6 +197,19 @@ impl Exporter {
             .read_file(r"war3.w3mod:units\unitskin.txt")
             .ok_or_else(|| io::Error::other("failed to read war3.w3mod:units\\unitskin.txt"))?;
         let unit_skin = parse_unit_skin(&String::from_utf8_lossy(&unit_skin_bytes));
+        let doodad_skin_bytes = storage
+            .read_file(r"war3.w3mod:doodads\doodadskins.txt")
+            .ok_or_else(|| {
+                io::Error::other("failed to read war3.w3mod:doodads\\doodadskins.txt")
+            })?;
+        let doodad_skin = parse_doodad_skin(&String::from_utf8_lossy(&doodad_skin_bytes));
+        let destructable_skin_bytes = storage
+            .read_file(r"war3.w3mod:units\destructableskin.txt")
+            .ok_or_else(|| {
+                io::Error::other("failed to read war3.w3mod:units\\destructableskin.txt")
+            })?;
+        let destructable_skin =
+            parse_doodad_skin(&String::from_utf8_lossy(&destructable_skin_bytes));
 
         fs::create_dir_all(output.join("models"))?;
         fs::create_dir_all(output.join("textures"))?;
@@ -146,6 +223,8 @@ impl Exporter {
             keep_source,
             wc3_version,
             unit_skin,
+            doodad_skin,
+            destructable_skin,
             texture_cache: BTreeMap::new(),
         })
     }
@@ -210,6 +289,219 @@ impl Exporter {
         })
     }
 
+    pub fn export_doodads(
+        &mut self,
+        doodads: &[DoodadAssetSpec],
+    ) -> Result<DoodadAssetManifest, Box<dyn Error>> {
+        let mut variants = BTreeMap::<(String, u32), ResolvedDoodadVariant>::new();
+        let mut failures = Vec::new();
+        for doodad in doodads {
+            let variations: BTreeSet<_> = doodad
+                .placements
+                .iter()
+                .filter(|placement| placement.visible)
+                .map(|placement| placement.variation)
+                .collect();
+            for variation in variations {
+                match self.resolve_doodad_variant(doodad, variation) {
+                    Ok(resolved) => {
+                        variants.insert((doodad.rawcode.clone(), variation), resolved);
+                    }
+                    Err(error) => failures.push(DoodadFailureManifest {
+                        rawcode: doodad.rawcode.clone(),
+                        variation,
+                        source_model: doodad
+                            .model_path
+                            .clone()
+                            .unwrap_or_else(|| format!("base:{}", doodad.base_rawcode)),
+                        error: error.to_string(),
+                    }),
+                }
+            }
+        }
+
+        let mut models = Vec::new();
+        let mut model_outputs = BTreeMap::<String, String>::new();
+        let mut model_errors = BTreeMap::<String, String>::new();
+        for ((rawcode, variation), resolved) in &variants {
+            let Some(source_model) = resolved.source_model.as_deref() else {
+                continue;
+            };
+            let key = doodad_model_key(source_model, &resolved.replaceable_textures);
+            if model_outputs.contains_key(&key) || model_errors.contains_key(&key) {
+                continue;
+            }
+            match self.export_model_with_replacements(source_model, &resolved.replaceable_textures)
+            {
+                Ok(model) => {
+                    model_outputs.insert(key, model.gltf.clone());
+                    models.push(model);
+                }
+                Err(error) => {
+                    let error = error.to_string();
+                    model_errors.insert(key, error.clone());
+                    failures.push(DoodadFailureManifest {
+                        rawcode: rawcode.clone(),
+                        variation: *variation,
+                        source_model: source_model.to_owned(),
+                        error,
+                    });
+                }
+            }
+        }
+
+        let objects = doodads
+            .iter()
+            .map(|doodad| {
+                let placements = doodad
+                    .placements
+                    .iter()
+                    .map(|placement| {
+                        let resolved = variants.get(&(doodad.rawcode.clone(), placement.variation));
+                        let gltf = resolved
+                            .and_then(|resolved| {
+                                resolved
+                                    .source_model
+                                    .as_deref()
+                                    .map(|source| (resolved, source))
+                            })
+                            .and_then(|(resolved, source)| {
+                                model_outputs
+                                    .get(&doodad_model_key(source, &resolved.replaceable_textures))
+                                    .cloned()
+                            });
+                        DoodadPlacementManifest {
+                            editor_id: placement.editor_id,
+                            position: placement.position,
+                            angle_degrees: placement.angle_degrees,
+                            scale: placement.scale,
+                            visible: placement.visible,
+                            solid: placement.solid,
+                            fixed_z: placement.fixed_z,
+                            variation: placement.variation,
+                            requested_model: resolved
+                                .and_then(|resolved| resolved.requested_model.clone()),
+                            source_model: resolved
+                                .and_then(|resolved| resolved.source_model.clone()),
+                            fallback_to_base_art: resolved
+                                .is_some_and(|resolved| resolved.fallback_to_base_art),
+                            gltf,
+                        }
+                    })
+                    .collect();
+                DoodadObjectManifest {
+                    rawcode: doodad.rawcode.clone(),
+                    object_kind: doodad.object_kind.clone(),
+                    name: doodad.name.clone(),
+                    placements,
+                }
+            })
+            .collect();
+
+        Ok(DoodadAssetManifest {
+            schema_version: 1,
+            castle_fight_catalog_version: CATALOG_VERSION,
+            wc3_version: self.wc3_version.clone(),
+            art_mode: "sd",
+            objects,
+            models,
+            failures,
+        })
+    }
+
+    fn resolve_doodad_variant(
+        &self,
+        doodad: &DoodadAssetSpec,
+        variation: u32,
+    ) -> Result<ResolvedDoodadVariant, Box<dyn Error>> {
+        let profiles = if doodad.object_kind == "destructable" {
+            &self.destructable_skin
+        } else {
+            &self.doodad_skin
+        };
+        let profile = profiles.get(&doodad.base_rawcode.to_ascii_lowercase());
+        let profile_model =
+            profile.and_then(|profile| profile.file_sd.as_deref().or(profile.file.as_deref()));
+        let num_variations = doodad
+            .num_variations
+            .or_else(|| profile.and_then(|profile| profile.num_variations))
+            .unwrap_or(1)
+            .max(1);
+
+        if doodad.model_path.is_none()
+            && profile_model.is_some_and(|path| path.to_ascii_lowercase().contains("losblocker"))
+        {
+            return Ok(ResolvedDoodadVariant {
+                requested_model: None,
+                source_model: None,
+                fallback_to_base_art: false,
+                replaceable_textures: BTreeMap::new(),
+            });
+        }
+
+        let requested_model = doodad
+            .model_path
+            .as_deref()
+            .and_then(|path| self.find_doodad_model_variant(path, variation, num_variations));
+        let requested_logical = doodad
+            .model_path
+            .as_deref()
+            .map(|path| preferred_doodad_model_path(path, variation, num_variations));
+        let base_model = profile_model
+            .and_then(|path| self.find_doodad_model_variant(path, variation, num_variations));
+        let (source_model, fallback_to_base_art) = if let Some(requested) = requested_model {
+            (requested, false)
+        } else if let Some(base) = base_model {
+            (base, doodad.model_path.is_some())
+        } else {
+            let requested = requested_logical.as_deref().unwrap_or("<none>");
+            let base = profile_model.unwrap_or("<none>");
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "{} {} ({}) variation {} has no install-resident model: requested {}, base {} -> {}",
+                    doodad.object_kind,
+                    doodad.rawcode,
+                    doodad.name,
+                    variation,
+                    requested,
+                    doodad.base_rawcode,
+                    base
+                ),
+            )
+            .into());
+        };
+
+        let mut replaceable_textures = BTreeMap::new();
+        if let Some(profile) = profile
+            && let (Some(id), Some(texture)) = (
+                profile.replaceable_texture_id,
+                profile.replaceable_texture.as_deref(),
+            )
+            && id != 0
+        {
+            replaceable_textures.insert(id, texture.to_owned());
+        }
+
+        Ok(ResolvedDoodadVariant {
+            requested_model: requested_logical,
+            source_model: Some(source_model),
+            fallback_to_base_art,
+            replaceable_textures,
+        })
+    }
+
+    fn find_doodad_model_variant(
+        &self,
+        model_path: &str,
+        variation: u32,
+        num_variations: u32,
+    ) -> Option<String> {
+        doodad_model_candidates(model_path, variation, num_variations)
+            .into_iter()
+            .find(|path| self.model_exists(path))
+    }
+
     fn resolve_unit(&self, unit: &UnitAssetSpec) -> Result<ResolvedUnit, Box<dyn Error>> {
         let profile = self.unit_skin.get(&unit.base_rawcode.to_ascii_lowercase());
         let requested_model = unit.model_path.as_deref().map(normalize_model_path);
@@ -259,6 +551,14 @@ impl Exporter {
     }
 
     fn export_model(&mut self, logical_path: &str) -> Result<ModelManifest, Box<dyn Error>> {
+        self.export_model_with_replacements(logical_path, &BTreeMap::new())
+    }
+
+    fn export_model_with_replacements(
+        &mut self,
+        logical_path: &str,
+        replaceable_textures: &BTreeMap<u32, String>,
+    ) -> Result<ModelManifest, Box<dyn Error>> {
         let (source_casc_path, model_bytes) = self.read_model(logical_path)?;
         let mut parser = MdxParser::new();
         let model = parser
@@ -266,7 +566,7 @@ impl Exporter {
             .ok_or_else(|| io::Error::other(format!("failed to parse MDX {source_casc_path}")))?;
         let mut warnings = parser.issues();
 
-        let asset_name = flat_asset_name(logical_path);
+        let asset_name = doodad_asset_name(logical_path, replaceable_textures);
         if self.keep_source {
             fs::write(
                 self.output
@@ -276,7 +576,8 @@ impl Exporter {
             )?;
         }
 
-        let (texture_manifests, gltf_texture_indices) = self.export_model_textures(&model)?;
+        let (texture_manifests, gltf_texture_indices) =
+            self.export_model_textures(&model, replaceable_textures)?;
         let gltf_name = format!("models/{asset_name}.gltf");
         let bin_name = format!("models/{asset_name}.bin");
         let (gltf, bin, material_warnings) = build_gltf(
@@ -329,33 +630,43 @@ impl Exporter {
         Ok((casc_path, bytes.to_vec()))
     }
 
-    fn export_model_textures(&mut self, model: &Model) -> Result<TextureExport, Box<dyn Error>> {
+    fn export_model_textures(
+        &mut self,
+        model: &Model,
+        replaceable_textures: &BTreeMap<u32, String>,
+    ) -> Result<TextureExport, Box<dyn Error>> {
         let mut manifests = Vec::with_capacity(model.textures_len());
         let mut gltf_indices = Vec::with_capacity(model.textures_len());
         let mut next_gltf_index = 0usize;
 
         for texture in model.textures_iter() {
             let replaceable_id = texture.replaceable_id();
-            let logical = normalize_texture_path(&texture.file_name());
-            if replaceable_id != 0 || logical.is_empty() {
+            let model_logical = normalize_texture_path(&texture.file_name());
+            let logical = if replaceable_id == 0 {
+                (!model_logical.is_empty()).then_some(model_logical.clone())
+            } else {
+                replaceable_textures.get(&replaceable_id).cloned()
+            };
+            let Some(logical) = logical else {
                 manifests.push(TextureManifest {
-                    source_texture: logical,
+                    source_texture: model_logical,
                     source_casc_path: None,
                     png: None,
                     replaceable_id,
                 });
                 gltf_indices.push(None);
                 continue;
-            }
+            };
 
             let key = logical.to_ascii_lowercase();
-            let manifest = if let Some(cached) = self.texture_cache.get(&key) {
+            let mut manifest = if let Some(cached) = self.texture_cache.get(&key) {
                 cached.clone()
             } else {
                 let exported = self.export_texture(&logical)?;
                 self.texture_cache.insert(key, exported.clone());
                 exported
             };
+            manifest.replaceable_id = replaceable_id;
             manifests.push(manifest);
             gltf_indices.push(Some(next_gltf_index));
             next_gltf_index += 1;
@@ -2085,6 +2396,45 @@ fn read_wc3_version(install: &Path) -> Option<String> {
     None
 }
 
+fn parse_doodad_skin(text: &str) -> DoodadSkinCatalog {
+    let mut result = DoodadSkinCatalog::new();
+    let mut current: Option<String> = None;
+    for raw_line in text.lines() {
+        let line = raw_line.trim().trim_start_matches('\u{feff}');
+        if line.is_empty() || line.starts_with("//") || line.starts_with(';') {
+            continue;
+        }
+        if let Some(section) = line
+            .strip_prefix('[')
+            .and_then(|line| line.strip_suffix(']'))
+        {
+            let key = section.trim().to_ascii_lowercase();
+            result.entry(key.clone()).or_default();
+            current = Some(key);
+            continue;
+        }
+        let Some(current) = current.as_ref() else {
+            continue;
+        };
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let profile = result
+            .get_mut(current)
+            .expect("current section was inserted");
+        let value = value.trim();
+        match key.trim().to_ascii_lowercase().as_str() {
+            "file:sd" => profile.file_sd = nonempty(value),
+            "file" => profile.file = nonempty(value),
+            "numvar" => profile.num_variations = value.parse().ok(),
+            "texid" => profile.replaceable_texture_id = value.parse().ok(),
+            "texfile:sd" | "texfile" => profile.replaceable_texture = nonempty(value),
+            _ => {}
+        }
+    }
+    result
+}
+
 fn parse_unit_skin(text: &str) -> UnitSkinCatalog {
     let mut result = UnitSkinCatalog::new();
     let mut current: Option<String> = None;
@@ -2125,6 +2475,50 @@ fn parse_unit_skin(text: &str) -> UnitSkinCatalog {
 
 fn nonempty(value: &str) -> Option<String> {
     (!value.is_empty() && value != "-").then(|| value.to_owned())
+}
+
+fn doodad_model_key(logical_path: &str, replacements: &BTreeMap<u32, String>) -> String {
+    let mut key = logical_path.to_ascii_lowercase();
+    for (id, texture) in replacements {
+        key.push('|');
+        key.push_str(&id.to_string());
+        key.push('=');
+        key.push_str(&texture.to_ascii_lowercase());
+    }
+    key
+}
+
+fn doodad_asset_name(logical_path: &str, replacements: &BTreeMap<u32, String>) -> String {
+    let mut name = flat_asset_name(logical_path);
+    for (id, texture) in replacements {
+        name.push_str("__r");
+        name.push_str(&id.to_string());
+        name.push('_');
+        name.push_str(&flat_asset_name(texture));
+    }
+    name
+}
+
+fn preferred_doodad_model_path(path: &str, variation: u32, num_variations: u32) -> String {
+    doodad_model_candidates(path, variation, num_variations)
+        .into_iter()
+        .next()
+        .expect("doodad model candidate list is never empty")
+}
+
+fn doodad_model_candidates(path: &str, variation: u32, num_variations: u32) -> Vec<String> {
+    let exact = normalize_model_path(path);
+    let stem = exact
+        .strip_suffix(".mdx")
+        .expect("normalized model path always has mdx suffix");
+    let varied = format!("{stem}{variation}.mdx");
+    if num_variations > 1 && varied != exact {
+        vec![varied, exact]
+    } else if varied != exact {
+        vec![exact, varied]
+    } else {
+        vec![exact]
+    }
 }
 
 pub fn normalize_model_path(path: &str) -> String {
@@ -2187,6 +2581,37 @@ mod tests {
         assert_eq!(
             flat_asset_name(r"units\human\Footman\Footman.mdx"),
             "units__human__footman__footman"
+        );
+    }
+
+    #[test]
+    fn doodad_variations_append_the_editor_variation_index() {
+        assert_eq!(
+            doodad_model_candidates(r"Doodads\Ashenvale\Rocks\AshenRock\AshenRock", 7, 10)[0],
+            r"Doodads\Ashenvale\Rocks\AshenRock\AshenRock7.mdx"
+        );
+        assert_eq!(
+            doodad_model_candidates(r"Doodads\Ruins\Terrain\RuinsWall90\RuinsWall900.mdl", 0, 1,)
+                [0],
+            r"Doodads\Ruins\Terrain\RuinsWall90\RuinsWall900.mdx"
+        );
+    }
+
+    #[test]
+    fn doodad_skin_parser_recovers_model_variations_and_replaceable_texture() {
+        let profiles = parse_doodad_skin(
+            "\u{feff}[ATtr]\nnumVar=5\nfile=Doodads\\Terrain\\AshenTree\\AshenTree\ntexID=32\ntexFile=ReplaceableTextures\\AshenvaleTree\\AshenTree\n",
+        );
+        let profile = &profiles["attr"];
+        assert_eq!(profile.num_variations, Some(5));
+        assert_eq!(
+            profile.file.as_deref(),
+            Some(r"Doodads\Terrain\AshenTree\AshenTree")
+        );
+        assert_eq!(profile.replaceable_texture_id, Some(32));
+        assert_eq!(
+            profile.replaceable_texture.as_deref(),
+            Some(r"ReplaceableTextures\AshenvaleTree\AshenTree")
         );
     }
 

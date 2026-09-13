@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use catalog::{load_embedded_units, load_production_units};
+use catalog::{load_embedded_doodads, load_embedded_units, load_production_units};
 use export::Exporter;
 
 fn main() {
@@ -48,6 +48,71 @@ fn run() -> Result<(), Box<dyn Error>> {
         )
     })?;
     verify_install(&wc3_install)?;
+
+    if args.doodads || !args.doodad_filters.is_empty() {
+        if args.production.is_some() || args.object_fields.is_some() || !args.units.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--doodads/--doodad cannot be combined with unit catalog/filter options",
+            )
+            .into());
+        }
+        let mut doodads = load_embedded_doodads()?;
+        if !args.doodad_filters.is_empty() {
+            let requested: BTreeSet<_> = args.doodad_filters.iter().map(String::as_str).collect();
+            let available: BTreeSet<_> = doodads
+                .iter()
+                .map(|doodad| doodad.rawcode.as_str())
+                .collect();
+            let unknown: Vec<_> = requested.difference(&available).copied().collect();
+            if !unknown.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "requested doodad rawcode(s) not in placed catalog: {}",
+                        unknown.join(", ")
+                    ),
+                )
+                .into());
+            }
+            doodads.retain(|doodad| requested.contains(doodad.rawcode.as_str()));
+        }
+        let placements: usize = doodads.iter().map(|doodad| doodad.placements.len()).sum();
+        println!(
+            "Extracting {placements} Castle Fight doodad placement(s) across {} object definition(s) from {}",
+            doodads.len(),
+            wc3_install.display()
+        );
+        let mut exporter = Exporter::open(&wc3_install, &output, args.keep_source)?;
+        let manifest = exporter.export_doodads(&doodads)?;
+        fs::write(
+            output.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+        println!(
+            "Exported {} unique model(s) for {} doodad object(s) to {}",
+            manifest.models.len(),
+            manifest.objects.len(),
+            output.display()
+        );
+        if !manifest.failures.is_empty() {
+            eprintln!(
+                "{} doodad model variant(s) could not be exported:",
+                manifest.failures.len()
+            );
+            for failure in &manifest.failures {
+                eprintln!(
+                    "  {} variation {} ({}): {}",
+                    failure.rawcode, failure.variation, failure.source_model, failure.error
+                );
+            }
+            return Err(io::Error::other(
+                "doodad asset extraction completed with model failures; see manifest.json",
+            )
+            .into());
+        }
+        return Ok(());
+    }
 
     let mut units = match (&args.production, &args.object_fields) {
         (None, None) => load_embedded_units()?,
@@ -138,6 +203,8 @@ struct Args {
     production: Option<PathBuf>,
     object_fields: Option<PathBuf>,
     units: Vec<String>,
+    doodads: bool,
+    doodad_filters: Vec<String>,
     art_mode: String,
     keep_source: bool,
     help: bool,
@@ -151,6 +218,8 @@ impl Args {
             production: None,
             object_fields: None,
             units: Vec::new(),
+            doodads: false,
+            doodad_filters: Vec::new(),
             art_mode: "sd".to_owned(),
             keep_source: false,
             help: false,
@@ -161,6 +230,7 @@ impl Args {
             match args[i].as_str() {
                 "-h" | "--help" => result.help = true,
                 "--keep-source" => result.keep_source = true,
+                "--doodads" => result.doodads = true,
                 "--wc3" => result.wc3_install = Some(PathBuf::from(value(&args, &mut i, "--wc3")?)),
                 "--output" | "-o" => {
                     result.output = Some(PathBuf::from(value(&args, &mut i, "--output")?))
@@ -175,6 +245,9 @@ impl Args {
                 "--unit" => result
                     .units
                     .push(value(&args, &mut i, "--unit")?.to_owned()),
+                "--doodad" => result
+                    .doodad_filters
+                    .push(value(&args, &mut i, "--doodad")?.to_owned()),
                 "--art" => result.art_mode = value(&args, &mut i, "--art")?.to_ascii_lowercase(),
                 unknown => {
                     return Err(io::Error::new(
@@ -213,6 +286,8 @@ Options:
   --wc3 PATH            Warcraft III install root (or set WC3_INSTALL)
   -o, --output PATH     Destination directory for converted assets
   --unit RAWCODE        Export one production unit; repeat for more units
+  --doodads             Export every doodad/destructable placed by Castle Fight
+  --doodad RAWCODE      Export one placed doodad type; repeat for more types
   --art sd              Art mode. SD/classic is currently implemented
   --keep-source         Also retain extracted MDX and source texture files
   --production PATH     Development override for production-buildings.tsv
@@ -220,7 +295,8 @@ Options:
   -h, --help            Show this help
 
 With no --unit filters, every production unit in the resolved Castle Fight
-catalog is exported. Models shared by multiple unit rawcodes are converted once.
+catalog is exported. Use --doodads (or --doodad RAWCODE) for map decoration
+assets and exact placements. Models shared by multiple objects are converted once.
 "
     );
 }
@@ -241,5 +317,17 @@ mod tests {
         .unwrap();
         assert_eq!(args.units, ["hfoo", "hrif"]);
         assert_eq!(args.art_mode, "sd");
+    }
+
+    #[test]
+    fn doodad_filter_implies_doodad_export_mode() {
+        let args = Args::parse(
+            ["--wc3", "/game", "--output", "/out", "--doodad", "ATtr"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .unwrap();
+        assert!(!args.doodads);
+        assert_eq!(args.doodad_filters, ["ATtr"]);
     }
 }

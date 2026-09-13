@@ -14,8 +14,36 @@ pub struct UnitAssetSpec {
     pub scale: Option<f32>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DoodadAssetSpec {
+    pub rawcode: String,
+    pub base_rawcode: String,
+    pub object_kind: String,
+    pub name: String,
+    pub model_path: Option<String>,
+    pub num_variations: Option<u32>,
+    pub placements: Vec<DoodadPlacementSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DoodadPlacementSpec {
+    pub editor_id: u32,
+    pub position: [f32; 3],
+    pub angle_degrees: f32,
+    pub scale: [f32; 3],
+    pub visible: bool,
+    pub solid: bool,
+    pub fixed_z: bool,
+    pub variation: u32,
+}
+
 pub fn load_embedded_units() -> Result<Vec<UnitAssetSpec>, Box<dyn Error>> {
     let json = include_str!(concat!(env!("OUT_DIR"), "/unit-assets.json"));
+    Ok(serde_json::from_str(json)?)
+}
+
+pub fn load_embedded_doodads() -> Result<Vec<DoodadAssetSpec>, Box<dyn Error>> {
+    let json = include_str!(concat!(env!("OUT_DIR"), "/doodad-assets.json"));
     Ok(serde_json::from_str(json)?)
 }
 

@@ -12,9 +12,42 @@ struct UnitAssetSpec {
     scale: Option<f32>,
 }
 
+#[derive(Serialize)]
+struct DoodadAssetSpec {
+    rawcode: String,
+    base_rawcode: String,
+    object_kind: String,
+    name: String,
+    model_path: Option<String>,
+    num_variations: Option<u32>,
+    placements: Vec<DoodadPlacementSpec>,
+}
+
+#[derive(Serialize)]
+struct DoodadPlacementSpec {
+    editor_id: u32,
+    position: [f32; 3],
+    angle_degrees: f32,
+    scale: [f32; 3],
+    visible: bool,
+    solid: bool,
+    fixed_z: bool,
+    variation: u32,
+}
+
+struct DoodadBuilder {
+    rawcode: String,
+    base_rawcode: String,
+    object_kind: String,
+    name: String,
+    model_path: Option<String>,
+    num_variations: Option<u32>,
+    placements: Vec<DoodadPlacementSpec>,
+}
+
 fn main() {
     if let Err(error) = build_catalog() {
-        panic!("failed to build embedded WC3 unit asset catalog: {error}");
+        panic!("failed to build embedded WC3 asset catalogs: {error}");
     }
 }
 
@@ -24,16 +57,26 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let resolved = original_map.join("extracted/resolved");
     let production_path = resolved.join("production-buildings.tsv");
     let object_fields_path = resolved.join("object-fields.tsv");
+    let placed_doodads_path = resolved.join("placed-doodads.tsv");
     println!("cargo:rerun-if-changed={}", production_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
+    println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
     let map_readme = original_map.join("README.md");
     println!("cargo:rerun-if-changed={}", map_readme.display());
     let catalog_version = parse_catalog_version(&fs::read_to_string(&map_readme)?)?;
     println!("cargo:rustc-env=CF_ASSET_CATALOG_VERSION={catalog_version}");
 
     let units = load_production_units(&production_path, &object_fields_path)?;
-    let out = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR")).join("unit-assets.json");
-    fs::write(out, serde_json::to_vec(&units)?)?;
+    let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
+    fs::write(
+        out_dir.join("unit-assets.json"),
+        serde_json::to_vec(&units)?,
+    )?;
+    fs::write(
+        out_dir.join("doodad-assets.json"),
+        serde_json::to_vec(&doodads)?,
+    )?;
     Ok(())
 }
 
@@ -120,6 +163,128 @@ fn load_production_units(
     Ok(result)
 }
 
+fn load_placed_doodads(
+    placed_path: &std::path::Path,
+    object_fields_path: &std::path::Path,
+) -> Result<Vec<DoodadAssetSpec>, Box<dyn Error>> {
+    let mut placed = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(placed_path)?;
+    let headers = placed.headers()?.clone();
+    let rawcode = header_index(&headers, "rawcode")?;
+    let object_kind = header_index(&headers, "object_kind")?;
+    let name = header_index(&headers, "name")?;
+    let editor_id = header_index(&headers, "editor_id")?;
+    let x = header_index(&headers, "x")?;
+    let y = header_index(&headers, "y")?;
+    let z = header_index(&headers, "z")?;
+    let angle = header_index(&headers, "angle_degrees")?;
+    let scale_x = header_index(&headers, "scale_x")?;
+    let scale_y = header_index(&headers, "scale_y")?;
+    let scale_z = header_index(&headers, "scale_z")?;
+    let visible = header_index(&headers, "visible")?;
+    let solid = header_index(&headers, "solid")?;
+    let fixed_z = header_index(&headers, "fixed_z")?;
+    let variation = header_index(&headers, "variation")?;
+
+    let mut objects = BTreeMap::<String, DoodadBuilder>::new();
+    for row in placed.records() {
+        let row = row?;
+        let rawcode = required(&row, rawcode, "rawcode")?.to_owned();
+        let kind = required(&row, object_kind, "object_kind")?.to_owned();
+        let object = objects
+            .entry(rawcode.clone())
+            .or_insert_with(|| DoodadBuilder {
+                rawcode: rawcode.clone(),
+                base_rawcode: rawcode.clone(),
+                object_kind: kind.clone(),
+                name: row.get(name).unwrap_or_default().to_owned(),
+                model_path: None,
+                num_variations: None,
+                placements: Vec::new(),
+            });
+        if object.object_kind != kind {
+            return Err(
+                format!("placed rawcode {rawcode} appears as multiple object kinds").into(),
+            );
+        }
+        object.placements.push(DoodadPlacementSpec {
+            editor_id: parse_required(&row, editor_id, "editor_id")?,
+            position: [
+                parse_required(&row, x, "x")?,
+                parse_required(&row, y, "y")?,
+                parse_required(&row, z, "z")?,
+            ],
+            angle_degrees: parse_required(&row, angle, "angle_degrees")?,
+            scale: [
+                parse_required(&row, scale_x, "scale_x")?,
+                parse_required(&row, scale_y, "scale_y")?,
+                parse_required(&row, scale_z, "scale_z")?,
+            ],
+            visible: parse_flag(&row, visible, "visible")?,
+            solid: parse_flag(&row, solid, "solid")?,
+            fixed_z: parse_flag(&row, fixed_z, "fixed_z")?,
+            variation: parse_required(&row, variation, "variation")?,
+        });
+    }
+
+    let mut fields = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(object_fields_path)?;
+    let field_headers = fields.headers()?.clone();
+    let category = header_index(&field_headers, "category")?;
+    let rawcode_col = header_index(&field_headers, "rawcode")?;
+    let base_rawcode_col = header_index(&field_headers, "base_rawcode")?;
+    let field_id = header_index(&field_headers, "field_id")?;
+    let recovered = header_index(&field_headers, "recovered_value_json")?;
+    for row in fields.records() {
+        let row = row?;
+        let Some(rawcode) = row.get(rawcode_col) else {
+            continue;
+        };
+        let Some(object) = objects.get_mut(rawcode) else {
+            continue;
+        };
+        let expected_category = if object.object_kind == "destructable" {
+            "destructables"
+        } else {
+            "doodads"
+        };
+        if row.get(category) != Some(expected_category) {
+            continue;
+        }
+        if let Some(base) = row.get(base_rawcode_col).filter(|value| !value.is_empty()) {
+            object.base_rawcode = base.to_owned();
+        }
+        match row.get(field_id) {
+            Some("dfil") | Some("bfil") => {
+                if let Some(path) = parse_json_string(row.get(recovered).unwrap_or_default()) {
+                    object.model_path = Some(path);
+                }
+            }
+            Some("dvar") | Some("bvar") => {
+                if let Some(count) = parse_json_u32(row.get(recovered).unwrap_or_default()) {
+                    object.num_variations = Some(count);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(objects
+        .into_values()
+        .map(|object| DoodadAssetSpec {
+            rawcode: object.rawcode,
+            base_rawcode: object.base_rawcode,
+            object_kind: object.object_kind,
+            name: object.name,
+            model_path: object.model_path,
+            num_variations: object.num_variations,
+            placements: object.placements,
+        })
+        .collect())
+}
+
 fn parse_catalog_version(readme: &str) -> Result<String, Box<dyn Error>> {
     const MARKER: &str = "Castle Fight DE Beta ";
     let after = readme
@@ -143,6 +308,35 @@ fn header_index(headers: &StringRecord, name: &str) -> Result<usize, Box<dyn Err
         .ok_or_else(|| format!("missing TSV column {name:?}").into())
 }
 
+fn required<'a>(
+    row: &'a StringRecord,
+    index: usize,
+    name: &str,
+) -> Result<&'a str, Box<dyn Error>> {
+    row.get(index)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("missing required TSV value {name:?}").into())
+}
+
+fn parse_required<T>(row: &StringRecord, index: usize, name: &str) -> Result<T, Box<dyn Error>>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let value = required(row, index, name)?;
+    value
+        .parse()
+        .map_err(|error| format!("invalid {name} value {value:?}: {error}").into())
+}
+
+fn parse_flag(row: &StringRecord, index: usize, name: &str) -> Result<bool, Box<dyn Error>> {
+    match required(row, index, name)? {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        value => Err(format!("invalid {name} flag {value:?}").into()),
+    }
+}
+
 fn parse_json_string(value: &str) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(value)
         .ok()?
@@ -154,6 +348,14 @@ fn parse_json_f32(value: &str) -> Option<f32> {
     let value = serde_json::from_str::<serde_json::Value>(value).ok()?;
     if let Some(number) = value.as_f64() {
         return Some(number as f32);
+    }
+    value.as_str()?.parse().ok()
+}
+
+fn parse_json_u32(value: &str) -> Option<u32> {
+    let value = serde_json::from_str::<serde_json::Value>(value).ok()?;
+    if let Some(number) = value.as_u64() {
+        return u32::try_from(number).ok();
     }
     value.as_str()?.parse().ok()
 }

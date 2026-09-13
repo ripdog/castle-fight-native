@@ -33,6 +33,21 @@ The terrain asset extractor resolves each palette rawcode through Warcraft's `Te
 
 Generated files live under ignored `assets/wc3/terrain/`: PNG ground/cliff atlases plus `manifest.json` recording the rawcode-to-CASC provenance and atlas shape. No Blizzard texture is committed. When this generated directory is present, the 3D client uses the ground atlases with Warcraft's tilepoint blend masks and variation selection; without it, the existing procedural solid-color terrain remains the fallback. Cliff atlases are extracted and recorded now, while cliff-face mesh/texturing remains separate from the smooth authoritative height surface used by the current client.
 
+## Doodad presentation assets
+
+`resolved/placed-doodads.tsv` is the authoritative placement catalog for the original map: rawcode/kind/name, exact X/Y/Z, angle, per-axis scale, visibility/solid/fixed-Z flags, variation, and resolved pathing footprint. The shared Rust WC3 asset exporter embeds this placement catalog and resolves the corresponding classic doodad/destructable skin records directly from the user's Warcraft III installation.
+
+```sh
+cargo run -p castle-fight-wc3-assets -- \
+  --wc3 "$WC3_INSTALL" \
+  --doodads \
+  --output assets/wc3/doodads
+```
+
+The generated ignored bundle contains `manifest.json`, glTF/bin models, and PNG textures. Only model variations that are actually placed by Castle Fight are exported. Editor-only LOS/pathing blockers are deliberately retained as unresolved render placements rather than shown in the client. Destructable replaceable textures (notably tree skins) are resolved from Warcraft's `texID`/`texFile` metadata. The native client automatically instantiates every resolved visible placement when this bundle is present; if it is absent, doodad presentation is simply skipped.
+
+MDX particle/ribbon emitters are not yet converted, so the two emitter-only bubble-geyser doodads currently have empty glTF scenes. This does not affect the geometry-backed trees, shrubs, rocks, walls, ruins, props, water plants, fish, etc.
+
 ## Source-built third-party tools
 
 Only open-source tooling is fetched, pinned, license-checked, and built locally.

@@ -1,6 +1,7 @@
 mod bridge;
 mod build_ui;
 mod demo;
+mod doodads;
 mod inspection;
 mod presentation;
 mod terrain;
@@ -18,6 +19,7 @@ use castle_fight_sim::Simulation;
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
 use demo::{create_demo_world, try_spawn_demo_building};
+use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
@@ -94,6 +96,7 @@ fn main() {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
             CastlePresentationPlugin::new(options.health_bars),
+            DoodadPresentationPlugin,
             BuildUiPlugin,
             InspectionPlugin,
         ))
