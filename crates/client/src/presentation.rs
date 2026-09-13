@@ -22,7 +22,12 @@ use crate::{
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
 const UNIT_RANGED_HEIGHT: f32 = 8.0;
 const UNIT_BASE_COLLISION_RADIUS_WORLD: f32 = 4.0;
-const AIR_UNIT_ALTITUDE: f32 = 48.0;
+const AIR_UNIT_ALTITUDE: f32 = 64.0;
+const AIR_HOVER_BOB_HEIGHT: f32 = 2.2;
+const AIR_HOVER_PHASE_PER_TICK: f32 = 0.24;
+const AIR_WING_FLAP_SPEED: f32 = 9.0;
+const AIR_WING_FLAP_AMPLITUDE: f32 = 0.72;
+const AIR_WING_BASE_ANGLE: f32 = 0.18;
 const BUILDING_HEIGHT: f32 = 96.0;
 const STATIC_BLOCKER_HEIGHT: f32 = 5.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
@@ -131,6 +136,7 @@ struct PresentationAssets {
     bounce_orb_mesh: Handle<Mesh>,
     caster_crystal_mesh: Handle<Mesh>,
     caster_ring_mesh: Handle<Mesh>,
+    air_wing_mesh: Handle<Mesh>,
     building_mesh: Handle<Mesh>,
     guaranteed_projectile_mesh: Handle<Mesh>,
     ballistic_projectile_mesh: Handle<Mesh>,
@@ -307,6 +313,12 @@ struct WeaponPresentation {
 }
 
 #[derive(Component)]
+struct AirWingPresentation {
+    side: f32,
+    phase: f32,
+}
+
+#[derive(Component)]
 struct MissIndicator {
     target: SimId,
     fallback_position: SimPoint,
@@ -354,6 +366,7 @@ impl Plugin for CastlePresentationPlugin {
                     interpolate_render_transforms,
                     update_miss_indicators,
                     animate_unit_weapons,
+                    animate_air_wings,
                     age_death_remnants,
                     age_projectile_impacts,
                     age_ability_area_impacts,
@@ -395,6 +408,7 @@ fn setup_scene(
     let bounce_orb_mesh = meshes.add(Cuboid::new(2.8, 2.8, 2.8));
     let caster_crystal_mesh = meshes.add(Cuboid::new(2.2, 5.0, 2.2));
     let caster_ring_mesh = meshes.add(Cuboid::new(4.6, 0.45, 4.6));
+    let air_wing_mesh = meshes.add(Cuboid::new(6.5, 0.45, 4.4));
     let building_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let guaranteed_projectile_mesh = meshes.add(Cuboid::new(1.3, 1.3, 5.5));
     let ballistic_projectile_mesh = meshes.add(Cuboid::new(3.8, 3.8, 3.8));
@@ -516,6 +530,7 @@ fn setup_scene(
         bounce_orb_mesh,
         caster_crystal_mesh,
         caster_ring_mesh,
+        air_wing_mesh,
         building_mesh: building_mesh.clone(),
         guaranteed_projectile_mesh,
         ballistic_projectile_mesh,
@@ -701,6 +716,35 @@ fn spawn_unit_weapon(
     weapon_entity.expect("unit weapon entity was not spawned")
 }
 
+fn spawn_air_wings(
+    commands: &mut Commands,
+    assets: &PresentationAssets,
+    unit_entity: Entity,
+    unit: &UnitSample,
+) {
+    if unit.movement_class != MovementClass::Air {
+        return;
+    }
+
+    let material = assets.unit_accent_material(unit.team);
+    let phase = unit.id.0 as f32 * 0.61;
+    commands.entity(unit_entity).with_children(|unit_root| {
+        for side in [-1.0_f32, 1.0] {
+            unit_root
+                .spawn((
+                    Transform::from_xyz(side * 3.0, 0.5, -0.4),
+                    Visibility::default(),
+                    AirWingPresentation { side, phase },
+                ))
+                .with_child((
+                    Mesh3d(assets.air_wing_mesh.clone()),
+                    MeshMaterial3d(material.clone()),
+                    Transform::from_xyz(side * 3.1, 0.0, 0.0),
+                ));
+        }
+    });
+}
+
 fn trigger_attack_animations(
     samples: Res<PresentationSamples>,
     render_map: Res<RenderMap>,
@@ -825,6 +869,18 @@ fn animate_unit_weapons(
             weapon.elapsed = Some(elapsed);
         }
     }
+}
+
+fn animate_air_wings(time: Res<Time>, mut wings: Query<(&AirWingPresentation, &mut Transform)>) {
+    let elapsed = time.elapsed_secs();
+    for (wing, mut transform) in &mut wings {
+        transform.rotation = air_wing_rotation(wing.side, wing.phase, elapsed);
+    }
+}
+
+fn air_wing_rotation(side: f32, phase: f32, elapsed: f32) -> Quat {
+    let flap = (elapsed * AIR_WING_FLAP_SPEED + phase).sin() * AIR_WING_FLAP_AMPLITUDE;
+    Quat::from_rotation_z(side * (AIR_WING_BASE_ANGLE + flap))
 }
 
 fn weapon_transform(kind: WeaponKind, progress: Option<f32>) -> Transform {
@@ -1178,6 +1234,7 @@ fn sync_render_entities(
             ))
             .id();
         let weapon = spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
+        spawn_air_wings(&mut commands, &assets, entity, unit);
         render_map.units.insert(
             unit.id,
             PresentedEntry {
@@ -1288,7 +1345,7 @@ fn interpolate_render_transforms(
             &terrain,
         );
         let moving = previous.position != current.position;
-        let bob = walk_bob(current.id, render_tick, moving);
+        let bob = unit_motion_bob(current.id, current.movement_class, render_tick, moving);
         let position = ground_position + Vec3::Y * (unit_height(current) * 0.5 + bob);
         let desired_rotation =
             unit_facing_rotation(current, previous, &samples, &metrics, &terrain, alpha);
@@ -1439,6 +1496,21 @@ fn unit_facing_rotation(
 
 fn facing_rotation(direction: Vec3) -> Quat {
     Quat::from_rotation_y(direction.x.atan2(direction.z))
+}
+
+fn unit_motion_bob(
+    id: SimId,
+    movement_class: MovementClass,
+    render_tick: f32,
+    moving: bool,
+) -> f32 {
+    match movement_class {
+        MovementClass::Ground => walk_bob(id, render_tick, moving),
+        MovementClass::Air => {
+            let phase = render_tick * AIR_HOVER_PHASE_PER_TICK + id.0 as f32 * 0.47;
+            phase.sin() * AIR_HOVER_BOB_HEIGHT
+        }
+    }
 }
 
 fn walk_bob(id: SimId, render_tick: f32, moving: bool) -> f32 {
@@ -1952,12 +2024,23 @@ pub(crate) const fn unit_visual_altitude(movement_class: MovementClass) -> f32 {
     }
 }
 
+pub(crate) fn unit_visual_center_lerp(
+    previous: SimPoint,
+    current: SimPoint,
+    unit: &UnitSample,
+    alpha: f32,
+    terrain: &TerrainSurface,
+) -> Vec3 {
+    unit_ground_position_lerp(previous, current, unit.movement_class, alpha, terrain)
+        + Vec3::Y * (unit_height(unit) * 0.5)
+}
+
 fn unit_render_scale(unit: &UnitSample) -> f32 {
     let collision_world = unit.collision_radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32;
     (collision_world / UNIT_BASE_COLLISION_RADIUS_WORLD).max(1.0)
 }
 
-fn unit_height(unit: &UnitSample) -> f32 {
+pub(crate) fn unit_height(unit: &UnitSample) -> f32 {
     let base = match unit.visual_kind.weapon_kind() {
         UnitVisualKind::Melee => UNIT_MELEE_HEIGHT,
         UnitVisualKind::Ranged | UnitVisualKind::Ballistic | UnitVisualKind::Bounce => {
@@ -2080,6 +2163,30 @@ mod tests {
         assert_eq!(walk_bob(SimId(7), 42.5, false), 0.0);
         let bob = walk_bob(SimId(7), 42.5, true);
         assert!((0.0..=UNIT_WALK_BOB_HEIGHT).contains(&bob));
+    }
+
+    #[test]
+    fn air_units_hover_even_when_stationary() {
+        let first = unit_motion_bob(SimId(7), MovementClass::Air, 42.5, false);
+        let later = unit_motion_bob(SimId(7), MovementClass::Air, 44.5, false);
+        assert!(first.abs() <= AIR_HOVER_BOB_HEIGHT);
+        assert!(later.abs() <= AIR_HOVER_BOB_HEIGHT);
+        assert_ne!(first, later);
+        assert!(
+            unit_visual_altitude(MovementClass::Air) > unit_visual_altitude(MovementClass::Ground)
+        );
+    }
+
+    #[test]
+    fn air_wings_flap_and_mirror_each_other() {
+        let left_start = air_wing_rotation(-1.0, 0.25, 0.0);
+        let left_later = air_wing_rotation(-1.0, 0.25, 0.1);
+        let right_start = air_wing_rotation(1.0, 0.25, 0.0);
+
+        assert!(left_start.dot(left_later).abs() < 0.999_999);
+        let left_tip = left_start * Vec3::X;
+        let right_tip = right_start * Vec3::X;
+        assert!((left_tip.y + right_tip.y).abs() < 1.0e-5);
     }
 
     #[test]

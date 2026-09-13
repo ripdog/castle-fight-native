@@ -222,6 +222,8 @@ Camera movement MUST NOT modify the authoritative simulation.
 
 The user may select/inspect combat units/buildings for information. Ordinary combat-unit selection MUST remain inspection-only and MUST NOT expose direct orders.
 
+Air units SHOULD be presented at an obvious visual altitude above the sampled terrain, with presentation-only motion or silhouettes that distinguish them from ground units. Unit picking SHOULD test the rendered 3D unit volume rather than only the terrain point beneath it, so clicking an airborne model selects that unit at its visible altitude.
+
 The player's builder is the sole directly controlled unit and should be visually/UI-distinct enough that its movement/build/inventory controls are not confused with combat-unit inspection.
 
 Picking may use render/GPU/scene data to identify a `SimId`, but displayed authoritative stats should be resolved from the latest simulation state.

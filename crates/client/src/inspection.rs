@@ -7,8 +7,8 @@ use crate::{
     build_ui::{BuildSelection, cursor_over_build_panel},
     presentation::{
         WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
-        sim_point_to_terrain_world_lerp, sim_point_to_world, sim_point_to_world_lerp,
-        unit_visual_altitude, viewport_ground_point,
+        sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
+        unit_visual_center_lerp, viewport_ground_point,
     },
     terrain::TerrainSurface,
 };
@@ -114,16 +114,20 @@ fn handle_world_selection(
         return;
     }
     let (camera, camera_transform) = *camera;
+    let alpha = playback.interpolation_alpha(&fixed_time);
+    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
+        selection.selected = None;
+        return;
+    };
+    if let Some(unit) = pick_unit_on_ray(ray.origin, *ray.direction, &samples, &terrain, alpha) {
+        selection.selected = Some(unit);
+        return;
+    }
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         selection.selected = None;
         return;
     };
-    selection.selected = pick_entity(
-        world,
-        &samples,
-        &metrics,
-        playback.interpolation_alpha(&fixed_time),
-    );
+    selection.selected = pick_building_at_ground(world, &samples, &metrics);
 }
 
 fn clear_stale_selection(
@@ -216,36 +220,70 @@ fn draw_selection_highlight(
     }
 }
 
-fn pick_entity(
+fn pick_unit_on_ray(
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+    samples: &PresentationSamples,
+    terrain: &TerrainSurface,
+    alpha: f32,
+) -> Option<SimId> {
+    let mut nearest: Option<(f32, SimId)> = None;
+    for unit in samples.current.units.values() {
+        let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
+        let center =
+            unit_visual_center_lerp(previous.position, unit.position, unit, alpha, terrain);
+        let radius = unit_pick_radius(unit).max(unit_height(unit) * 0.55);
+        let Some(distance) = ray_sphere_hit_distance(ray_origin, ray_direction, center, radius)
+        else {
+            continue;
+        };
+        match nearest {
+            Some((nearest_distance, _)) if nearest_distance <= distance => {}
+            _ => nearest = Some((distance, unit.id)),
+        }
+    }
+    nearest.map(|(_, id)| id)
+}
+
+fn pick_building_at_ground(
     world: Vec3,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
-    alpha: f32,
 ) -> Option<SimId> {
-    let mut nearest_unit: Option<(f32, SimId)> = None;
-    for unit in samples.current.units.values() {
-        let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
-        let position = sim_point_to_world_lerp(previous.position, unit.position, alpha);
-        let distance_sq = position.xz().distance_squared(world.xz());
-        let radius = unit_pick_radius(unit);
-        if distance_sq > radius * radius {
-            continue;
-        }
-        match nearest_unit {
-            Some((nearest_sq, _)) if nearest_sq <= distance_sq => {}
-            _ => nearest_unit = Some((distance_sq, unit.id)),
-        }
-    }
-    if let Some((_, id)) = nearest_unit {
-        return Some(id);
-    }
-
     samples
         .current
         .buildings
         .values()
         .find(|building| point_inside_building(world, building, metrics))
         .map(|building| building.id)
+}
+
+fn ray_sphere_hit_distance(
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+    center: Vec3,
+    radius: f32,
+) -> Option<f32> {
+    let direction = ray_direction.normalize_or_zero();
+    if direction == Vec3::ZERO {
+        return None;
+    }
+    let offset = ray_origin - center;
+    let projected = offset.dot(direction);
+    let discriminant = projected * projected - (offset.length_squared() - radius * radius);
+    if discriminant < 0.0 {
+        return None;
+    }
+    let root = discriminant.sqrt();
+    let near = -projected - root;
+    let far = -projected + root;
+    if near >= 0.0 {
+        Some(near)
+    } else if far >= 0.0 {
+        Some(far)
+    } else {
+        None
+    }
 }
 
 fn point_inside_building(world: Vec3, building: &BuildingSample, metrics: &WorldMetrics) -> bool {
@@ -441,7 +479,9 @@ fn cursor_over_inspector_panel(cursor: Vec2, window_width: f32) -> bool {
 mod tests {
     use std::collections::BTreeMap;
 
-    use castle_fight_sim::{BuildingFootprint, NavCell, SimPoint, SimulationConfig};
+    use castle_fight_sim::{
+        BuildingFootprint, MovementClass, NavCell, SimPoint, SimulationConfig, TerrainElevationMap,
+    };
 
     use super::*;
     use crate::bridge::PresentationSnapshot;
@@ -453,6 +493,20 @@ mod tests {
             navigation_max: NavCell::new(100, 100),
             ..SimulationConfig::default()
         })
+    }
+
+    fn flat_terrain() -> TerrainSurface {
+        TerrainSurface::new(
+            TerrainElevationMap::from_vertex_samples(
+                SimPoint::new(0, 0),
+                10 * SUBUNITS_PER_WORLD_UNIT,
+                20,
+                20,
+                vec![2; 21 * 21],
+                vec![0x2000; 21 * 21],
+            )
+            .unwrap(),
+        )
     }
 
     fn empty_samples() -> PresentationSamples {
@@ -494,8 +548,9 @@ mod tests {
                 visual_kind: UnitVisualKind::Melee,
             },
         );
+        let terrain = flat_terrain();
         assert_eq!(
-            pick_entity(Vec3::new(103.0, 0.0, 100.0), &samples, &metrics(), 1.0,),
+            pick_unit_on_ray(Vec3::new(103.0, 5.0, 0.0), Vec3::Z, &samples, &terrain, 1.0,),
             Some(SimId(7))
         );
     }
@@ -521,11 +576,68 @@ mod tests {
             },
         );
         assert_eq!(
-            pick_entity(Vec3::new(120.0, 0.0, 220.0), &samples, &metrics(), 1.0,),
+            pick_building_at_ground(Vec3::new(120.0, 0.0, 220.0), &samples, &metrics()),
             Some(SimId(9))
         );
         assert_eq!(
-            pick_entity(Vec3::new(145.0, 0.0, 220.0), &samples, &metrics(), 1.0,),
+            pick_building_at_ground(Vec3::new(145.0, 0.0, 220.0), &samples, &metrics()),
+            None
+        );
+    }
+
+    #[test]
+    fn ray_picking_hits_flying_unit_at_rendered_altitude() {
+        let mut samples = empty_samples();
+        samples.current.units.insert(
+            SimId(11),
+            UnitSample {
+                id: SimId(11),
+                team: Team(0),
+                position: SimPoint::new(
+                    100 * SUBUNITS_PER_WORLD_UNIT,
+                    100 * SUBUNITS_PER_WORLD_UNIT,
+                ),
+                collision_radius: 4 * SUBUNITS_PER_WORLD_UNIT,
+                movement_class: MovementClass::Air,
+                health: 50,
+                target: None,
+                direct_retaliation_lock: false,
+                last_attacker: None,
+                last_attacked_tick: None,
+                cooldown_remaining: 0,
+                stunned_until_tick: 0,
+                mana_current: None,
+                mana_maximum: None,
+                visual_kind: UnitVisualKind::Melee,
+            },
+        );
+        let terrain = flat_terrain();
+        let center = unit_visual_center_lerp(
+            samples.current.units[&SimId(11)].position,
+            samples.current.units[&SimId(11)].position,
+            &samples.current.units[&SimId(11)],
+            1.0,
+            &terrain,
+        );
+
+        assert_eq!(
+            pick_unit_on_ray(
+                Vec3::new(center.x, center.y, 0.0),
+                Vec3::Z,
+                &samples,
+                &terrain,
+                1.0,
+            ),
+            Some(SimId(11))
+        );
+        assert_eq!(
+            pick_unit_on_ray(
+                Vec3::new(center.x, 0.0, 0.0),
+                Vec3::Z,
+                &samples,
+                &terrain,
+                1.0,
+            ),
             None
         );
     }
