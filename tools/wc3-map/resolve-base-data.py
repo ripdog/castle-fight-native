@@ -1992,6 +1992,40 @@ def main() -> None:
                     parameters["thunderbolt_effective_cooldown_seconds"] = numeric(
                         protected_ability_values.get(("A0D5", level, "cooldown"), thunderbolt["cooldown"])
                     )
+                elif mechanic["mechanic_kind"] == "attack-damage-flying-target-multiplier":
+                    if unit_rawcode != "n03U":
+                        raise ValueError(f"Riptide air-bonus mechanic attached to unexpected unit: {unit_rawcode}")
+                    if "45% extra damage to air units" not in unit["ubertip"]:
+                        raise ValueError("Winged Riptide Serpent tooltip air-bonus text changed")
+                    parameters["unit_tooltip"] = unit["ubertip"]
+                elif mechanic["mechanic_kind"] == "damage-triggered-persistent-low-hp-attack-bonus":
+                    levels: list[dict[str, Any]] = []
+                    for level in (1, 2, 3):
+                        bonus = next((row for row in ability_levels.get("A0HR", []) if row["level"] == str(level)), None)
+                        if bonus is None:
+                            raise ValueError(f"Forest Troll hidden damage-bonus level missing: {level}")
+                        fields = json.loads(bonus["data_fields_labeled_json"])
+                        levels.append({"level": level, "attack_bonus": numeric(fields.get("Attack Bonus"))})
+                    if [row["attack_bonus"] for row in levels] != [30, 60, 90]:
+                        raise ValueError(f"Forest Troll hidden damage-bonus levels changed: {levels}")
+                    parameters["resolved_bonus_levels"] = levels
+                    for threshold in parameters["thresholds"]:
+                        level = int(threshold["ability_level"])
+                        threshold["attack_bonus"] = levels[level - 1]["attack_bonus"]
+                    parameters["bonus_ability_rawcode"] = "A0HR"
+                    parameters["bonus_ability_name"] = ability_levels["A0HR"][0]["name"]
+                    parameters["unit_tooltip"] = unit["ubertip"]
+                    parameters["mechanic_absent_from_unit_tooltip"] = "Troll Damage Bonus" not in unit["ubertip"]
+                elif mechanic["mechanic_kind"] == "attack-proc-ground-whirlwind-aoe":
+                    marker = next((row for row in ability_levels.get("A0HG", []) if row["level"] == "1"), None)
+                    if marker is None:
+                        raise ValueError("Ironpaw Whirlwind marker A0HG is missing")
+                    if numeric(parameters["damage"]) != 175 or "150 damage" not in unit["ubertip"]:
+                        raise ValueError("Ironpaw Whirlwind runtime/tooltip damage evidence changed")
+                    parameters["marker_ability_rawcode"] = "A0HG"
+                    parameters["marker_ability_name"] = marker["name"]
+                    parameters["marker_ability_object_data"] = json.loads(marker["data_fields_labeled_json"])
+                    parameters["unit_tooltip"] = unit["ubertip"]
                 elif mechanic["mechanic_kind"] == "summon-event-mana-reset":
                     parameters["static_object_mana_start"] = numeric(unit["mana_start"])
                     parameters["mana_max"] = numeric(unit["mana_max"])
@@ -2471,6 +2505,43 @@ def main() -> None:
                     parameters["ability_tooltip"] = blink["ubertip"]
                     parameters["ability_range"] = numeric(blink["range"])
                     parameters["ability_object_data"] = blink_fields
+                elif system_id == "round-start-castle-protection":
+                    if numeric(parameters["protection_duration_seconds"]) != 15:
+                        raise ValueError(f"Castle protection duration changed: {parameters}")
+                    parameters["round_time_formula"] = "VGb * 60 + UGb"
+                elif system_id == "obelisk-of-light-cleansing-light":
+                    obelisk = static_units.get("h005")
+                    if obelisk is None:
+                        raise ValueError("Obelisk of Light h005 is missing")
+                    phoenix = ability_level_one("A000")
+                    phoenix_fields = json.loads(phoenix["data_fields_labeled_json"])
+                    if (
+                        numeric(phoenix_fields.get("Initial Damage")) != 180
+                        or numeric(phoenix_fields.get("Damage Per Second")) != 0
+                        or numeric(phoenix["cooldown"]) != 5
+                    ):
+                        raise ValueError(f"Obelisk of Light A000 Phoenix Fire fields changed: {phoenix}")
+                    removed: list[dict[str, Any]] = []
+                    for ability_id in parameters["removed_persistent_ability_ids"]:
+                        rawcode = integer_rawcode(int(ability_id))
+                        ability = next((row for row in ability_levels.get(rawcode, []) if row["level"] == "1"), None)
+                        removed.append({
+                            "ability_id": int(ability_id),
+                            "rawcode": rawcode,
+                            "name": ability["name"] if ability is not None else "",
+                        })
+                    parameters["building_rawcode"] = "h005"
+                    parameters["building_name"] = obelisk["name"]
+                    parameters["building_tooltip"] = obelisk["ubertip"]
+                    parameters["effect_ability_rawcode"] = "A000"
+                    parameters["effect_ability_name"] = phoenix["name"]
+                    parameters["effect_ability_base_rawcode"] = phoenix["base_rawcode"]
+                    parameters["effect_initial_damage"] = numeric(phoenix_fields.get("Initial Damage"))
+                    parameters["effect_damage_per_second"] = numeric(phoenix_fields.get("Damage Per Second"))
+                    parameters["effect_cooldown_seconds"] = numeric(phoenix["cooldown"])
+                    parameters["effect_area"] = numeric(phoenix["area"])
+                    parameters["effect_targets"] = phoenix["targets"]
+                    parameters["removed_persistent_abilities"] = removed
                 elif system_id == "rescue-strike":
                     rescue = ability_level_one("A005")
                     effect = ability_level_one("A06E")
@@ -2585,7 +2656,10 @@ def main() -> None:
         "handleFanOfKnives",
         "applyVampireArmorReduction",
         "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+        "hL",
+        "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack",
         "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood",
+        "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
         "EventListener_add_FireElemental_onEvent_add_FireElemental",
         "EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend",
     }
@@ -2607,6 +2681,7 @@ def main() -> None:
     marker_requirements = {
         "A0DW": "source-damage-health-scaled-aftershock",
         "A0DX": "target-damage-melee-thunderbolt-retaliation",
+        "A0HG": "attack-proc-ground-whirlwind-aoe",
     }
     marker_runtime_hooks_by_unit: dict[str, set[str]] = defaultdict(set)
     for unit_rawcode in production_source_by_unit:
@@ -4318,9 +4393,9 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
-            "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus marker-driven Earth/Lightning hooks; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
-            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows: Power Plant spawn augmentation and freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, and Blood Fiend procedural bodies/traits. Runtime probabilities are preserved even when tooltips disagree, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
+            "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
+            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

@@ -230,10 +230,12 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 32)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 35)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
+            "attack-damage-flying-target-multiplier": 1,
             "attack-proc-dispel-positive-buffs": 3,
+            "attack-proc-ground-whirlwind-aoe": 1,
             "attack-proc-native-mirror-image": 1,
             "attack-stacking-corrosion": 1,
             "automatic-defend-state-maintenance": 1,
@@ -241,6 +243,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "damage-triggered-auto-fan-of-knives": 1,
             "damage-triggered-echo-step-and-remnant": 1,
             "damage-triggered-feral-rage-and-hibernation": 2,
+            "damage-triggered-persistent-low-hp-attack-bonus": 1,
             "death-retaliation-damage-to-killer": 1,
             "kill-heal-percent-max-hp": 2,
             "kill-triggered-native-berserk": 3,
@@ -258,7 +261,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 32)
+        self.assertEqual(len(rows), 35)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -333,6 +336,33 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(lord["spawned_unit_id"], 1747988821)
         self.assertTrue(vampire["remove_original_dead_unit"])
         self.assertTrue(lord["victim_requires_not_undead"])
+
+        riptide_row = rows[("n03U", "attack-damage-flying-target-multiplier")]
+        riptide = json.loads(riptide_row["parameters_json"])
+        self.assertIn("DamageListener_addListener_RiptideAttack", riptide_row["source_functions"])
+        self.assertEqual(riptide["bonus_fraction"], 0.45)
+        self.assertEqual(riptide["damage_multiplier"], 1.45)
+        self.assertTrue(riptide["target_requires_flying"])
+        self.assertEqual(riptide["required_damage_event_type"], 0)
+        self.assertTrue(riptide["modifies_current_damage_instance"])
+
+        troll_blood = json.loads(rows[("n02G", "damage-triggered-persistent-low-hp-attack-bonus")]["parameters_json"])
+        self.assertEqual(
+            [(entry["hp_ratio_below"], entry["attack_bonus"]) for entry in troll_blood["thresholds"]],
+            [(0.75, 30), (0.5, 60), (0.25, 90)],
+        )
+        self.assertTrue(troll_blood["levels_only_increase"])
+        self.assertTrue(troll_blood["healing_does_not_downgrade_reached_level"])
+        self.assertTrue(troll_blood["mechanic_absent_from_unit_tooltip"])
+
+        whirlwind = json.loads(rows[("n03J", "attack-proc-ground-whirlwind-aoe")]["parameters_json"])
+        self.assertEqual(whirlwind["proc_probability"], 0.2)
+        self.assertEqual(whirlwind["radius"], 160)
+        self.assertEqual(whirlwind["damage"], 175)
+        self.assertEqual(whirlwind["tooltip_damage"], 150)
+        self.assertTrue(whirlwind["tooltip_damage_disagrees_with_runtime"])
+        self.assertEqual(whirlwind["target_predicate"], "enemy-of-source;alive;combat-sapper;not-flying")
+        self.assertEqual(whirlwind["damage_type"], "universal")
 
         for rawcode in ("n00V", "n01O", "n02G"):
             berserk = json.loads(rows[(rawcode, "kill-triggered-native-berserk")]["parameters_json"])
@@ -455,16 +485,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_runtime_coverage_is_closed(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_runtime_coverage_rows"], 32)
+        self.assertEqual(summary["production_unit_runtime_coverage_rows"], 34)
         self.assertEqual(summary["production_unit_runtime_coverage_status_counts"], {
             "parent-special-endpoint": 1,
-            "special-mechanic": 22,
+            "special-mechanic": 24,
             "special-mechanic+unit-spell": 8,
             "verified-visual-only": 1,
         })
         with (self.resolved / "production-unit-runtime-coverage.tsv").open(encoding="utf-8") as handle:
             rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 32)
+        self.assertEqual(len(rows), 34)
         self.assertEqual(rows["n01B"]["coverage_status"], "verified-visual-only")
         self.assertIn("vertex color 82,0,135,102", rows["n01B"]["coverage_note"])
         self.assertEqual(rows["h02Z"]["coverage_status"], "parent-special-endpoint")
@@ -475,10 +505,14 @@ class ResolvedEvidenceTests(unittest.TestCase):
         for rawcode in ("h03P", "h03R"):
             self.assertEqual(rows[rawcode]["marker_runtime_hooks"], "ability-marker:A0DX")
             self.assertIn("target-damage-melee-thunderbolt-retaliation", rows[rawcode]["special_mechanic_kinds"])
+        self.assertEqual(rows["n03U"]["explicit_runtime_functions"], "hL")
+        self.assertIn("attack-damage-flying-target-multiplier", rows["n03U"]["special_mechanic_kinds"])
+        self.assertEqual(rows["n03J"]["marker_runtime_hooks"], "ability-marker:A0HG")
+        self.assertIn("attack-proc-ground-whirlwind-aoe", rows["n03J"]["special_mechanic_kinds"])
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 16)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 18)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
@@ -490,6 +524,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
             "periodic-idle-combat-unit-attack-order-recovery": 1,
             "enchantment-marker-driven-half-damage-cleave": 1,
+            "first-fifteen-seconds-castle-damage-immunity": 1,
+            "persistent-carrier-auto-attack-damage-triggered-full-cleanse": 1,
             "unit-type-structure-target-current-damage-halving": 1,
             "summoned-carrier-random-unit-replacement": 1,
             "team-constructed-building-count-to-spell-level": 1,
@@ -499,7 +535,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 16)
+        self.assertEqual(len(rows), 18)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -684,6 +720,23 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(chi["vision_radius"], 512)
         self.assertEqual(chi["vision_duration_seconds"], 8)
         self.assertEqual(chi["batch_position"], "arithmetic-mean-of-damaged-target-positions")
+
+        castle_protection = json.loads(rows["round-start-castle-protection"]["parameters_json"])
+        self.assertEqual(castle_protection["protection_duration_seconds"], 15)
+        self.assertEqual(castle_protection["damage_rewrite"], 0)
+        self.assertTrue(castle_protection["positive_damage_only"])
+        self.assertEqual(castle_protection["round_time_formula"], "VGb * 60 + UGb")
+
+        obelisk = json.loads(rows["obelisk-of-light-cleansing-light"]["parameters_json"])
+        self.assertEqual(obelisk["building_rawcode"], "h005")
+        self.assertEqual(obelisk["effect_ability_rawcode"], "A000")
+        self.assertEqual(obelisk["effect_ability_base_rawcode"], "Apxf")
+        self.assertEqual(obelisk["effect_initial_damage"], 180)
+        self.assertEqual(obelisk["effect_cooldown_seconds"], 5)
+        self.assertTrue(obelisk["remove_native_positive_and_negative_buffs"])
+        self.assertEqual(len(obelisk["removed_persistent_ability_ids"]), 25)
+        self.assertIn(1093682737, obelisk["removed_persistent_ability_ids"])
+        self.assertIn(1093683033, obelisk["removed_persistent_ability_ids"])
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

@@ -109,9 +109,11 @@
     "unit_spell_inlined_registrations": 1,
     "protected_filter_bindings": 22,
     "protected_filter_bindings_resolved": 21,
-    "production_unit_special_mechanics": 32,
+    "production_unit_special_mechanics": 35,
     "production_unit_special_mechanic_kinds": {
+      "attack-damage-flying-target-multiplier": 1,
       "attack-proc-dispel-positive-buffs": 3,
+      "attack-proc-ground-whirlwind-aoe": 1,
       "attack-proc-native-mirror-image": 1,
       "attack-stacking-corrosion": 1,
       "auto-spawn-tree-and-grab-war-club": 1,
@@ -120,6 +122,7 @@
       "damage-triggered-auto-fan-of-knives": 1,
       "damage-triggered-echo-step-and-remnant": 1,
       "damage-triggered-feral-rage-and-hibernation": 2,
+      "damage-triggered-persistent-low-hp-attack-bonus": 1,
       "death-retaliation-damage-to-killer": 1,
       "kill-heal-percent-max-hp": 2,
       "kill-triggered-native-berserk": 3,
@@ -138,7 +141,7 @@
     "building_improvement_spawn_mechanic_kinds": {
       "unreachable-production-spawn-branch-keyed-by-A0EL": 1
     },
-    "runtime_system_mechanics": 16,
+    "runtime_system_mechanics": 18,
     "runtime_system_mechanic_kinds": {
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
       "body-replacement-plus-independent-random-trait-groups": 1,
@@ -146,9 +149,11 @@
       "builder-point-teleport-clamped-to-own-castle": 1,
       "building-random-enemy-base-attack-ground-controller": 1,
       "enchantment-marker-driven-half-damage-cleave": 1,
+      "first-fifteen-seconds-castle-damage-immunity": 1,
       "per-player-building-count-income-multiplier": 1,
       "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
       "periodic-idle-combat-unit-attack-order-recovery": 1,
+      "persistent-carrier-auto-attack-damage-triggered-full-cleanse": 1,
       "summoned-carrier-random-unit-replacement": 1,
       "team-constructed-building-count-to-spell-level": 1,
       "team-presence-gated-owner-scaled-elemental-death-heal": 1,

@@ -4437,6 +4437,11 @@ def _extract_production_unit_special_mechanics(
         "code__addAction_DamageRuntime",
         "applyVampireArmorReduction",
         "devourAttackProc",
+        "hL", "shouldApplyRiptideAirBonus", "addRiptideAirDamageBonus",
+        "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack",
+        "IN", "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood",
+        "qP", "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
+        "ForGroupCallback_forUnitsInRange_addListener_doAfter_Whirlwind_callback_forUnitsInRange_addListener_doAfter_Whirlwind",
     }
     if not required_map_functions.issubset(available_functions):
         return []
@@ -4603,6 +4608,174 @@ def _extract_production_unit_special_mechanics(
             "evidence_kind": "exact-shared-damage-handler",
             "byte_offset": retaliation_start,
         })
+
+    # Winged Riptide Serpent: the shared damage listener rewrites every positive
+    # attack-damage event against a flying target to 145% of the current event
+    # amount. This applies at the damage-event layer, including bounce recipients,
+    # rather than being encoded in the native bouncing weapon itself.
+    riptide_init_start, _ = require_tokens("hL", {"1848652629", "0.45", "DamageEvent_addListener"})
+    riptide_pred_start, _ = require_tokens(
+        "shouldApplyRiptideAirBonus",
+        {"u0", "0"},
+    )
+    riptide_bonus_start, _ = require_tokens("addRiptideAirDamageBonus", {"q0"})
+    riptide_start, _ = require_tokens(
+        "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack",
+        {
+            "DamageEvent_getSource", "DamageEvent_getTarget", "DamageEvent_getAmount",
+            "UNIT_TYPE_FLYING", "shouldApplyRiptideAirBonus", "addRiptideAirDamageBonus",
+            "DamageInstance_DamageInstance_setAmount",
+        },
+    )
+    riptide_pred_function = next(function for function in functions if function["name"] == "shouldApplyRiptideAirBonus")
+    riptide_pred_source = data[int(riptide_pred_function["start"]):int(riptide_pred_function["end"])]
+    if b"((UDr==u0)and VDr)and(WDr==0)" not in riptide_pred_source or b"XDr>0." not in riptide_pred_source:
+        raise ValueError("Winged Riptide Serpent air-bonus predicate changed")
+    riptide_bonus_function = next(function for function in functions if function["name"] == "addRiptideAirDamageBonus")
+    riptide_bonus_source = data[int(riptide_bonus_function["start"]):int(riptide_bonus_function["end"])]
+    if b"return(YDr+(YDr*q0))" not in riptide_bonus_source:
+        raise ValueError("Winged Riptide Serpent air-bonus formula changed")
+    rows.append({
+        "unit_id": 1848652629,
+        "mechanic_kind": "attack-damage-flying-target-multiplier",
+        "trigger": "damage-event",
+        "parameters": {
+            "required_damage_event_type": 0,
+            "requires_positive_damage": True,
+            "target_requires_flying": True,
+            "bonus_fraction": 0.45,
+            "damage_multiplier": 1.45,
+            "modifies_current_damage_instance": True,
+            "applies_to_any_qualifying_damage_recipient": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "hL", "shouldApplyRiptideAirBonus", "addRiptideAirDamageBonus",
+            "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack",
+        ],
+        "evidence_kind": "exact-damage-listener-current-instance-rewrite",
+        "byte_offset": min(riptide_init_start, riptide_pred_start, riptide_bonus_start, riptide_start),
+    })
+
+    # Forest Troll Trapper: taking damage promotes a hidden permanent A0HR
+    # attack-bonus ability as successive HP-ratio thresholds are crossed. The
+    # handler has no downgrade/removal path, so healing does not undo a reached
+    # tier during that unit's lifetime.
+    troll_blood_init_start, _ = require_tokens("IN", {"1093683282", "DamageEvent_addListener"})
+    troll_blood_start, _ = require_tokens(
+        "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood",
+        {
+            "1848652359", "unit_getHPRatio", "0.25", "0.5", "0.75", "jS",
+            "addProtectedAbility", "__wurst_safe_SetUnitAbilityLevel", "__wurst_safe_SetUnitVertexColor",
+        },
+    )
+    troll_blood_function = next(
+        function for function in functions
+        if function["name"] == "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood"
+    )
+    troll_blood_source = data[int(troll_blood_function["start"]):int(troll_blood_function["end"])]
+    for fragment in (
+        b"if(p8n<0.25)then",
+        b"__wurst_safe_SetUnitAbilityLevel(q8n,r8n,3)",
+        b"__wurst_safe_SetUnitVertexColor(s8n,143,8,8,255)",
+        b"elseif(p8n<0.5)then",
+        b"__wurst_safe_SetUnitAbilityLevel(t8n,u8n,2)",
+        b"__wurst_safe_SetUnitVertexColor(v8n,179,66,66,255)",
+        b"elseif(p8n<0.75)then",
+        b"addProtectedAbility(w8n,x8n)",
+        b"__wurst_safe_SetUnitVertexColor(y8n,229,138,138,255)",
+    ):
+        if fragment not in troll_blood_source:
+            raise ValueError("Forest Troll Trapper Troll Blood threshold state machine changed")
+    rows.append({
+        "unit_id": 1848652359,
+        "mechanic_kind": "damage-triggered-persistent-low-hp-attack-bonus",
+        "trigger": "target-damage-event",
+        "parameters": {
+            "bonus_ability_id": 1093683282,
+            "thresholds": [
+                {"hp_ratio_below": 0.75, "ability_level": 1, "vertex_rgba": [229, 138, 138, 255]},
+                {"hp_ratio_below": 0.50, "ability_level": 2, "vertex_rgba": [179, 66, 66, 255]},
+                {"hp_ratio_below": 0.25, "ability_level": 3, "vertex_rgba": [143, 8, 8, 255]},
+            ],
+            "levels_only_increase": True,
+            "healing_does_not_downgrade_reached_level": True,
+        },
+        "related_rawcode_ids": [1093683282],
+        "source_functions": ["IN", "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood"],
+        "evidence_kind": "exact-damage-listener-hp-threshold-state-machine",
+        "byte_offset": min(troll_blood_init_start, troll_blood_start),
+    })
+
+    # Ironpaw Guardian: attack-damage events have a 20% real-valued proc chance
+    # to deal a second 175 universal-damage packet to all alive ground enemy
+    # combat sappers in 160 range of the damaged target. The map tooltip says
+    # 150 damage; retain the exact script value for importer behavior.
+    whirlwind_init_start, _ = require_tokens("qP", {"1093683271", "0.20", "175.0", "160.0"})
+    whirlwind_start, _ = require_tokens(
+        "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
+        {
+            "DamageEvent_getType", "unit_hasAbility", "GetRandomReal", "0.", "1.",
+            "forUnitsInRange", "__wurst_safe_SetUnitAnimation", "__wurst_safe_QueueUnitAnimation",
+        },
+    )
+    whirlwind_cb_start, _ = require_tokens(
+        "ForGroupCallback_forUnitsInRange_addListener_doAfter_Whirlwind_callback_forUnitsInRange_addListener_doAfter_Whirlwind",
+        {
+            "unit_isEnemyOf1", "unit_isAlive", "isCombatSapper", "UNIT_TYPE_FLYING",
+            "ATTACK_TYPE_NORMAL", "DAMAGE_TYPE_UNIVERSAL", "__wurst_safe_UnitDamageTarget",
+        },
+    )
+    whirlwind_function = next(
+        function for function in functions
+        if function["name"] == "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind"
+    )
+    whirlwind_source = data[int(whirlwind_function["start"]):int(whirlwind_function["end"])]
+    if b"if((DamageEvent_getType()==0)and unit_hasAbility(zao,KQ))then" not in whirlwind_source:
+        raise ValueError("Ironpaw Whirlwind damage-event gate changed")
+    if b"if(JQ>=GetRandomReal(0.,1.))then" not in whirlwind_source:
+        raise ValueError("Ironpaw Whirlwind proc comparison changed")
+    if b'__wurst_safe_SetUnitAnimation(Gao,"Attack Walk Stand Spin")' not in whirlwind_source or b'__wurst_safe_QueueUnitAnimation(Hao,"stand")' not in whirlwind_source:
+        raise ValueError("Ironpaw Whirlwind animation sequence changed")
+    whirlwind_cb_function = next(
+        function for function in functions
+        if function["name"] == "ForGroupCallback_forUnitsInRange_addListener_doAfter_Whirlwind_callback_forUnitsInRange_addListener_doAfter_Whirlwind"
+    )
+    whirlwind_cb_source = data[int(whirlwind_cb_function["start"]):int(whirlwind_cb_function["end"])]
+    if b"__wurst_safe_UnitDamageTarget(Oao,Pao,Qao,false,false,Rao,DAMAGE_TYPE_UNIVERSAL,WEAPON_TYPE_WHOKNOWS)" not in whirlwind_cb_source:
+        raise ValueError("Ironpaw Whirlwind damage packet changed")
+    rows.append({
+        "unit_id": 1848652618,
+        "mechanic_kind": "attack-proc-ground-whirlwind-aoe",
+        "trigger": "damage-event",
+        "parameters": {
+            "marker_ability_id": 1093683271,
+            "required_damage_event_type": 0,
+            "proc_probability": 0.20,
+            "random_roll_min": 0.0,
+            "random_roll_max": 1.0,
+            "proc_comparison": "roll <= 0.20",
+            "center": "damaged-target-position",
+            "radius": 160,
+            "damage": 175,
+            "tooltip_damage": 150,
+            "tooltip_damage_disagrees_with_runtime": True,
+            "target_predicate": "enemy-of-source;alive;combat-sapper;not-flying",
+            "is_attack": False,
+            "is_ranged": False,
+            "attack_type": "normal",
+            "damage_type": "universal",
+            "animation": "Attack Walk Stand Spin",
+            "queued_animation": "stand",
+        },
+        "related_rawcode_ids": [1093683271],
+        "source_functions": [
+            "qP", "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
+            "ForGroupCallback_forUnitsInRange_addListener_doAfter_Whirlwind_callback_forUnitsInRange_addListener_doAfter_Whirlwind",
+        ],
+        "evidence_kind": "exact-marker-damage-listener-proc-and-area-callback",
+        "byte_offset": min(whirlwind_init_start, whirlwind_start, whirlwind_cb_start),
+    })
 
     # Nature attack procs: Dryad and Keeper remove positive magic buffs from
     # their attacked target, while Ancient Keeper applies the same dispel to
@@ -5521,7 +5694,16 @@ def _extract_runtime_system_mechanics(
         "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
         "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire2",
         "CallbackSingle_doAfter_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_doAfter_addListener_doAfter_ThunderpawSpire",
-        "createVision", "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+        "createVision",
+        "YF", "isCastleProtected", "completeRoundStart", "yd",
+        "DamageListener_addListener_CastleProtection_onEvent_addListener_CastleProtection",
+        "TI", "startObeliskOfLight", "stopObeliskOfLight",
+        "CallbackSingle_doAfter_ObeliskOfLight_call_doAfter_ObeliskOfLight",
+        "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight",
+        "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight1",
+        "code__onLeave_doAfter_ObeliskOfLight",
+        "DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight",
+        "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
     }
     if not required.issubset(available):
         return []
@@ -6573,6 +6755,146 @@ def _extract_runtime_system_mechanics(
         ],
         "evidence_kind": "exact-damage-impact-accumulator-delayed-average-vision-and-cleanup",
         "byte_offset": min(shared_damage_start, chi_batch_start, vision_start, chi_cleanup_start),
+    })
+
+    # Castle protection. The round timer is reset to 0:00 by completeRoundStart
+    # and yd advances its second/minute counters once per second. For the first
+    # 15 seconds of an active round, any positive damage instance targeting
+    # either team castle is rewritten to zero.
+    castle_protect_init_start, castle_protect_init_source, castle_protect_init_tokens = source("YF")
+    castle_protect_pred_start, castle_protect_pred_source, castle_protect_pred_tokens = source("isCastleProtected")
+    round_start_start, round_start_source, round_start_tokens = source("completeRoundStart")
+    round_tick_start, round_tick_source, round_tick_tokens = source("yd")
+    castle_protect_damage_start, castle_protect_damage_source, castle_protect_damage_tokens = source(
+        "DamageListener_addListener_CastleProtection_onEvent_addListener_CastleProtection"
+    )
+    if b"zkb=15" not in castle_protect_init_source or "DamageEvent_addListener" not in castle_protect_init_tokens:
+        raise ValueError("Castle protection duration/listener registration changed")
+    if b"isRoundStarted()and(VGb==0))and(UGb<zkb)" not in castle_protect_pred_source:
+        raise ValueError("Castle protection round-time predicate changed")
+    if b"(H_p==cX[0])or(H_p==cX[1])" not in castle_protect_pred_source:
+        raise ValueError("Castle protection castle target predicate changed")
+    if b"VGb=0 UGb=0" not in round_start_source:
+        raise ValueError("Round timer reset at round start changed")
+    if b"UGb=(UGb+1)if(UGb==60)then UGb=0 VGb=(VGb+1)" not in round_tick_source:
+        raise ValueError("Round minute/second timer advancement changed")
+    if b"DamageEvent_getAmount()>0." not in castle_protect_damage_source or b"isCastleProtected(BOl)" not in castle_protect_damage_source:
+        raise ValueError("Castle protection damage-event gate changed")
+    if b"DamageInstance_DamageInstance_setAmount(khb,0.)" not in castle_protect_damage_source:
+        raise ValueError("Castle protection zero-damage rewrite changed")
+    rows.append({
+        "system_id": "round-start-castle-protection",
+        "mechanic_kind": "first-fifteen-seconds-castle-damage-immunity",
+        "trigger": "positive-damage-event-targeting-team-castle",
+        "parameters": {
+            "protection_duration_seconds": 15,
+            "requires_round_started": True,
+            "protected_targets": "both-team-castle-units-cX[0]-and-cX[1]",
+            "positive_damage_only": True,
+            "damage_rewrite": 0,
+            "round_timer_reset_minute": 0,
+            "round_timer_reset_second": 0,
+            "round_timer_tick_seconds": 1,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "YF", "isCastleProtected", "completeRoundStart", "yd",
+            "DamageListener_addListener_CastleProtection_onEvent_addListener_CastleProtection",
+        ],
+        "evidence_kind": "exact-round-timer-reset-tick-protection-predicate-and-current-damage-rewrite",
+        "byte_offset": min(
+            castle_protect_init_start, castle_protect_pred_start, round_start_start,
+            round_tick_start, castle_protect_damage_start,
+        ),
+    })
+
+    # Obelisk of Light. Construction creates one persistent invisible spell
+    # carrier at the building position with A000 Phoenix Fire. Positive damage
+    # caused by that carrier removes native positive/negative buffs and an exact
+    # list of Castle Fight persistent enchantment/bonus abilities from the hit
+    # target. Building death or leave removes the carrier.
+    obelisk_init_start, obelisk_init_source, obelisk_init_tokens = source("TI")
+    obelisk_start_start, obelisk_start_source, obelisk_start_tokens = source("startObeliskOfLight")
+    obelisk_stop_start, obelisk_stop_source, obelisk_stop_tokens = source("stopObeliskOfLight")
+    obelisk_listener_start, obelisk_listener_source, obelisk_listener_tokens = source(
+        "CallbackSingle_doAfter_ObeliskOfLight_call_doAfter_ObeliskOfLight"
+    )
+    obelisk_construct_start, obelisk_construct_source, obelisk_construct_tokens = source(
+        "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight"
+    )
+    obelisk_death_start, obelisk_death_source, obelisk_death_tokens = source(
+        "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight1"
+    )
+    obelisk_leave_start, obelisk_leave_source, obelisk_leave_tokens = source("code__onLeave_doAfter_ObeliskOfLight")
+    obelisk_damage_start, obelisk_damage_source, obelisk_damage_tokens = source(
+        "DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight"
+    )
+    if b"O7=1747988533 N7=1093677104" not in obelisk_init_source:
+        raise ValueError("Obelisk of Light unit/effect ability constants changed")
+    if b"h2q=persistentDummyCarrierWithAbility(unit_getOwner(g2q),N7,unit_getPos(g2q))" not in obelisk_start_source:
+        raise ValueError("Obelisk of Light persistent carrier creation changed")
+    if b"P7:HashMap_put(__wurst_objectToIndex(g2q),__wurst_objectToIndex(h2q))" not in obelisk_start_source:
+        raise ValueError("Obelisk of Light building-to-carrier tracking changed")
+    if b"P7:HashMap_remove(__wurst_objectToIndex(i2q))" not in obelisk_stop_source or b"__wurst_safe_RemoveUnit(l2q)" not in obelisk_stop_source:
+        raise ValueError("Obelisk of Light carrier cleanup changed")
+    if not {"EVENT_PLAYER_UNIT_CONSTRUCT_FINISH", "EVENT_PLAYER_UNIT_DEATH", "DamageEvent_addListener"}.issubset(obelisk_listener_tokens):
+        raise ValueError("Obelisk of Light lifecycle/damage listeners changed")
+    if b"if(unit_getTypeId(s8m)==O7)then startObeliskOfLight(s8m)" not in obelisk_construct_source:
+        raise ValueError("Obelisk of Light construction startup changed")
+    if b"unit_getTypeId(v8m)==O7))then stopObeliskOfLight(v8m)" not in obelisk_death_source:
+        raise ValueError("Obelisk of Light death cleanup changed")
+    if b"stopObeliskOfLight(getEnterLeaveUnit())" not in obelisk_leave_source:
+        raise ValueError("Obelisk of Light leave cleanup changed")
+    removed_ability_ids = [
+        1093679171, 1093679172, 1093679174,
+        1093677890, 1093677889, 1093677892, 1093679180,
+        1093678409, 1093678679, 1093679181, 1093678681, 1093679186, 1093678680,
+        1093679441, 1093679442, 1093683286,
+        1093682231, 1093682739, 1093682737, 1093677905, 1093682740,
+        1093679436, 1093678676, 1093678677, 1093683033,
+    ]
+    if not {str(value) for value in removed_ability_ids}.issubset(obelisk_damage_tokens):
+        raise ValueError("Obelisk of Light explicit cleanse ability set changed")
+    if b"DamageEvent_getAmount()>0." not in obelisk_damage_source or b"unit_hasAbility(y8m,N7)" not in obelisk_damage_source:
+        raise ValueError("Obelisk of Light cleanse damage-source gate changed")
+    if b"__wurst_safe_UnitRemoveBuffs(A8m,true,true)" not in obelisk_damage_source:
+        raise ValueError("Obelisk of Light native buff cleanse changed")
+    for ability_id in removed_ability_ids:
+        if f"unit_removeAbility(A8m,{ability_id})".encode() not in obelisk_damage_source:
+            raise ValueError(f"Obelisk of Light cleanse lost ability {ability_id}")
+    rows.append({
+        "system_id": "obelisk-of-light-cleansing-light",
+        "mechanic_kind": "persistent-carrier-auto-attack-damage-triggered-full-cleanse",
+        "trigger": "building-construction-plus-carrier-damage-event",
+        "parameters": {
+            "building_unit_id": 1747988533,
+            "carrier_effect_ability_id": 1093677104,
+            "one_carrier_per_live_building": True,
+            "carrier_owner": "building-owner",
+            "carrier_position": "building-position",
+            "carrier_removed_on_building_death": True,
+            "carrier_removed_on_building_leave": True,
+            "cleanse_requires_positive_damage": True,
+            "cleanse_requires_damage_source_has_effect_ability": True,
+            "remove_native_positive_and_negative_buffs": True,
+            "unit_remove_buffs_positive": True,
+            "unit_remove_buffs_negative": True,
+            "removed_persistent_ability_ids": removed_ability_ids,
+        },
+        "related_rawcode_ids": [1747988533, 1093677104, *removed_ability_ids],
+        "source_functions": [
+            "TI", "startObeliskOfLight", "stopObeliskOfLight",
+            "CallbackSingle_doAfter_ObeliskOfLight_call_doAfter_ObeliskOfLight",
+            "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight",
+            "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight1",
+            "code__onLeave_doAfter_ObeliskOfLight",
+            "DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight",
+        ],
+        "evidence_kind": "exact-persistent-carrier-lifecycle-native-phoenix-fire-and-damage-cleanse-list",
+        "byte_offset": min(
+            obelisk_init_start, obelisk_start_start, obelisk_stop_start, obelisk_listener_start,
+            obelisk_construct_start, obelisk_death_start, obelisk_leave_start, obelisk_damage_start,
+        ),
     })
 
     # Blood Fiend procedural generation. The trained n00L carrier is first
