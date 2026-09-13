@@ -29,7 +29,6 @@ const AIR_WING_FLAP_SPEED: f32 = 9.0;
 const AIR_WING_FLAP_AMPLITUDE: f32 = 0.72;
 const AIR_WING_BASE_ANGLE: f32 = 0.18;
 const BUILDING_HEIGHT: f32 = 96.0;
-const STATIC_BLOCKER_HEIGHT: f32 = 5.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
 const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
@@ -54,7 +53,6 @@ pub struct WorldMetrics {
     navigation_cell_size_subunits: i32,
     navigation_min: IVec2,
     navigation_max: IVec2,
-    static_blockers: Vec<BuildingFootprint>,
 }
 
 impl WorldMetrics {
@@ -64,7 +62,6 @@ impl WorldMetrics {
             navigation_cell_size_subunits: config.navigation_cell_size,
             navigation_min: IVec2::new(config.navigation_min.x, config.navigation_min.y),
             navigation_max: IVec2::new(config.navigation_max.x, config.navigation_max.y),
-            static_blockers: config.static_blockers.clone(),
         }
     }
 
@@ -584,6 +581,10 @@ fn setup_scene(
                     let material = materials.add(StandardMaterial {
                         base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
                         alpha_mode: AlphaMode::Blend,
+                        // WC3 composes terrain layers in palette order. All palette meshes share
+                        // one AABB center, so this bias gives Bevy a camera-independent transparent
+                        // sort order and also prevents coplanar depth fighting.
+                        depth_bias: texture_mesh.palette_index as f32 + 1.0,
                         perceptual_roughness: 0.95,
                         ..default()
                     });
@@ -598,29 +599,6 @@ fn setup_scene(
                 eprintln!("warning: failed to build WC3 terrain texture meshes: {error}");
             }
         }
-    }
-
-    let blocker_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.085, 0.09, 0.095),
-        perceptual_roughness: 0.94,
-        ..default()
-    });
-    for blocker in &metrics.static_blockers {
-        let (center, size) = metrics.footprint_center_size(*blocker);
-        let ground_height = terrain.height_at_world(center.xz());
-        commands.spawn((
-            Mesh3d(building_mesh.clone()),
-            MeshMaterial3d(blocker_material.clone()),
-            Transform {
-                translation: Vec3::new(
-                    center.x,
-                    ground_height + STATIC_BLOCKER_HEIGHT * 0.5,
-                    center.z,
-                ),
-                scale: Vec3::new(size.x, STATIC_BLOCKER_HEIGHT, size.y),
-                ..default()
-            },
-        ));
     }
 
     commands.spawn((

@@ -15,8 +15,6 @@ use serde::Deserialize;
 const HEIGHT_QUARTERS_PER_WORLD_UNIT: f32 = 4.0;
 const TERRAIN_TEXTURE_MANIFEST: &str = "wc3/terrain/manifest.json";
 const TERRAIN_TEXTURE_ASSET_PREFIX: &str = "wc3/terrain";
-const TERRAIN_TEXTURE_BASE_OFFSET: f32 = 0.04;
-const TERRAIN_TEXTURE_PRIORITY_OFFSET: f32 = 0.025;
 const WC3_BLEND_ATLAS_SIDE: u32 = 4;
 
 #[derive(Resource, Debug, Clone)]
@@ -229,6 +227,26 @@ impl TerrainSurface {
         .with_computed_smooth_normals()
     }
 
+    fn texture_sort_bounds(&self) -> Result<([f32; 3], [f32; 3]), String> {
+        let mut min_height = f32::INFINITY;
+        let mut max_height = f32::NEG_INFINITY;
+        for y in 0..=self.elevation.height_tiles() {
+            for x in 0..=self.elevation.width_tiles() {
+                let sample = self
+                    .elevation
+                    .vertex_sample(x, y)
+                    .ok_or_else(|| format!("missing terrain vertex ({x}, {y})"))?;
+                let height = sample_display_height(sample);
+                min_height = min_height.min(height);
+                max_height = max_height.max(height);
+            }
+        }
+        Ok((
+            [self.origin_world.x, min_height, self.origin_world.y],
+            [self.max_world.x, max_height, self.max_world.y],
+        ))
+    }
+
     pub fn textured_meshes(
         &self,
         layout: &TerrainTextureLayout,
@@ -250,21 +268,19 @@ impl TerrainSurface {
                         .get(&layer.palette_index)
                         .expect("validated terrain texture set contains palette entry");
                     let uvs = atlas_uvs(atlas, layer.variation)?;
-                    builders.entry(layer.palette_index).or_default().push_quad(
-                        self,
-                        x,
-                        y,
-                        layer.palette_index,
-                        uvs,
-                    )?;
+                    builders
+                        .entry(layer.palette_index)
+                        .or_default()
+                        .push_quad(self, x, y, uvs)?;
                 }
             }
         }
 
+        let sort_bounds = self.texture_sort_bounds()?;
         Ok(builders
             .into_iter()
             .filter_map(|(palette_index, builder)| {
-                builder.finish().map(|mesh| TerrainTextureMesh {
+                builder.finish(sort_bounds).map(|mesh| TerrainTextureMesh {
                     palette_index,
                     mesh,
                 })
@@ -519,13 +535,10 @@ impl TerrainMeshBuilder {
         terrain: &TerrainSurface,
         x: u32,
         y: u32,
-        palette_index: usize,
         uvs: [[f32; 2]; 4],
     ) -> Result<(), String> {
         let base_index = u32::try_from(self.positions.len())
             .map_err(|_| "terrain texture mesh has too many vertices".to_owned())?;
-        let y_offset =
-            TERRAIN_TEXTURE_BASE_OFFSET + palette_index as f32 * TERRAIN_TEXTURE_PRIORITY_OFFSET;
         let position = |vertex_x: u32, vertex_y: u32| -> Result<[f32; 3], String> {
             let sample = terrain
                 .elevation
@@ -533,7 +546,7 @@ impl TerrainMeshBuilder {
                 .ok_or_else(|| format!("missing terrain vertex ({vertex_x}, {vertex_y})"))?;
             Ok([
                 terrain.origin_world.x + vertex_x as f32 * terrain.tile_world,
-                sample_display_height(sample) + y_offset,
+                sample_display_height(sample),
                 terrain.origin_world.y + vertex_y as f32 * terrain.tile_world,
             ])
         };
@@ -556,10 +569,19 @@ impl TerrainMeshBuilder {
         Ok(())
     }
 
-    fn finish(self) -> Option<Mesh> {
+    fn finish(mut self, sort_bounds: ([f32; 3], [f32; 3])) -> Option<Mesh> {
         if self.positions.is_empty() {
             return None;
         }
+
+        // Bevy sorts transparent meshes by each mesh AABB center. WC3 terrain layers
+        // must instead have one global, palette-defined order. These two unindexed
+        // anchor vertices give every palette mesh the exact same AABB, leaving the
+        // material depth bias as the only transparent-sort discriminator.
+        self.positions
+            .extend_from_slice(&[sort_bounds.0, sort_bounds.1]);
+        self.uvs.extend_from_slice(&[[0.0, 0.0], [0.0, 0.0]]);
+
         Some(
             Mesh::new(
                 PrimitiveTopology::TriangleList,
@@ -650,6 +672,28 @@ mod tests {
         .unwrap()
     }
 
+    fn dummy_texture_set(layout: &TerrainTextureLayout) -> TerrainTextureSet {
+        TerrainTextureSet {
+            ground: layout
+                .tile_palette
+                .iter()
+                .enumerate()
+                .map(|(palette_index, rawcode)| {
+                    (
+                        palette_index,
+                        TerrainGroundAtlas {
+                            rawcode: rawcode.clone(),
+                            asset_path: format!("unused/{rawcode}.png"),
+                            width: 512,
+                            height: 256,
+                            extended: true,
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+
     #[test]
     fn original_terrain_uses_extracted_world_bounds() {
         let terrain = original_terrain();
@@ -686,6 +730,27 @@ mod tests {
         assert_eq!(layout.tile_palette[0], "Zdtr");
         assert_eq!(layout.tile_palette[4], "Agrd");
         assert_eq!(layout.tile_palette[9], "Nice");
+    }
+
+    #[test]
+    fn textured_palette_meshes_share_one_camera_independent_sort_center() {
+        let terrain = original_terrain();
+        let layout = original_texture_layout();
+        let textures = dummy_texture_set(&layout);
+        let (min_bound, max_bound) = terrain.texture_sort_bounds().unwrap();
+        let meshes = terrain.textured_meshes(&layout, &textures).unwrap();
+
+        assert!(!meshes.is_empty());
+        for texture_mesh in meshes {
+            let positions = texture_mesh
+                .mesh
+                .attribute(Mesh::ATTRIBUTE_POSITION)
+                .unwrap()
+                .as_float3()
+                .unwrap();
+            assert!(positions.contains(&min_bound));
+            assert!(positions.contains(&max_bound));
+        }
     }
 
     #[test]
