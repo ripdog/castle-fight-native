@@ -113,14 +113,25 @@
     "protected_perk_registry_registration_status_counts": {
       "exact-protected-vm-call": 19
     },
-    "perk_mechanics": 8,
+    "perk_mechanics": 19,
     "perk_mechanic_kinds": {
       "attack-damage-target-type-tradeoff": 2,
       "bidirectional-spell-damage-amplification": 1,
+      "bulwark-hp-for-mobility-and-attack-speed-tradeoff": 1,
       "cage-conditional-spell-damage-tradeoff": 1,
       "caged-spell-resistance-and-base-damage-penalty": 1,
+      "caster-mana-overcharge-with-special-building-penalty": 1,
+      "castle-boundary-armor-stance": 1,
+      "disable-y-tier-and-grant-one-tiny-watch-tower-item": 1,
       "flat-armor-class-attack-bonus-with-base-damage-penalty": 1,
+      "flat-hp-regeneration-with-base-damage-penalty": 1,
+      "glass-cannon-max-hp-and-primary-base-damage-scaling": 1,
       "mana-shield-damage-absorption": 1,
+      "persistent-builder-bird-with-food-slot-decay-and-time-scaling-damage": 1,
+      "portable-cloud-item-with-siege-base-damage-penalty": 1,
+      "production-building-enchantment-with-global-trained-unit-penalty": 1,
+      "ranged-ground-range-and-attack-speed-tradeoff": 1,
+      "spell-building-mana-regeneration-enchantment": 1,
       "toggleable-health-band-attack-damage-stance": 1
     },
     "damage_listener_coverage_rows": 20,

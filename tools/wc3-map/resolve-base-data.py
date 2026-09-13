@@ -938,11 +938,19 @@ def main() -> None:
     }
     item_records = [record for record in object_records if record["category"] == "items"]
     item_rows: list[list[Any]] = []
+    items_by_rawcode: dict[str, dict[str, Any]] = {}
     for record in item_records:
         rawcode = str(record["rawcode"])
         values = {
             name: value_as_text(field_lookup(rows_by_object, "items", rawcode, field_id))
             for name, field_id in item_fields.items()
+        }
+        items_by_rawcode[rawcode] = {
+            "table": record["table"],
+            "rawcode": rawcode,
+            "base_rawcode": record["base_rawcode"],
+            **values,
+            "protection_conflict_fields": record["protection_conflict_count"],
         }
         item_rows.append([
             record["table"], rawcode, record["base_rawcode"],
@@ -2121,29 +2129,96 @@ def main() -> None:
     perk_mechanic_rows: list[list[Any]] = []
     perk_mechanics_path = map_root / "script" / "perk-mechanics.tsv"
     if perk_mechanics_path.exists():
+        def perk_ability_snapshot(rawcode: str) -> dict[str, Any]:
+            ability = next((row for row in ability_levels.get(rawcode, []) if row["level"] == "1"), None)
+            if ability is None:
+                raise ValueError(f"perk mechanic is missing ability level 1: {rawcode}")
+            return {
+                "rawcode": rawcode,
+                "name": ability["name"],
+                "tip": ability["tip"],
+                "ubertip": ability["ubertip"],
+                "base_rawcode": ability["base_rawcode"],
+                "mana_cost": numeric(protected_ability_values.get((rawcode, 1, "mana_cost"), ability["mana_cost"])),
+                "cooldown": numeric(protected_ability_values.get((rawcode, 1, "cooldown"), ability["cooldown"])),
+                "range": numeric(ability["range"]),
+                "area": numeric(ability["area"]),
+                "targets": ability["targets"],
+                "buffs": ability["buffs"],
+                "object_data": json.loads(ability["data_fields_labeled_json"]),
+            }
+
+        def perk_item_snapshot(rawcode: str) -> dict[str, Any]:
+            item = items_by_rawcode.get(rawcode)
+            if item is None:
+                raise ValueError(f"perk mechanic is missing item definition: {rawcode}")
+            return {
+                "rawcode": rawcode,
+                "name": item["name"],
+                "description": item["description"],
+                "tip": item["tip"],
+                "ubertip": item["ubertip"],
+                "uses": numeric(item["uses"]),
+                "stack_max": numeric(item["stack_max"]),
+                "abilities": item["abilities"],
+                "usable": item["usable"],
+                "perishable": item["perishable"],
+                "droppable": item["droppable"],
+            }
+
+        def perk_unit_snapshot(rawcode: str) -> dict[str, Any]:
+            unit = static_units.get(rawcode)
+            if unit is None:
+                raise ValueError(f"perk mechanic is missing unit definition: {rawcode}")
+            runtime = protected_unit_applied.get(rawcode, {})
+            return {
+                "rawcode": rawcode,
+                "name": unit["name"],
+                "hp": numeric(runtime.get("hp", unit["hp"])),
+                "armor": numeric(runtime.get("armor", unit["armor"])),
+                "armor_type": runtime.get("armor_type", unit["armor_type"]),
+                "move_speed": numeric(runtime.get("move_speed", unit["move_speed"])),
+                "attack1_min": numeric(runtime.get("attack1_min", unit["attack1_min"])),
+                "attack1_max": numeric(runtime.get("attack1_max", unit["attack1_max"])),
+                "attack1_dps": numeric(runtime.get("dps", unit["attack1_dps"])),
+                "attack1_cooldown": numeric(runtime.get("attack1_cooldown", unit["attack1_cooldown"])),
+                "attack1_range": numeric(runtime.get("attack1_range", unit["attack1_range"])),
+                "attack1_type": unit["attack1_type"],
+                "attack1_targets": unit["attack1_targets"],
+                "abilities": unit["abilities"],
+            }
+
         with perk_mechanics_path.open(encoding="utf-8", newline="") as handle:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 parameters = json.loads(mechanic["parameters_json"])
-                if mechanic["perk_id"] == "perk_09":
-                    toggle_abilities: list[dict[str, Any]] = []
-                    for rawcode in ("AM06", "AM07"):
-                        ability = next((row for row in ability_levels.get(rawcode, []) if row["level"] == "1"), None)
-                        if ability is None:
-                            raise ValueError(f"Combat Stance perk is missing toggle ability {rawcode}")
-                        toggle_abilities.append({
-                            "rawcode": rawcode,
-                            "name": ability["name"],
-                            "tip": ability["tip"],
-                            "ubertip": ability["ubertip"],
-                            "base_rawcode": ability["base_rawcode"],
-                            "mana_cost": numeric(protected_ability_values.get((rawcode, 1, "mana_cost"), ability["mana_cost"])),
-                            "cooldown": numeric(protected_ability_values.get((rawcode, 1, "cooldown"), ability["cooldown"])),
-                            "range": numeric(ability["range"]),
-                            "area": numeric(ability["area"]),
-                            "targets": ability["targets"],
-                            "object_data": json.loads(ability["data_fields_labeled_json"]),
-                        })
-                    parameters["toggle_abilities"] = toggle_abilities
+                perk_id = mechanic["perk_id"]
+                if perk_id == "perk_02":
+                    parameters["portable_cloud_item"] = perk_item_snapshot("IcfS")
+                    parameters["portable_cloud_effect_ability"] = perk_ability_snapshot("AcfS")
+                elif perk_id == "perk_03":
+                    parameters["bird_food_item"] = perk_item_snapshot("IM01")
+                    parameters["bird_unit"] = perk_unit_snapshot("x002")
+                elif perk_id == "perk_04":
+                    parameters["towerless_item"] = perk_item_snapshot("IM02")
+                    parameters["tiny_tower_unit"] = perk_unit_snapshot("h081")
+                    parameters["tiny_tower_build_ability"] = perk_ability_snapshot("AM04")
+                    parameters["initializer_related_multishot_ability"] = perk_ability_snapshot("AM05")
+                elif perk_id == "perk_09":
+                    parameters["toggle_abilities"] = [
+                        perk_ability_snapshot("AM06"), perk_ability_snapshot("AM07")
+                    ]
+                elif perk_id == "perk_12":
+                    parameters["armor_abilities"] = [
+                        perk_ability_snapshot("AM08"), perk_ability_snapshot("AM09")
+                    ]
+                elif perk_id == "perk_14":
+                    parameters["enchantment_abilities"] = [
+                        perk_ability_snapshot("AM0a"), perk_ability_snapshot("AM0b"), perk_ability_snapshot("AM0c")
+                    ]
+                elif perk_id == "perk_17":
+                    parameters["enchantment_abilities"] = [
+                        perk_ability_snapshot("AM0d"), perk_ability_snapshot("AM0e")
+                    ]
 
                 perk_mechanic_rows.append([
                     mechanic["perk_id"], mechanic["perk_name"], mechanic["protected_registry_slot"],
@@ -4476,6 +4551,7 @@ def main() -> None:
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
             "perk-mechanics.tsv currently normalizes all eight proven-live damage-listener draft perks, including target-type damage tradeoffs, cage-conditioned damage/base-damage changes, Combat Stance HP bands and toggle abilities, Mana Shielding, Spell's Edge and Containment Focus; remaining live perks stay separate until their non-damage runtime paths are normalized",
+            "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",

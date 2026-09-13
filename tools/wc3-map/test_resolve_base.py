@@ -187,13 +187,52 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(breaching["factory_value_evidence"], "factory-result-via-local")
         summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
-        self.assertEqual(summary["perk_mechanics"], 8)
+        self.assertEqual(summary["perk_mechanics"], 19)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
 
-    def test_damage_driven_perk_mechanics_are_importer_ready(self) -> None:
+    def test_all_proven_live_perk_mechanics_are_importer_ready(self) -> None:
         with (self.resolved / "perk-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["perk_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(set(rows), {"perk_06", "perk_07", "perk_08", "perk_09", "perk_10", "perk_16", "perk_18", "perk_19"})
+        self.assertEqual(set(rows), {f"perk_{index:02d}" for index in range(1, 20)})
+
+        arcane = json.loads(rows["perk_01"]["parameters_json"])
+        self.assertEqual(arcane["unit_mana_regen_delta"], 0.5)
+        self.assertEqual(arcane["special_building_income_factors"], [0.12, 0.09])
+        self.assertEqual(arcane["special_building_mana_regen_delta"], -0.3)
+
+        cloudchaser = json.loads(rows["perk_02"]["parameters_json"])
+        self.assertEqual(cloudchaser["builder_item_charges"], 4)
+        self.assertEqual(cloudchaser["siege_unit_base_damage_factor"], 0.8)
+        self.assertEqual(cloudchaser["portable_cloud_item"]["rawcode"], "IcfS")
+        self.assertEqual(cloudchaser["portable_cloud_item"]["uses"], 4.0)
+        self.assertEqual(cloudchaser["portable_cloud_effect_ability"]["rawcode"], "AcfS")
+        self.assertEqual(cloudchaser["portable_cloud_effect_ability"]["area"], 225.0)
+
+        feathered = json.loads(rows["perk_03"]["parameters_json"])
+        self.assertEqual(feathered["food_intervals_seconds"], [600, 450, 300, 150, 120, 60])
+        self.assertEqual(feathered["food_consumption_times_from_round_start_seconds"], [600, 1050, 1350, 1500, 1620, 1680])
+        self.assertEqual(feathered["bird_base_damage_initial"], 25)
+        self.assertEqual(feathered["bird_base_damage_gain"], 12)
+        self.assertEqual(feathered["bird_damage_step_seconds"], 300)
+        self.assertEqual(feathered["bird_food_item"]["rawcode"], "IM01")
+        self.assertEqual(feathered["bird_unit"]["rawcode"], "x002")
+        self.assertEqual(feathered["bird_unit"]["name"], "Feathered Friend")
+
+        towerless = json.loads(rows["perk_04"]["parameters_json"])
+        self.assertEqual(towerless["builder_item_id"], 1229795378)
+        self.assertEqual(towerless["tiny_tower_unit_id"], 1747990577)
+        self.assertEqual(towerless["towerless_item"]["rawcode"], "IM02")
+        self.assertEqual(towerless["tiny_tower_unit"]["name"], "Tiny Watch Tower")
+        self.assertEqual(towerless["tiny_tower_unit"]["attack1_range"], 900.0)
+        self.assertEqual(towerless["tiny_tower_unit"]["attack1_dps"], 53.0)
+        self.assertEqual(towerless["tiny_tower_build_ability"]["rawcode"], "AM04")
+        self.assertFalse(towerless["initializer_related_multishot_runtime_attachment_proven"])
+        self.assertEqual(towerless["initializer_related_multishot_ability"]["rawcode"], "AM05")
+
+        glass = json.loads(rows["perk_05"]["parameters_json"])
+        self.assertEqual(glass["max_hp_factor"], 0.85)
+        self.assertEqual(glass["primary_weapon_base_damage_factor"], 1.25)
+        self.assertFalse(glass["secondary_weapon_modified"])
 
         transcendent = json.loads(rows["perk_06"]["parameters_json"])
         self.assertEqual(transcendent["base_damage_delta_on_non_structure_index"], -15)
@@ -228,10 +267,61 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(breaching["flying_damage_factor"], 0.75)
         self.assertTrue(breaching["factors_multiply_when_target_matches_both"])
 
+        bulwark = json.loads(rows["perk_11"]["parameters_json"])
+        self.assertEqual(bulwark["max_hp_factor"], 1.12)
+        self.assertEqual(bulwark["move_speed_factor"], 0.93)
+        self.assertEqual(bulwark["attack_speed_factor"], 0.93)
+        self.assertEqual(bulwark["affected_weapon_indices"], [0, 1])
+
+        forward = json.loads(rows["perk_12"]["parameters_json"])
+        self.assertEqual(forward["outside_own_castle_armor_bonus"], 3)
+        self.assertEqual(forward["inside_own_castle_armor_bonus"], -2)
+        self.assertEqual(
+            [(ability["rawcode"], ability["object_data"]["Defense Bonus"]) for ability in forward["armor_abilities"]],
+            [("AM08", 3), ("AM09", -2)],
+        )
+
+        longline = json.loads(rows["perk_13"]["parameters_json"])
+        self.assertEqual(longline["advertised_attack_range_delta"], 90)
+        self.assertEqual(longline["script_range_reference_weapon_index"], 0)
+        self.assertEqual(longline["script_range_write_weapon_index"], 1)
+        self.assertTrue(longline["primary_weapon_range_is_not_directly_written"])
+        self.assertEqual(longline["acquisition_range_update_condition"], "current-acquisition < weapon0 + 90")
+        self.assertEqual(longline["acquisition_range_on_update"], "weapon0 + 140")
+        self.assertEqual(longline["acquisition_range_otherwise"], "unchanged")
+        self.assertEqual(longline["attack_speed_factor"], 0.88)
+
+        production_enchantment = json.loads(rows["perk_14"]["parameters_json"])
+        self.assertEqual(production_enchantment["all_owned_trained_combat_sapper_max_hp_factor"], 0.95)
+        self.assertEqual(production_enchantment["selected_building_spawn_max_hp_factor"], 1.15)
+        self.assertEqual(production_enchantment["selected_building_spawn_nominal_net_hp_factor_after_global_penalty"], 1.0925)
+        self.assertEqual(production_enchantment["selected_bonus_deferred_via_nested_zero_timers"], 2)
+        self.assertTrue(production_enchantment["each_scaling_step_rounds_independently"])
+        self.assertEqual(production_enchantment["max_hp_current_life_when_increasing"], "old-life + (new-max-old-max)")
+        self.assertEqual(production_enchantment["max_hp_current_life_when_decreasing"], "min(old-life,new-max)")
+        self.assertEqual(
+            [ability["rawcode"] for ability in production_enchantment["enchantment_abilities"]],
+            ["AM0a", "AM0b", "AM0c"],
+        )
+
+        rampant = json.loads(rows["perk_15"]["parameters_json"])
+        self.assertEqual(rampant["hp_regeneration_delta_per_second"], 7.0)
+        self.assertEqual(rampant["base_damage_factor"], 0.9)
+        self.assertEqual(rampant["base_damage_weapon_indices"], [0, 1])
+
         mana = json.loads(rows["perk_16"]["parameters_json"])
         self.assertEqual(mana["damage_per_mana"], 3.0)
         self.assertTrue(mana["applies_to_attack_and_non_attack_damage"])
         self.assertTrue(mana["eligible_excludes_peon"])
+
+        spell_enchantment = json.loads(rows["perk_17"]["parameters_json"])
+        self.assertEqual(spell_enchantment["selected_spell_building_mana_regen_delta"], 0.2)
+        self.assertEqual(spell_enchantment["other_owned_spell_building_mana_regen_delta"], -0.05)
+        self.assertTrue(spell_enchantment["unit_deindex_clears_stored_delta_for_reused_index"])
+        self.assertEqual(
+            [ability["rawcode"] for ability in spell_enchantment["enchantment_abilities"]],
+            ["AM0d", "AM0e"],
+        )
 
         spells_edge = json.loads(rows["perk_18"]["parameters_json"])
         self.assertEqual(spells_edge["per_owned_source_factor"], 1.15)
@@ -245,7 +335,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(containment["cage_test_owner"], "damage-target-owner")
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["perk_mechanic_rows"], 8)
+        self.assertEqual(summary["perk_mechanic_rows"], 19)
 
     def test_wurst_generated_object_marker_is_classified_as_compiler_provenance(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))

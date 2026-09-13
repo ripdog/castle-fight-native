@@ -4296,7 +4296,7 @@ def _extract_perk_mechanics(
     functions: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Normalize the proven-live damage-driven draft perks into importer semantics."""
+    """Normalize every proven-live draft perk into importer-facing runtime semantics."""
     if not protected_perk_registry_audit:
         return []
 
@@ -4319,6 +4319,20 @@ def _extract_perk_mechanics(
             raise ValueError(f"perk mechanic global constant changed or became ambiguous: {fragment!r}")
 
     for fragment in (
+        b"A6=0.5", b"z6=(-0.3)", b"evb=0.12", b"dvb=0.09",
+        b"P2=0.8", b"Q2=4", b"R2=1231251027",
+        b"M4=__wurst_ensureInt(2016423986)", b"L4=__wurst_ensureInt(1229795377)", b"K4=0.6",
+        b"J4=6", b"I4=800.", b"H4=260.", b"G4=750.", b"F4=120.", b"E4=25", b"D4=300.", b"C4=12",
+        b"B4[0]=600.", b"B4[1]=450.", b"B4[2]=300.", b"B4[3]=150.", b"B4[4]=120.", b"B4[5]=60.",
+        b"U3=__wurst_ensureInt(1229795378)", b"T3=1747990577", b"S3=900", b"R3=45",
+        b"N3=0.85", b"M3=1.25",
+        b"B5=1.12", b"A5=0.93", b"z5=0.93",
+        b"H3=3", b"G3=(-2)", b"J3=__wurst_ensureInt(1095577656)", b"I3=__wurst_ensureInt(1095577657)",
+        b"B3=90", b"A3=0.88",
+        b"m6=__wurst_ensureInt(1095577697)", b"k6=__wurst_ensureInt(1095577698)", b"e6=__wurst_ensureInt(1095577699)",
+        b"V5=1.15", b"U5=1.15", b"T5=1.10", b"S5=0.95", b"R5=0.95",
+        b"Q5=__wurst_ensureInt(1095577700)", b"P5=__wurst_ensureInt(1095577701)", b"K5=0.20", b"J5=(-0.05)",
+        b"Z2=7.0", b"Y2=0.90",
         b"q6=1.20", b"o6=0.75",
         b"q5=0.75", b"o5=(-50)",
         b"m5=1.20", b"k5=0.90",
@@ -4364,6 +4378,190 @@ def _extract_perk_mechanics(
             "evidence_kind": evidence_kind,
             "byte_offset": min(offsets),
         })
+
+    add(
+        "perk_01",
+        "caster-mana-overcharge-with-special-building-penalty",
+        "owned-unit-indexing-plus-owned-construction-finish",
+        {
+            "unit_scope": "non-structure units with positive max mana",
+            "unit_spawn_mana": "set-current-mana-to-max",
+            "unit_mana_regen_delta": 0.5,
+            "special_building_income_factors": [0.12, 0.09],
+            "special_building_mana_regen_delta": -0.3,
+            "special_building_penalty_trigger": "owned-construction-finish",
+            "cleanup_reversal_present": False,
+        },
+        [
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkArcaneOvercharge_call_perkOnIndex_setCleanup_PerkArcaneOvercharge", (
+                b"applyArcaneOverchargeTo(abn)",
+            )),
+            ("applyArcaneOverchargeTo", (
+                b"UNIT_TYPE_STRUCTURE", b"UNIT_STATE_MAX_MANA", b"UNIT_STATE_MANA", b"unit_getMaxMana(M4q)",
+                b"UNIT_RF_MANA_REGENERATION", b"+A6",
+            )),
+            ("EventListener_perkListen_setCleanup_PerkArcaneOvercharge_onEvent_perkListen_setCleanup_PerkArcaneOvercharge", (
+                b"GetConstructedStructure()", b"applyArcaneOverchargeSpecialPenalty",
+            )),
+            ("applyArcaneOverchargeSpecialPenalty", (
+                b"unit_getOwner(V4q)==U4q", b"CFBuilding_getBuildingById", b"CFBuilding_incomeFactor_field==evb",
+                b"CFBuilding_incomeFactor_field==dvb", b"UNIT_RF_MANA_REGENERATION", b"+z6",
+            )),
+        ],
+    )
+
+    add(
+        "perk_02",
+        "portable-cloud-item-with-siege-base-damage-penalty",
+        "perk-activation-round-start-and-owned-unit-indexing",
+        {
+            "builder_item_id": 1231251027,
+            "builder_item_charges": 4,
+            "round_start_refills_or_reissues_item": True,
+            "item_effect_ability_id": 1097033299,
+            "siege_unit_base_damage_factor": 0.8,
+            "siege_detection": "spawn-building CFBuilding_isSiege_field",
+            "affected_weapon_indices": [0, 1],
+            "rounding": "real_toInt(value*factor+0.5)",
+            "cleanup_disables_future_application_without_reversing_existing_units": True,
+        },
+        [
+            ("giveCloudStaffToBuilder", (
+                b"unit_getItemById(xdr,R2)", b"unit_addProtectedItemById(xdr,R2)", b"SetItemCharges(zdr,Adr)", b"Adr=Q2",
+            )),
+            ("Action_watch_PerkStormchaser_run_watch_PerkStormchaser", (
+                b"O2[lhn]", b"giveCloudStaffToBuilder(V1[lhn])",
+            )),
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkStormchaser_call_perkOnIndex_setCleanup_PerkStormchaser", (
+                b"getSpawnBuilding(xhn)", b"unit_getOwner(yhn)==whn.plr", b"CFBuilding_isSiege_field",
+                b"applyStormchaserSiegePenalty(xhn)",
+            )),
+            ("applyStormchaserSiegePenalty", (
+                b"unit_getBaseDamage(Edr,0)", b"unit_getBaseDamage(Edr,1)", b"P2", b"BlzSetUnitBaseDamage",
+            )),
+            ("PerkCleanupFunc_setCleanup_PerkStormchaser_call_setCleanup_PerkStormchaser", (
+                b"O2[player_getId(Chn)]=false",
+            )),
+        ],
+        related_rawcode_ids=(1231251027, 1097033299),
+    )
+
+    add(
+        "perk_03",
+        "persistent-builder-bird-with-food-slot-decay-and-time-scaling-damage",
+        "perk-activation-round-start-plus-0.6-second-periodic-controller",
+        {
+            "bird_unit_id": 2016423986,
+            "bird_food_item_id": 1229795377,
+            "inventory_slots_filled": 6,
+            "food_intervals_seconds": [600, 450, 300, 150, 120, 60],
+            "food_consumption_times_from_round_start_seconds": [600, 1050, 1350, 1500, 1620, 1680],
+            "bird_base_damage_initial": 25,
+            "bird_base_damage_gain": 12,
+            "bird_damage_step_seconds": 300,
+            "bird_base_damage_formula": "25 + floor(elapsed-round-seconds/300)*12",
+            "bird_damage_weapon_index": 0,
+            "controller_period_seconds": 0.6,
+            "target_search_radius_from_builder": 750.0,
+            "target_filter": "alive enemy combat sapper and not invulnerable; nearest to builder",
+            "builder_anchor_forward_distance": 120.0,
+            "follow_reissue_distance": 260.0,
+            "teleport_to_anchor_distance": 800.0,
+            "bird_locust_removed_on_spawn": True,
+            "bird_invulnerable_ability_id": 1098282348,
+            "round_start_recreates_bird_and_resets_food_schedule": True,
+        },
+        [
+            ("resetFeatheredFriendRoundStateFor", (
+                b"RemoveUnit(d9q)", b"Z3[c9q]=(-1)", b"Y3[c9q]=0", b"X3[c9q]=0.",
+            )),
+            ("spawnFeatheredFriendBird", (
+                b"createUnit(h_q,M4", b"unit_removeAbility(j_q,1097625443)", b"addProtectedAbility(k_q,1098282348)",
+                b"unit_makeAbilityPermanent(j_q,1098282348,true)",
+            )),
+            ("applyFeatheredFriendDamageScaling", (
+                b"getElapsedGameTime()-V3", b"real_toInt((h9q/D4))", b"E4+(i9q*C4)", b"BlzSetUnitBaseDamage(k9q,l9q,0)",
+            )),
+            ("ForGroupCallback_forUnitsInRange_PerkFeatheredFriend_callback_forUnitsInRange_PerkFeatheredFriend", (
+                b"unit_isAlive(ven)", b"unit_isEnemyOf(ven,uen.plr)", b"isCombatSapper(ven)", b"not unit_isInvulnerable(ven)",
+                b"vec2_distanceToSq", b"bestTarget",
+            )),
+            ("updateFeatheredFriendBirdFoodPenalty", (
+                b"giveFeatheredFriendBirdFood(z_q)", b"removeOneFeatheredFriendBirdFood(z_q)",
+                b"nextFeatheredFriendFoodDelay", b"Y3[A_q]=(__wurst_ensureInt(Y3[A_q])+1)",
+            )),
+            ("controlFeatheredFriendBird", (
+                b"D9q>(I4*I4)", b"D9q>(H4*H4)", b"findFeatheredFriendTarget", b"featheredFriendAnchor",
+            )),
+            ("CallbackPeriodic_perkPeriodic_PerkFeatheredFriend_call_perkPeriodic_PerkFeatheredFriend", (
+                b"updateFeatheredFriendBirdFoodPenalty", b"ensureFeatheredFriendBird", b"applyFeatheredFriendDamageScaling",
+                b"controlFeatheredFriendBird",
+            )),
+            ("Action_watch_PerkFeatheredFriend_run_watch_PerkFeatheredFriend", (
+                b"V3=getElapsedGameTime()", b"resetFeatheredFriendRoundStateFor", b"nextFeatheredFriendFoodDelay", b"activateFeatheredFriendFor",
+            )),
+        ],
+        related_rawcode_ids=(2016423986, 1229795377, 1097625443, 1098282348),
+    )
+
+    add(
+        "perk_04",
+        "disable-y-tier-and-grant-one-tiny-watch-tower-item",
+        "perk-activation-and-round-start",
+        {
+            "disabled_building_scope": "all CFBuilding entries in BuildingTier_index (Y-tier)",
+            "disable_method": "SetPlayerTechMaxAllowed(building-id,0)",
+            "builder_item_id": 1229795378,
+            "builder_item_granted_if_missing": True,
+            "tiny_tower_unit_id": 1747990577,
+            "tiny_tower_build_ability_id": 1095577652,
+            "initializer_related_multishot_ability_id": 1095577653,
+            "initializer_related_multishot_runtime_attachment_proven": False,
+            "display_attack_range": 900,
+            "display_average_dps": 45,
+            "round_start_reenforces_tech_caps_and_reissues_missing_item": True,
+        },
+        [
+            ("LLItrClosure_forEach_PerkFortifiedOutpost_run_forEach_PerkFortifiedOutpost", (
+                b"SetPlayerTechMaxAllowed(Men.plr,Nen.CFBuilding_buildingId,0)",
+            )),
+            ("enforceFortifiedOutpostTechAvailability", (
+                b"LinkedList_LinkedList_forEach(btb[Vrb.BuildingTier_index],bar)",
+            )),
+            ("giveTinyOutpostItemToBuilder", (
+                b"unit_getItemById(dar,U3)", b"unit_addProtectedItemById(dar,U3)",
+            )),
+            ("Action_watch_PerkFortifiedOutpost_run_watch_PerkFortifiedOutpost", (
+                b"enforceFortifiedOutpostTechAvailability(Ven)", b"giveTinyOutpostItemToBuilder(Ven)",
+            )),
+        ],
+        related_rawcode_ids=(1229795378, 1747990577, 1095577652, 1095577653),
+    )
+
+    add(
+        "perk_05",
+        "glass-cannon-max-hp-and-primary-base-damage-scaling",
+        "owned-unit-indexing",
+        {
+            "unit_scope": "non-structure units",
+            "max_hp_factor": 0.85,
+            "max_hp_rounding": "real_toInt(old-max-hp*0.85+0.5)",
+            "current_life_after_application": "new-max-hp",
+            "primary_weapon_base_damage_factor": 1.25,
+            "primary_weapon_rounding": "real_toInt(old-base-damage*1.25+0.5)",
+            "secondary_weapon_modified": False,
+            "cleanup_reversal_present": False,
+        },
+        [
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkGlassCannon_call_perkOnIndex_setCleanup_PerkGlassCannon", (
+                b"applyGlassCannonTo(kfn)",
+            )),
+            ("applyGlassCannonTo", (
+                b"UNIT_TYPE_STRUCTURE", b"BlzGetUnitMaxHP", b"lar*N3", b"SetWidgetLife(oar,par)",
+                b"unit_getBaseDamage(kar,0)", b"nar*M3", b"BlzSetUnitBaseDamage(qar,rar,0)",
+            )),
+        ],
+    )
 
     add(
         "perk_10",
@@ -4612,9 +4810,281 @@ def _extract_perk_mechanics(
         related_rawcode_ids=(1095577654, 1095577655),
     )
 
+    add(
+        "perk_11",
+        "bulwark-hp-for-mobility-and-attack-speed-tradeoff",
+        "perk-activation-current-units-plus-owned-unit-indexing",
+        {
+            "unit_scope": "combat sappers",
+            "max_hp_factor": 1.12,
+            "max_hp_rounding": "real_toInt(old-max-hp*1.12+0.5)",
+            "current_life_factor": 1.12,
+            "move_speed_factor": 0.93,
+            "attack_speed_factor": 0.93,
+            "attack_cooldown_formula": "old-cooldown/0.93",
+            "affected_weapon_indices": [0, 1],
+            "cleanup_reversal_present": False,
+        },
+        [
+            ("applyBulwarkMarchToCurrentUnits", (
+                b"GroupEnumUnitsOfPlayer", b"isCombatSapper(F7q)", b"applyBulwarkMarchTo(F7q)",
+            )),
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkBulwarkMarch_call_perkOnIndex_setCleanup_PerkBulwarkMarch", (
+                b"isCombatSapper(fdn)", b"applyBulwarkMarchTo(fdn)",
+            )),
+            ("applyBulwarkMarchTo", (
+                b"BlzGetUnitMaxHP", b"x7q*B5", b"widget_getLife(w7q)*B5", b"GetUnitMoveSpeed(w7q)*A5",
+                b"BlzGetUnitAttackCooldown(w7q,0)", b"z7q/z5", b"BlzGetUnitAttackCooldown(w7q,1)", b"A7q/z5",
+            )),
+        ],
+    )
+
+    add(
+        "perk_12",
+        "castle-boundary-armor-stance",
+        "perk-activation-unit-indexing-and-castle-enter-leave-events",
+        {
+            "unit_scope": "combat sappers",
+            "outside_own_castle_armor_bonus": 3,
+            "inside_own_castle_armor_bonus": -2,
+            "outside_armor_ability_id": 1095577656,
+            "inside_armor_ability_id": 1095577657,
+            "inside_test": "isInsideOwnCastleRect(unit-owner,unit)",
+            "castle_event_hooks": "enter and leave for both castle rectangles",
+            "mutually_exclusive_armor_abilities": True,
+            "cleanup_removes_both_armor_abilities_and_tracking": True,
+        },
+        [
+            ("registerCurrentLastWallUnits", (
+                b"GroupEnumUnitsOfPlayer", b"isLastWallEligibleUnit(jbr)", b"trackLastWallUnit(gbr,jbr)",
+            )),
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkLastWallProtocol_call_perkOnIndex_setCleanup_PerkLastWallProtocol", (
+                b"isLastWallEligibleUnit(Qfn)", b"trackLastWallUnit(Pfn.plr,Qfn)",
+            )),
+            ("refreshLastWallArmor", (
+                b"isInsideOwnCastleRect(Par,Oar)", b"unit_getAbilityLevel(Oar,J3)", b"unit_getAbilityLevel(Oar,I3)",
+                b"unit_removeAbility(Oar,J3)", b"addProtectedAbility(Var,War)", b"unit_removeAbility(Oar,I3)", b"addProtectedAbility(Xar,Yar)",
+            )),
+            ("installLastWallCastleHooksOnce", (
+                b"TriggerRegisterEnterRectSimple(rbr,NFb)", b"TriggerRegisterLeaveRectSimple(sbr,NFb)",
+                b"TriggerRegisterEnterRectSimple(tbr,MFb)", b"TriggerRegisterLeaveRectSimple(ubr,MFb)",
+            )),
+            ("PerkCleanupFunc_setCleanup_PerkLastWallProtocol_call_setCleanup_PerkLastWallProtocol", (
+                b"removeLastWallArmorAbilities(Zfn)", b"E3[agn]=false", b"D3[agn]=(-1)", b"GroupClear(cgn)",
+            )),
+        ],
+        related_rawcode_ids=(1095577656, 1095577657),
+    )
+
+    add(
+        "perk_13",
+        "ranged-ground-range-and-attack-speed-tradeoff",
+        "perk-activation-current-units-plus-owned-unit-indexing",
+        {
+            "unit_scope": "combat sapper and ground and ranged attacker",
+            "advertised_attack_range_delta": 90,
+            "script_range_reference_weapon_index": 0,
+            "script_range_write_weapon_index": 1,
+            "script_range_write_formula": "weapon1 + 90",
+            "primary_weapon_range_is_not_directly_written": True,
+            "acquisition_range_update_condition": "current-acquisition < weapon0 + 90",
+            "acquisition_range_on_update": "weapon0 + 140",
+            "acquisition_range_otherwise": "unchanged",
+            "attack_speed_factor": 0.88,
+            "attack_cooldown_formula": "old-cooldown/0.88",
+            "attack_cooldown_weapon_indices": [0, 1],
+            "script_range_quirk_preserved": True,
+            "cleanup_reversal_present": False,
+        },
+        [
+            ("isRangedGroundCombatUnit", (
+                b"isCombatSapper(Kbr)", b"UNIT_TYPE_GROUND", b"UNIT_TYPE_RANGED_ATTACKER",
+            )),
+            ("setUnitAttackRangeFixed", (
+                b"UNIT_WEAPON_RF_ATTACK_RANGE,0", b"UNIT_WEAPON_RF_ATTACK_RANGE,1", b"((Mbr-Nbr)+Obr)",
+            )),
+            ("applyLonglineFormationTo", (
+                b"Qbr+B3", b"setUnitAttackRangeFixed(Pbr,Rbr)", b"Rbr+50.",
+                b"BlzGetUnitAttackCooldown(Pbr,0)", b"Sbr/A3", b"BlzGetUnitAttackCooldown(Pbr,1)", b"Tbr/A3",
+            )),
+            ("applyLonglineFormationToCurrentUnits", (
+                b"GroupEnumUnitsOfPlayer", b"isRangedGroundCombatUnit(Ybr)", b"applyLonglineFormationTo(Ybr)",
+            )),
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkLonglineFormation_call_perkOnIndex_setCleanup_PerkLonglineFormation", (
+                b"isRangedGroundCombatUnit(ogn)", b"applyLonglineFormationTo(ogn)",
+            )),
+        ],
+    )
+
+    add(
+        "perk_14",
+        "production-building-enchantment-with-global-trained-unit-penalty",
+        "perk-activation-unit-indexing-builder-target-spell-and-target-death",
+        {
+            "builder_target_ability_id": 1095577697,
+            "selected_building_marker_ability_id": 1095577698,
+            "enchanted_spawn_marker_ability_id": 1095577699,
+            "target_requirement": "allied production building",
+            "all_owned_trained_combat_sapper_max_hp_factor": 0.95,
+            "all_owned_trained_combat_sapper_base_damage_factor": 0.95,
+            "selected_building_spawn_max_hp_factor": 1.15,
+            "selected_building_spawn_base_damage_factor": 1.15,
+            "selected_building_spawn_model_scale_factor": 1.10,
+            "selected_building_spawn_nominal_net_hp_factor_after_global_penalty": 1.0925,
+            "selected_building_spawn_nominal_net_base_damage_factor_after_global_penalty": 1.0925,
+            "selected_building_spawn_scaling_order": ["global-0.95", "selected-1.15"],
+            "selected_bonus_deferred_via_nested_zero_timers": 2,
+            "each_scaling_step_rounds_independently": True,
+            "max_hp_current_life_when_increasing": "old-life + (new-max-old-max)",
+            "max_hp_current_life_when_decreasing": "min(old-life,new-max)",
+            "base_damage_weapon_indices": [0, 1],
+            "scale_rounding": "real_toInt(value*factor+0.5)",
+            "selected_bonus_scans_all_active_players_and_stops_at_first_matching_target": True,
+            "selected_bonus_stacks_multiple_active_targets": False,
+            "round_start_clears_selected_target_but_keeps_perk_active": True,
+            "cleanup_disables_perk_removes_builder_ability_and_spawn_markers": True,
+        },
+        [
+            ("scaleUnitBaseDamage", (
+                b"unit_getBaseDamage(z5q,0)", b"B5q*A5q", b"unit_getBaseDamage(z5q,1)", b"C5q*A5q",
+                b"BlzSetUnitBaseDamage",
+            )),
+            ("scaleUnitMaxHp", (
+                b"BlzGetUnitMaxHP(H5q)", b"int_toReal(J5q)*I5q", b"if(K5q>J5q)then",
+                b"widget_getLife(H5q)+int_toReal((K5q-J5q))", b"min1(widget_getLife(H5q),int_toReal(K5q))",
+            )),
+            ("scaleUnitModelSize", (
+                b"UNIT_RF_SCALING_VALUE", b"R5q*Q5q", b"SetUnitScale",
+            )),
+            ("applyProductionSpawnModifiers", (
+                b"isCombatSapper(V5q)", b"getSpawnBuilding(V5q)", b"unit_getOwner(W5q)==U5q",
+                b"scaleUnitMaxHp(X5q,R5)", b"scaleUnitBaseDamage(X5q,S5)",
+            )),
+            ("applyProductionEnchantBonusFromAnyActiveTarget", (
+                b"isCombatSapper(Y5q)", b"getSpawnBuilding(Y5q)", b"ProductionEnchantmentState_active",
+                b"Z5q==b6q.ProductionEnchantmentState_target", b"scaleUnitMaxHp(c6q,U5)", b"scaleUnitBaseDamage(c6q,V5)",
+                b"scaleUnitModelSize(c6q,T5)", b"addAbilityIfMissing(c6q,e6)", b"return",
+            )),
+            ("setProductionEnchantedBuilding", (
+                b"unit_isAllyOf(g6q,f6q)", b"isProductionBuilding(g6q)", b"addAbilityIfMissing(g6q,k6)",
+            )),
+            ("registerProductionEnchantmentPlayer", (
+                b"ProductionEnchantmentState_active=true", b"ensureProductionBuilderAbility(Z6q)", b"code__onUnitIndex_PerkBuildingEnchantment",
+            )),
+            ("code__onUnitIndex_PerkBuildingEnchantment", (
+                b"getIndexingUnit()", b"Pr:create715()", b"f7q.indexed=e7q", b"nullTimer(f7q)",
+            )),
+            ("CallbackSingle_nullTimer_onUnitIndex_PerkBuildingEnchantment_call_nullTimer_onUnitIndex_PerkBuildingEnchantment", (
+                b"Rr:create716()", b"zbn.indexed=ybn.indexed", b"nullTimer(zbn)",
+            )),
+            ("CallbackSingle_nullTimer_nullTimer_onUnitIndex_PerkBuildingEnchantment_call_nullTimer_nullTimer_onUnitIndex_PerkBuildingEnchantment", (
+                b"applyProductionEnchantBonusFromAnyActiveTarget(Bbn.indexed)",
+            )),
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkBuildingEnchantment_call_perkOnIndex_setCleanup_PerkBuildingEnchantment", (
+                b"applyProductionSpawnModifiers(Ubn.plr,Vbn)",
+            )),
+            ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment", (
+                b"GetSpellAbilityId()==m6", b"setProductionEnchantedBuilding(Xbn.plr,Zbn)",
+            )),
+            ("Action_watch_PerkBuildingEnchantment_run_watch_PerkBuildingEnchantment", (
+                b"ensureProductionBuilderAbility(V1[wbn])", b"clearProductionEnchantedBuildingFor(V1[wbn])",
+            )),
+            ("PerkCleanupFunc_setCleanup_PerkBuildingEnchantment_call_setCleanup_PerkBuildingEnchantment", (
+                b"ProductionEnchantmentState_active=false", b"removeAbilityIfPresent(hcn,k6)", b"removeAbilityIfPresent(hcn,e6)",
+                b"unit_removeAbility(icn,m6)",
+            )),
+        ],
+        related_rawcode_ids=(1095577697, 1095577698, 1095577699),
+    )
+
+    add(
+        "perk_15",
+        "flat-hp-regeneration-with-base-damage-penalty",
+        "perk-activation-current-units-plus-owned-unit-indexing",
+        {
+            "unit_scope": "combat sappers",
+            "hp_regeneration_delta_per_second": 7.0,
+            "base_damage_factor": 0.90,
+            "base_damage_weapon_indices": [0, 1],
+            "base_damage_rounding": "real_toInt(old-base-damage*0.90+0.5)",
+            "cleanup_reversal_present": False,
+        },
+        [
+            ("applyRampantGrowthTo", (
+                b"UNIT_RF_HIT_POINTS_REGENERATION_RATE", b"+Z2", b"unit_getBaseDamage(Ccr,0)", b"int_toReal(Dcr)*Y2",
+                b"unit_getBaseDamage(Ccr,1)", b"int_toReal(Ecr)*Y2", b"BlzSetUnitBaseDamage",
+            )),
+            ("applyRampantGrowthToCurrentUnits", (
+                b"GroupEnumUnitsOfPlayer", b"isCombatSapper", b"applyRampantGrowthTo",
+            )),
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkRampantGrowth_call_perkOnIndex_setCleanup_PerkRampantGrowth", (
+                b"isCombatSapper(Ogn)", b"applyRampantGrowthTo(Ogn)",
+            )),
+        ],
+    )
+
+    add(
+        "perk_17",
+        "spell-building-mana-regeneration-enchantment",
+        "perk-activation-construction-finish-builder-target-spell-and-target-death",
+        {
+            "builder_target_ability_id": 1095577700,
+            "selected_building_marker_ability_id": 1095577701,
+            "target_requirement": "allied spell building",
+            "selected_spell_building_mana_regen_delta": 0.20,
+            "other_owned_spell_building_mana_regen_delta": -0.05,
+            "selected_allied_building_may_be_owned_by_another_player": True,
+            "mana_regen_delta_tracking_is_idempotent": True,
+            "construction_finish_refreshes_owned_spell_buildings": True,
+            "target_death_clears_selection": True,
+            "unit_deindex_clears_stored_delta_for_reused_index": True,
+            "round_start_clears_selected_target_but_keeps_perk_active": True,
+            "cleanup_resets_selected_delta_and_removes_builder_ability": True,
+        },
+        [
+            ("desiredSpellBuildingManaDelta", (
+                b"isSpellBuilding(B6q)", b"SpellEnchantmentState_active", b"B6q==C6q.SpellEnchantmentState_target",
+                b"return K5", b"return J5",
+            )),
+            ("setSpellBuildingManaDelta", (
+                b"UNIT_RF_MANA_REGENERATION", b"+x6q)-z6q", b"G5[y6q]=x6q",
+            )),
+            ("refreshSpellBuildingEnchantments", (
+                b"GroupEnumUnitsOfPlayer", b"desiredSpellBuildingManaDelta(H6q,K6q)", b"setSpellBuildingManaDelta(K6q,L6q)",
+                b"K6q==I6q.SpellEnchantmentState_target", b"addAbilityIfMissing(K6q,P5)",
+            )),
+            ("setSpellEnchantedBuilding", (
+                b"unit_isAllyOf(T6q,S6q)", b"isSpellBuilding(T6q)", b"SpellEnchantmentState_target=T6q",
+                b"refreshSpellBuildingEnchantments(S6q)",
+            )),
+            ("registerSpellEnchantmentPlayer", (
+                b"SpellEnchantmentState_active=true", b"ensureSpellBuilderAbility(g7q)", b"refreshSpellBuildingEnchantments(g7q)",
+                b"code__onUnitDeindex_PerkBuildingEnchantment",
+            )),
+            ("code__onUnitDeindex_PerkBuildingEnchantment", (
+                b"unit_getIndex(getIndexingUnit())", b"G5[l7q]=0.",
+            )),
+            ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment2", (
+                b"GetConstructedStructure()", b"unit_getOwner(xcn)==wcn.plr", b"isSpellBuilding(xcn)", b"refreshSpellBuildingEnchantments(wcn.plr)",
+            )),
+            ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment3", (
+                b"GetSpellAbilityId()==Q5", b"setSpellEnchantedBuilding(zcn.plr,Bcn)",
+            )),
+            ("Action_watch_PerkBuildingEnchantment_run_watch_PerkBuildingEnchantment1", (
+                b"ensureSpellBuilderAbility(V1[Fbn])", b"clearSpellEnchantedBuildingFor(V1[Fbn])",
+            )),
+            ("PerkCleanupFunc_setCleanup_PerkBuildingEnchantment_call_setCleanup_PerkBuildingEnchantment1", (
+                b"SpellEnchantmentState_active=false", b"clearSpellEnchantedBuildingFor(Hcn)", b"unit_removeAbility(Jcn,Q5)",
+            )),
+        ],
+        related_rawcode_ids=(1095577700, 1095577701),
+    )
+
     rows.sort(key=lambda row: int(row["protected_registry_slot"]))
-    if len(rows) != 8:
-        raise ValueError(f"damage-driven perk semantic row count changed: {len(rows)}")
+    if len(rows) != 19:
+        raise ValueError(f"proven-live perk semantic row count changed: {len(rows)}")
+    if {str(row["perk_id"]) for row in rows} != set(audit_by_id):
+        raise ValueError("not every proven protected perk registration has normalized semantics")
     return rows
 
 
