@@ -17,7 +17,6 @@ use crate::terrain::client_asset_root;
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
-const UNIT_ASSET_PREFIX: &str = "wc3/units";
 const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow00.png";
 const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
@@ -132,6 +131,18 @@ pub struct Wc3RibbonSource {
 pub struct Wc3TeamTint {
     pub index: u8,
     pub color: Color,
+    asset_prefix: &'static str,
+}
+
+impl Wc3TeamTint {
+    #[must_use]
+    pub const fn new(index: u8, color: Color, asset_prefix: &'static str) -> Self {
+        Self {
+            index,
+            color,
+            asset_prefix,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -429,14 +440,9 @@ pub fn fix_wc3_scene_materials(
                 handle.clone()
             } else {
                 let mut team_glow = material_template.clone();
-                let texture = if team.index == 0 {
-                    TEAM_GLOW_BLUE_TEXTURE
-                } else {
-                    TEAM_GLOW_RED_TEXTURE
-                };
                 team_glow.base_color = Color::WHITE;
                 team_glow.base_color_texture =
-                    Some(asset_server.load(format!("{UNIT_ASSET_PREFIX}/{texture}")));
+                    Some(asset_server.load(team_glow_texture_path(team)));
                 team_glow.emissive = LinearRgba::WHITE;
                 team_glow.alpha_mode = AlphaMode::Add;
                 team_glow.unlit = true;
@@ -479,6 +485,15 @@ pub fn fix_wc3_scene_materials(
 
         commands.entity(entity).insert(Wc3MaterialProcessed);
     }
+}
+
+fn team_glow_texture_path(team: Wc3TeamTint) -> String {
+    let texture = if team.index == 0 {
+        TEAM_GLOW_BLUE_TEXTURE
+    } else {
+        TEAM_GLOW_RED_TEXTURE
+    };
+    format!("{}/{texture}", team.asset_prefix.trim_end_matches('/'))
 }
 
 fn wc3_team_tint(
@@ -907,6 +922,20 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn team_glow_texture_uses_the_owning_model_pack() {
+        let blue = Wc3TeamTint::new(0, Color::WHITE, "wc3/buildings");
+        let red = Wc3TeamTint::new(1, Color::WHITE, "wc3/buildings");
+        assert_eq!(
+            team_glow_texture_path(blue),
+            "wc3/buildings/textures/replaceabletextures__teamglow__teamglow01.png"
+        );
+        assert_eq!(
+            team_glow_texture_path(red),
+            "wc3/buildings/textures/replaceabletextures__teamglow__teamglow00.png"
+        );
+    }
 
     #[test]
     fn rawcodes_are_four_bytes() {

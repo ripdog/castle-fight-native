@@ -1863,10 +1863,7 @@ fn sync_render_entities(
                     rawcode,
                     presentation_root: entity,
                 },
-                Wc3TeamTint {
-                    index: unit.team.0,
-                    color: team_color(unit.team),
-                },
+                Wc3TeamTint::new(unit.team.0, team_color(unit.team), "wc3/units"),
                 Transform {
                     translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
                     rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
@@ -1977,6 +1974,7 @@ fn sync_render_entities(
             commands.entity(entity).with_child((
                 WorldAssetRoot(model.scene.clone()),
                 ImportedBuildingModelRoot { rawcode },
+                Wc3TeamTint::new(building.team.0, team_color(building.team), "wc3/buildings"),
                 Transform {
                     translation: Vec3::NEG_Y * visual_height * 0.5,
                     scale: Vec3::splat(model.scale),
@@ -2023,10 +2021,11 @@ fn sync_render_entities(
                     rawcode,
                     presentation_root: entity,
                 },
-                Wc3TeamTint {
-                    index: corpse.source_team.0,
-                    color: team_color(corpse.source_team),
-                },
+                Wc3TeamTint::new(
+                    corpse.source_team.0,
+                    team_color(corpse.source_team),
+                    "wc3/units",
+                ),
                 Transform {
                     rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
                     scale: Vec3::splat(model.scale),
