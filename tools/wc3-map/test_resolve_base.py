@@ -230,7 +230,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 33)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 32)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "attack-proc-dispel-positive-buffs": 3,
@@ -251,7 +251,6 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "source-damage-stacking-blood-corrosion": 1,
             "summon-event-mana-reset": 1,
             "target-damage-melee-thunderbolt-retaliation": 2,
-            "target-damage-one-shot-emergency-life-reset": 1,
             "train-event-random-initial-mana": 1,
             "train-event-set-exploded-flag": 1,
             "retarget-flying-damage-source": 2,
@@ -259,7 +258,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 33)
+        self.assertEqual(len(rows), 32)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -433,13 +432,6 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(greater_lightning["thunderbolt_object_data"]["Damage"], 50)
         self.assertEqual(greater_lightning["thunderbolt_duration_seconds"], 4)
         self.assertEqual(greater_lightning["thunderbolt_order_id"], 852095)
-
-        warlock = json.loads(rows[("n005", "target-damage-one-shot-emergency-life-reset")]["parameters_json"])
-        self.assertEqual(warlock["trigger_current_life_below"], 128)
-        self.assertEqual(warlock["trigger_current_life_above"], 0.405)
-        self.assertEqual(warlock["set_current_life_to"], 5000)
-        self.assertTrue(warlock["remove_marker_after_trigger"])
-        self.assertEqual(warlock["marker_base_rawcode"], "ANcl")
 
         paladin_summon = json.loads(rows[("h03C", "summon-event-mana-reset")]["parameters_json"])
         self.assertEqual(paladin_summon["set_mana_to"], 30)
@@ -849,9 +841,28 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(sandkin["period_seconds"], 1)
         self.assertEqual(sandkin["cast_iterations"], 5)
 
+        self.assertEqual(
+            rows["h062"]["semantic_kind"],
+            "permanent-building-mana-regen-and-spawn-trait-improvement",
+        )
         mana_generator = json.loads(rows["h062"]["parameters_json"])
         self.assertEqual(mana_generator["normal_mana_regen_bonus"], 0.15)
         self.assertEqual(mana_generator["elemental_mana_regen_bonus"], 0.30)
+        spawn_trait = mana_generator["spawn_trait"]
+        self.assertEqual(spawn_trait["spawn_trait_probability_percent"], 30)
+        self.assertEqual(spawn_trait["spawn_granted_emergency_ability_id"], 1093682522)
+        self.assertEqual(spawn_trait["spawn_granted_damage_dispatch_marker_id"], 1093681973)
+        self.assertEqual(spawn_trait["emergency_trigger_current_life_below"], 128)
+        self.assertEqual(spawn_trait["emergency_set_current_life_to"], 5000)
+        self.assertTrue(spawn_trait["emergency_removes_ability_after_trigger"])
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["building_improvement_spawn_mechanic_rows"], 1)
+        cross_path = self.root / "docs" / "original_map" / "extracted" / "script" / "building-improvement-spawn-mechanics.tsv"
+        with cross_path.open(encoding="utf-8") as handle:
+            cross_rows = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(cross_rows), 1)
+        self.assertEqual(cross_rows[0]["source_unit_rawcode"], "h062")
+        self.assertEqual(cross_rows[0]["mechanic_kind"], "improved-building-per-spawn-emergency-life-trait")
 
         ogre = json.loads(rows["n02Y"]["parameters_json"])
         self.assertEqual(ogre["berserk_ability_rawcode"], "A0GR")

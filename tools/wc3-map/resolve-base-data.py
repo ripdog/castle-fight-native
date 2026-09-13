@@ -1969,12 +1969,6 @@ def main() -> None:
                     parameters["thunderbolt_effective_cooldown_seconds"] = numeric(
                         protected_ability_values.get(("A0D5", level, "cooldown"), thunderbolt["cooldown"])
                     )
-                elif mechanic["mechanic_kind"] == "target-damage-one-shot-emergency-life-reset":
-                    marker = next((row for row in ability_levels.get("A0EZ", []) if row["level"] == "1"), None)
-                    if marker is None:
-                        raise ValueError("Warlock emergency-life mechanic is missing A0EZ marker object data")
-                    parameters["marker_base_rawcode"] = marker["base_rawcode"]
-                    parameters["marker_object_data"] = json.loads(marker["data_fields_labeled_json"])
                 elif mechanic["mechanic_kind"] == "summon-event-mana-reset":
                     parameters["static_object_mana_start"] = numeric(unit["mana_start"])
                     parameters["mana_max"] = numeric(unit["mana_max"])
@@ -2292,6 +2286,16 @@ def main() -> None:
         "dummyCarrierCastImmediate": (1,),
         "dummyCarrierWithAbilities1": (1, 2, 3),
     }
+
+    building_improvement_spawn_by_source: dict[str, dict[str, str]] = {}
+    building_improvement_spawn_path = map_root / "script" / "building-improvement-spawn-mechanics.tsv"
+    if building_improvement_spawn_path.exists():
+        with building_improvement_spawn_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                source_rawcode = row["source_unit_rawcode"]
+                if source_rawcode in building_improvement_spawn_by_source:
+                    raise ValueError(f"duplicate building-improvement spawn mechanic source: {source_rawcode}")
+                building_improvement_spawn_by_source[source_rawcode] = row
 
     unit_spell_semantic_rows: list[list[Any]] = []
     unit_spell_semantic_status_counts: Counter[str] = Counter()
@@ -2764,9 +2768,23 @@ def main() -> None:
             source_functions.append("assassinSpell")
         elif unit_rawcode == "h062":
             require_literals(mechanic, "improveSpecialBuilding", ("1.", "2"))
-            semantic_kind = "permanent-building-mana-regen-improvement"
+            cross_runtime = building_improvement_spawn_by_source.get("h062")
+            if cross_runtime is None:
+                raise ValueError("Mana Generator semantic is missing A0EL cross-runtime spawn evidence")
+            if cross_runtime["mechanic_kind"] != "improved-building-per-spawn-emergency-life-trait":
+                raise ValueError(f"Mana Generator cross-runtime mechanic changed: {cross_runtime['mechanic_kind']}")
+            spawn_trait = json.loads(cross_runtime["parameters_json"])
+            if (
+                spawn_trait.get("improvement_ability_id") != 1093682508
+                or spawn_trait.get("spawn_trait_probability_percent") != 30
+                or spawn_trait.get("spawn_granted_emergency_ability_id") != 1093682522
+                or spawn_trait.get("spawn_granted_damage_dispatch_marker_id") != 1093681973
+                or spawn_trait.get("emergency_set_current_life_to") != 5000
+            ):
+                raise ValueError(f"Mana Generator cross-runtime spawn parameters changed: {spawn_trait}")
+            semantic_kind = "permanent-building-mana-regen-and-spawn-trait-improvement"
             normalization_status = "script-native-ready"
-            effect_rawcodes = ["A0EL"]
+            effect_rawcodes = ["A0EL", "A0EZ", "A0C5"]
             parameters.update({
                 "improvement_ability_rawcode": "A0EL",
                 "normal_level": 1,
@@ -2777,8 +2795,12 @@ def main() -> None:
                 "one_generator_per_target": True,
                 "target_requires_mana": True,
                 "target_requires_special_building": True,
+                "spawn_trait": spawn_trait,
             })
             source_functions.append("improveSpecialBuilding")
+            source_functions.extend(
+                function for function in cross_runtime["source_functions"].split(",") if function
+            )
 
         enriched_effects: list[dict[str, Any]] = []
         for rawcode in effect_rawcodes:
@@ -3608,6 +3630,7 @@ def main() -> None:
         "production_unit_special_mechanic_kinds": dict(sorted(Counter(
             row[4] for row in production_special_rows
         ).items())),
+        "building_improvement_spawn_mechanic_rows": len(building_improvement_spawn_by_source),
         "production_unit_ability_links": len(production_ability_rows),
         "production_unit_unique_abilities": len(production_ability_unique),
         "production_unit_inherited_ability_links": production_ability_inherited_links,
@@ -3673,14 +3696,14 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Warlock emergency life reset, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
             "protected-filter-bindings.tsv resolves all 21 fixed generated W3P Filter wrappers from exact use-site/compiler structure; generic registerPlayerUnitEvent local SCr is correctly classified as a dynamic caller-supplied wrapper, leaving no unresolved fixed filter globals",
             "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
             "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
-            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
+            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate; Mana Generator also joins building-improvement-spawn-mechanics.tsv so A0EL's 30% per-spawn A0EZ+A0C5 emergency-life side effect is not lost",
             "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
             "building-spells.tsv now covers both generated registration representations: 15 protected registry calls and 28 direct EVENT_PLAYER_UNIT_SPELL_EFFECT listeners. Forty-two use Castle Fight's mana-cost/building-regen cadence; Tidal Guardian is the explicit cooldown-driven exception at its protected 15-second WC3 cooldown",
             "building-spell-evidence.tsv gives all 43 scripted building spells the same bounded static handler/helper/callback/effect evidence used for unit spells, including direct and reachable rawcodes enriched with resolved WC3 object data",

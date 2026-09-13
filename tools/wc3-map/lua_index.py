@@ -4409,6 +4409,7 @@ def _extract_production_unit_special_mechanics(
         "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
         "fJ",
         "onSummonedUnit",
+        "onUnitTrained",
         "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1",
         "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime1",
         "EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend",
@@ -4422,6 +4423,7 @@ def _extract_production_unit_special_mechanics(
         "ancientKeeperDispelProc",
         "ForGroupCallback_forUnitsInRange_DamageProcs_callback_forUnitsInRange_DamageProcs",
         "handleTargetDamageEffects",
+        "castLightningShield",
         "feralRage",
         "startBearHibernate",
         "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime1",
@@ -5018,35 +5020,6 @@ def _extract_production_unit_special_mechanics(
             "byte_offset": min(target_damage_start, lightning_start),
         })
 
-    # Warlock: a hidden one-shot target-damage marker provides an emergency
-    # post-hit life reset. It triggers strictly below 128 life while alive,
-    # sets current life to 5000, then removes the marker so it cannot recur.
-    warlock_start, _ = require_tokens(
-        "deathPactEmergency",
-        {"128.", "5000.", "1093682522", "widget_getLife", "__wurst_safe_SetWidgetLife", "unit_removeAbility"},
-    )
-    warlock_function = next(function for function in functions if function["name"] == "deathPactEmergency")
-    warlock_source = data[int(warlock_function["start"]):int(warlock_function["end"])]
-    if b"(Bpq<128.)and(Bpq>.405)" not in warlock_source:
-        raise ValueError("Warlock emergency-life threshold changed")
-    rows.append({
-        "unit_id": 1848651829,
-        "mechanic_kind": "target-damage-one-shot-emergency-life-reset",
-        "trigger": "target-damage-event",
-        "parameters": {
-            "target_marker_ability_id": 1093682522,
-            "trigger_current_life_below": 128,
-            "trigger_current_life_above": 0.405,
-            "set_current_life_to": 5000,
-            "remove_marker_after_trigger": True,
-            "death_pact_visual_only": True,
-        },
-        "related_rawcode_ids": [1093682522],
-        "source_functions": ["handleTargetDamageEffects", "deathPactEmergency"],
-        "evidence_kind": "exact-marker-driven-target-damage-handler",
-        "byte_offset": min(target_damage_start, warlock_start),
-    })
-
     # Paladin: the summon-event path overrides its object-data starting mana to
     # exactly 30 before returning it to normal attack behavior. Keep this scoped
     # to summoned Paladins; ordinary object-data mana_start remains separate.
@@ -5349,6 +5322,96 @@ def _extract_production_unit_special_mechanics(
     return rows
 
 
+def _extract_building_improvement_spawn_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover cross-runtime effects caused by permanent building improvements.
+
+    Mana Generator's A0EL target improvement is registered as a unit spell, but
+    its per-spawn side effect is implemented later in setupUnit and therefore is
+    not reachable through the ordinary unit-spell call graph. Keep that bridge
+    explicit so importers do not reproduce only the mana-regeneration half.
+    """
+    available = {str(function["name"]) for function in functions}
+    required = {"improveSpecialBuilding", "setupUnit", "handleTargetDamageEffects", "deathPactEmergency"}
+    if not required.issubset(available):
+        return []
+
+    def source(name: str) -> tuple[int, bytes, set[str]]:
+        body = _function_body_tokens(data, functions, name)
+        if body is None:
+            raise ValueError(f"building-improvement runtime source missing: {name}")
+        start, tokens = body
+        function = next(function for function in functions if function["name"] == name)
+        raw = data[int(function["start"]):int(function["end"])]
+        return start, raw, {token.text for token in tokens}
+
+    improve_start, improve_source, improve_tokens = source("improveSpecialBuilding")
+    setup_start, setup_source, setup_tokens = source("setupUnit")
+    target_start, target_source, target_tokens = source("handleTargetDamageEffects")
+    emergency_start, emergency_source, emergency_tokens = source("deathPactEmergency")
+
+    required_improve = {
+        "1093682508", "1093682259", "2", "addProtectedAbility",
+        "__wurst_safe_UnitMakeAbilityPermanent", "__wurst_safe_SetUnitAbilityLevel",
+    }
+    if not required_improve.issubset(improve_tokens):
+        raise ValueError("Mana Generator building-improvement setup changed")
+    if b"addProtectedAbility(ipr,1093682508)" not in improve_source:
+        raise ValueError("Mana Generator no longer grants A0EL to improved building")
+    if b"__wurst_safe_UnitMakeAbilityPermanent(bpr,true,1093682508)" not in improve_source:
+        raise ValueError("Mana Generator A0EL permanence changed")
+
+    required_setup = {"1093682508", "1093682522", "1093681973", "GetRandomInt", "30", "addProtectedAbility"}
+    if not required_setup.issubset(setup_tokens):
+        raise ValueError("A0EL per-spawn trait setup changed")
+    if b"(unit_getAbilityLevel(Ofs,1093682508)>0)and(GetRandomInt(0,99)<30)" not in setup_source:
+        raise ValueError("A0EL per-spawn trait probability changed")
+    if b"addProtectedAbility(Tfs,1093682522)" not in setup_source or b"addProtectedAbility(Ufs,1093681973)" not in setup_source:
+        raise ValueError("A0EL per-spawn granted abilities changed")
+
+    if not {"1093681973", "1093682522", "deathPactEmergency"}.issubset(target_tokens):
+        raise ValueError("A0EL spawn trait target-damage dispatch changed")
+    if b"unit_getAbilityLevel(gqq,1093681973)<=0" not in target_source:
+        raise ValueError("A0EL spawn trait target-damage marker gate changed")
+    if b"unit_getAbilityLevel(gqq,1093682522)>0" not in target_source:
+        raise ValueError("A0EL spawn trait emergency marker branch changed")
+
+    if not {"128.", "5000.", "1093682522", "__wurst_safe_SetWidgetLife", "unit_removeAbility"}.issubset(emergency_tokens):
+        raise ValueError("A0EL spawn trait emergency handler changed")
+    if b"(Bpq<128.)and(Bpq>.405)" not in emergency_source:
+        raise ValueError("A0EL spawn trait emergency threshold changed")
+    if b"__wurst_safe_SetWidgetLife(Apq,5000.)" not in emergency_source:
+        raise ValueError("A0EL spawn trait emergency life reset changed")
+
+    return [{
+        "source_unit_id": 1747990066,
+        "mechanic_kind": "improved-building-per-spawn-emergency-life-trait",
+        "trigger": "spawn-from-improved-building",
+        "parameters": {
+            "improvement_ability_id": 1093682508,
+            "elemental_building_marker_ability_id": 1093682259,
+            "normal_improvement_level": 1,
+            "elemental_improvement_level": 2,
+            "spawn_trait_roll_min": 0,
+            "spawn_trait_roll_max": 99,
+            "spawn_trait_roll_threshold_exclusive": 30,
+            "spawn_trait_probability_percent": 30,
+            "spawn_granted_emergency_ability_id": 1093682522,
+            "spawn_granted_damage_dispatch_marker_id": 1093681973,
+            "emergency_trigger_current_life_below": 128,
+            "emergency_trigger_current_life_above": 0.405,
+            "emergency_set_current_life_to": 5000,
+            "emergency_removes_ability_after_trigger": True,
+        },
+        "related_rawcode_ids": [1093682508, 1093682259, 1093682522, 1093681973],
+        "source_functions": ["improveSpecialBuilding", "setupUnit", "handleTargetDamageEffects", "deathPactEmergency"],
+        "evidence_kind": "exact-cross-runtime-building-improvement-and-spawn-handler",
+        "byte_offset": min(improve_start, setup_start, target_start, emergency_start),
+    }]
+
+
 def _enclosing_named_function(
     functions: list[dict[str, object]],
     byte_offset: int,
@@ -5534,6 +5597,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     production_unit_special_mechanics = _extract_production_unit_special_mechanics(
         data, functions, protected_filter_bindings
     )
+    building_improvement_spawn_mechanics = _extract_building_improvement_spawn_mechanics(data, functions)
     castle_item_mechanics = _extract_castle_item_mechanics(data, functions, function_aliases)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
@@ -5587,6 +5651,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "function_value_arguments": function_value_arguments,
         "protected_filter_bindings": protected_filter_bindings,
         "production_unit_special_mechanics": production_unit_special_mechanics,
+        "building_improvement_spawn_mechanics": building_improvement_spawn_mechanics,
         "castle_item_mechanics": castle_item_mechanics,
         "building_spell_registrations": building_spell_registrations,
         "building_spell_evidence": building_spell_evidence,

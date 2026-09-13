@@ -109,7 +109,7 @@
     "unit_spell_inlined_registrations": 1,
     "protected_filter_bindings": 22,
     "protected_filter_bindings_resolved": 21,
-    "production_unit_special_mechanics": 33,
+    "production_unit_special_mechanics": 32,
     "production_unit_special_mechanic_kinds": {
       "attack-proc-dispel-positive-buffs": 3,
       "attack-proc-native-mirror-image": 1,
@@ -131,9 +131,12 @@
       "source-damage-stacking-blood-corrosion": 1,
       "summon-event-mana-reset": 1,
       "target-damage-melee-thunderbolt-retaliation": 2,
-      "target-damage-one-shot-emergency-life-reset": 1,
       "train-event-random-initial-mana": 1,
       "train-event-set-exploded-flag": 1
+    },
+    "building_improvement_spawn_mechanics": 1,
+    "building_improvement_spawn_mechanic_kinds": {
+      "improved-building-per-spawn-emergency-life-trait": 1
     },
     "building_spell_mechanics": 43,
     "building_spell_mechanics_with_unresolved_target_filter": 0,
