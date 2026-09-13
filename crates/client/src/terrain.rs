@@ -132,6 +132,7 @@ impl TerrainSurface {
         self.max_world
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn world_size(&self) -> Vec2 {
         self.max_world - self.origin_world
