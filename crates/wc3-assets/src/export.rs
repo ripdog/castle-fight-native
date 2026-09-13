@@ -8,15 +8,18 @@ use std::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use whiteout::{
-    casc::Storage,
+    casc::Storage as CascStorage,
     mdx::{
         InterpolationType, LayerFilterMode, LayerShadingFlag, MDLXFormat, Model, Node, NodeFlag,
         Parser as MdxParser, SequenceFlag, TrackF32, TrackQuaternion, TrackVector3f,
     },
+    mpq::Storage as MpqStorage,
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
 };
 
-use crate::catalog::{CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec};
+use crate::catalog::{
+    CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec, VisualAssetCatalog, VisualAssetSpec,
+};
 
 const GL_ARRAY_BUFFER: u32 = 34_962;
 const GL_ELEMENT_ARRAY_BUFFER: u32 = 34_963;
@@ -104,7 +107,95 @@ pub struct ModelManifest {
     pub bones: usize,
     pub animations: Vec<AnimationManifest>,
     pub textures: Vec<TextureManifest>,
+    pub particle_emitters: Vec<ParticleEmitter2Manifest>,
+    pub model_particle_emitters: Vec<ModelParticleEmitterManifest>,
+    pub ribbon_emitters: Vec<RibbonEmitterManifest>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ParticleEmitter2Manifest {
+    pub object_id: u32,
+    pub name: String,
+    pub position: [f32; 3],
+    pub speed: f32,
+    pub variation: f32,
+    pub latitude: f32,
+    pub gravity: f32,
+    pub lifespan: f32,
+    pub emission_rate: f32,
+    pub length: f32,
+    pub width: f32,
+    pub filter_mode: u32,
+    pub rows: u32,
+    pub columns: u32,
+    pub head_or_tail: u32,
+    pub tail_length: f32,
+    pub segment_colors: [[f32; 3]; 3],
+    pub segment_alpha: [u8; 3],
+    pub segment_scaling: [f32; 3],
+    pub texture: Option<String>,
+    pub squirt: bool,
+    pub replaceable_id: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelParticleEmitterManifest {
+    pub object_id: u32,
+    pub name: String,
+    pub position: [f32; 3],
+    pub emission_rate: f32,
+    pub gravity: f32,
+    pub longitude: f32,
+    pub latitude: f32,
+    pub lifespan: f32,
+    pub initial_velocity: f32,
+    pub spawn_model: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RibbonEmitterManifest {
+    pub object_id: u32,
+    pub name: String,
+    pub position: [f32; 3],
+    pub height_above: f32,
+    pub height_below: f32,
+    pub alpha: f32,
+    pub color: [f32; 3],
+    pub lifespan: f32,
+    pub emission_rate: u32,
+    pub rows: u32,
+    pub columns: u32,
+    pub material_id: u32,
+    pub gravity: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VisualAssetManifest {
+    pub schema_version: u32,
+    pub castle_fight_catalog_version: &'static str,
+    pub wc3_version: Option<String>,
+    pub art_mode: &'static str,
+    pub assets: Vec<VisualBindingManifest>,
+    pub chain_lightning_abilities: Vec<String>,
+    pub stun: Option<VisualBindingManifest>,
+    pub models: Vec<ModelManifest>,
+    pub failures: Vec<VisualFailureManifest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VisualBindingManifest {
+    pub owner_kind: String,
+    pub owner_rawcode: String,
+    pub role: String,
+    pub source_model: String,
+    pub gltf: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VisualFailureManifest {
+    pub source_model: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -133,7 +224,8 @@ pub struct FailureManifest {
 }
 
 pub struct Exporter {
-    storage: Storage,
+    storage: CascStorage,
+    map_storage: Option<MpqStorage>,
     output: PathBuf,
     keep_source: bool,
     wc3_version: Option<String>,
@@ -185,15 +277,26 @@ type DoodadSkinCatalog = BTreeMap<String, DoodadSkinProfile>;
 impl Exporter {
     pub fn open(
         wc3_install: &Path,
+        map_archive: Option<&Path>,
         output: &Path,
         keep_source: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        let storage = Storage::open(&wc3_install.to_string_lossy(), None).ok_or_else(|| {
+        let storage = CascStorage::open(&wc3_install.to_string_lossy(), None).ok_or_else(|| {
             io::Error::other(format!(
                 "failed to open Warcraft III CASC storage at {}",
                 wc3_install.display()
             ))
         })?;
+        let map_storage = map_archive
+            .map(|path| {
+                MpqStorage::open(&path.to_string_lossy(), None).ok_or_else(|| {
+                    io::Error::other(format!(
+                        "failed to open Warcraft III map archive at {}",
+                        path.display()
+                    ))
+                })
+            })
+            .transpose()?;
         let wc3_version = read_wc3_version(wc3_install);
         let unit_skin_bytes = storage
             .read_file(r"war3.w3mod:units\unitskin.txt")
@@ -221,6 +324,7 @@ impl Exporter {
         }
         Ok(Self {
             storage,
+            map_storage,
             output: output.to_path_buf(),
             keep_source,
             wc3_version,
@@ -286,6 +390,89 @@ impl Exporter {
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
             units,
+            models,
+            failures,
+        })
+    }
+
+    pub fn export_visuals(
+        &mut self,
+        catalog: &VisualAssetCatalog,
+    ) -> Result<VisualAssetManifest, Box<dyn Error>> {
+        let normalized_assets: Vec<_> = catalog
+            .assets
+            .iter()
+            .map(|asset| VisualAssetSpec {
+                owner_kind: asset.owner_kind.clone(),
+                owner_rawcode: asset.owner_rawcode.clone(),
+                role: asset.role.clone(),
+                model_path: normalize_model_path(&asset.model_path),
+            })
+            .collect();
+        let stun_source = catalog.stun_model_path.as_deref().map(normalize_model_path);
+
+        let mut sources = BTreeSet::new();
+        for asset in &normalized_assets {
+            sources.insert(asset.model_path.clone());
+        }
+        if let Some(source) = &stun_source {
+            sources.insert(source.clone());
+        }
+
+        let mut models = Vec::new();
+        let mut failures = Vec::new();
+        let mut model_outputs = BTreeMap::<String, String>::new();
+        for source in sources {
+            if !self.model_exists(&source) {
+                failures.push(VisualFailureManifest {
+                    source_model: source,
+                    error: "model is not present in the map archive or Warcraft III CASC install"
+                        .to_owned(),
+                });
+                continue;
+            }
+            match self.export_model(&source) {
+                Ok(model) => {
+                    model_outputs.insert(source.to_ascii_lowercase(), model.gltf.clone());
+                    models.push(model);
+                }
+                Err(error) => failures.push(VisualFailureManifest {
+                    source_model: source,
+                    error: error.to_string(),
+                }),
+            }
+        }
+
+        let assets = normalized_assets
+            .into_iter()
+            .map(|asset| VisualBindingManifest {
+                owner_kind: asset.owner_kind,
+                owner_rawcode: asset.owner_rawcode,
+                role: asset.role,
+                gltf: model_outputs
+                    .get(&asset.model_path.to_ascii_lowercase())
+                    .cloned(),
+                source_model: asset.model_path,
+            })
+            .collect();
+        let stun = stun_source.map(|source_model| VisualBindingManifest {
+            owner_kind: "status".to_owned(),
+            owner_rawcode: "stun".to_owned(),
+            role: "target".to_owned(),
+            gltf: model_outputs
+                .get(&source_model.to_ascii_lowercase())
+                .cloned(),
+            source_model,
+        });
+
+        Ok(VisualAssetManifest {
+            schema_version: 1,
+            castle_fight_catalog_version: CATALOG_VERSION,
+            wc3_version: self.wc3_version.clone(),
+            art_mode: "sd",
+            assets,
+            chain_lightning_abilities: catalog.chain_lightning_abilities.clone(),
+            stun,
             models,
             failures,
         })
@@ -548,8 +735,12 @@ impl Exporter {
     }
 
     fn model_exists(&self, logical_path: &str) -> bool {
-        self.storage
-            .file_exists(&format!("war3.w3mod:{logical_path}"))
+        self.map_storage
+            .as_ref()
+            .is_some_and(|storage| storage.file_exists(logical_path))
+            || self
+                .storage
+                .file_exists(&format!("war3.w3mod:{logical_path}"))
     }
 
     fn export_model(&mut self, logical_path: &str) -> Result<ModelManifest, Box<dyn Error>> {
@@ -598,6 +789,9 @@ impl Exporter {
         )?;
 
         let animations = animation_manifests_from_gltf(&gltf)?;
+        let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests);
+        let model_particle_emitters = model_particle_emitter_manifests(&model);
+        let ribbon_emitters = ribbon_emitter_manifests(&model);
 
         Ok(ModelManifest {
             source_model: logical_path.to_owned(),
@@ -608,16 +802,24 @@ impl Exporter {
             bones: model.bones_len(),
             animations,
             textures: texture_manifests,
+            particle_emitters,
+            model_particle_emitters,
+            ribbon_emitters,
             warnings,
         })
     }
 
     fn read_model(&self, logical_path: &str) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+        if let Some(storage) = &self.map_storage
+            && let Some(bytes) = storage.read_file(logical_path)
+        {
+            return Ok((format!("map:{logical_path}"), bytes.to_vec()));
+        }
         let casc_path = format!("war3.w3mod:{logical_path}");
         let bytes = self.storage.read_file(&casc_path).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("WC3 model not found in CASC: {casc_path}"),
+                format!("WC3 model not found in map archive or CASC: {casc_path}"),
             )
         })?;
         Ok((casc_path, bytes.to_vec()))
@@ -751,6 +953,7 @@ impl Exporter {
             .unwrap_or("")
             .to_ascii_lowercase();
         let stem = path.with_extension("").to_string_lossy().replace('/', "\\");
+        let stems = legacy_texture_stems(&stem);
 
         let mut extensions = Vec::new();
         if !requested_ext.is_empty() {
@@ -762,16 +965,23 @@ impl Exporter {
             }
         }
 
-        for ext in extensions {
-            let candidate = format!("{stem}.{ext}");
-            let casc_path = format!("war3.w3mod:{candidate}");
-            if let Some(bytes) = self.storage.read_file(&casc_path) {
-                return Ok((casc_path, bytes.to_vec(), ext));
+        for stem in stems {
+            for ext in &extensions {
+                let candidate = format!("{stem}.{ext}");
+                if let Some(storage) = &self.map_storage
+                    && let Some(bytes) = storage.read_file(&candidate)
+                {
+                    return Ok((format!("map:{candidate}"), bytes.to_vec(), ext.clone()));
+                }
+                let casc_path = format!("war3.w3mod:{candidate}");
+                if let Some(bytes) = self.storage.read_file(&casc_path) {
+                    return Ok((casc_path, bytes.to_vec(), ext.clone()));
+                }
             }
         }
         Err(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("WC3 texture not found in CASC for logical path {logical_path}"),
+            format!("WC3 texture not found in map archive or CASC for logical path {logical_path}"),
         )
         .into())
     }
@@ -800,6 +1010,102 @@ fn texture_to_png(texture: &Texture) -> Result<Vec<u8>, Box<dyn Error>> {
         .into());
     }
     Ok(bytes.to_vec())
+}
+
+fn particle_emitter_2_manifests(
+    model: &Model,
+    textures: &[TextureManifest],
+) -> Vec<ParticleEmitter2Manifest> {
+    model
+        .particle_emitters_2_iter()
+        .map(|emitter| {
+            let node = emitter.node();
+            let segment_colors = std::array::from_fn(|index| {
+                let color = emitter.segment_color(index);
+                [color.x, color.y, color.z]
+            });
+            ParticleEmitter2Manifest {
+                object_id: node.object_id(),
+                name: node.name(),
+                position: model_node_position(model, &node),
+                speed: emitter.speed(),
+                variation: emitter.variation(),
+                latitude: emitter.latitude(),
+                gravity: emitter.gravity(),
+                lifespan: emitter.lifespan(),
+                emission_rate: emitter.emission_rate(),
+                length: emitter.length(),
+                width: emitter.width(),
+                filter_mode: emitter.filter_mode(),
+                rows: emitter.rows(),
+                columns: emitter.columns(),
+                head_or_tail: emitter.head_or_tail(),
+                tail_length: emitter.tail_length(),
+                segment_colors,
+                segment_alpha: std::array::from_fn(|index| emitter.segment_alpha(index)),
+                segment_scaling: std::array::from_fn(|index| emitter.segment_scaling(index)),
+                texture: textures
+                    .get(emitter.texture_id() as usize)
+                    .and_then(|texture| texture.png.clone()),
+                squirt: emitter.squirt() != 0,
+                replaceable_id: emitter.replaceable_id(),
+            }
+        })
+        .collect()
+}
+
+fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterManifest> {
+    model
+        .particle_emitters_iter()
+        .map(|emitter| {
+            let node = emitter.node();
+            ModelParticleEmitterManifest {
+                object_id: node.object_id(),
+                name: node.name(),
+                position: model_node_position(model, &node),
+                emission_rate: emitter.emission_rate(),
+                gravity: emitter.gravity(),
+                longitude: emitter.longitude(),
+                latitude: emitter.latitude(),
+                lifespan: emitter.lifespan(),
+                initial_velocity: emitter.initial_velocity(),
+                spawn_model: emitter.spawn_model_file_name(),
+            }
+        })
+        .collect()
+}
+
+fn ribbon_emitter_manifests(model: &Model) -> Vec<RibbonEmitterManifest> {
+    model
+        .ribbon_emitters_iter()
+        .map(|emitter| {
+            let node = emitter.node();
+            let color = emitter.color();
+            RibbonEmitterManifest {
+                object_id: node.object_id(),
+                name: node.name(),
+                position: model_node_position(model, &node),
+                height_above: emitter.height_above(),
+                height_below: emitter.height_below(),
+                alpha: emitter.alpha(),
+                color: [color.x, color.y, color.z],
+                lifespan: emitter.lifespan(),
+                emission_rate: emitter.emission_rate(),
+                rows: emitter.rows(),
+                columns: emitter.columns(),
+                material_id: emitter.material_id(),
+                gravity: emitter.gravity(),
+            }
+        })
+        .collect()
+}
+
+fn model_node_position(model: &Model, node: &Node) -> [f32; 3] {
+    model
+        .pivot_points()
+        .get(node.object_id() as usize)
+        .map(|pivot| wc3_vec3(pivot.x, pivot.y, pivot.z))
+        .unwrap_or([0.0; 3])
 }
 
 fn build_gltf(
@@ -1013,10 +1319,6 @@ fn build_skeleton(
     binary: &mut BinaryBuilder,
     warnings: &mut Vec<String>,
 ) -> Result<SkeletonBuild, Box<dyn Error>> {
-    if model.bones_len() == 0 {
-        return Ok(SkeletonBuild::default());
-    }
-
     let mut infos = BTreeMap::<u32, SkeletonNodeInfo>::new();
     for bone in model.bones_iter() {
         let node = bone.node();
@@ -1061,6 +1363,10 @@ fn build_skeleton(
     for emitter in model.corn_emitters_iter() {
         let node = emitter.node();
         insert_skeleton_node(model, &node, &mut infos)?;
+    }
+
+    if infos.is_empty() {
+        return Ok(SkeletonBuild::default());
     }
 
     let mut result = SkeletonBuild::default();
@@ -1143,12 +1449,14 @@ fn build_skeleton(
         let pivot = infos.get(&object_id).expect("bone descriptor exists").pivot;
         inverse_bind.push(inverse_translation_matrix(pivot));
     }
-    let inverse_bind_accessor = binary.push_mat4_f32(&inverse_bind);
-    result.skin = Some(json!({
-        "name": "wc3_skin",
-        "inverseBindMatrices": inverse_bind_accessor,
-        "joints": result.joint_nodes,
-    }));
+    if !inverse_bind.is_empty() {
+        let inverse_bind_accessor = binary.push_mat4_f32(&inverse_bind);
+        result.skin = Some(json!({
+            "name": "wc3_skin",
+            "inverseBindMatrices": inverse_bind_accessor,
+            "joints": result.joint_nodes,
+        }));
+    }
     Ok(result)
 }
 
@@ -2851,6 +3159,14 @@ fn normalize_texture_path(path: &str) -> String {
         .to_owned()
 }
 
+fn legacy_texture_stems(stem: &str) -> Vec<String> {
+    let mut stems = vec![stem.to_owned()];
+    if stem.eq_ignore_ascii_case(r"Textures\Clouds8x8") {
+        stems.push(r"ReplaceableTextures\Weather\Clouds8x8".to_owned());
+    }
+    stems
+}
+
 fn flat_asset_name(path: &str) -> String {
     let without_extension = Path::new(path)
         .with_extension("")
@@ -2883,6 +3199,21 @@ mod tests {
         assert_eq!(
             normalize_model_path("units/human/Footman/Footman"),
             r"units\human\Footman\Footman.mdx"
+        );
+    }
+
+    #[test]
+    fn legacy_cloud_texture_uses_stock_weather_alias() {
+        assert_eq!(
+            legacy_texture_stems(r"Textures\Clouds8x8"),
+            [
+                r"Textures\Clouds8x8".to_owned(),
+                r"ReplaceableTextures\Weather\Clouds8x8".to_owned(),
+            ]
+        );
+        assert_eq!(
+            legacy_texture_stems(r"Textures\Other"),
+            [r"Textures\Other".to_owned()]
         );
     }
 

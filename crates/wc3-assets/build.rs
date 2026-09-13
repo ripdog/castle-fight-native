@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, env, error::Error, fs, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    error::Error,
+    fs,
+    path::PathBuf,
+};
 
 use csv::StringRecord;
 use serde::Serialize;
@@ -21,6 +27,21 @@ struct DoodadAssetSpec {
     model_path: Option<String>,
     num_variations: Option<u32>,
     placements: Vec<DoodadPlacementSpec>,
+}
+
+#[derive(Serialize)]
+struct VisualAssetSpec {
+    owner_kind: String,
+    owner_rawcode: String,
+    role: String,
+    model_path: String,
+}
+
+#[derive(Serialize)]
+struct VisualAssetCatalog {
+    assets: Vec<VisualAssetSpec>,
+    chain_lightning_abilities: Vec<String>,
+    stun_model_path: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -68,6 +89,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
 
     let units = load_production_units(&production_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
+    let visuals = load_visual_assets(&object_fields_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
         out_dir.join("unit-assets.json"),
@@ -76,6 +98,10 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     fs::write(
         out_dir.join("doodad-assets.json"),
         serde_json::to_vec(&doodads)?,
+    )?;
+    fs::write(
+        out_dir.join("visual-assets.json"),
+        serde_json::to_vec(&visuals)?,
     )?;
     Ok(())
 }
@@ -285,6 +311,88 @@ fn load_placed_doodads(
         .collect())
 }
 
+fn load_visual_assets(
+    object_fields_path: &std::path::Path,
+) -> Result<VisualAssetCatalog, Box<dyn Error>> {
+    let mut fields = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(object_fields_path)?;
+    let headers = fields.headers()?.clone();
+    let category = header_index(&headers, "category")?;
+    let rawcode_col = header_index(&headers, "rawcode")?;
+    let base_rawcode_col = header_index(&headers, "base_rawcode")?;
+    let field_id = header_index(&headers, "field_id")?;
+    let value_type = header_index(&headers, "value_type")?;
+    let base_value = header_index(&headers, "base_value_json")?;
+    let recovered = header_index(&headers, "recovered_value_json")?;
+
+    let mut assets = BTreeSet::<(String, String, String, String)>::new();
+    let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
+    let mut stun_model_path = None;
+    for row in fields.records() {
+        let row = row?;
+        let Some(kind) = row.get(category) else {
+            continue;
+        };
+        let Some(rawcode) = row.get(rawcode_col) else {
+            continue;
+        };
+        let base_rawcode = row.get(base_rawcode_col).unwrap_or_default();
+        let Some(field) = row.get(field_id) else {
+            continue;
+        };
+
+        let role = match (kind, field) {
+            ("units", "ua1m") => Some("attack1_projectile"),
+            ("units", "ua2m") => Some("attack2_projectile"),
+            ("abilities", "amat") => Some("missile"),
+            ("abilities", "acat") => Some("caster"),
+            ("abilities", "aeat") => Some("effect"),
+            ("abilities", "atat") => Some("target"),
+            ("abilities", "asat") => Some("special"),
+            ("buffs", "feat") => Some("effect"),
+            ("buffs", "ftat") => Some("target"),
+            ("buffs", "fsat") => Some("special"),
+            _ => None,
+        };
+        if let Some(role) = role
+            && matches!(row.get(value_type), Some("model") | Some("modelList"))
+        {
+            for path in parse_json_model_paths(row.get(recovered).unwrap_or_default())
+                .into_iter()
+                .filter(|path| is_renderable_model_path(path))
+            {
+                assets.insert((kind.to_owned(), rawcode.to_owned(), role.to_owned(), path));
+            }
+        }
+
+        if kind == "abilities" && matches!(base_rawcode, "ACcl" | "AOcl") {
+            chain_lightning_abilities.insert(rawcode.to_owned(), ());
+        }
+        if kind == "buffs" && base_rawcode == "BPSE" && field == "ftat" && stun_model_path.is_none()
+        {
+            stun_model_path = parse_json_string(row.get(base_value).unwrap_or_default())
+                .filter(|path| !path.trim().is_empty());
+        }
+    }
+
+    Ok(VisualAssetCatalog {
+        assets: assets
+            .into_iter()
+            .map(
+                |(owner_kind, owner_rawcode, role, model_path)| VisualAssetSpec {
+                    owner_kind,
+                    owner_rawcode,
+                    role,
+                    model_path,
+                },
+            )
+            .collect(),
+        chain_lightning_abilities: chain_lightning_abilities.into_keys().collect(),
+        stun_model_path,
+    })
+}
+
 fn parse_catalog_version(readme: &str) -> Result<String, Box<dyn Error>> {
     const MARKER: &str = "Castle Fight DE Beta ";
     let after = readme
@@ -342,6 +450,27 @@ fn parse_json_string(value: &str) -> Option<String> {
         .ok()?
         .as_str()
         .map(str::to_owned)
+}
+
+fn parse_json_model_paths(value: &str) -> Vec<String> {
+    parse_json_string(value)
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn is_renderable_model_path(path: &str) -> bool {
+    !matches!(
+        path.trim().to_ascii_lowercase().as_str(),
+        ".mdl" | ".mdx" | "none" | "none.mdl" | "none.mdx"
+    )
 }
 
 fn parse_json_f32(value: &str) -> Option<f32> {

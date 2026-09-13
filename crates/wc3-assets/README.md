@@ -1,8 +1,8 @@
 # Warcraft III asset extractor
 
-`cf-wc3-assets` converts Warcraft III presentation assets from a local installation into files Castle Fight Native can consume. It supports both production-unit art and the doodads/destructables actually placed by Castle Fight. The repository and game build do not contain Warcraft III art; extraction happens from the user's local installation.
+`cf-wc3-assets` converts Warcraft III presentation assets from a local installation into files Castle Fight Native can consume. It supports production-unit art, the doodads/destructables actually placed by Castle Fight, and map-referenced projectile/spell/buff visual models. The repository and game build do not contain Warcraft III art; extraction happens from the user's local installation.
 
-The production-unit and placed-doodad catalogs are embedded in the executable at build time from the resolved Castle Fight map data. A released extractor therefore does not need the repository, the original map, or the large resolver TSV files at runtime.
+The production-unit, placed-doodad, and visual-effect catalogs are embedded in the executable at build time from the resolved Castle Fight map data. A released extractor therefore does not need the repository, the original map, or the large resolver TSV files at runtime.
 
 ## Usage
 
@@ -29,6 +29,18 @@ cargo run -p castle-fight-wc3-assets -- \
 
 This exports only models referenced by the 1,780 committed placements. Invisible LOS/pathing blocker objects are retained in `manifest.json` for provenance but have no render scene. Repeat `--doodad RAWCODE` to restrict extraction while developing.
 
+To export the projectile, spell, buff, and status-effect models referenced by the resolved map data, use effect mode:
+
+```sh
+cargo run -p castle-fight-wc3-assets -- \
+  --wc3 "$WC3_INSTALL" \
+  --map /path/to/Castle_Fight.w3x \
+  --effects \
+  --output assets/wc3/effects
+```
+
+`--map` is optional, but supplying the matching Castle Fight map lets the extractor read imported MDX and texture files directly from the MPQ before falling back to install-resident CASC art. Effect extraction is best-effort across the whole catalog: unresolved references are recorded in `manifest.json` rather than aborting the pack. The manifest also identifies abilities based on Warcraft's Chain Lightning primitives and records the stock stun target art used by the client.
+
 Use `--keep-source` to retain the extracted MDX and original texture payloads beside the converted output. `--production` and `--object-fields` are development overrides for unit extraction and must be supplied together; normal shipped use relies on the embedded catalogs.
 
 ## Castle Fight client integration
@@ -47,7 +59,7 @@ Those rawcodes currently replace the placeholder meshes for Footman and Ice Trol
 
 ## Output
 
-The output root contains `manifest.json`, `models/*.gltf`, matching `models/*.bin` buffers, and converted `textures/*.png` files. Unit entries in the manifest carry their rawcode, model path, model scale, converted glTF path, and whether install-resident base art had to replace a custom map model that is unavailable in a stock Warcraft III installation. Doodad manifests preserve every exact editor placement (position/Z, angle, X/Y/Z scale, variation, visibility/solid/fixed-Z flags) and the resolved glTF scene for that variation.
+The output root contains `manifest.json`, `models/*.gltf`, matching `models/*.bin` buffers, and converted `textures/*.png` files. Unit entries in the manifest carry their rawcode, model path, model scale, converted glTF path, and whether install-resident base art had to replace a custom map model that is unavailable in a stock Warcraft III installation. Doodad manifests preserve every exact editor placement (position/Z, angle, X/Y/Z scale, variation, visibility/solid/fixed-Z flags) and the resolved glTF scene for that variation. Effect manifests bind unit/ability/buff rawcodes and art roles to converted scenes and retain Warcraft particle/ribbon emitter definitions beside each model because glTF has no native equivalent for those emitters.
 
 Geometry is converted from Warcraft's Z-up coordinates to glTF/Bevy Y-up coordinates but remains in Warcraft world units. Consumers should apply the per-unit `scale` from `manifest.json` rather than baking scale into shared model geometry.
 
@@ -61,8 +73,10 @@ Warcraft `DontInterp` and linear transform tracks map directly to glTF step/line
 
 Warcraft multi-layer materials are flattened to one representative glTF material. WC3 `FilterMode None` layers whose decoded texture actually contains transparent pixels are exported as glTF alpha-mask materials; this preserves cutout props such as banners without making ordinary opaque `None` layers transparent. Doodad/destructable skin replaceable textures such as Ashenvale tree skins are resolved through `texID`/`texFile` and baked into the exported glTF material; unit team-color and other dynamic replaceables are not yet reproduced exactly. Node flags that disable inheritance of selected parent transforms also cannot be represented exactly by a normal glTF hierarchy and are reported as model warnings.
 
-Models imported into the Castle Fight map are not present in a vanilla Warcraft III installation. When the map requests such a model, the extractor falls back to the corresponding install-resident base object art and marks `fallback_to_base_art: true` while retaining `requested_model` in the manifest. An optional map-archive asset source can later provide exact imported art without changing the install-only path.
+Models imported into Castle Fight are not present in a vanilla Warcraft III installation. Unit/doodad extraction can fall back to corresponding install-resident base object art where available, while effect extraction can read exact imported models and textures when `--map` supplies the matching `.w3x`/MPQ archive. Missing custom references remain explicit failures in the generated manifest rather than being silently substituted with unrelated art.
 
-The native client only autoplays an emitted animation whose name is exactly `Stand` (case-insensitive), at half presentation speed. It deliberately ignores `Stand Hit`, numbered stand variants, destruction/death clips, and declared WC3 sequences that produced no glTF transform channels. This keeps ambient fish/birds/etc. moving without accidentally animating static walls or trees through hit/death states. MDX particle/ribbon emitters are not yet translated to glTF. Most Castle Fight doodads have normal mesh geometry; the two bubble-geyser doodads are emitter-only and therefore currently instantiate empty scenes until an emitter presentation path is added.
+The native client only autoplays an emitted doodad animation whose name is exactly `Stand` (case-insensitive), at half presentation speed. It deliberately ignores `Stand Hit`, numbered stand variants, destruction/death clips, and declared WC3 sequences that produced no glTF transform channels. This keeps ambient fish/birds/etc. moving without accidentally animating static walls or trees through hit/death states.
+
+MDX ParticleEmitter2, legacy model-particle, and ribbon definitions are retained in `manifest.json`; emitter nodes are also kept in the converted hierarchy even when a model has no bones or mesh geometry. The native client currently renders ParticleEmitter2 data with textured billboards using the source emission rate, speed/cone, gravity, lifetime, colors, and segment scaling, with a bounded one-shot fallback for `Squirt` emitters whose source emission rate is animation-driven. Ribbon and legacy model-particle metadata are preserved for later exact rendering but are not yet reproduced natively, and animated emitter tracks/texture-atlas frame selection are still approximated. Projectile glTF geometry remains visible alongside the native particle pass, while Chain Lightning is rendered procedurally from the authoritative resolved jump path because Warcraft represents it as a lightning primitive rather than an MDX projectile model.
 
 Only assets the user is authorized to access should be extracted. The extractor itself does not bundle Warcraft III asset files.

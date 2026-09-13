@@ -15,6 +15,21 @@ pub struct UnitAssetSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VisualAssetSpec {
+    pub owner_kind: String,
+    pub owner_rawcode: String,
+    pub role: String,
+    pub model_path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VisualAssetCatalog {
+    pub assets: Vec<VisualAssetSpec>,
+    pub chain_lightning_abilities: Vec<String>,
+    pub stun_model_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DoodadAssetSpec {
     pub rawcode: String,
     pub base_rawcode: String,
@@ -44,6 +59,11 @@ pub fn load_embedded_units() -> Result<Vec<UnitAssetSpec>, Box<dyn Error>> {
 
 pub fn load_embedded_doodads() -> Result<Vec<DoodadAssetSpec>, Box<dyn Error>> {
     let json = include_str!(concat!(env!("OUT_DIR"), "/doodad-assets.json"));
+    Ok(serde_json::from_str(json)?)
+}
+
+pub fn load_embedded_visuals() -> Result<VisualAssetCatalog, Box<dyn Error>> {
+    let json = include_str!(concat!(env!("OUT_DIR"), "/visual-assets.json"));
     Ok(serde_json::from_str(json)?)
 }
 
@@ -164,5 +184,58 @@ mod tests {
         );
         assert_eq!(parse_json_f32("0.65"), Some(0.65));
         assert_eq!(parse_json_f32(r#""0.9""#), Some(0.9));
+    }
+
+    #[test]
+    fn embedded_visual_catalog_contains_current_combat_art() {
+        let catalog = load_embedded_visuals().expect("embedded visual catalog parses");
+        let projectile = |rawcode: &str| {
+            catalog.assets.iter().find(|asset| {
+                asset.owner_kind == "units"
+                    && asset.owner_rawcode == rawcode
+                    && asset.role == "attack1_projectile"
+            })
+        };
+        assert_eq!(
+            projectile("e003").map(|asset| asset.model_path.as_str()),
+            Some(r"Abilities\Weapons\Arrow\ArrowMissile.mdl")
+        );
+        assert_eq!(
+            projectile("n015").map(|asset| asset.model_path.as_str()),
+            Some(r"Abilities\Weapons\LichMissile\LichMissile.mdl")
+        );
+        assert!(
+            catalog
+                .chain_lightning_abilities
+                .iter()
+                .any(|rawcode| rawcode == "A05X")
+        );
+        assert_eq!(
+            catalog.stun_model_path.as_deref(),
+            Some(r"Abilities\Spells\Human\Thunderclap\ThunderclapTarget.mdl")
+        );
+        let flame_strike_special: Vec<_> = catalog
+            .assets
+            .iter()
+            .filter(|asset| {
+                asset.owner_kind == "abilities"
+                    && asset.owner_rawcode == "A01I"
+                    && asset.role == "special"
+            })
+            .map(|asset| asset.model_path.as_str())
+            .collect();
+        assert_eq!(flame_strike_special.len(), 3);
+        assert!(
+            catalog
+                .assets
+                .iter()
+                .all(|asset| !asset.model_path.contains("CommandButtons"))
+        );
+        assert!(catalog.assets.iter().all(|asset| {
+            !matches!(
+                asset.model_path.trim().to_ascii_lowercase().as_str(),
+                ".mdl" | ".mdx" | "none" | "none.mdl" | "none.mdx"
+            )
+        }));
     }
 }

@@ -9,7 +9,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use catalog::{load_embedded_doodads, load_embedded_units, load_production_units};
+use catalog::{
+    load_embedded_doodads, load_embedded_units, load_embedded_visuals, load_production_units,
+};
 use export::Exporter;
 
 fn main() {
@@ -49,6 +51,45 @@ fn run() -> Result<(), Box<dyn Error>> {
     })?;
     verify_install(&wc3_install)?;
 
+    if args.effects {
+        if args.doodads
+            || !args.doodad_filters.is_empty()
+            || args.production.is_some()
+            || args.object_fields.is_some()
+            || !args.units.is_empty()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--effects cannot be combined with unit or doodad options",
+            )
+            .into());
+        }
+        let visuals = load_embedded_visuals()?;
+        println!(
+            "Extracting {} Castle Fight projectile/effect art reference(s) from {}",
+            visuals.assets.len() + usize::from(visuals.stun_model_path.is_some()),
+            wc3_install.display()
+        );
+        let mut exporter = Exporter::open(
+            &wc3_install,
+            args.map_archive.as_deref(),
+            &output,
+            args.keep_source,
+        )?;
+        let manifest = exporter.export_visuals(&visuals)?;
+        fs::write(
+            output.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+        println!(
+            "Exported {} unique WC3 visual model(s) to {} ({} unresolved map/import reference(s))",
+            manifest.models.len(),
+            output.display(),
+            manifest.failures.len()
+        );
+        return Ok(());
+    }
+
     if args.doodads || !args.doodad_filters.is_empty() {
         if args.production.is_some() || args.object_fields.is_some() || !args.units.is_empty() {
             return Err(io::Error::new(
@@ -83,7 +124,12 @@ fn run() -> Result<(), Box<dyn Error>> {
             doodads.len(),
             wc3_install.display()
         );
-        let mut exporter = Exporter::open(&wc3_install, &output, args.keep_source)?;
+        let mut exporter = Exporter::open(
+            &wc3_install,
+            args.map_archive.as_deref(),
+            &output,
+            args.keep_source,
+        )?;
         let manifest = exporter.export_doodads(&doodads)?;
         fs::write(
             output.join("manifest.json"),
@@ -149,7 +195,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         units.len(),
         wc3_install.display()
     );
-    let mut exporter = Exporter::open(&wc3_install, &output, args.keep_source)?;
+    let mut exporter = Exporter::open(
+        &wc3_install,
+        args.map_archive.as_deref(),
+        &output,
+        args.keep_source,
+    )?;
     let manifest = exporter.export_units(&units)?;
     fs::write(
         output.join("manifest.json"),
@@ -199,12 +250,14 @@ fn verify_install(path: &Path) -> Result<(), Box<dyn Error>> {
 
 struct Args {
     wc3_install: Option<PathBuf>,
+    map_archive: Option<PathBuf>,
     output: Option<PathBuf>,
     production: Option<PathBuf>,
     object_fields: Option<PathBuf>,
     units: Vec<String>,
     doodads: bool,
     doodad_filters: Vec<String>,
+    effects: bool,
     art_mode: String,
     keep_source: bool,
     help: bool,
@@ -214,12 +267,14 @@ impl Args {
     fn parse(args: impl Iterator<Item = String>) -> Result<Self, Box<dyn Error>> {
         let mut result = Self {
             wc3_install: None,
+            map_archive: None,
             output: None,
             production: None,
             object_fields: None,
             units: Vec::new(),
             doodads: false,
             doodad_filters: Vec::new(),
+            effects: false,
             art_mode: "sd".to_owned(),
             keep_source: false,
             help: false,
@@ -231,7 +286,9 @@ impl Args {
                 "-h" | "--help" => result.help = true,
                 "--keep-source" => result.keep_source = true,
                 "--doodads" => result.doodads = true,
+                "--effects" => result.effects = true,
                 "--wc3" => result.wc3_install = Some(PathBuf::from(value(&args, &mut i, "--wc3")?)),
+                "--map" => result.map_archive = Some(PathBuf::from(value(&args, &mut i, "--map")?)),
                 "--output" | "-o" => {
                     result.output = Some(PathBuf::from(value(&args, &mut i, "--output")?))
                 }
@@ -284,9 +341,11 @@ Usage:
 
 Options:
   --wc3 PATH            Warcraft III install root (or set WC3_INSTALL)
+  --map PATH            Optional Warcraft III map archive for map-imported assets
   -o, --output PATH     Destination directory for converted assets
   --unit RAWCODE        Export one production unit; repeat for more units
   --doodads             Export every doodad/destructable placed by Castle Fight
+  --effects             Export projectile/spell/buff models referenced by Castle Fight
   --doodad RAWCODE      Export one placed doodad type; repeat for more types
   --art sd              Art mode. SD/classic is currently implemented
   --keep-source         Also retain extracted MDX and source texture files
@@ -296,7 +355,10 @@ Options:
 
 With no --unit filters, every production unit in the resolved Castle Fight
 catalog is exported. Use --doodads (or --doodad RAWCODE) for map decoration
-assets and exact placements. Models shared by multiple objects are converted once.
+assets and exact placements. Use --effects for the visual-effects catalog. Models shared
+by multiple objects are converted once. Particle/ribbon metadata is retained in the model
+manifest for native presentation even though glTF has no particle-emitter primitive. When
+--map is supplied, map-imported models/textures override install assets and are extracted too.
 "
     );
 }
@@ -317,6 +379,30 @@ mod tests {
         .unwrap();
         assert_eq!(args.units, ["hfoo", "hrif"]);
         assert_eq!(args.art_mode, "sd");
+        assert!(args.map_archive.is_none());
+    }
+
+    #[test]
+    fn parses_optional_map_archive() {
+        let args = Args::parse(
+            [
+                "--wc3",
+                "/game",
+                "--map",
+                "/maps/castle-fight.w3x",
+                "--output",
+                "/out",
+                "--effects",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .unwrap();
+        assert_eq!(
+            args.map_archive.as_deref(),
+            Some(Path::new("/maps/castle-fight.w3x"))
+        );
+        assert!(args.effects);
     }
 
     #[test]
