@@ -1545,6 +1545,7 @@ mod tests {
                 source: caster,
                 ability: AbilityId(7),
                 target: AbilityCastTarget::Unit(target),
+                target_position: Some(SimPoint::new(15 * cell, 0)),
                 effect: AbilityEffect::Damage { amount: 1 },
             }]
         );
@@ -1604,6 +1605,7 @@ mod tests {
         };
         assert!(targets.contains(&selected));
         let center = sim.unit(selected).unwrap().position;
+        assert_eq!(event.target_position, Some(center));
         let area_radius_sq = u64::try_from(2 * cell).unwrap().pow(2);
         let expected_hits = targets
             .iter()
@@ -1671,6 +1673,7 @@ mod tests {
                 source: caster,
                 ability: AbilityId(9),
                 target: AbilityCastTarget::Unit(near),
+                target_position: Some(SimPoint::new(13 * cell, 0)),
                 effect: AbilityEffect::AreaDamage {
                     amount: 2,
                     radius: cell,

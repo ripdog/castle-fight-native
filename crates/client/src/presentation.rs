@@ -9,8 +9,8 @@ use bevy::{
     window::PrimaryWindow,
 };
 use castle_fight_sim::{
-    BuildingFootprint, MovementClass, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT,
-    SimId, SimPoint, SimulationConfig, Team,
+    AbilityEffect, BuildingFootprint, MovementClass, ProjectileView, ProjectileViewKind,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig, Team,
 };
 
 use crate::{
@@ -29,6 +29,7 @@ const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
 const PROJECTILE_IMPACT_SECONDS: f32 = 0.22;
 const PROJECTILE_IMPACT_RADIUS: f32 = 8.0;
+const ABILITY_AREA_EFFECT_SECONDS: f32 = 0.65;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
 const HEALTH_BAR_DEPTH: f32 = 6.0;
@@ -257,6 +258,16 @@ struct ProjectileImpact {
 #[derive(Resource, Default)]
 struct ProjectileImpacts(Vec<ProjectileImpact>);
 
+#[derive(Debug, Clone, Copy)]
+struct AbilityAreaImpact {
+    position: Vec3,
+    radius: f32,
+    remaining: f32,
+}
+
+#[derive(Resource, Default)]
+struct AbilityAreaImpacts(Vec<AbilityAreaImpact>);
+
 #[derive(Resource)]
 struct DebugPresentation {
     overlays: bool,
@@ -323,6 +334,7 @@ impl Plugin for CastlePresentationPlugin {
         app.init_resource::<RenderMap>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
+            .init_resource::<AbilityAreaImpacts>()
             .init_gizmo_group::<HealthBarGizmos>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .insert_resource(DebugPresentation {
@@ -343,6 +355,7 @@ impl Plugin for CastlePresentationPlugin {
                     animate_unit_weapons,
                     age_death_remnants,
                     age_projectile_impacts,
+                    age_ability_area_impacts,
                     draw_projectile_effects,
                     draw_health_bars,
                     draw_presentation_gizmos,
@@ -1042,6 +1055,7 @@ fn sync_render_entities(
     mut render_map: ResMut<RenderMap>,
     mut remnants: ResMut<DeathRemnants>,
     mut projectile_impacts: ResMut<ProjectileImpacts>,
+    mut ability_impacts: ResMut<AbilityAreaImpacts>,
 ) {
     let (metrics, terrain, assets) = world;
     if !samples.is_changed() {
@@ -1128,6 +1142,20 @@ fn sync_render_entities(
                 });
             }
         }
+    }
+
+    for cast in &samples.current.ability_casts {
+        let AbilityEffect::AreaDamage { radius, .. } = cast.effect else {
+            continue;
+        };
+        let Some(target_position) = cast.target_position else {
+            continue;
+        };
+        ability_impacts.0.push(AbilityAreaImpact {
+            position: sim_point_to_terrain_world(target_position, &terrain) + Vec3::Y * 2.0,
+            radius: radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
+            remaining: ABILITY_AREA_EFFECT_SECONDS,
+        });
     }
 
     for unit in samples.current.units.values() {
@@ -1457,11 +1485,20 @@ fn age_projectile_impacts(time: Res<Time>, mut impacts: ResMut<ProjectileImpacts
     impacts.0.retain(|impact| impact.remaining > 0.0);
 }
 
+fn age_ability_area_impacts(time: Res<Time>, mut impacts: ResMut<AbilityAreaImpacts>) {
+    let delta = time.delta_secs();
+    for impact in &mut impacts.0 {
+        impact.remaining -= delta;
+    }
+    impacts.0.retain(|impact| impact.remaining > 0.0);
+}
+
 fn draw_projectile_effects(
     samples: Res<PresentationSamples>,
     render_map: Res<RenderMap>,
     transforms: Query<&Transform>,
     impacts: Res<ProjectileImpacts>,
+    ability_impacts: Res<AbilityAreaImpacts>,
     mut gizmos: Gizmos<ProjectileEffectGizmos>,
 ) {
     for (id, projectile) in &samples.current.projectiles {
@@ -1487,6 +1524,19 @@ fn draw_projectile_effects(
             Isometry3d::new(impact.position, Quat::from_rotation_arc(Vec3::Z, Vec3::Y)),
             radius,
             projectile_effect_color(impact.kind).with_alpha(life * 0.85),
+        );
+    }
+
+    for impact in &ability_impacts.0 {
+        let life = (impact.remaining / ABILITY_AREA_EFFECT_SECONDS).clamp(0.0, 1.0);
+        let radius = impact.radius * (0.35 + (1.0 - life) * 0.65);
+        let color = Color::srgb(0.78, 0.42, 1.0).with_alpha(life * 0.92);
+        let orientation = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
+        gizmos.circle(Isometry3d::new(impact.position, orientation), radius, color);
+        gizmos.circle(
+            Isometry3d::new(impact.position + Vec3::Y * 5.0, orientation),
+            radius * 0.72,
+            color.with_alpha(life * 0.55),
         );
     }
 }

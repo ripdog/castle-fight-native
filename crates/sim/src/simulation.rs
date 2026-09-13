@@ -159,6 +159,7 @@ pub struct AbilityCastEvent {
     pub source: SimId,
     pub ability: AbilityId,
     pub target: AbilityCastTarget,
+    pub target_position: Option<SimPoint>,
     pub effect: AbilityEffect,
 }
 
@@ -2385,6 +2386,11 @@ impl Simulation {
                 }
             }
 
+            let target_position = match intent.target {
+                AbilityIntentTarget::Unit { index, .. } => Some(units[index].position),
+                AbilityIntentTarget::AllEnemyUnits => None,
+            };
+
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
                     if let AbilityEffect::AreaDamage { radius, .. } = intent.ability.effect {
@@ -2432,6 +2438,7 @@ impl Simulation {
                 source: intent.source_id,
                 ability: intent.ability.id,
                 target: intent.target.cast_target(),
+                target_position,
                 effect: intent.ability.effect,
             });
             metrics.casts += 1;

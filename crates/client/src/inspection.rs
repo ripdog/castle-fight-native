@@ -417,6 +417,7 @@ mod tests {
             corpses: BTreeMap::new(),
             projectiles: BTreeMap::new(),
             attacks: Vec::new(),
+            ability_casts: Vec::new(),
         };
         PresentationSamples::new(snapshot)
     }
