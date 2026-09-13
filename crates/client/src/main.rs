@@ -27,6 +27,24 @@ pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
 }
 
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SimulationPlayback {
+    pub(crate) paused: bool,
+}
+
+impl SimulationPlayback {
+    pub(crate) fn interpolation_alpha(self, fixed_time: &Time<Fixed>) -> f32 {
+        if self.paused {
+            1.0
+        } else {
+            fixed_time.overstep_fraction()
+        }
+    }
+}
+
+#[derive(Component)]
+struct SimulationPauseText;
+
 fn main() {
     let options = ClientOptions::parse();
     let demo = create_demo_world(default_worker_count(), options.stress_units);
@@ -43,6 +61,7 @@ fn main() {
         .insert_resource(AuthoritativeSimulation {
             simulation: demo.simulation,
         })
+        .init_resource::<SimulationPlayback>()
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
         .insert_resource(TerrainSurface::new(demo.terrain))
@@ -61,6 +80,11 @@ fn main() {
             BuildUiPlugin,
             InspectionPlugin,
         ))
+        .add_systems(Startup, setup_simulation_pause_ui)
+        .add_systems(
+            Update,
+            (toggle_simulation_pause, update_simulation_pause_ui).chain(),
+        )
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
     if options.perf_log {
@@ -145,12 +169,75 @@ impl ClientOptions {
     }
 }
 
+fn setup_simulation_pause_ui(mut commands: Commands) {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(420.0),
+                top: px(16.0),
+                width: px(600.0),
+                padding: UiRect::axes(px(14.0), px(8.0)),
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(px(7.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.035, 0.045, 0.060, 0.90)),
+        ))
+        .with_child((
+            Text::new("SIM RUNNING • Space/P pause"),
+            TextFont::from_font_size(18.0),
+            TextColor(Color::srgb(0.78, 0.84, 0.90)),
+            SimulationPauseText,
+        ));
+}
+
+fn toggle_simulation_pause(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut playback: ResMut<SimulationPlayback>,
+) {
+    if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyP) {
+        playback.paused = !playback.paused;
+    }
+}
+
+fn update_simulation_pause_ui(
+    playback: Res<SimulationPlayback>,
+    presentation: Res<PresentationSamples>,
+    text: Single<(&mut Text, &mut TextColor), With<SimulationPauseText>>,
+) {
+    let (mut text, mut color) = text.into_inner();
+    let next = if playback.paused {
+        format!(
+            "SIMULATION PAUSED — tick {} • Space/P resume",
+            presentation.current.tick
+        )
+    } else {
+        format!(
+            "SIM RUNNING — tick {} • Space/P pause",
+            presentation.current.tick
+        )
+    };
+    if text.0 != next {
+        text.0 = next;
+    }
+    color.0 = if playback.paused {
+        Color::srgb(1.0, 0.78, 0.20)
+    } else {
+        Color::srgb(0.78, 0.84, 0.90)
+    };
+}
+
 fn advance_authoritative_simulation(
+    playback: Res<SimulationPlayback>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
     mut pending_builds: ResMut<PendingBuildPlacements>,
     mut build_selection: ResMut<BuildSelection>,
 ) {
+    if playback.paused {
+        return;
+    }
     for request in pending_builds.0.drain(..) {
         match try_spawn_demo_building(
             &mut authoritative.simulation,
@@ -184,4 +271,49 @@ fn default_worker_count() -> usize {
         .map(usize::from)
         .unwrap_or(1)
         .min(8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paused_fixed_update_does_not_advance_authoritative_tick() {
+        let simulation = Simulation::new(Default::default(), 1);
+        let initial_snapshot = PresentationSnapshot::capture(&simulation);
+        let mut app = App::new();
+        app.insert_resource(SimulationPlayback { paused: true })
+            .insert_resource(AuthoritativeSimulation { simulation })
+            .insert_resource(PresentationSamples::new(initial_snapshot))
+            .init_resource::<PendingBuildPlacements>()
+            .init_resource::<BuildSelection>()
+            .add_systems(Update, advance_authoritative_simulation);
+
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<AuthoritativeSimulation>()
+                .simulation
+                .tick(),
+            0
+        );
+        assert_eq!(
+            app.world().resource::<PresentationSamples>().current.tick,
+            0
+        );
+
+        app.world_mut().resource_mut::<SimulationPlayback>().paused = false;
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<AuthoritativeSimulation>()
+                .simulation
+                .tick(),
+            1
+        );
+        assert_eq!(
+            app.world().resource::<PresentationSamples>().current.tick,
+            1
+        );
+    }
 }

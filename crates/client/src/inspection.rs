@@ -2,6 +2,7 @@ use bevy::{prelude::*, time::Fixed, window::PrimaryWindow};
 use castle_fight_sim::{SUBUNITS_PER_WORLD_UNIT, SimId, Team};
 
 use crate::{
+    SimulationPlayback,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
     build_ui::{BuildSelection, cursor_over_build_panel},
     presentation::{
@@ -15,7 +16,7 @@ use crate::{
 const PANEL_RIGHT: f32 = 16.0;
 const PANEL_TOP: f32 = 16.0;
 const PANEL_WIDTH: f32 = 340.0;
-const PANEL_HEIGHT: f32 = 330.0;
+const PANEL_HEIGHT: f32 = 410.0;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
 const SELECTION_RING_PADDING: f32 = 2.5;
 const SELECTION_COLOR: Color = Color::srgb(1.0, 0.88, 0.22);
@@ -90,11 +91,15 @@ fn handle_world_selection(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     world: (Res<Time<Fixed>>, Res<WorldMetrics>, Res<TerrainSurface>),
-    state: (Res<PresentationSamples>, Res<BuildSelection>),
+    state: (
+        Res<PresentationSamples>,
+        Res<BuildSelection>,
+        Res<SimulationPlayback>,
+    ),
     mut selection: ResMut<InspectionSelection>,
 ) {
     let (fixed_time, metrics, terrain) = world;
-    let (samples, build_selection) = state;
+    let (samples, build_selection, playback) = state;
     if keys.just_pressed(KeyCode::Escape) && build_selection.kind.is_none() {
         selection.selected = None;
     }
@@ -113,7 +118,12 @@ fn handle_world_selection(
         selection.selected = None;
         return;
     };
-    selection.selected = pick_entity(world, &samples, &metrics, fixed_time.overstep_fraction());
+    selection.selected = pick_entity(
+        world,
+        &samples,
+        &metrics,
+        playback.interpolation_alpha(&fixed_time),
+    );
 }
 
 fn clear_stale_selection(
@@ -144,6 +154,7 @@ fn update_inspector_text(
 
 fn draw_selection_highlight(
     fixed_time: Res<Time<Fixed>>,
+    playback: Res<SimulationPlayback>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
     terrain: Res<TerrainSurface>,
@@ -153,7 +164,7 @@ fn draw_selection_highlight(
     let Some(id) = selection.selected else {
         return;
     };
-    let alpha = fixed_time.overstep_fraction();
+    let alpha = playback.interpolation_alpha(&fixed_time);
 
     if let Some(unit) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(unit);
@@ -288,7 +299,21 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
         format!("Movement: {:?}", unit.movement_class),
         format!("Health: {}", unit.health),
         format!("Position: {:.1}, {:.1}", position.x, position.z),
+        format!("Order: {}", unit_order_label(unit, tick)),
         format!("Target: {}", target_label(unit.target)),
+        format!(
+            "Direct retaliation lock: {}",
+            if unit.direct_retaliation_lock {
+                "Yes"
+            } else {
+                "No"
+            }
+        ),
+        format!("Last attacker: {}", target_label(unit.last_attacker)),
+        format!(
+            "Last attacked: {}",
+            attacked_tick_label(unit.last_attacked_tick, tick)
+        ),
         format!("Attack cooldown: {} ticks", unit.cooldown_remaining),
         format!("State: {}", stun_label(unit.stunned_until_tick, tick)),
     ];
@@ -337,8 +362,29 @@ fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
     lines.join("\n")
 }
 
+fn unit_order_label(unit: &UnitSample, tick: u64) -> String {
+    if unit.stunned_until_tick > tick {
+        return "Disabled/stunned".into();
+    }
+    match (unit.target, unit.direct_retaliation_lock) {
+        (Some(target), true) => format!("Direct retaliation against #{}", target.0),
+        (Some(target), false) => format!("Engaging target #{}", target.0),
+        (None, _) => "Advancing toward enemy objective".into(),
+    }
+}
+
 fn target_label(target: Option<SimId>) -> String {
     target.map_or_else(|| "None".into(), |target| format!("#{}", target.0))
+}
+
+fn attacked_tick_label(attacked_tick: Option<u64>, tick: u64) -> String {
+    attacked_tick.map_or_else(
+        || "Never".into(),
+        |attacked_tick| {
+            let age = tick.saturating_sub(attacked_tick);
+            format!("tick {attacked_tick} ({age} ticks ago)")
+        },
+    )
 }
 
 fn stun_label(stunned_until_tick: u64, tick: u64) -> String {
@@ -438,6 +484,9 @@ mod tests {
                 movement_class: castle_fight_sim::MovementClass::Ground,
                 health: 50,
                 target: None,
+                direct_retaliation_lock: false,
+                last_attacker: None,
+                last_attacked_tick: None,
                 cooldown_remaining: 0,
                 stunned_until_tick: 0,
                 mana_current: None,

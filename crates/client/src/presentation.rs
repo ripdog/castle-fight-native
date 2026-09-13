@@ -14,6 +14,7 @@ use castle_fight_sim::{
 };
 
 use crate::{
+    SimulationPlayback,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
     terrain::TerrainSurface,
 };
@@ -1258,15 +1259,18 @@ fn sync_render_entities(
 }
 
 fn interpolate_render_transforms(
-    time: Res<Time>,
-    fixed_time: Res<Time<Fixed>>,
-    samples: Res<PresentationSamples>,
-    metrics: Res<WorldMetrics>,
-    terrain: Res<TerrainSurface>,
+    clocks: (Res<Time>, Res<Time<Fixed>>, Res<SimulationPlayback>),
+    world: (
+        Res<PresentationSamples>,
+        Res<WorldMetrics>,
+        Res<TerrainSurface>,
+    ),
     mut render_map: ResMut<RenderMap>,
     mut transforms: Query<&mut Transform>,
 ) {
-    let alpha = fixed_time.overstep_fraction();
+    let (time, fixed_time, playback) = clocks;
+    let (samples, metrics, terrain) = world;
+    let alpha = playback.interpolation_alpha(&fixed_time);
     let render_tick = samples.previous.tick as f32
         + (samples.current.tick.saturating_sub(samples.previous.tick) as f32) * alpha;
     let facing_blend = 1.0 - (-UNIT_FACING_RESPONSE * time.delta_secs()).exp();
@@ -1542,7 +1546,7 @@ fn draw_projectile_effects(
 }
 
 fn draw_health_bars(
-    fixed_time: Res<Time<Fixed>>,
+    clocks: (Res<Time<Fixed>>, Res<SimulationPlayback>),
     samples: Res<PresentationSamples>,
     world: (Res<WorldMetrics>, Res<TerrainSurface>),
     render_map: Res<RenderMap>,
@@ -1550,12 +1554,13 @@ fn draw_health_bars(
     camera_frustum: Single<&Frustum, With<Camera3d>>,
     mut health_gizmos: Gizmos<HealthBarGizmos>,
 ) {
+    let (fixed_time, playback) = clocks;
     let (metrics, terrain) = world;
     if !debug.health_bars {
         return;
     }
 
-    let alpha = fixed_time.overstep_fraction();
+    let alpha = playback.interpolation_alpha(&fixed_time);
     for (id, unit) in &samples.current.units {
         let Some(entry) = render_map.units.get(id) else {
             continue;
@@ -1603,7 +1608,7 @@ fn draw_health_bars(
 }
 
 fn draw_presentation_gizmos(
-    fixed_time: Res<Time<Fixed>>,
+    clocks: (Res<Time<Fixed>>, Res<SimulationPlayback>),
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
     terrain: Res<TerrainSurface>,
@@ -1611,7 +1616,8 @@ fn draw_presentation_gizmos(
     remnants: Res<DeathRemnants>,
     mut gizmos: Gizmos,
 ) {
-    let alpha = fixed_time.overstep_fraction();
+    let (fixed_time, playback) = clocks;
+    let alpha = playback.interpolation_alpha(&fixed_time);
 
     for remnant in &remnants.0 {
         let life = (remnant.remaining / DEATH_REMAINS_SECONDS).clamp(0.0, 1.0);
@@ -1873,6 +1879,7 @@ fn corpse_render_position(position: SimPoint, terrain: &TerrainSurface) -> Vec3 
 
 fn update_window_title(
     samples: Res<PresentationSamples>,
+    playback: Res<SimulationPlayback>,
     debug: Res<DebugPresentation>,
     diagnostics: Res<DiagnosticsStore>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
@@ -1882,7 +1889,8 @@ fn update_window_title(
         .and_then(|diagnostic| diagnostic.smoothed())
         .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
     window.title = format!(
-        "Castle Fight Native 3D | {fps} FPS | tick {} | units {} | buildings {} | corpses {} | projectiles {} | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
+        "Castle Fight Native 3D | {} | {fps} FPS | tick {} | units {} | buildings {} | corpses {} | projectiles {} | Space/P pause | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
+        if playback.paused { "PAUSED" } else { "RUNNING" },
         samples.current.tick,
         samples.current.units.len(),
         samples.current.buildings.len(),

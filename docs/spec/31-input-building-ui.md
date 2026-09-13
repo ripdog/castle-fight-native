@@ -181,6 +181,8 @@ Inspection can show:
 
 Selection MUST NOT imply or enable direct control. The builder is the sole normal exception and has its own movement/build/item interaction UI.
 
+Development/verification clients MAY expose a **local simulation pause** for inspection. This pause stops local authoritative simulation ticks at a completed tick boundary while leaving rendering, camera control, selection, inspection, and other presentation-only UI responsive. It MUST NOT mutate gameplay state merely by being toggled, and it is distinct from canonical network/match pause controls. While locally paused, inspection SHOULD show the latest committed authoritative state rather than an interpolated in-between presentation state. Useful debug fields include the unit's current target/order, most recent attacker and attack tick, and whether direct-retaliation lock is active.
+
 ## 15. Camera/input mappings
 
 Controls should be configurable and may include:

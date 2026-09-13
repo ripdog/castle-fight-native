@@ -1455,11 +1455,18 @@ mod tests {
         sim.step();
         assert_eq!(sim.projectile_count(), 1);
         sim.step();
-        assert_eq!(sim.unit(source).unwrap().last_attacker, Some(attacker));
+        let source_view = sim.unit(source).unwrap();
+        assert_eq!(source_view.last_attacker, Some(attacker));
+        assert!(source_view.last_attacked_tick.is_some());
+        assert!(!source_view.direct_retaliation_lock);
         sim.step();
-        assert_eq!(sim.unit(source).unwrap().target, Some(attacker));
+        let source_view = sim.unit(source).unwrap();
+        assert_eq!(source_view.target, Some(attacker));
+        assert!(source_view.direct_retaliation_lock);
         sim.step();
-        assert_eq!(sim.unit(source).unwrap().target, Some(attacker));
+        let source_view = sim.unit(source).unwrap();
+        assert_eq!(source_view.target, Some(attacker));
+        assert!(source_view.direct_retaliation_lock);
     }
 
     #[test]
