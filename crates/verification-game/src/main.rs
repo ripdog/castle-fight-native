@@ -2,9 +2,11 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::{camera::ScalingMode, prelude::*, time::Fixed, window::PrimaryWindow};
 use castle_fight_sim::{
-    AttackDelivery, BuildingFootprint, BuildingSpawn, BuildingView, MovementProfile, NavCell,
-    ProductionProfile, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
-    SimulationConfig, Team, UnitTemplate, UnitView,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, BuildingView, ManaProfile,
+    MovementProfile, NavCell, ProductionProfile, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT,
+    SimId, SimPoint, Simulation, SimulationConfig, SpellcastingProfile, Team, UnitTemplate,
+    UnitView,
 };
 
 const SIMULATION_HZ: f64 = 30.0;
@@ -24,6 +26,8 @@ const PRODUCTION_BUILDING_SIZE: u16 = 4;
 const PRODUCTION_INTERVAL_TICKS: u16 = 300;
 const ATTACK_COOLDOWN_TICKS: u16 = 30;
 const RANGED_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
+const ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 90;
+const TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 110;
 const ATTACK_TRACE_SECONDS: f32 = 0.18;
 const PLAYER_CASTLE: BuildingFootprint = BuildingFootprint::new(30, 34, 7, 7);
 const ENEMY_CASTLE: BuildingFootprint = BuildingFootprint::new(163, 34, 7, 7);
@@ -32,20 +36,50 @@ const ENEMY_CASTLE: BuildingFootprint = BuildingFootprint::new(163, 34, 7, 7);
 enum ProductionKind {
     Melee,
     Ranged,
+    Artillery,
+    Spellcaster,
 }
 
 impl ProductionKind {
     const fn label(self) -> &'static str {
         match self {
-            Self::Melee => "melee",
-            Self::Ranged => "ranged",
+            Self::Melee => "melee production",
+            Self::Ranged => "ranged production",
+            Self::Artillery => "artillery production",
+            Self::Spellcaster => "spellcaster production",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuildKind {
+    Production(ProductionKind),
+    GuaranteedTower,
+    ProjectileTower,
+    GlobalAreaSpell,
+}
+
+impl BuildKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Production(kind) => kind.label(),
+            Self::GuaranteedTower => "guaranteed-hit tower",
+            Self::ProjectileTower => "projectile splash tower",
+            Self::GlobalAreaSpell => "global-random AOE spell building",
+        }
+    }
+
+    const fn footprint_size(self) -> u16 {
+        match self {
+            Self::GuaranteedTower | Self::ProjectileTower => 3,
+            Self::Production(_) | Self::GlobalAreaSpell => PRODUCTION_BUILDING_SIZE,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 struct PendingPlacement {
-    kind: ProductionKind,
+    kind: BuildKind,
     footprint: BuildingFootprint,
 }
 
@@ -55,13 +89,15 @@ struct PendingPlacements(Vec<PendingPlacement>);
 #[derive(Resource)]
 struct UiStatus {
     text: String,
+    selected: BuildKind,
 }
 
 impl Default for UiStatus {
     fn default() -> Self {
         Self {
-            text: "LMB: melee building • RMB: ranged building • placements mirror automatically"
+            text: "1 melee • 2 ranged • 3 artillery • 4 caster • 5 hit tower • 6 splash tower • 7 global AOE • LMB place • RMB quick ranged"
                 .into(),
+            selected: BuildKind::Production(ProductionKind::Melee),
         }
     }
 }
@@ -334,12 +370,18 @@ fn spawn_rect(commands: &mut Commands, center: Vec2, size: Vec2, color: Color, z
 
 fn queue_build_input(
     buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     camera: Single<(&Camera, &GlobalTransform), With<VerificationCamera>>,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<GameState>,
     mut pending: ResMut<PendingPlacements>,
     mut status: ResMut<UiStatus>,
 ) {
+    if let Some(kind) = build_kind_hotkey(&keys) {
+        status.selected = kind;
+        status.text = format!("Selected {}", kind.label());
+    }
+
     if let Some(outcome) = state.outcome {
         if buttons.just_pressed(MouseButton::Left) || buttons.just_pressed(MouseButton::Right) {
             status.text = format!("{} — simulation stopped", outcome.label());
@@ -347,9 +389,9 @@ fn queue_build_input(
         return;
     }
     let kind = if buttons.just_pressed(MouseButton::Left) {
-        Some(ProductionKind::Melee)
+        Some(status.selected)
     } else if buttons.just_pressed(MouseButton::Right) {
-        Some(ProductionKind::Ranged)
+        Some(BuildKind::Production(ProductionKind::Ranged))
     } else {
         None
     };
@@ -363,13 +405,39 @@ fn queue_build_input(
     let Ok(world) = camera.viewport_to_world_2d(camera_transform, cursor) else {
         return;
     };
-    let Some(footprint) = player_footprint_at(world) else {
+    let Some(footprint) = player_footprint_at(world, kind.footprint_size()) else {
         status.text = "Placement rejected: click inside the blue player base".into();
         return;
     };
 
     pending.0.push(PendingPlacement { kind, footprint });
-    status.text = format!("Queued mirrored {} production building", kind.label());
+    status.text = format!("Queued mirrored {}", kind.label());
+}
+
+fn build_kind_hotkey(keys: &ButtonInput<KeyCode>) -> Option<BuildKind> {
+    [
+        (
+            KeyCode::Digit1,
+            BuildKind::Production(ProductionKind::Melee),
+        ),
+        (
+            KeyCode::Digit2,
+            BuildKind::Production(ProductionKind::Ranged),
+        ),
+        (
+            KeyCode::Digit3,
+            BuildKind::Production(ProductionKind::Artillery),
+        ),
+        (
+            KeyCode::Digit4,
+            BuildKind::Production(ProductionKind::Spellcaster),
+        ),
+        (KeyCode::Digit5, BuildKind::GuaranteedTower),
+        (KeyCode::Digit6, BuildKind::ProjectileTower),
+        (KeyCode::Digit7, BuildKind::GlobalAreaSpell),
+    ]
+    .into_iter()
+    .find_map(|(key, kind)| keys.just_pressed(key).then_some(kind))
 }
 
 fn apply_placements_and_step(
@@ -392,26 +460,19 @@ fn apply_placements_and_step(
             continue;
         }
 
-        state
-            .simulation
-            .try_spawn_building(production_building(
-                Team(0),
-                placement.footprint,
-                placement.kind,
-            ))
-            .expect("prevalidated player placement unexpectedly failed");
-        state
-            .simulation
-            .try_spawn_building(production_building(
-                Team(1),
-                enemy_footprint,
-                placement.kind,
-            ))
-            .expect("mirrored enemy placement unexpectedly failed");
-        status.text = format!(
-            "Placed mirrored {} production buildings",
-            placement.kind.label()
+        spawn_verification_building(
+            &mut state.simulation,
+            Team(0),
+            placement.footprint,
+            placement.kind,
         );
+        spawn_verification_building(
+            &mut state.simulation,
+            Team(1),
+            enemy_footprint,
+            placement.kind,
+        );
+        status.text = format!("Placed mirrored {}", placement.kind.label());
     }
 
     let stepped = state.step_match();
@@ -440,6 +501,33 @@ fn apply_placements_and_step(
     }
 }
 
+fn spawn_verification_building(
+    simulation: &mut Simulation,
+    team: Team,
+    footprint: BuildingFootprint,
+    kind: BuildKind,
+) -> SimId {
+    match kind {
+        BuildKind::Production(ProductionKind::Spellcaster) => simulation
+            .spawn_building_with_production_spellcasting(
+                production_building(team, footprint, ProductionKind::Spellcaster),
+                short_range_spellcaster_profile(),
+            ),
+        BuildKind::Production(kind) => {
+            simulation.spawn_building(production_building(team, footprint, kind))
+        }
+        BuildKind::GuaranteedTower => {
+            simulation.spawn_building(attack_building(team, footprint, guaranteed_tower_attack()))
+        }
+        BuildKind::ProjectileTower => {
+            simulation.spawn_building(attack_building(team, footprint, projectile_tower_attack()))
+        }
+        BuildKind::GlobalAreaSpell => {
+            simulation.spawn_building(spell_building(team, footprint, global_area_spell_profile()))
+        }
+    }
+}
+
 fn production_building(
     team: Team,
     footprint: BuildingFootprint,
@@ -460,12 +548,42 @@ fn production_building(
     }
 }
 
+fn attack_building(
+    team: Team,
+    footprint: BuildingFootprint,
+    attack: AttackProfile,
+) -> BuildingSpawn {
+    BuildingSpawn {
+        team,
+        footprint,
+        health: 160,
+        production: None,
+        attack: Some(attack),
+        spellcasting: None,
+    }
+}
+
+fn spell_building(
+    team: Team,
+    footprint: BuildingFootprint,
+    spellcasting: SpellcastingProfile,
+) -> BuildingSpawn {
+    BuildingSpawn {
+        team,
+        footprint,
+        health: 140,
+        production: None,
+        attack: None,
+        spellcasting: Some(spellcasting),
+    }
+}
+
 fn unit_template(kind: ProductionKind) -> UnitTemplate {
     let speed_per_tick = 40 * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32;
     match kind {
         ProductionKind::Melee => UnitTemplate {
             health: 10,
-            attack: castle_fight_sim::AttackProfile {
+            attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
                 damage: 1,
                 range: 14 * SUBUNITS_PER_WORLD_UNIT,
@@ -476,7 +594,7 @@ fn unit_template(kind: ProductionKind) -> UnitTemplate {
         },
         ProductionKind::Ranged => UnitTemplate {
             health: 10,
-            attack: castle_fight_sim::AttackProfile {
+            attack: AttackProfile {
                 delivery: AttackDelivery::RangedGuaranteedHit {
                     speed_per_tick: RANGED_PROJECTILE_SPEED_WORLD_PER_SECOND
                         * SUBUNITS_PER_WORLD_UNIT
@@ -488,6 +606,102 @@ fn unit_template(kind: ProductionKind) -> UnitTemplate {
                 cooldown_ticks: ATTACK_COOLDOWN_TICKS,
             },
             movement: MovementProfile { speed_per_tick },
+        },
+        ProductionKind::Artillery => UnitTemplate {
+            health: 10,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedBallistic {
+                    speed_per_tick: ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND
+                        * SUBUNITS_PER_WORLD_UNIT
+                        / SIMULATION_HZ_I32,
+                    impact_radius: 35 * SUBUNITS_PER_WORLD_UNIT,
+                },
+                damage: 2,
+                range: 260 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 340 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 2 * ATTACK_COOLDOWN_TICKS,
+            },
+            movement: MovementProfile { speed_per_tick },
+        },
+        ProductionKind::Spellcaster => UnitTemplate {
+            health: 10,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 14 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 80 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+            },
+            movement: MovementProfile { speed_per_tick },
+        },
+    }
+}
+
+fn guaranteed_tower_attack() -> AttackProfile {
+    AttackProfile {
+        delivery: AttackDelivery::RangedGuaranteedHit {
+            speed_per_tick: RANGED_PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                / SIMULATION_HZ_I32,
+        },
+        damage: 2,
+        range: 300 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 300 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+    }
+}
+
+fn projectile_tower_attack() -> AttackProfile {
+    AttackProfile {
+        delivery: AttackDelivery::RangedBallistic {
+            speed_per_tick: TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                / SIMULATION_HZ_I32,
+            impact_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+        },
+        damage: 4,
+        range: 340 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 340 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 2 * ATTACK_COOLDOWN_TICKS,
+    }
+}
+
+fn global_area_spell_profile() -> SpellcastingProfile {
+    SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 180,
+            starting: 0,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(1_001),
+            mana_cost: 180,
+            cooldown_ticks: 1,
+            range: 0,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
+            effect: AbilityEffect::AreaDamage {
+                amount: 3,
+                radius: 50 * SUBUNITS_PER_WORLD_UNIT,
+            },
+        },
+    }
+}
+
+fn short_range_spellcaster_profile() -> SpellcastingProfile {
+    SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 120,
+            starting: 0,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(1_002),
+            mana_cost: 120,
+            cooldown_ticks: 1,
+            range: 90 * SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+            effect: AbilityEffect::AreaDamage {
+                amount: 2,
+                radius: 30 * SUBUNITS_PER_WORLD_UNIT,
+            },
         },
     }
 }
@@ -640,6 +854,7 @@ fn draw_cursor_preview(
     camera: Single<(&Camera, &GlobalTransform), With<VerificationCamera>>,
     window: Single<&Window, With<PrimaryWindow>>,
     state: Res<GameState>,
+    status: Res<UiStatus>,
     mut gizmos: Gizmos,
 ) {
     let Some(cursor) = window.cursor_position() else {
@@ -649,7 +864,7 @@ fn draw_cursor_preview(
     let Ok(world) = camera.viewport_to_world_2d(camera_transform, cursor) else {
         return;
     };
-    let Some(player) = player_footprint_at(world) else {
+    let Some(player) = player_footprint_at(world, status.selected.footprint_size()) else {
         return;
     };
     let enemy = mirror_footprint(player);
@@ -694,24 +909,25 @@ fn update_window_title(
         .map(|outcome| format!(" | {}", outcome.label()))
         .unwrap_or_default();
     window.title = format!(
-        "Castle Fight verification | LMB melee • RMB ranged | t={seconds:.1}s • units={} • buildings={} • castles {player_castle_hp}/{enemy_castle_hp}{outcome} | {}",
+        "Castle Fight verification | selected: {} | 1-7 select • LMB place • RMB quick ranged | t={seconds:.1}s • units={} • buildings={} • castles {player_castle_hp}/{enemy_castle_hp}{outcome} | {}",
+        status.selected.label(),
         state.simulation.unit_count(),
         state.simulation.building_count(),
         status.text,
     );
 }
 
-fn player_footprint_at(world: Vec2) -> Option<BuildingFootprint> {
+fn player_footprint_at(world: Vec2, size: u16) -> Option<BuildingFootprint> {
     if !(0.0..MAP_WIDTH).contains(&world.x) || !(0.0..MAP_HEIGHT).contains(&world.y) {
         return None;
     }
     let cell_x = (world.x / NAV_CELL_WORLD as f32).floor() as i32;
     let cell_y = (world.y / NAV_CELL_WORLD as f32).floor() as i32;
     let footprint = BuildingFootprint::new(
-        cell_x - i32::from(PRODUCTION_BUILDING_SIZE / 2),
-        cell_y - i32::from(PRODUCTION_BUILDING_SIZE / 2),
-        PRODUCTION_BUILDING_SIZE,
-        PRODUCTION_BUILDING_SIZE,
+        cell_x - i32::from(size / 2),
+        cell_y - i32::from(size / 2),
+        size,
+        size,
     );
     (footprint.min_x >= 0
         && footprint.max_x() <= PLAYER_BASE_MAX_X
@@ -755,11 +971,20 @@ fn footprint_world_rect(footprint: BuildingFootprint) -> (Vec2, Vec2) {
 }
 
 fn unit_color(unit: &UnitView) -> Color {
+    if unit.mana_maximum.is_some() {
+        return if unit.team.0 == 0 {
+            Color::srgb(0.72, 0.40, 1.0)
+        } else {
+            Color::srgb(1.0, 0.38, 0.76)
+        };
+    }
     match (unit.team.0, unit.attack_delivery) {
         (0, AttackDelivery::Melee) => Color::srgb(0.22, 0.55, 1.0),
         (0, AttackDelivery::RangedGuaranteedHit { .. }) => Color::srgb(0.42, 0.88, 1.0),
+        (0, AttackDelivery::RangedBallistic { .. }) => Color::srgb(0.94, 0.78, 0.28),
         (1, AttackDelivery::Melee) => Color::srgb(1.0, 0.30, 0.26),
         (1, AttackDelivery::RangedGuaranteedHit { .. }) => Color::srgb(1.0, 0.60, 0.32),
+        (1, AttackDelivery::RangedBallistic { .. }) => Color::srgb(1.0, 0.78, 0.22),
         _ => Color::WHITE,
     }
 }
@@ -774,6 +999,22 @@ fn unit_size(unit: &UnitView) -> Vec2 {
 }
 
 fn building_color(building: &BuildingView) -> Color {
+    if building.mana_maximum.is_some() {
+        return if building.team.0 == 0 {
+            Color::srgb(0.58, 0.25, 0.86)
+        } else {
+            Color::srgb(0.86, 0.24, 0.62)
+        };
+    }
+    if let Some(delivery) = building.attack_delivery {
+        return match (building.team.0, delivery) {
+            (0, AttackDelivery::RangedGuaranteedHit { .. }) => Color::srgb(0.18, 0.86, 0.92),
+            (0, AttackDelivery::RangedBallistic { .. }) => Color::srgb(0.88, 0.66, 0.18),
+            (1, AttackDelivery::RangedGuaranteedHit { .. }) => Color::srgb(0.96, 0.48, 0.48),
+            (1, AttackDelivery::RangedBallistic { .. }) => Color::srgb(0.96, 0.68, 0.18),
+            _ => Color::srgb(0.6, 0.6, 0.6),
+        };
+    }
     match (
         building.team.0,
         building
@@ -784,8 +1025,10 @@ fn building_color(building: &BuildingView) -> Color {
         (1, None) => Color::srgb(1.0, 0.48, 0.42),
         (0, Some(AttackDelivery::Melee)) => Color::srgb(0.12, 0.36, 0.72),
         (0, Some(AttackDelivery::RangedGuaranteedHit { .. })) => Color::srgb(0.20, 0.62, 0.78),
+        (0, Some(AttackDelivery::RangedBallistic { .. })) => Color::srgb(0.72, 0.58, 0.12),
         (1, Some(AttackDelivery::Melee)) => Color::srgb(0.72, 0.18, 0.16),
         (1, Some(AttackDelivery::RangedGuaranteedHit { .. })) => Color::srgb(0.82, 0.40, 0.16),
+        (1, Some(AttackDelivery::RangedBallistic { .. })) => Color::srgb(0.82, 0.56, 0.12),
         _ => Color::srgb(0.6, 0.6, 0.6),
     }
 }
@@ -820,12 +1063,20 @@ mod tests {
     }
 
     #[test]
-    fn verification_units_are_ten_hp_and_one_dps() {
-        for kind in [ProductionKind::Melee, ProductionKind::Ranged] {
+    fn verification_units_are_ten_hp_and_one_base_dps() {
+        for kind in [
+            ProductionKind::Melee,
+            ProductionKind::Ranged,
+            ProductionKind::Artillery,
+            ProductionKind::Spellcaster,
+        ] {
             let unit = unit_template(kind);
             assert_eq!(unit.health, 10);
-            assert_eq!(unit.attack.damage, 1);
-            assert_eq!(unit.attack.cooldown_ticks, 30);
+            assert_eq!(
+                i32::from(unit.attack.cooldown_ticks),
+                unit.attack.damage * SIMULATION_HZ_I32,
+                "{kind:?} should keep the one-DPS base-attack baseline"
+            );
         }
         assert_eq!(
             unit_template(ProductionKind::Ranged).attack.delivery,
@@ -834,6 +1085,60 @@ mod tests {
                     / SIMULATION_HZ_I32,
             }
         );
+        assert_eq!(
+            unit_template(ProductionKind::Artillery).attack.delivery,
+            AttackDelivery::RangedBallistic {
+                speed_per_tick: ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND
+                    * SUBUNITS_PER_WORLD_UNIT
+                    / SIMULATION_HZ_I32,
+                impact_radius: 35 * SUBUNITS_PER_WORLD_UNIT,
+            }
+        );
+    }
+
+    #[test]
+    fn verification_towers_cover_guaranteed_and_ballistic_delivery() {
+        assert!(matches!(
+            guaranteed_tower_attack().delivery,
+            AttackDelivery::RangedGuaranteedHit { .. }
+        ));
+        assert_eq!(
+            projectile_tower_attack().delivery,
+            AttackDelivery::RangedBallistic {
+                speed_per_tick: TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                    / SIMULATION_HZ_I32,
+                impact_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+            }
+        );
+        assert!(projectile_tower_attack().range > guaranteed_tower_attack().range);
+    }
+
+    #[test]
+    fn verification_area_spells_cast_only_when_full_with_requested_scope() {
+        let global = global_area_spell_profile();
+        assert_eq!(global.mana.starting, 0);
+        assert_eq!(global.ability.mana_cost, global.mana.maximum);
+        assert_eq!(
+            global.ability.target_policy,
+            AbilityTargetPolicy::RandomEnemyUnitGlobal
+        );
+        assert!(matches!(
+            global.ability.effect,
+            AbilityEffect::AreaDamage { .. }
+        ));
+
+        let local = short_range_spellcaster_profile();
+        assert_eq!(local.mana.starting, 0);
+        assert_eq!(local.ability.mana_cost, local.mana.maximum);
+        assert_eq!(
+            local.ability.target_policy,
+            AbilityTargetPolicy::RandomEnemyUnit
+        );
+        assert!(local.ability.range > 0);
+        assert!(matches!(
+            local.ability.effect,
+            AbilityEffect::AreaDamage { .. }
+        ));
     }
 
     #[test]
