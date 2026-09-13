@@ -118,6 +118,12 @@ struct PresentationAssets {
     gun_body_mesh: Handle<Mesh>,
     gun_barrel_mesh: Handle<Mesh>,
     gun_grip_mesh: Handle<Mesh>,
+    mortar_base_mesh: Handle<Mesh>,
+    mortar_barrel_mesh: Handle<Mesh>,
+    bounce_staff_mesh: Handle<Mesh>,
+    bounce_orb_mesh: Handle<Mesh>,
+    caster_crystal_mesh: Handle<Mesh>,
+    caster_ring_mesh: Handle<Mesh>,
     building_mesh: Handle<Mesh>,
     guaranteed_projectile_mesh: Handle<Mesh>,
     ballistic_projectile_mesh: Handle<Mesh>,
@@ -126,22 +132,25 @@ struct PresentationAssets {
     unit_materials: [Handle<StandardMaterial>; 2],
     building_materials: [Handle<StandardMaterial>; 2],
     building_accent_materials: [Handle<StandardMaterial>; 2],
+    unit_accent_materials: [Handle<StandardMaterial>; 2],
     corpse_materials: [Handle<StandardMaterial>; 2],
     projectile_materials: [Handle<StandardMaterial>; 4],
     weapon_material: Handle<StandardMaterial>,
     neutral_unit_material: Handle<StandardMaterial>,
     neutral_building_material: Handle<StandardMaterial>,
     neutral_building_accent_material: Handle<StandardMaterial>,
+    neutral_unit_accent_material: Handle<StandardMaterial>,
     neutral_corpse_material: Handle<StandardMaterial>,
 }
 
 impl PresentationAssets {
     fn unit_mesh(&self, kind: UnitVisualKind) -> Handle<Mesh> {
-        match kind {
+        match kind.weapon_kind() {
             UnitVisualKind::Melee => self.melee_mesh.clone(),
             UnitVisualKind::Ranged => self.ranged_mesh.clone(),
             UnitVisualKind::Ballistic => self.ballistic_unit_mesh.clone(),
             UnitVisualKind::Bounce => self.bounce_unit_mesh.clone(),
+            _ => unreachable!("caster kind must map to a base delivery kind"),
         }
     }
 
@@ -150,6 +159,13 @@ impl PresentationAssets {
             .get(usize::from(team.0))
             .cloned()
             .unwrap_or_else(|| self.neutral_unit_material.clone())
+    }
+
+    fn unit_accent_material(&self, team: Team) -> Handle<StandardMaterial> {
+        self.unit_accent_materials
+            .get(usize::from(team.0))
+            .cloned()
+            .unwrap_or_else(|| self.neutral_unit_accent_material.clone())
     }
 
     fn building_material(&self, team: Team) -> Handle<StandardMaterial> {
@@ -263,6 +279,8 @@ struct RtsCamera {
 enum WeaponKind {
     Sword,
     Gun,
+    Mortar,
+    BounceStaff,
 }
 
 #[derive(Component)]
@@ -342,6 +360,12 @@ fn setup_scene(
     let gun_body_mesh = meshes.add(Cuboid::new(1.6, 1.5, 5.0));
     let gun_barrel_mesh = meshes.add(Cuboid::new(0.8, 0.8, 4.0));
     let gun_grip_mesh = meshes.add(Cuboid::new(1.1, 2.2, 1.1));
+    let mortar_base_mesh = meshes.add(Cuboid::new(3.8, 1.0, 3.8));
+    let mortar_barrel_mesh = meshes.add(Cuboid::new(1.8, 1.8, 6.5));
+    let bounce_staff_mesh = meshes.add(Cuboid::new(0.65, 0.65, 5.8));
+    let bounce_orb_mesh = meshes.add(Cuboid::new(2.8, 2.8, 2.8));
+    let caster_crystal_mesh = meshes.add(Cuboid::new(2.2, 5.0, 2.2));
+    let caster_ring_mesh = meshes.add(Cuboid::new(4.6, 0.45, 4.6));
     let building_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let guaranteed_projectile_mesh = meshes.add(Cuboid::new(1.3, 1.3, 5.5));
     let ballistic_projectile_mesh = meshes.add(Cuboid::new(3.8, 3.8, 3.8));
@@ -386,6 +410,22 @@ fn setup_scene(
             ..default()
         }),
     ];
+    let unit_accent_materials = [
+        materials.add(StandardMaterial {
+            base_color: Color::srgb(0.38, 0.78, 1.0),
+            emissive: LinearRgba::new(0.05, 0.20, 0.42, 1.0),
+            metallic: 0.15,
+            perceptual_roughness: 0.35,
+            ..default()
+        }),
+        materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.42, 0.28),
+            emissive: LinearRgba::new(0.42, 0.07, 0.04, 1.0),
+            metallic: 0.15,
+            perceptual_roughness: 0.35,
+            ..default()
+        }),
+    ];
     let corpse_materials = [
         materials.add(StandardMaterial {
             base_color: Color::srgba(0.12, 0.32, 0.62, 0.42),
@@ -419,6 +459,11 @@ fn setup_scene(
         emissive: LinearRgba::new(0.08, 0.08, 0.09, 1.0),
         ..default()
     });
+    let neutral_unit_accent_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.76, 0.76, 0.82),
+        emissive: LinearRgba::new(0.10, 0.10, 0.12, 1.0),
+        ..default()
+    });
     let neutral_corpse_material = materials.add(StandardMaterial {
         base_color: Color::srgba(0.34, 0.34, 0.36, 0.40),
         alpha_mode: AlphaMode::Blend,
@@ -436,6 +481,12 @@ fn setup_scene(
         gun_body_mesh,
         gun_barrel_mesh,
         gun_grip_mesh,
+        mortar_base_mesh,
+        mortar_barrel_mesh,
+        bounce_staff_mesh,
+        bounce_orb_mesh,
+        caster_crystal_mesh,
+        caster_ring_mesh,
         building_mesh: building_mesh.clone(),
         guaranteed_projectile_mesh,
         ballistic_projectile_mesh,
@@ -444,12 +495,14 @@ fn setup_scene(
         unit_materials,
         building_materials,
         building_accent_materials,
+        unit_accent_materials,
         corpse_materials,
         projectile_materials,
         weapon_material,
         neutral_unit_material,
         neutral_building_material,
         neutral_building_accent_material,
+        neutral_unit_accent_material,
         neutral_corpse_material,
     });
 
@@ -516,13 +569,15 @@ fn spawn_unit_weapon(
     commands: &mut Commands,
     assets: &PresentationAssets,
     unit_entity: Entity,
+    team: Team,
     visual_kind: UnitVisualKind,
 ) -> Entity {
-    let kind = match visual_kind {
+    let kind = match visual_kind.weapon_kind() {
         UnitVisualKind::Melee => WeaponKind::Sword,
-        UnitVisualKind::Ranged | UnitVisualKind::Ballistic | UnitVisualKind::Bounce => {
-            WeaponKind::Gun
-        }
+        UnitVisualKind::Ranged => WeaponKind::Gun,
+        UnitVisualKind::Ballistic => WeaponKind::Mortar,
+        UnitVisualKind::Bounce => WeaponKind::BounceStaff,
+        _ => unreachable!("caster kind must map to a base delivery kind"),
     };
     let mut weapon_entity = None;
     commands.entity(unit_entity).with_children(|unit| {
@@ -565,7 +620,48 @@ fn spawn_unit_weapon(
                     Transform::from_xyz(0.0, -1.25, 1.0),
                 ));
             }
+            WeaponKind::Mortar => {
+                weapon.spawn((
+                    Mesh3d(assets.mortar_base_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, -1.2, 0.0),
+                ));
+                weapon.spawn((
+                    Mesh3d(assets.mortar_barrel_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, 0.8, 2.8),
+                ));
+            }
+            WeaponKind::BounceStaff => {
+                weapon.spawn((
+                    Mesh3d(assets.bounce_staff_mesh.clone()),
+                    MeshMaterial3d(assets.weapon_material.clone()),
+                    Transform::from_xyz(0.0, 0.0, 1.8),
+                ));
+                weapon.spawn((
+                    Mesh3d(assets.bounce_orb_mesh.clone()),
+                    MeshMaterial3d(assets.unit_accent_material(team)),
+                    Transform::from_xyz(0.0, 3.0, 4.0),
+                ));
+            }
         });
+        if visual_kind.is_caster() {
+            let caster_material = assets.unit_accent_material(team);
+            unit.spawn((
+                Mesh3d(assets.caster_ring_mesh.clone()),
+                MeshMaterial3d(caster_material.clone()),
+                Transform::from_xyz(0.0, 5.2, 0.0),
+            ));
+            unit.spawn((
+                Mesh3d(assets.caster_crystal_mesh.clone()),
+                MeshMaterial3d(caster_material),
+                Transform {
+                    translation: Vec3::new(0.0, 8.4, 0.0),
+                    rotation: Quat::from_euler(EulerRot::XYZ, 0.3, 0.4, 0.2),
+                    scale: Vec3::splat(0.8),
+                },
+            ));
+        }
     });
     weapon_entity.expect("unit weapon entity was not spawned")
 }
@@ -604,6 +700,8 @@ fn animate_unit_weapons(
         let duration = match weapon.kind {
             WeaponKind::Sword => SWORD_SWING_SECONDS,
             WeaponKind::Gun => GUN_RECOIL_SECONDS,
+            WeaponKind::Mortar => 0.30,
+            WeaponKind::BounceStaff => 0.26,
         };
         let progress = (elapsed / duration).clamp(0.0, 1.0);
         *transform = weapon_transform(weapon.kind, Some(progress));
@@ -625,6 +723,16 @@ fn weapon_transform(kind: WeaponKind, progress: Option<f32>) -> Transform {
             ..default()
         },
         WeaponKind::Gun => Transform::from_translation(Vec3::new(3.8, 0.0, -1.7 * envelope)),
+        WeaponKind::Mortar => Transform {
+            translation: Vec3::new(0.0, 0.2, 0.4),
+            rotation: Quat::from_rotation_x(0.55 + 0.30 * envelope),
+            ..default()
+        },
+        WeaponKind::BounceStaff => Transform {
+            translation: Vec3::new(3.0, 0.0, 0.0),
+            rotation: Quat::from_rotation_z(-0.65 + 0.55 * envelope),
+            ..default()
+        },
     }
 }
 
@@ -638,6 +746,7 @@ fn spawn_building_visual(
 ) {
     let body_material = assets.building_material(building.team);
     let accent_material = assets.building_accent_material(building.team);
+    let weapon_material = assets.weapon_material.clone();
     commands
         .entity(root)
         .with_children(|parent| match building.visual_kind {
@@ -665,7 +774,10 @@ fn spawn_building_visual(
                     }
                 }
             }
-            BuildingVisualKind::Production => {
+            BuildingVisualKind::Production
+            | BuildingVisualKind::ProductionAttack
+            | BuildingVisualKind::ProductionSpellcaster
+            | BuildingVisualKind::ProductionAttackSpellcaster => {
                 parent.spawn((
                     Mesh3d(assets.building_mesh.clone()),
                     MeshMaterial3d(body_material.clone()),
@@ -695,66 +807,129 @@ fn spawn_building_visual(
                         },
                     ));
                 }
+                if matches!(
+                    building.visual_kind,
+                    BuildingVisualKind::ProductionAttack
+                        | BuildingVisualKind::ProductionAttackSpellcaster
+                ) {
+                    spawn_building_attack_details(
+                        parent,
+                        assets,
+                        &size,
+                        height,
+                        &weapon_material,
+                        &accent_material,
+                    );
+                }
+                if matches!(
+                    building.visual_kind,
+                    BuildingVisualKind::ProductionSpellcaster
+                        | BuildingVisualKind::ProductionAttackSpellcaster
+                ) {
+                    spawn_building_spell_details(parent, assets, &size, height, &accent_material);
+                }
             }
             BuildingVisualKind::Attack => {
-                parent.spawn((
-                    Mesh3d(assets.building_mesh.clone()),
-                    MeshMaterial3d(body_material.clone()),
-                    Transform {
-                        translation: Vec3::new(0.0, -height * 0.16, 0.0),
-                        scale: Vec3::new(size.x * 0.72, height * 0.68, size.y * 0.72),
-                        ..default()
-                    },
-                ));
-                parent.spawn((
-                    Mesh3d(assets.building_mesh.clone()),
-                    MeshMaterial3d(accent_material.clone()),
-                    Transform {
-                        translation: Vec3::new(0.0, height * 0.28, 0.0),
-                        scale: Vec3::new(size.x * 0.44, height * 0.26, size.y * 0.44),
-                        ..default()
-                    },
-                ));
-                parent.spawn((
-                    Mesh3d(assets.building_mesh.clone()),
-                    MeshMaterial3d(assets.weapon_material.clone()),
-                    Transform {
-                        translation: Vec3::new(0.0, height * 0.29, size.y * 0.38),
-                        scale: Vec3::new(size.x * 0.11, height * 0.10, size.y * 0.60),
-                        ..default()
-                    },
-                ));
+                spawn_building_combat_body(parent, assets, &body_material, &size, height);
+                spawn_building_attack_details(
+                    parent,
+                    assets,
+                    &size,
+                    height,
+                    &weapon_material,
+                    &accent_material,
+                );
             }
             BuildingVisualKind::Spellcaster => {
-                parent.spawn((
-                    Mesh3d(assets.building_mesh.clone()),
-                    MeshMaterial3d(body_material),
-                    Transform {
-                        translation: Vec3::new(0.0, -height * 0.19, 0.0),
-                        scale: Vec3::new(size.x * 0.70, height * 0.60, size.y * 0.70),
-                        ..default()
-                    },
-                ));
-                parent.spawn((
-                    Mesh3d(assets.building_mesh.clone()),
-                    MeshMaterial3d(accent_material.clone()),
-                    Transform {
-                        translation: Vec3::new(0.0, height * 0.18, 0.0),
-                        scale: Vec3::new(size.x * 0.24, height * 0.52, size.y * 0.24),
-                        ..default()
-                    },
-                ));
-                parent.spawn((
-                    Mesh3d(assets.building_mesh.clone()),
-                    MeshMaterial3d(accent_material),
-                    Transform {
-                        translation: Vec3::new(0.0, height * 0.49, 0.0),
-                        rotation: Quat::from_euler(EulerRot::XYZ, 0.45, 0.65, 0.35),
-                        scale: Vec3::new(size.x * 0.24, height * 0.24, size.y * 0.24),
-                    },
-                ));
+                spawn_building_combat_body(parent, assets, &body_material, &size, height);
+                spawn_building_spell_details(parent, assets, &size, height, &accent_material);
+            }
+            BuildingVisualKind::AttackSpellcaster => {
+                spawn_building_combat_body(parent, assets, &body_material, &size, height);
+                spawn_building_attack_details(
+                    parent,
+                    assets,
+                    &size,
+                    height,
+                    &weapon_material,
+                    &accent_material,
+                );
+                spawn_building_spell_details(parent, assets, &size, height, &accent_material);
             }
         });
+}
+
+fn spawn_building_combat_body(
+    parent: &mut ChildSpawnerCommands,
+    assets: &PresentationAssets,
+    body_material: &Handle<StandardMaterial>,
+    size: &Vec2,
+    height: f32,
+) {
+    parent.spawn((
+        Mesh3d(assets.building_mesh.clone()),
+        MeshMaterial3d(body_material.clone()),
+        Transform {
+            translation: Vec3::new(0.0, -height * 0.16, 0.0),
+            scale: Vec3::new(size.x * 0.72, height * 0.68, size.y * 0.72),
+            ..default()
+        },
+    ));
+}
+
+fn spawn_building_attack_details(
+    parent: &mut ChildSpawnerCommands,
+    assets: &PresentationAssets,
+    size: &Vec2,
+    height: f32,
+    weapon_material: &Handle<StandardMaterial>,
+    accent_material: &Handle<StandardMaterial>,
+) {
+    parent.spawn((
+        Mesh3d(assets.building_mesh.clone()),
+        MeshMaterial3d(accent_material.clone()),
+        Transform {
+            translation: Vec3::new(0.0, height * 0.28, 0.0),
+            scale: Vec3::new(size.x * 0.44, height * 0.26, size.y * 0.44),
+            ..default()
+        },
+    ));
+    parent.spawn((
+        Mesh3d(assets.building_mesh.clone()),
+        MeshMaterial3d(weapon_material.clone()),
+        Transform {
+            translation: Vec3::new(0.0, height * 0.29, size.y * 0.38),
+            scale: Vec3::new(size.x * 0.11, height * 0.10, size.y * 0.60),
+            ..default()
+        },
+    ));
+}
+
+fn spawn_building_spell_details(
+    parent: &mut ChildSpawnerCommands,
+    assets: &PresentationAssets,
+    size: &Vec2,
+    height: f32,
+    accent_material: &Handle<StandardMaterial>,
+) {
+    parent.spawn((
+        Mesh3d(assets.building_mesh.clone()),
+        MeshMaterial3d(accent_material.clone()),
+        Transform {
+            translation: Vec3::new(0.0, height * 0.18, 0.0),
+            scale: Vec3::new(size.x * 0.24, height * 0.52, size.y * 0.24),
+            ..default()
+        },
+    ));
+    parent.spawn((
+        Mesh3d(assets.caster_crystal_mesh.clone()),
+        MeshMaterial3d(accent_material.clone()),
+        Transform {
+            translation: Vec3::new(0.0, height * 0.49, 0.0),
+            rotation: Quat::from_euler(EulerRot::XYZ, 0.45, 0.65, 0.35),
+            scale: Vec3::splat(0.8),
+        },
+    ));
 }
 
 fn sync_render_entities(
@@ -864,7 +1039,7 @@ fn sync_render_entities(
                 Transform::from_translation(position),
             ))
             .id();
-        let weapon = spawn_unit_weapon(&mut commands, &assets, entity, unit.visual_kind);
+        let weapon = spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
         render_map.units.insert(
             unit.id,
             PresentedEntry {
@@ -1520,20 +1695,26 @@ pub(crate) fn sim_point_to_world_lerp(previous: SimPoint, current: SimPoint, alp
 }
 
 fn unit_height(unit: &UnitSample) -> f32 {
-    match unit.visual_kind {
+    match unit.visual_kind.weapon_kind() {
         UnitVisualKind::Melee => UNIT_MELEE_HEIGHT,
         UnitVisualKind::Ranged | UnitVisualKind::Ballistic | UnitVisualKind::Bounce => {
             UNIT_RANGED_HEIGHT
         }
+        _ => unreachable!("caster kind must map to a base delivery kind"),
     }
 }
 
 fn building_height(building: &BuildingSample) -> f32 {
     match building.visual_kind {
         BuildingVisualKind::Structure => BUILDING_HEIGHT * 1.25,
-        BuildingVisualKind::Production => BUILDING_HEIGHT,
-        BuildingVisualKind::Attack => BUILDING_HEIGHT * 1.15,
-        BuildingVisualKind::Spellcaster => BUILDING_HEIGHT * 1.10,
+        BuildingVisualKind::Production | BuildingVisualKind::ProductionSpellcaster => {
+            BUILDING_HEIGHT
+        }
+        BuildingVisualKind::Attack
+        | BuildingVisualKind::Spellcaster
+        | BuildingVisualKind::ProductionAttack
+        | BuildingVisualKind::AttackSpellcaster => BUILDING_HEIGHT * 1.15,
+        BuildingVisualKind::ProductionAttackSpellcaster => BUILDING_HEIGHT * 1.20,
     }
 }
 

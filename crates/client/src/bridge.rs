@@ -12,15 +12,40 @@ pub enum UnitVisualKind {
     Ranged,
     Ballistic,
     Bounce,
+    MeleeCaster,
+    RangedCaster,
+    BallisticCaster,
+    BounceCaster,
 }
 
 impl UnitVisualKind {
-    fn from_delivery(delivery: AttackDelivery) -> Self {
-        match delivery {
-            AttackDelivery::Melee => Self::Melee,
-            AttackDelivery::RangedGuaranteedHit { .. } => Self::Ranged,
-            AttackDelivery::RangedBallistic { .. } => Self::Ballistic,
-            AttackDelivery::Bounce { .. } => Self::Bounce,
+    fn from_delivery(delivery: AttackDelivery, spellcaster: bool) -> Self {
+        match (delivery, spellcaster) {
+            (AttackDelivery::Melee, false) => Self::Melee,
+            (AttackDelivery::RangedGuaranteedHit { .. }, false) => Self::Ranged,
+            (AttackDelivery::RangedBallistic { .. }, false) => Self::Ballistic,
+            (AttackDelivery::Bounce { .. }, false) => Self::Bounce,
+            (AttackDelivery::Melee, true) => Self::MeleeCaster,
+            (AttackDelivery::RangedGuaranteedHit { .. }, true) => Self::RangedCaster,
+            (AttackDelivery::RangedBallistic { .. }, true) => Self::BallisticCaster,
+            (AttackDelivery::Bounce { .. }, true) => Self::BounceCaster,
+        }
+    }
+
+    pub(crate) const fn is_caster(self) -> bool {
+        matches!(
+            self,
+            Self::MeleeCaster | Self::RangedCaster | Self::BallisticCaster | Self::BounceCaster
+        )
+    }
+
+    pub(crate) const fn weapon_kind(self) -> UnitVisualKind {
+        match self {
+            Self::MeleeCaster => Self::Melee,
+            Self::RangedCaster => Self::Ranged,
+            Self::BallisticCaster => Self::Ballistic,
+            Self::BounceCaster => Self::Bounce,
+            other => other,
         }
     }
 }
@@ -31,6 +56,25 @@ pub enum BuildingVisualKind {
     Production,
     Attack,
     Spellcaster,
+    ProductionAttack,
+    ProductionSpellcaster,
+    AttackSpellcaster,
+    ProductionAttackSpellcaster,
+}
+
+impl BuildingVisualKind {
+    fn from_roles(production: bool, attack: bool, spellcaster: bool) -> Self {
+        match (production, attack, spellcaster) {
+            (false, false, false) => Self::Structure,
+            (true, false, false) => Self::Production,
+            (false, true, false) => Self::Attack,
+            (false, false, true) => Self::Spellcaster,
+            (true, true, false) => Self::ProductionAttack,
+            (true, false, true) => Self::ProductionSpellcaster,
+            (false, true, true) => Self::AttackSpellcaster,
+            (true, true, true) => Self::ProductionAttackSpellcaster,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -43,6 +87,8 @@ pub struct UnitSample {
     pub target: Option<SimId>,
     pub cooldown_remaining: u16,
     pub stunned_until_tick: u64,
+    pub mana_current: Option<i32>,
+    pub mana_maximum: Option<i32>,
     pub visual_kind: UnitVisualKind,
 }
 
@@ -90,7 +136,12 @@ impl PresentationSnapshot {
                         target: unit.target,
                         cooldown_remaining: unit.cooldown_remaining,
                         stunned_until_tick: unit.stunned_until_tick,
-                        visual_kind: UnitVisualKind::from_delivery(unit.attack_delivery),
+                        mana_current: unit.mana_current,
+                        mana_maximum: unit.mana_maximum,
+                        visual_kind: UnitVisualKind::from_delivery(
+                            unit.attack_delivery,
+                            unit.mana_maximum.is_some(),
+                        ),
                     },
                 )
             })
@@ -99,15 +150,11 @@ impl PresentationSnapshot {
             .buildings()
             .into_iter()
             .map(|building| {
-                let visual_kind = if building.production.is_some() {
-                    BuildingVisualKind::Production
-                } else if building.attack_delivery.is_some() {
-                    BuildingVisualKind::Attack
-                } else if building.mana_maximum.is_some() {
-                    BuildingVisualKind::Spellcaster
-                } else {
-                    BuildingVisualKind::Structure
-                };
+                let visual_kind = BuildingVisualKind::from_roles(
+                    building.production.is_some(),
+                    building.attack_delivery.is_some(),
+                    building.mana_maximum.is_some(),
+                );
                 (
                     building.id,
                     BuildingSample {
@@ -229,6 +276,58 @@ mod tests {
                 .iter()
                 .any(|attack| attack.target == victim)
         );
+    }
+
+    #[test]
+    fn visual_kinds_cover_every_exposed_delivery_and_role_combination() {
+        let deliveries = [
+            AttackDelivery::Melee,
+            AttackDelivery::RangedGuaranteedHit { speed_per_tick: 1 },
+            AttackDelivery::RangedBallistic {
+                speed_per_tick: 1,
+                impact_radius: 2,
+            },
+            AttackDelivery::Bounce {
+                speed_per_tick: 1,
+                bounce_range: 2,
+                max_bounces: 3,
+                damage_percent_per_bounce: 50,
+                allow_repeat_targets: false,
+            },
+        ];
+        let mut kinds = Vec::new();
+        for delivery in deliveries {
+            kinds.push(UnitVisualKind::from_delivery(delivery, false));
+            kinds.push(UnitVisualKind::from_delivery(delivery, true));
+        }
+        assert_eq!(
+            kinds,
+            [
+                UnitVisualKind::Melee,
+                UnitVisualKind::MeleeCaster,
+                UnitVisualKind::Ranged,
+                UnitVisualKind::RangedCaster,
+                UnitVisualKind::Ballistic,
+                UnitVisualKind::BallisticCaster,
+                UnitVisualKind::Bounce,
+                UnitVisualKind::BounceCaster,
+            ]
+        );
+
+        let mut building_kinds = Vec::new();
+        for production in [false, true] {
+            for attack in [false, true] {
+                for spellcaster in [false, true] {
+                    building_kinds.push(BuildingVisualKind::from_roles(
+                        production,
+                        attack,
+                        spellcaster,
+                    ));
+                }
+            }
+        }
+        assert_eq!(building_kinds.len(), 8);
+        assert!(building_kinds.contains(&BuildingVisualKind::ProductionAttackSpellcaster));
     }
 
     #[test]

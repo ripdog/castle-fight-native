@@ -265,18 +265,20 @@ fn inspector_text(id: SimId, samples: &PresentationSamples) -> String {
 
 fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
     let position = sim_point_to_world(unit.position);
-    format!(
-        "UNIT #{}\nSide: {}\nType: {}\nHealth: {}\nPosition: {:.1}, {:.1}\nTarget: {}\nAttack cooldown: {} ticks\nState: {}",
-        unit.id.0,
-        team_label(unit.team),
-        unit_kind_label(unit.visual_kind),
-        unit.health,
-        position.x,
-        position.z,
-        target_label(unit.target),
-        unit.cooldown_remaining,
-        stun_label(unit.stunned_until_tick, tick),
-    )
+    let mut lines = vec![
+        format!("UNIT #{}", unit.id.0),
+        format!("Side: {}", team_label(unit.team)),
+        format!("Type: {}", unit_kind_label(unit.visual_kind)),
+        format!("Health: {}", unit.health),
+        format!("Position: {:.1}, {:.1}", position.x, position.z),
+        format!("Target: {}", target_label(unit.target)),
+        format!("Attack cooldown: {} ticks", unit.cooldown_remaining),
+        format!("State: {}", stun_label(unit.stunned_until_tick, tick)),
+    ];
+    if let (Some(current), Some(maximum)) = (unit.mana_current, unit.mana_maximum) {
+        lines.push(format!("Mana: {current}/{maximum}"));
+    }
+    lines.join("\n")
 }
 
 fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
@@ -336,6 +338,10 @@ fn unit_kind_label(kind: UnitVisualKind) -> &'static str {
         UnitVisualKind::Ranged => "Ranged",
         UnitVisualKind::Ballistic => "Ballistic ranged",
         UnitVisualKind::Bounce => "Bounce ranged",
+        UnitVisualKind::MeleeCaster => "Melee caster",
+        UnitVisualKind::RangedCaster => "Ranged caster",
+        UnitVisualKind::BallisticCaster => "Ballistic caster",
+        UnitVisualKind::BounceCaster => "Bounce caster",
     }
 }
 
@@ -345,6 +351,10 @@ fn building_kind_label(kind: BuildingVisualKind) -> &'static str {
         BuildingVisualKind::Production => "Production",
         BuildingVisualKind::Attack => "Attack",
         BuildingVisualKind::Spellcaster => "Spellcaster",
+        BuildingVisualKind::ProductionAttack => "Production + attack",
+        BuildingVisualKind::ProductionSpellcaster => "Production + spellcaster",
+        BuildingVisualKind::AttackSpellcaster => "Attack + spellcaster",
+        BuildingVisualKind::ProductionAttackSpellcaster => "Production + attack + spellcaster",
     }
 }
 
@@ -411,6 +421,8 @@ mod tests {
                 target: None,
                 cooldown_remaining: 0,
                 stunned_until_tick: 0,
+                mana_current: None,
+                mana_maximum: None,
                 visual_kind: UnitVisualKind::Melee,
             },
         );
