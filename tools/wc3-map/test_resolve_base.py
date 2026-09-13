@@ -230,7 +230,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 23)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 25)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "attack-proc-dispel-positive-buffs": 3,
@@ -246,12 +246,14 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "kill-triggered-native-berserk": 3,
             "native-lava-spawn-split-with-child-conversion": 1,
             "organic-kill-eternal-servitude": 2,
+            "source-damage-mastery-over-death": 1,
+            "source-damage-stacking-blood-corrosion": 1,
             "retarget-flying-damage-source": 2,
         })
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 23)
+        self.assertEqual(len(rows), 25)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -387,6 +389,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(water["mirror_image_object_data"]["Damage Taken (%)"], 2)
         self.assertEqual(water["mirror_image_duration_seconds"], 60)
         self.assertEqual(water["mirror_image_effective_mana_cost"], 0)
+
+        lich = json.loads(rows[("u00D", "source-damage-mastery-over-death")]["parameters_json"])
+        self.assertEqual(lich["devour_roll_threshold_exclusive"], 15)
+        self.assertEqual(lich["devour_heal_fraction_of_target_current_hp"], 0.5)
+        self.assertEqual(lich["devour_damage"], 10000)
+        self.assertEqual(lich["death_and_decay_probability_if_devour_eligible_percent"], 10)
+        self.assertEqual(lich["death_and_decay_probability_if_devour_ineligible_percent"], 25)
+        self.assertEqual(lich["death_and_decay_object_data"]["Max Life Drained per Second (%)"], 0.08)
+        self.assertEqual(lich["death_and_decay_object_data"]["Building Reduction"], 0.1)
+        self.assertEqual(lich["death_and_decay_duration_seconds"], 5)
+        self.assertEqual(lich["death_and_decay_area"], 350)
+        self.assertEqual(lich["death_and_decay_effective_mana_cost"], 0)
+        self.assertEqual(lich["death_and_decay_effective_cooldown_seconds"], 0.0)
+
+        lord_corrosion = json.loads(rows[("h05H", "source-damage-stacking-blood-corrosion")]["parameters_json"])
+        self.assertEqual(lord_corrosion["maximum_stack_level"], 5)
+        self.assertEqual(
+            [entry["defense_bonus"] for entry in lord_corrosion["stack_levels"]],
+            [-2, -4, -6, -8, -10],
+        )
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

@@ -4432,6 +4432,9 @@ def _extract_production_unit_special_mechanics(
         "vampireCharge",
         "randomN02YOrder",
         "tornadoStackProc",
+        "code__addAction_DamageRuntime",
+        "applyVampireArmorReduction",
+        "devourAttackProc",
     }
     if not required_map_functions.issubset(available_functions):
         return []
@@ -4843,6 +4846,88 @@ def _extract_production_unit_special_mechanics(
         "source_functions": ["handleSourceDamageEffects", "randomN02YOrder"],
         "evidence_kind": "exact-source-damage-handler-plus-native-ability",
         "byte_offset": min(source_damage_start, water_start),
+    })
+
+    # Lich King: source damage uses one random roll for Mastery over Death. An
+    # eligible roll <15 heals for half the target's current life then deals a
+    # 10,000 chaos/death hit; otherwise any roll <25 casts native Death and
+    # Decay at the target position. Thus devour-ineligible targets can enter the
+    # Death and Decay branch even on rolls 0..14.
+    require_tokens(
+        "handleSourceDamageEffects",
+        {"1966092356", "devourAttackProc"},
+    )
+    lich_start, _ = require_tokens(
+        "devourAttackProc",
+        {
+            "GetRandomInt", "15", "25", "1093678896", "UNIT_TYPE_MECHANICAL",
+            "2.", "10000.", "ATTACK_TYPE_CHAOS", "DAMAGE_TYPE_DEATH", "1093679158", "852221", "6.",
+            "__wurst_safe_SetWidgetLife", "__wurst_safe_UnitDamageTarget", "addProtectedAbility",
+            "unit_issuePointOrderById", "__wurst_safe_UnitApplyTimedLife",
+        },
+    )
+    lich_function = next(function for function in functions if function["name"] == "devourAttackProc")
+    lich_source = data[int(lich_function["start"]):int(lich_function["end"])]
+    if b"widget_getLife(noq)<.405" not in lich_source:
+        raise ValueError("Lich King Devour alive threshold changed")
+    rows.append({
+        "unit_id": 1966092356,
+        "mechanic_kind": "source-damage-mastery-over-death",
+        "trigger": "source-damage-event",
+        "parameters": {
+            "source_damage_marker_ability_id": 1093677905,
+            "random_roll_min": 0,
+            "random_roll_max": 99,
+            "devour_roll_threshold_exclusive": 15,
+            "devour_target_excluded_ability_id": 1093678896,
+            "devour_target_requires_not_mechanical": True,
+            "devour_target_requires_alive_after_damage": True,
+            "devour_heal_fraction_of_target_current_hp": 0.5,
+            "devour_damage": 10000,
+            "devour_attack_type": "chaos",
+            "devour_damage_type": "death",
+            "devour_is_attack": True,
+            "devour_is_ranged": False,
+            "death_and_decay_roll_threshold_exclusive": 25,
+            "death_and_decay_branch_runs_when_devour_condition_fails": True,
+            "death_and_decay_probability_if_devour_eligible_percent": 10,
+            "death_and_decay_probability_if_devour_ineligible_percent": 25,
+            "death_and_decay_ability_id": 1093679158,
+            "death_and_decay_order_id": 852221,
+            "death_and_decay_cast_position": "damaged-target-position",
+            "death_and_decay_dummy_lifetime_seconds": 6,
+        },
+        "related_rawcode_ids": [1093677905, 1093678896, 1093679158],
+        "source_functions": ["handleSourceDamageEffects", "devourAttackProc"],
+        "evidence_kind": "exact-source-damage-handler-plus-native-area-spell",
+        "byte_offset": min(source_damage_start, lich_start),
+    })
+
+    # Vampire Lord: every damage event sourced from the Lord applies A0GY to a
+    # non-structure target or increments it by one level, capped at level 5.
+    damage_dispatch_start, _ = require_tokens(
+        "code__addAction_DamageRuntime",
+        {"GetEventDamageSource", "GetTriggerUnit", "applyVampireArmorReduction"},
+    )
+    vampire_armor_start, _ = require_tokens(
+        "applyVampireArmorReduction",
+        {"1747989832", "UNIT_TYPE_STRUCTURE", "1093683033", "5", "addProtectedAbility", "__wurst_safe_SetUnitAbilityLevel"},
+    )
+    rows.append({
+        "unit_id": 1747989832,
+        "mechanic_kind": "source-damage-stacking-blood-corrosion",
+        "trigger": "damage-event",
+        "parameters": {
+            "target_must_not_be_structure": True,
+            "target_stack_ability_id": 1093683033,
+            "initial_stack_level": 1,
+            "maximum_stack_level": 5,
+            "stack_increment_per_damage_event": 1,
+        },
+        "related_rawcode_ids": [1093683033],
+        "source_functions": ["code__addAction_DamageRuntime", "applyVampireArmorReduction"],
+        "evidence_kind": "exact-damage-dispatch-plus-levelled-object-state",
+        "byte_offset": min(damage_dispatch_start, vampire_armor_start),
     })
 
     # Human Defender: Defend is automatically enabled shortly after spawn, then

@@ -1892,6 +1892,42 @@ def main() -> None:
                     parameters["mirror_image_cooldown_seconds"] = numeric(
                         protected_ability_values.get(("A0CU", 1, "cooldown"), mirror["cooldown"])
                     )
+                elif mechanic["mechanic_kind"] == "source-damage-mastery-over-death":
+                    decay = next((row for row in ability_levels.get("A086", []) if row["level"] == "1"), None)
+                    if decay is None:
+                        raise ValueError("Lich King special mechanic is missing A086 object data")
+                    decay_fields = json.loads(decay["data_fields_labeled_json"])
+                    if (
+                        numeric(decay_fields.get("Max Life Drained per Second (%)")) != 0.08
+                        or numeric(decay_fields.get("Building Reduction")) != 0.1
+                    ):
+                        raise ValueError(f"Lich King Death and Decay fields changed: {decay_fields}")
+                    parameters["death_and_decay_object_data"] = decay_fields
+                    parameters["death_and_decay_duration_seconds"] = numeric(
+                        field_lookup(rows_by_object, "abilities", "A086", "adur", 1, 0)
+                    )
+                    parameters["death_and_decay_area"] = numeric(decay["area"])
+                    parameters["death_and_decay_targets"] = decay["targets"]
+                    parameters["death_and_decay_effective_mana_cost"] = numeric(
+                        protected_ability_values.get(("A086", 1, "mana_cost"), decay["mana_cost"])
+                    )
+                    parameters["death_and_decay_effective_cooldown_seconds"] = numeric(
+                        protected_ability_values.get(("A086", 1, "cooldown"), decay["cooldown"])
+                    )
+                elif mechanic["mechanic_kind"] == "source-damage-stacking-blood-corrosion":
+                    stack_levels = []
+                    for level in range(1, 6):
+                        stack = next((row for row in ability_levels.get("A0GY", []) if row["level"] == str(level)), None)
+                        if stack is None:
+                            raise ValueError(f"Vampire Lord Blood Corrosion level missing: {level}")
+                        fields = json.loads(stack["data_fields_labeled_json"])
+                        stack_levels.append({
+                            "level": level,
+                            "defense_bonus": numeric(fields.get("Defense Bonus")),
+                        })
+                    if [row["defense_bonus"] for row in stack_levels] != [-2, -4, -6, -8, -10]:
+                        raise ValueError(f"Vampire Lord Blood Corrosion states changed: {stack_levels}")
+                    parameters["stack_levels"] = stack_levels
                 elif mechanic["mechanic_kind"] == "kill-triggered-native-berserk":
                     berserk = next((row for row in ability_levels.get("A02I", []) if row["level"] == "1"), None)
                     if berserk is None:
@@ -3558,7 +3594,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, and Greater Wind Kaboom charge",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

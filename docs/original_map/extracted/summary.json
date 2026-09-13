@@ -109,7 +109,7 @@
     "unit_spell_inlined_registrations": 1,
     "protected_filter_bindings": 22,
     "protected_filter_bindings_resolved": 21,
-    "production_unit_special_mechanics": 23,
+    "production_unit_special_mechanics": 25,
     "production_unit_special_mechanic_kinds": {
       "attack-proc-dispel-positive-buffs": 3,
       "attack-proc-native-mirror-image": 1,
@@ -125,7 +125,9 @@
       "kill-triggered-native-berserk": 3,
       "native-lava-spawn-split-with-child-conversion": 1,
       "organic-kill-eternal-servitude": 2,
-      "retarget-flying-damage-source": 2
+      "retarget-flying-damage-source": 2,
+      "source-damage-mastery-over-death": 1,
+      "source-damage-stacking-blood-corrosion": 1
     },
     "building_spell_mechanics": 43,
     "building_spell_mechanics_with_unresolved_target_filter": 0,
