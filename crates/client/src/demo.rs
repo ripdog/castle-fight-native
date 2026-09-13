@@ -1,8 +1,8 @@
 use castle_fight_sim::{
     ArmorProfile, ArmorType, BuildingFootprint, BuildingGameplayProperties, BuildingPlacementError,
     BuildingSpawn, CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind,
-    CombatRules, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
-    SimulationConfig, Team, TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
+    CombatRules, ContentIdentity, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
+    Simulation, SimulationConfig, Team, TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
 };
 
 use crate::presentation::WorldMetrics;
@@ -59,6 +59,10 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
     let mut simulation = Simulation::new_with_combat_rules(config, workers, combat_rules);
 
     let castle_properties = BuildingGameplayProperties {
+        content: Some(ContentIdentity {
+            rawcode: u32::from_be_bytes(*b"hcas"),
+            name: "Main Castle",
+        }),
         damage_type: DamageType::Normal,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         ..BuildingGameplayProperties::default()
@@ -451,13 +455,21 @@ mod tests {
         assert_eq!(center_world(ENEMY_CASTLE), (CASTLE_CENTER_X_WORLD, 0));
 
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
-        let footprints: Vec<_> = simulation
-            .buildings()
-            .into_iter()
+        let buildings = simulation.buildings();
+        let footprints: Vec<_> = buildings
+            .iter()
             .map(|building| building.footprint)
             .collect();
         assert!(footprints.contains(&PLAYER_CASTLE));
         assert!(footprints.contains(&ENEMY_CASTLE));
+        for castle in buildings.iter().filter(|building| {
+            building.footprint == PLAYER_CASTLE || building.footprint == ENEMY_CASTLE
+        }) {
+            assert_eq!(
+                castle.content.map(|content| content.rawcode),
+                Some(u32::from_be_bytes(*b"hcas"))
+            );
+        }
     }
 
     #[test]

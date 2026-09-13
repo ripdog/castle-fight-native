@@ -19,7 +19,8 @@ use whiteout::{
 };
 
 use crate::catalog::{
-    CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec, VisualAssetCatalog, VisualAssetSpec,
+    BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec, VisualAssetCatalog,
+    VisualAssetSpec,
 };
 
 const GL_ARRAY_BUFFER: u32 = 34_962;
@@ -55,6 +56,35 @@ pub struct UnitManifest {
     pub source_model: String,
     pub fallback_to_base_art: bool,
     pub gltf: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BuildingAssetManifest {
+    pub schema_version: u32,
+    pub castle_fight_catalog_version: &'static str,
+    pub wc3_version: Option<String>,
+    pub art_mode: &'static str,
+    pub buildings: Vec<BuildingManifest>,
+    pub models: Vec<ModelManifest>,
+    pub failures: Vec<BuildingFailureManifest>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BuildingManifest {
+    pub rawcode: String,
+    pub name: String,
+    pub scale: f32,
+    pub requested_model: Option<String>,
+    pub source_model: String,
+    pub fallback_to_base_art: bool,
+    pub gltf: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BuildingFailureManifest {
+    pub source_model: String,
+    pub buildings: Vec<String>,
+    pub error: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -252,6 +282,16 @@ struct ResolvedUnit {
     scale: f32,
 }
 
+#[derive(Debug)]
+struct ResolvedBuilding {
+    rawcode: String,
+    name: String,
+    requested_model: Option<String>,
+    source_model: String,
+    fallback_to_base_art: bool,
+    scale: f32,
+}
+
 #[derive(Debug, Clone)]
 struct ResolvedDoodadVariant {
     requested_model: Option<String>,
@@ -397,6 +437,69 @@ impl Exporter {
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
             units,
+            models,
+            failures,
+        })
+    }
+
+    pub fn export_buildings(
+        &mut self,
+        buildings: &[BuildingAssetSpec],
+    ) -> Result<BuildingAssetManifest, Box<dyn Error>> {
+        let resolved: Vec<_> = buildings
+            .iter()
+            .map(|building| self.resolve_building(building))
+            .collect::<Result<_, _>>()?;
+        let mut grouped = BTreeMap::<String, Vec<&ResolvedBuilding>>::new();
+        for building in &resolved {
+            grouped
+                .entry(building.source_model.to_ascii_lowercase())
+                .or_default()
+                .push(building);
+        }
+
+        let mut models = Vec::new();
+        let mut failures = Vec::new();
+        let mut model_outputs = BTreeMap::<String, String>::new();
+        for (key, group) in &grouped {
+            let source = group[0].source_model.clone();
+            match self.export_model(&source) {
+                Ok(model) => {
+                    model_outputs.insert(key.clone(), model.gltf.clone());
+                    models.push(model);
+                }
+                Err(error) => failures.push(BuildingFailureManifest {
+                    source_model: source,
+                    buildings: group
+                        .iter()
+                        .map(|building| building.rawcode.clone())
+                        .collect(),
+                    error: error.to_string(),
+                }),
+            }
+        }
+
+        let buildings = resolved
+            .iter()
+            .map(|building| BuildingManifest {
+                rawcode: building.rawcode.clone(),
+                name: building.name.clone(),
+                scale: building.scale,
+                requested_model: building.requested_model.clone(),
+                gltf: model_outputs
+                    .get(&building.source_model.to_ascii_lowercase())
+                    .cloned(),
+                source_model: building.source_model.clone(),
+                fallback_to_base_art: building.fallback_to_base_art,
+            })
+            .collect();
+
+        Ok(BuildingAssetManifest {
+            schema_version: 1,
+            castle_fight_catalog_version: CATALOG_VERSION,
+            wc3_version: self.wc3_version.clone(),
+            art_mode: "sd",
+            buildings,
             models,
             failures,
         })
@@ -737,6 +840,54 @@ impl Exporter {
         Ok(ResolvedUnit {
             rawcode: unit.rawcode.clone(),
             name: unit.name.clone(),
+            requested_model,
+            source_model,
+            fallback_to_base_art,
+            scale,
+        })
+    }
+
+    fn resolve_building(
+        &self,
+        building: &BuildingAssetSpec,
+    ) -> Result<ResolvedBuilding, Box<dyn Error>> {
+        let profile = self
+            .unit_skin
+            .get(&building.base_rawcode.to_ascii_lowercase());
+        let requested_model = building.model_path.as_deref().map(normalize_model_path);
+        let base_model = profile
+            .and_then(|profile| profile.file_sd.as_deref().or(profile.file.as_deref()))
+            .map(normalize_model_path);
+        let requested_available = requested_model
+            .as_deref()
+            .is_some_and(|path| self.model_exists(path));
+        let base_available = base_model
+            .as_deref()
+            .is_some_and(|path| self.model_exists(path));
+        let (source_model, fallback_to_base_art) = if requested_available {
+            (requested_model.clone().expect("checked above"), false)
+        } else if base_available {
+            (
+                base_model.clone().expect("checked above"),
+                requested_model.is_some(),
+            )
+        } else {
+            let requested = requested_model.as_deref().unwrap_or("<none>");
+            let base = base_model.as_deref().unwrap_or("<none>");
+            return Err(io::Error::other(format!(
+                "building {} ({}) has no install-resident model: requested {}, base profile {} -> {}",
+                building.rawcode, building.name, requested, building.base_rawcode, base
+            ))
+            .into());
+        };
+        let scale = building
+            .scale
+            .or_else(|| profile.and_then(|profile| profile.model_scale_sd))
+            .or_else(|| profile.and_then(|profile| profile.model_scale))
+            .unwrap_or(1.0);
+        Ok(ResolvedBuilding {
+            rawcode: building.rawcode.clone(),
+            name: building.name.clone(),
             requested_model,
             source_model,
             fallback_to_base_art,

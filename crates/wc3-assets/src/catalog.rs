@@ -15,6 +15,15 @@ pub struct UnitAssetSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BuildingAssetSpec {
+    pub rawcode: String,
+    pub base_rawcode: String,
+    pub name: String,
+    pub model_path: Option<String>,
+    pub scale: Option<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VisualAssetSpec {
     pub owner_kind: String,
     pub owner_rawcode: String,
@@ -55,6 +64,11 @@ pub struct DoodadPlacementSpec {
 
 pub fn load_embedded_units() -> Result<Vec<UnitAssetSpec>, Box<dyn Error>> {
     let json = include_str!(concat!(env!("OUT_DIR"), "/unit-assets.json"));
+    Ok(serde_json::from_str(json)?)
+}
+
+pub fn load_embedded_buildings() -> Result<Vec<BuildingAssetSpec>, Box<dyn Error>> {
+    let json = include_str!(concat!(env!("OUT_DIR"), "/building-assets.json"));
     Ok(serde_json::from_str(json)?)
 }
 
@@ -185,6 +199,23 @@ mod tests {
         );
         assert_eq!(parse_json_f32("0.65"), Some(0.65));
         assert_eq!(parse_json_f32(r#""0.9""#), Some(0.9));
+    }
+
+    #[test]
+    fn embedded_building_catalog_contains_current_native_slice() {
+        let buildings = load_embedded_buildings().expect("embedded building catalog loads");
+        let rawcodes: std::collections::BTreeSet<_> = buildings
+            .iter()
+            .map(|building| building.rawcode.as_str())
+            .collect();
+        for expected in [
+            "hcas", "h000", "h03D", "h02I", "h03K", "h015", "h006", "h07P",
+        ] {
+            assert!(
+                rawcodes.contains(expected),
+                "missing current building {expected}"
+            );
+        }
     }
 
     #[test]

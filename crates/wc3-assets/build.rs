@@ -19,6 +19,15 @@ struct UnitAssetSpec {
 }
 
 #[derive(Serialize)]
+struct BuildingAssetSpec {
+    rawcode: String,
+    base_rawcode: String,
+    name: String,
+    model_path: Option<String>,
+    scale: Option<f32>,
+}
+
+#[derive(Serialize)]
 struct DoodadAssetSpec {
     rawcode: String,
     base_rawcode: String,
@@ -78,9 +87,11 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let original_map = manifest_dir.join("../../docs/original_map");
     let resolved = original_map.join("extracted/resolved");
     let production_path = resolved.join("production-buildings.tsv");
+    let buildings_path = resolved.join("buildings.tsv");
     let object_fields_path = resolved.join("object-fields.tsv");
     let placed_doodads_path = resolved.join("placed-doodads.tsv");
     println!("cargo:rerun-if-changed={}", production_path.display());
+    println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
     println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
     let map_readme = original_map.join("README.md");
@@ -89,12 +100,17 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     println!("cargo:rustc-env=CF_ASSET_CATALOG_VERSION={catalog_version}");
 
     let units = load_production_units(&production_path, &object_fields_path)?;
+    let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
     let visuals = load_visual_assets(&object_fields_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
         out_dir.join("unit-assets.json"),
         serde_json::to_vec(&units)?,
+    )?;
+    fs::write(
+        out_dir.join("building-assets.json"),
+        serde_json::to_vec(&buildings)?,
     )?;
     fs::write(
         out_dir.join("doodad-assets.json"),
@@ -188,6 +204,79 @@ fn load_production_units(
         });
     }
     Ok(result)
+}
+
+fn load_buildings(
+    buildings_path: &std::path::Path,
+    object_fields_path: &std::path::Path,
+) -> Result<Vec<BuildingAssetSpec>, Box<dyn Error>> {
+    let mut buildings = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(buildings_path)?;
+    let building_headers = buildings.headers()?.clone();
+    let rawcode_col = header_index(&building_headers, "rawcode")?;
+    let base_rawcode_col = header_index(&building_headers, "base_rawcode")?;
+    let name_col = header_index(&building_headers, "name")?;
+
+    let mut specs = BTreeMap::<String, BuildingAssetSpec>::new();
+    for row in buildings.records() {
+        let row = row?;
+        let rawcode = required(&row, rawcode_col, "rawcode")?.to_owned();
+        specs
+            .entry(rawcode.clone())
+            .or_insert_with(|| BuildingAssetSpec {
+                base_rawcode: row
+                    .get(base_rawcode_col)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned(),
+                name: row.get(name_col).unwrap_or_default().trim().to_owned(),
+                rawcode,
+                model_path: None,
+                scale: None,
+            });
+    }
+
+    let mut fields = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(object_fields_path)?;
+    let headers = fields.headers()?.clone();
+    let category = header_index(&headers, "category")?;
+    let rawcode_field = header_index(&headers, "rawcode")?;
+    let field_id = header_index(&headers, "field_id")?;
+    let recovered = header_index(&headers, "recovered_value_json")?;
+    for row in fields.records() {
+        let row = row?;
+        if row.get(category) != Some("units") {
+            continue;
+        }
+        let Some(rawcode) = row.get(rawcode_field) else {
+            continue;
+        };
+        let Some(spec) = specs.get_mut(rawcode) else {
+            continue;
+        };
+        match row.get(field_id) {
+            Some("ifil") => {
+                spec.model_path = parse_json_string(row.get(recovered).unwrap_or_default());
+            }
+            Some("isca") => {
+                spec.scale = parse_json_f32(row.get(recovered).unwrap_or_default());
+            }
+            _ => {}
+        }
+    }
+
+    for building in specs.values() {
+        if building.base_rawcode.is_empty() {
+            return Err(format!(
+                "building {} ({}) has no resolved base rawcode",
+                building.rawcode, building.name
+            )
+            .into());
+        }
+    }
+    Ok(specs.into_values().collect())
 }
 
 fn load_placed_doodads(

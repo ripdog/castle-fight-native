@@ -1,8 +1,8 @@
 # Warcraft III asset extractor
 
-`cf-wc3-assets` converts Warcraft III presentation assets from a local installation into files Castle Fight Native can consume. It supports production-unit art, the doodads/destructables actually placed by Castle Fight, and map-referenced projectile/spell/buff visual models. The repository and game build do not contain Warcraft III art; extraction happens from the user's local installation.
+`cf-wc3-assets` converts Warcraft III presentation assets from a local installation into files Castle Fight Native can consume. It supports production-unit and building art, the doodads/destructables actually placed by Castle Fight, and map-referenced projectile/spell/buff visual models. The repository and game build do not contain Warcraft III art; extraction happens from the user's local installation.
 
-The production-unit, placed-doodad, and visual-effect catalogs are embedded in the executable at build time from the resolved Castle Fight map data. A released extractor therefore does not need the repository, the original map, or the large resolver TSV files at runtime.
+The production-unit, building, placed-doodad, and visual-effect catalogs are embedded in the executable at build time from the resolved Castle Fight map data. A released extractor therefore does not need the repository, the original map, or the large resolver TSV files at runtime.
 
 ## Usage
 
@@ -17,6 +17,24 @@ cf-wc3-assets \
 ```sh
 cf-wc3-assets --wc3 "$WC3_INSTALL" -o /tmp/cf-assets --unit hfoo --unit hrif
 ```
+
+To export building art, use `--buildings` for the complete resolved Castle Fight building catalog or repeat `--building RAWCODE` for a smaller pack. The current native slice is:
+
+```sh
+cargo run -p castle-fight-wc3-assets -- \
+  --wc3 "$WC3_INSTALL" \
+  --output assets/wc3/buildings \
+  --building hcas \
+  --building h000 \
+  --building h03D \
+  --building h02I \
+  --building h03K \
+  --building h015 \
+  --building h006 \
+  --building h07P
+```
+
+These are the Main Castle, five current production buildings, Watch Tower, and Poof Tower. The client loops a safe unupgraded `Stand*` sequence when one exists, which preserves ambient building motion such as flags while avoiding birth, work, upgrade, and death sequences. Future native building content only needs a matching rawcode in the generated building manifest; the renderer does not require another hardcoded model mapping.
 
 To export the map decorations for the native 3D client, use the doodad mode and the client's expected generated-asset directory:
 
@@ -45,7 +63,7 @@ Use `--keep-source` to retain the extracted MDX and original texture payloads be
 
 ## Castle Fight client integration
 
-The 3D client automatically looks for a generated unit pack at `assets/wc3/units/manifest.json`. The generated Warcraft files are gitignored, so they stay local to the player's installation. A useful first-pass pack for the current demo is:
+The 3D client automatically looks for generated unit and building packs at `assets/wc3/units/manifest.json` and `assets/wc3/buildings/manifest.json`. The generated Warcraft files are gitignored, so they stay local to the player's installation. A useful first-pass pack for the current demo is:
 
 ```sh
 cargo run -p castle-fight-wc3-assets -- \
@@ -58,13 +76,13 @@ cargo run -p castle-fight-wc3-assets -- \
   --unit h016
 ```
 
-Those rawcodes cover the complete current native unit slice: Footman, Ranger, Catapult, Ice Troll Shadow Priest, and Gryphon Rider. If a generated model is absent, the client silently retains its normal placeholder visual. The client selects stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates: unit-pack schema 4 includes per-geoset visibility animation, Bevy-compatible four-influence skins, and exported WC3 overhead attachment points used by status effects. The client deliberately rejects older packs so stale exports cannot keep rendering decay geometry, unsupported `JOINTS_1/WEIGHTS_1` data, or incorrect attachment metadata.
+Those rawcodes cover the complete current native unit slice: Footman, Ranger, Catapult, Ice Troll Shadow Priest, and Gryphon Rider. Buildings use the same rawcode-driven fallback behavior: if a generated unit or building model is absent, the client silently retains its normal placeholder visual. The client selects stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates: unit-pack schema 4 includes per-geoset visibility animation, Bevy-compatible four-influence skins, and exported WC3 overhead attachment points used by status effects. The client deliberately rejects older packs so stale exports cannot keep rendering decay geometry, unsupported `JOINTS_1/WEIGHTS_1` data, or incorrect attachment metadata.
 
 ## Output
 
-The output root contains `manifest.json`, `models/*.gltf`, matching `models/*.bin` buffers, and converted `textures/*.png` files. Unit entries in the manifest carry their rawcode, model path, model scale, converted glTF path, and whether install-resident base art had to replace a custom map model that is unavailable in a stock Warcraft III installation. Doodad manifests preserve every exact editor placement (position/Z, angle, X/Y/Z scale, variation, visibility/solid/fixed-Z flags) and the resolved glTF scene for that variation. Effect manifests bind unit/ability/buff rawcodes and art roles to converted scenes and retain Warcraft particle/ribbon emitter definitions beside each model because glTF has no native equivalent for those emitters.
+The output root contains `manifest.json`, `models/*.gltf`, matching `models/*.bin` buffers, and converted `textures/*.png` files. Unit and building entries in their manifests carry rawcode, model path, model scale, converted glTF path, and whether install-resident base art had to replace a custom map model that is unavailable in a stock Warcraft III installation. Doodad manifests preserve every exact editor placement (position/Z, angle, X/Y/Z scale, variation, visibility/solid/fixed-Z flags) and the resolved glTF scene for that variation. Effect manifests bind unit/ability/buff rawcodes and art roles to converted scenes and retain Warcraft particle/ribbon emitter definitions beside each model because glTF has no native equivalent for those emitters.
 
-Geometry is converted from Warcraft's Z-up coordinates to glTF/Bevy Y-up coordinates but remains in Warcraft world units. Consumers should apply the per-unit `scale` from `manifest.json` rather than baking scale into shared model geometry.
+Geometry is converted from Warcraft's Z-up coordinates to glTF/Bevy Y-up coordinates but remains in Warcraft world units. Consumers should apply the per-object `scale` from `manifest.json` rather than baking scale into shared model geometry.
 
 The extractor follows texture references from MDX files and handles modern installations where an SD model still names `foo.blp` but CASC contains the corresponding `foo.dds`. BLP, DDS, and TGA inputs are decoded to PNG. Shared model and texture outputs are deduplicated.
 
@@ -76,7 +94,7 @@ Warcraft `DontInterp` and linear transform tracks map directly to glTF step/line
 
 Warcraft multi-layer materials are flattened to one representative glTF material, with explicit metadata retained for runtime reconstruction where one layer is not enough. The exporter understands both legacy layer texture IDs and v1100+ sub-texture slots. WC3 `FilterMode None` layers whose decoded texture actually contains transparent pixels are exported as glTF alpha-mask materials; `Transparent` remains alpha-tested, while the native client restores additive, additive-alpha, blend, and modulate behavior from the retained WC3 filter mode. Doodad/destructable skin replaceable textures such as Ashenvale tree skins are resolved through `texID`/`texFile` and baked into the exported glTF material. Unit replaceable IDs 1 and 2 are handled specially: team-color underlays are reconstructed per side and team-glow layers use the corresponding stock red/blue glow texture. Other dynamic replaceables are not yet reproduced exactly. Node flags that disable inheritance of selected parent transforms also cannot be represented exactly by a normal glTF hierarchy and are reported as model warnings.
 
-Models imported into Castle Fight are not present in a vanilla Warcraft III installation. Unit/doodad extraction can fall back to corresponding install-resident base object art where available, while effect extraction can read exact imported models and textures when `--map` supplies the matching `.w3x`/MPQ archive. Missing custom references remain explicit failures in the generated manifest rather than being silently substituted with unrelated art.
+Models imported into Castle Fight are not present in a vanilla Warcraft III installation. Unit/building/doodad extraction can fall back to corresponding install-resident base object art where available, while map-backed extraction can read exact imported models and textures when `--map` supplies the matching `.w3x`/MPQ archive. Missing custom references remain explicit failures in the generated manifest rather than being silently substituted with unrelated art.
 
 For doodads, the native client only autoplays an emitted animation whose name is exactly `Stand` (case-insensitive), at half presentation speed. It deliberately ignores `Stand Hit`, numbered stand variants, destruction/death clips, and declared WC3 sequences that produced no glTF transform channels. This keeps ambient fish/birds/etc. moving without accidentally animating static walls or trees through hit/death states.
 

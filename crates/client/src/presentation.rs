@@ -17,6 +17,7 @@ use castle_fight_sim::{
 use crate::{
     SimulationPlayback,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
+    building_models::BuildingModelSet,
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
@@ -364,6 +365,14 @@ struct ImportedUnitModelRoot {
 }
 
 #[derive(Component, Debug, Clone, Copy)]
+struct ImportedBuildingModelRoot {
+    rawcode: u32,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+struct ImportedBuildingAnimationController;
+
+#[derive(Component, Debug, Clone, Copy)]
 struct ImportedDeathRemnant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -449,6 +458,7 @@ impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
             .init_resource::<UnitModelSet>()
+            .init_resource::<BuildingModelSet>()
             .init_resource::<Wc3VisualSet>()
             .init_resource::<FpsDisplay>()
             .init_resource::<DeathRemnants>()
@@ -470,9 +480,11 @@ impl Plugin for CastlePresentationPlugin {
                     toggle_debug_controls,
                     update_camera,
                     prepare_unit_model_animations,
+                    prepare_building_model_animations,
                     sync_render_entities,
                     fix_wc3_scene_materials,
                     setup_imported_unit_animation_players,
+                    setup_imported_building_animation_players,
                     trigger_attack_animations,
                     update_imported_unit_animations,
                     spawn_miss_indicators,
@@ -511,6 +523,7 @@ impl Plugin for CastlePresentationPlugin {
 fn setup_scene(
     mut commands: Commands,
     mut unit_models: ResMut<UnitModelSet>,
+    mut building_models: ResMut<BuildingModelSet>,
     mut wc3_visuals: ResMut<Wc3VisualSet>,
     world: (
         Res<WorldMetrics>,
@@ -528,6 +541,7 @@ fn setup_scene(
     let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
     let (asset_server, mut meshes, mut materials) = assets;
     *unit_models = UnitModelSet::load_default(&asset_server);
+    *building_models = BuildingModelSet::load_default(&asset_server);
     *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
     let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
     health_bar_config.line.width = 6.0;
@@ -780,6 +794,15 @@ fn prepare_unit_model_animations(
     unit_models.prepare_animations(&gltfs, &animation_clips, &mut graphs);
 }
 
+fn prepare_building_model_animations(
+    mut building_models: ResMut<BuildingModelSet>,
+    gltfs: Res<Assets<Gltf>>,
+    animation_clips: Res<Assets<AnimationClip>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+) {
+    building_models.prepare_animations(&gltfs, &animation_clips, &mut graphs);
+}
+
 fn spawn_unit_weapon(
     commands: &mut Commands,
     assets: &PresentationAssets,
@@ -948,6 +971,53 @@ fn setup_imported_unit_animation_players(
             },
         ));
     }
+}
+
+fn setup_imported_building_animation_players(
+    mut commands: Commands,
+    building_models: Res<BuildingModelSet>,
+    parents: Query<&ChildOf>,
+    roots: Query<&ImportedBuildingModelRoot>,
+    mut players: Query<
+        (Entity, &mut AnimationPlayer),
+        Without<ImportedBuildingAnimationController>,
+    >,
+) {
+    for (entity, mut player) in &mut players {
+        let Some(root) = imported_building_model_root(entity, &parents, &roots) else {
+            continue;
+        };
+        let Some(animation) = building_models.animation(root.rawcode) else {
+            continue;
+        };
+        let mut transitions = AnimationTransitions::new();
+        transitions
+            .play(&mut player, animation.stand, Duration::ZERO)
+            .repeat();
+        commands.entity(entity).insert((
+            AnimationGraphHandle(animation.graph.clone()),
+            transitions,
+            ImportedBuildingAnimationController,
+        ));
+    }
+}
+
+fn imported_building_model_root(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&ImportedBuildingModelRoot>,
+) -> Option<ImportedBuildingModelRoot> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(root) = roots.get(current) {
+            return Some(*root);
+        }
+        let Ok(parent) = parents.get(current) else {
+            return None;
+        };
+        current = parent.parent();
+    }
+    None
 }
 
 fn imported_model_root(
@@ -1576,6 +1646,7 @@ type SyncRenderWorld<'w> = (
     Res<'w, TerrainSurface>,
     Res<'w, PresentationAssets>,
     Res<'w, UnitModelSet>,
+    Res<'w, BuildingModelSet>,
     Res<'w, Wc3VisualSet>,
 );
 
@@ -1594,7 +1665,7 @@ fn sync_render_entities(
     mut render_map: ResMut<RenderMap>,
     effects: SyncRenderEffects<'_>,
 ) {
-    let (metrics, terrain, assets, unit_models, wc3_visuals) = world;
+    let (metrics, terrain, assets, unit_models, building_models, wc3_visuals) = world;
     let (
         mut remnants,
         mut projectile_impacts,
@@ -1897,21 +1968,40 @@ fn sync_render_entities(
                 Visibility::default(),
             ))
             .id();
-        spawn_building_visual(
-            &mut commands,
-            &assets,
-            entity,
-            building,
-            size,
-            visual_height,
-        );
+        let imported_model = building.content.and_then(|content| {
+            building_models
+                .get(content.rawcode)
+                .map(|model| (content.rawcode, model))
+        });
+        let imported_rawcode = if let Some((rawcode, model)) = imported_model {
+            commands.entity(entity).with_child((
+                WorldAssetRoot(model.scene.clone()),
+                ImportedBuildingModelRoot { rawcode },
+                Transform {
+                    translation: Vec3::NEG_Y * visual_height * 0.5,
+                    scale: Vec3::splat(model.scale),
+                    ..default()
+                },
+            ));
+            Some(rawcode)
+        } else {
+            spawn_building_visual(
+                &mut commands,
+                &assets,
+                entity,
+                building,
+                size,
+                visual_height,
+            );
+            None
+        };
         render_map.buildings.insert(
             building.id,
             PresentedEntry {
                 entity,
                 weapon: None,
                 max_health_seen: building.health.max(1),
-                imported_rawcode: None,
+                imported_rawcode,
             },
         );
     }

@@ -1,5 +1,6 @@
 mod bridge;
 mod build_ui;
+mod building_models;
 mod demo;
 mod doodads;
 mod inspection;

@@ -10,7 +10,8 @@ use std::{
 };
 
 use catalog::{
-    load_embedded_doodads, load_embedded_units, load_embedded_visuals, load_production_units,
+    load_embedded_buildings, load_embedded_doodads, load_embedded_units, load_embedded_visuals,
+    load_production_units,
 };
 use export::Exporter;
 
@@ -52,7 +53,9 @@ fn run() -> Result<(), Box<dyn Error>> {
     verify_install(&wc3_install)?;
 
     if args.effects {
-        if args.doodads
+        if args.buildings
+            || !args.building_filters.is_empty()
+            || args.doodads
             || !args.doodad_filters.is_empty()
             || args.production.is_some()
             || args.object_fields.is_some()
@@ -60,7 +63,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--effects cannot be combined with unit or doodad options",
+                "--effects cannot be combined with unit, building, or doodad options",
             )
             .into());
         }
@@ -87,6 +90,82 @@ fn run() -> Result<(), Box<dyn Error>> {
             output.display(),
             manifest.failures.len()
         );
+        return Ok(());
+    }
+
+    if args.buildings || !args.building_filters.is_empty() {
+        if args.doodads
+            || !args.doodad_filters.is_empty()
+            || args.production.is_some()
+            || args.object_fields.is_some()
+            || !args.units.is_empty()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--buildings/--building cannot be combined with unit or doodad options",
+            )
+            .into());
+        }
+        let mut buildings = load_embedded_buildings()?;
+        if !args.building_filters.is_empty() {
+            let requested: BTreeSet<_> = args.building_filters.iter().map(String::as_str).collect();
+            let available: BTreeSet<_> = buildings
+                .iter()
+                .map(|building| building.rawcode.as_str())
+                .collect();
+            let unknown: Vec<_> = requested.difference(&available).copied().collect();
+            if !unknown.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "requested building rawcode(s) not in resolved building catalog: {}",
+                        unknown.join(", ")
+                    ),
+                )
+                .into());
+            }
+            buildings.retain(|building| requested.contains(building.rawcode.as_str()));
+        }
+        println!(
+            "Extracting {} Castle Fight building asset definition(s) from {}",
+            buildings.len(),
+            wc3_install.display()
+        );
+        let mut exporter = Exporter::open(
+            &wc3_install,
+            args.map_archive.as_deref(),
+            &output,
+            args.keep_source,
+        )?;
+        let manifest = exporter.export_buildings(&buildings)?;
+        fs::write(
+            output.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+        println!(
+            "Exported {} unique model(s) for {} building(s) to {}",
+            manifest.models.len(),
+            manifest.buildings.len(),
+            output.display()
+        );
+        if !manifest.failures.is_empty() {
+            eprintln!(
+                "{} building model(s) could not be exported:",
+                manifest.failures.len()
+            );
+            for failure in &manifest.failures {
+                eprintln!(
+                    "  {} (buildings {}): {}",
+                    failure.source_model,
+                    failure.buildings.join(","),
+                    failure.error
+                );
+            }
+            return Err(io::Error::other(
+                "building asset extraction completed with model failures; see manifest.json",
+            )
+            .into());
+        }
         return Ok(());
     }
 
@@ -255,6 +334,8 @@ struct Args {
     production: Option<PathBuf>,
     object_fields: Option<PathBuf>,
     units: Vec<String>,
+    buildings: bool,
+    building_filters: Vec<String>,
     doodads: bool,
     doodad_filters: Vec<String>,
     effects: bool,
@@ -272,6 +353,8 @@ impl Args {
             production: None,
             object_fields: None,
             units: Vec::new(),
+            buildings: false,
+            building_filters: Vec::new(),
             doodads: false,
             doodad_filters: Vec::new(),
             effects: false,
@@ -285,6 +368,7 @@ impl Args {
             match args[i].as_str() {
                 "-h" | "--help" => result.help = true,
                 "--keep-source" => result.keep_source = true,
+                "--buildings" => result.buildings = true,
                 "--doodads" => result.doodads = true,
                 "--effects" => result.effects = true,
                 "--wc3" => result.wc3_install = Some(PathBuf::from(value(&args, &mut i, "--wc3")?)),
@@ -302,6 +386,9 @@ impl Args {
                 "--unit" => result
                     .units
                     .push(value(&args, &mut i, "--unit")?.to_owned()),
+                "--building" => result
+                    .building_filters
+                    .push(value(&args, &mut i, "--building")?.to_owned()),
                 "--doodad" => result
                     .doodad_filters
                     .push(value(&args, &mut i, "--doodad")?.to_owned()),
@@ -344,6 +431,8 @@ Options:
   --map PATH            Optional Warcraft III map archive for map-imported assets
   -o, --output PATH     Destination directory for converted assets
   --unit RAWCODE        Export one production unit; repeat for more units
+  --buildings           Export every resolved Castle Fight building model
+  --building RAWCODE    Export one building; repeat for more buildings
   --doodads             Export every doodad/destructable placed by Castle Fight
   --effects             Export projectile/spell/buff models referenced by Castle Fight
   --doodad RAWCODE      Export one placed doodad type; repeat for more types
@@ -354,9 +443,10 @@ Options:
   -h, --help            Show this help
 
 With no --unit filters, every production unit in the resolved Castle Fight
-catalog is exported. Use --doodads (or --doodad RAWCODE) for map decoration
-assets and exact placements. Use --effects for the visual-effects catalog. Models shared
-by multiple objects are converted once. Particle/ribbon metadata is retained in the model
+catalog is exported. Use --buildings (or --building RAWCODE) for structures and towers,
+--doodads (or --doodad RAWCODE) for map decoration assets and exact placements, and
+--effects for the visual-effects catalog. Models shared by multiple objects are converted
+once. Particle/ribbon metadata is retained in the model
 manifest for native presentation even though glTF has no particle-emitter primitive. When
 --map is supplied, map-imported models/textures override install assets and are extracted too.
 "
@@ -380,6 +470,27 @@ mod tests {
         assert_eq!(args.units, ["hfoo", "hrif"]);
         assert_eq!(args.art_mode, "sd");
         assert!(args.map_archive.is_none());
+    }
+
+    #[test]
+    fn building_filter_implies_building_export_mode() {
+        let args = Args::parse(
+            [
+                "--wc3",
+                "/game",
+                "--output",
+                "/out",
+                "--building",
+                "h000",
+                "--building",
+                "h006",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .unwrap();
+        assert!(!args.buildings);
+        assert_eq!(args.building_filters, ["h000", "h006"]);
     }
 
     #[test]
