@@ -666,21 +666,103 @@ mod tests {
         sim.step();
         sim.step();
         assert_eq!(sim.unit(first).unwrap().health, 900);
-        assert_eq!(sim.unit(second).unwrap().health, 950);
-        assert_eq!(sim.unit(third).unwrap().health, 975);
+        assert_eq!(sim.unit(second).unwrap().health, 1_000);
+        assert_eq!(sim.unit(third).unwrap().health, 1_000);
         let events = sim.chain_lightnings_last_tick();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].source, source);
         assert_eq!(events[0].ability, AbilityId(u32::from_be_bytes(*b"CHLN")));
         assert_eq!(
             events[0].points(),
-            &[
-                SimPoint::new(40 * world, 0),
-                SimPoint::new(41 * world, 0),
-                SimPoint::new(43 * world, 0),
-                SimPoint::new(45 * world, 0),
-            ]
+            &[SimPoint::new(40 * world, 0), SimPoint::new(41 * world, 0)]
         );
+
+        while sim.tick() <= 8 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(second).unwrap().health, 1_000);
+        sim.step();
+        assert_eq!(sim.unit(second).unwrap().health, 950);
+        assert_eq!(sim.unit(third).unwrap().health, 1_000);
+        assert_eq!(
+            sim.chain_lightnings_last_tick()[0].points(),
+            &[SimPoint::new(41 * world, 0), SimPoint::new(43 * world, 0)]
+        );
+
+        while sim.tick() <= 15 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(third).unwrap().health, 1_000);
+        sim.step();
+        assert_eq!(sim.unit(third).unwrap().health, 975);
+        assert_eq!(
+            sim.chain_lightnings_last_tick()[0].points(),
+            &[SimPoint::new(43 * world, 0), SimPoint::new(45 * world, 0)]
+        );
+    }
+
+    #[test]
+    fn staged_chain_lightning_is_worker_count_independent() {
+        let build_sim = |workers| {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let mut sim = Simulation::new(SimulationConfig::default(), workers);
+            let attack = AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 4 * world,
+                acquisition_range: 8 * world,
+                cooldown_ticks: 100,
+            };
+            sim.spawn_unit_with_properties(
+                UnitSpawn {
+                    team: Team(0),
+                    position: SimPoint::new(40 * world, 0),
+                    health: 100,
+                    attack,
+                    movement: MovementProfile { speed_per_tick: 0 },
+                },
+                UnitGameplayProperties {
+                    passive_effects: PassiveUnitEffects::single(
+                        PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                            ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
+                            chance_per_10k: 10_000,
+                            targets: AttackTargetMask::GROUND_UNITS,
+                            effect: TriggeredAttackEffect::ChainLightning(
+                                ChainLightningEffectProfile {
+                                    ability: AbilityId(u32::from_be_bytes(*b"CHLN")),
+                                    initial_damage: 100,
+                                    maximum_targets: 3,
+                                    jump_radius: 3 * world,
+                                    damage_reduction_per_10k: 5_000,
+                                    targets: AttackTargetMask::GROUND_UNITS,
+                                },
+                            ),
+                        }),
+                    ),
+                    ..UnitGameplayProperties::default()
+                },
+            );
+            sim.spawn_unit(duel_unit(1, 41 * world, 0, 1_000));
+            sim.spawn_unit(duel_unit(1, 43 * world, 0, 1_000));
+            sim.spawn_unit(duel_unit(1, 45 * world, 0, 1_000));
+            sim
+        };
+
+        let mut single = build_sim(1);
+        let mut parallel = build_sim(4);
+        for tick in 0..20 {
+            let single_result = single.step();
+            let parallel_result = parallel.step();
+            assert_eq!(
+                single_result.checksum, parallel_result.checksum,
+                "staged Chain Lightning diverged on tick {tick}"
+            );
+            assert_eq!(
+                single.chain_lightnings_last_tick(),
+                parallel.chain_lightnings_last_tick(),
+                "Chain Lightning events diverged on tick {tick}"
+            );
+        }
     }
 
     #[test]

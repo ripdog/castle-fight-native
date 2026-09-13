@@ -20,9 +20,9 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, BurningOilZone, CollisionRadius,
-        ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile,
-        GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        BuildingGameplayProperties, BuildingSpawn, BurningOilZone, ChainLightningState,
+        CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer,
+        CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
         MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
         ManaState, ModifierId, MovementClass, MovementProfile, NavigationGoal, NavigationState,
         PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
@@ -960,6 +960,98 @@ impl Simulation {
         let mut attackers_this_tick = vec![None; units.len()];
         let mut next_defense_alerts = Vec::new();
 
+        let mut chain_query = self.world.query::<(Entity, &SimId, &ChainLightningState)>();
+        let mut due_chain_lightnings: Vec<_> = chain_query
+            .iter(&self.world)
+            .filter_map(|(entity, id, state)| {
+                (chain_lightning_jump_due_tick(state.started_tick, state.next_jump_index)
+                    <= completed_tick)
+                    .then_some((entity, *id, *state))
+            })
+            .collect();
+        due_chain_lightnings.sort_unstable_by_key(|(_, id, _)| *id);
+        let mut chain_lightning_updates = Vec::new();
+        let mut chain_lightning_entities_to_remove = Vec::new();
+        for (entity, _, mut state) in due_chain_lightnings {
+            let origin = find_unit_index(&units, state.current_target)
+                .filter(|index| unit_health[*index] > 0)
+                .map_or(state.last_position, |index| positions[index]);
+            let radius_sq = square_i32(state.profile.jump_radius);
+            let hit_count = usize::from(state.hit_count);
+            let next = units
+                .iter()
+                .enumerate()
+                .filter(|(candidate_index, candidate)| {
+                    unit_health[*candidate_index] > 0
+                        && candidate.team != state.source_team
+                        && state
+                            .profile
+                            .targets
+                            .can_target_unit(candidate.movement_class)
+                        && !state.hit_targets[..hit_count].contains(&candidate.id)
+                        && origin.distance_sq(positions[*candidate_index]) <= radius_sq
+                })
+                .min_by_key(|(candidate_index, candidate)| {
+                    (
+                        origin.distance_sq(positions[*candidate_index]),
+                        candidate.id,
+                    )
+                })
+                .map(|(candidate_index, _)| candidate_index);
+            let Some(next_index) = next else {
+                chain_lightning_entities_to_remove.push(entity);
+                continue;
+            };
+
+            let adjusted = self
+                .combat_rules
+                .damage_rules
+                .apply_spell(state.next_damage, units[next_index].armor.armor_type);
+            unit_health[next_index] = unit_health[next_index]
+                .checked_sub(adjusted)
+                .expect("Chain Lightning damage overflow");
+            let next_position = positions[next_index];
+            let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
+            points[0] = origin;
+            points[1] = next_position;
+            self.last_chain_lightnings.push(ChainLightningEvent {
+                source: state.source,
+                ability: state.profile.ability,
+                points,
+                point_count: 2,
+            });
+
+            let hit_index = usize::from(state.hit_count);
+            debug_assert!(hit_index < MAX_BOUNCE_HITS);
+            state.hit_targets[hit_index] = units[next_index].id;
+            state.hit_count = state
+                .hit_count
+                .checked_add(1)
+                .expect("Chain Lightning hit count overflow");
+            state.current_target = units[next_index].id;
+            state.last_position = next_position;
+
+            if usize::from(state.hit_count)
+                >= usize::from(state.profile.maximum_targets).min(MAX_BOUNCE_HITS)
+            {
+                chain_lightning_entities_to_remove.push(entity);
+                continue;
+            }
+            state.next_damage = scaled_chain_lightning_damage(
+                state.next_damage,
+                state.profile.damage_reduction_per_10k,
+            );
+            if state.next_damage <= 0 {
+                chain_lightning_entities_to_remove.push(entity);
+                continue;
+            }
+            state.next_jump_index = state
+                .next_jump_index
+                .checked_add(1)
+                .expect("Chain Lightning jump index overflow");
+            chain_lightning_updates.push((entity, state));
+        }
+
         let phase_start = Instant::now();
         let due_projectiles = self.snapshot_due_projectiles();
         let due_bounce_projectiles = self.snapshot_due_bounce_projectiles();
@@ -986,6 +1078,7 @@ impl Simulation {
         let mut ballistic_candidate_checks = 0usize;
         let mut bounce_jumps = 0usize;
         let mut bounce_candidate_checks = 0usize;
+        let mut chain_lightning_launches = Vec::new();
         for snapshot in due_target_projectiles {
             match snapshot {
                 DueTargetProjectileSnapshot::GuaranteedHit(snapshot) => {
@@ -1016,7 +1109,7 @@ impl Simulation {
                     )
                     .is_some()
                     {
-                        if let Some(event) = apply_pending_attack_effects(
+                        let pending = apply_pending_attack_effects(
                             target,
                             snapshot.projectile.on_hit,
                             PendingAttackEffectSource {
@@ -1030,8 +1123,12 @@ impl Simulation {
                                 unit_health: &mut unit_health,
                                 damage_rules: self.combat_rules.damage_rules,
                             },
-                        ) {
+                        );
+                        if let Some(event) = pending.chain_event {
                             self.last_chain_lightnings.push(event);
+                        }
+                        if let Some(state) = pending.chain_state {
+                            chain_lightning_launches.push(state);
                         }
                         projectile_impacts += 1;
                         projectile_effects += 1;
@@ -1189,7 +1286,7 @@ impl Simulation {
                             },
                         );
                         debug_assert!(applied.is_some());
-                        if let Some(event) = apply_pending_attack_effects(
+                        let pending = apply_pending_attack_effects(
                             intent.target,
                             on_hit,
                             PendingAttackEffectSource {
@@ -1203,8 +1300,12 @@ impl Simulation {
                                 unit_health: &mut unit_health,
                                 damage_rules: self.combat_rules.damage_rules,
                             },
-                        ) {
+                        );
+                        if let Some(event) = pending.chain_event {
                             self.last_chain_lightnings.push(event);
+                        }
+                        if let Some(state) = pending.chain_state {
+                            chain_lightning_launches.push(state);
                         }
                         if let (
                             AttackSourceIndex::Unit(source_index),
@@ -1445,6 +1546,18 @@ impl Simulation {
         let ballistic_impact = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        for entity in chain_lightning_entities_to_remove {
+            self.world.despawn(entity);
+        }
+        for (entity, state) in chain_lightning_updates {
+            if let Some(mut stored) = self
+                .world
+                .entity_mut(entity)
+                .get_mut::<ChainLightningState>()
+            {
+                *stored = state;
+            }
+        }
         for entity in projectile_entities_to_remove {
             self.world.despawn(entity);
         }
@@ -1468,6 +1581,10 @@ impl Simulation {
                     pulse_index: 1,
                 },
             ));
+        }
+        for state in chain_lightning_launches {
+            let id = self.allocate_id();
+            self.world.spawn((id, state));
         }
         for launch in projectile_launches {
             let id = self.allocate_id();
@@ -6246,12 +6363,18 @@ struct PendingAttackEffectState<'a> {
     damage_rules: DamageRules,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct PendingAttackEffectResult {
+    chain_event: Option<ChainLightningEvent>,
+    chain_state: Option<ChainLightningState>,
+}
+
 fn apply_pending_attack_effects(
     target: TargetIndex,
     effects: PendingAttackEffects,
     source: PendingAttackEffectSource,
     state: PendingAttackEffectState<'_>,
-) -> Option<ChainLightningEvent> {
+) -> PendingAttackEffectResult {
     let PendingAttackEffectState {
         completed_tick,
         units,
@@ -6259,10 +6382,10 @@ fn apply_pending_attack_effects(
         damage_rules,
     } = state;
     let TargetIndex::Unit(index) = target else {
-        return None;
+        return PendingAttackEffectResult::default();
     };
     if unit_health[index] <= 0 {
-        return None;
+        return PendingAttackEffectResult::default();
     }
     if effects.stun_duration_ticks > 0 {
         let stunned_until_tick = completed_tick
@@ -6273,72 +6396,50 @@ fn apply_pending_attack_effects(
             .stunned_until_tick
             .max(stunned_until_tick);
     }
-    let mut chain_lightning = None;
+    let mut result = PendingAttackEffectResult::default();
     if let Some(effect) = effects.triggered_spell {
         match effect {
             TriggeredAttackEffect::ChainLightning(profile) => {
-                let mut hit = [SimId(0); MAX_BOUNCE_HITS];
-                let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
-                points[0] = source.position;
                 let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);
-                let mut point_count = 1usize;
                 if max_targets > 0 {
-                    let mut current_index = index;
-                    let mut damage = profile.initial_damage;
-                    for hit_index in 0..max_targets {
-                        if unit_health[current_index] <= 0 {
-                            break;
-                        }
-                        let adjusted =
-                            damage_rules.apply_spell(damage, units[current_index].armor.armor_type);
-                        unit_health[current_index] = unit_health[current_index]
-                            .checked_sub(adjusted)
-                            .expect("Chain Lightning damage overflow");
-                        hit[hit_index] = units[current_index].id;
-                        points[point_count] = units[current_index].position;
-                        point_count += 1;
-                        if hit_index + 1 >= max_targets {
-                            break;
-                        }
-                        let origin = units[current_index].position;
-                        let radius_sq = square_i32(profile.jump_radius);
-                        let next = units
-                            .iter()
-                            .enumerate()
-                            .filter(|(candidate_index, candidate)| {
-                                unit_health[*candidate_index] > 0
-                                    && candidate.team != source.team
-                                    && profile.targets.can_target_unit(candidate.movement_class)
-                                    && !hit[..=hit_index].contains(&candidate.id)
-                                    && origin.distance_sq(candidate.position) <= radius_sq
-                            })
-                            .min_by_key(|(_, candidate)| {
-                                (origin.distance_sq(candidate.position), candidate.id)
-                            })
-                            .map(|(candidate_index, _)| candidate_index);
-                        let Some(next_index) = next else {
-                            break;
-                        };
-                        damage = i32::try_from(
-                            i64::from(damage)
-                                * i64::from(10_000 - profile.damage_reduction_per_10k)
-                                / 10_000,
-                        )
-                        .expect("Chain Lightning damage scaling overflow");
-                        if damage <= 0 {
-                            break;
-                        }
-                        current_index = next_index;
-                    }
-                }
-                if point_count > 1 {
-                    chain_lightning = Some(ChainLightningEvent {
+                    let adjusted = damage_rules
+                        .apply_spell(profile.initial_damage, units[index].armor.armor_type);
+                    unit_health[index] = unit_health[index]
+                        .checked_sub(adjusted)
+                        .expect("Chain Lightning damage overflow");
+
+                    let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
+                    points[0] = source.position;
+                    points[1] = units[index].position;
+                    result.chain_event = Some(ChainLightningEvent {
                         source: source.id,
                         ability: profile.ability,
                         points,
-                        point_count: u8::try_from(point_count)
-                            .expect("Chain Lightning point count fits in u8"),
+                        point_count: 2,
                     });
+
+                    if max_targets > 1 {
+                        let next_damage = scaled_chain_lightning_damage(
+                            profile.initial_damage,
+                            profile.damage_reduction_per_10k,
+                        );
+                        if next_damage > 0 {
+                            let mut hit_targets = [SimId(0); MAX_BOUNCE_HITS];
+                            hit_targets[0] = units[index].id;
+                            result.chain_state = Some(ChainLightningState {
+                                source: source.id,
+                                source_team: source.team,
+                                profile,
+                                started_tick: completed_tick,
+                                next_jump_index: 1,
+                                current_target: units[index].id,
+                                last_position: units[index].position,
+                                next_damage,
+                                hit_targets,
+                                hit_count: 1,
+                            });
+                        }
+                    }
                 }
             }
             TriggeredAttackEffect::EntanglingRoots(profile) => {
@@ -6367,7 +6468,7 @@ fn apply_pending_attack_effects(
             }
         }
     }
-    chain_lightning
+    result
 }
 
 fn apply_ability_effect_to_unit(
@@ -6847,6 +6948,28 @@ fn scaled_bounce_damage(damage: i32, percent: u16) -> i32 {
         .expect("bounce damage scaling overflowed validated bounds")
 }
 
+fn scaled_chain_lightning_damage(damage: i32, reduction_per_10k: u16) -> i32 {
+    debug_assert!(reduction_per_10k <= ATTACK_PROC_CHANCE_SCALE);
+    i32::try_from(
+        i64::from(damage) * i64::from(ATTACK_PROC_CHANCE_SCALE - reduction_per_10k)
+            / i64::from(ATTACK_PROC_CHANCE_SCALE),
+    )
+    .expect("Chain Lightning damage scaling overflow")
+}
+
+fn chain_lightning_jump_due_tick(started_tick: u64, jump_index: u8) -> u64 {
+    debug_assert!(jump_index > 0);
+    let elapsed_ticks = u64::from(jump_index)
+        .checked_mul(
+            u64::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz must be positive"),
+        )
+        .expect("Chain Lightning jump timing overflow")
+        .div_ceil(4);
+    started_tick
+        .checked_add(elapsed_ticks)
+        .expect("Chain Lightning due tick overflow")
+}
+
 fn deterministic_random(seed: u64, tick: u64, entity: SimId, purpose: u64, index: u64) -> u64 {
     let state = splitmix64(seed ^ tick.rotate_left(17));
     let state = splitmix64(state ^ entity.0.rotate_left(31));
@@ -7130,6 +7253,12 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 return Some(CanonicalEntity::BurningOil(CanonicalBurningOil {
                     id,
                     zone: *zone,
+                }));
+            }
+            if let Some(state) = entity.get::<ChainLightningState>() {
+                return Some(CanonicalEntity::ChainLightning(CanonicalChainLightning {
+                    id,
+                    state: *state,
                 }));
             }
             if let Some(corpse) = entity.get::<Corpse>() {
@@ -7507,6 +7636,28 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(zone.zone.created_tick);
                 hash.write_u16(zone.zone.pulse_index);
             }
+            CanonicalEntity::ChainLightning(chain) => {
+                hash.write_u8(7);
+                hash.write_u64(chain.id.0);
+                hash.write_u64(chain.state.source.0);
+                hash.write_u8(chain.state.source_team.0);
+                hash.write_u64(u64::from(chain.state.profile.ability.0));
+                hash.write_i32(chain.state.profile.initial_damage);
+                hash.write_u8(chain.state.profile.maximum_targets);
+                hash.write_i32(chain.state.profile.jump_radius);
+                hash.write_u16(chain.state.profile.damage_reduction_per_10k);
+                hash.write_u8(chain.state.profile.targets.bits());
+                hash.write_u64(chain.state.started_tick);
+                hash.write_u8(chain.state.next_jump_index);
+                hash.write_u64(chain.state.current_target.0);
+                hash.write_i32(chain.state.last_position.x);
+                hash.write_i32(chain.state.last_position.y);
+                hash.write_i32(chain.state.next_damage);
+                hash.write_u8(chain.state.hit_count);
+                for target in chain.state.hit_targets {
+                    hash.write_u64(target.0);
+                }
+            }
         }
     }
 
@@ -7542,6 +7693,7 @@ enum CanonicalEntity {
     BounceProjectile(CanonicalBounceProjectile),
     Corpse(CanonicalCorpse),
     BurningOil(CanonicalBurningOil),
+    ChainLightning(CanonicalChainLightning),
 }
 
 impl CanonicalEntity {
@@ -7554,6 +7706,7 @@ impl CanonicalEntity {
             Self::BounceProjectile(projectile) => projectile.id,
             Self::Corpse(corpse) => corpse.id,
             Self::BurningOil(zone) => zone.id,
+            Self::ChainLightning(chain) => chain.id,
         }
     }
 }
@@ -7643,6 +7796,12 @@ struct CanonicalCorpse {
 struct CanonicalBurningOil {
     id: SimId,
     zone: BurningOilZone,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CanonicalChainLightning {
+    id: SimId,
+    state: ChainLightningState,
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {

@@ -654,6 +654,20 @@ pub(crate) struct BurningOilZone {
     pub pulse_index: u16,
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ChainLightningState {
+    pub source: SimId,
+    pub source_team: Team,
+    pub profile: ChainLightningEffectProfile,
+    pub started_tick: u64,
+    pub next_jump_index: u8,
+    pub current_target: SimId,
+    pub last_position: SimPoint,
+    pub next_damage: i32,
+    pub hit_targets: [SimId; MAX_BOUNCE_HITS],
+    pub hit_count: u8,
+}
+
 pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 8;
 pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
