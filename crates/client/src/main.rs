@@ -3,6 +3,7 @@ mod build_ui;
 mod demo;
 mod inspection;
 mod presentation;
+mod terrain;
 
 use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
@@ -17,6 +18,7 @@ use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
 use demo::{create_demo_world, demo_corpse_profile, production_structure};
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
+use terrain::TerrainSurface;
 
 const SIMULATION_HZ: f64 = 30.0;
 
@@ -43,6 +45,7 @@ fn main() {
         })
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
+        .insert_resource(TerrainSurface::new(demo.terrain))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Castle Fight Native 3D".into(),

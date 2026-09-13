@@ -13,8 +13,9 @@ use castle_fight_sim::{
     SimPoint, SimulationConfig, Team,
 };
 
-use crate::bridge::{
-    BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind,
+use crate::{
+    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
+    terrain::TerrainSurface,
 };
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
@@ -36,6 +37,8 @@ const GUN_RECOIL_SECONDS: f32 = 0.16;
 const UNIT_WALK_BOB_HEIGHT: f32 = 0.55;
 const UNIT_WALK_PHASE_PER_TICK: f32 = 0.58;
 const UNIT_FACING_RESPONSE: f32 = 14.0;
+const MISS_INDICATOR_SECONDS: f32 = 1.0;
+const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -289,6 +292,13 @@ struct WeaponPresentation {
     elapsed: Option<f32>,
 }
 
+#[derive(Component)]
+struct MissIndicator {
+    target: SimId,
+    fallback_position: SimPoint,
+    remaining: f32,
+}
+
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct HealthBarGizmos;
 
@@ -325,7 +335,9 @@ impl Plugin for CastlePresentationPlugin {
                     update_camera,
                     sync_render_entities,
                     trigger_attack_animations,
+                    spawn_miss_indicators,
                     interpolate_render_transforms,
+                    update_miss_indicators,
                     animate_unit_weapons,
                     age_death_remnants,
                     age_projectile_impacts,
@@ -342,6 +354,7 @@ impl Plugin for CastlePresentationPlugin {
 fn setup_scene(
     mut commands: Commands,
     metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut gizmo_configs: ResMut<GizmoConfigStore>,
@@ -506,18 +519,19 @@ fn setup_scene(
         neutral_corpse_material,
     });
 
-    let world_size = metrics.world_size();
-    let world_center = metrics.world_center();
-    let ground_mesh = meshes.add(Cuboid::new(world_size.x, 1.0, world_size.y));
+    let world_size = terrain.world_size();
+    let mut world_center = metrics.world_center();
+    world_center.y = terrain.height_at_world(world_center.xz());
+    let ground_mesh = meshes.add(terrain.mesh());
     let ground_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.16, 0.18, 0.15),
-        perceptual_roughness: 1.0,
+        base_color: Color::srgb(0.16, 0.20, 0.13),
+        perceptual_roughness: 0.95,
         ..default()
     });
     commands.spawn((
         Mesh3d(ground_mesh),
         MeshMaterial3d(ground_material),
-        Transform::from_xyz(world_center.x, -0.5, world_center.z),
+        Transform::IDENTITY,
     ));
 
     let blocker_material = materials.add(StandardMaterial {
@@ -527,11 +541,16 @@ fn setup_scene(
     });
     for blocker in &metrics.static_blockers {
         let (center, size) = metrics.footprint_center_size(*blocker);
+        let ground_height = terrain.height_at_world(center.xz());
         commands.spawn((
             Mesh3d(building_mesh.clone()),
             MeshMaterial3d(blocker_material.clone()),
             Transform {
-                translation: Vec3::new(center.x, STATIC_BLOCKER_HEIGHT * 0.5, center.z),
+                translation: Vec3::new(
+                    center.x,
+                    ground_height + STATIC_BLOCKER_HEIGHT * 0.5,
+                    center.z,
+                ),
                 scale: Vec3::new(size.x, STATIC_BLOCKER_HEIGHT, size.y),
                 ..default()
             },
@@ -685,6 +704,84 @@ fn trigger_attack_animations(
         if let Ok(mut weapon) = weapons.get_mut(weapon_entity) {
             weapon.elapsed = Some(0.0);
         }
+    }
+}
+
+fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSamples>) {
+    if !samples.is_changed() {
+        return;
+    }
+
+    for attack in samples
+        .current
+        .attacks
+        .iter()
+        .filter(|attack| attack.missed)
+    {
+        commands.spawn((
+            Text::new("MISS"),
+            TextFont::from_font_size(24.0),
+            TextColor(Color::srgb(1.0, 0.88, 0.20)),
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(-10_000.0),
+                top: px(-10_000.0),
+                ..default()
+            },
+            ZIndex(100),
+            MissIndicator {
+                target: attack.target,
+                fallback_position: attack.target_position,
+                remaining: MISS_INDICATOR_SECONDS,
+            },
+        ));
+    }
+}
+
+fn update_miss_indicators(
+    mut commands: Commands,
+    state: (Res<Time>, Res<PresentationSamples>, Res<TerrainSurface>),
+    render_map: Res<RenderMap>,
+    transforms: Query<&Transform>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut indicators: Query<(Entity, &mut MissIndicator, &mut Node, &mut TextColor)>,
+) {
+    let (time, samples, terrain) = state;
+    let (camera, camera_transform) = *camera;
+    let delta = time.delta_secs();
+
+    for (entity, mut indicator, mut node, mut color) in &mut indicators {
+        indicator.remaining -= delta;
+        if indicator.remaining <= 0.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        let fallback =
+            terrain.clamp_world_position(sim_point_to_world(indicator.fallback_position));
+        let mut world = render_map
+            .units
+            .get(&indicator.target)
+            .and_then(|entry| transforms.get(entry.entity).ok())
+            .map_or(fallback + Vec3::Y * 12.0, |transform| {
+                let extra_height = samples
+                    .current
+                    .units
+                    .get(&indicator.target)
+                    .map_or(10.0, |unit| unit_height(unit) * 0.65 + 5.0);
+                transform.translation + Vec3::Y * extra_height
+            });
+        let life = (indicator.remaining / MISS_INDICATOR_SECONDS).clamp(0.0, 1.0);
+        world.y += (1.0 - life) * 5.0;
+
+        let Ok(viewport) = camera.world_to_viewport(camera_transform, world) else {
+            node.left = px(-10_000.0);
+            node.top = px(-10_000.0);
+            continue;
+        };
+        node.left = px(viewport.x - 28.0);
+        node.top = px(viewport.y - 16.0 - (1.0 - life) * MISS_INDICATOR_RISE_PIXELS);
+        color.0 = Color::srgba(1.0, 0.88, 0.20, life.min(0.95));
     }
 }
 
@@ -935,12 +1032,16 @@ fn spawn_building_spell_details(
 fn sync_render_entities(
     mut commands: Commands,
     samples: Res<PresentationSamples>,
-    metrics: Res<WorldMetrics>,
-    assets: Res<PresentationAssets>,
+    world: (
+        Res<WorldMetrics>,
+        Res<TerrainSurface>,
+        Res<PresentationAssets>,
+    ),
     mut render_map: ResMut<RenderMap>,
     mut remnants: ResMut<DeathRemnants>,
     mut projectile_impacts: ResMut<ProjectileImpacts>,
 ) {
+    let (metrics, terrain, assets) = world;
     if !samples.is_changed() {
         return;
     }
@@ -964,7 +1065,7 @@ fn sync_render_entities(
             .any(|corpse| corpse.source_unit == id);
         if !became_authoritative_corpse && let Some(unit) = samples.previous.units.get(&id) {
             remnants.0.push(DeathRemnant {
-                position: sim_point_to_world(unit.position),
+                position: sim_point_to_terrain_world(unit.position, &terrain),
                 team: unit.team,
                 building: false,
                 remaining: DEATH_REMAINS_SECONDS,
@@ -985,7 +1086,8 @@ fn sync_render_entities(
             .expect("stale building entry disappeared during presentation sync");
         commands.entity(entry.entity).despawn();
         if let Some(building) = samples.previous.buildings.get(&id) {
-            let (center, _) = metrics.footprint_center_size(building.footprint);
+            let (mut center, _) = metrics.footprint_center_size(building.footprint);
+            center.y = terrain.height_at_world(center.xz());
             remnants.0.push(DeathRemnant {
                 position: center,
                 team: building.team,
@@ -1031,7 +1133,8 @@ fn sync_render_entities(
             entry.max_health_seen = entry.max_health_seen.max(unit.health);
             continue;
         }
-        let position = sim_point_to_world(unit.position) + Vec3::Y * (unit_height(unit) * 0.5);
+        let position = sim_point_to_terrain_world(unit.position, &terrain)
+            + Vec3::Y * (unit_height(unit) * 0.5);
         let entity = commands
             .spawn((
                 Mesh3d(assets.unit_mesh(unit.visual_kind)),
@@ -1055,11 +1158,12 @@ fn sync_render_entities(
             entry.max_health_seen = entry.max_health_seen.max(building.health);
             continue;
         }
-        let (center, size) = metrics.footprint_center_size(building.footprint);
+        let (mut center, size) = metrics.footprint_center_size(building.footprint);
+        center.y = terrain.height_at_world(center.xz());
         let visual_height = building_height(building);
         let entity = commands
             .spawn((
-                Transform::from_xyz(center.x, visual_height * 0.5, center.z),
+                Transform::from_xyz(center.x, center.y + visual_height * 0.5, center.z),
                 Visibility::default(),
             ))
             .id();
@@ -1085,7 +1189,7 @@ fn sync_render_entities(
         if render_map.corpses.contains_key(&corpse.id) {
             continue;
         }
-        let position = corpse_render_position(corpse.position);
+        let position = corpse_render_position(corpse.position, &terrain);
         let entity = commands
             .spawn((
                 Mesh3d(assets.corpse_mesh.clone()),
@@ -1100,7 +1204,8 @@ fn sync_render_entities(
         if render_map.projectiles.contains_key(&projectile.id) {
             continue;
         }
-        let position = sim_point_to_world(projectile.launch_position) + Vec3::Y * PROJECTILE_HEIGHT;
+        let position = sim_point_to_terrain_world(projectile.launch_position, &terrain)
+            + Vec3::Y * PROJECTILE_HEIGHT;
         let entity = commands
             .spawn((
                 Mesh3d(assets.projectile_mesh(projectile)),
@@ -1123,6 +1228,7 @@ fn interpolate_render_transforms(
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
     mut render_map: ResMut<RenderMap>,
     mut transforms: Query<&mut Transform>,
 ) {
@@ -1136,11 +1242,13 @@ fn interpolate_render_transforms(
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(current);
-        let ground_position = sim_point_to_world_lerp(previous.position, current.position, alpha);
+        let ground_position =
+            sim_point_to_terrain_world_lerp(previous.position, current.position, alpha, &terrain);
         let moving = previous.position != current.position;
         let bob = walk_bob(current.id, render_tick, moving);
         let position = ground_position + Vec3::Y * (unit_height(current) * 0.5 + bob);
-        let desired_rotation = unit_facing_rotation(current, previous, &samples, &metrics, alpha);
+        let desired_rotation =
+            unit_facing_rotation(current, previous, &samples, &metrics, &terrain, alpha);
         if let Ok(mut transform) = transforms.get_mut(entry.entity) {
             if transform.translation != position {
                 transform.translation = position;
@@ -1155,8 +1263,13 @@ fn interpolate_render_transforms(
         let Some(entry) = render_map.buildings.get(id) else {
             continue;
         };
-        let (center, _) = metrics.footprint_center_size(current.footprint);
-        let position = Vec3::new(center.x, building_height(current) * 0.5, center.z);
+        let (mut center, _) = metrics.footprint_center_size(current.footprint);
+        center.y = terrain.height_at_world(center.xz());
+        let position = Vec3::new(
+            center.x,
+            center.y + building_height(current) * 0.5,
+            center.z,
+        );
         if let Ok(mut transform) = transforms.get_mut(entry.entity)
             && transform.translation != position
         {
@@ -1169,7 +1282,7 @@ fn interpolate_render_transforms(
             continue;
         };
         let (position, rotation) =
-            projectile_pose(projectile, &samples, &metrics, alpha, render_tick);
+            projectile_pose(projectile, &samples, &metrics, &terrain, alpha, render_tick);
         projectile_entry.last_position = position;
         if let Ok(mut transform) = transforms.get_mut(projectile_entry.entity) {
             if transform.translation != position {
@@ -1184,11 +1297,12 @@ fn projectile_pose(
     projectile: &ProjectileView,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
     alpha: f32,
     render_tick: f32,
 ) -> (Vec3, Quat) {
-    let start = sim_point_to_world(projectile.launch_position);
-    let target = projectile_target(projectile, samples, metrics, alpha, start);
+    let start = sim_point_to_terrain_world(projectile.launch_position, terrain);
+    let target = projectile_target(projectile, samples, metrics, terrain, alpha, start);
     let travel_ticks = projectile
         .impact_tick
         .saturating_sub(projectile.launch_tick)
@@ -1223,15 +1337,18 @@ fn projectile_target(
     projectile: &ProjectileView,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
     alpha: f32,
     fallback: Vec3,
 ) -> Vec3 {
     match projectile.kind {
         ProjectileViewKind::GuaranteedHit { target }
         | ProjectileViewKind::Bounce { target, .. } => {
-            entity_render_position(target, samples, metrics, alpha).unwrap_or(fallback)
+            entity_render_position(target, samples, metrics, terrain, alpha).unwrap_or(fallback)
         }
-        ProjectileViewKind::Ballistic { destination, .. } => sim_point_to_world(destination),
+        ProjectileViewKind::Ballistic { destination, .. } => {
+            sim_point_to_terrain_world(destination, terrain)
+        }
     }
 }
 
@@ -1242,7 +1359,7 @@ fn projectile_position_at_progress(
     progress: f32,
 ) -> Vec3 {
     let mut position = start.lerp(target, progress);
-    position.y = PROJECTILE_HEIGHT;
+    position.y += PROJECTILE_HEIGHT;
     if matches!(projectile.kind, ProjectileViewKind::Ballistic { .. }) {
         position.y += BALLISTIC_ARC_HEIGHT * 4.0 * progress * (1.0 - progress);
     }
@@ -1254,17 +1371,19 @@ fn unit_facing_rotation(
     previous: &UnitSample,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
     alpha: f32,
 ) -> Option<Quat> {
-    let current_position = sim_point_to_world_lerp(previous.position, current.position, alpha);
+    let current_position =
+        sim_point_to_terrain_world_lerp(previous.position, current.position, alpha, terrain);
     let direction = current
         .target
-        .and_then(|target| entity_render_position(target, samples, metrics, alpha))
+        .and_then(|target| entity_render_position(target, samples, metrics, terrain, alpha))
         .map(|target| target - current_position)
         .filter(|direction| direction.xz().length_squared() > 0.001)
         .or_else(|| {
-            let movement =
-                sim_point_to_world(current.position) - sim_point_to_world(previous.position);
+            let movement = sim_point_to_terrain_world(current.position, terrain)
+                - sim_point_to_terrain_world(previous.position, terrain);
             (movement.xz().length_squared() > 0.001).then_some(movement)
         })?;
     Some(facing_rotation(direction))
@@ -1286,18 +1405,21 @@ fn entity_render_position(
     id: SimId,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
     alpha: f32,
 ) -> Option<Vec3> {
     if let Some(current) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(current);
-        return Some(sim_point_to_world_lerp(
+        return Some(sim_point_to_terrain_world_lerp(
             previous.position,
             current.position,
             alpha,
+            terrain,
         ));
     }
     samples.current.buildings.get(&id).map(|building| {
-        let (center, _) = metrics.footprint_center_size(building.footprint);
+        let (mut center, _) = metrics.footprint_center_size(building.footprint);
+        center.y = terrain.height_at_world(center.xz());
         center
     })
 }
@@ -1355,12 +1477,13 @@ fn draw_projectile_effects(
 fn draw_health_bars(
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
-    metrics: Res<WorldMetrics>,
+    world: (Res<WorldMetrics>, Res<TerrainSurface>),
     render_map: Res<RenderMap>,
     debug: Res<DebugPresentation>,
     camera_frustum: Single<&Frustum, With<Camera3d>>,
     mut health_gizmos: Gizmos<HealthBarGizmos>,
 ) {
+    let (metrics, terrain) = world;
     if !debug.health_bars {
         return;
     }
@@ -1371,8 +1494,9 @@ fn draw_health_bars(
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(unit);
-        let position = sim_point_to_world_lerp(previous.position, unit.position, alpha)
-            + Vec3::Y * (unit_height(unit) + 3.0);
+        let position =
+            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain)
+                + Vec3::Y * (unit_height(unit) + 3.0);
         if !health_bar_visible(&camera_frustum, position, UNIT_HEALTH_BAR_WIDTH) {
             continue;
         }
@@ -1389,7 +1513,8 @@ fn draw_health_bars(
         let Some(entry) = render_map.buildings.get(id) else {
             continue;
         };
-        let (center, size) = metrics.footprint_center_size(building.footprint);
+        let (mut center, size) = metrics.footprint_center_size(building.footprint);
+        center.y = terrain.height_at_world(center.xz());
         let position = center + Vec3::Y * (building_height(building) + 4.0);
         let width = size.x.clamp(24.0, 72.0);
         if !health_bar_visible(&camera_frustum, position, width) {
@@ -1410,6 +1535,7 @@ fn draw_presentation_gizmos(
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
     debug: Res<DebugPresentation>,
     remnants: Res<DeathRemnants>,
     mut gizmos: Gizmos,
@@ -1435,8 +1561,9 @@ fn draw_presentation_gizmos(
 
     for unit in samples.current.units.values() {
         let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
-        let rendered = sim_point_to_world_lerp(previous.position, unit.position, alpha);
-        let authoritative = sim_point_to_world(unit.position);
+        let rendered =
+            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain);
+        let authoritative = sim_point_to_terrain_world(unit.position, &terrain);
         gizmos.line(
             rendered + Vec3::Y * 0.2,
             authoritative + Vec3::Y * 0.2,
@@ -1448,7 +1575,8 @@ fn draw_presentation_gizmos(
             team_color(unit.team).with_alpha(0.8),
         );
         if let Some(target) = unit.target
-            && let Some(target_position) = entity_render_position(target, &samples, &metrics, alpha)
+            && let Some(target_position) =
+                entity_render_position(target, &samples, &metrics, &terrain, alpha)
         {
             gizmos.line(
                 rendered + Vec3::Y * 2.0,
@@ -1462,13 +1590,16 @@ fn draw_presentation_gizmos(
         draw_footprint_outline(
             &mut gizmos,
             &metrics,
+            &terrain,
             building.footprint,
             team_color(building.team),
         );
         if let Some(target) = building.target
-            && let Some(target_position) = entity_render_position(target, &samples, &metrics, alpha)
+            && let Some(target_position) =
+                entity_render_position(target, &samples, &metrics, &terrain, alpha)
         {
-            let (center, _) = metrics.footprint_center_size(building.footprint);
+            let (mut center, _) = metrics.footprint_center_size(building.footprint);
+            center.y = terrain.height_at_world(center.xz());
             gizmos.line(
                 center + Vec3::Y * 3.0,
                 target_position + Vec3::Y * 2.0,
@@ -1517,34 +1648,21 @@ fn draw_health_bar(
 pub(crate) fn draw_footprint_outline(
     gizmos: &mut Gizmos,
     metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
     footprint: BuildingFootprint,
     color: Color,
 ) {
     let (center, size) = metrics.footprint_center_size(footprint);
     let half = size * 0.5;
-    let y = 0.15;
-    let min = Vec3::new(center.x - half.x, y, center.z - half.y);
-    let max = Vec3::new(center.x + half.x, y, center.z + half.y);
-    gizmos.line(
-        Vec3::new(min.x, y, min.z),
-        Vec3::new(max.x, y, min.z),
-        color,
-    );
-    gizmos.line(
-        Vec3::new(max.x, y, min.z),
-        Vec3::new(max.x, y, max.z),
-        color,
-    );
-    gizmos.line(
-        Vec3::new(max.x, y, max.z),
-        Vec3::new(min.x, y, max.z),
-        color,
-    );
-    gizmos.line(
-        Vec3::new(min.x, y, max.z),
-        Vec3::new(min.x, y, min.z),
-        color,
-    );
+    let corner = |x: f32, z: f32| Vec3::new(x, terrain.height_at_world(Vec2::new(x, z)) + 0.15, z);
+    let min_min = corner(center.x - half.x, center.z - half.y);
+    let max_min = corner(center.x + half.x, center.z - half.y);
+    let max_max = corner(center.x + half.x, center.z + half.y);
+    let min_max = corner(center.x - half.x, center.z + half.y);
+    gizmos.line(min_min, max_min, color);
+    gizmos.line(max_min, max_max, color);
+    gizmos.line(max_max, min_max, color);
+    gizmos.line(min_max, min_min, color);
 }
 
 fn toggle_debug_controls(keys: Res<ButtonInput<KeyCode>>, mut debug: ResMut<DebugPresentation>) {
@@ -1562,16 +1680,17 @@ fn update_camera(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     window: Single<&Window, With<PrimaryWindow>>,
-    metrics: Res<WorldMetrics>,
+    world: (Res<WorldMetrics>, Res<TerrainSurface>),
     mut camera: Single<(&Camera, &mut RtsCamera, &mut Transform), With<Camera3d>>,
 ) {
+    let (metrics, terrain) = world;
     let (camera_component, rig, transform) = &mut *camera;
 
     if mouse_buttons.just_pressed(MouseButton::Middle)
         && let Some(cursor) = window.cursor_position()
     {
         let camera_global = GlobalTransform::from(**transform);
-        rig.grab_anchor = viewport_ground_point(camera_component, &camera_global, cursor);
+        rig.grab_anchor = viewport_ground_point(camera_component, &camera_global, cursor, &terrain);
     }
 
     let dt = time.delta_secs();
@@ -1611,6 +1730,7 @@ fn update_camera(
     );
     if keys.just_pressed(KeyCode::Home) {
         rig.focus = metrics.world_center();
+        rig.focus.y = terrain.height_at_world(rig.focus.xz());
         rig.distance = world_size.max_element() * 0.72;
         rig.yaw = 0.0;
     }
@@ -1622,7 +1742,7 @@ fn update_camera(
         let proposed = camera_transform(rig);
         let proposed_global = GlobalTransform::from(proposed);
         if let Some(cursor_world) =
-            viewport_ground_point(camera_component, &proposed_global, cursor)
+            viewport_ground_point(camera_component, &proposed_global, cursor, &terrain)
         {
             let correction = anchor - cursor_world;
             rig.focus += Vec3::new(correction.x, 0.0, correction.z);
@@ -1640,10 +1760,25 @@ pub(crate) fn viewport_ground_point(
     camera: &Camera,
     camera_transform: &GlobalTransform,
     cursor: Vec2,
+    terrain: &TerrainSurface,
 ) -> Option<Vec3> {
     let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
-    let distance = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))?;
-    Some(ray.origin + ray.direction.normalize() * distance)
+    let direction = ray.direction.normalize();
+    if direction.y.abs() < 1.0e-5 {
+        return None;
+    }
+    let mut distance = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))?;
+    let mut point = ray.origin + direction * distance;
+    for _ in 0..8 {
+        let height = terrain.height_at_world(point.xz());
+        distance += (height - point.y) / direction.y;
+        point = ray.origin + direction * distance;
+    }
+    if !terrain.contains_world(point.xz()) {
+        return None;
+    }
+    point.y = terrain.height_at_world(point.xz());
+    Some(point)
 }
 
 fn camera_transform(rig: &RtsCamera) -> Transform {
@@ -1656,8 +1791,8 @@ fn camera_transform(rig: &RtsCamera) -> Transform {
     Transform::from_translation(rig.focus + offset).looking_at(rig.focus, Vec3::Y)
 }
 
-fn corpse_render_position(position: SimPoint) -> Vec3 {
-    sim_point_to_world(position) + Vec3::Y * (-CORPSE_THICKNESS * 0.5 + 0.08)
+fn corpse_render_position(position: SimPoint, terrain: &TerrainSurface) -> Vec3 {
+    sim_point_to_terrain_world(position, terrain) + Vec3::Y * (-CORPSE_THICKNESS * 0.5 + 0.08)
 }
 
 fn update_window_title(
@@ -1692,6 +1827,19 @@ pub(crate) fn sim_point_to_world(point: SimPoint) -> Vec3 {
 
 pub(crate) fn sim_point_to_world_lerp(previous: SimPoint, current: SimPoint, alpha: f32) -> Vec3 {
     sim_point_to_world(previous).lerp(sim_point_to_world(current), alpha)
+}
+
+pub(crate) fn sim_point_to_terrain_world(point: SimPoint, terrain: &TerrainSurface) -> Vec3 {
+    terrain.clamp_world_position(sim_point_to_world(point))
+}
+
+pub(crate) fn sim_point_to_terrain_world_lerp(
+    previous: SimPoint,
+    current: SimPoint,
+    alpha: f32,
+    terrain: &TerrainSurface,
+) -> Vec3 {
+    terrain.clamp_world_position(sim_point_to_world_lerp(previous, current, alpha))
 }
 
 fn unit_height(unit: &UnitSample) -> f32 {
@@ -1739,9 +1887,18 @@ fn team_color(team: Team) -> Color {
 
 #[cfg(test)]
 mod tests {
-    use castle_fight_sim::NavCell;
+    use castle_fight_sim::{NavCell, TerrainElevationMap};
 
     use super::*;
+
+    fn original_terrain() -> TerrainSurface {
+        TerrainSurface::new(
+            TerrainElevationMap::from_wc3_terrain_json(include_str!(
+                "../../../docs/original_map/extracted/terrain.json"
+            ))
+            .unwrap(),
+        )
+    }
 
     #[test]
     fn sim_subunits_map_one_to_one_to_render_world_units() {
@@ -1766,11 +1923,30 @@ mod tests {
 
     #[test]
     fn corpse_marker_is_mostly_sunk_into_ground() {
-        let position = corpse_render_position(SimPoint::new(0, 0));
+        let terrain = original_terrain();
+        let ground = terrain.height_at_world(Vec2::ZERO);
+        let position = corpse_render_position(SimPoint::new(0, 0), &terrain);
         let top = position.y + CORPSE_THICKNESS * 0.5;
-        assert!(position.y < 0.0);
-        assert!(top > 0.0);
-        assert!(top < CORPSE_THICKNESS * 0.25);
+        assert!(position.y < ground);
+        assert!(top > ground);
+        assert!(top < ground + CORPSE_THICKNESS * 0.25);
+    }
+
+    #[test]
+    fn rendered_units_are_clamped_to_original_terrain() {
+        let terrain = original_terrain();
+        let lane = sim_point_to_terrain_world(SimPoint::new(0, 0), &terrain);
+        let outside = sim_point_to_terrain_world(
+            SimPoint::new(
+                100_000 * SUBUNITS_PER_WORLD_UNIT,
+                100_000 * SUBUNITS_PER_WORLD_UNIT,
+            ),
+            &terrain,
+        );
+
+        assert_eq!(lane.y, terrain.height_at_world(Vec2::ZERO));
+        assert_eq!(outside.xz(), terrain.world_max());
+        assert_eq!(outside.y, terrain.height_at_world(terrain.world_max()));
     }
 
     #[test]

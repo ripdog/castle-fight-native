@@ -5,6 +5,7 @@ use crate::{
     AuthoritativeSimulation,
     demo::BuildKind,
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
+    terrain::TerrainSurface,
 };
 
 const BUILDING_FOOTPRINT_SIZE: u16 = 4;
@@ -284,11 +285,12 @@ fn queue_world_placement(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    metrics: Res<WorldMetrics>,
+    world: (Res<WorldMetrics>, Res<TerrainSurface>),
     authoritative: Res<AuthoritativeSimulation>,
     mut selection: ResMut<BuildSelection>,
     mut pending: ResMut<PendingBuildPlacements>,
 ) {
+    let (metrics, terrain) = world;
     if !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
     }
@@ -302,7 +304,7 @@ fn queue_world_placement(
         return;
     }
     let (camera, camera_transform) = *camera;
-    let Some(world) = viewport_ground_point(camera, camera_transform, cursor) else {
+    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         selection.status = "Placement rejected: cursor does not intersect the battlefield.".into();
         return;
     };
@@ -324,6 +326,7 @@ fn draw_build_preview(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
     authoritative: Res<AuthoritativeSimulation>,
     selection: Res<BuildSelection>,
     mut gizmos: Gizmos,
@@ -338,7 +341,7 @@ fn draw_build_preview(
         return;
     }
     let (camera, camera_transform) = *camera;
-    let Some(world) = viewport_ground_point(camera, camera_transform, cursor) else {
+    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         return;
     };
     let footprint = placement_footprint(&metrics, world);
@@ -348,7 +351,7 @@ fn draw_build_preview(
     } else {
         Color::srgb(1.0, 0.18, 0.15)
     };
-    draw_footprint_outline(&mut gizmos, &metrics, footprint, color);
+    draw_footprint_outline(&mut gizmos, &metrics, &terrain, footprint, color);
 }
 
 fn placement_footprint(metrics: &WorldMetrics, world: Vec3) -> BuildingFootprint {

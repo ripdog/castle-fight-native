@@ -1,40 +1,48 @@
 use castle_fight_sim::{
-    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, CorpseDefinitionId,
-    CorpseProfile, MovementProfile, NavCell, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimPoint,
-    Simulation, SimulationConfig, Team, UnitSpawn, UnitTemplate,
+    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, CombatRules,
+    CorpseDefinitionId, CorpseProfile, MovementProfile, NavCell, ProductionProfile,
+    SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig, Team, TerrainElevationMap,
+    UnitSpawn, UnitTemplate,
 };
 
 use crate::presentation::WorldMetrics;
 
 const SIMULATION_HZ_I32: i32 = 30;
-const NAV_CELL_WORLD: i32 = 10;
+const NAV_CELL_WORLD: i32 = 32;
 const NAV_CELL_SUBUNITS: i32 = NAV_CELL_WORLD * SUBUNITS_PER_WORLD_UNIT;
-const NAV_MAX_X: i32 = 199;
-const NAV_MAX_Y: i32 = 74;
-const MIDDLE_MIN_X: i32 = 67;
-const MIDDLE_MAX_X: i32 = 132;
-const LANE_MIN_Y: i32 = 20;
-const LANE_MAX_Y: i32 = 54;
+const MIDDLE_MIN_X: i32 = -128;
+const MIDDLE_MAX_X: i32 = 127;
+const LANE_MIN_Y: i32 = -24;
+const LANE_MAX_Y: i32 = 23;
 const CASTLE_HEALTH: i32 = 20_000;
 const PRODUCTION_HEALTH: i32 = 1_000;
 const PRODUCTION_INTERVAL_TICKS: u16 = 120;
 const ATTACK_COOLDOWN_TICKS: u16 = 30;
 const PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
 const DEMO_CORPSE_LIFETIME_TICKS: u32 = 300;
+// Visual-verification value only; the exact original Castle Fight uphill miss chance is still
+// compatibility data to recover.
+const DEMO_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
 
-const PLAYER_CASTLE: BuildingFootprint = BuildingFootprint::new(30, 34, 7, 7);
-const ENEMY_CASTLE: BuildingFootprint = BuildingFootprint::new(163, 34, 7, 7);
+const PLAYER_CASTLE: BuildingFootprint = BuildingFootprint::new(-191, -4, 7, 7);
+const ENEMY_CASTLE: BuildingFootprint = BuildingFootprint::new(184, -4, 7, 7);
 
 pub struct DemoWorld {
     pub simulation: Simulation,
     pub metrics: WorldMetrics,
+    pub terrain: TerrainElevationMap,
 }
 
 #[must_use]
 pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWorld {
-    let config = demo_config();
+    let terrain = original_terrain();
+    let config = demo_config(&terrain);
     let metrics = WorldMetrics::from_simulation_config(&config);
-    let mut simulation = Simulation::new(config, workers);
+    let combat_rules = CombatRules {
+        terrain_elevation: Some(terrain.clone()),
+        uphill_miss_chance_per_10k: DEMO_UPHILL_MISS_CHANCE_PER_10K,
+    };
+    let mut simulation = Simulation::new_with_combat_rules(config, workers, combat_rules);
 
     simulation.spawn_building(passive_structure(Team(0), PLAYER_CASTLE, CASTLE_HEALTH));
     simulation.spawn_building(passive_structure(Team(1), ENEMY_CASTLE, CASTLE_HEALTH));
@@ -45,13 +53,13 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
         for (team, melee, ranged) in [
             (
                 Team(0),
-                BuildingFootprint::new(49, 27, 4, 4),
-                BuildingFootprint::new(49, 44, 4, 4),
+                BuildingFootprint::new(-152, -24, 4, 4),
+                BuildingFootprint::new(-152, 20, 4, 4),
             ),
             (
                 Team(1),
-                BuildingFootprint::new(147, 27, 4, 4),
-                BuildingFootprint::new(147, 44, 4, 4),
+                BuildingFootprint::new(148, -24, 4, 4),
+                BuildingFootprint::new(148, 20, 4, 4),
             ),
         ] {
             simulation.spawn_building_with_production_corpse(
@@ -68,14 +76,15 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
     DemoWorld {
         simulation,
         metrics,
+        terrain,
     }
 }
 
 fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) {
     const COLUMNS: usize = 120;
     const SPACING_WORLD: i32 = 10;
-    const START_X_WORLD: i32 = 400;
-    const START_Y_WORLD: i32 = 215;
+    const START_X_WORLD: i32 = -600;
+    const START_Y_WORLD: i32 = -300;
 
     for index in 0..unit_count {
         let column = index % COLUMNS;
@@ -108,31 +117,46 @@ fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) 
     }
 }
 
-fn demo_config() -> SimulationConfig {
+fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
+    let origin = terrain.origin();
+    let maximum = terrain.max_point();
+    assert_eq!(origin.x.rem_euclid(NAV_CELL_SUBUNITS), 0);
+    assert_eq!(origin.y.rem_euclid(NAV_CELL_SUBUNITS), 0);
+    assert_eq!(maximum.x.rem_euclid(NAV_CELL_SUBUNITS), 0);
+    assert_eq!(maximum.y.rem_euclid(NAV_CELL_SUBUNITS), 0);
+    let navigation_min = NavCell::new(
+        origin.x.div_euclid(NAV_CELL_SUBUNITS),
+        origin.y.div_euclid(NAV_CELL_SUBUNITS),
+    );
+    let navigation_max = NavCell::new(
+        maximum.x.div_euclid(NAV_CELL_SUBUNITS) - 1,
+        maximum.y.div_euclid(NAV_CELL_SUBUNITS) - 1,
+    );
+
     SimulationConfig {
         match_seed: 0x4341_5354_4c45,
         spatial_cell_size: 40 * SUBUNITS_PER_WORLD_UNIT,
         navigation_cell_size: NAV_CELL_SUBUNITS,
-        navigation_min: NavCell::new(0, 0),
-        navigation_max: NavCell::new(NAV_MAX_X, NAV_MAX_Y),
+        navigation_min,
+        navigation_max,
         target_pursuit_extra_range: 30 * SUBUNITS_PER_WORLD_UNIT,
         unit_separation_distance: 8 * SUBUNITS_PER_WORLD_UNIT,
         max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
         static_blockers: vec![
             BuildingFootprint::new(
                 MIDDLE_MIN_X,
-                0,
+                navigation_min.y,
                 (MIDDLE_MAX_X - MIDDLE_MIN_X + 1) as u16,
-                LANE_MIN_Y as u16,
+                (LANE_MIN_Y - navigation_min.y) as u16,
             ),
             BuildingFootprint::new(
                 MIDDLE_MIN_X,
                 LANE_MAX_Y + 1,
                 (MIDDLE_MAX_X - MIDDLE_MIN_X + 1) as u16,
-                (NAV_MAX_Y - LANE_MAX_Y) as u16,
+                (navigation_max.y - LANE_MAX_Y) as u16,
             ),
         ],
-        team_objective: [cell_center(162, 37), cell_center(37, 37)],
+        team_objective: [world_point(6_000, 0), world_point(-6_000, 0)],
     }
 }
 
@@ -222,9 +246,13 @@ fn unit_template(kind: BuildKind) -> UnitTemplate {
     }
 }
 
-fn cell_center(x: i32, y: i32) -> SimPoint {
-    SimPoint::new(
-        x * NAV_CELL_SUBUNITS + NAV_CELL_SUBUNITS / 2,
-        y * NAV_CELL_SUBUNITS + NAV_CELL_SUBUNITS / 2,
-    )
+fn original_terrain() -> TerrainElevationMap {
+    TerrainElevationMap::from_wc3_terrain_json(include_str!(
+        "../../../docs/original_map/extracted/terrain.json"
+    ))
+    .expect("committed original terrain must remain loadable")
+}
+
+fn world_point(x: i32, y: i32) -> SimPoint {
+    SimPoint::new(x * SUBUNITS_PER_WORLD_UNIT, y * SUBUNITS_PER_WORLD_UNIT)
 }

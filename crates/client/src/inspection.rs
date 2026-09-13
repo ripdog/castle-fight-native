@@ -5,9 +5,11 @@ use crate::{
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
     build_ui::{BuildSelection, cursor_over_build_panel},
     presentation::{
-        WorldMetrics, draw_footprint_outline, sim_point_to_world, sim_point_to_world_lerp,
+        WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
+        sim_point_to_terrain_world_lerp, sim_point_to_world, sim_point_to_world_lerp,
         viewport_ground_point,
     },
+    terrain::TerrainSurface,
 };
 
 const PANEL_RIGHT: f32 = 16.0;
@@ -87,15 +89,12 @@ fn handle_world_selection(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    context: (
-        Res<Time<Fixed>>,
-        Res<WorldMetrics>,
-        Res<PresentationSamples>,
-        Res<BuildSelection>,
-    ),
+    world: (Res<Time<Fixed>>, Res<WorldMetrics>, Res<TerrainSurface>),
+    state: (Res<PresentationSamples>, Res<BuildSelection>),
     mut selection: ResMut<InspectionSelection>,
 ) {
-    let (fixed_time, metrics, samples, build_selection) = context;
+    let (fixed_time, metrics, terrain) = world;
+    let (samples, build_selection) = state;
     if keys.just_pressed(KeyCode::Escape) && build_selection.kind.is_none() {
         selection.selected = None;
     }
@@ -110,7 +109,7 @@ fn handle_world_selection(
         return;
     }
     let (camera, camera_transform) = *camera;
-    let Some(world) = viewport_ground_point(camera, camera_transform, cursor) else {
+    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         selection.selected = None;
         return;
     };
@@ -147,6 +146,7 @@ fn draw_selection_highlight(
     fixed_time: Res<Time<Fixed>>,
     samples: Res<PresentationSamples>,
     metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
     selection: Res<InspectionSelection>,
     mut gizmos: Gizmos,
 ) {
@@ -157,7 +157,8 @@ fn draw_selection_highlight(
 
     if let Some(unit) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(unit);
-        let center = sim_point_to_world_lerp(previous.position, unit.position, alpha);
+        let center =
+            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain);
         let radius = unit_pick_radius(unit) + SELECTION_RING_PADDING;
         gizmos.circle(
             Isometry3d::new(
@@ -168,7 +169,8 @@ fn draw_selection_highlight(
             SELECTION_COLOR,
         );
         if let Some(target) = unit.target
-            && let Some(target_position) = current_entity_position(target, &samples, &metrics)
+            && let Some(target_position) =
+                current_entity_position(target, &samples, &metrics, &terrain)
         {
             gizmos.line(
                 center + Vec3::Y * 4.0,
@@ -180,11 +182,19 @@ fn draw_selection_highlight(
     }
 
     if let Some(building) = samples.current.buildings.get(&id) {
-        draw_footprint_outline(&mut gizmos, &metrics, building.footprint, SELECTION_COLOR);
+        draw_footprint_outline(
+            &mut gizmos,
+            &metrics,
+            &terrain,
+            building.footprint,
+            SELECTION_COLOR,
+        );
         if let Some(target) = building.target
-            && let Some(target_position) = current_entity_position(target, &samples, &metrics)
+            && let Some(target_position) =
+                current_entity_position(target, &samples, &metrics, &terrain)
         {
-            let (center, _) = metrics.footprint_center_size(building.footprint);
+            let (mut center, _) = metrics.footprint_center_size(building.footprint);
+            center.y = terrain.height_at_world(center.xz());
             gizmos.line(
                 center + Vec3::Y * 6.0,
                 target_position + Vec3::Y * 4.0,
@@ -243,12 +253,14 @@ fn current_entity_position(
     id: SimId,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
 ) -> Option<Vec3> {
     if let Some(unit) = samples.current.units.get(&id) {
-        return Some(sim_point_to_world(unit.position));
+        return Some(sim_point_to_terrain_world(unit.position, terrain));
     }
     samples.current.buildings.get(&id).map(|building| {
-        let (center, _) = metrics.footprint_center_size(building.footprint);
+        let (mut center, _) = metrics.footprint_center_size(building.footprint);
+        center.y = terrain.height_at_world(center.xz());
         center
     })
 }

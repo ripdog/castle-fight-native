@@ -12,6 +12,13 @@ pub struct TerrainElevationSample {
     pub ground_height_raw: i32,
 }
 
+impl TerrainElevationSample {
+    #[must_use]
+    pub const fn display_height_quarters(self) -> i32 {
+        self.ground_height_raw - 0x2000 + (self.cliff_level as i32 - 2) * 0x0200
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerrainElevationMap {
     origin: SimPoint,
@@ -122,10 +129,25 @@ impl TerrainElevationMap {
     #[must_use]
     pub fn sample(&self, point: SimPoint) -> Option<TerrainElevationSample> {
         let index = self.nearest_vertex_index(point)?;
-        Some(TerrainElevationSample {
-            cliff_level: self.cliff_levels[index],
-            ground_height_raw: self.ground_heights_raw[index],
-        })
+        self.sample_at_index(index)
+    }
+
+    #[must_use]
+    pub fn vertex_sample(
+        &self,
+        vertex_x: u32,
+        vertex_y_from_bottom: u32,
+    ) -> Option<TerrainElevationSample> {
+        if vertex_x > self.width_tiles || vertex_y_from_bottom > self.height_tiles {
+            return None;
+        }
+        let row_from_top = self.height_tiles - vertex_y_from_bottom;
+        let row_width = usize::try_from(self.width_tiles).ok()?.checked_add(1)?;
+        let index = usize::try_from(row_from_top)
+            .ok()?
+            .checked_mul(row_width)?
+            .checked_add(usize::try_from(vertex_x).ok()?)?;
+        self.sample_at_index(index)
     }
 
     #[must_use]
@@ -136,6 +158,13 @@ impl TerrainElevationMap {
     #[must_use]
     pub fn contains(&self, point: SimPoint) -> bool {
         self.nearest_vertex_index(point).is_some()
+    }
+
+    fn sample_at_index(&self, index: usize) -> Option<TerrainElevationSample> {
+        Some(TerrainElevationSample {
+            cliff_level: *self.cliff_levels.get(index)?,
+            ground_height_raw: *self.ground_heights_raw.get(index)?,
+        })
     }
 
     fn nearest_vertex_index(&self, point: SimPoint) -> Option<usize> {
@@ -321,6 +350,33 @@ mod tests {
         );
         assert_eq!(terrain.sample(world_point(128, 64)).unwrap().cliff_level, 4);
         assert!(!terrain.contains(world_point(129, 64)));
+    }
+
+    #[test]
+    fn vertex_samples_use_world_bottom_to_top_coordinates() {
+        let terrain = TerrainElevationMap::from_vertex_samples(
+            world_point(0, 0),
+            128 * SUBUNITS_PER_WORLD_UNIT,
+            1,
+            1,
+            vec![3, 4, 1, 2],
+            vec![8192, 8196, 8200, 8204],
+        )
+        .unwrap();
+
+        assert_eq!(terrain.vertex_sample(0, 0).unwrap().cliff_level, 1);
+        assert_eq!(terrain.vertex_sample(1, 0).unwrap().ground_height_raw, 8204);
+        assert_eq!(terrain.vertex_sample(0, 1).unwrap().cliff_level, 3);
+        assert!(terrain.vertex_sample(2, 0).is_none());
+    }
+
+    #[test]
+    fn display_height_includes_ground_and_cliff_layers() {
+        let sample = TerrainElevationSample {
+            cliff_level: 4,
+            ground_height_raw: 9270,
+        };
+        assert_eq!(sample.display_height_quarters(), 2102);
     }
 
     #[test]
