@@ -88,7 +88,9 @@ Gameplay hit testing, targeting, and building validation MUST use authoritative 
 
 The standard Castle Fight client SHOULD render the committed Warcraft terrain using the extracted W3E grid's original world bounds and vertex heights rather than an unrelated flat presentation plane. The current imported map spans 132 × 64 terrain tiles at 128 Warcraft world units per tile, from `(-8192, -4096)` through `(8704, 4096)`.
 
-Presentation height uses the Warcraft terrain-display conversion of the extracted vertex data: `groundHeight - 8192 + (layerHeight - 2) * 512`, expressed in quarter-world-unit height samples. Smooth interpolation between imported vertices is presentation-only; authoritative uphill combat continues to use the simulation's discrete cliff-level rule.
+Presentation height uses the Warcraft terrain-display conversion of the extracted vertex data: `groundHeight - 8192 + (layerHeight - 2) * 512`, expressed in quarter-world-unit height samples. The presentation surface MAY use clamped higher-order interpolation and additional tessellation between those exact imported vertices to round abrupt ramp/plateau joins, provided every authored vertex height remains unchanged. This smoothing is presentation-only; authoritative uphill combat continues to use the simulation's discrete cliff-level rule.
+
+Imported Warcraft ground atlases are presentation diffuse assets and SHOULD retain their authored brightness across terrain slope. The client MUST NOT allow its scene-light direction to drive steep textured ramps/cliff transitions nearly black merely because the presentation mesh normal faces away from a directional light.
 
 Ground-bound render entities such as units, buildings, corpses, selection markers, and building-placement previews SHOULD sample this same presentation heightfield. Rendered unit positions MUST be clamped to the imported terrain bounds/height so interpolation or cosmetic motion cannot leave a unit visibly below, above, or outside the terrain. This clamping MUST NOT feed presentation Y coordinates back into authoritative movement or combat.
 

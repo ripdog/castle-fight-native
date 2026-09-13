@@ -581,6 +581,10 @@ fn setup_scene(
                     let material = materials.add(StandardMaterial {
                         base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
                         alpha_mode: AlphaMode::Blend,
+                        // The Warcraft ground atlases already contain their intended diffuse
+                        // shading. Re-lighting the steep transition geometry made ramps turn
+                        // nearly black when their normals faced away from our single sun light.
+                        unlit: true,
                         // WC3 composes terrain layers in palette order. All palette meshes share
                         // one AABB center, so this bias gives Bevy a camera-independent transparent
                         // sort order and also prevents coplanar depth fighting.

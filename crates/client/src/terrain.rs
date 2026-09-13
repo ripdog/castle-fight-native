@@ -16,6 +16,8 @@ const HEIGHT_QUARTERS_PER_WORLD_UNIT: f32 = 4.0;
 const TERRAIN_TEXTURE_MANIFEST: &str = "wc3/terrain/manifest.json";
 const TERRAIN_TEXTURE_ASSET_PREFIX: &str = "wc3/terrain";
 const WC3_BLEND_ATLAS_SIDE: u32 = 4;
+const TERRAIN_PRESENTATION_SUBDIVISIONS: u32 = 4;
+const TERRAIN_NORMAL_SAMPLE_GRID_DELTA: f32 = 0.125;
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainSurface {
@@ -63,6 +65,7 @@ struct TerrainTextureLayer {
 #[derive(Default)]
 struct TerrainMeshBuilder {
     positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
     indices: Vec<u32>,
 }
@@ -145,23 +148,74 @@ impl TerrainSurface {
     #[must_use]
     pub fn height_at_world(&self, point: Vec2) -> f32 {
         let clamped = point.clamp(self.origin_world, self.max_world);
-        let grid = (clamped - self.origin_world) / self.tile_world;
-        let max_x = self.elevation.width_tiles();
-        let max_y = self.elevation.height_tiles();
-        let x0 = (grid.x.floor() as u32).min(max_x);
-        let y0 = (grid.y.floor() as u32).min(max_y);
-        let x1 = x0.saturating_add(1).min(max_x);
-        let y1 = y0.saturating_add(1).min(max_y);
-        let tx = if x0 == x1 { 0.0 } else { grid.x - x0 as f32 };
-        let ty = if y0 == y1 { 0.0 } else { grid.y - y0 as f32 };
+        self.height_at_grid((clamped - self.origin_world) / self.tile_world)
+    }
 
-        let h00 = sample_height(self.elevation.vertex_sample(x0, y0));
-        let h10 = sample_height(self.elevation.vertex_sample(x1, y0));
-        let h01 = sample_height(self.elevation.vertex_sample(x0, y1));
-        let h11 = sample_height(self.elevation.vertex_sample(x1, y1));
-        let bottom = h00 + (h10 - h00) * tx;
-        let top = h01 + (h11 - h01) * tx;
-        bottom + (top - bottom) * ty
+    fn height_at_grid(&self, grid: Vec2) -> f32 {
+        let width = self.elevation.width_tiles();
+        let height = self.elevation.height_tiles();
+        let clamped = grid.clamp(Vec2::ZERO, Vec2::new(width as f32, height as f32));
+        let cell_x = (clamped.x.floor() as u32).min(width - 1);
+        let cell_y = (clamped.y.floor() as u32).min(height - 1);
+        let tx = (clamped.x - cell_x as f32).clamp(0.0, 1.0);
+        let ty = (clamped.y - cell_y as f32).clamp(0.0, 1.0);
+
+        let mut rows = [0.0; 4];
+        for (row_index, offset_y) in (-1_i32..=2).enumerate() {
+            let y = cell_y as i32 + offset_y;
+            let p0 = self.vertex_height_clamped(cell_x as i32 - 1, y);
+            let p1 = self.vertex_height_clamped(cell_x as i32, y);
+            let p2 = self.vertex_height_clamped(cell_x as i32 + 1, y);
+            let p3 = self.vertex_height_clamped(cell_x as i32 + 2, y);
+            rows[row_index] = catmull_rom(p0, p1, p2, p3, tx);
+        }
+        let smoothed = catmull_rom(rows[0], rows[1], rows[2], rows[3], ty);
+
+        let corners = [
+            self.vertex_height_clamped(cell_x as i32, cell_y as i32),
+            self.vertex_height_clamped(cell_x as i32 + 1, cell_y as i32),
+            self.vertex_height_clamped(cell_x as i32, cell_y as i32 + 1),
+            self.vertex_height_clamped(cell_x as i32 + 1, cell_y as i32 + 1),
+        ];
+        let minimum = corners.into_iter().fold(f32::INFINITY, f32::min);
+        let maximum = corners.into_iter().fold(f32::NEG_INFINITY, f32::max);
+        smoothed.clamp(minimum, maximum)
+    }
+
+    fn vertex_height_clamped(&self, x: i32, y: i32) -> f32 {
+        let vertex_x = x.clamp(0, self.elevation.width_tiles() as i32) as u32;
+        let vertex_y = y.clamp(0, self.elevation.height_tiles() as i32) as u32;
+        sample_height(self.elevation.vertex_sample(vertex_x, vertex_y))
+    }
+
+    fn position_at_grid(&self, grid: Vec2) -> [f32; 3] {
+        [
+            self.origin_world.x + grid.x * self.tile_world,
+            self.height_at_grid(grid),
+            self.origin_world.y + grid.y * self.tile_world,
+        ]
+    }
+
+    fn normal_at_grid(&self, grid: Vec2) -> [f32; 3] {
+        let maximum = Vec2::new(
+            self.elevation.width_tiles() as f32,
+            self.elevation.height_tiles() as f32,
+        );
+        let left = Vec2::new((grid.x - TERRAIN_NORMAL_SAMPLE_GRID_DELTA).max(0.0), grid.y);
+        let right = Vec2::new(
+            (grid.x + TERRAIN_NORMAL_SAMPLE_GRID_DELTA).min(maximum.x),
+            grid.y,
+        );
+        let bottom = Vec2::new(grid.x, (grid.y - TERRAIN_NORMAL_SAMPLE_GRID_DELTA).max(0.0));
+        let top = Vec2::new(
+            grid.x,
+            (grid.y + TERRAIN_NORMAL_SAMPLE_GRID_DELTA).min(maximum.y),
+        );
+        let dx = ((right.x - left.x) * self.tile_world).max(f32::EPSILON);
+        let dz = ((top.y - bottom.y) * self.tile_world).max(f32::EPSILON);
+        let dh_dx = (self.height_at_grid(right) - self.height_at_grid(left)) / dx;
+        let dh_dz = (self.height_at_grid(top) - self.height_at_grid(bottom)) / dz;
+        Vec3::new(-dh_dx, 1.0, -dh_dz).normalize().to_array()
     }
 
     #[must_use]
@@ -174,27 +228,25 @@ impl TerrainSurface {
 
     #[must_use]
     pub fn mesh(&self) -> Mesh {
-        let width = self.elevation.width_tiles();
-        let height = self.elevation.height_tiles();
+        let width = self.elevation.width_tiles() * TERRAIN_PRESENTATION_SUBDIVISIONS;
+        let height = self.elevation.height_tiles() * TERRAIN_PRESENTATION_SUBDIVISIONS;
         let row_width = width + 1;
         let vertex_count = (row_width as usize) * ((height + 1) as usize);
         let mut positions = Vec::with_capacity(vertex_count);
+        let mut normals = Vec::with_capacity(vertex_count);
         let mut uvs = Vec::with_capacity(vertex_count);
+        let subdivisions = TERRAIN_PRESENTATION_SUBDIVISIONS as f32;
+        let terrain_width = self.elevation.width_tiles() as f32;
+        let terrain_height = self.elevation.height_tiles() as f32;
 
         for y in 0..=height {
             for x in 0..=width {
-                let sample = self
-                    .elevation
-                    .vertex_sample(x, y)
-                    .expect("validated terrain vertex grid is complete");
-                positions.push([
-                    self.origin_world.x + x as f32 * self.tile_world,
-                    sample_display_height(sample),
-                    self.origin_world.y + y as f32 * self.tile_world,
-                ]);
+                let grid = Vec2::new(x as f32 / subdivisions, y as f32 / subdivisions);
+                positions.push(self.position_at_grid(grid));
+                normals.push(self.normal_at_grid(grid));
                 uvs.push([
-                    x as f32 / width.max(1) as f32,
-                    1.0 - y as f32 / height.max(1) as f32,
+                    grid.x / terrain_width.max(1.0),
+                    1.0 - grid.y / terrain_height.max(1.0),
                 ]);
             }
         }
@@ -222,9 +274,9 @@ impl TerrainSurface {
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         )
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
         .with_inserted_indices(Indices::U32(indices))
-        .with_computed_smooth_normals()
     }
 
     fn texture_sort_bounds(&self) -> Result<([f32; 3], [f32; 3]), String> {
@@ -537,35 +589,38 @@ impl TerrainMeshBuilder {
         y: u32,
         uvs: [[f32; 2]; 4],
     ) -> Result<(), String> {
+        let subdivisions = TERRAIN_PRESENTATION_SUBDIVISIONS;
+        let row_width = subdivisions + 1;
         let base_index = u32::try_from(self.positions.len())
             .map_err(|_| "terrain texture mesh has too many vertices".to_owned())?;
-        let position = |vertex_x: u32, vertex_y: u32| -> Result<[f32; 3], String> {
-            let sample = terrain
-                .elevation
-                .vertex_sample(vertex_x, vertex_y)
-                .ok_or_else(|| format!("missing terrain vertex ({vertex_x}, {vertex_y})"))?;
-            Ok([
-                terrain.origin_world.x + vertex_x as f32 * terrain.tile_world,
-                sample_display_height(sample),
-                terrain.origin_world.y + vertex_y as f32 * terrain.tile_world,
-            ])
-        };
 
-        self.positions.extend_from_slice(&[
-            position(x, y)?,
-            position(x, y + 1)?,
-            position(x + 1, y)?,
-            position(x + 1, y + 1)?,
-        ]);
-        self.uvs.extend_from_slice(&uvs);
-        self.indices.extend_from_slice(&[
-            base_index,
-            base_index + 1,
-            base_index + 2,
-            base_index + 2,
-            base_index + 1,
-            base_index + 3,
-        ]);
+        for sub_y in 0..=subdivisions {
+            let fy = sub_y as f32 / subdivisions as f32;
+            for sub_x in 0..=subdivisions {
+                let fx = sub_x as f32 / subdivisions as f32;
+                let grid = Vec2::new(x as f32 + fx, y as f32 + fy);
+                self.positions.push(terrain.position_at_grid(grid));
+                self.normals.push(terrain.normal_at_grid(grid));
+                self.uvs.push(interpolate_quad_uv(uvs, fx, fy));
+            }
+        }
+
+        for sub_y in 0..subdivisions {
+            for sub_x in 0..subdivisions {
+                let bottom_left = base_index + sub_y * row_width + sub_x;
+                let bottom_right = bottom_left + 1;
+                let top_left = bottom_left + row_width;
+                let top_right = top_left + 1;
+                self.indices.extend_from_slice(&[
+                    bottom_left,
+                    top_left,
+                    bottom_right,
+                    bottom_right,
+                    top_left,
+                    top_right,
+                ]);
+            }
+        }
         Ok(())
     }
 
@@ -580,6 +635,8 @@ impl TerrainMeshBuilder {
         // material depth bias as the only transparent-sort discriminator.
         self.positions
             .extend_from_slice(&[sort_bounds.0, sort_bounds.1]);
+        self.normals
+            .extend_from_slice(&[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]);
         self.uvs.extend_from_slice(&[[0.0, 0.0], [0.0, 0.0]]);
 
         Some(
@@ -588,9 +645,9 @@ impl TerrainMeshBuilder {
                 RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
             )
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
-            .with_inserted_indices(Indices::U32(self.indices))
-            .with_computed_smooth_normals(),
+            .with_inserted_indices(Indices::U32(self.indices)),
         )
     }
 }
@@ -609,6 +666,26 @@ fn full_tile_variation(extended: bool, detail: u8) -> u8 {
     } else {
         15
     }
+}
+
+fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    0.5 * ((2.0 * p1)
+        + (-p0 + p2) * t
+        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+}
+
+fn interpolate_quad_uv(uvs: [[f32; 2]; 4], fx: f32, fy: f32) -> [f32; 2] {
+    let bottom_left = Vec2::from_array(uvs[0]);
+    let top_left = Vec2::from_array(uvs[1]);
+    let bottom_right = Vec2::from_array(uvs[2]);
+    let top_right = Vec2::from_array(uvs[3]);
+    bottom_left
+        .lerp(top_left, fy)
+        .lerp(bottom_right.lerp(top_right, fy), fx)
+        .to_array()
 }
 
 fn atlas_uvs(atlas: &TerrainGroundAtlas, variation: u8) -> Result<[[f32; 2]; 4], String> {
@@ -654,6 +731,8 @@ fn sample_display_height(sample: TerrainElevationSample) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use castle_fight_sim::SimPoint;
+
     use super::*;
 
     fn original_terrain() -> TerrainSurface {
@@ -670,6 +749,20 @@ mod tests {
             "../../../docs/original_map/extracted/terrain.json"
         ))
         .unwrap()
+    }
+
+    fn rounded_ramp_terrain() -> TerrainSurface {
+        TerrainSurface::new(
+            TerrainElevationMap::from_vertex_samples(
+                SimPoint::new(0, 0),
+                128 * SUBUNITS_PER_WORLD_UNIT,
+                1,
+                1,
+                vec![2, 2, 2, 2],
+                vec![8_592, 8_192, 8_592, 8_192],
+            )
+            .unwrap(),
+        )
     }
 
     fn dummy_texture_set(layout: &TerrainTextureLayout) -> TerrainTextureSet {
@@ -720,6 +813,44 @@ mod tests {
         let corner = terrain.height_at_world(terrain.world_min());
         let outside = terrain.height_at_world(Vec2::new(-100_000.0, -100_000.0));
         assert_eq!(outside, corner);
+    }
+
+    #[test]
+    fn presentation_height_rounds_ramp_profile_without_moving_vertices() {
+        let terrain = rounded_ramp_terrain();
+        let left = terrain.height_at_world(Vec2::new(0.0, 64.0));
+        let quarter = terrain.height_at_world(Vec2::new(32.0, 64.0));
+        let middle = terrain.height_at_world(Vec2::new(64.0, 64.0));
+        let right = terrain.height_at_world(Vec2::new(128.0, 64.0));
+
+        assert!((left - 100.0).abs() < 0.001);
+        assert!((right - 0.0).abs() < 0.001);
+        assert!((middle - 50.0).abs() < 0.001);
+        assert!(
+            quarter > 75.0,
+            "rounded ramp should ease out of the plateau"
+        );
+    }
+
+    #[test]
+    fn presentation_mesh_subdivides_tiles_for_curved_ramps() {
+        let terrain = rounded_ramp_terrain();
+        let mesh = terrain.mesh();
+        let positions = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+        let normals = mesh
+            .attribute(Mesh::ATTRIBUTE_NORMAL)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+        let side = (TERRAIN_PRESENTATION_SUBDIVISIONS + 1) as usize;
+
+        assert_eq!(positions.len(), side * side);
+        assert_eq!(normals.len(), positions.len());
+        assert!(normals.iter().all(|normal| normal[1] > 0.0));
     }
 
     #[test]
