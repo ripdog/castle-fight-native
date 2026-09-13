@@ -230,16 +230,17 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 5)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 6)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "automatic-defend-state-maintenance": 1,
             "damage-triggered-echo-step-and-remnant": 1,
+            "native-lava-spawn-split-with-child-conversion": 1,
             "retarget-flying-damage-source": 2,
         })
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(set(rows), {"e00F", "h03A", "n02S", "n02T", "n03I"})
+        self.assertEqual(set(rows), {"e00F", "h03A", "n02S", "n02T", "n03I", "u00F"})
 
         giant = json.loads(rows["e00F"]["parameters_json"])
         self.assertEqual(rows["e00F"]["building_rawcode"], "h028")
@@ -280,6 +281,20 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(defender["undefend_reactivation_delay_seconds"], 5.5)
         self.assertEqual(defender["defend_object_data"]["Damage Taken (%)"], 0.4)
         self.assertEqual(defender["defend_object_data"]["Chance to Deflect"], 50)
+
+        fire = json.loads(rows["u00F"]["parameters_json"])
+        self.assertEqual(rows["u00F"]["building_rawcode"], "h046")
+        self.assertEqual(fire["native_split_base_ability_rawcode"], "ANlm")
+        self.assertEqual(fire["native_split_summoned_unit_rawcode"], "h030")
+        self.assertEqual(fire["native_split_object_data"]["Split Attack Count"], 15)
+        self.assertEqual(fire["native_split_object_data"]["Split Delay"], 2)
+        self.assertEqual(fire["native_split_object_data"]["Max Hitpoint Factor"], 0.5)
+        self.assertEqual(fire["native_split_object_data"]["Generation Count"], 3)
+        self.assertEqual(fire["native_split_object_data"]["Summoned Unit Count"], 1)
+        self.assertEqual(fire["native_split_effective_cooldown"], 0.1)
+        self.assertEqual(fire["nested_h030_child_replacement_unit_id"], 1747989082)
+        self.assertTrue(fire["remove_summoned_type_from_h030_child"])
+        self.assertEqual(fire["post_child_attack_order_delay_seconds"], 0.2)
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

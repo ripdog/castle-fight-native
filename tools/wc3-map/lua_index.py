@@ -4612,6 +4612,63 @@ def _extract_production_unit_special_mechanics(
         "byte_offset": min(defender_spawn_start, defender_order_start),
     })
 
+    # Greater Fire Elemental: WC3's native ANlm split engine owns the attack
+    # counter/generation mechanics. Castle Fight adds a summon listener that
+    # strips the summoned classification from h030 children and converts an
+    # h030 child produced by another h030 into ordinary Fire Elemental h02Z.
+    # Keep the native ANlm fields joined downstream from object data rather than
+    # re-deriving engine internals from the listener.
+    fire_listener_start, _ = require_tokens(
+        "EventListener_add_FireElemental_onEvent_add_FireElemental",
+        {
+            "1747989296", "1747989082", "1966092358", "UNIT_TYPE_SUMMONED",
+            "__wurst_safe_UnitRemoveType", "__wurst_safe_ReplaceUnitBJ", "setupFireSummon", "doAfter",
+        },
+    )
+    require_tokens(
+        "setupFireSummon",
+        {"trackTrainedUnitPathing", "orderCodeAttackIfAllowed", "Pm", "create501", "doAfter"},
+    )
+    require_tokens(
+        "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
+        {"orderCodeAttackIfAllowed"},
+    )
+    listener_function = next(
+        function for function in functions
+        if function["name"] == "EventListener_add_FireElemental_onEvent_add_FireElemental"
+    )
+    listener_source = data[int(listener_function["start"]):int(listener_function["end"])]
+    if b"__wurst_safe_ReplaceUnitBJ(jxm,1747989082,2)" not in listener_source:
+        raise ValueError("Greater Fire Elemental child conversion changed")
+    setup_function = next(function for function in functions if function["name"] == "setupFireSummon")
+    setup_source = data[int(setup_function["start"]):int(setup_function["end"])]
+    if b"doAfter(0.2,dzq)" not in setup_source:
+        raise ValueError("Fire Elemental post-split attack setup delay changed")
+    rows.append({
+        "unit_id": 1966092358,
+        "mechanic_kind": "native-lava-spawn-split-with-child-conversion",
+        "trigger": "wc3-ANlm-split-and-summon-event",
+        "parameters": {
+            "split_ability_id": 1093682265,
+            "first_split_child_unit_id": 1747989296,
+            "nested_h030_child_replacement_unit_id": 1747989082,
+            "nested_h030_child_replace_method": 2,
+            "remove_summoned_type_from_h030_child": True,
+            "post_child_setup_tracks_pathing": True,
+            "post_child_setup_orders_attack": True,
+            "post_child_attack_order_delay_seconds": 0.2,
+            "native_split_state_machine": "Warcraft-ANlm",
+        },
+        "related_rawcode_ids": [1093682265, 1747989296, 1747989082],
+        "source_functions": [
+            "EventListener_add_FireElemental_onEvent_add_FireElemental",
+            "setupFireSummon",
+            "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
+        ],
+        "evidence_kind": "native-ANlm-object-data-plus-exact-summon-listener",
+        "byte_offset": fire_listener_start,
+    })
+
     return rows
 
 

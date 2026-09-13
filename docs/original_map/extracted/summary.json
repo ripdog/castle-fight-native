@@ -109,11 +109,12 @@
     "unit_spell_inlined_registrations": 1,
     "protected_filter_bindings": 22,
     "protected_filter_bindings_resolved": 21,
-    "production_unit_special_mechanics": 5,
+    "production_unit_special_mechanics": 6,
     "production_unit_special_mechanic_kinds": {
       "auto-spawn-tree-and-grab-war-club": 1,
       "automatic-defend-state-maintenance": 1,
       "damage-triggered-echo-step-and-remnant": 1,
+      "native-lava-spawn-split-with-child-conversion": 1,
       "retarget-flying-damage-source": 2
     },
     "building_spell_mechanics": 43,
