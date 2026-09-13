@@ -5434,7 +5434,9 @@ def _extract_runtime_system_mechanics(
         "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning",
         "ME", "acquireElvenShrine", "elvenShrineEffectiveReviveChance", "fJ",
         "CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler",
-        "markShrineReviveBlocked", "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+        "markShrineReviveBlocked", "onBuildingFinished", "acquireLinker", "eleLinkerHealAmount", "changeEleBuildingCount", "wL",
+        "GH", "calcTreasureBoxMultiplier", "rawIncomeWithTreasureBox", "acquireTreasureBox", "SE",
+        "applyTreasureBoxModeEnabled", "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
     }
     if not required.issubset(available):
         return []
@@ -5680,6 +5682,147 @@ def _extract_runtime_system_mechanics(
         ],
         "evidence_kind": "exact-team-counter-death-branch-and-delayed-replacement-callback",
         "byte_offset": min(lifecycle_start, elven_start, revive_chance_start, death_start, revive_start, block_start),
+    })
+
+    # Elemental Linker. One or more team Linkers merely enable the effect; the
+    # heal amount is based on the dead Elemental owner's own production-building
+    # count. The runtime uses 17 hp/building (not tooltip 17.5), caps at 500,
+    # heals same-type allied units in 350 range for the full amount and all other
+    # allied combat sappers for only 20% (not the tooltip's stated 30%).
+    finish_start, finish_source, finish_tokens = source("onBuildingFinished")
+    linker_start, linker_source, linker_tokens = source("acquireLinker")
+    heal_start, heal_source, heal_tokens = source("eleLinkerHealAmount")
+    count_start, count_source, count_tokens = source("changeEleBuildingCount")
+    side_effect_start, side_effect_source, side_effect_tokens = source("wL")
+    if b"Ktb=100 Jtb=.024 Itb=256. Htb=6 Gtb=5 Ftb=17 Etb=500 Dtb=5 Ctb=20 Btb=40" not in lifecycle_source:
+        raise ValueError("Elemental Linker lifecycle constants changed")
+    if b"YDp==1747990067)then acquireLinker(VDp,XDp)" not in finish_source:
+        raise ValueError("Elemental Linker lifecycle dispatch changed")
+    if not {"Atb", "ztb", "CreateTextTag"}.issubset(linker_tokens):
+        raise ValueError("Elemental Linker acquisition bookkeeping changed")
+    if b"Atb[OCp]=(__wurst_ensureInt(Atb[OCp])+1)" not in linker_source:
+        raise ValueError("Elemental Linker team presence count changed")
+    if b"return min((Ftb*eleBuildingTotal(bCp)),Etb)" not in heal_source:
+        raise ValueError("Elemental Linker heal amount formula changed")
+    if not {"eleBuildingTotal", "wtb", "mtb", "max1"}.issubset(count_tokens):
+        raise ValueError("Elemental production-building count maintenance changed")
+    if b"unit_getAbilityLevel(M2q,1093682741)>0" not in death_source:
+        raise ValueError("Elemental Linker dead-unit marker gate changed")
+    if b"(__wurst_ensureInt(Atb[R2q])>0)" not in death_source:
+        raise ValueError("Elemental Linker team-presence gate changed")
+    if b"TX=eleLinkerHealAmount(P2q)" not in death_source or b"350.,C3q" not in death_source:
+        raise ValueError("Elemental Linker death heal amount/radius changed")
+    if not {"isAliveCombatSapper", "unit_isAllyOf", "UX", "TX", "widget_getLife"}.issubset(side_effect_tokens):
+        raise ValueError("Elemental Linker heal target callback changed")
+    if b"unit_getTypeId(jHr)==UX" not in side_effect_source or b"(.2*TX)" not in side_effect_source:
+        raise ValueError("Elemental Linker same/other-type heal factors changed")
+    rows.append({
+        "system_id": "elemental-linker-death-heal",
+        "mechanic_kind": "team-presence-gated-owner-scaled-elemental-death-heal",
+        "trigger": "elemental-combat-sapper-death",
+        "parameters": {
+            "linker_unit_id": 1747990067,
+            "elemental_unit_marker_ability_id": 1093682741,
+            "team_linker_presence_required": True,
+            "additional_linkers_do_not_stack_heal": True,
+            "elemental_building_bucket_count": 5,
+            "heal_per_owned_elemental_production_building": 17,
+            "tooltip_heal_per_building": 17.5,
+            "heal_per_building_tooltip_disagrees_with_runtime": True,
+            "maximum_heal": 500,
+            "heal_radius": 350,
+            "target_predicate": "alive-combat-sapper;ally-of-dead-unit-owner",
+            "same_unit_type_heal_factor": 1.0,
+            "other_unit_type_heal_factor": 0.2,
+            "tooltip_other_race_reduction_percent": 70,
+            "runtime_other_type_reduction_percent": 80,
+            "other_type_tooltip_disagrees_with_runtime": True,
+            "building_count_scope": "dead-unit-owner",
+            "linker_presence_scope": "team",
+            "owner_change_updates_counts": True,
+            "building_death_updates_counts": True,
+        },
+        "related_rawcode_ids": [1747990067, 1093682741],
+        "source_functions": [
+            "ME", "acquireLinker", "acquireEleBuilding", "changeEleBuildingCount", "eleLinkerHealAmount",
+            "fJ", "wL", "migrateBuildingLifecycleOwner", "NE", "OE",
+        ],
+        "evidence_kind": "exact-lifecycle-counters-death-branch-and-resolved-filter-side-effect",
+        "byte_offset": min(lifecycle_start, finish_start, linker_start, heal_start, count_start, death_start, side_effect_start),
+    })
+
+    # Treasure Box income multiplier. Construction/death maintain a per-player
+    # count. Counts 1..9 use a precomputed cumulative table; count 10+ switches
+    # to the explicit linear tail in calcTreasureBoxMultiplier. The multiplier
+    # is applied to base income before the ordinary progressive income tax.
+    treasure_init_start, treasure_init_source, treasure_init_tokens = source("GH")
+    multiplier_start, multiplier_source, multiplier_tokens = source("calcTreasureBoxMultiplier")
+    income_start, income_source, income_tokens = source("rawIncomeWithTreasureBox")
+    treasure_acquire_start, treasure_acquire_source, treasure_acquire_tokens = source("acquireTreasureBox")
+    treasure_remove_start, treasure_remove_source, treasure_remove_tokens = source("SE")
+    treasure_mode_start, treasure_mode_source, treasure_mode_tokens = source("applyTreasureBoxModeEnabled")
+    treasure_table = [0.0, 1.0, 1.85, 2.57, 3.18, 3.7, 4.14, 4.52, 4.84, 5.11]
+    expected_table_fragment = (
+        b"Fab[0]=0. Fab[1]=1. Fab[2]=1.85 Fab[3]=2.57 Fab[4]=3.18 Fab[5]=3.7 "
+        b"Fab[6]=4.14 Fab[7]=4.52 Fab[8]=4.84 Fab[9]=5.11"
+    )
+    if expected_table_fragment not in treasure_init_source:
+        raise ValueError("Treasure Box cumulative multiplier table changed")
+    if b"if(XEq<=0)then return 1." not in multiplier_source:
+        raise ValueError("Treasure Box zero-count multiplier changed")
+    if b"if(XEq<10)then return((__wurst_ensureReal(Fab[XEq])*0.25)+1.)" not in multiplier_source:
+        raise ValueError("Treasure Box table multiplier formula changed")
+    if b"return((((int_toReal((XEq-9))*0.25)+5.11)*0.25)+1.)" not in multiplier_source:
+        raise ValueError("Treasure Box count>=10 tail formula changed")
+    if b"iGb[YEq])*10.)*calcTreasureBoxMultiplier" not in income_source:
+        raise ValueError("Treasure Box raw-income application changed")
+    if b"YDp==1747988536)then acquireTreasureBox(VDp)" not in finish_source:
+        raise ValueError("Treasure Box lifecycle dispatch changed")
+    if not {"qGb", "unit_getOwner"}.issubset(treasure_acquire_tokens):
+        raise ValueError("Treasure Box lifecycle acquisition changed")
+    if b"qGb[uDp]=(__wurst_ensureInt(qGb[uDp])+1)" not in treasure_acquire_source:
+        raise ValueError("Treasure Box count increment changed")
+    if b"qGb[xDp]=max1(0,(__wurst_ensureInt(qGb[xDp])-1))" not in treasure_remove_source:
+        raise ValueError("Treasure Box count decrement changed")
+    if not {"1747988536", "__wurst_safe_SetPlayerUnitAvailableBJ"}.issubset(treasure_mode_tokens):
+        raise ValueError("No-Treasure-Box mode availability gate changed")
+    if b"zX=(not QQq)" not in treasure_mode_source:
+        raise ValueError("Treasure Box mode flag changed")
+    rows.append({
+        "system_id": "treasure-box-income-multiplier",
+        "mechanic_kind": "per-player-building-count-income-multiplier",
+        "trigger": "income-calculation-with-building-lifecycle-count",
+        "parameters": {
+            "treasure_box_unit_id": 1747988536,
+            "count_scope": "player",
+            "base_income_units_scale": 10,
+            "multiplier_table_indexes_0_through_9": treasure_table,
+            "zero_count_multiplier": 1.0,
+            "counts_1_through_9_formula": "1 + 0.25 * table[count]",
+            "count_10_plus_formula": "1 + 0.25 * (5.11 + 0.25 * (count - 9))",
+            "count_10_plus_marginal_multiplier_per_box": 0.0625,
+            "multipliers_0_through_9": [
+                1.0 if count == 0 else 1.0 + (0.25 * treasure_table[count])
+                for count in range(10)
+            ],
+            "applied_before_progressive_income_tax": True,
+            "tooltip_first_box_bonus_percent": 25,
+            "tooltip_later_box_reduction_percent": 15,
+            "runtime_uses_precomputed_table_then_linear_tail": True,
+            "no_treasure_box_mode_disables_building_for_player_slots_0_through_11": True,
+            "building_death_decrements_count": True,
+            "owner_change_migrates_count": True,
+        },
+        "related_rawcode_ids": [1747988536],
+        "source_functions": [
+            "GH", "calcTreasureBoxMultiplier", "rawIncomeWithTreasureBox", "acquireTreasureBox", "SE",
+            "migrateBuildingLifecycleOwner", "applyTreasureBoxModeEnabled",
+        ],
+        "evidence_kind": "exact-lifecycle-count-precomputed-table-and-income-formula",
+        "byte_offset": min(
+            treasure_init_start, multiplier_start, income_start, treasure_acquire_start,
+            treasure_remove_start, treasure_mode_start,
+        ),
     })
 
     # Blood Fiend procedural generation. The trained n00L carrier is first

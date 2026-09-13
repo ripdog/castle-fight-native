@@ -2245,6 +2245,52 @@ def main() -> None:
                     parameters["production_carrier_name"] = carrier["name"]
                     parameters["resolved_body_distribution"] = body_rows
                     parameters["resolved_trait_groups"] = resolved_groups
+                elif system_id == "elemental-linker-death-heal":
+                    linker = static_units.get("h063")
+                    marker = ability_level_one("A0F5")
+                    if linker is None:
+                        raise ValueError("Elemental Linker runtime system is missing h063")
+                    tooltip = str(linker["ubertip"])
+                    if "17.5" not in tooltip or "70" not in tooltip:
+                        raise ValueError(f"Elemental Linker tooltip no longer advertises 17.5/70%: {tooltip}")
+                    if (
+                        numeric(parameters["heal_per_owned_elemental_production_building"]) != 17
+                        or numeric(parameters["maximum_heal"]) != 500
+                        or numeric(parameters["heal_radius"]) != 350
+                        or numeric(parameters["other_unit_type_heal_factor"]) != 0.2
+                    ):
+                        raise ValueError(f"Elemental Linker runtime formula changed: {parameters}")
+                    bucket_path = map_root / "script" / "element-building-buckets.tsv"
+                    if not bucket_path.exists():
+                        raise ValueError("Elemental Linker runtime system is missing script element-building buckets")
+                    with bucket_path.open(encoding="utf-8", newline="") as bucket_handle:
+                        bucket_rows = list(csv.DictReader(bucket_handle, delimiter="\t"))
+                    bucket_ids = sorted({int(row["bucket"]) for row in bucket_rows})
+                    if bucket_ids != [1, 2, 3, 4, 5]:
+                        raise ValueError(f"Elemental Linker building buckets changed: {bucket_ids}")
+                    parameters["linker_name"] = linker["name"]
+                    parameters["linker_tooltip"] = tooltip
+                    parameters["elemental_marker_ability_rawcode"] = "A0F5"
+                    parameters["elemental_marker_ability_name"] = marker["name"]
+                    parameters["resolved_elemental_building_count"] = len(bucket_rows)
+                    parameters["resolved_elemental_building_buckets"] = bucket_ids
+                elif system_id == "treasure-box-income-multiplier":
+                    treasure = static_units.get("h008")
+                    if treasure is None:
+                        raise ValueError("Treasure Box runtime system is missing h008")
+                    tooltip = str(treasure["ubertip"])
+                    if "25" not in tooltip or "15" not in tooltip:
+                        raise ValueError(f"Treasure Box tooltip no longer advertises 25%/15%: {tooltip}")
+                    expected_table = [0.0, 1.0, 1.85, 2.57, 3.18, 3.7, 4.14, 4.52, 4.84, 5.11]
+                    expected_multipliers = [1.0, 1.25, 1.4625, 1.6425, 1.795, 1.925, 2.035, 2.13, 2.21, 2.2775]
+                    if [numeric(value) for value in parameters["multiplier_table_indexes_0_through_9"]] != expected_table:
+                        raise ValueError(f"Treasure Box multiplier table changed: {parameters}")
+                    if [numeric(value) for value in parameters["multipliers_0_through_9"]] != expected_multipliers:
+                        raise ValueError(f"Treasure Box derived multipliers changed: {parameters}")
+                    if numeric(parameters["count_10_plus_marginal_multiplier_per_box"]) != 0.0625:
+                        raise ValueError(f"Treasure Box linear-tail increment changed: {parameters}")
+                    parameters["treasure_box_name"] = treasure["name"]
+                    parameters["treasure_box_tooltip"] = tooltip
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 

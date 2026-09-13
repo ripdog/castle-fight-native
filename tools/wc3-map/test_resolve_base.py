@@ -478,16 +478,18 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 4)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 6)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
+            "per-player-building-count-income-multiplier": 1,
+            "team-presence-gated-owner-scaled-elemental-death-heal": 1,
             "team-shrine-independent-clone-rolls-and-train-transformations": 1,
             "team-stacked-one-time-delayed-unit-revival": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 6)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -542,6 +544,34 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(fiend["resolved_trait_groups"]), 6)
         for group in fiend["resolved_trait_groups"]:
             self.assertEqual(sum(outcome["probability_percent"] for outcome in group["outcomes"]), 100)
+
+        linker = json.loads(rows["elemental-linker-death-heal"]["parameters_json"])
+        self.assertEqual(linker["tooltip_heal_per_building"], 17.5)
+        self.assertEqual(linker["heal_per_owned_elemental_production_building"], 17)
+        self.assertTrue(linker["heal_per_building_tooltip_disagrees_with_runtime"])
+        self.assertEqual(linker["maximum_heal"], 500)
+        self.assertEqual(linker["heal_radius"], 350)
+        self.assertEqual(linker["same_unit_type_heal_factor"], 1.0)
+        self.assertEqual(linker["other_unit_type_heal_factor"], 0.2)
+        self.assertEqual(linker["tooltip_other_race_reduction_percent"], 70)
+        self.assertEqual(linker["runtime_other_type_reduction_percent"], 80)
+        self.assertTrue(linker["other_type_tooltip_disagrees_with_runtime"])
+        self.assertEqual(linker["resolved_elemental_building_count"], 12)
+        self.assertEqual(linker["resolved_elemental_building_buckets"], [1, 2, 3, 4, 5])
+
+        treasure = json.loads(rows["treasure-box-income-multiplier"]["parameters_json"])
+        self.assertEqual(treasure["tooltip_first_box_bonus_percent"], 25)
+        self.assertEqual(treasure["tooltip_later_box_reduction_percent"], 15)
+        self.assertEqual(
+            treasure["multiplier_table_indexes_0_through_9"],
+            [0.0, 1.0, 1.85, 2.57, 3.18, 3.7, 4.14, 4.52, 4.84, 5.11],
+        )
+        self.assertEqual(
+            treasure["multipliers_0_through_9"],
+            [1.0, 1.25, 1.4625, 1.6425, 1.795, 1.925, 2.035, 2.13, 2.21, 2.2775],
+        )
+        self.assertEqual(treasure["count_10_plus_marginal_multiplier_per_box"], 0.0625)
+        self.assertTrue(treasure["applied_before_progressive_income_tax"])
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
