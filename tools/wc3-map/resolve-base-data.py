@@ -2449,6 +2449,54 @@ def main() -> None:
                     parameters["assassin_tooltip"] = assassin["ubertip"]
                     parameters["royal_assassin_tooltip"] = royal["ubertip"]
                     parameters["gobbo_tooltip"] = gobbo["ubertip"]
+                elif system_id == "global-idle-attack-reengage":
+                    excluded: list[dict[str, Any]] = []
+                    for rawcode in ("A07I", "A07M"):
+                        ability = ability_level_one(rawcode)
+                        excluded.append({
+                            "rawcode": rawcode,
+                            "name": ability["name"],
+                            "base_rawcode": ability["base_rawcode"],
+                            "object_data": json.loads(ability["data_fields_labeled_json"]),
+                        })
+                    parameters["resolved_excluded_abilities"] = excluded
+                elif system_id == "builder-castle-blink":
+                    blink = ability_level_one("A0-1")
+                    blink_fields = json.loads(blink["data_fields_labeled_json"])
+                    if blink["name"] != "Blink" or numeric(blink["range"]) != 10000:
+                        raise ValueError(f"Builder Blink object data changed: {blink}")
+                    if numeric(blink_fields.get("Target Type")) != 2 or numeric(blink_fields.get("Options")) != 1:
+                        raise ValueError(f"Builder Blink channel fields changed: {blink_fields}")
+                    parameters["ability_name"] = blink["name"]
+                    parameters["ability_tooltip"] = blink["ubertip"]
+                    parameters["ability_range"] = numeric(blink["range"])
+                    parameters["ability_object_data"] = blink_fields
+                elif system_id == "rescue-strike":
+                    rescue = ability_level_one("A005")
+                    effect = ability_level_one("A06E")
+                    marker = static_units.get("h04X")
+                    if marker is None:
+                        raise ValueError("Rescue Strike marker unit h04X is missing")
+                    runtime_cooldown = protected_ability_values.get(("A005", 1, "cooldown"))
+                    runtime_mana = protected_ability_values.get(("A005", 1, "mana_cost"))
+                    if numeric(runtime_cooldown) != 60 or numeric(runtime_mana) != 0:
+                        raise ValueError(
+                            f"Rescue Strike protected cooldown/mana changed: cooldown={runtime_cooldown} mana={runtime_mana}"
+                        )
+                    if numeric(rescue["area"]) != 700 or numeric(rescue["range"]) != 1000:
+                        raise ValueError(f"Rescue Strike object range/area changed: {rescue}")
+                    parameters["ability_rawcode"] = "A005"
+                    parameters["ability_name"] = rescue["name"]
+                    parameters["ability_tooltip"] = rescue["ubertip"]
+                    parameters["static_object_cooldown_seconds"] = numeric(rescue["cooldown"])
+                    parameters["effective_protected_cooldown_seconds"] = numeric(runtime_cooldown)
+                    parameters["effective_protected_mana_cost"] = numeric(runtime_mana)
+                    parameters["object_range"] = numeric(rescue["range"])
+                    parameters["object_area"] = numeric(rescue["area"])
+                    parameters["effect_ability_rawcode"] = "A06E"
+                    parameters["effect_ability_name"] = effect["name"]
+                    parameters["marker_unit_rawcode"] = "h04X"
+                    parameters["marker_unit_name"] = marker["name"]
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 

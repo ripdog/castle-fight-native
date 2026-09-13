@@ -478,13 +478,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 10)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 13)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
+            "builder-point-teleport-clamped-to-own-castle": 1,
+            "builder-point-cast-team-coordinated-area-execution": 1,
             "building-random-enemy-base-attack-ground-controller": 1,
             "per-player-building-count-income-multiplier": 1,
             "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
+            "periodic-idle-combat-unit-attack-order-recovery": 1,
             "summoned-carrier-random-unit-replacement": 1,
             "team-constructed-building-count-to-spell-level": 1,
             "team-presence-gated-owner-scaled-elemental-death-heal": 1,
@@ -493,7 +496,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 10)
+        self.assertEqual(len(rows), 13)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -630,6 +633,32 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(actors["n01U"]["timed_life_seconds"], 45)
         self.assertEqual(actors["n01U"]["repair_object_data"]["Repair Time Ratio"], 0.45)
         self.assertFalse(support["gobbo_one_per_target_claim_proven_by_script"])
+
+        idle = json.loads(rows["global-idle-attack-reengage"]["parameters_json"])
+        self.assertEqual(idle["interval_seconds"], 4)
+        self.assertTrue(idle["starts_each_round"])
+        self.assertEqual(idle["excluded_ability_ids"], [1093678921, 1093678925])
+        self.assertEqual(idle["target_predicate"], "alive;current-order-zero;combat-sapper;vulnerable;lacks-A07I;lacks-A07M")
+
+        blink = json.loads(rows["builder-castle-blink"]["parameters_json"])
+        self.assertEqual(blink["ability_rawcode"], "A0-1")
+        self.assertEqual(blink["ability_range"], 10000)
+        self.assertEqual(blink["rect_inset_world_units"], 64)
+        self.assertEqual(blink["destination_rect"], "owner-own-castle-rect")
+        self.assertEqual(blink["post_teleport_order_id"], 851972)
+
+        rescue = json.loads(rows["rescue-strike"]["parameters_json"])
+        self.assertEqual(rescue["ability_rawcode"], "A005")
+        self.assertEqual(rescue["effective_protected_cooldown_seconds"], 60)
+        self.assertEqual(rescue["static_object_cooldown_seconds"], 99)
+        self.assertEqual(rescue["cast_delay_seconds"], 0.35)
+        self.assertEqual(rescue["radius"], 700)
+        self.assertEqual(rescue["finish_delay_seconds"], 1.5)
+        self.assertEqual(rescue["team_coordination_cooldown_seconds"], 2)
+        self.assertEqual(rescue["zero_kill_refund_cooldown_seconds"], 180)
+        self.assertEqual([packet["amount"] for packet in rescue["damage_packets"]], [4444, 4444])
+        self.assertTrue(rescue["zero_kill_refunds_ability_and_effect"])
+        self.assertTrue(rescue["nonzero_kill_does_not_refund_in_finish_handler"])
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

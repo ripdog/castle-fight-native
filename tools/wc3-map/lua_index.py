@@ -5449,6 +5449,12 @@ def _extract_runtime_system_mechanics(
         "prepareGobboTargets", "isGobboRepairableTarget", "isGobboRallyTarget", "orderGoboW",
         "setGobboSpawner", "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
         "sH", "applyGobboTimedLife", "onSummonedUnit",
+        "completeRoundStart", "startIdleAttackTimer", "isIdleAttackUnit", "code__TimerStart_IdleAttackRuntime",
+        "ForGroupCallback_forUnitsInRect_IdleAttackRuntime_callback_forUnitsInRect_IdleAttackRuntime",
+        "uL", "CE", "EventListener_add_Blink_onEvent_add_Blink",
+        "gL", "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
+        "CallbackSingle_doAfter_RescueStrikeRuntime_call_doAfter_RescueStrikeRuntime1",
+        "applyRescueStrike", "startRescueStrikeCooldown", "startTeamRescueStrikeCooldown", "finishRescueStrike",
         "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
     }
     if not required.issubset(available):
@@ -6153,6 +6159,208 @@ def _extract_runtime_system_mechanics(
             assassin_init_start, support_init_start, support_gate_start, support_dispatch_start,
             assassin_targets_start, assassin_valid_start, assassin_order_start, gobbo_targets_start,
             gobbo_order_start, task_run_start, gobbo_life_init_start, gobbo_life_start,
+        ),
+    })
+
+    # Global idle-unit re-engagement. At round start the map starts a 4-second
+    # timer that scans the battlefield and reissues the ordinary Castle Fight
+    # attack order only to idle, alive/vulnerable combat sappers. Units carrying
+    # either of the two channel/support markers are deliberately excluded.
+    round_start_start, round_start_source, round_start_tokens = source("completeRoundStart")
+    idle_timer_start, idle_timer_source, idle_timer_tokens = source("startIdleAttackTimer")
+    idle_pred_start, idle_pred_source, idle_pred_tokens = source("isIdleAttackUnit")
+    idle_tick_start, idle_tick_source, idle_tick_tokens = source("code__TimerStart_IdleAttackRuntime")
+    idle_cb_start, idle_cb_source, idle_cb_tokens = source(
+        "ForGroupCallback_forUnitsInRect_IdleAttackRuntime_callback_forUnitsInRect_IdleAttackRuntime"
+    )
+    if b"Dd()startIdleAttackTimer()" not in round_start_source:
+        raise ValueError("Idle-attack timer no longer starts with the round")
+    if b"__wurst_safe_TimerStart(Nab,4.,true" not in idle_timer_source:
+        raise ValueError("Idle-attack sweep interval changed")
+    for fragment in (
+        b"widget_getLife(lEq)>.405",
+        b"unit_getCurrentOrder(lEq)==0",
+        b"isCombatSapper(lEq)",
+        b"isVulnerable(lEq)",
+        b"unit_getAbilityLevel(lEq,1093678921)<=0",
+        b"unit_getAbilityLevel(lEq,1093678925)<=0",
+    ):
+        if fragment not in idle_pred_source:
+            raise ValueError("Idle-attack unit predicate changed")
+    if b"pEq=uIb" not in idle_tick_source or b"__wurst_safe_GroupEnumUnitsInRect(Oib,pEq,Gib)" not in idle_tick_source:
+        raise ValueError("Idle-attack battlefield enumeration changed")
+    if b"if isIdleAttackUnit(TCm)then orderCodeAttack(TCm)end" not in idle_cb_source:
+        raise ValueError("Idle-attack re-engage callback changed")
+    rows.append({
+        "system_id": "global-idle-attack-reengage",
+        "mechanic_kind": "periodic-idle-combat-unit-attack-order-recovery",
+        "trigger": "round-start-then-every-4-seconds",
+        "parameters": {
+            "interval_seconds": 4,
+            "enumeration_rect_symbol": "uIb",
+            "target_predicate": "alive;current-order-zero;combat-sapper;vulnerable;lacks-A07I;lacks-A07M",
+            "excluded_ability_ids": [1093678921, 1093678925],
+            "action": "orderCodeAttack",
+            "starts_each_round": True,
+        },
+        "related_rawcode_ids": [1093678921, 1093678925],
+        "source_functions": [
+            "completeRoundStart", "startIdleAttackTimer", "isIdleAttackUnit",
+            "code__TimerStart_IdleAttackRuntime",
+            "ForGroupCallback_forUnitsInRect_IdleAttackRuntime_callback_forUnitsInRect_IdleAttackRuntime",
+        ],
+        "evidence_kind": "exact-round-start-periodic-global-enumeration-and-unit-predicate",
+        "byte_offset": min(round_start_start, idle_timer_start, idle_pred_start, idle_tick_start, idle_cb_start),
+    })
+
+    # Builder Blink. Every spawned builder receives A0-1. The cast handler does
+    # not trust the requested point: it selects the owner's own castle rectangle,
+    # clamps X/Y to a 64-unit inset, teleports immediately, then emits O6.
+    blink_init_start, blink_init_source, blink_init_tokens = source("uL")
+    blink_register_start, blink_register_source, blink_register_tokens = source("CE")
+    blink_cast_start, blink_cast_source, blink_cast_tokens = source("EventListener_add_Blink_onEvent_add_Blink")
+    order_init_start, order_init_source, order_init_tokens = source("kJ")
+    enemy_rect_start, enemy_rect_source, enemy_rect_tokens = source("enemyCastleRect")
+    if b"kY=1093676337" not in blink_init_source:
+        raise ValueError("Builder Blink ability rawcode changed")
+    if b"EVENT_PLAYER_UNIT_SPELL_CAST" not in blink_register_source or b"Xb:create35()" not in blink_register_source:
+        raise ValueError("Builder Blink spell-cast registration changed")
+    if b"bYq=kY addProtectedAbility(aYq,bYq)" not in round_start_source:
+        raise ValueError("Round-start builder Blink grant changed")
+    if b"if(GetSpellAbilityId()==kY)" not in blink_cast_source:
+        raise ValueError("Builder Blink ability gate changed")
+    if b"if(__wurst_ensureInt(lGb[player_getId(PAk)])==0)then RAk=NFb else RAk=MFb end" not in blink_cast_source:
+        raise ValueError("Builder Blink castle-rect selection changed")
+    if b"if(__wurst_ensureInt(lGb[player_getId(unit_getOwner(dEq))])==0)then eEq=MFb else eEq=NFb end" not in enemy_rect_source:
+        raise ValueError("Enemy-castle rectangle orientation changed")
+    for fragment in (
+        b"rect_getMinX(QAk)+64.", b"rect_getMaxX(QAk)-64.",
+        b"rect_getMinY(QAk)+64.", b"rect_getMaxY(QAk)-64.",
+        b"__wurst_safe_SetUnitPosition(pBk,qBk[1],qBk[2])",
+        b"unit_issuePointOrderById(bBk,O6,cBk)",
+    ):
+        if fragment not in blink_cast_source:
+            raise ValueError("Builder Blink clamp/teleport sequence changed")
+    if b"O6=851972" not in order_init_source:
+        raise ValueError("Builder Blink post-teleport order id changed")
+    rows.append({
+        "system_id": "builder-castle-blink",
+        "mechanic_kind": "builder-point-teleport-clamped-to-own-castle",
+        "trigger": "A0-1-spell-cast",
+        "parameters": {
+            "ability_id": 1093676337,
+            "ability_rawcode": "A0-1",
+            "granted_to_spawned_builders": True,
+            "destination_rect": "owner-own-castle-rect",
+            "destination_rect_proof": "team0 uses NFb while enemyCastleRect(team0)=MFb; team1 uses MFb while enemyCastleRect(team1)=NFb",
+            "rect_inset_world_units": 64,
+            "clamp_x": True,
+            "clamp_y": True,
+            "teleport_primitive": "SetUnitPosition",
+            "post_teleport_order_id": 851972,
+            "post_teleport_order_symbol": "O6",
+        },
+        "related_rawcode_ids": [1093676337],
+        "source_functions": ["uL", "CE", "completeRoundStart", "EventListener_add_Blink_onEvent_add_Blink", "enemyCastleRect", "kJ"],
+        "evidence_kind": "exact-builder-grant-spell-cast-rect-clamp-and-position-set",
+        "byte_offset": min(blink_init_start, blink_register_start, round_start_start, blink_cast_start, enemy_rect_start, order_init_start),
+    })
+
+    # Rescue Strike. A005 is a point-cast, once-available builder ability. The
+    # script removes it immediately, creates an invisible marker, waits 0.35s,
+    # then applies two lethal-scale damage packets to each eligible enemy in a
+    # 700 radius. The team receives a short coordination cooldown; a zero-kill
+    # strike alone is refunded, with a punitive 180-second cooldown.
+    rescue_register_start, rescue_register_source, rescue_register_tokens = source("gL")
+    rescue_cast_start, rescue_cast_source, rescue_cast_tokens = source(
+        "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime"
+    )
+    rescue_delay_start, rescue_delay_source, rescue_delay_tokens = source(
+        "CallbackSingle_doAfter_RescueStrikeRuntime_call_doAfter_RescueStrikeRuntime1"
+    )
+    rescue_apply_start, rescue_apply_source, rescue_apply_tokens = source("applyRescueStrike")
+    rescue_cd_start, rescue_cd_source, rescue_cd_tokens = source("startRescueStrikeCooldown")
+    rescue_team_cd_start, rescue_team_cd_source, rescue_team_cd_tokens = source("startTeamRescueStrikeCooldown")
+    rescue_finish_start, rescue_finish_source, rescue_finish_tokens = source("finishRescueStrike")
+    if b"EventListener_addSpellInternal(nil,1093677109,aDr)" not in rescue_register_source:
+        raise ValueError("Rescue Strike A005 registration changed")
+    for fragment in (
+        b"createUnit(VBn,1747989592,UBn,{0.})",
+        b"__wurst_safe_SetUnitVertexColor(YBn,0,0,0,0)",
+        b"unit_removeAbility(TBn,1093677109)",
+        b"unit_removeAbility(TBn,1093678661)",
+        b"doAfter(.35,XBn)",
+    ):
+        if fragment not in rescue_cast_source:
+            raise ValueError("Rescue Strike cast/marker setup changed")
+    if b"applyRescueStrike(LBn.caster,LBn.marker,LBn.p,LBn.targetPos)" not in rescue_delay_source:
+        raise ValueError("Rescue Strike delayed apply callback changed")
+    for fragment in (
+        b"__wurst_safe_GroupEnumUnitsInRange(GDr,MDr[1],MDr[2],700.,nil)",
+        b"unit_isEnemyOf(JDr,EDr)",
+        b"widget_getLife(JDr)>0.405",
+        b"unit_getAbilityLevel(JDr,1098282348)<=0",
+        b"__wurst_safe_UnitDamageTarget(CDr,JDr,4444.,true,false,ATTACK_TYPE_CHAOS,DAMAGE_TYPE_DEATH,WEAPON_TYPE_WHOKNOWS)",
+        b"__wurst_safe_UnitDamageTarget(CDr,JDr,4444.,true,false,ATTACK_TYPE_NORMAL,DAMAGE_TYPE_MAGIC,WEAPON_TYPE_WHOKNOWS)",
+        b"unit_issueImmediateOrderById(DDr,852526)",
+        b"startTeamRescueStrikeCooldown(EDr)",
+        b"doAfter(1.5,LDr)",
+    ):
+        if fragment not in rescue_apply_source:
+            raise ValueError("Rescue Strike damage/finalization sequence changed")
+    if b"__wurst_safe_BlzStartUnitAbilityCooldown(fDr,1093677109,2.)" not in rescue_cd_source:
+        raise ValueError("Rescue Strike team coordination cooldown changed")
+    if not {"oGb", "nGb", "startRescueStrikeCooldown"}.issubset(rescue_team_cd_tokens):
+        raise ValueError("Rescue Strike team cooldown fan-out changed")
+    for fragment in (
+        b"__wurst_safe_RemoveUnit(zDr)",
+        b"kX[xDr]=(__wurst_ensureInt(kX[xDr])-1)",
+        b"if(vDr==0)then",
+        b"addProtectedAbility(ADr,1093677109)",
+        b"addProtectedAbility(BDr,1093678661)",
+        b"__wurst_safe_BlzStartUnitAbilityCooldown(rDr,1093677109,180.0)",
+        b"kX[yDr]=(__wurst_ensureInt(kX[yDr])+1)",
+    ):
+        if fragment not in rescue_finish_source:
+            raise ValueError("Rescue Strike finish/refund behavior changed")
+    rows.append({
+        "system_id": "rescue-strike",
+        "mechanic_kind": "builder-point-cast-team-coordinated-area-execution",
+        "trigger": "A005-point-cast",
+        "parameters": {
+            "ability_id": 1093677109,
+            "effect_ability_id": 1093678661,
+            "marker_unit_id": 1747989592,
+            "cast_delay_seconds": 0.35,
+            "radius": 700,
+            "target_predicate": "enemy;alive;lacks-Avul",
+            "excluded_ability_id": 1098282348,
+            "marks_targets_as_scripted_death": True,
+            "damage_packets": [
+                {"amount": 4444, "attack_type": "chaos", "damage_type": "death"},
+                {"amount": 4444, "attack_type": "normal", "damage_type": "magic"},
+            ],
+            "marker_post_damage_order_id": 852526,
+            "team_coordination_cooldown_seconds": 2,
+            "finish_delay_seconds": 1.5,
+            "ability_removed_on_cast": True,
+            "effect_ability_removed_on_cast": True,
+            "zero_kill_refunds_ability_and_effect": True,
+            "zero_kill_refund_cooldown_seconds": 180,
+            "nonzero_kill_does_not_refund_in_finish_handler": True,
+            "records_sum_of_pre_damage_target_life": True,
+            "team_available_strike_counter_decremented_on_resolution": True,
+        },
+        "related_rawcode_ids": [1093677109, 1093678661, 1747989592, 1098282348],
+        "source_functions": [
+            "gL", "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
+            "CallbackSingle_doAfter_RescueStrikeRuntime_call_doAfter_RescueStrikeRuntime1",
+            "applyRescueStrike", "startRescueStrikeCooldown", "startTeamRescueStrikeCooldown", "finishRescueStrike",
+        ],
+        "evidence_kind": "exact-cast-removal-delayed-area-damage-team-cooldown-and-zero-kill-refund",
+        "byte_offset": min(
+            rescue_register_start, rescue_cast_start, rescue_delay_start, rescue_apply_start,
+            rescue_cd_start, rescue_team_cd_start, rescue_finish_start,
         ),
     })
 
