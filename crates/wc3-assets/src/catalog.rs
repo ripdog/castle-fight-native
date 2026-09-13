@@ -21,6 +21,7 @@ pub struct BuildingAssetSpec {
     pub name: String,
     pub model_path: Option<String>,
     pub scale: Option<f32>,
+    pub animation_properties: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -204,18 +205,56 @@ mod tests {
     #[test]
     fn embedded_building_catalog_contains_current_native_slice() {
         let buildings = load_embedded_buildings().expect("embedded building catalog loads");
-        let rawcodes: std::collections::BTreeSet<_> = buildings
-            .iter()
-            .map(|building| building.rawcode.as_str())
-            .collect();
-        for expected in [
-            "hcas", "h000", "h03D", "h02I", "h03K", "h015", "h006", "h07P",
-        ] {
-            assert!(
-                rawcodes.contains(expected),
-                "missing current building {expected}"
-            );
+        let building = |rawcode: &str| {
+            buildings
+                .iter()
+                .find(|building| building.rawcode == rawcode)
+                .unwrap_or_else(|| panic!("missing current building {rawcode}"))
+        };
+        let expected = [
+            ("hcas", r"buildings\human\TownHall\TownHall", 1.2),
+            (
+                "h000",
+                r"buildings\human\HumanBarracks\HumanBarracks.mdl",
+                0.5,
+            ),
+            (
+                "h03D",
+                r"buildings\nightelf\HuntersHall\HuntersHall.mdl",
+                0.52,
+            ),
+            ("h02I", r"buildings\orc\WarMill\WarMill.mdl", 0.5),
+            (
+                "h03K",
+                r"buildings\other\IceTrollHut1\IceTrollHut1.mdl",
+                0.6,
+            ),
+            (
+                "h015",
+                r"buildings\human\GryphonAviary\GryphonAviary.mdl",
+                0.5,
+            ),
+            ("h006", r"buildings\human\HumanTower\HumanTower", 0.8),
+            ("h07P", r"war3mapImported\PandarenTower.mdl", 0.8),
+        ];
+        for (rawcode, model, scale) in expected {
+            let actual = building(rawcode);
+            assert_eq!(actual.model_path.as_deref(), Some(model), "{rawcode} model");
+            assert_eq!(actual.scale, Some(scale), "{rawcode} scale");
         }
+        assert_eq!(
+            building("hcas").animation_properties,
+            vec!["upgrade".to_owned(), "second".to_owned()]
+        );
+        assert_eq!(
+            building("h006").animation_properties,
+            vec!["upgrade".to_owned(), "first".to_owned()]
+        );
+        assert_eq!(
+            building("h07P").animation_properties,
+            vec!["upgrade".to_owned(), "second".to_owned()]
+        );
+        assert!(building("h000").animation_properties.is_empty());
     }
 
     #[test]

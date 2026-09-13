@@ -25,6 +25,7 @@ struct BuildingAssetSpec {
     name: String,
     model_path: Option<String>,
     scale: Option<f32>,
+    animation_properties: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -234,6 +235,7 @@ fn load_buildings(
                 rawcode,
                 model_path: None,
                 scale: None,
+                animation_properties: Vec::new(),
             });
     }
 
@@ -257,11 +259,15 @@ fn load_buildings(
             continue;
         };
         match row.get(field_id) {
-            Some("ifil") => {
+            Some("umdl") => {
                 spec.model_path = parse_json_string(row.get(recovered).unwrap_or_default());
             }
-            Some("isca") => {
+            Some("usca") => {
                 spec.scale = parse_json_f32(row.get(recovered).unwrap_or_default());
+            }
+            Some("uani") => {
+                spec.animation_properties =
+                    parse_json_comma_list(row.get(recovered).unwrap_or_default());
             }
             _ => {}
         }
@@ -558,6 +564,20 @@ fn parse_json_string(value: &str) -> Option<String> {
         .ok()?
         .as_str()
         .map(str::to_owned)
+}
+
+fn parse_json_comma_list(value: &str) -> Vec<String> {
+    parse_json_string(value)
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 fn parse_json_model_paths(value: &str) -> Vec<String> {

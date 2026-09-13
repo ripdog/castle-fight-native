@@ -11,7 +11,7 @@ use crate::terrain::client_asset_root;
 
 const BUILDING_MODEL_MANIFEST: &str = "wc3/buildings/manifest.json";
 const BUILDING_MODEL_ASSET_PREFIX: &str = "wc3/buildings";
-const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 1;
+const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Resource, Default)]
 pub struct BuildingModelSet {
@@ -23,6 +23,7 @@ pub struct BuildingModelAsset {
     pub scene: Handle<WorldAsset>,
     gltf: Handle<Gltf>,
     pub scale: f32,
+    animation_properties: Vec<String>,
     animation: Option<BuildingAnimationSet>,
 }
 
@@ -42,6 +43,10 @@ struct BuildingAssetManifest {
 struct BuildingAssetManifestEntry {
     rawcode: String,
     scale: f32,
+    #[serde(default)]
+    animation_properties: Vec<String>,
+    #[serde(default)]
+    fallback_to_base_art: bool,
     gltf: Option<String>,
 }
 
@@ -49,6 +54,7 @@ struct BuildingAssetManifestEntry {
 struct ResolvedBuildingAsset {
     rawcode: u32,
     scale: f32,
+    animation_properties: Vec<String>,
     asset_path: String,
 }
 
@@ -81,6 +87,7 @@ impl BuildingModelSet {
                             scene,
                             gltf,
                             scale: entry.scale,
+                            animation_properties: entry.animation_properties,
                             animation: None,
                         },
                     );
@@ -111,7 +118,7 @@ impl BuildingModelSet {
             let Some(gltf) = gltfs.get(&model.gltf) else {
                 continue;
             };
-            let Some(stand) = find_stand_animation(gltf) else {
+            let Some(stand) = find_stand_animation(gltf, &model.animation_properties) else {
                 continue;
             };
             if animation_clips.get(&stand).is_none() {
@@ -136,23 +143,54 @@ impl BuildingModelSet {
     }
 }
 
-fn find_stand_animation(gltf: &Gltf) -> Option<Handle<AnimationClip>> {
+fn find_stand_animation(
+    gltf: &Gltf,
+    animation_properties: &[String],
+) -> Option<Handle<AnimationClip>> {
     gltf.named_animations
         .iter()
-        .filter_map(|(name, clip)| stand_animation_score(name).map(|score| (score, name, clip)))
+        .filter_map(|(name, clip)| {
+            stand_animation_score(name, animation_properties).map(|score| (score, name, clip))
+        })
         .min_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(right.1)))
         .map(|(_, _, clip)| clip.clone())
 }
 
-fn stand_animation_score(name: &str) -> Option<u8> {
+fn stand_animation_score(name: &str, animation_properties: &[String]) -> Option<u8> {
     let name = name.to_ascii_lowercase();
-    match name.as_str() {
-        "stand" => Some(0),
-        "stand - 1" | "stand 1" => Some(1),
-        _ if name.starts_with("stand") && !name.contains("work") && !name.contains("upgrade") => {
-            Some(2)
-        }
-        _ => None,
+    let words: Vec<_> = name
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    if words.first().copied() != Some("stand") || words.contains(&"work") {
+        return None;
+    }
+
+    let required: Vec<_> = animation_properties
+        .iter()
+        .map(|property| property.to_ascii_lowercase())
+        .collect();
+    if !required
+        .iter()
+        .all(|property| words.contains(&property.as_str()))
+    {
+        return None;
+    }
+    if required.is_empty() && words.contains(&"upgrade") {
+        return None;
+    }
+
+    let canonical = if required.is_empty() {
+        "stand".to_owned()
+    } else {
+        format!("stand {}", required.join(" "))
+    };
+    if name == canonical {
+        Some(0)
+    } else if required.is_empty() && matches!(name.as_str(), "stand - 1" | "stand 1") {
+        Some(1)
+    } else {
+        Some(2)
     }
 }
 
@@ -180,6 +218,9 @@ fn resolve_manifest_entries(
 
     let mut resolved = BTreeMap::new();
     for entry in manifest.buildings {
+        if entry.fallback_to_base_art {
+            continue;
+        }
         let Some(gltf) = entry.gltf else {
             continue;
         };
@@ -199,6 +240,7 @@ fn resolve_manifest_entries(
                 ResolvedBuildingAsset {
                     rawcode,
                     scale: entry.scale,
+                    animation_properties: entry.animation_properties,
                     asset_path,
                 },
             )
@@ -238,41 +280,77 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolves_building_manifest_paths_and_scales() {
+    fn resolves_building_manifest_paths_scales_and_animation_properties() {
         let json = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "buildings": [
-                {"rawcode": "h000", "scale": 4.0, "gltf": "models/blacksmith.gltf"},
-                {"rawcode": "h006", "scale": 2.5, "gltf": "models/tower.gltf"},
-                {"rawcode": "xxxx", "scale": 1.0, "gltf": null}
+                {"rawcode": "h000", "scale": 0.5, "animation_properties": [], "fallback_to_base_art": false, "gltf": "models/humanbarracks.gltf"},
+                {"rawcode": "h006", "scale": 0.8, "animation_properties": ["upgrade", "first"], "fallback_to_base_art": false, "gltf": "models/tower.gltf"},
+                {"rawcode": "h07P", "scale": 0.8, "animation_properties": ["upgrade", "second"], "fallback_to_base_art": true, "gltf": "models/tower.gltf"},
+                {"rawcode": "xxxx", "scale": 1.0, "animation_properties": [], "fallback_to_base_art": false, "gltf": null}
             ]
         }"#;
         let entries = resolve_manifest_entries(json, "wc3/buildings").expect("manifest resolves");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].rawcode, u32::from_be_bytes(*b"h000"));
-        assert_eq!(entries[0].scale, 4.0);
+        assert_eq!(entries[0].scale, 0.5);
+        assert!(entries[0].animation_properties.is_empty());
         assert_eq!(
             entries[0].asset_path,
-            "wc3/buildings/models/blacksmith.gltf"
+            "wc3/buildings/models/humanbarracks.gltf"
         );
         assert_eq!(entries[1].rawcode, u32::from_be_bytes(*b"h006"));
+        assert_eq!(
+            entries[1].animation_properties,
+            vec!["upgrade".to_owned(), "first".to_owned()]
+        );
     }
 
     #[test]
-    fn building_stand_selector_uses_safe_unupgraded_idle_sequences() {
-        assert_eq!(stand_animation_score("Stand"), Some(0));
-        assert_eq!(stand_animation_score("Stand - 1"), Some(1));
-        assert_eq!(stand_animation_score("Stand Ready Attack"), Some(2));
-        assert_eq!(stand_animation_score("Stand Work"), None);
-        assert_eq!(stand_animation_score("Stand Upgrade First"), None);
-        assert_eq!(stand_animation_score("Birth"), None);
-        assert_eq!(stand_animation_score("Death"), None);
+    fn building_stand_selector_honors_required_animation_properties() {
+        let none: &[String] = &[];
+        let guard_tower = ["upgrade".to_owned(), "first".to_owned()];
+        let castle = ["upgrade".to_owned(), "second".to_owned()];
+
+        assert_eq!(stand_animation_score("Stand", none), Some(0));
+        assert_eq!(stand_animation_score("Stand - 1", none), Some(1));
+        assert_eq!(stand_animation_score("Stand Ready Attack", none), Some(2));
+        assert_eq!(stand_animation_score("Stand Work", none), None);
+        assert_eq!(stand_animation_score("Stand Upgrade First", none), None);
+        assert_eq!(
+            stand_animation_score("Stand Upgrade First Ready Attack", &guard_tower),
+            Some(2)
+        );
+        assert_eq!(
+            stand_animation_score("Stand Upgrade Second", &castle),
+            Some(0)
+        );
+        assert_eq!(
+            stand_animation_score("Stand Upgrade Second", &guard_tower),
+            None
+        );
+        assert_eq!(
+            stand_animation_score("Stand Work Upgrade First", &guard_tower),
+            None
+        );
+        assert_eq!(stand_animation_score("Birth", none), None);
+        assert_eq!(stand_animation_score("Death", none), None);
     }
 
     #[test]
     fn rejects_invalid_building_manifest_entries() {
-        let bad_scale = r#"{
+        let stale_schema = r#"{
             "schema_version": 1,
+            "buildings": []
+        }"#;
+        assert!(
+            resolve_manifest_entries(stale_schema, "wc3/buildings")
+                .expect_err("stale schema must be rejected")
+                .contains("unsupported building asset manifest schema")
+        );
+
+        let bad_scale = r#"{
+            "schema_version": 2,
             "buildings": [{"rawcode": "h000", "scale": 0.0, "gltf": "models/foo.gltf"}]
         }"#;
         assert!(
@@ -282,7 +360,7 @@ mod tests {
         );
 
         let bad_path = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "buildings": [{"rawcode": "h000", "scale": 1.0, "gltf": "../escape.gltf"}]
         }"#;
         assert!(

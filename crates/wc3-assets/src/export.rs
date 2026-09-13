@@ -74,6 +74,7 @@ pub struct BuildingManifest {
     pub rawcode: String,
     pub name: String,
     pub scale: f32,
+    pub animation_properties: Vec<String>,
     pub requested_model: Option<String>,
     pub source_model: String,
     pub fallback_to_base_art: bool,
@@ -290,6 +291,7 @@ struct ResolvedBuilding {
     source_model: String,
     fallback_to_base_art: bool,
     scale: f32,
+    animation_properties: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -485,6 +487,7 @@ impl Exporter {
                 rawcode: building.rawcode.clone(),
                 name: building.name.clone(),
                 scale: building.scale,
+                animation_properties: building.animation_properties.clone(),
                 requested_model: building.requested_model.clone(),
                 gltf: model_outputs
                     .get(&building.source_model.to_ascii_lowercase())
@@ -495,7 +498,7 @@ impl Exporter {
             .collect();
 
         Ok(BuildingAssetManifest {
-            schema_version: 1,
+            schema_version: 2,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -892,6 +895,7 @@ impl Exporter {
             source_model,
             fallback_to_base_art,
             scale,
+            animation_properties: building.animation_properties.clone(),
         })
     }
 
@@ -2930,13 +2934,32 @@ fn layer_diffuse_texture_id(layer: &Layer) -> u32 {
         )
 }
 
+fn layer_diffuse_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> bool {
+    model
+        .textures(layer_diffuse_texture_id(layer) as usize)
+        .is_some_and(|texture| texture.replaceable_id() == replaceable_id)
+}
+
+fn layer_static_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> bool {
+    let texture_matches = |texture_id: u32| {
+        model
+            .textures(texture_id as usize)
+            .is_some_and(|texture| texture.replaceable_id() == replaceable_id)
+    };
+    texture_matches(layer.texture_id())
+        || layer
+            .sub_textures_iter()
+            .any(|sub_texture| texture_matches(sub_texture.texture_id()))
+}
+
+#[cfg(test)]
 fn layer_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> bool {
     let texture_matches = |texture_id: u32| {
         model
             .textures(texture_id as usize)
             .is_some_and(|texture| texture.replaceable_id() == replaceable_id)
     };
-    if texture_matches(layer.texture_id())
+    if layer_static_uses_replaceable(model, layer, replaceable_id)
         || layer
             .texture_id_tracks()
             .keys()
@@ -2947,13 +2970,12 @@ fn layer_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> 
         return true;
     }
     layer.sub_textures_iter().any(|sub_texture| {
-        texture_matches(sub_texture.texture_id())
-            || sub_texture
-                .tracks()
-                .keys()
-                .iter()
-                .copied()
-                .any(texture_matches)
+        sub_texture
+            .tracks()
+            .keys()
+            .iter()
+            .copied()
+            .any(texture_matches)
     })
 }
 
@@ -2991,13 +3013,12 @@ fn build_materials(
         let mut extensions = serde_json::Map::new();
         let mut extras = serde_json::Map::new();
 
-        let uses_replaceable = |replaceable_id: u32| {
-            material
-                .layers_iter()
-                .any(|layer| layer_uses_replaceable(model, &layer, replaceable_id))
-        };
-        let has_team_color_underlay = uses_replaceable(1);
-        let has_team_glow_layer = uses_replaceable(2);
+        let has_team_color_underlay = material
+            .layers_iter()
+            .any(|layer| layer_static_uses_replaceable(model, &layer, 1));
+        let has_team_glow_layer = layer
+            .as_ref()
+            .is_some_and(|layer| layer_diffuse_uses_replaceable(model, layer, 2));
         if has_team_color_underlay {
             extras.insert("wc3TeamColorUnderlay".into(), json!(true));
         }
@@ -3547,8 +3568,34 @@ mod tests {
         }
 
         assert_eq!(layer_diffuse_texture_id(&layer), 0);
+        assert!(!layer_diffuse_uses_replaceable(&model, &layer, 1));
+        assert!(layer_static_uses_replaceable(&model, &layer, 1));
         assert!(layer_uses_replaceable(&model, &layer, 1));
+        assert!(!layer_static_uses_replaceable(&model, &layer, 2));
         assert!(!layer_uses_replaceable(&model, &layer, 2));
+    }
+
+    #[test]
+    fn animated_team_glow_texture_does_not_replace_the_static_diffuse_texture() {
+        let mut model = Model::new();
+        model.resize_textures(2);
+        model
+            .textures_mut(1)
+            .expect("team glow texture")
+            .set_replaceable_id(2);
+
+        let mut layer = Layer::new();
+        layer.set_texture_id(0);
+        {
+            let mut track = layer.texture_id_tracks_mut();
+            track.set_is_used(true);
+            track.set_timestamps(&[0]);
+            track.set_keys(&[1]);
+        }
+
+        assert!(!layer_diffuse_uses_replaceable(&model, &layer, 2));
+        assert!(!layer_static_uses_replaceable(&model, &layer, 2));
+        assert!(layer_uses_replaceable(&model, &layer, 2));
     }
 
     #[test]
