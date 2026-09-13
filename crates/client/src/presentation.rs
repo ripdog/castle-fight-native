@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use bevy::{
     camera::primitives::{Frustum, Sphere},
-    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     input::mouse::MouseWheel,
     prelude::*,
     time::Fixed,
@@ -48,6 +47,7 @@ const UNIT_WALK_PHASE_PER_TICK: f32 = 0.58;
 const UNIT_FACING_RESPONSE: f32 = 14.0;
 const MISS_INDICATOR_SECONDS: f32 = 1.0;
 const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
+const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
 const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 
 #[derive(Resource, Debug, Clone)]
@@ -330,6 +330,25 @@ struct HealthBarGizmos;
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct ProjectileEffectGizmos;
 
+#[derive(Resource, Debug, Default)]
+struct FpsDisplay {
+    elapsed_seconds: f32,
+    frames: u32,
+    fps: Option<f32>,
+}
+
+impl FpsDisplay {
+    fn record_frame(&mut self, delta_seconds: f32) {
+        self.elapsed_seconds += delta_seconds.max(0.0);
+        self.frames = self.frames.saturating_add(1);
+        if self.elapsed_seconds >= FPS_DISPLAY_SAMPLE_SECONDS {
+            self.fps = Some(self.frames as f32 / self.elapsed_seconds);
+            self.elapsed_seconds = 0.0;
+            self.frames = 0;
+        }
+    }
+}
+
 pub struct CastlePresentationPlugin {
     health_bars: bool,
 }
@@ -345,6 +364,7 @@ impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
             .init_resource::<UnitModelSet>()
+            .init_resource::<FpsDisplay>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
@@ -373,6 +393,7 @@ impl Plugin for CastlePresentationPlugin {
                     draw_projectile_effects,
                     draw_health_bars,
                     draw_presentation_gizmos,
+                    sample_display_fps,
                     update_window_title,
                 )
                     .chain(),
@@ -1992,16 +2013,19 @@ fn corpse_render_position(position: SimPoint, terrain: &TerrainSurface) -> Vec3 
     sim_point_to_terrain_world(position, terrain) + Vec3::Y * (-CORPSE_THICKNESS * 0.5 + 0.08)
 }
 
+fn sample_display_fps(time: Res<Time>, mut display: ResMut<FpsDisplay>) {
+    display.record_frame(time.delta_secs());
+}
+
 fn update_window_title(
     samples: Res<PresentationSamples>,
     playback: Res<SimulationPlayback>,
     debug: Res<DebugPresentation>,
-    diagnostics: Res<DiagnosticsStore>,
+    display: Res<FpsDisplay>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
-    let fps = diagnostics
-        .get(&FrameTimeDiagnosticsPlugin::FPS)
-        .and_then(|diagnostic| diagnostic.smoothed())
+    let fps = display
+        .fps
         .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
     window.title = format!(
         "Castle Fight Native 3D | {} | {fps} FPS | tick {} | units {} | buildings {} | corpses {} | projectiles {} | Space/P pause | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
@@ -2140,6 +2164,23 @@ mod tests {
             ))
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn fps_display_updates_only_after_each_sample_window() {
+        let mut display = FpsDisplay::default();
+
+        for _ in 0..4 {
+            display.record_frame(0.1);
+            assert_eq!(display.fps, None);
+        }
+        display.record_frame(0.1);
+        assert!((display.fps.unwrap() - 10.0).abs() < 1.0e-5);
+
+        display.record_frame(0.25);
+        assert!((display.fps.unwrap() - 10.0).abs() < 1.0e-5);
+        display.record_frame(0.25);
+        assert!((display.fps.unwrap() - 4.0).abs() < 1.0e-5);
     }
 
     #[test]
