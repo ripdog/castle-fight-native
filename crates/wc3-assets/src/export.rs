@@ -11,7 +11,7 @@ use whiteout::{
     casc::Storage,
     mdx::{
         InterpolationType, LayerFilterMode, LayerShadingFlag, MDLXFormat, Model, Node, NodeFlag,
-        Parser as MdxParser, SequenceFlag, TrackQuaternion, TrackVector3f,
+        Parser as MdxParser, SequenceFlag, TrackF32, TrackQuaternion, TrackVector3f,
     },
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
 };
@@ -24,6 +24,7 @@ const GL_FLOAT: u32 = 5_126;
 const GL_UNSIGNED_SHORT: u32 = 5_123;
 const NO_PARENT: u32 = u32::MAX;
 const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
+const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
 type TextureExport = (Vec<TextureManifest>, Vec<Option<usize>>);
 type GltfBuildOutput = (Value, Vec<u8>, Vec<String>);
@@ -280,7 +281,7 @@ impl Exporter {
             .collect();
 
         Ok(AssetManifest {
-            schema_version: 1,
+            schema_version: ASSET_MANIFEST_SCHEMA_VERSION,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -812,7 +813,9 @@ fn build_gltf(
     let mut warnings = Vec::new();
     let skeleton = build_skeleton(model, &mut binary, &mut warnings)?;
 
-    let mut primitives = Vec::new();
+    let mut meshes = Vec::new();
+    let mut geoset_nodes = Vec::new();
+    let mut geoset_node_by_index = BTreeMap::new();
     for (geoset_index, geoset) in model.geosets_iter().enumerate() {
         if geoset.vertex_positions().is_empty() || geoset.faces().is_empty() {
             continue;
@@ -867,7 +870,7 @@ fn build_gltf(
             }
         }
 
-        primitives.push(json!({
+        let primitive = json!({
             "attributes": attributes,
             "indices": index_accessor,
             "material": geoset.material_id(),
@@ -876,10 +879,40 @@ fn build_gltf(
                 "wc3Geoset": geoset_index,
                 "wc3Lod": geoset.lod(),
             }
+        });
+        let mesh_index = meshes.len();
+        meshes.push(json!({
+            "name": format!("{asset_name}_geoset_{geoset_index}"),
+            "primitives": [primitive],
         }));
+
+        let node_index = 1 + skeleton.nodes.len() + geoset_nodes.len();
+        let mut geoset_node = json!({
+            "name": format!("{asset_name}_geoset_{geoset_index}"),
+            "mesh": mesh_index,
+            "scale": visibility_scale(default_geoset_alpha(model, geoset_index)?),
+            "extras": {
+                "wc3Geoset": geoset_index,
+                "wc3Lod": geoset.lod(),
+            }
+        });
+        if skeleton.skin.is_some() {
+            geoset_node
+                .as_object_mut()
+                .expect("geoset node object")
+                .insert("skin".into(), json!(0));
+        }
+        geoset_node_by_index.insert(geoset_index, node_index);
+        geoset_nodes.push(geoset_node);
     }
 
-    let animations = build_animations(model, &skeleton, &mut binary, &mut warnings)?;
+    let animations = build_animations(
+        model,
+        &skeleton,
+        &geoset_node_by_index,
+        &mut binary,
+        &mut warnings,
+    )?;
     let (materials, material_warnings, uses_unlit) =
         build_materials(model, texture_indices, texture_manifests);
     warnings.extend(material_warnings);
@@ -898,17 +931,16 @@ fn build_gltf(
         .map(|source| json!({ "sampler": 0, "source": source }))
         .collect();
 
-    let mut mesh_node = json!({ "name": asset_name, "mesh": 0 });
-    if skeleton.skin.is_some() {
-        mesh_node
-            .as_object_mut()
-            .expect("mesh node object")
-            .insert("skin".into(), json!(0));
-    }
-    let mut nodes = vec![mesh_node];
+    let mut model_children = skeleton.scene_roots.clone();
+    model_children.extend(geoset_node_by_index.values().copied());
+    let model_root = json!({
+        "name": asset_name,
+        "children": model_children,
+    });
+    let mut nodes = vec![model_root];
     nodes.extend(skeleton.nodes.iter().cloned());
-    let mut scene_nodes = vec![0usize];
-    scene_nodes.extend(skeleton.scene_roots.iter().copied());
+    nodes.extend(geoset_nodes);
+    let scene_nodes = vec![0usize];
 
     let mut root = json!({
         "asset": {
@@ -918,7 +950,7 @@ fn build_gltf(
         "scene": 0,
         "scenes": [{ "nodes": scene_nodes }],
         "nodes": nodes,
-        "meshes": [{ "name": asset_name, "primitives": primitives }],
+        "meshes": meshes,
         "buffers": [{
             "uri": format!("{asset_name}.bin"),
             "byteLength": binary.bytes.len()
@@ -1349,15 +1381,19 @@ fn animation_manifests_from_gltf(gltf: &Value) -> Result<Vec<AnimationManifest>,
         .collect()
 }
 
+#[derive(Debug)]
+struct F32Samples {
+    times: Vec<f32>,
+    values: Vec<f32>,
+}
+
 fn build_animations(
     model: &Model,
     skeleton: &SkeletonBuild,
+    geoset_node_by_index: &BTreeMap<usize, usize>,
     binary: &mut BinaryBuilder,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<Value>, Box<dyn Error>> {
-    if skeleton.joint_nodes.is_empty() {
-        return Ok(Vec::new());
-    }
     let mut animations = Vec::new();
     let mut baked_global_sequences = false;
 
@@ -1524,6 +1560,23 @@ fn build_animations(
                 &mut baked_global_sequences,
             )?;
         }
+        for geoset_animation in model.geoset_animations_iter() {
+            let geoset_index = geoset_animation.geoset_id() as usize;
+            let Some(&gltf_node) = geoset_node_by_index.get(&geoset_index) else {
+                continue;
+            };
+            append_geoset_visibility_animation(
+                model,
+                &geoset_animation,
+                gltf_node,
+                start,
+                end,
+                binary,
+                &mut samplers,
+                &mut channels,
+                &mut baked_global_sequences,
+            )?;
+        }
 
         if !channels.is_empty() {
             animations.push(json!({
@@ -1542,7 +1595,7 @@ fn build_animations(
 
     if baked_global_sequences {
         warnings.push(
-            "global-sequence bone/helper transforms are baked into every glTF clip starting at global time zero; Warcraft keeps that clock running across sequence changes"
+            "global-sequence transforms are baked into every glTF clip starting at global time zero; Warcraft keeps that clock running across sequence changes"
                 .to_owned(),
         );
     }
@@ -1613,6 +1666,118 @@ fn append_node_animation(
         push_vec3_animation_channel(binary, samplers, channels, gltf_node, "scale", samples);
     }
     Ok(())
+}
+
+fn default_geoset_alpha(model: &Model, geoset_index: usize) -> Result<f32, Box<dyn Error>> {
+    let Some(animation) = model
+        .geoset_animations_iter()
+        .find(|animation| animation.geoset_id() as usize == geoset_index)
+    else {
+        return Ok(1.0);
+    };
+    let base_alpha = animation.alpha();
+    let track = animation.alpha_tracks();
+    if !track.is_used() || track.key_count() == 0 {
+        return Ok(base_alpha);
+    }
+    validate_f32_track(&track)?;
+    let Some(sequence) = model.sequences_iter().next() else {
+        return Ok(base_alpha);
+    };
+    let start = sequence.interval_start();
+    let Some(key_index) = track
+        .timestamps()
+        .iter()
+        .position(|timestamp| *timestamp == start)
+    else {
+        return Ok(base_alpha);
+    };
+    Ok(f32_key(&track, key_index, 0))
+}
+
+fn visibility_scale(alpha: f32) -> [f32; 3] {
+    let visible = if alpha > 0.001 { 1.0 } else { 0.0 };
+    [visible; 3]
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_geoset_visibility_animation(
+    model: &Model,
+    animation: &whiteout::mdx::GeosetAnimation,
+    gltf_node: usize,
+    start: u32,
+    end: u32,
+    binary: &mut BinaryBuilder,
+    samplers: &mut Vec<Value>,
+    channels: &mut Vec<Value>,
+    baked_global_sequences: &mut bool,
+) -> Result<(), Box<dyn Error>> {
+    let track = animation.alpha_tracks();
+    if track.global_sequence_id() != NO_GLOBAL_SEQUENCE && track.is_used() {
+        *baked_global_sequences = true;
+    }
+    let duration = end.saturating_sub(start) as f32 / 1000.0;
+    let samples = if let Some(samples) = sample_f32_track(model, &track, start, end)? {
+        Vec3Samples {
+            times: samples.times,
+            values: samples.values.into_iter().map(visibility_scale).collect(),
+            // glTF cannot animate primitive/material visibility. Use a binary node-scale
+            // approximation rather than shrinking the mesh through partial alpha values.
+            interpolation: "STEP",
+        }
+    } else {
+        let scale = visibility_scale(animation.alpha());
+        Vec3Samples {
+            times: vec![0.0, duration],
+            values: vec![scale, scale],
+            interpolation: "STEP",
+        }
+    };
+    push_vec3_animation_channel(binary, samplers, channels, gltf_node, "scale", samples);
+    Ok(())
+}
+
+fn sample_f32_track(
+    model: &Model,
+    track: &TrackF32,
+    sequence_start: u32,
+    sequence_end: u32,
+) -> Result<Option<F32Samples>, Box<dyn Error>> {
+    if !track.is_used() || track.key_count() == 0 {
+        return Ok(None);
+    }
+    validate_f32_track(track)?;
+    let window = track_window(
+        track.timestamps(),
+        track.global_sequence_id(),
+        model.global_sequences(),
+        sequence_start,
+        sequence_end,
+    );
+    let Some(window) = window else {
+        return Ok(None);
+    };
+    if window.indices.is_empty() {
+        return Ok(None);
+    }
+
+    let local_times = sample_times(track.interpolation_type(), track.timestamps(), &window);
+    let mut values = Vec::with_capacity(local_times.len());
+    for &local_ms in &local_times {
+        let frame = window.frame_for_local(local_ms);
+        values.push(evaluate_f32(
+            track,
+            &window.indices,
+            window.track_start,
+            window.track_end,
+            frame,
+        ));
+    }
+    let times = local_times
+        .iter()
+        .map(|time| *time as f32 / 1000.0)
+        .collect();
+    Ok(Some(F32Samples { times, values }))
 }
 
 fn sample_vec3_track(
@@ -1842,6 +2007,29 @@ fn sample_times(
     times.into_iter().collect()
 }
 
+fn evaluate_f32(track: &TrackF32, indices: &[usize], start: u32, end: u32, frame: u32) -> f32 {
+    if indices.len() == 1 {
+        return f32_key(track, indices[0], 0);
+    }
+    let (a, b, t) = interpolation_pair(track.timestamps(), indices, start, end, frame);
+    let va = f32_key(track, a, 0);
+    let vb = f32_key(track, b, 0);
+    match track.interpolation_type() {
+        InterpolationType::None => va,
+        InterpolationType::Linear => va + (vb - va) * t,
+        InterpolationType::Hermite => {
+            let out_tangent = f32_key(track, a, 2);
+            let in_tangent = f32_key(track, b, 1);
+            hermite(va, out_tangent, in_tangent, vb, t)
+        }
+        InterpolationType::Bezier => {
+            let out_tangent = f32_key(track, a, 2);
+            let in_tangent = f32_key(track, b, 1);
+            bezier(va, out_tangent, in_tangent, vb, t)
+        }
+    }
+}
+
 fn evaluate_vec3(
     track: &TrackVector3f,
     indices: &[usize],
@@ -1938,6 +2126,18 @@ fn interpolation_pair(
     (start_index, end_index, t)
 }
 
+fn f32_key(track: &TrackF32, key: usize, component: usize) -> f32 {
+    let stride = if matches!(
+        track.interpolation_type(),
+        InterpolationType::Hermite | InterpolationType::Bezier
+    ) {
+        3
+    } else {
+        1
+    };
+    track.keys()[key * stride + component.min(stride - 1)]
+}
+
 fn vec3_key(track: &TrackVector3f, key: usize, component: usize) -> [f32; 3] {
     let stride = if matches!(
         track.interpolation_type(),
@@ -1962,6 +2162,23 @@ fn quat_key(track: &TrackQuaternion, key: usize, component: usize) -> [f32; 4] {
     };
     let value = track.keys()[key * stride + component.min(stride - 1)];
     [value.x, value.y, value.z, value.w]
+}
+
+fn validate_f32_track(track: &TrackF32) -> Result<(), Box<dyn Error>> {
+    let stride = if matches!(
+        track.interpolation_type(),
+        InterpolationType::Hermite | InterpolationType::Bezier
+    ) {
+        3
+    } else {
+        1
+    };
+    validate_track_layout(
+        track.key_count(),
+        track.timestamps().len(),
+        track.keys().len(),
+        stride,
+    )
 }
 
 fn validate_vec3_track(track: &TrackVector3f) -> Result<(), Box<dyn Error>> {
@@ -2085,6 +2302,24 @@ fn lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
         a[1] + (b[1] - a[1]) * t,
         a[2] + (b[2] - a[2]) * t,
     ]
+}
+
+fn hermite(a: f32, b: f32, c: f32, d: f32, t: f32) -> f32 {
+    let t2 = t * t;
+    let f1 = t2 * (2.0 * t - 3.0) + 1.0;
+    let f2 = t2 * (t - 2.0) + t;
+    let f3 = t2 * (t - 1.0);
+    let f4 = t2 * (3.0 - 2.0 * t);
+    a * f1 + b * f2 + c * f3 + d * f4
+}
+
+fn bezier(a: f32, b: f32, c: f32, d: f32, t: f32) -> f32 {
+    let inv = 1.0 - t;
+    let f1 = inv * inv * inv;
+    let f2 = 3.0 * t * inv * inv;
+    let f3 = 3.0 * t * t * inv;
+    let f4 = t * t * t;
+    a * f1 + b * f2 + c * f3 + d * f4
 }
 
 fn hermite3(a: [f32; 3], b: [f32; 3], c: [f32; 3], d: [f32; 3], t: f32) -> [f32; 3] {
@@ -2759,6 +2994,28 @@ mod tests {
             .chain(skin.weights_1.as_ref().unwrap()[0].iter())
             .sum();
         assert!((total - 1.0).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn geoset_alpha_maps_to_binary_node_visibility() {
+        assert_eq!(visibility_scale(0.0), [0.0; 3]);
+        assert_eq!(visibility_scale(0.001), [0.0; 3]);
+        assert_eq!(visibility_scale(0.01), [1.0; 3]);
+        assert_eq!(visibility_scale(1.0), [1.0; 3]);
+    }
+
+    #[test]
+    fn step_scalar_track_keeps_hidden_geoset_hidden_until_key_change() {
+        let mut track = TrackF32::new();
+        track.set_is_used(true);
+        track.set_interpolation_type(InterpolationType::None);
+        track.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+        track.set_key_count(2);
+        track.set_timestamps(&[100, 200]);
+        track.set_keys(&[0.0, 1.0]);
+        validate_f32_track(&track).expect("track layout must be valid");
+        assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 150), 0.0);
+        assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 200), 1.0);
     }
 
     #[test]

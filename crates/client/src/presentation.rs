@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use bevy::{
     camera::primitives::{Frustum, Sphere},
+    gltf::Gltf,
     input::mouse::MouseWheel,
     prelude::*,
     time::Fixed,
@@ -311,6 +312,29 @@ struct WeaponPresentation {
     elapsed: Option<f32>,
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+struct ImportedUnitModelRoot {
+    sim_id: SimId,
+    rawcode: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImportedUnitAnimationState {
+    Stand,
+    Walk,
+    Attack,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+struct ImportedUnitAnimationController {
+    sim_id: SimId,
+    stand: AnimationNodeIndex,
+    walk: Option<AnimationNodeIndex>,
+    attack: Option<AnimationNodeIndex>,
+    state: ImportedUnitAnimationState,
+    last_attack_snapshot_tick: Option<u64>,
+}
+
 #[derive(Component)]
 struct AirWingPresentation {
     side: f32,
@@ -380,8 +404,11 @@ impl Plugin for CastlePresentationPlugin {
                 (
                     toggle_debug_controls,
                     update_camera,
+                    prepare_unit_model_animations,
                     sync_render_entities,
+                    setup_imported_unit_animation_players,
                     trigger_attack_animations,
+                    update_imported_unit_animations,
                     spawn_miss_indicators,
                     interpolate_render_transforms,
                     update_miss_indicators,
@@ -658,6 +685,14 @@ fn setup_scene(
     ));
 }
 
+fn prepare_unit_model_animations(
+    mut unit_models: ResMut<UnitModelSet>,
+    gltfs: Res<Assets<Gltf>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+) {
+    unit_models.prepare_animations(&gltfs, &mut graphs);
+}
+
 fn spawn_unit_weapon(
     commands: &mut Commands,
     assets: &PresentationAssets,
@@ -786,6 +821,120 @@ fn spawn_air_wings(
                 ));
         }
     });
+}
+
+fn setup_imported_unit_animation_players(
+    mut commands: Commands,
+    unit_models: Res<UnitModelSet>,
+    parents: Query<&ChildOf>,
+    roots: Query<&ImportedUnitModelRoot>,
+    mut players: Query<(Entity, &mut AnimationPlayer), Without<ImportedUnitAnimationController>>,
+) {
+    for (entity, mut player) in &mut players {
+        let Some(root) = imported_model_root(entity, &parents, &roots) else {
+            continue;
+        };
+        let Some(animations) = unit_models.animations(root.rawcode) else {
+            continue;
+        };
+
+        let mut transitions = AnimationTransitions::new();
+        transitions
+            .play(&mut player, animations.stand, Duration::ZERO)
+            .repeat();
+        commands.entity(entity).insert((
+            AnimationGraphHandle(animations.graph.clone()),
+            transitions,
+            ImportedUnitAnimationController {
+                sim_id: root.sim_id,
+                stand: animations.stand,
+                walk: animations.walk,
+                attack: animations.attack,
+                state: ImportedUnitAnimationState::Stand,
+                last_attack_snapshot_tick: None,
+            },
+        ));
+    }
+}
+
+fn imported_model_root(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&ImportedUnitModelRoot>,
+) -> Option<ImportedUnitModelRoot> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(root) = roots.get(current) {
+            return Some(*root);
+        }
+        let Ok(parent) = parents.get(current) else {
+            return None;
+        };
+        current = parent.parent();
+    }
+    None
+}
+
+fn update_imported_unit_animations(
+    samples: Res<PresentationSamples>,
+    mut players: Query<(
+        &mut AnimationPlayer,
+        &mut AnimationTransitions,
+        &mut ImportedUnitAnimationController,
+    )>,
+) {
+    for (mut player, mut transitions, mut controller) in &mut players {
+        let Some(current) = samples.current.units.get(&controller.sim_id) else {
+            continue;
+        };
+        let attack_this_snapshot = controller.last_attack_snapshot_tick
+            != Some(samples.current.tick)
+            && samples
+                .current
+                .attacks
+                .iter()
+                .any(|attack| attack.source == controller.sim_id);
+        if attack_this_snapshot {
+            controller.last_attack_snapshot_tick = Some(samples.current.tick);
+            if let Some(attack) = controller.attack {
+                transitions.play(&mut player, attack, Duration::from_millis(50));
+                controller.state = ImportedUnitAnimationState::Attack;
+                continue;
+            }
+        }
+
+        if controller.state == ImportedUnitAnimationState::Attack
+            && controller
+                .attack
+                .and_then(|attack| player.animation(attack))
+                .is_some_and(|animation| !animation.is_finished())
+        {
+            continue;
+        }
+
+        let previous = samples
+            .previous
+            .units
+            .get(&controller.sim_id)
+            .unwrap_or(current);
+        let desired = if previous.position != current.position && controller.walk.is_some() {
+            ImportedUnitAnimationState::Walk
+        } else {
+            ImportedUnitAnimationState::Stand
+        };
+        if controller.state == desired {
+            continue;
+        }
+        let animation = match desired {
+            ImportedUnitAnimationState::Stand => controller.stand,
+            ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
+            ImportedUnitAnimationState::Attack => unreachable!("attack is handled above"),
+        };
+        transitions
+            .play(&mut player, animation, Duration::from_millis(100))
+            .repeat();
+        controller.state = desired;
+    }
 }
 
 fn trigger_attack_animations(
@@ -1266,14 +1415,20 @@ fn sync_render_entities(
         }
         let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
             + Vec3::Y * (unit_height(unit) * 0.5);
-        let imported_model = unit
-            .content
-            .and_then(|content| unit_models.get(content.rawcode));
-        let (entity, weapon) = if let Some(model) = imported_model {
+        let imported_model = unit.content.and_then(|content| {
+            unit_models
+                .get(content.rawcode)
+                .map(|model| (content.rawcode, model))
+        });
+        let (entity, weapon) = if let Some((rawcode, model)) = imported_model {
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .with_child((
                     WorldAssetRoot(model.scene.clone()),
+                    ImportedUnitModelRoot {
+                        sim_id: unit.id,
+                        rawcode,
+                    },
                     Transform {
                         translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
                         rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
