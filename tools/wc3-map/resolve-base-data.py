@@ -631,6 +631,10 @@ def rawcode_list(value: Any) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
+def integer_rawcode(integer_id: int) -> str:
+    return integer_id.to_bytes(4, "big").decode("latin1")
+
+
 def build_field_resolver(rows: list[dict[str, Any]]) -> dict[tuple[str, str, int, int], dict[str, Any]]:
     return {
         (row["category"], row["rawcode"], int(row["level"]), int(row["column"])): row
@@ -1797,6 +1801,41 @@ def main() -> None:
                     if defend is None:
                         raise ValueError("Defender special mechanic is missing A03G object data")
                     parameters["defend_object_data"] = json.loads(defend["data_fields_labeled_json"])
+                elif mechanic["mechanic_kind"] == "damage-triggered-feral-rage-and-hibernation":
+                    damage_rawcode = integer_rawcode(int(parameters["feral_rage_damage_ability_id"]))
+                    speed_rawcode = integer_rawcode(int(parameters["feral_rage_attack_speed_ability_id"]))
+                    regen_rawcode = integer_rawcode(int(parameters["hibernate_regen_ability_id"]))
+                    damage_ability = next((row for row in ability_levels.get(damage_rawcode, []) if row["level"] == "1"), None)
+                    speed_ability = next((row for row in ability_levels.get(speed_rawcode, []) if row["level"] == "1"), None)
+                    regen_ability = next((row for row in ability_levels.get(regen_rawcode, []) if row["level"] == "1"), None)
+                    if damage_ability is None or speed_ability is None or regen_ability is None:
+                        raise ValueError(f"Bear runtime mechanic is missing linked ability data: {unit_rawcode}")
+                    damage_fields = json.loads(damage_ability["data_fields_labeled_json"])
+                    speed_fields = json.loads(speed_ability["data_fields_labeled_json"])
+                    regen_fields = json.loads(regen_ability["data_fields_labeled_json"])
+                    expected_bonus = 0.2 if unit_rawcode == "n029" else 0.3
+                    if (
+                        numeric(damage_fields.get("Damage Increase (%)")) != expected_bonus
+                        or numeric(speed_fields.get("Attack Speed Increase (%)")) != expected_bonus
+                    ):
+                        raise ValueError(f"Bear Feral Rage object data changed: {unit_rawcode}")
+                    damage_duration = numeric(field_lookup(rows_by_object, "abilities", damage_rawcode, "adur", 1, 0))
+                    speed_duration = numeric(field_lookup(rows_by_object, "abilities", speed_rawcode, "adur", 1, 0))
+                    if damage_duration != speed_duration:
+                        raise ValueError(f"Bear Feral Rage buff durations diverged: {unit_rawcode}")
+                    parameters["feral_rage_damage_object_data"] = damage_fields
+                    parameters["feral_rage_attack_speed_object_data"] = speed_fields
+                    parameters["feral_rage_buff_duration_seconds"] = damage_duration
+                    parameters["hibernate_regen_object_data"] = regen_fields
+                    extra_id = parameters.get("hibernate_extra_sleep_ability_id")
+                    if extra_id is not None:
+                        extra_rawcode = integer_rawcode(int(extra_id))
+                        extra_ability = next((row for row in ability_levels.get(extra_rawcode, []) if row["level"] == "1"), None)
+                        if extra_ability is None:
+                            raise ValueError(f"Ancient Bear sleep bonus ability missing: {extra_rawcode}")
+                        parameters["hibernate_extra_sleep_object_data"] = json.loads(
+                            extra_ability["data_fields_labeled_json"]
+                        )
                 elif mechanic["mechanic_kind"] == "kill-triggered-native-berserk":
                     berserk = next((row for row in ability_levels.get("A02I", []) if row["level"] == "1"), None)
                     if berserk is None:
@@ -3463,7 +3502,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club setup, Echofoot Mystic Echo Step/remnant, Gnoll anti-air retaliation, Defender native Defend maintenance, Greater Fire Elemental ANlm splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, and Troll-family kill-triggered Berserk",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature attack-proc dispels, and Bear/Ancient Bear Feral Rage plus scripted hibernation",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

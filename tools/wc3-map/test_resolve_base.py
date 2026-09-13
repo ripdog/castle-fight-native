@@ -230,11 +230,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 14)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 19)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
+            "attack-proc-dispel-positive-buffs": 3,
             "automatic-defend-state-maintenance": 1,
             "damage-triggered-echo-step-and-remnant": 1,
+            "damage-triggered-feral-rage-and-hibernation": 2,
             "death-retaliation-damage-to-killer": 1,
             "kill-heal-percent-max-hp": 2,
             "kill-triggered-native-berserk": 3,
@@ -245,7 +247,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 14)
+        self.assertEqual(len(rows), 19)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -330,6 +332,30 @@ class ResolvedEvidenceTests(unittest.TestCase):
             self.assertEqual(berserk["berserk_object_data"]["Attack Speed Increase"], 2)
             self.assertEqual(berserk["berserk_object_data"]["Movement Speed Increase"], 0.25)
             self.assertEqual(berserk["berserk_object_data"]["Damage Taken Increase"], 0.1)
+
+        for rawcode, chance, radius in (("e006", 15, 0), ("e009", 20, 0), ("e00C", 25, 100)):
+            dispel = json.loads(rows[(rawcode, "attack-proc-dispel-positive-buffs")]["parameters_json"])
+            self.assertEqual(dispel["proc_chance_percent"], chance)
+            self.assertEqual(dispel["effect_radius"], radius)
+            self.assertEqual(dispel["unit_remove_buffs_ex_args"], [True, False, True, False, False, False, False])
+        ancient_dispel = json.loads(rows[("e00C", "attack-proc-dispel-positive-buffs")]["parameters_json"])
+        self.assertEqual(ancient_dispel["aoe_target_predicate"], "isDispellableEnemyOf")
+
+        bear = json.loads(rows[("n029", "damage-triggered-feral-rage-and-hibernation")]["parameters_json"])
+        ancient_bear = json.loads(rows[("n02B", "damage-triggered-feral-rage-and-hibernation")]["parameters_json"])
+        self.assertEqual(bear["feral_rage_proc_chance_percent"], 15)
+        self.assertEqual(bear["feral_rage_damage_object_data"]["Damage Increase (%)"], 0.2)
+        self.assertEqual(bear["feral_rage_attack_speed_object_data"]["Attack Speed Increase (%)"], 0.2)
+        self.assertEqual(bear["feral_rage_buff_duration_seconds"], 10)
+        self.assertEqual(bear["hibernate_trigger_life_below"], 255)
+        self.assertEqual(bear["hibernate_retreat_seconds"], 5)
+        self.assertEqual(bear["hibernate_sleep_seconds"], 10)
+        self.assertEqual(bear["hibernate_regen_object_data"]["Hit Points Regenerated Per Second"], 20)
+        self.assertEqual(ancient_bear["feral_rage_proc_chance_percent"], 20)
+        self.assertEqual(ancient_bear["feral_rage_damage_object_data"]["Damage Increase (%)"], 0.3)
+        self.assertEqual(ancient_bear["hibernate_trigger_life_below"], 326)
+        self.assertEqual(ancient_bear["hibernate_regen_object_data"]["Hit Points Regenerated Per Second"], 40)
+        self.assertEqual(ancient_bear["hibernate_extra_sleep_object_data"]["Attack Bonus"], 115)
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

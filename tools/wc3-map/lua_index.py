@@ -4416,6 +4416,18 @@ def _extract_production_unit_special_mechanics(
         "EventListener_add_FireElemental_onEvent_add_FireElemental",
         "setupFireSummon",
         "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
+        "handleSourceDamageEffects",
+        "dryadDispelProc",
+        "keeperDispelProc",
+        "ancientKeeperDispelProc",
+        "ForGroupCallback_forUnitsInRange_DamageProcs_callback_forUnitsInRange_DamageProcs",
+        "handleTargetDamageEffects",
+        "feralRage",
+        "startBearHibernate",
+        "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime1",
+        "startBearSleep",
+        "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime",
+        "finishBearHibernate",
     }
     if not required_map_functions.issubset(available_functions):
         return []
@@ -4574,6 +4586,135 @@ def _extract_production_unit_special_mechanics(
             ],
             "evidence_kind": "exact-shared-damage-handler",
             "byte_offset": retaliation_start,
+        })
+
+    # Nature attack procs: Dryad and Keeper remove positive magic buffs from
+    # their attacked target, while Ancient Keeper applies the same dispel to
+    # dispellable enemies in 100 range around the attacked unit.
+    source_damage_start, _ = require_tokens(
+        "handleSourceDamageEffects",
+        {"1697656886", "1697656889", "1697656899", "dryadDispelProc", "keeperDispelProc", "ancientKeeperDispelProc"},
+    )
+    require_tokens(
+        "dryadDispelProc",
+        {"GetRandomInt", "15", "__wurst_safe_UnitRemoveBuffsEx"},
+    )
+    require_tokens(
+        "keeperDispelProc",
+        {"GetRandomInt", "20", "__wurst_safe_UnitRemoveBuffsEx"},
+    )
+    require_tokens(
+        "ancientKeeperDispelProc",
+        {"GetRandomInt", "25", "100.", "forUnitsInRange", "kk", "create393"},
+    )
+    require_tokens(
+        "ForGroupCallback_forUnitsInRange_DamageProcs_callback_forUnitsInRange_DamageProcs",
+        {"isDispellableEnemyOf", "__wurst_safe_UnitRemoveBuffsEx"},
+    )
+    for unit_id, chance, radius in (
+        (1697656886, 15, 0),
+        (1697656889, 20, 0),
+        (1697656899, 25, 100),
+    ):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "attack-proc-dispel-positive-buffs",
+            "trigger": "source-damage-event",
+            "parameters": {
+                "proc_chance_percent": chance,
+                "center": "attacked-target",
+                "effect_radius": radius,
+                "direct_target_only": radius == 0,
+                "aoe_target_predicate": "isDispellableEnemyOf" if radius else "",
+                "unit_remove_buffs_ex_args": [True, False, True, False, False, False, False],
+            },
+            "related_rawcode_ids": [],
+            "source_functions": (
+                ["handleSourceDamageEffects", "ancientKeeperDispelProc", "ForGroupCallback_forUnitsInRange_DamageProcs_callback_forUnitsInRange_DamageProcs"]
+                if radius
+                else ["handleSourceDamageEffects", "dryadDispelProc" if chance == 15 else "keeperDispelProc"]
+            ),
+            "evidence_kind": "exact-source-damage-handler",
+            "byte_offset": source_damage_start,
+        })
+
+    # Bear/Ancient Bear: taking damage can proc two native buffs (damage and
+    # attack speed) and also drives a custom low-HP retreat/sleep state machine.
+    target_damage_start, _ = require_tokens(
+        "handleTargetDamageEffects",
+        {"1848652345", "1848652354", "15", "20", "255.", "326.", "feralRage", "startBearHibernate"},
+    )
+    require_tokens(
+        "feralRage",
+        {"GetRandomInt", "852066", "852101", "addProtectedAbility", "__wurst_safe_UnitApplyTimedLife", "2."},
+    )
+    require_tokens(
+        "startBearHibernate",
+        {"1093681972", "400.", "issueCodeTowardsOwnCastle", "5.", "doAfter"},
+    )
+    require_tokens(
+        "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime1",
+        {"startBearSleep"},
+    )
+    require_tokens(
+        "startBearSleep",
+        {"270.", "__wurst_safe_UnitRemoveBuffs", "851993", "1098083425", "1093681974", "1093681975", "1093681976", "10.", "doAfter"},
+    )
+    require_tokens(
+        "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime",
+        {"finishBearHibernate"},
+    )
+    require_tokens(
+        "finishBearHibernate",
+        {"1098083425", "1093681974", "1093681975", "orderCodeAttack"},
+    )
+    for unit_id, proc_chance, damage_ability, speed_ability, threshold, level, regen_ability, extra_sleep_ability in (
+        (1848652345, 15, 1093681719, 1093681717, 255, 1, 1093681974, None),
+        (1848652354, 20, 1093681720, 1093681718, 326, 2, 1093681975, 1093681976),
+    ):
+        related = [1093681973, 1093681972, damage_ability, speed_ability, 1098083425, regen_ability]
+        if extra_sleep_ability is not None:
+            related.append(extra_sleep_ability)
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "damage-triggered-feral-rage-and-hibernation",
+            "trigger": "target-damage-event",
+            "parameters": {
+                "runtime_damage_marker_ability_id": 1093681973,
+                "feral_rage_proc_chance_percent": proc_chance,
+                "feral_rage_damage_ability_id": damage_ability,
+                "feral_rage_attack_speed_ability_id": speed_ability,
+                "feral_rage_damage_order_id": 852066,
+                "feral_rage_attack_speed_order_id": 852101,
+                "feral_rage_dummy_lifetime_seconds": 2,
+                "hibernate_enabled_ability_id": 1093681972,
+                "hibernate_trigger_life_below": threshold,
+                "hibernate_level": level,
+                "hibernate_marker_removed_on_trigger": True,
+                "hibernate_retreat_move_speed": 400,
+                "hibernate_retreat_direction": "toward-own-castle",
+                "hibernate_retreat_seconds": 5,
+                "hibernate_sleep_move_speed": 270,
+                "hibernate_remove_positive_and_negative_buffs_before_sleep": True,
+                "hibernate_sleep_order_id": 851993,
+                "hibernate_sleep_ability_id": 1098083425,
+                "hibernate_regen_ability_id": regen_ability,
+                "hibernate_extra_sleep_ability_id": extra_sleep_ability,
+                "hibernate_sleep_seconds": 10,
+                "resume_attack_after_hibernate": True,
+            },
+            "related_rawcode_ids": related,
+            "source_functions": [
+                "handleTargetDamageEffects",
+                "feralRage",
+                "startBearHibernate",
+                "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime1",
+                "startBearSleep",
+                "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime",
+                "finishBearHibernate",
+            ],
+            "evidence_kind": "exact-target-damage-and-delayed-callback-state-machine",
+            "byte_offset": target_damage_start,
         })
 
     # Human Defender: Defend is automatically enabled shortly after spawn, then
