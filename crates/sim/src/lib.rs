@@ -7,10 +7,11 @@ mod terrain;
 mod topology;
 
 pub use components::{
-    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CollisionRadius, CorpseDefinitionId,
-    CorpseProfile, ManaProfile, ModifierId, MovementProfile, ProductionProfile, SimId,
-    SpellcastingProfile, StatusState, Team, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+    CollisionRadius, CorpseDefinitionId, CorpseProfile, ManaProfile, ModifierId, MovementClass,
+    MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState, Team,
+    UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
@@ -191,6 +192,33 @@ mod tests {
         }
     }
 
+    fn unit_properties(
+        movement_class: MovementClass,
+        attack_targets: AttackTargetMask,
+    ) -> UnitGameplayProperties {
+        UnitGameplayProperties {
+            movement_class,
+            attack_targets,
+            ..UnitGameplayProperties::default()
+        }
+    }
+
+    fn air_unit(team: u8, position: SimPoint, speed_per_tick: i32) -> UnitSpawn {
+        UnitSpawn {
+            team: Team(team),
+            position,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 4 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick },
+        }
+    }
+
     fn production_building(
         team: u8,
         footprint: BuildingFootprint,
@@ -219,6 +247,330 @@ mod tests {
             attack: None,
             spellcasting: None,
         }
+    }
+
+    #[test]
+    fn attack_target_masks_filter_air_and_ground_units() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(30, 10),
+            team_objective: [
+                SimPoint::new(30 * cell, 5 * cell),
+                SimPoint::new(0, 5 * cell),
+            ],
+            ..SimulationConfig::default()
+        };
+
+        let mut ground_only = Simulation::new(config.clone(), 2);
+        let attacker = ground_only.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(5 * cell, 5 * cell),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 1,
+                    range: 12 * cell,
+                    acquisition_range: 12 * cell,
+                    cooldown_ticks: 10,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            unit_properties(MovementClass::Ground, AttackTargetMask::GROUND_UNITS),
+        );
+        ground_only.spawn_unit_with_properties(
+            air_unit(1, SimPoint::new(7 * cell, 5 * cell), 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+        let mut ground_spawn = passive_unit(1, 9 * cell);
+        ground_spawn.position.y = 5 * cell;
+        let ground = ground_only.spawn_unit(ground_spawn);
+        ground_only.step();
+        assert_eq!(ground_only.unit(attacker).unwrap().target, Some(ground));
+
+        let mut air_only = Simulation::new(config, 2);
+        let attacker = air_only.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(5 * cell, 5 * cell),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 1,
+                    range: 12 * cell,
+                    acquisition_range: 12 * cell,
+                    cooldown_ticks: 10,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            unit_properties(MovementClass::Ground, AttackTargetMask::AIR_UNITS),
+        );
+        let air = air_only.spawn_unit_with_properties(
+            air_unit(1, SimPoint::new(7 * cell, 5 * cell), 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+        let mut ground_spawn = passive_unit(1, 9 * cell);
+        ground_spawn.position.y = 5 * cell;
+        air_only.spawn_unit(ground_spawn);
+        air_only.step();
+        assert_eq!(air_only.unit(attacker).unwrap().target, Some(air));
+    }
+
+    #[test]
+    fn air_units_fly_across_ground_blockers() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(20, 10),
+            static_blockers: vec![BuildingFootprint::new(10, 0, 1, 11)],
+            team_objective: [
+                SimPoint::new(20 * cell + cell / 2, 5 * cell + cell / 2),
+                SimPoint::new(cell / 2, 5 * cell + cell / 2),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let air = sim.spawn_unit_with_properties(
+            air_unit(
+                0,
+                SimPoint::new(5 * cell + cell / 2, 5 * cell + cell / 2),
+                cell / 2,
+            ),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+
+        for _ in 0..16 {
+            sim.step();
+        }
+        assert!(sim.unit(air).unwrap().position.x > 11 * cell);
+    }
+
+    #[test]
+    fn air_and_ground_use_separate_collision_layers_and_air_does_not_block_building_placement() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(10, 10),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let position = SimPoint::new(4 * cell + cell / 2, 4 * cell + cell / 2);
+        let air = sim.spawn_unit_with_properties(
+            air_unit(0, position, 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+        let footprint = BuildingFootprint::new(4, 4, 1, 1);
+        assert!(sim.can_place_building(footprint));
+
+        let ground = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        assert_eq!(sim.unit(air).unwrap().position, position);
+        assert_eq!(sim.unit(ground).unwrap().position, position);
+        assert!(!sim.can_place_building(footprint));
+    }
+
+    #[test]
+    fn air_units_still_collide_with_other_air_units() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(10, 10),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let position = SimPoint::new(5 * cell, 5 * cell);
+        let a = sim.spawn_unit_with_properties(
+            air_unit(0, position, 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+        let b = sim.spawn_unit_with_properties(
+            air_unit(0, position, 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+        sim.step();
+        let a = sim.unit(a).unwrap();
+        let b = sim.unit(b).unwrap();
+        let clearance = a.collision_radius + b.collision_radius;
+        assert!(a.position.distance_sq(b.position) >= (clearance as i64 * clearance as i64) as u64);
+    }
+
+    #[test]
+    fn ballistic_splash_preserves_attack_target_mask() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(30, 10),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(5 * cell, 5 * cell),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedBallistic {
+                        speed_per_tick: 100 * cell,
+                        impact_radius: 3 * cell,
+                    },
+                    damage: 10,
+                    range: 12 * cell,
+                    acquisition_range: 12 * cell,
+                    cooldown_ticks: 100,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            unit_properties(MovementClass::Ground, AttackTargetMask::GROUND_UNITS),
+        );
+        let mut ground_spawn = passive_unit(1, 10 * cell);
+        ground_spawn.position.y = 5 * cell;
+        let ground = sim.spawn_unit(ground_spawn);
+        let air = sim.spawn_unit_with_properties(
+            air_unit(1, SimPoint::new(11 * cell, 5 * cell), 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+
+        sim.step();
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(ground).unwrap().health, 9_990);
+        assert_eq!(sim.unit(air).unwrap().health, 100);
+    }
+
+    #[test]
+    fn production_inherits_air_movement_and_attack_targets() {
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(20, 10),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_building_with_properties(
+            production_building(0, BuildingFootprint::new(4, 4, 2, 2), 4),
+            BuildingGameplayProperties {
+                production_unit: unit_properties(MovementClass::Air, AttackTargetMask::AIR_UNITS),
+                ..BuildingGameplayProperties::default()
+            },
+        );
+        sim.step();
+        let unit = sim
+            .units()
+            .into_iter()
+            .next()
+            .expect("production unit missing");
+        assert_eq!(unit.movement_class, MovementClass::Air);
+        assert_eq!(unit.attack_targets, AttackTargetMask::AIR_UNITS);
+    }
+
+    #[test]
+    fn air_units_ignore_uphill_miss() {
+        let rules = CombatRules {
+            terrain_elevation: Some(original_map_terrain()),
+            uphill_miss_chance_per_10k: UPHILL_MISS_CHANCE_SCALE,
+        };
+        let mut sim = Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
+        sim.spawn_unit_with_properties(
+            terrain_attacker(0, wc3_point(0, 0), AttackDelivery::Melee),
+            unit_properties(MovementClass::Air, AttackTargetMask::GROUND_UNITS),
+        );
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: wc3_point(-6_000, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 9_993);
+        assert!(!sim.attacks_last_tick()[0].missed);
+    }
+
+    #[test]
+    fn mixed_air_ground_battle_is_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                match_seed: 0x4149_522d_4752_4f55,
+                navigation_min: NavCell::new(0, 0),
+                navigation_max: NavCell::new(60, 20),
+                static_blockers: vec![BuildingFootprint::new(30, 0, 1, 21)],
+                team_objective: [
+                    SimPoint::new(60 * cell, 10 * cell),
+                    SimPoint::new(0, 10 * cell),
+                ],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            for team in 0..=1 {
+                for index in 0..18 {
+                    let air = index % 3 == 0;
+                    let x = if team == 0 {
+                        8 + index / 6
+                    } else {
+                        52 - index / 6
+                    };
+                    let y = 2 + index % 6 * 3;
+                    let spawn = UnitSpawn {
+                        team: Team(team),
+                        position: SimPoint::new(x * cell + cell / 2, y * cell + cell / 2),
+                        health: 100,
+                        attack: AttackProfile {
+                            delivery: AttackDelivery::RangedGuaranteedHit {
+                                speed_per_tick: 4 * cell,
+                            },
+                            damage: 3,
+                            range: 5 * cell,
+                            acquisition_range: 10 * cell,
+                            cooldown_ticks: 4,
+                        },
+                        movement: MovementProfile {
+                            speed_per_tick: cell / 3,
+                        },
+                    };
+                    sim.spawn_unit_with_properties(
+                        spawn,
+                        unit_properties(
+                            if air {
+                                MovementClass::Air
+                            } else {
+                                MovementClass::Ground
+                            },
+                            if index % 2 == 0 {
+                                AttackTargetMask::ALL
+                            } else {
+                                AttackTargetMask::GROUND_UNITS
+                            },
+                        ),
+                    );
+                }
+            }
+            for _ in 0..120 {
+                sim.step();
+            }
+            sim.checksum()
+        }
+
+        assert_eq!(run(1), run(8));
     }
 
     #[test]
@@ -699,6 +1051,7 @@ mod tests {
                     lifetime_ticks: None,
                 }),
                 collision_radius: Some(CollisionRadius(world / 8)),
+                ..UnitGameplayProperties::default()
             },
         );
         assert_eq!(sim.unit(victim).unwrap().collision_radius, world / 8);

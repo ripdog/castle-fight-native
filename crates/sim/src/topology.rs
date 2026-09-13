@@ -152,6 +152,22 @@ impl TopologyGrid {
     }
 
     #[must_use]
+    pub fn circle_is_inside_bounds(&self, center: SimPoint, radius: i32) -> bool {
+        debug_assert!(radius >= 0);
+        let radius_i64 = i64::from(radius);
+        let min_world_x = i64::from(self.min.x) * i64::from(self.cell_size);
+        let min_world_y = i64::from(self.min.y) * i64::from(self.cell_size);
+        let max_world_x = (i64::from(self.min.x) + self.width as i64) * i64::from(self.cell_size);
+        let max_world_y = (i64::from(self.min.y) + self.height as i64) * i64::from(self.cell_size);
+        let center_x = i64::from(center.x);
+        let center_y = i64::from(center.y);
+        center_x - radius_i64 >= min_world_x
+            && center_y - radius_i64 >= min_world_y
+            && center_x + radius_i64 <= max_world_x
+            && center_y + radius_i64 <= max_world_y
+    }
+
+    #[must_use]
     pub fn circle_is_traversable_in_component(
         &self,
         center: SimPoint,
@@ -162,7 +178,7 @@ impl TopologyGrid {
         let Some(center_component) = self.component_id(self.cell_of_point(center)) else {
             return false;
         };
-        if center_component != component {
+        if center_component != component || !self.circle_is_inside_bounds(center, radius) {
             return false;
         }
         if radius == 0 {
@@ -170,19 +186,6 @@ impl TopologyGrid {
         }
 
         let radius_i64 = i64::from(radius);
-        let min_world_x = i64::from(self.min.x) * i64::from(self.cell_size);
-        let min_world_y = i64::from(self.min.y) * i64::from(self.cell_size);
-        let max_world_x = (i64::from(self.min.x) + self.width as i64) * i64::from(self.cell_size);
-        let max_world_y = (i64::from(self.min.y) + self.height as i64) * i64::from(self.cell_size);
-        let center_x = i64::from(center.x);
-        let center_y = i64::from(center.y);
-        if center_x - radius_i64 < min_world_x
-            || center_y - radius_i64 < min_world_y
-            || center_x + radius_i64 > max_world_x
-            || center_y + radius_i64 > max_world_y
-        {
-            return false;
-        }
 
         let min_cell = self.cell_of_point(SimPoint::new(
             center.x.saturating_sub(radius),

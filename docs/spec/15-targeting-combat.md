@@ -77,6 +77,8 @@ Depending on attack/content rules, eligibility may consider:
 
 Navigation reachability and targetability remain separate concepts, but an attacker MUST discard a candidate it cannot actually reach an attack position for with any attack that can affect that candidate.
 
+The current authoritative ordinary-attack filter is an explicit target mask with independent ground-unit, air-unit, and building bits. Movement class does not imply attack capability: a ground melee unit may be authored to hit air, an air unit may be ground-only, and an attack building uses the same mask. Target-class filtering applies to fresh acquisition, sticky retention, retaliation/ally-defense validation, the final attack-intent gate, ballistic splash victims, and bounce-chain candidates; a secondary projectile effect MUST NOT bypass the originating attack's target mask.
+
 Examples:
 
 - a long-range attacker already able to hit a caged unit does not need a ground route to that unit;
@@ -144,7 +146,7 @@ Candidate discovery MAY use an expanded center-radius broad-phase query, but exa
 
 For projectile delivery, the current verification launch position is the building footprint center while attack-range/travel distance uses the same exact footprint-distance rule used by the intent. This is provisional presentation/compatibility behavior and MUST remain explicit if revised.
 
-Damage caused by an attack building is otherwise ordinary combat damage. Its building `SimId` is the damage source, so a struck unit may establish that building as its first direct-retaliation target. The unit's 3× acquisition-range retaliation leash applies even if the building lies outside ordinary acquisition range; nearby allies may separately consume the corresponding defense alert when the attacker is valid/reachable under their own rules.
+Damage caused by an attack building is otherwise ordinary combat damage. Its building `SimId` is the damage source, so a struck unit may establish that building as its first direct-retaliation target only when that unit's own attack target mask permits buildings. The unit's 3× acquisition-range retaliation leash applies even if the building lies outside ordinary acquisition range; nearby allies may separately consume the corresponding defense alert when the attacker is valid/reachable under their own rules.
 
 ## 8. Combat intent
 
@@ -328,7 +330,7 @@ Parallel execution order MUST NOT consume or shift another entity's random seque
 
 ### 13.1 Uphill miss
 
-Castle Fight inherits a terrain-height combat advantage: when a unit attacks an enemy unit that is on higher authoritative terrain, the attack has a chance to miss. This rule applies to every ordinary unit attack attempt regardless of its delivery mode. It does not automatically apply to spells/abilities or attacks made by buildings unless their own rules explicitly opt into the same accuracy mechanic.
+Castle Fight inherits a terrain-height combat advantage: when a **ground** unit attacks an enemy unit that is on higher authoritative terrain, the attack has a chance to miss. This rule applies to every ordinary ground-unit attack attempt regardless of its delivery mode. Air units are not grounded on the sampled cliff surface and therefore do not use this elevation disadvantage. It does not automatically apply to spells/abilities or attacks made by buildings unless their own rules explicitly opt into the same accuracy mechanic.
 
 "Uphill" MUST be determined from authoritative map/gameplay elevation data at the units' authoritative ground positions, not from rendered mesh height, camera-space coordinates, animation offsets, projectile arcs, or floating-point presentation transforms. In Castle Fight's standard map layout, each team's base is elevated relative to the central lane; this therefore provides defenders in the base with the intended terrain advantage without any special-case "base defense" modifier.
 

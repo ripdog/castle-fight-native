@@ -9,8 +9,8 @@ use bevy::{
     window::PrimaryWindow,
 };
 use castle_fight_sim::{
-    BuildingFootprint, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId,
-    SimPoint, SimulationConfig, Team,
+    BuildingFootprint, MovementClass, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT,
+    SimId, SimPoint, SimulationConfig, Team,
 };
 
 use crate::{
@@ -20,6 +20,7 @@ use crate::{
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
 const UNIT_RANGED_HEIGHT: f32 = 8.0;
+const AIR_UNIT_ALTITUDE: f32 = 24.0;
 const BUILDING_HEIGHT: f32 = 18.0;
 const STATIC_BLOCKER_HEIGHT: f32 = 5.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
@@ -1133,7 +1134,7 @@ fn sync_render_entities(
             entry.max_health_seen = entry.max_health_seen.max(unit.health);
             continue;
         }
-        let position = sim_point_to_terrain_world(unit.position, &terrain)
+        let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
             + Vec3::Y * (unit_height(unit) * 0.5);
         let entity = commands
             .spawn((
@@ -1242,8 +1243,13 @@ fn interpolate_render_transforms(
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(current);
-        let ground_position =
-            sim_point_to_terrain_world_lerp(previous.position, current.position, alpha, &terrain);
+        let ground_position = unit_ground_position_lerp(
+            previous.position,
+            current.position,
+            current.movement_class,
+            alpha,
+            &terrain,
+        );
         let moving = previous.position != current.position;
         let bob = walk_bob(current.id, render_tick, moving);
         let position = ground_position + Vec3::Y * (unit_height(current) * 0.5 + bob);
@@ -1374,8 +1380,13 @@ fn unit_facing_rotation(
     terrain: &TerrainSurface,
     alpha: f32,
 ) -> Option<Quat> {
-    let current_position =
-        sim_point_to_terrain_world_lerp(previous.position, current.position, alpha, terrain);
+    let current_position = unit_ground_position_lerp(
+        previous.position,
+        current.position,
+        current.movement_class,
+        alpha,
+        terrain,
+    );
     let direction = current
         .target
         .and_then(|target| entity_render_position(target, samples, metrics, terrain, alpha))
@@ -1410,9 +1421,10 @@ fn entity_render_position(
 ) -> Option<Vec3> {
     if let Some(current) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(current);
-        return Some(sim_point_to_terrain_world_lerp(
+        return Some(unit_ground_position_lerp(
             previous.position,
             current.position,
+            current.movement_class,
             alpha,
             terrain,
         ));
@@ -1494,9 +1506,13 @@ fn draw_health_bars(
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(unit);
-        let position =
-            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain)
-                + Vec3::Y * (unit_height(unit) + 3.0);
+        let position = unit_ground_position_lerp(
+            previous.position,
+            unit.position,
+            unit.movement_class,
+            alpha,
+            &terrain,
+        ) + Vec3::Y * (unit_height(unit) + 3.0);
         if !health_bar_visible(&camera_frustum, position, UNIT_HEALTH_BAR_WIDTH) {
             continue;
         }
@@ -1561,9 +1577,14 @@ fn draw_presentation_gizmos(
 
     for unit in samples.current.units.values() {
         let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
-        let rendered =
-            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain);
-        let authoritative = sim_point_to_terrain_world(unit.position, &terrain);
+        let rendered = unit_ground_position_lerp(
+            previous.position,
+            unit.position,
+            unit.movement_class,
+            alpha,
+            &terrain,
+        );
+        let authoritative = unit_ground_position(unit.position, unit.movement_class, &terrain);
         gizmos.line(
             rendered + Vec3::Y * 0.2,
             authoritative + Vec3::Y * 0.2,
@@ -1840,6 +1861,32 @@ pub(crate) fn sim_point_to_terrain_world_lerp(
     terrain: &TerrainSurface,
 ) -> Vec3 {
     terrain.clamp_world_position(sim_point_to_world_lerp(previous, current, alpha))
+}
+
+fn unit_ground_position(
+    point: SimPoint,
+    movement_class: MovementClass,
+    terrain: &TerrainSurface,
+) -> Vec3 {
+    sim_point_to_terrain_world(point, terrain) + Vec3::Y * unit_visual_altitude(movement_class)
+}
+
+fn unit_ground_position_lerp(
+    previous: SimPoint,
+    current: SimPoint,
+    movement_class: MovementClass,
+    alpha: f32,
+    terrain: &TerrainSurface,
+) -> Vec3 {
+    sim_point_to_terrain_world_lerp(previous, current, alpha, terrain)
+        + Vec3::Y * unit_visual_altitude(movement_class)
+}
+
+pub(crate) const fn unit_visual_altitude(movement_class: MovementClass) -> f32 {
+    match movement_class {
+        MovementClass::Ground => 0.0,
+        MovementClass::Air => AIR_UNIT_ALTITUDE,
+    }
 }
 
 fn unit_height(unit: &UnitSample) -> f32 {

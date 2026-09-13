@@ -311,7 +311,9 @@ Maps MAY contain:
 - player-specific destination fields;
 - terrain movement classes.
 
-Shared navigation fields can be keyed by destination/team/movement class as required.
+The current authoritative movement-class model distinguishes `Ground` and `Air`. Ground units use ordinary blocked-cell topology, connected components, radius-aware clearance, and building footprints. Air units ignore ground blockers/building footprints for movement and path reachability, but remain bounded by the authoritative map rectangle. Ground and air units occupy separate collision layers: ground units do not physically block air units and air units do not block ground units or ground building placement; units within the same movement class still use deterministic pairwise collision/reservation. Air units therefore pursue targets and objectives by direct bounded movement rather than ground pathfinding.
+
+Shared navigation fields can be keyed by destination/team/movement class as required if additional terrain movement classes are introduced later.
 
 ## 20. Verification scenarios
 
@@ -355,4 +357,7 @@ Spatial/navigation tests MUST eventually include:
 36. an unobstructed targetless lane unit preserves its exact current `y` while advancing toward the enemy side rather than drifting toward the objective centerline;
 37. after combat or a forced topology detour moves a unit vertically, targetless movement resumes horizontally from the unit's new `y` without restoring any remembered spawn/home line;
 38. a unit in a disconnected cage makes one-way best-effort progress along its current row toward the objective-side wall, then remains blocked there rather than pacing or crossing the cage;
-36. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping.
+39. an air unit crosses ground blockers/building footprints while remaining inside map bounds;
+40. ground and air units may overlap in 2D authoritative position because they occupy separate collision layers, while two air units still cannot overlap each other;
+41. an air unit ignores disconnected ground topology when pursuing an otherwise valid target;
+42. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping.

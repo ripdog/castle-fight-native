@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AttackDelivery, AttackEvent, BuildingFootprint, CorpseView, ProjectileView, SimId, SimPoint,
-    Simulation, Team,
+    AttackDelivery, AttackEvent, BuildingFootprint, CorpseView, MovementClass, ProjectileView,
+    SimId, SimPoint, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +83,7 @@ pub struct UnitSample {
     pub team: Team,
     pub position: SimPoint,
     pub collision_radius: i32,
+    pub movement_class: MovementClass,
     pub health: i32,
     pub target: Option<SimId>,
     pub cooldown_remaining: u16,
@@ -132,6 +133,7 @@ impl PresentationSnapshot {
                         team: unit.team,
                         position: unit.position,
                         collision_radius: unit.collision_radius,
+                        movement_class: unit.movement_class,
                         health: unit.health,
                         target: unit.target,
                         cooldown_remaining: unit.cooldown_remaining,

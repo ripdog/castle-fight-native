@@ -16,14 +16,16 @@ const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
-        AttackProfile, AttackSequence, AutomaticAbilityProfile, AutomaticAbilityState,
-        BallisticProjectile, BounceProjectile, BuildingFootprint, BuildingSpawn, CollisionRadius,
-        Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
-        MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
-        NavigationGoal, NavigationState, Position, ProductionCollisionRadius,
-        ProductionCorpseProfile, ProductionProfile, ProductionSpellcastingProfile, ProductionState,
-        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
-        UnitGameplayProperties, UnitSpawn,
+        AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
+        AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildingFootprint,
+        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, Corpse, CorpseDefinitionId,
+        CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
+        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass, MovementProfile,
+        NavigationGoal, NavigationState, Position, ProductionAttackTargets,
+        ProductionCollisionRadius, ProductionCorpseProfile, ProductionMovementClass,
+        ProductionProfile, ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId,
+        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties,
+        UnitSpawn,
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -203,8 +205,10 @@ pub struct UnitView {
     pub team: Team,
     pub position: SimPoint,
     pub collision_radius: i32,
+    pub movement_class: MovementClass,
     pub health: i32,
     pub attack_delivery: AttackDelivery,
+    pub attack_targets: AttackTargetMask,
     pub target: Option<SimId>,
     pub last_attacker: Option<SimId>,
     pub cooldown_remaining: u16,
@@ -222,8 +226,11 @@ pub struct BuildingView {
     pub footprint: BuildingFootprint,
     pub health: i32,
     pub production: Option<ProductionProfile>,
+    pub production_movement_class: Option<MovementClass>,
+    pub production_attack_targets: Option<AttackTargetMask>,
     pub next_spawn_tick: Option<u64>,
     pub attack_delivery: Option<AttackDelivery>,
+    pub attack_targets: Option<AttackTargetMask>,
     pub target: Option<SimId>,
     pub cooldown_remaining: Option<u16>,
     pub mana_current: Option<i32>,
@@ -332,9 +339,23 @@ impl Simulation {
         unit: UnitSpawn,
         spellcasting: SpellcastingProfile,
     ) -> SimId {
+        self.spawn_unit_with_properties_and_spellcasting(
+            unit,
+            UnitGameplayProperties::default(),
+            spellcasting,
+        )
+    }
+
+    pub fn spawn_unit_with_properties_and_spellcasting(
+        &mut self,
+        unit: UnitSpawn,
+        properties: UnitGameplayProperties,
+        spellcasting: SpellcastingProfile,
+    ) -> SimId {
         validate_unit_spawn(unit);
+        self.validate_unit_gameplay_properties(unit.position, properties);
         validate_spellcasting_profile(spellcasting);
-        self.spawn_unit_unchecked(unit, None, None, Some(spellcasting))
+        self.spawn_unit_unchecked(unit, properties, Some(spellcasting))
     }
 
     pub fn spawn_unit_with_corpse(&mut self, unit: UnitSpawn, corpse: CorpseProfile) -> SimId {
@@ -342,7 +363,7 @@ impl Simulation {
             unit,
             UnitGameplayProperties {
                 corpse: Some(corpse),
-                collision_radius: None,
+                ..UnitGameplayProperties::default()
             },
         )
     }
@@ -355,8 +376,8 @@ impl Simulation {
         self.spawn_unit_with_properties(
             unit,
             UnitGameplayProperties {
-                corpse: None,
                 collision_radius: Some(collision_radius),
+                ..UnitGameplayProperties::default()
             },
         )
     }
@@ -367,32 +388,76 @@ impl Simulation {
         properties: UnitGameplayProperties,
     ) -> SimId {
         validate_unit_spawn(unit);
+        self.validate_unit_gameplay_properties(unit.position, properties);
+        self.spawn_unit_unchecked(unit, properties, None)
+    }
+
+    fn validate_unit_gameplay_properties(
+        &mut self,
+        position: SimPoint,
+        properties: UnitGameplayProperties,
+    ) {
         if let Some(corpse) = properties.corpse {
             validate_corpse_profile(corpse);
         }
         if let Some(collision_radius) = properties.collision_radius {
             validate_collision_radius(collision_radius);
-            self.refresh_topology_if_dirty();
-            let source_cell = self.topology.cell_of_point(unit.position);
-            let component = self
-                .topology
-                .component_id(source_cell)
-                .expect("authored collision unit must spawn on traversable topology");
-            assert!(
-                self.topology.circle_is_traversable_in_component(
-                    unit.position,
-                    collision_radius.0,
-                    component,
-                ),
-                "authored collision unit footprint overlaps blocked topology"
-            );
         }
-        self.spawn_unit_unchecked(unit, properties.corpse, properties.collision_radius, None)
+        let collision_radius = properties
+            .collision_radius
+            .map_or(self.default_collision_radius(), |radius| radius.0);
+        let legal = match properties.movement_class {
+            MovementClass::Ground if properties.collision_radius.is_some() => {
+                self.refresh_topology_if_dirty();
+                let source_cell = self.topology.cell_of_point(position);
+                self.topology
+                    .component_id(source_cell)
+                    .is_some_and(|component| {
+                        self.topology.circle_is_traversable_in_component(
+                            position,
+                            collision_radius,
+                            component,
+                        )
+                    })
+            }
+            MovementClass::Ground => self
+                .topology
+                .contains(self.topology.cell_of_point(position)),
+            MovementClass::Air => self
+                .topology
+                .circle_is_inside_bounds(position, collision_radius),
+        };
+        assert!(
+            legal,
+            "authored collision unit footprint is outside legal movement space"
+        );
     }
 
     pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
-        self.try_spawn_building(building)
+        self.spawn_building_with_properties(building, BuildingGameplayProperties::default())
+    }
+
+    pub fn spawn_building_with_properties(
+        &mut self,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> SimId {
+        self.try_spawn_building_with_properties(building, properties)
             .expect("invalid authored building placement")
+    }
+
+    pub fn spawn_building_with_attack_targets(
+        &mut self,
+        building: BuildingSpawn,
+        attack_targets: AttackTargetMask,
+    ) -> SimId {
+        self.spawn_building_with_properties(
+            building,
+            BuildingGameplayProperties {
+                attack_targets,
+                ..BuildingGameplayProperties::default()
+            },
+        )
     }
 
     pub fn spawn_building_with_production_corpse(
@@ -404,7 +469,7 @@ impl Simulation {
             building,
             UnitGameplayProperties {
                 corpse: Some(corpse),
-                collision_radius: None,
+                ..UnitGameplayProperties::default()
             },
         )
     }
@@ -413,7 +478,15 @@ impl Simulation {
         &mut self,
         building: BuildingSpawn,
     ) -> Result<SimId, BuildingPlacementError> {
-        self.try_spawn_building_internal(building, None, None, None)
+        self.try_spawn_building_with_properties(building, BuildingGameplayProperties::default())
+    }
+
+    pub fn try_spawn_building_with_properties(
+        &mut self,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<SimId, BuildingPlacementError> {
+        self.try_spawn_building_internal(building, properties)
     }
 
     pub fn try_spawn_building_with_production_corpse(
@@ -425,7 +498,7 @@ impl Simulation {
             building,
             UnitGameplayProperties {
                 corpse: Some(corpse),
-                collision_radius: None,
+                ..UnitGameplayProperties::default()
             },
         )
     }
@@ -438,8 +511,8 @@ impl Simulation {
         self.spawn_building_with_production_properties(
             building,
             UnitGameplayProperties {
-                corpse: None,
                 collision_radius: Some(collision_radius),
+                ..UnitGameplayProperties::default()
             },
         )
     }
@@ -470,9 +543,10 @@ impl Simulation {
         }
         self.try_spawn_building_internal(
             building,
-            properties.corpse,
-            properties.collision_radius,
-            None,
+            BuildingGameplayProperties {
+                production_unit: properties,
+                ..BuildingGameplayProperties::default()
+            },
         )
     }
 
@@ -495,15 +569,19 @@ impl Simulation {
             "production spellcasting profile requires a production building"
         );
         validate_spellcasting_profile(spellcasting);
-        self.try_spawn_building_internal(building, None, None, Some(spellcasting))
+        self.try_spawn_building_internal(
+            building,
+            BuildingGameplayProperties {
+                production_spellcasting: Some(spellcasting),
+                ..BuildingGameplayProperties::default()
+            },
+        )
     }
 
     fn try_spawn_building_internal(
         &mut self,
         building: BuildingSpawn,
-        production_corpse: Option<CorpseProfile>,
-        production_collision_radius: Option<CollisionRadius>,
-        production_spellcasting: Option<SpellcastingProfile>,
+        properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuildingPlacementError> {
         assert!(building.health > 0);
         assert!(building.team.0 < 2, "verification slice supports two teams");
@@ -511,6 +589,15 @@ impl Simulation {
         if let Some(production) = building.production {
             assert!(production.interval_ticks > 0);
             validate_unit_template(production.unit);
+            if let Some(corpse) = properties.production_unit.corpse {
+                validate_corpse_profile(corpse);
+            }
+            if let Some(collision_radius) = properties.production_unit.collision_radius {
+                validate_collision_radius(collision_radius);
+            }
+            if let Some(spellcasting) = properties.production_spellcasting {
+                validate_spellcasting_profile(spellcasting);
+            }
         }
         if let Some(attack) = building.attack {
             validate_attack_profile(attack);
@@ -561,20 +648,26 @@ impl Simulation {
                 .next_tick
                 .checked_add(u64::from(production.initial_delay_ticks))
                 .expect("initial production tick overflow");
-            entity.insert((production, ProductionState { next_spawn_tick }));
-            if let Some(corpse) = production_corpse {
+            entity.insert((
+                production,
+                ProductionState { next_spawn_tick },
+                ProductionMovementClass(properties.production_unit.movement_class),
+                ProductionAttackTargets(properties.production_unit.attack_targets),
+            ));
+            if let Some(corpse) = properties.production_unit.corpse {
                 entity.insert(ProductionCorpseProfile(corpse));
             }
-            if let Some(collision_radius) = production_collision_radius {
+            if let Some(collision_radius) = properties.production_unit.collision_radius {
                 entity.insert(ProductionCollisionRadius(collision_radius));
             }
-            if let Some(spellcasting) = production_spellcasting {
+            if let Some(spellcasting) = properties.production_spellcasting {
                 entity.insert(ProductionSpellcastingProfile(spellcasting));
             }
         }
         if let Some(attack) = building.attack {
             entity.insert((
                 attack,
+                properties.attack_targets,
                 AttackCooldown::default(),
                 TargetState::default(),
                 SpawnTick(self.next_tick),
@@ -656,7 +749,10 @@ impl Simulation {
             let Some(health) = entity.get::<Health>() else {
                 return false;
             };
-            if health.current <= 0 || entity.get::<BuildingFootprint>().is_some() {
+            if health.current <= 0
+                || entity.get::<BuildingFootprint>().is_some()
+                || entity.get::<MovementClass>() == Some(&MovementClass::Air)
+            {
                 return false;
             }
             if let Some(radius) = entity.get::<CollisionRadius>() {
@@ -701,49 +797,29 @@ impl Simulation {
         let phase_start = Instant::now();
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
-        let has_bounce_projectile = {
-            let mut query = self.world.query::<&BounceProjectile>();
-            query.iter(&self.world).next().is_some()
-        };
-        let needs_global_unit_grid = has_bounce_projectile
-            || buildings
-                .iter()
-                .any(|building| building.attack.is_some() || building.spellcasting.is_some())
-            || units.iter().any(|unit| {
-                unit.spellcasting.is_some()
-                    || matches!(
-                        unit.attack.delivery,
-                        AttackDelivery::RangedGuaranteedHit { .. }
-                            | AttackDelivery::RangedBallistic { .. }
-                            | AttackDelivery::Bounce { .. }
-                    )
-            });
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
-            units
-                .iter()
-                .enumerate()
-                .filter_map(|(index, unit)| {
-                    let cell = self.topology.cell_of_point(unit.position);
-                    let component = self.topology.component_id(cell)?;
-                    Some((index, *unit, component))
-                })
-                .flat_map(|(index, unit, component)| {
-                    [
-                        Some((
+            units.iter().enumerate().flat_map(|(index, unit)| {
+                let component_entry = (unit.movement_class == MovementClass::Ground)
+                    .then(|| {
+                        self.topology
+                            .component_id(self.topology.cell_of_point(unit.position))
+                    })
+                    .flatten()
+                    .map(|component| {
+                        (
                             SpatialPartition::new(unit.team.0, component),
                             index,
                             unit.position,
-                        )),
-                        needs_global_unit_grid.then_some((
-                            SpatialPartition::global(unit.team.0),
-                            index,
-                            unit.position,
-                        )),
-                    ]
-                    .into_iter()
-                    .flatten()
-                }),
+                        )
+                    });
+                [
+                    component_entry,
+                    Some((SpatialPartition::global(unit.team.0), index, unit.position)),
+                ]
+                .into_iter()
+                .flatten()
+            }),
         );
         let mut snapshot_and_spatial = phase_start.elapsed();
 
@@ -1008,7 +1084,8 @@ impl Simulation {
                 continue;
             };
 
-            let missed = self.uphill_attack_misses(&intent, target_position, completed_tick);
+            let missed =
+                self.uphill_attack_misses(&intent, target_position, completed_tick, &units);
             if !missed {
                 match intent.attack.delivery {
                     AttackDelivery::Melee => {
@@ -1057,6 +1134,7 @@ impl Simulation {
                         ballistic_projectile_launches.push(BallisticProjectileLaunch {
                             source: intent.source_id,
                             source_team: intent.source_team,
+                            target_mask: intent.attack_targets,
                             damage: intent.attack.damage,
                             launch_position: intent.source_position,
                             destination: target_position,
@@ -1080,6 +1158,7 @@ impl Simulation {
                         bounce_projectile_launches.push(BounceProjectileLaunch {
                             source: intent.source_id,
                             source_team: intent.source_team,
+                            target_mask: intent.attack_targets,
                             target: intent.target_id,
                             damage: intent.attack.damage,
                             launch_position: intent.source_position,
@@ -1162,6 +1241,10 @@ impl Simulation {
                         if unit_health[unit_index] > 0
                             && snapshot
                                 .projectile
+                                .target_mask
+                                .can_target_unit(units[unit_index].movement_class)
+                            && snapshot
+                                .projectile
                                 .destination
                                 .distance_sq(positions[unit_index])
                                 <= radius_sq
@@ -1171,7 +1254,10 @@ impl Simulation {
                     },
                 );
                 for (building_index, building) in buildings.iter().enumerate() {
-                    if building.team.0 != enemy_team || building_health[building_index] <= 0 {
+                    if !snapshot.projectile.target_mask.can_target_buildings()
+                        || building.team.0 != enemy_team
+                        || building_health[building_index] <= 0
+                    {
                         continue;
                     }
                     ballistic_candidate_checks += 1;
@@ -1243,6 +1329,7 @@ impl Simulation {
                 BallisticProjectile {
                     source: launch.source,
                     source_team: launch.source_team,
+                    target_mask: launch.target_mask,
                     damage: launch.damage,
                     launch_position: launch.launch_position,
                     destination: launch.destination,
@@ -1261,6 +1348,7 @@ impl Simulation {
                 BounceProjectile {
                     source: launch.source,
                     source_team: launch.source_team,
+                    target_mask: launch.target_mask,
                     target: launch.target,
                     damage: launch.damage,
                     launch_position: launch.launch_position,
@@ -1649,8 +1737,7 @@ impl Simulation {
     fn spawn_unit_unchecked(
         &mut self,
         unit: UnitSpawn,
-        corpse: Option<CorpseProfile>,
-        collision_radius: Option<CollisionRadius>,
+        properties: UnitGameplayProperties,
         spellcasting: Option<SpellcastingProfile>,
     ) -> SimId {
         let id = self.allocate_id();
@@ -1663,6 +1750,8 @@ impl Simulation {
                 max: unit.health,
             },
             unit.attack,
+            properties.attack_targets,
+            properties.movement_class,
             AttackCooldown::default(),
             AttackSequence::default(),
             TargetState::default(),
@@ -1672,10 +1761,10 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
-        if let Some(corpse) = corpse {
+        if let Some(corpse) = properties.corpse {
             entity.insert(CorpseProducer(corpse));
         }
-        if let Some(collision_radius) = collision_radius {
+        if let Some(collision_radius) = properties.collision_radius {
             entity.insert(collision_radius);
         }
         if let Some(spellcasting) = spellcasting {
@@ -1765,11 +1854,13 @@ impl Simulation {
             &ProductionState,
             Option<&ProductionCorpseProfile>,
             Option<&ProductionCollisionRadius>,
+            &ProductionMovementClass,
+            &ProductionAttackTargets,
             Option<&ProductionSpellcastingProfile>,
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _, _, _)| state.next_spawn_tick <= self.next_tick)
+            .filter(|(_, _, _, _, _, state, _, _, _, _, _)| state.next_spawn_tick <= self.next_tick)
             .map(
                 |(
                     entity,
@@ -1780,6 +1871,8 @@ impl Simulation {
                     state,
                     corpse,
                     collision_radius,
+                    movement_class,
+                    attack_targets,
                     spellcasting,
                 )| {
                     ProductionAttempt {
@@ -1790,6 +1883,8 @@ impl Simulation {
                         profile: *profile,
                         corpse: corpse.map(|corpse| corpse.0),
                         collision_radius: collision_radius.map(|radius| radius.0),
+                        movement_class: movement_class.0,
+                        attack_targets: attack_targets.0,
                         spellcasting: spellcasting.map(|profile| profile.0),
                         next_spawn_tick: state.next_spawn_tick,
                     }
@@ -1826,15 +1921,31 @@ impl Simulation {
             .max(max_spawn_radius)
             .saturating_mul(2)
             .max(1);
-        let mut reservations = SpatialReservationGrid::build_with_radii(
+        let mut ground_reservations = SpatialReservationGrid::build_with_radii(
             reservation_cell_size,
             bounds_min,
             bounds_max,
             reservation_capacity,
-            units
-                .iter()
-                .enumerate()
-                .map(|(index, unit)| (index, unit.position, unit.collision_radius)),
+            units.iter().enumerate().filter_map(|(index, unit)| {
+                (unit.movement_class == MovementClass::Ground).then_some((
+                    index,
+                    unit.position,
+                    unit.collision_radius,
+                ))
+            }),
+        );
+        let mut air_reservations = SpatialReservationGrid::build_with_radii(
+            reservation_cell_size,
+            bounds_min,
+            bounds_max,
+            reservation_capacity,
+            units.iter().enumerate().filter_map(|(index, unit)| {
+                (unit.movement_class == MovementClass::Air).then_some((
+                    index,
+                    unit.position,
+                    unit.collision_radius,
+                ))
+            }),
         );
         let mut next_reservation_index = units.len();
         let mut spawned = 0;
@@ -1845,29 +1956,44 @@ impl Simulation {
             let collision_radius = attempt
                 .collision_radius
                 .map_or(self.default_collision_radius(), |radius| radius.0);
+            let reservations = match attempt.movement_class {
+                MovementClass::Ground => &mut ground_reservations,
+                MovementClass::Air => &mut air_reservations,
+            };
             let spawn =
                 spiral_cells(preferred, attempt.profile.search_radius_cells).find_map(|cell| {
-                    let component = self.topology.component_id(cell)?;
-                    let position = self.topology.center_of_cell(cell);
-                    if attempt.collision_radius.is_some()
-                        && !self.topology.circle_is_traversable_in_component(
-                            position,
-                            collision_radius,
-                            component,
-                        )
-                    {
+                    if !self.topology.contains(cell) {
                         return None;
                     }
-                    reservations
-                        .is_clear_with_radius(position, collision_radius)
-                        .then_some((cell, position))
+                    let position = self.topology.center_of_cell(cell);
+                    let movement_legal = match attempt.movement_class {
+                        MovementClass::Ground => {
+                            let component = self.topology.component_id(cell)?;
+                            attempt.collision_radius.is_none()
+                                || self.topology.circle_is_traversable_in_component(
+                                    position,
+                                    collision_radius,
+                                    component,
+                                )
+                        }
+                        MovementClass::Air => self
+                            .topology
+                            .circle_is_inside_bounds(position, collision_radius),
+                    };
+                    (movement_legal
+                        && reservations.is_clear_with_radius(position, collision_radius))
+                    .then_some((cell, position))
                 });
 
             if let Some((_cell, position)) = spawn {
                 self.spawn_unit_unchecked(
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
-                    attempt.corpse,
-                    attempt.collision_radius,
+                    UnitGameplayProperties {
+                        corpse: attempt.corpse,
+                        collision_radius: attempt.collision_radius,
+                        movement_class: attempt.movement_class,
+                        attack_targets: attempt.attack_targets,
+                    },
                     attempt.spellcasting,
                 );
                 reservations.insert_with_radius(next_reservation_index, position, collision_radius);
@@ -1934,6 +2060,12 @@ impl Simulation {
                         .expect("unit attack sequence missing")
                         .0;
                     let collision_radius = entity_ref.get::<CollisionRadius>().copied();
+                    let movement_class = *entity_ref
+                        .get::<MovementClass>()
+                        .expect("unit movement class missing");
+                    let attack_targets = *entity_ref
+                        .get::<AttackTargetMask>()
+                        .expect("unit attack target mask missing");
                     let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
                     let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
                     let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
@@ -1959,6 +2091,8 @@ impl Simulation {
                         collision_radius: collision_radius
                             .map_or(default_collision_radius, |radius| radius.0),
                         collision_radius_override: collision_radius.map(|radius| radius.0),
+                        movement_class,
+                        attack_targets,
                         spellcasting,
                         mana_current,
                         ability_state,
@@ -2005,9 +2139,12 @@ impl Simulation {
                     ability_state,
                     status,
                 )| {
+                    let entity_ref = self.world.entity(entity);
+                    let attack_targets = entity_ref.get::<AttackTargetMask>().copied();
                     debug_assert_eq!(attack.is_some(), cooldown.is_some());
                     debug_assert_eq!(attack.is_some(), target.is_some());
                     debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
+                    debug_assert_eq!(attack.is_some(), attack_targets.is_some());
                     debug_assert_eq!(spellcasting.is_some(), mana.is_some());
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
                     debug_assert_eq!(attack.is_some() || spellcasting.is_some(), status.is_some());
@@ -2018,6 +2155,7 @@ impl Simulation {
                         footprint: *footprint,
                         health: health.current,
                         attack: attack.copied(),
+                        attack_targets,
                         cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
                         target: target.and_then(|target| target.current),
                         spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
@@ -2684,6 +2822,9 @@ impl Simulation {
         grid: &SpatialGrid,
     ) -> Option<SimId> {
         let attack = source.attack?;
+        let attack_targets = source
+            .attack_targets
+            .expect("attack building target mask missing");
         let enemy_team = 1u8
             .checked_sub(source.team.0)
             .expect("verification slice supports teams 0 and 1 only");
@@ -2701,7 +2842,9 @@ impl Simulation {
             query_radius,
             |index| {
                 let candidate = &units[index];
-                if candidate.health <= 0 {
+                if candidate.health <= 0
+                    || !attack_targets.can_target_unit(candidate.movement_class)
+                {
                     return;
                 }
                 let distance_sq = point_to_footprint_distance_sq(
@@ -2720,6 +2863,9 @@ impl Simulation {
         );
         if let Some((_, target)) = best_unit {
             return Some(target);
+        }
+        if !attack_targets.can_target_buildings() {
+            return None;
         }
 
         let mut best_building: Option<(u64, SimId)> = None;
@@ -2753,11 +2899,15 @@ impl Simulation {
         let Some(attack) = source.attack else {
             return false;
         };
+        let attack_targets = source
+            .attack_targets
+            .expect("attack building target mask missing");
         let range_sq = attack.acquisition_range_sq();
         if let Some(index) = find_unit_index(units, target_id) {
             let target = &units[index];
             return target.team != source.team
                 && target.health > 0
+                && attack_targets.can_target_unit(target.movement_class)
                 && point_to_footprint_distance_sq(
                     target.position,
                     source.footprint,
@@ -2766,7 +2916,8 @@ impl Simulation {
         }
         if let Some(index) = find_building_index(buildings, target_id) {
             let target = &buildings[index];
-            return target.team != source.team
+            return attack_targets.can_target_buildings()
+                && target.team != source.team
                 && target.health > 0
                 && footprint_to_footprint_distance_sq(
                     source.footprint,
@@ -2785,15 +2936,19 @@ impl Simulation {
         grid: &SpatialGrid,
     ) -> Option<SimId> {
         let source_cell = self.topology.cell_of_point(source.position);
-        let component = self.topology.component_id(source_cell)?;
+        let component = (source.movement_class == MovementClass::Ground)
+            .then(|| self.topology.component_id(source_cell))
+            .flatten();
         let enemy_team = 1u8
             .checked_sub(source.team.0)
             .expect("verification slice supports teams 0 and 1 only");
-        let partition = match source.attack.delivery {
-            AttackDelivery::Melee => SpatialPartition::new(enemy_team, component),
-            AttackDelivery::RangedGuaranteedHit { .. }
-            | AttackDelivery::RangedBallistic { .. }
-            | AttackDelivery::Bounce { .. } => SpatialPartition::global(enemy_team),
+        let partition = if source.movement_class == MovementClass::Ground
+            && matches!(source.attack.delivery, AttackDelivery::Melee)
+            && !source.attack_targets.can_target_unit(MovementClass::Air)
+        {
+            SpatialPartition::new(enemy_team, component?)
+        } else {
+            SpatialPartition::global(enemy_team)
         };
         let mut best: Option<(u8, u64, SimId)> = None;
         grid.for_each_candidate(
@@ -2803,7 +2958,11 @@ impl Simulation {
             |index| {
                 let candidate = &units[index];
                 debug_assert_ne!(source.team, candidate.team);
-                if candidate.health <= 0 {
+                if candidate.health <= 0
+                    || !source
+                        .attack_targets
+                        .can_target_unit(candidate.movement_class)
+                {
                     return;
                 }
                 let distance_sq = source.position.distance_sq(candidate.position);
@@ -2822,6 +2981,9 @@ impl Simulation {
             },
         );
 
+        if !source.attack_targets.can_target_buildings() {
+            return best.map(|(_, _, id)| id);
+        }
         for building in buildings {
             if source.team == building.team || building.health <= 0 {
                 continue;
@@ -2893,11 +3055,13 @@ impl Simulation {
             let target = &units[index];
             return source.team != target.team
                 && target.health > 0
+                && source.attack_targets.can_target_unit(target.movement_class)
                 && source.position.distance_sq(target.position) <= retaliation_range_sq;
         }
         if let Some(index) = find_building_index(buildings, target_id) {
             let target = &buildings[index];
-            return source.team != target.team
+            return source.attack_targets.can_target_buildings()
+                && source.team != target.team
                 && target.health > 0
                 && point_to_footprint_distance_sq(
                     source.position,
@@ -3109,7 +3273,10 @@ impl Simulation {
                     return;
                 }
                 let candidate = &context.units[unit_index];
-                if candidate.id == projectile.target
+                if !projectile
+                    .target_mask
+                    .can_target_unit(candidate.movement_class)
+                    || candidate.id == projectile.target
                     || impact_position.distance_sq(candidate.position) > range_sq
                 {
                     return;
@@ -3178,10 +3345,35 @@ impl Simulation {
         distance_sq: u64,
         pursuit_limit_sq: u64,
     ) -> bool {
-        if source.health <= 0 || target.health <= 0 || distance_sq > pursuit_limit_sq {
+        if source.health <= 0
+            || target.health <= 0
+            || distance_sq > pursuit_limit_sq
+            || !source.attack_targets.can_target_unit(target.movement_class)
+        {
             return false;
         }
         let in_attack_range = distance_sq <= source.attack.range_sq();
+        if source.movement_class == MovementClass::Air {
+            return in_attack_range || source.movement.speed_per_tick > 0;
+        }
+        if target.movement_class == MovementClass::Air {
+            if in_attack_range {
+                return true;
+            }
+            if source.movement.speed_per_tick == 0 {
+                return false;
+            }
+            let source_cell = self.topology.cell_of_point(source.position);
+            return self
+                .nearest_reachable_unit_attack_cell(
+                    source_cell,
+                    source.position,
+                    target.position,
+                    source.attack.range,
+                    source.collision_radius_override,
+                )
+                .is_some();
+        }
         match source.attack.delivery {
             AttackDelivery::Melee => {
                 self.topology.same_component(
@@ -3209,10 +3401,17 @@ impl Simulation {
         distance_sq: u64,
         pursuit_limit_sq: u64,
     ) -> bool {
-        if source.health <= 0 || target.health <= 0 || distance_sq > pursuit_limit_sq {
+        if source.health <= 0
+            || target.health <= 0
+            || distance_sq > pursuit_limit_sq
+            || !source.attack_targets.can_target_buildings()
+        {
             return false;
         }
         let in_attack_range = distance_sq <= source.attack.range_sq();
+        if source.movement_class == MovementClass::Air {
+            return in_attack_range || source.movement.speed_per_tick > 0;
+        }
         if matches!(
             source.attack.delivery,
             AttackDelivery::RangedGuaranteedHit { .. }
@@ -3237,11 +3436,17 @@ impl Simulation {
         intent: &AttackIntent,
         target_position: SimPoint,
         completed_tick: u64,
+        units: &[UnitSnapshot],
     ) -> bool {
         let chance = self.combat_rules.uphill_miss_chance_per_10k;
+        let (AttackSourceIndex::Unit(source_index), TargetIndex::Unit(target_index)) =
+            (intent.source, intent.target)
+        else {
+            return false;
+        };
         if chance == 0
-            || !matches!(intent.source, AttackSourceIndex::Unit(_))
-            || !matches!(intent.target, TargetIndex::Unit(_))
+            || units[source_index].movement_class == MovementClass::Air
+            || units[target_index].movement_class == MovementClass::Air
         {
             return false;
         }
@@ -3290,11 +3495,20 @@ impl Simulation {
                     let target_id = source.target?;
                     let (target, distance_sq) =
                         if let Some(index) = find_unit_index(units, target_id) {
+                            if !source
+                                .attack_targets
+                                .can_target_unit(units[index].movement_class)
+                            {
+                                return None;
+                            }
                             (
                                 TargetIndex::Unit(index),
                                 source.position.distance_sq(units[index].position),
                             )
                         } else {
+                            if !source.attack_targets.can_target_buildings() {
+                                return None;
+                            }
                             let index = find_building_index(buildings, target_id)?;
                             (
                                 TargetIndex::Building(index),
@@ -3316,6 +3530,7 @@ impl Simulation {
                         source_position: source.position,
                         target_id,
                         attack: source.attack,
+                        attack_targets: source.attack_targets,
                         attack_sequence: source.attack_sequence,
                         distance_sq,
                     })
@@ -3337,8 +3552,14 @@ impl Simulation {
                         return None;
                     }
                     let target_id = source.target?;
+                    let attack_targets = source
+                        .attack_targets
+                        .expect("attack building target mask missing");
                     let (target, distance_sq) =
                         if let Some(index) = find_unit_index(units, target_id) {
+                            if !attack_targets.can_target_unit(units[index].movement_class) {
+                                return None;
+                            }
                             (
                                 TargetIndex::Unit(index),
                                 point_to_footprint_distance_sq(
@@ -3348,6 +3569,9 @@ impl Simulation {
                                 ),
                             )
                         } else {
+                            if !attack_targets.can_target_buildings() {
+                                return None;
+                            }
                             let index = find_building_index(buildings, target_id)?;
                             (
                                 TargetIndex::Building(index),
@@ -3372,6 +3596,9 @@ impl Simulation {
                         ),
                         target_id,
                         attack,
+                        attack_targets: source
+                            .attack_targets
+                            .expect("attack building target mask missing"),
                         attack_sequence: 0,
                         distance_sq,
                     })
@@ -3534,6 +3761,16 @@ impl Simulation {
             || self.next_tick < unit.status.stunned_until_tick
         {
             return MovementDecision::stationary(current);
+        }
+        if unit.movement_class == MovementClass::Air {
+            return self.desired_air_position(
+                unit,
+                units,
+                buildings,
+                unit_health,
+                building_health,
+                movement_speed,
+            );
         }
         let source_cell = self.topology.cell_of_point(current);
         let mut pursuit_target = None;
@@ -3828,6 +4065,94 @@ impl Simulation {
         }
     }
 
+    fn desired_air_position(
+        &self,
+        unit: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        unit_health: &[i32],
+        building_health: &[i32],
+        movement_speed: i32,
+    ) -> MovementDecision {
+        let current = unit.position;
+        let mut pursuit_target = None;
+        let mut attack_goal = None;
+        let goal = unit
+            .target
+            .and_then(|target_id| {
+                if let Some(target_index) = find_unit_index(units, target_id) {
+                    if unit_health[target_index] <= 0 {
+                        return None;
+                    }
+                    let target_position = units[target_index].position;
+                    if current.distance_sq(target_position) <= unit.attack.range_sq() {
+                        attack_goal = Some(current);
+                        return Some(current);
+                    }
+                    pursuit_target = Some(target_id);
+                    let goal =
+                        point_attack_envelope_goal(current, target_position, unit.attack.range);
+                    attack_goal = Some(goal);
+                    Some(goal)
+                } else if let Some(target_index) = find_building_index(buildings, target_id) {
+                    if building_health[target_index] <= 0 {
+                        return None;
+                    }
+                    let footprint = buildings[target_index].footprint;
+                    if point_to_footprint_distance_sq(
+                        current,
+                        footprint,
+                        self.config.navigation_cell_size,
+                    ) <= unit.attack.range_sq()
+                    {
+                        attack_goal = Some(current);
+                        return Some(current);
+                    }
+                    pursuit_target = Some(target_id);
+                    let goal = building_attack_envelope_goal(
+                        current,
+                        footprint,
+                        unit.attack.range,
+                        self.config.navigation_cell_size,
+                    );
+                    attack_goal = Some(goal);
+                    Some(goal)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| {
+                SimPoint::new(
+                    self.config.team_objective[usize::from(unit.team.0)].x,
+                    current.y,
+                )
+            });
+
+        if goal == current {
+            return MovementDecision::stationary(current);
+        }
+        let candidate = current.step_towards(goal, movement_speed);
+        let position = if self
+            .topology
+            .circle_is_inside_bounds(candidate, unit.collision_radius)
+        {
+            candidate
+        } else {
+            current
+        };
+        MovementDecision {
+            position,
+            pursuit_step: pursuit_target.is_some(),
+            pursuit_target,
+            attack_goal,
+            navigation_route_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
+    }
+
     fn horizontal_objective_goal_cell(
         &self,
         source_cell: NavCell,
@@ -3878,7 +4203,6 @@ impl Simulation {
             return desired_positions.to_vec();
         }
 
-        let collision_partition = SpatialPartition::global(0);
         let max_pair_distance = max_radius.saturating_mul(2);
         let max_anticipation_distance = max_pair_distance.saturating_mul(2);
         let collision_grid = SpatialGrid::build(
@@ -3887,7 +4211,13 @@ impl Simulation {
                 .iter()
                 .enumerate()
                 .filter(|(index, _)| unit_health[*index] > 0)
-                .map(|(index, position)| (collision_partition, index, *position)),
+                .map(|(index, position)| {
+                    (
+                        movement_collision_partition(units[index].movement_class),
+                        index,
+                        *position,
+                    )
+                }),
         );
         self.pool.install(|| {
             units
@@ -3899,7 +4229,9 @@ impl Simulation {
                     }
                     let desired = desired_positions[index];
                     let current_cell = self.topology.cell_of_point(unit.position);
-                    if self.topology.component_id(current_cell).is_none() {
+                    if unit.movement_class == MovementClass::Ground
+                        && self.topology.component_id(current_cell).is_none()
+                    {
                         return desired;
                     }
                     let movement_x = i64::from(desired.x) - i64::from(unit.position.x);
@@ -3913,7 +4245,7 @@ impl Simulation {
                         .saturating_add(max_radius)
                         .saturating_mul(2);
                     collision_grid.for_each_candidate(
-                        collision_partition,
+                        movement_collision_partition(unit.movement_class),
                         desired,
                         query_radius,
                         |other_index| {
@@ -4002,12 +4334,7 @@ impl Simulation {
                         i32::try_from(push_y).expect("crowd y offset overflow"),
                     );
                     let offset = SimPoint::new(0, 0).step_towards(raw_offset, max_separation);
-                    self.valid_separated_position(
-                        current_cell,
-                        desired,
-                        offset,
-                        unit.collision_radius_override,
-                    )
+                    self.valid_separated_position(current_cell, desired, offset, unit)
                 })
                 .collect()
         })
@@ -4033,21 +4360,29 @@ impl Simulation {
             return separated_positions.to_vec();
         }
 
-        let entries = units.iter().enumerate().filter_map(|(index, unit)| {
-            (unit_health[index] > 0).then_some((
-                index,
-                separated_positions[index],
-                unit.collision_radius,
-            ))
-        });
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
-        let mut reservations = SpatialReservationGrid::build_with_radii(
-            max_radius.saturating_mul(2).max(1),
+        let reservation_cell_size = max_radius.saturating_mul(2).max(1);
+        let mut ground_reservations = SpatialReservationGrid::build_with_radii(
+            reservation_cell_size,
             bounds_min,
             bounds_max,
             units.len(),
-            entries,
+            units.iter().enumerate().filter_map(|(index, unit)| {
+                (unit_health[index] > 0 && unit.movement_class == MovementClass::Ground)
+                    .then_some((index, separated_positions[index], unit.collision_radius))
+            }),
         );
+        let mut air_reservations =
+            SpatialReservationGrid::build_with_radii(
+                reservation_cell_size,
+                bounds_min,
+                bounds_max,
+                units.len(),
+                units.iter().enumerate().filter_map(|(index, unit)| {
+                    (unit_health[index] > 0 && unit.movement_class == MovementClass::Air)
+                        .then_some((index, separated_positions[index], unit.collision_radius))
+                }),
+            );
         let mut result: Vec<_> = units.iter().map(|unit| unit.position).collect();
         let lateral = self.config.max_separation_per_tick.max(1);
 
@@ -4057,9 +4392,15 @@ impl Simulation {
                 continue;
             }
             let original_cell = self.topology.cell_of_point(unit.position);
-            if self.topology.component_id(original_cell).is_none() {
+            if unit.movement_class == MovementClass::Ground
+                && self.topology.component_id(original_cell).is_none()
+            {
                 continue;
             }
+            let reservations = match unit.movement_class {
+                MovementClass::Ground => &mut ground_reservations,
+                MovementClass::Air => &mut air_reservations,
+            };
             reservations.remove(index);
 
             let desired = desired_positions[index];
@@ -4072,12 +4413,8 @@ impl Simulation {
                 *navigation = NavigationState::default();
             }
 
-            let direct_clear = self.position_is_traversable_from(
-                original_cell,
-                desired,
-                unit.collision_radius_override,
-            ) && reservations
-                .is_clear_with_radius(desired, unit.collision_radius);
+            let direct_clear = self.position_is_legal_for_unit(unit, original_cell, desired)
+                && reservations.is_clear_with_radius(desired, unit.collision_radius);
             let mut avoiding = false;
             if navigating {
                 if !direct_clear {
@@ -4144,11 +4481,8 @@ impl Simulation {
                     let Some(candidate) = candidate else {
                         continue;
                     };
-                    if self.position_is_traversable_from(
-                        original_cell,
-                        candidate,
-                        unit.collision_radius_override,
-                    ) && reservations.is_clear_with_radius(candidate, unit.collision_radius)
+                    if self.position_is_legal_for_unit(unit, original_cell, candidate)
+                        && reservations.is_clear_with_radius(candidate, unit.collision_radius)
                     {
                         if candidate_side != 0 && candidate_side != navigation.bypass_side {
                             navigation.bypass_side = candidate_side;
@@ -4169,11 +4503,8 @@ impl Simulation {
                 .into_iter()
                 .flatten()
                 {
-                    if self.position_is_traversable_from(
-                        original_cell,
-                        candidate,
-                        unit.collision_radius_override,
-                    ) && reservations.is_clear_with_radius(candidate, unit.collision_radius)
+                    if self.position_is_legal_for_unit(unit, original_cell, candidate)
+                        && reservations.is_clear_with_radius(candidate, unit.collision_radius)
                     {
                         chosen = Some(candidate);
                         break;
@@ -4184,12 +4515,10 @@ impl Simulation {
             let chosen = chosen
                 .or_else(|| {
                     self.find_local_non_overlap_position(
-                        unit.position,
+                        unit,
                         original_cell,
-                        unit.collision_radius,
-                        unit.collision_radius_override,
                         sidestep_sign(unit.id),
-                        &reservations,
+                        reservations,
                     )
                 })
                 .unwrap_or(unit.position);
@@ -4203,14 +4532,14 @@ impl Simulation {
 
     fn find_local_non_overlap_position(
         &self,
-        origin: SimPoint,
+        unit: &UnitSnapshot,
         original_cell: NavCell,
-        collision_radius: i32,
-        topology_collision_radius: Option<i32>,
         search_bias: i32,
         reservations: &SpatialReservationGrid,
     ) -> Option<SimPoint> {
         debug_assert!(search_bias == -1 || search_bias == 1);
+        let origin = unit.position;
+        let collision_radius = unit.collision_radius;
         let step = collision_radius.max(1);
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
         let max_radius = [
@@ -4225,6 +4554,16 @@ impl Simulation {
         .max(step);
         let max_ring = (max_radius + step - 1) / step;
 
+        let legal_position = |candidate| match unit.movement_class {
+            MovementClass::Ground => self.position_is_traversable_from(
+                original_cell,
+                candidate,
+                unit.collision_radius_override,
+            ),
+            MovementClass::Air => self
+                .topology
+                .circle_is_inside_bounds(candidate, collision_radius),
+        };
         let order_multiplier = -search_bias;
         for ring in 1..=max_ring {
             let distance = ring.checked_mul(step)?;
@@ -4238,11 +4577,8 @@ impl Simulation {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
-                    if self.position_is_traversable_from(
-                        original_cell,
-                        candidate,
-                        topology_collision_radius,
-                    ) && reservations.is_clear_with_radius(candidate, collision_radius)
+                    if legal_position(candidate)
+                        && reservations.is_clear_with_radius(candidate, collision_radius)
                     {
                         return Some(candidate);
                     }
@@ -4258,11 +4594,8 @@ impl Simulation {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
-                    if self.position_is_traversable_from(
-                        original_cell,
-                        candidate,
-                        topology_collision_radius,
-                    ) && reservations.is_clear_with_radius(candidate, collision_radius)
+                    if legal_position(candidate)
+                        && reservations.is_clear_with_radius(candidate, collision_radius)
                     {
                         return Some(candidate);
                     }
@@ -4369,6 +4702,24 @@ impl Simulation {
         )
     }
 
+    fn position_is_legal_for_unit(
+        &self,
+        unit: &UnitSnapshot,
+        original_cell: NavCell,
+        candidate: SimPoint,
+    ) -> bool {
+        match unit.movement_class {
+            MovementClass::Ground => self.position_is_traversable_from(
+                original_cell,
+                candidate,
+                unit.collision_radius_override,
+            ),
+            MovementClass::Air => self
+                .topology
+                .circle_is_inside_bounds(candidate, unit.collision_radius),
+        }
+    }
+
     fn position_is_traversable_from(
         &self,
         original_cell: NavCell,
@@ -4393,7 +4744,7 @@ impl Simulation {
         original_cell: NavCell,
         desired: SimPoint,
         offset: SimPoint,
-        collision_radius: Option<i32>,
+        unit: &UnitSnapshot,
     ) -> SimPoint {
         let candidates = [
             SimPoint::new(
@@ -4425,9 +4776,7 @@ impl Simulation {
 
         candidates
             .into_iter()
-            .find(|candidate| {
-                self.position_is_traversable_from(original_cell, *candidate, collision_radius)
-            })
+            .find(|candidate| self.position_is_legal_for_unit(unit, original_cell, *candidate))
             .unwrap_or(desired)
     }
 }
@@ -4514,6 +4863,8 @@ struct UnitSnapshot {
     corpse: Option<CorpseProfile>,
     collision_radius: i32,
     collision_radius_override: Option<i32>,
+    movement_class: MovementClass,
+    attack_targets: AttackTargetMask,
     spellcasting: Option<SpellcastingProfile>,
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
@@ -4527,6 +4878,7 @@ struct BuildingSnapshot {
     footprint: BuildingFootprint,
     health: i32,
     attack: Option<AttackProfile>,
+    attack_targets: Option<AttackTargetMask>,
     cooldown_remaining: Option<u16>,
     target: Option<SimId>,
     spawn_tick: Option<u64>,
@@ -4545,6 +4897,8 @@ struct ProductionAttempt {
     profile: ProductionProfile,
     corpse: Option<CorpseProfile>,
     collision_radius: Option<CollisionRadius>,
+    movement_class: MovementClass,
+    attack_targets: AttackTargetMask,
     spellcasting: Option<SpellcastingProfile>,
     next_spawn_tick: u64,
 }
@@ -4595,6 +4949,7 @@ struct AttackIntent {
     source_position: SimPoint,
     target_id: SimId,
     attack: AttackProfile,
+    attack_targets: AttackTargetMask,
     attack_sequence: u64,
     distance_sq: u64,
 }
@@ -4694,6 +5049,7 @@ struct ProjectileLaunch {
 struct BallisticProjectileLaunch {
     source: SimId,
     source_team: Team,
+    target_mask: AttackTargetMask,
     damage: i32,
     launch_position: SimPoint,
     destination: SimPoint,
@@ -4706,6 +5062,7 @@ struct BallisticProjectileLaunch {
 struct BounceProjectileLaunch {
     source: SimId,
     source_team: Team,
+    target_mask: AttackTargetMask,
     target: SimId,
     damage: i32,
     launch_position: SimPoint,
@@ -4824,6 +5181,14 @@ struct BuildingTargetSelectionResult {
     decisions: Vec<Option<SimId>>,
     retained_targets: usize,
     target_changes: usize,
+}
+
+fn movement_collision_partition(movement_class: MovementClass) -> SpatialPartition {
+    let component = match movement_class {
+        MovementClass::Ground => 0,
+        MovementClass::Air => 1,
+    };
+    SpatialPartition::new(0, component)
 }
 
 fn defense_attacker_partition(victim_index: usize) -> SpatialPartition {
@@ -5131,8 +5496,10 @@ fn unit_view_from_entity(
         collision_radius: entity
             .get::<CollisionRadius>()
             .map_or(default_collision_radius, |radius| radius.0),
+        movement_class: *entity.get::<MovementClass>()?,
         health: entity.get::<Health>()?.current,
         attack_delivery: entity.get::<AttackProfile>()?.delivery,
+        attack_targets: *entity.get::<AttackTargetMask>()?,
         target: entity.get::<TargetState>()?.current,
         last_attacker: entity.get::<RetaliationState>()?.attacker,
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
@@ -5155,10 +5522,15 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
         footprint: *entity.get::<BuildingFootprint>()?,
         health: entity.get::<Health>()?.current,
         production,
+        production_movement_class: entity.get::<ProductionMovementClass>().map(|class| class.0),
+        production_attack_targets: entity
+            .get::<ProductionAttackTargets>()
+            .map(|targets| targets.0),
         next_spawn_tick: entity
             .get::<ProductionState>()
             .map(|state| state.next_spawn_tick),
         attack_delivery: attack.map(|attack| attack.delivery),
+        attack_targets: entity.get::<AttackTargetMask>().copied(),
         target: entity
             .get::<TargetState>()
             .and_then(|target| target.current),
@@ -5682,6 +6054,8 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     position: position.0,
                     health,
                     attack: *entity.get::<AttackProfile>()?,
+                    attack_targets: *entity.get::<AttackTargetMask>()?,
+                    movement_class: *entity.get::<MovementClass>()?,
                     movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
                     attack_sequence: *entity.get::<AttackSequence>()?,
@@ -5710,10 +6084,17 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     production_collision_radius: entity
                         .get::<ProductionCollisionRadius>()
                         .map(|radius| radius.0),
+                    production_movement_class: entity
+                        .get::<ProductionMovementClass>()
+                        .map(|class| class.0),
+                    production_attack_targets: entity
+                        .get::<ProductionAttackTargets>()
+                        .map(|targets| targets.0),
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
                         .map(|profile| profile.0),
                     attack: entity.get::<AttackProfile>().copied(),
+                    attack_targets: entity.get::<AttackTargetMask>().copied(),
                     cooldown: entity.get::<AttackCooldown>().copied(),
                     target: entity.get::<TargetState>().copied(),
                     spawn_tick: entity.get::<SpawnTick>().copied(),
@@ -5741,6 +6122,11 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_i32(unit.health.current);
                 hash.write_i32(unit.health.max);
                 hash_attack_delivery(&mut hash, unit.attack.delivery);
+                hash.write_u8(unit.attack_targets.bits());
+                hash.write_u8(match unit.movement_class {
+                    MovementClass::Ground => 0,
+                    MovementClass::Air => 1,
+                });
                 hash.write_i32(unit.attack.damage);
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
@@ -5828,6 +6214,21 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                         hash.write_u64(0x434f_4c4c_4953_5052);
                         hash.write_i32(collision_radius.0);
                     }
+                    hash.write_u8(
+                        match building
+                            .production_movement_class
+                            .expect("production building missing movement class")
+                        {
+                            MovementClass::Ground => 0,
+                            MovementClass::Air => 1,
+                        },
+                    );
+                    hash.write_u8(
+                        building
+                            .production_attack_targets
+                            .expect("production building missing attack target mask")
+                            .bits(),
+                    );
                     if let Some(spellcasting) = building.production_spellcasting {
                         hash.write_u64(0x5350_454c_4c50_524f);
                         hash.write_i32(spellcasting.mana.maximum);
@@ -5841,6 +6242,12 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 if let Some(attack) = building.attack {
                     hash.write_u8(1);
                     hash_attack_delivery(&mut hash, attack.delivery);
+                    hash.write_u8(
+                        building
+                            .attack_targets
+                            .expect("attack building missing target mask")
+                            .bits(),
+                    );
                     hash.write_i32(attack.damage);
                     hash.write_i32(attack.range);
                     hash.write_i32(attack.acquisition_range);
@@ -5908,6 +6315,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(projectile.id.0);
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
+                hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_i32(projectile.projectile.damage);
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
@@ -5922,6 +6330,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(projectile.id.0);
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
+                hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
                 hash.write_i32(projectile.projectile.launch_position.x);
@@ -6006,6 +6415,8 @@ struct CanonicalUnit {
     position: SimPoint,
     health: Health,
     attack: AttackProfile,
+    attack_targets: AttackTargetMask,
+    movement_class: MovementClass,
     movement: MovementProfile,
     cooldown: AttackCooldown,
     attack_sequence: AttackSequence,
@@ -6031,8 +6442,11 @@ struct CanonicalBuilding {
     production_state: Option<ProductionState>,
     production_corpse: Option<CorpseProfile>,
     production_collision_radius: Option<CollisionRadius>,
+    production_movement_class: Option<MovementClass>,
+    production_attack_targets: Option<AttackTargetMask>,
     production_spellcasting: Option<SpellcastingProfile>,
     attack: Option<AttackProfile>,
+    attack_targets: Option<AttackTargetMask>,
     cooldown: Option<AttackCooldown>,
     target: Option<TargetState>,
     spawn_tick: Option<SpawnTick>,

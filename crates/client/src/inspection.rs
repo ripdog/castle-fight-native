@@ -7,7 +7,7 @@ use crate::{
     presentation::{
         WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
         sim_point_to_terrain_world_lerp, sim_point_to_world, sim_point_to_world_lerp,
-        viewport_ground_point,
+        unit_visual_altitude, viewport_ground_point,
     },
     terrain::TerrainSurface,
 };
@@ -158,7 +158,8 @@ fn draw_selection_highlight(
     if let Some(unit) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(unit);
         let center =
-            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain);
+            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain)
+                + Vec3::Y * unit_visual_altitude(unit.movement_class);
         let radius = unit_pick_radius(unit) + SELECTION_RING_PADDING;
         gizmos.circle(
             Isometry3d::new(
@@ -256,7 +257,10 @@ fn current_entity_position(
     terrain: &TerrainSurface,
 ) -> Option<Vec3> {
     if let Some(unit) = samples.current.units.get(&id) {
-        return Some(sim_point_to_terrain_world(unit.position, terrain));
+        return Some(
+            sim_point_to_terrain_world(unit.position, terrain)
+                + Vec3::Y * unit_visual_altitude(unit.movement_class),
+        );
     }
     samples.current.buildings.get(&id).map(|building| {
         let (mut center, _) = metrics.footprint_center_size(building.footprint);
@@ -281,6 +285,7 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
         format!("UNIT #{}", unit.id.0),
         format!("Side: {}", team_label(unit.team)),
         format!("Type: {}", unit_kind_label(unit.visual_kind)),
+        format!("Movement: {:?}", unit.movement_class),
         format!("Health: {}", unit.health),
         format!("Position: {:.1}, {:.1}", position.x, position.z),
         format!("Target: {}", target_label(unit.target)),
@@ -429,6 +434,7 @@ mod tests {
                     100 * SUBUNITS_PER_WORLD_UNIT,
                 ),
                 collision_radius: 4 * SUBUNITS_PER_WORLD_UNIT,
+                movement_class: castle_fight_sim::MovementClass::Ground,
                 health: 50,
                 target: None,
                 cooldown_remaining: 0,

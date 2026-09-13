@@ -89,6 +89,7 @@ pub(crate) struct GuaranteedHitProjectile {
 pub(crate) struct BallisticProjectile {
     pub source: SimId,
     pub source_team: Team,
+    pub target_mask: AttackTargetMask,
     pub damage: i32,
     pub launch_position: SimPoint,
     pub destination: SimPoint,
@@ -101,6 +102,7 @@ pub(crate) struct BallisticProjectile {
 pub(crate) struct BounceProjectile {
     pub source: SimId,
     pub source_team: Team,
+    pub target_mask: AttackTargetMask,
     pub target: SimId,
     pub damage: i32,
     pub launch_position: SimPoint,
@@ -134,14 +136,86 @@ pub(crate) struct ProductionCorpseProfile(pub CorpseProfile);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CollisionRadius(pub i32);
 
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum MovementClass {
+    #[default]
+    Ground,
+    Air,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AttackTargetMask(u8);
+
+impl AttackTargetMask {
+    const GROUND_UNIT_BIT: u8 = 1 << 0;
+    const AIR_UNIT_BIT: u8 = 1 << 1;
+    const BUILDING_BIT: u8 = 1 << 2;
+
+    pub const GROUND_UNITS: Self = Self(Self::GROUND_UNIT_BIT);
+    pub const AIR_UNITS: Self = Self(Self::AIR_UNIT_BIT);
+    pub const BUILDINGS: Self = Self(Self::BUILDING_BIT);
+    pub const GROUND_AND_BUILDINGS: Self = Self(Self::GROUND_UNIT_BIT | Self::BUILDING_BIT);
+    pub const AIR_AND_GROUND: Self = Self(Self::GROUND_UNIT_BIT | Self::AIR_UNIT_BIT);
+    pub const ALL: Self = Self(Self::GROUND_UNIT_BIT | Self::AIR_UNIT_BIT | Self::BUILDING_BIT);
+
+    #[must_use]
+    pub const fn from_capabilities(ground_units: bool, air_units: bool, buildings: bool) -> Self {
+        Self(
+            ((ground_units as u8) * Self::GROUND_UNIT_BIT)
+                | ((air_units as u8) * Self::AIR_UNIT_BIT)
+                | ((buildings as u8) * Self::BUILDING_BIT),
+        )
+    }
+
+    #[must_use]
+    pub const fn can_target_unit(self, movement_class: MovementClass) -> bool {
+        let bit = match movement_class {
+            MovementClass::Ground => Self::GROUND_UNIT_BIT,
+            MovementClass::Air => Self::AIR_UNIT_BIT,
+        };
+        self.0 & bit != 0
+    }
+
+    #[must_use]
+    pub const fn can_target_buildings(self) -> bool {
+        self.0 & Self::BUILDING_BIT != 0
+    }
+
+    #[must_use]
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+}
+
+impl Default for AttackTargetMask {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct UnitGameplayProperties {
     pub corpse: Option<CorpseProfile>,
     pub collision_radius: Option<CollisionRadius>,
+    pub movement_class: MovementClass,
+    pub attack_targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BuildingGameplayProperties {
+    pub attack_targets: AttackTargetMask,
+    pub production_unit: UnitGameplayProperties,
+    pub production_spellcasting: Option<SpellcastingProfile>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionCollisionRadius(pub CollisionRadius);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionMovementClass(pub MovementClass);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionAttackTargets(pub AttackTargetMask);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
