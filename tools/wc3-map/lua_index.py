@@ -5047,6 +5047,73 @@ def _extract_production_unit_special_mechanics(
         "byte_offset": min(target_damage_start, warlock_start),
     })
 
+    # Paladin: the summon-event path overrides its object-data starting mana to
+    # exactly 30 before returning it to normal attack behavior. Keep this scoped
+    # to summoned Paladins; ordinary object-data mana_start remains separate.
+    paladin_summon_start, _ = require_tokens(
+        "onSummonedUnit",
+        {"1747989315", "UNIT_STATE_MANA", "30.", "__wurst_safe_SetUnitState", "orderCodeAttackIfAllowed"},
+    )
+    paladin_summon_function = next(function for function in functions if function["name"] == "onSummonedUnit")
+    paladin_summon_source = data[int(paladin_summon_function["start"]):int(paladin_summon_function["end"])]
+    if b"if(tXr==1747989315)then" not in paladin_summon_source:
+        raise ValueError("Paladin summon mana branch changed")
+    rows.append({
+        "unit_id": 1747989315,
+        "mechanic_kind": "summon-event-mana-reset",
+        "trigger": "unit-summon-event",
+        "parameters": {
+            "set_mana_to": 30,
+            "resume_attack_if_allowed": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": ["onSummonedUnit"],
+        "evidence_kind": "exact-summon-event-branch",
+        "byte_offset": paladin_summon_start,
+    })
+
+    # Mine Layer and Goblin Rocketeer have train-event initialization that is
+    # not represented by their object data or scripted spell registration.
+    train_start, _ = require_tokens(
+        "onUnitTrained",
+        {
+            "1747990101", "1848652365", "UNIT_STATE_MANA", "GetRandomReal", "30.",
+            "__wurst_safe_SetUnitState", "__wurst_safe_SetUnitExploded",
+        },
+    )
+    train_function = next(function for function in functions if function["name"] == "onUnitTrained")
+    train_source = data[int(train_function["start"]):int(train_function["end"])]
+    if b"GetRandomReal(.20,30.)" not in train_source:
+        raise ValueError("Mine Layer trained-mana random range changed")
+    if b"__wurst_safe_SetUnitExploded(cgs,true)" not in train_source:
+        raise ValueError("Goblin Rocketeer exploded flag changed")
+    rows.append({
+        "unit_id": 1747990101,
+        "mechanic_kind": "train-event-random-initial-mana",
+        "trigger": "unit-trained-event",
+        "parameters": {
+            "mana_random_min": 0.20,
+            "mana_random_max": 30,
+            "mana_random_distribution": "uniform-real",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": ["onUnitTrained"],
+        "evidence_kind": "exact-train-event-branch",
+        "byte_offset": train_start,
+    })
+    rows.append({
+        "unit_id": 1848652365,
+        "mechanic_kind": "train-event-set-exploded-flag",
+        "trigger": "unit-trained-event",
+        "parameters": {
+            "set_unit_exploded": True,
+        },
+        "related_rawcode_ids": [1093682778],
+        "source_functions": ["onUnitTrained", "fJ"],
+        "evidence_kind": "exact-train-event-flag-plus-native-death-explosion",
+        "byte_offset": train_start,
+    })
+
     # Human Defender: Defend is automatically enabled shortly after spawn, then
     # normal attack movement resumes. If the unit receives the native undefend
     # order, FixDefend re-enables Defend after 5.5 seconds. This keeps A03G's

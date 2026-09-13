@@ -1975,6 +1975,38 @@ def main() -> None:
                         raise ValueError("Warlock emergency-life mechanic is missing A0EZ marker object data")
                     parameters["marker_base_rawcode"] = marker["base_rawcode"]
                     parameters["marker_object_data"] = json.loads(marker["data_fields_labeled_json"])
+                elif mechanic["mechanic_kind"] == "summon-event-mana-reset":
+                    parameters["static_object_mana_start"] = numeric(unit["mana_start"])
+                    parameters["mana_max"] = numeric(unit["mana_max"])
+                elif mechanic["mechanic_kind"] == "train-event-random-initial-mana":
+                    mine_spell = next((row for row in ability_levels.get("A095", []) if row["level"] == "1"), None)
+                    if mine_spell is None:
+                        raise ValueError("Mine Layer train-time mana mechanic is missing A095 object data")
+                    effective_cost = numeric(
+                        protected_ability_values.get(("A095", 1, "mana_cost"), mine_spell["mana_cost"])
+                    )
+                    if effective_cost != 25:
+                        raise ValueError(f"Mine Layer spell cost changed: {effective_cost}")
+                    parameters["static_object_mana_start"] = numeric(unit["mana_start"])
+                    parameters["mana_max"] = numeric(unit["mana_max"])
+                    parameters["mine_spell_effective_mana_cost"] = effective_cost
+                elif mechanic["mechanic_kind"] == "train-event-set-exploded-flag":
+                    explosion = next((row for row in ability_levels.get("A0FZ", []) if row["level"] == "1"), None)
+                    if explosion is None:
+                        raise ValueError("Goblin Rocketeer exploded-flag mechanic is missing A0FZ object data")
+                    explosion_fields = json.loads(explosion["data_fields_labeled_json"])
+                    expected_explosion = {
+                        "Full Damage Amount": 325,
+                        "Full Damage Radius": 160,
+                        "Partial Damage Amount": 175,
+                        "Partial Damage Radius": 320,
+                    }
+                    if explosion_fields != expected_explosion:
+                        raise ValueError(f"Goblin Rocketeer death explosion fields changed: {explosion_fields}")
+                    parameters["death_explosion_ability_rawcode"] = "A0FZ"
+                    parameters["death_explosion_base_rawcode"] = explosion["base_rawcode"]
+                    parameters["death_explosion_object_data"] = explosion_fields
+                    parameters["death_explosion_targets"] = explosion["targets"]
                 elif mechanic["mechanic_kind"] == "kill-triggered-native-berserk":
                     berserk = next((row for row in ability_levels.get("A02I", []) if row["level"] == "1"), None)
                     if berserk is None:
@@ -3641,7 +3673,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Warlock emergency life reset, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Warlock emergency life reset, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

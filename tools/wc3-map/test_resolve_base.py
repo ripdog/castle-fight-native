@@ -230,7 +230,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 30)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 33)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "attack-proc-dispel-positive-buffs": 3,
@@ -249,14 +249,17 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "source-damage-health-scaled-aftershock": 2,
             "source-damage-mastery-over-death": 1,
             "source-damage-stacking-blood-corrosion": 1,
+            "summon-event-mana-reset": 1,
             "target-damage-melee-thunderbolt-retaliation": 2,
             "target-damage-one-shot-emergency-life-reset": 1,
+            "train-event-random-initial-mana": 1,
+            "train-event-set-exploded-flag": 1,
             "retarget-flying-damage-source": 2,
         })
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 30)
+        self.assertEqual(len(rows), 33)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -437,6 +440,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(warlock["set_current_life_to"], 5000)
         self.assertTrue(warlock["remove_marker_after_trigger"])
         self.assertEqual(warlock["marker_base_rawcode"], "ANcl")
+
+        paladin_summon = json.loads(rows[("h03C", "summon-event-mana-reset")]["parameters_json"])
+        self.assertEqual(paladin_summon["set_mana_to"], 30)
+        self.assertEqual(paladin_summon["static_object_mana_start"], 200)
+        self.assertEqual(paladin_summon["mana_max"], 300)
+
+        mine_init = json.loads(rows[("h06U", "train-event-random-initial-mana")]["parameters_json"])
+        self.assertEqual(mine_init["mana_random_min"], 0.2)
+        self.assertEqual(mine_init["mana_random_max"], 30)
+        self.assertEqual(mine_init["static_object_mana_start"], 12)
+        self.assertEqual(mine_init["mana_max"], 50)
+        self.assertEqual(mine_init["mine_spell_effective_mana_cost"], 25)
+
+        rocketeer = json.loads(rows[("n02M", "train-event-set-exploded-flag")]["parameters_json"])
+        self.assertTrue(rocketeer["set_unit_exploded"])
+        self.assertEqual(rocketeer["death_explosion_ability_rawcode"], "A0FZ")
+        self.assertEqual(rocketeer["death_explosion_object_data"]["Full Damage Amount"], 325)
+        self.assertEqual(rocketeer["death_explosion_object_data"]["Full Damage Radius"], 160)
+        self.assertEqual(rocketeer["death_explosion_object_data"]["Partial Damage Amount"], 175)
+        self.assertEqual(rocketeer["death_explosion_object_data"]["Partial Damage Radius"], 320)
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
