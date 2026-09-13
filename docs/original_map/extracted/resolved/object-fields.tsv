@@ -91,7 +91,7 @@ units	original	hcas	hcas	uhhm	0	0	hideHeroMinimap	Hero - Hide Hero Minimap Displ
 units	original	hcas	hcas	uhom	0	0	hideOnMinimap	Hide Minimap Display	bool	UnitUI	hideOnMinimap	0	[]		0	0	base	0
 units	original	hcas	hcas	uhos	0	0	hostilePal	Display as Neutral Hostile	bool	UnitUI	hostilePal	"""-"""	[]		"""-"""	"""-"""	base	0
 units	original	hcas	hcas	uhot	0	0	Hotkey	Hotkey	char	Profile	Hotkey	"""U"""	[]		"""U"""	"""U"""	base	0
-units	original	hcas	hcas	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	2500	[5000,1,1]	4,21,38	1	5000	w3p-recovered-first-numeric-sentinel	1
+units	original	hcas	hcas	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	2500	[5000,1,1]	4,21,38	1	5000	w3p-runtime-unitstat-confirmed	1
 units	original	hcas	hcas	uhpr	0	0	regenHP	Hit Points Regeneration Rate	unreal	UnitBalance	regenHP	"""-"""	[0.5,0.5,0.5]	6,23,40	0.5	0.5	map-identical-duplicates	0
 units	original	hcas	hcas	uhrt	0	0	regenType	Hit Points Regeneration Type	regenType	UnitBalance	regenType	"""none"""	"[""always"",""always"",""always""]"	7,24,41	"""always"""	"""always"""	map-identical-duplicates	0
 units	original	hcas	hcas	uibo	0	0	isBuildOn	Can Be Built On	bool	UnitData	isBuildOn	0	[]		0	0	base	0
@@ -201,7 +201,7 @@ units	original	hfoo	hfoo	iarm	0	0	armor	Armor Type	armorType	Profile	armor	"""Me
 units	original	hfoo	hfoo	ifil	0	0	file	Model Used	model	Profile	file	"""units\\human\\Footman\\Footman"""	[]		"""units\\human\\Footman\\Footman"""	"""units\\human\\Footman\\Footman"""	base	0
 units	original	hfoo	hfoo	iico	0	0	Art	Interface Icon	icon	Profile	Art	"""ReplaceableTextures\\CommandButtons\\BTNFootman.blp"""	[]		"""ReplaceableTextures\\CommandButtons\\BTNFootman.blp"""	"""ReplaceableTextures\\CommandButtons\\BTNFootman.blp"""	base	0
 units	original	hfoo	hfoo	isca	0	0	scale	Scaling Value	real	Profile	scale	"""1"""	[]		"""1"""	"""1"""	base	0
-units	original	hfoo	hfoo	ua1b	0	0	dmgplus1	Attack 1 - Damage Base	int	UnitWeapons	dmgplus1	11	[24,0,0]	7,30,53	0	24	w3p-recovered-first-numeric-sentinel	1
+units	original	hfoo	hfoo	ua1b	0	0	dmgplus1	Attack 1 - Damage Base	int	UnitWeapons	dmgplus1	11	[24,0,0]	7,30,53	0	24	w3p-runtime-unitstat-confirmed	1
 units	original	hfoo	hfoo	ua1c	0	0	cool1	Attack 1 - Cooldown Time	unreal	UnitWeapons	cool1	1.35	[]		1.35	1.35	base	0
 units	original	hfoo	hfoo	ua1d	0	0	dice1	Attack 1 - Damage Number of Dice	int	UnitWeapons	dice1	1	[]		1	1	base	0
 units	original	hfoo	hfoo	ua1f	0	0	Farea1	Attack 1 - Area of Effect (Full Damage)	int	UnitWeapons	Farea1	""" - """	[]		""" - """	""" - """	base	0
@@ -257,7 +257,7 @@ units	original	hfoo	hfoo	ucpt	0	0	castpt	Animation - Cast Point	unreal	UnitWeapo
 units	original	hfoo	hfoo	ucs1	0	0	weapType1	Attack 1 - Weapon Sound	combatSound	Profile	weapType1	"""MetalMediumSlice"""	[]		"""MetalMediumSlice"""	"""MetalMediumSlice"""	base	0
 units	original	hfoo	hfoo	udaa	0	0	auto	Default Active Ability	abilCode	UnitAbilities	auto	"""_"""	[]		"""_"""	"""_"""	base	0
 units	original	hfoo	hfoo	udea	0	0	deathType	Death Type	deathType	UnitData	deathType	3	[]		3	3	base	0
-units	original	hfoo	hfoo	udef	0	0	def	Defense Base	int	UnitBalance	def	2	[4,0,0]	6,29,52	0	4	w3p-recovered-first-numeric-sentinel	1
+units	original	hfoo	hfoo	udef	0	0	def	Defense Base	int	UnitBalance	def	2	[4,0,0]	6,29,52	0	4	w3p-runtime-unitstat-confirmed	1
 units	original	hfoo	hfoo	udl1	0	0	damageLoss1	Attack 1 - Damage Loss Factor	unreal	UnitWeapons	damageLoss1	0	[]		0	0	base	0
 units	original	hfoo	hfoo	udl2	0	0	damageLoss2	Attack 2 - Damage Loss Factor	unreal	UnitWeapons	damageLoss2	0	[]		0	0	base	0
 units	original	hfoo	hfoo	udp1	0	0	dmgpt1	Attack 1 - Animation Damage Point	unreal	UnitWeapons	dmgpt1	0.5	[]		0.5	0.5	base	0
@@ -284,7 +284,7 @@ units	original	hfoo	hfoo	uhhm	0	0	hideHeroMinimap	Hero - Hide Hero Minimap Displ
 units	original	hfoo	hfoo	uhom	0	0	hideOnMinimap	Hide Minimap Display	bool	UnitUI	hideOnMinimap	0	[]		0	0	base	0
 units	original	hfoo	hfoo	uhos	0	0	hostilePal	Display as Neutral Hostile	bool	UnitUI	hostilePal	"""-"""	[]		"""-"""	"""-"""	base	0
 units	original	hfoo	hfoo	uhot	0	0	Hotkey	Hotkey	char	Profile	Hotkey	"""F"""	"[""Q"",""Q"",""Q""]"	20,43,66	"""Q"""	"""Q"""	map-identical-duplicates	0
-units	original	hfoo	hfoo	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	420	[250,1,1]	11,34,57	1	250	w3p-recovered-first-numeric-sentinel	1
+units	original	hfoo	hfoo	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	420	[250,1,1]	11,34,57	1	250	w3p-runtime-unitstat-confirmed	1
 units	original	hfoo	hfoo	uhpr	0	0	regenHP	Hit Points Regeneration Rate	unreal	UnitBalance	regenHP	0.25	[]		0.25	0.25	base	0
 units	original	hfoo	hfoo	uhrt	0	0	regenType	Hit Points Regeneration Type	regenType	UnitBalance	regenType	"""always"""	[]		"""always"""	"""always"""	base	0
 units	original	hfoo	hfoo	uibo	0	0	isBuildOn	Can Be Built On	bool	UnitData	isBuildOn	0	[]		0	0	base	0
@@ -387,7 +387,7 @@ units	original	hmtm	hmtm	iarm	0	0	armor	Armor Type	armorType	Profile	armor	"""Fl
 units	original	hmtm	hmtm	ifil	0	0	file	Model Used	model	Profile	file	"""units\\human\\MortarTeam\\MortarTeam"""	[]		"""units\\human\\MortarTeam\\MortarTeam"""	"""units\\human\\MortarTeam\\MortarTeam"""	base	0
 units	original	hmtm	hmtm	iico	0	0	Art	Interface Icon	icon	Profile	Art	"""ReplaceableTextures\\CommandButtons\\BTNMortarTeam.blp"""	[]		"""ReplaceableTextures\\CommandButtons\\BTNMortarTeam.blp"""	"""ReplaceableTextures\\CommandButtons\\BTNMortarTeam.blp"""	base	0
 units	original	hmtm	hmtm	isca	0	0	scale	Scaling Value	real	Profile	scale	"""1.3"""	[]		"""1.3"""	"""1.3"""	base	0
-units	original	hmtm	hmtm	ua1b	0	0	dmgplus1	Attack 1 - Damage Base	int	UnitWeapons	dmgplus1	51	[67,0,0]	8,42,76	0	67	w3p-recovered-first-numeric-sentinel	1
+units	original	hmtm	hmtm	ua1b	0	0	dmgplus1	Attack 1 - Damage Base	int	UnitWeapons	dmgplus1	51	[67,0,0]	8,42,76	0	67	w3p-runtime-unitstat-confirmed	1
 units	original	hmtm	hmtm	ua1c	0	0	cool1	Attack 1 - Cooldown Time	unreal	UnitWeapons	cool1	3.5	[]		3.5	3.5	base	0
 units	original	hmtm	hmtm	ua1d	0	0	dice1	Attack 1 - Damage Number of Dice	int	UnitWeapons	dice1	1	[]		1	1	base	0
 units	original	hmtm	hmtm	ua1f	0	0	Farea1	Attack 1 - Area of Effect (Full Damage)	int	UnitWeapons	Farea1	25	[]		25	25	base	0
@@ -396,7 +396,7 @@ units	original	hmtm	hmtm	ua1h	0	0	Harea1	Attack 1 - Area of Effect (Medium Damag
 units	original	hmtm	hmtm	ua1m	0	0	Missileart	Attack 1 - Projectile Art	model	Profile	Missileart	"""Abilities\\Weapons\\Mortar\\MortarMissile.mdl"""	[]		"""Abilities\\Weapons\\Mortar\\MortarMissile.mdl"""	"""Abilities\\Weapons\\Mortar\\MortarMissile.mdl"""	base	0
 units	original	hmtm	hmtm	ua1p	0	0	splashTargs1	Attack 1 - Area of Effect Targets	targetList	UnitWeapons	splashTargs1	"""ground,structure,debris,tree,wall"""	"[""debris,enemies,ground,structure"",""debris,enemies,ground,structure"",""debris,enemies,ground,structure""]"	23,57,91	"""debris,enemies,ground,structure"""	"""debris,enemies,ground,structure"""	map-identical-duplicates	0
 units	original	hmtm	hmtm	ua1q	0	0	Qarea1	Attack 1 - Area of Effect (Small Damage)	int	UnitWeapons	Qarea1	250	[220,220,220]	19,53,87	220	220	map-identical-duplicates	0
-units	original	hmtm	hmtm	ua1r	0	0	rangeN1	Attack 1 - Range	int	UnitWeapons	rangeN1	1150	[1000,1,1]	21,55,89	1	1000	w3p-recovered-first-numeric-sentinel	1
+units	original	hmtm	hmtm	ua1r	0	0	rangeN1	Attack 1 - Range	int	UnitWeapons	rangeN1	1150	[1000,1,1]	21,55,89	1	1000	w3p-runtime-unitstat-confirmed	1
 units	original	hmtm	hmtm	ua1s	0	0	sides1	Attack 1 - Damage Sides per Die	int	UnitWeapons	sides1	13	[]		13	13	base	0
 units	original	hmtm	hmtm	ua1t	0	0	atkType1	Attack 1 - Attack Type	attackType	UnitWeapons	atkType1	"""siege"""	[]		"""siege"""	"""siege"""	base	0
 units	original	hmtm	hmtm	ua1w	0	0	weapTp1	Attack 1 - Weapon Type	weaponType	UnitWeapons	weapTp1	"""artillery"""	[]		"""artillery"""	"""artillery"""	base	0
@@ -472,7 +472,7 @@ units	original	hmtm	hmtm	uhhm	0	0	hideHeroMinimap	Hero - Hide Hero Minimap Displ
 units	original	hmtm	hmtm	uhom	0	0	hideOnMinimap	Hide Minimap Display	bool	UnitUI	hideOnMinimap	0	[]		0	0	base	0
 units	original	hmtm	hmtm	uhos	0	0	hostilePal	Display as Neutral Hostile	bool	UnitUI	hostilePal	"""-"""	[]		"""-"""	"""-"""	base	0
 units	original	hmtm	hmtm	uhot	0	0	Hotkey	Hotkey	char	Profile	Hotkey	"""M"""	"[""Q"",""Q"",""Q""]"	30,64,98	"""Q"""	"""Q"""	map-identical-duplicates	0
-units	original	hmtm	hmtm	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	360	[280,1,1]	14,48,82	1	280	w3p-recovered-first-numeric-sentinel	1
+units	original	hmtm	hmtm	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	360	[280,1,1]	14,48,82	1	280	w3p-runtime-unitstat-confirmed	1
 units	original	hmtm	hmtm	uhpr	0	0	regenHP	Hit Points Regeneration Rate	unreal	UnitBalance	regenHP	0.25	[]		0.25	0.25	base	0
 units	original	hmtm	hmtm	uhrt	0	0	regenType	Hit Points Regeneration Type	regenType	UnitBalance	regenType	"""always"""	[]		"""always"""	"""always"""	base	0
 units	original	hmtm	hmtm	uibo	0	0	isBuildOn	Can Be Built On	bool	UnitData	isBuildOn	0	[]		0	0	base	0
@@ -576,7 +576,7 @@ units	original	hrif	hrif	iarm	0	0	armor	Armor Type	armorType	Profile	armor	"""Fl
 units	original	hrif	hrif	ifil	0	0	file	Model Used	model	Profile	file	"""units\\human\\Rifleman\\Rifleman"""	[]		"""units\\human\\Rifleman\\Rifleman"""	"""units\\human\\Rifleman\\Rifleman"""	base	0
 units	original	hrif	hrif	iico	0	0	Art	Interface Icon	icon	Profile	Art	"""ReplaceableTextures\\CommandButtons\\BTNRifleman.blp"""	[]		"""ReplaceableTextures\\CommandButtons\\BTNRifleman.blp"""	"""ReplaceableTextures\\CommandButtons\\BTNRifleman.blp"""	base	0
 units	original	hrif	hrif	isca	0	0	scale	Scaling Value	real	Profile	scale	"""1"""	[]		"""1"""	"""1"""	base	0
-units	original	hrif	hrif	ua1b	0	0	dmgplus1	Attack 1 - Damage Base	int	UnitWeapons	dmgplus1	16	[31,0,0]	8,38,68	0	31	w3p-recovered-first-numeric-sentinel	1
+units	original	hrif	hrif	ua1b	0	0	dmgplus1	Attack 1 - Damage Base	int	UnitWeapons	dmgplus1	16	[31,0,0]	8,38,68	0	31	w3p-runtime-unitstat-confirmed	1
 units	original	hrif	hrif	ua1c	0	0	cool1	Attack 1 - Cooldown Time	unreal	UnitWeapons	cool1	1.5	[]		1.5	1.5	base	0
 units	original	hrif	hrif	ua1d	0	0	dice1	Attack 1 - Damage Number of Dice	int	UnitWeapons	dice1	2	[1,1,1]	7,37,67	1	1	map-identical-duplicates	0
 units	original	hrif	hrif	ua1f	0	0	Farea1	Attack 1 - Area of Effect (Full Damage)	int	UnitWeapons	Farea1	""" - """	[]		""" - """	""" - """	base	0
@@ -585,8 +585,8 @@ units	original	hrif	hrif	ua1h	0	0	Harea1	Attack 1 - Area of Effect (Medium Damag
 units	original	hrif	hrif	ua1m	0	0	Missileart	Attack 1 - Projectile Art	model	Profile	Missileart	"""Abilities\\Weapons\\Rifle\\RifleImpact.mdl"""	[]		"""Abilities\\Weapons\\Rifle\\RifleImpact.mdl"""	"""Abilities\\Weapons\\Rifle\\RifleImpact.mdl"""	base	0
 units	original	hrif	hrif	ua1p	0	0	splashTargs1	Attack 1 - Area of Effect Targets	targetList	UnitWeapons	splashTargs1	"""_"""	[]		"""_"""	"""_"""	base	0
 units	original	hrif	hrif	ua1q	0	0	Qarea1	Attack 1 - Area of Effect (Small Damage)	int	UnitWeapons	Qarea1	""" - """	[]		""" - """	""" - """	base	0
-units	original	hrif	hrif	ua1r	0	0	rangeN1	Attack 1 - Range	int	UnitWeapons	rangeN1	400	[500,1,1]	17,47,77	1	500	w3p-recovered-first-numeric-sentinel	1
-units	original	hrif	hrif	ua1s	0	0	sides1	Attack 1 - Damage Sides per Die	int	UnitWeapons	sides1	4	[5,1,1]	19,49,79	1	5	w3p-recovered-first-numeric-sentinel	1
+units	original	hrif	hrif	ua1r	0	0	rangeN1	Attack 1 - Range	int	UnitWeapons	rangeN1	400	[500,1,1]	17,47,77	1	500	w3p-runtime-unitstat-confirmed	1
+units	original	hrif	hrif	ua1s	0	0	sides1	Attack 1 - Damage Sides per Die	int	UnitWeapons	sides1	4	[5,1,1]	19,49,79	1	5	w3p-runtime-unitstat-confirmed	1
 units	original	hrif	hrif	ua1t	0	0	atkType1	Attack 1 - Attack Type	attackType	UnitWeapons	atkType1	"""pierce"""	[]		"""pierce"""	"""pierce"""	base	0
 units	original	hrif	hrif	ua1w	0	0	weapTp1	Attack 1 - Weapon Type	weaponType	UnitWeapons	weapTp1	"""instant"""	[]		"""instant"""	"""instant"""	base	0
 units	original	hrif	hrif	ua1z	0	0	Missilespeed	Attack 1 - Projectile Speed	int	Profile	Missilespeed	"""1900"""	[]		"""1900"""	"""1900"""	base	0
@@ -660,7 +660,7 @@ units	original	hrif	hrif	uhhm	0	0	hideHeroMinimap	Hero - Hide Hero Minimap Displ
 units	original	hrif	hrif	uhom	0	0	hideOnMinimap	Hide Minimap Display	bool	UnitUI	hideOnMinimap	0	[]		0	0	base	0
 units	original	hrif	hrif	uhos	0	0	hostilePal	Display as Neutral Hostile	bool	UnitUI	hostilePal	"""-"""	[]		"""-"""	"""-"""	base	0
 units	original	hrif	hrif	uhot	0	0	Hotkey	Hotkey	char	Profile	Hotkey	"""R"""	"[""Q"",""Q"",""Q""]"	26,56,86	"""Q"""	"""Q"""	map-identical-duplicates	0
-units	original	hrif	hrif	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	520	[270,1,1]	12,42,72	1	270	w3p-recovered-first-numeric-sentinel	1
+units	original	hrif	hrif	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	520	[270,1,1]	12,42,72	1	270	w3p-runtime-unitstat-confirmed	1
 units	original	hrif	hrif	uhpr	0	0	regenHP	Hit Points Regeneration Rate	unreal	UnitBalance	regenHP	0.25	[]		0.25	0.25	base	0
 units	original	hrif	hrif	uhrt	0	0	regenType	Hit Points Regeneration Type	regenType	UnitBalance	regenType	"""always"""	[]		"""always"""	"""always"""	base	0
 units	original	hrif	hrif	uibo	0	0	isBuildOn	Can Be Built On	bool	UnitData	isBuildOn	0	[]		0	0	base	0
@@ -5057,7 +5057,7 @@ units	original	otot	otot	uhhd	0	0	hideHeroDeathMsg	Hero - Hide Hero Death Messag
 units	original	otot	otot	uhhm	0	0	hideHeroMinimap	Hero - Hide Hero Minimap Display	bool	UnitUI	hideHeroMinimap	0	[]		0	0	base	0
 units	original	otot	otot	uhom	0	0	hideOnMinimap	Hide Minimap Display	bool	UnitUI	hideOnMinimap	0	[]		0	0	base	0
 units	original	otot	otot	uhos	0	0	hostilePal	Display as Neutral Hostile	bool	UnitUI	hostilePal	"""-"""	[]		"""-"""	"""-"""	base	0
-units	original	otot	otot	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	100	[99999,1,1]	0,2,4	1	99999	w3p-recovered-first-numeric-sentinel	1
+units	original	otot	otot	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	100	[99999,1,1]	0,2,4	1	99999	w3p-runtime-unitstat-confirmed	1
 units	original	otot	otot	uhpr	0	0	regenHP	Hit Points Regeneration Rate	unreal	UnitBalance	regenHP	"""-"""	[]		"""-"""	"""-"""	base	0
 units	original	otot	otot	uhrt	0	0	regenType	Hit Points Regeneration Type	regenType	UnitBalance	regenType	"""none"""	[]		"""none"""	"""none"""	base	0
 units	original	otot	otot	uibo	0	0	isBuildOn	Can Be Built On	bool	UnitData	isBuildOn	0	[]		0	0	base	0
@@ -5184,7 +5184,7 @@ units	custom	h07W	hbla	ua2r	0	0	rangeN2	Attack 2 - Range	int	UnitWeapons	rangeN2
 units	custom	h07W	hbla	ua2s	0	0	sides2	Attack 2 - Damage Sides per Die	int	UnitWeapons	sides2	"""-"""	[]		"""-"""	"""-"""	base	0
 units	custom	h07W	hbla	ua2t	0	0	atkType2	Attack 2 - Attack Type	attackType	UnitWeapons	atkType2	"""normal"""	[]		"""normal"""	"""normal"""	base	0
 units	custom	h07W	hbla	ua2w	0	0	weapTp2	Attack 2 - Weapon Type	weaponType	UnitWeapons	weapTp2	"""_"""	[]		"""_"""	"""_"""	base	0
-units	custom	h07W	hbla	uabi	0	0	abilList	Normal	abilityList	UnitAbilities	abilList	"""Abds"""	"[""A0HO"",""A0HO,AM0{"",""A0HO,AM0{""]"	0,43,45	"""A0HO,AM0{"""	"""A0HO,AM0{"""	ambiguous-string-last-write	1
+units	custom	h07W	hbla	uabi	0	0	abilList	Normal	abilityList	UnitAbilities	abilList	"""Abds"""	"[""A0HO"",""A0HO,AM0{"",""A0HO,AM0{""]"	0,43,45	"""A0HO,AM0{"""	"""A0HO,AM0{"""	map-stable-final-write	1
 units	custom	h07W	hbla	uabr	0	0	buffRadius	AI Placement Radius	unreal	UnitData	buffRadius	"""-"""	[]		"""-"""	"""-"""	base	0
 units	custom	h07W	hbla	uabs	0	0	abilSkinList	Normal Skin	abilitySkinList	Profile	abilSkinList	"""Abds"""	[]		"""Abds"""	"""Abds"""	base	0
 units	custom	h07W	hbla	uabt	0	0	buffType	AI Placement Type	aiBuffer	UnitData	buffType	"""_"""	[]		"""_"""	"""_"""	base	0
@@ -5244,7 +5244,7 @@ units	custom	h07W	hbla	uhhm	0	0	hideHeroMinimap	Hero - Hide Hero Minimap Display
 units	custom	h07W	hbla	uhom	0	0	hideOnMinimap	Hide Minimap Display	bool	UnitUI	hideOnMinimap	0	[]		0	0	base	0
 units	custom	h07W	hbla	uhos	0	0	hostilePal	Display as Neutral Hostile	bool	UnitUI	hostilePal	"""-"""	[]		"""-"""	"""-"""	base	0
 units	custom	h07W	hbla	uhot	0	0	Hotkey	Hotkey	char	Profile	Hotkey	"""S"""	"[""D""]"	32	"""D"""	"""D"""	map	0
-units	custom	h07W	hbla	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	1200	[900,1,1]	11,44,46	1	900	w3p-recovered-first-numeric-sentinel	1
+units	custom	h07W	hbla	uhpm	0	0	HP	Hit Points Maximum (Base)	int	UnitBalance	HP	1200	[900,1,1]	11,44,46	1	900	w3p-runtime-unitstat-confirmed	1
 units	custom	h07W	hbla	uhpr	0	0	regenHP	Hit Points Regeneration Rate	unreal	UnitBalance	regenHP	"""-"""	[0.5]	18	0.5	0.5	map	0
 units	custom	h07W	hbla	uhrt	0	0	regenType	Hit Points Regeneration Type	regenType	UnitBalance	regenType	"""none"""	"[""always""]"	20	"""always"""	"""always"""	map	0
 units	custom	h07W	hbla	uibo	0	0	isBuildOn	Can Be Built On	bool	UnitData	isBuildOn	0	[]		0	0	base	0

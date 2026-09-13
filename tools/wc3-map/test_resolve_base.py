@@ -103,6 +103,15 @@ class ProtectionRecoveryTests(unittest.TestCase):
         self.assertEqual(value, "A0HO,AM0{")
         self.assertEqual(reason, "ambiguous-string-last-write")
 
+    def test_repeated_final_string_write_is_classified_stable(self) -> None:
+        value, reason = resolve.choose_recovered([
+            resolve.MapCandidate(0, "A0HO", "string"),
+            resolve.MapCandidate(1, "A0HO,AM0{", "string"),
+            resolve.MapCandidate(2, "A0HO,AM0{", "string"),
+        ])
+        self.assertEqual(value, "A0HO,AM0{")
+        self.assertEqual(reason, "map-stable-final-write")
+
 
 class PathingTextureTests(unittest.TestCase):
     def test_tga_channels_map_to_pathing_bits(self) -> None:
@@ -198,6 +207,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
         speed = json.loads(by_kind[("I00F", "point-triggered-dummy-effect")]["effect_ability_objects_json"])[0]["levels"][0]
         self.assertEqual(speed["duration_normal"], "15")
         self.assertEqual(speed["data_fields_labeled"]["Movement Speed Increase"], 2)
+
+    def test_protection_conflicts_are_independently_confirmed(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["protection_conflicts"], 14)
+        self.assertEqual(summary["protection_conflicts_runtime_unitstat_confirmed"], 13)
+        self.assertEqual(summary["protection_conflicts_stable_final_write"], 1)
+        self.assertEqual(summary["protection_conflict_selection_counts"], {
+            "map-stable-final-write": 1,
+            "w3p-runtime-unitstat-confirmed": 13,
+        })
+
+        with (self.resolved / "protection-conflicts.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        numeric = [row for row in rows if not (row["rawcode"] == "h07W" and row["field_id"] == "uabi")]
+        self.assertEqual(len(numeric), 13)
+        self.assertTrue(all(row["selection"] == "w3p-runtime-unitstat-confirmed" for row in numeric))
+
+        snow_abilities = next(row for row in rows if row["rawcode"] == "h07W" and row["field_id"] == "uabi")
+        self.assertEqual(snow_abilities["selection"], "map-stable-final-write")
+        self.assertEqual(json.loads(snow_abilities["recovered_value_json"]), "A0HO,AM0{")
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

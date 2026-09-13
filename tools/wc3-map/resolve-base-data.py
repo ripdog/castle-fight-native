@@ -303,6 +303,8 @@ def choose_recovered(candidates: list[MapCandidate]) -> tuple[Any, str]:
         ):
             return first, "w3p-recovered-first-numeric-sentinel"
     if isinstance(first, str):
+        if len(values) >= 3 and all_same(values[-2:]):
+            return values[-1], "map-stable-final-write"
         return values[-1], "ambiguous-string-last-write"
     return values[-1], "ambiguous-last-write"
 
@@ -676,6 +678,21 @@ def main() -> None:
     map_misc_path = map_root / "war3mapMisc.txt"
     map_misc = parse_profile(map_misc_path).get("Misc", {}) if map_misc_path.exists() else {}
 
+    protected_unit_conflict_fields = {
+        "uhpm": "hp",
+        "udef": "armor",
+        "ua1b": "attack1_base_damage",
+        "ua1r": "attack1_range",
+        "ua1s": "attack1_dice_sides",
+    }
+    protected_unit_conflict_runtime: dict[str, dict[str, str]] = {}
+    protected_unit_conflict_path = map_root / "script" / "protected-unit-stats.tsv"
+    if protected_unit_conflict_path.exists():
+        with protected_unit_conflict_path.open(encoding="utf-8", newline="") as handle:
+            protected_unit_conflict_runtime = {
+                row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")
+            }
+
     def effective_misc_value(key: str) -> tuple[str, str, str]:
         base_value = ci_get(base_misc, key)
         map_value = ci_get(map_misc, key)
@@ -770,6 +787,24 @@ def main() -> None:
                     if not map_values:
                         recovery_reason = "base"
                     conflict = len(map_values) > 1 and not all_same([candidate.value for candidate in map_values])
+                    if conflict and category == "units" and field_id in protected_unit_conflict_fields:
+                        runtime_row = protected_unit_conflict_runtime.get(rawcode)
+                        runtime_column = protected_unit_conflict_fields[field_id]
+                        runtime_value = runtime_row.get(runtime_column, "") if runtime_row is not None else ""
+                        runtime_number = numeric(runtime_value)
+                        if runtime_number is not None:
+                            matching_values = [
+                                candidate.value for candidate in map_values
+                                if numeric(candidate.value) is not None
+                                and math.isclose(float(numeric(candidate.value)), runtime_number, rel_tol=0.0, abs_tol=1e-9)
+                            ]
+                            if not matching_values:
+                                raise ValueError(
+                                    f"protected UnitStat runtime value {rawcode}.{runtime_column}={runtime_value} "
+                                    f"matches none of conflicting map candidates {[candidate.value for candidate in map_values]}"
+                                )
+                            recovered_value = matching_values[0]
+                            recovery_reason = "w3p-runtime-unitstat-confirmed"
                     if conflict:
                         conflict_rows.append([
                             category,
@@ -3221,6 +3256,13 @@ def main() -> None:
         "base_source_field_rows": len(source_rows),
         "protection_conflicts": len(conflict_rows),
         "objects_with_protection_conflicts": len({(row[0], row[2]) for row in conflict_rows}),
+        "protection_conflict_selection_counts": dict(sorted(Counter(row[11] for row in conflict_rows).items())),
+        "protection_conflicts_runtime_unitstat_confirmed": sum(
+            row[11] == "w3p-runtime-unitstat-confirmed" for row in conflict_rows
+        ),
+        "protection_conflicts_stable_final_write": sum(
+            row[11] == "map-stable-final-write" for row in conflict_rows
+        ),
         "base_data_files": len(source_manifest),
         "pathing_textures_extracted": len(pathing_textures),
         "pathing_textures_used_by_map_units": len(used_pathing),
@@ -3309,7 +3351,7 @@ def main() -> None:
         "death_decay_constants": dict(sorted(death_constants.items())),
         "notes": [
             "object-fields.tsv preserves base, every map candidate, last-write and recovered values; the non-WC3 field wurs is classified as Wurst compiler provenance (GENERATED_BY_WURST=42), not gameplay data",
-            "recovered values use a narrow W3P numeric-sentinel heuristic; ambiguous strings retain last-write semantics",
+            "all 13 conflicting numeric unit fields are independently confirmed against the decoded protected UnitStat runtime table; the sole conflicting string field (Snowveil Fountain ability list) repeats the same final value twice and is classified as a stable final write",
             "pathing texture pixels are 32 world units; bits 1/2/4 mean unwalkable/unflyable/unbuildable",
             f"base-source-fields.tsv exposes the W3I-selected {data_selection.overlay_dir}/base SLK values before map overrides, including computed columns",
             "protected-ability-fields.tsv compares the protected Lua runtime table against static resolved cooldown/mana values without overwriting either source",
@@ -3319,14 +3361,14 @@ def main() -> None:
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
-            "protected-filter-bindings.tsv resolves generated W3P Filter wrappers only from exact use-site/compiler structure rather than independent adjacency guessing; 16 fixed bindings are currently proven, including the Wurst ClosureForGroups dispatcher Gib=kG, generic registerPlayerUnitEvent local SCr is classified dynamic, and five opaque globals stay unresolved. This corrects Desert priority filters (Y0=tK, X0=sK, W0=uK, V0=vK) and Elemental linker QX=wL while retaining SX=vL",
+            "protected-filter-bindings.tsv resolves all 21 fixed generated W3P Filter wrappers from exact use-site/compiler structure; generic registerPlayerUnitEvent local SCr is correctly classified as a dynamic caller-supplied wrapper, leaving no unresolved fixed filter globals",
             "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
             "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
             "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
             "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
             "building-spells.tsv now covers both generated registration representations: 15 protected registry calls and 28 direct EVENT_PLAYER_UNIT_SPELL_EFFECT listeners. Forty-two use Castle Fight's mana-cost/building-regen cadence; Tidal Guardian is the explicit cooldown-driven exception at its protected 15-second WC3 cooldown",
             "building-spell-evidence.tsv gives all 43 scripted building spells the same bounded static handler/helper/callback/effect evidence used for unit spells, including direct and reachable rawcodes enriched with resolved WC3 object data",
-            "building-spell-mechanics.tsv strictly normalizes all 43 scripted building spells across both registration families into target/delivery/mechanic parameters plus separately sourced linked WC3 object effects; protected generated filter symbols are preserved where their complete predicates are not yet proven, and explicit tooltip-vs-object disagreements are retained rather than resolved silently",
+            "building-spell-mechanics.tsv strictly normalizes all 43 scripted building spells across both registration families into target/delivery/mechanic parameters plus separately sourced linked WC3 object effects; all referenced fixed protected filter predicates are resolved, and explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",
