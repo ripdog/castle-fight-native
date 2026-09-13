@@ -230,7 +230,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 25)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 30)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "attack-proc-dispel-positive-buffs": 3,
@@ -246,14 +246,17 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "kill-triggered-native-berserk": 3,
             "native-lava-spawn-split-with-child-conversion": 1,
             "organic-kill-eternal-servitude": 2,
+            "source-damage-health-scaled-aftershock": 2,
             "source-damage-mastery-over-death": 1,
             "source-damage-stacking-blood-corrosion": 1,
+            "target-damage-melee-thunderbolt-retaliation": 2,
+            "target-damage-one-shot-emergency-life-reset": 1,
             "retarget-flying-damage-source": 2,
         })
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 25)
+        self.assertEqual(len(rows), 30)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -409,6 +412,31 @@ class ResolvedEvidenceTests(unittest.TestCase):
             [entry["defense_bonus"] for entry in lord_corrosion["stack_levels"]],
             [-2, -4, -6, -8, -10],
         )
+
+        earth = json.loads(rows[("h034", "source-damage-health-scaled-aftershock")]["parameters_json"])
+        greater_earth = json.loads(rows[("h03N", "source-damage-health-scaled-aftershock")]["parameters_json"])
+        self.assertEqual(earth["object_unit_level"], 1)
+        self.assertEqual(earth["maximum_bonus_damage_at_full_hp"], 50)
+        self.assertEqual(greater_earth["object_unit_level"], 2)
+        self.assertEqual(greater_earth["maximum_bonus_damage_at_full_hp"], 100)
+        self.assertEqual(earth["damage_type"], "demolition")
+
+        lightning = json.loads(rows[("h03P", "target-damage-melee-thunderbolt-retaliation")]["parameters_json"])
+        greater_lightning = json.loads(rows[("h03R", "target-damage-melee-thunderbolt-retaliation")]["parameters_json"])
+        self.assertEqual(lightning["effective_proc_probability_percent"], 16)
+        self.assertEqual(lightning["thunderbolt_object_data"]["Damage"], 25)
+        self.assertEqual(lightning["thunderbolt_duration_seconds"], 2)
+        self.assertEqual(greater_lightning["effective_proc_probability_percent"], 31)
+        self.assertEqual(greater_lightning["thunderbolt_object_data"]["Damage"], 50)
+        self.assertEqual(greater_lightning["thunderbolt_duration_seconds"], 4)
+        self.assertEqual(greater_lightning["thunderbolt_order_id"], 852095)
+
+        warlock = json.loads(rows[("n005", "target-damage-one-shot-emergency-life-reset")]["parameters_json"])
+        self.assertEqual(warlock["trigger_current_life_below"], 128)
+        self.assertEqual(warlock["trigger_current_life_above"], 0.405)
+        self.assertEqual(warlock["set_current_life_to"], 5000)
+        self.assertTrue(warlock["remove_marker_after_trigger"])
+        self.assertEqual(warlock["marker_base_rawcode"], "ANcl")
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

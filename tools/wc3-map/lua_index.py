@@ -4930,6 +4930,123 @@ def _extract_production_unit_special_mechanics(
         "byte_offset": min(damage_dispatch_start, vampire_armor_start),
     })
 
+    # Earth Elementals: the shared source-damage handler adds a second,
+    # health-scaled siege/demolition hit whenever A0DW is present. The formula
+    # is exact script behavior and deliberately uses current HP / max HP.
+    require_tokens(
+        "handleSourceDamageEffects",
+        {
+            "1093682263", "50.", "unit_getLevel", "widget_getLife", "unit_getMaxHP",
+            "ATTACK_TYPE_SIEGE", "DAMAGE_TYPE_DEMOLITION", "__wurst_safe_DisableTrigger",
+            "__wurst_safe_UnitDamageTarget", "__wurst_safe_EnableTrigger",
+        },
+    )
+    source_damage_function = next(
+        function for function in functions if function["name"] == "handleSourceDamageEffects"
+    )
+    source_damage_source = data[int(source_damage_function["start"]):int(source_damage_function["end"])]
+    earth_formula = (
+        b"__wurst_safe_UnitDamageTarget(Qpq,Rpq,(((50.*unit_getLevel(Qpq))*widget_getLife(Qpq))/unit_getMaxHP(Qpq)),"
+        b"true,false,ATTACK_TYPE_SIEGE,DAMAGE_TYPE_DEMOLITION"
+    )
+    if earth_formula not in source_damage_source:
+        raise ValueError("Earth Elemental Aftershock formula changed")
+    for unit_id, unit_level in ((1747989300, 1), (1747989326, 2)):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "source-damage-health-scaled-aftershock",
+            "trigger": "source-damage-event",
+            "parameters": {
+                "source_damage_marker_ability_id": 1093677905,
+                "aftershock_marker_ability_id": 1093682263,
+                "unit_level": unit_level,
+                "bonus_damage_formula": "50 * unit_level * current_hp / max_hp",
+                "maximum_bonus_damage_at_full_hp": 50 * unit_level,
+                "attack_type": "siege",
+                "damage_type": "demolition",
+                "is_attack": True,
+                "is_ranged": False,
+                "recursion_guard_trigger_disabled_during_bonus_hit": True,
+            },
+            "related_rawcode_ids": [1093677905, 1093682263],
+            "source_functions": ["handleSourceDamageEffects"],
+            "evidence_kind": "exact-marker-driven-source-damage-formula",
+            "byte_offset": source_damage_start,
+        })
+
+    # Lightning Elementals: damage from a melee attacker can proc a dummy
+    # Thunderbolt. The script uses an inclusive random comparison, so levels 1
+    # and 2 have 16 and 31 successful integer rolls out of 100 respectively.
+    lightning_start, _ = require_tokens(
+        "castLightningShield",
+        {
+            "UNIT_TYPE_MELEE_ATTACKER", "ATTACK_TYPE_NORMAL", "GetRandomInt", "15", "1093682229",
+            "852095", "4.", "unit_getLevel", "addProtectedAbility", "__wurst_safe_SetUnitAbilityLevel",
+            "__wurst_safe_IssueTargetOrderById", "__wurst_safe_UnitApplyTimedLife",
+        },
+    )
+    lightning_function = next(function for function in functions if function["name"] == "castLightningShield")
+    lightning_source = data[int(lightning_function["start"]):int(lightning_function["end"])]
+    if b"GetRandomInt(0,99)<=(15*ppq)" not in lightning_source:
+        raise ValueError("Lightning Elemental retaliation probability changed")
+    if b"not(BlzGetEventAttackType()==ATTACK_TYPE_NORMAL)" not in lightning_source:
+        raise ValueError("Lightning Elemental attack-type gate changed")
+    for unit_id, unit_level in ((1747989328, 1), (1747989330, 2)):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "target-damage-melee-thunderbolt-retaliation",
+            "trigger": "target-damage-event",
+            "parameters": {
+                "target_marker_ability_id": 1093682264,
+                "unit_level": unit_level,
+                "attacker_requires_melee_attacker_type": True,
+                "event_attack_type_must_not_equal": "normal",
+                "random_roll_min": 0,
+                "random_roll_max": 99,
+                "proc_comparison": "roll <= 15 * unit_level",
+                "successful_roll_count": 15 * unit_level + 1,
+                "effective_proc_probability_percent": 15 * unit_level + 1,
+                "thunderbolt_ability_id": 1093682229,
+                "thunderbolt_ability_level": unit_level,
+                "thunderbolt_order_id": 852095,
+                "dummy_lifetime_seconds": 4,
+                "bypasses_wrong_order_guard": True,
+            },
+            "related_rawcode_ids": [1093682264, 1093682229],
+            "source_functions": ["handleTargetDamageEffects", "castLightningShield"],
+            "evidence_kind": "exact-marker-driven-target-damage-native-cast",
+            "byte_offset": min(target_damage_start, lightning_start),
+        })
+
+    # Warlock: a hidden one-shot target-damage marker provides an emergency
+    # post-hit life reset. It triggers strictly below 128 life while alive,
+    # sets current life to 5000, then removes the marker so it cannot recur.
+    warlock_start, _ = require_tokens(
+        "deathPactEmergency",
+        {"128.", "5000.", "1093682522", "widget_getLife", "__wurst_safe_SetWidgetLife", "unit_removeAbility"},
+    )
+    warlock_function = next(function for function in functions if function["name"] == "deathPactEmergency")
+    warlock_source = data[int(warlock_function["start"]):int(warlock_function["end"])]
+    if b"(Bpq<128.)and(Bpq>.405)" not in warlock_source:
+        raise ValueError("Warlock emergency-life threshold changed")
+    rows.append({
+        "unit_id": 1848651829,
+        "mechanic_kind": "target-damage-one-shot-emergency-life-reset",
+        "trigger": "target-damage-event",
+        "parameters": {
+            "target_marker_ability_id": 1093682522,
+            "trigger_current_life_below": 128,
+            "trigger_current_life_above": 0.405,
+            "set_current_life_to": 5000,
+            "remove_marker_after_trigger": True,
+            "death_pact_visual_only": True,
+        },
+        "related_rawcode_ids": [1093682522],
+        "source_functions": ["handleTargetDamageEffects", "deathPactEmergency"],
+        "evidence_kind": "exact-marker-driven-target-damage-handler",
+        "byte_offset": min(target_damage_start, warlock_start),
+    })
+
     # Human Defender: Defend is automatically enabled shortly after spawn, then
     # normal attack movement resumes. If the unit receives the native undefend
     # order, FixDefend re-enables Defend after 5.5 seconds. This keeps A03G's

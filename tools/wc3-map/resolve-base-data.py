@@ -1928,6 +1928,53 @@ def main() -> None:
                     if [row["defense_bonus"] for row in stack_levels] != [-2, -4, -6, -8, -10]:
                         raise ValueError(f"Vampire Lord Blood Corrosion states changed: {stack_levels}")
                     parameters["stack_levels"] = stack_levels
+                elif mechanic["mechanic_kind"] == "source-damage-health-scaled-aftershock":
+                    object_level = numeric(field_lookup(rows_by_object, "units", unit_rawcode, "ulev", 0, 0))
+                    if object_level != numeric(parameters["unit_level"]):
+                        raise ValueError(
+                            f"Earth Elemental runtime level changed: {unit_rawcode} object={object_level} "
+                            f"script={parameters['unit_level']}"
+                        )
+                    expected_max = 50 * int(parameters["unit_level"])
+                    if numeric(parameters["maximum_bonus_damage_at_full_hp"]) != expected_max:
+                        raise ValueError(f"Earth Elemental Aftershock maximum changed: {unit_rawcode}")
+                    parameters["object_unit_level"] = object_level
+                elif mechanic["mechanic_kind"] == "target-damage-melee-thunderbolt-retaliation":
+                    level = int(parameters["unit_level"])
+                    object_level = numeric(field_lookup(rows_by_object, "units", unit_rawcode, "ulev", 0, 0))
+                    if object_level != level:
+                        raise ValueError(
+                            f"Lightning Elemental runtime level changed: {unit_rawcode} object={object_level} script={level}"
+                        )
+                    thunderbolt = next(
+                        (row for row in ability_levels.get("A0D5", []) if row["level"] == str(level)),
+                        None,
+                    )
+                    if thunderbolt is None:
+                        raise ValueError(f"Lightning retaliation ability level missing: A0D5 level {level}")
+                    thunderbolt_fields = json.loads(thunderbolt["data_fields_labeled_json"])
+                    expected_damage = 25 * level
+                    if numeric(thunderbolt_fields.get("Damage")) != expected_damage:
+                        raise ValueError(f"Lightning retaliation damage changed at level {level}: {thunderbolt_fields}")
+                    parameters["object_unit_level"] = object_level
+                    parameters["thunderbolt_object_data"] = thunderbolt_fields
+                    parameters["thunderbolt_duration_seconds"] = numeric(
+                        field_lookup(rows_by_object, "abilities", "A0D5", "adur", level, 0)
+                    )
+                    parameters["thunderbolt_range"] = numeric(thunderbolt["range"])
+                    parameters["thunderbolt_targets"] = thunderbolt["targets"]
+                    parameters["thunderbolt_effective_mana_cost"] = numeric(
+                        protected_ability_values.get(("A0D5", level, "mana_cost"), thunderbolt["mana_cost"])
+                    )
+                    parameters["thunderbolt_effective_cooldown_seconds"] = numeric(
+                        protected_ability_values.get(("A0D5", level, "cooldown"), thunderbolt["cooldown"])
+                    )
+                elif mechanic["mechanic_kind"] == "target-damage-one-shot-emergency-life-reset":
+                    marker = next((row for row in ability_levels.get("A0EZ", []) if row["level"] == "1"), None)
+                    if marker is None:
+                        raise ValueError("Warlock emergency-life mechanic is missing A0EZ marker object data")
+                    parameters["marker_base_rawcode"] = marker["base_rawcode"]
+                    parameters["marker_object_data"] = json.loads(marker["data_fields_labeled_json"])
                 elif mechanic["mechanic_kind"] == "kill-triggered-native-berserk":
                     berserk = next((row for row in ability_levels.get("A02I", []) if row["level"] == "1"), None)
                     if berserk is None:
@@ -3594,7 +3641,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Warlock emergency life reset, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
