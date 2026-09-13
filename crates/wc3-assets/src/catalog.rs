@@ -20,6 +20,7 @@ pub struct VisualAssetSpec {
     pub owner_rawcode: String,
     pub role: String,
     pub model_path: String,
+    pub missile_arc: Option<f32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -203,6 +204,10 @@ mod tests {
         assert_eq!(
             projectile("n015").map(|asset| asset.model_path.as_str()),
             Some(r"Abilities\Weapons\LichMissile\LichMissile.mdl")
+        );
+        assert_eq!(
+            projectile("o001").and_then(|asset| asset.missile_arc),
+            Some(0.4)
         );
         assert!(
             catalog

@@ -11,7 +11,7 @@ use crate::terrain::client_asset_root;
 
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
-const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 3;
+const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
 const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 5] = [
     u32::from_be_bytes(*b"hfoo"),
     u32::from_be_bytes(*b"e003"),
@@ -30,6 +30,7 @@ pub struct UnitModelAsset {
     pub scene: Handle<WorldAsset>,
     gltf: Handle<Gltf>,
     pub scale: f32,
+    pub overhead_height: Option<f32>,
     animations: Option<UnitAnimationSet>,
 }
 
@@ -55,6 +56,7 @@ pub struct UnitAnimationSet {
 struct UnitAssetManifest {
     schema_version: u32,
     units: Vec<UnitAssetManifestEntry>,
+    models: Vec<UnitModelManifestEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,10 +66,17 @@ struct UnitAssetManifestEntry {
     gltf: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct UnitModelManifestEntry {
+    gltf: String,
+    overhead_position: Option<[f32; 3]>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct ResolvedUnitAsset {
     rawcode: u32,
     scale: f32,
+    overhead_height: Option<f32>,
     asset_path: String,
 }
 
@@ -103,6 +112,7 @@ impl UnitModelSet {
                             scene,
                             gltf,
                             scale: entry.scale,
+                            overhead_height: entry.overhead_height,
                             animations: None,
                         },
                     );
@@ -314,6 +324,12 @@ fn resolve_manifest_entries(
         ));
     }
 
+    let overhead_by_gltf: BTreeMap<_, _> = manifest
+        .models
+        .into_iter()
+        .map(|model| (model.gltf.replace('\\', "/"), model.overhead_position))
+        .collect();
+
     let mut resolved = BTreeMap::new();
     for entry in manifest.units {
         let Some(gltf) = entry.gltf else {
@@ -328,6 +344,12 @@ fn resolve_manifest_entries(
         }
         let gltf = gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
+        let overhead_height = overhead_by_gltf
+            .get(&gltf)
+            .copied()
+            .flatten()
+            .map(|position| position[1] * entry.scale)
+            .filter(|height| height.is_finite() && *height > 0.0);
         let asset_path = format!("{}/{}", asset_prefix.trim_end_matches('/'), gltf);
         if resolved
             .insert(
@@ -335,6 +357,7 @@ fn resolve_manifest_entries(
                 ResolvedUnitAsset {
                     rawcode,
                     scale: entry.scale,
+                    overhead_height,
                     asset_path,
                 },
             )
@@ -376,7 +399,7 @@ mod tests {
     #[test]
     fn resolves_generated_unit_manifest_paths_and_scales() {
         let json = r#"{
-            "schema_version": 3,
+            "schema_version": 4,
             "units": [
                 {
                     "rawcode": "hfoo",
@@ -393,6 +416,16 @@ mod tests {
                     "scale": 1.0,
                     "gltf": null
                 }
+            ],
+            "models": [
+                {
+                    "gltf": "models/units__human__footman__footman.gltf",
+                    "overhead_position": [0.0, 120.0, 0.0]
+                },
+                {
+                    "gltf": "models/units__human__gryphonrider__gryphonrider.gltf",
+                    "overhead_position": [0.0, 150.0, 0.0]
+                }
             ]
         }"#;
 
@@ -400,6 +433,7 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].rawcode, u32::from_be_bytes(*b"h016"));
         assert_eq!(entries[0].scale, 1.2);
+        assert_eq!(entries[0].overhead_height, Some(180.0));
         assert_eq!(
             entries[0].asset_path,
             "wc3/units/models/units__human__gryphonrider__gryphonrider.gltf"
@@ -410,12 +444,13 @@ mod tests {
     #[test]
     fn rejects_stale_unit_asset_manifest_schema() {
         let json = r#"{
-            "schema_version": 2,
-            "units": []
+            "schema_version": 3,
+            "units": [],
+            "models": []
         }"#;
         let error = resolve_manifest_entries(json, "wc3/units")
             .expect_err("stale generated packs must be regenerated");
-        assert!(error.contains("unsupported unit asset manifest schema 2"));
+        assert!(error.contains("unsupported unit asset manifest schema 3"));
     }
 
     #[test]
@@ -423,8 +458,9 @@ mod tests {
         for path in ["../escape.gltf", "..\\\\escape.gltf"] {
             let json = format!(
                 r#"{{
-                    "schema_version": 3,
-                    "units": [{{"rawcode": "hfoo", "scale": 1.0, "gltf": {path:?}}}]
+                    "schema_version": 4,
+                    "units": [{{"rawcode": "hfoo", "scale": 1.0, "gltf": {path:?}}}],
+                    "models": []
                 }}"#
             );
             let error =
@@ -464,8 +500,9 @@ mod tests {
     #[test]
     fn rejects_invalid_rawcodes_and_scales() {
         let bad_rawcode = r#"{
-            "schema_version": 3,
-            "units": [{"rawcode": "foo", "scale": 1.0, "gltf": "models/foo.gltf"}]
+            "schema_version": 4,
+            "units": [{"rawcode": "foo", "scale": 1.0, "gltf": "models/foo.gltf"}],
+            "models": []
         }"#;
         assert!(
             resolve_manifest_entries(bad_rawcode, "wc3/units")
@@ -474,8 +511,9 @@ mod tests {
         );
 
         let bad_scale = r#"{
-            "schema_version": 3,
-            "units": [{"rawcode": "hfoo", "scale": 0.0, "gltf": "models/foo.gltf"}]
+            "schema_version": 4,
+            "units": [{"rawcode": "hfoo", "scale": 0.0, "gltf": "models/foo.gltf"}],
+            "models": []
         }"#;
         assert!(
             resolve_manifest_entries(bad_scale, "wc3/units")

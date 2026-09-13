@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 use whiteout::{
     casc::Storage as CascStorage,
     mdx::{
-        InterpolationType, LayerFilterMode, LayerShadingFlag, MDLXFormat, Model, Node, NodeFlag,
-        Parser as MdxParser, SequenceFlag, TrackF32, TrackQuaternion, TrackVector3f,
+        InterpolationType, Layer, LayerFilterMode, LayerShadingFlag, LayerSlotType, MDLXFormat,
+        Model, Node, NodeFlag, Parser as MdxParser, SequenceFlag, TrackF32, TrackQuaternion,
+        TrackVector3f,
     },
     mpq::Storage as MpqStorage,
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
@@ -27,7 +28,9 @@ const GL_FLOAT: u32 = 5_126;
 const GL_UNSIGNED_SHORT: u32 = 5_123;
 const NO_PARENT: u32 = u32::MAX;
 const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
-const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 3;
+const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 4;
+const TEAM_GLOW_RED_TEXTURE: &str = r"ReplaceableTextures\TeamGlow\TeamGlow00.blp";
+const TEAM_GLOW_BLUE_TEXTURE: &str = r"ReplaceableTextures\TeamGlow\TeamGlow01.blp";
 
 type TextureExport = (Vec<TextureManifest>, Vec<Option<usize>>);
 type GltfBuildOutput = (Value, Vec<u8>, Vec<String>);
@@ -105,6 +108,7 @@ pub struct ModelManifest {
     pub bin: String,
     pub geosets: usize,
     pub bones: usize,
+    pub overhead_position: Option<[f32; 3]>,
     pub animations: Vec<AnimationManifest>,
     pub textures: Vec<TextureManifest>,
     pub particle_emitters: Vec<ParticleEmitter2Manifest>,
@@ -190,6 +194,7 @@ pub struct VisualBindingManifest {
     pub role: String,
     pub source_model: String,
     pub gltf: Option<String>,
+    pub missile_arc: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -407,6 +412,7 @@ impl Exporter {
                 owner_rawcode: asset.owner_rawcode.clone(),
                 role: asset.role.clone(),
                 model_path: normalize_model_path(&asset.model_path),
+                missile_arc: asset.missile_arc,
             })
             .collect();
         let stun_source = catalog.stun_model_path.as_deref().map(normalize_model_path);
@@ -453,6 +459,7 @@ impl Exporter {
                     .get(&asset.model_path.to_ascii_lowercase())
                     .cloned(),
                 source_model: asset.model_path,
+                missile_arc: asset.missile_arc,
             })
             .collect();
         let stun = stun_source.map(|source_model| VisualBindingManifest {
@@ -463,10 +470,11 @@ impl Exporter {
                 .get(&source_model.to_ascii_lowercase())
                 .cloned(),
             source_model,
+            missile_arc: None,
         });
 
         Ok(VisualAssetManifest {
-            schema_version: 1,
+            schema_version: 2,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -800,6 +808,7 @@ impl Exporter {
             bin: bin_name,
             geosets: model.geosets_len(),
             bones: model.bones_len(),
+            overhead_position: model_overhead_position(&model),
             animations,
             textures: texture_manifests,
             particle_emitters,
@@ -834,13 +843,29 @@ impl Exporter {
         let mut gltf_indices = Vec::with_capacity(model.textures_len());
         let mut next_gltf_index = 0usize;
 
+        if model
+            .textures_iter()
+            .any(|texture| texture.replaceable_id() == 2)
+        {
+            for logical in [TEAM_GLOW_RED_TEXTURE, TEAM_GLOW_BLUE_TEXTURE] {
+                let key = logical.to_ascii_lowercase();
+                if !self.texture_cache.contains_key(&key) {
+                    let exported = self.export_texture(logical)?;
+                    self.texture_cache.insert(key, exported);
+                }
+            }
+        }
+
         for texture in model.textures_iter() {
             let replaceable_id = texture.replaceable_id();
             let model_logical = normalize_texture_path(&texture.file_name());
             let logical = if replaceable_id == 0 {
                 (!model_logical.is_empty()).then_some(model_logical.clone())
             } else {
-                replaceable_textures.get(&replaceable_id).cloned()
+                replaceable_textures
+                    .get(&replaceable_id)
+                    .cloned()
+                    .or_else(|| (replaceable_id == 2).then(|| TEAM_GLOW_BLUE_TEXTURE.to_owned()))
             };
             let Some(logical) = logical else {
                 manifests.push(TextureManifest {
@@ -2563,6 +2588,32 @@ fn wc3_vec3(x: f32, y: f32, z: f32) -> [f32; 3] {
     [x, z, -y]
 }
 
+fn model_overhead_position(model: &Model) -> Option<[f32; 3]> {
+    fn score(name: &str) -> Option<u8> {
+        let name = name.to_ascii_lowercase();
+        if name.contains("overhead") {
+            Some(0)
+        } else if name.contains("head") {
+            Some(1)
+        } else {
+            None
+        }
+    }
+
+    let attachments = model.attachments_iter().filter_map(|attachment| {
+        let node = attachment.node();
+        score(&node.name()).map(|score| (score, model_node_position(model, &node)))
+    });
+    let helpers = model.helpers_iter().filter_map(|helper| {
+        let node = helper.node();
+        score(&node.name()).map(|score| (score, model_node_position(model, &node)))
+    });
+    attachments
+        .chain(helpers)
+        .min_by_key(|(score, _)| *score)
+        .map(|(_, position)| position)
+}
+
 fn wc3_quat(value: [f32; 4]) -> [f32; 4] {
     normalize_quat([value[0], value[2], -value[1], value[3]])
 }
@@ -2685,6 +2736,43 @@ fn sqlerp_quat(a: [f32; 4], b: [f32; 4], c: [f32; 4], d: [f32; 4], t: f32) -> [f
     slerp_quat(first, second, 2.0 * t * (1.0 - t))
 }
 
+fn layer_diffuse_texture_id(layer: &Layer) -> u32 {
+    layer
+        .sub_textures_iter()
+        .find(|sub_texture| sub_texture.slot() == LayerSlotType::DiffuseMap)
+        .map_or_else(
+            || layer.texture_id(),
+            |sub_texture| sub_texture.texture_id(),
+        )
+}
+
+fn layer_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> bool {
+    let texture_matches = |texture_id: u32| {
+        model
+            .textures(texture_id as usize)
+            .is_some_and(|texture| texture.replaceable_id() == replaceable_id)
+    };
+    if texture_matches(layer.texture_id())
+        || layer
+            .texture_id_tracks()
+            .keys()
+            .iter()
+            .copied()
+            .any(texture_matches)
+    {
+        return true;
+    }
+    layer.sub_textures_iter().any(|sub_texture| {
+        texture_matches(sub_texture.texture_id())
+            || sub_texture
+                .tracks()
+                .keys()
+                .iter()
+                .copied()
+                .any(texture_matches)
+    })
+}
+
 fn build_materials(
     model: &Model,
     texture_indices: &[Option<usize>],
@@ -2703,7 +2791,7 @@ fn build_materials(
         }
         let selected = material.layers_iter().find(|layer| {
             texture_indices
-                .get(layer.texture_id() as usize)
+                .get(layer_diffuse_texture_id(layer) as usize)
                 .and_then(|index| *index)
                 .is_some()
         });
@@ -2719,8 +2807,22 @@ fn build_materials(
         let mut extensions = serde_json::Map::new();
         let mut extras = serde_json::Map::new();
 
+        let uses_replaceable = |replaceable_id: u32| {
+            material
+                .layers_iter()
+                .any(|layer| layer_uses_replaceable(model, &layer, replaceable_id))
+        };
+        let has_team_color_underlay = uses_replaceable(1);
+        let has_team_glow_layer = uses_replaceable(2);
+        if has_team_color_underlay {
+            extras.insert("wc3TeamColorUnderlay".into(), json!(true));
+        }
+        if has_team_glow_layer {
+            extras.insert("wc3TeamGlowLayer".into(), json!(true));
+        }
+
         if let Some(layer) = layer {
-            let texture_id = layer.texture_id() as usize;
+            let texture_id = layer_diffuse_texture_id(&layer) as usize;
             if let Some(Some(gltf_texture)) = texture_indices.get(texture_id) {
                 pbr.as_object_mut()
                     .expect("pbr object")
@@ -3214,6 +3316,55 @@ mod tests {
                 [0],
             r"Doodads\Ruins\Terrain\RuinsWall90\RuinsWall900.mdx"
         );
+    }
+
+    #[test]
+    fn overhead_attachment_uses_wc3_model_pivot() {
+        let mut model = Model::new();
+        model.resize_attachments(1);
+        {
+            let mut attachment = model.attachments_mut(0).expect("attachment");
+            let mut node = attachment.node_mut();
+            node.set_name("Overhead Ref");
+            node.set_object_id(0);
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f {
+            x: 3.0,
+            y: 4.0,
+            z: 120.0,
+        }]);
+        assert_eq!(model_overhead_position(&model), Some([3.0, 120.0, -4.0]));
+    }
+
+    #[test]
+    fn reforged_subtextures_resolve_diffuse_and_team_color_slots() {
+        let mut model = Model::new();
+        model.resize_textures(3);
+        model
+            .textures_mut(1)
+            .expect("team color texture")
+            .set_replaceable_id(1);
+        model
+            .textures_mut(2)
+            .expect("team glow texture")
+            .set_replaceable_id(2);
+
+        let mut layer = Layer::new();
+        layer.resize_sub_textures(5);
+        {
+            let mut diffuse = layer.sub_textures_mut(0).expect("diffuse slot");
+            diffuse.set_slot(LayerSlotType::DiffuseMap);
+            diffuse.set_texture_id(0);
+        }
+        {
+            let mut team_color = layer.sub_textures_mut(4).expect("team color slot");
+            team_color.set_slot(LayerSlotType::TeamColor);
+            team_color.set_texture_id(1);
+        }
+
+        assert_eq!(layer_diffuse_texture_id(&layer), 0);
+        assert!(layer_uses_replaceable(&model, &layer, 1));
+        assert!(!layer_uses_replaceable(&model, &layer, 2));
     }
 
     #[test]

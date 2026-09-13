@@ -4,18 +4,24 @@ use std::{
     path::{Component, Path},
 };
 
-use bevy::prelude::*;
+use bevy::{
+    asset::AssetId, camera::visibility::NoFrustumCulling, gltf::GltfMaterialExtras,
+    mesh::skinning::SkinnedMesh, prelude::*,
+};
 use serde::Deserialize;
 
 use crate::terrain::client_asset_root;
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
+const UNIT_ASSET_PREFIX: &str = "wc3/units";
+const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow00.png";
+const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
-    projectile_by_rawcode: BTreeMap<u32, Wc3VisualModel>,
+    projectile_by_rawcode: BTreeMap<u32, Wc3ProjectileVisual>,
     ability_by_rawcode: BTreeMap<u32, Vec<Wc3AbilityVisual>>,
     chain_lightning_abilities: BTreeSet<u32>,
     stun: Option<Wc3VisualModel>,
@@ -25,6 +31,12 @@ pub struct Wc3VisualSet {
 pub struct Wc3VisualModel {
     pub scene: Handle<WorldAsset>,
     pub emitters: Vec<Wc3ParticleEmitter>,
+}
+
+#[derive(Clone)]
+pub struct Wc3ProjectileVisual {
+    pub model: Wc3VisualModel,
+    pub missile_arc: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +54,7 @@ pub struct Wc3AbilityVisual {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Wc3ParticleEmitter {
     pub position: [f32; 3],
+    pub filter_mode: u32,
     pub speed: f32,
     pub variation: f32,
     pub latitude: f32,
@@ -70,6 +83,8 @@ struct VisualBinding {
     owner_rawcode: String,
     role: String,
     gltf: Option<String>,
+    #[serde(default)]
+    missile_arc: Option<f32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +98,15 @@ struct ModelManifest {
 pub struct Wc3EmitterSource {
     emitters: Vec<EmitterRuntime>,
 }
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Wc3TeamTint {
+    pub index: u8,
+    pub color: Color,
+}
+
+#[derive(Component)]
+pub(crate) struct Wc3MaterialProcessed;
 
 #[derive(Clone)]
 struct EmitterRuntime {
@@ -133,7 +157,7 @@ impl Wc3VisualSet {
     }
 
     #[must_use]
-    pub fn projectile(&self, rawcode: u32) -> Option<&Wc3VisualModel> {
+    pub fn projectile(&self, rawcode: u32) -> Option<&Wc3ProjectileVisual> {
         self.projectile_by_rawcode.get(&rawcode)
     }
 
@@ -174,6 +198,16 @@ impl Wc3EmitterSource {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct Wc3MaterialExtras {
+    #[serde(rename = "wc3FilterMode")]
+    filter_mode: Option<String>,
+    #[serde(rename = "wc3TeamColorUnderlay", default)]
+    team_color_underlay: bool,
+    #[serde(rename = "wc3TeamGlowLayer", default)]
+    team_glow_layer: bool,
+}
+
 impl Wc3ParticleAssets {
     pub fn new(meshes: &mut Assets<Mesh>) -> Self {
         let quad = meshes.add(Rectangle::new(1.0, 1.0));
@@ -193,8 +227,8 @@ impl Wc3ParticleAssets {
         let alpha = f32::from(emitter.segment_alpha[0]) / 255.0;
         let texture_key = emitter.texture.as_deref().unwrap_or("<none>");
         let key = format!(
-            "{texture_key}|{:.3}|{:.3}|{:.3}|{alpha:.3}",
-            color[0], color[1], color[2]
+            "{texture_key}|{}|{:.3}|{:.3}|{:.3}|{alpha:.3}",
+            emitter.filter_mode, color[0], color[1], color[2]
         );
         if let Some(handle) = self.materials.get(&key) {
             return handle.clone();
@@ -208,7 +242,7 @@ impl Wc3ParticleAssets {
             base_color,
             base_color_texture,
             emissive: LinearRgba::new(color[0], color[1], color[2], 1.0),
-            alpha_mode: AlphaMode::Blend,
+            alpha_mode: particle_alpha_mode(emitter.filter_mode),
             unlit: true,
             double_sided: true,
             ..default()
@@ -216,6 +250,148 @@ impl Wc3ParticleAssets {
         self.materials.insert(key, handle.clone());
         handle
     }
+}
+
+fn particle_alpha_mode(filter_mode: u32) -> AlphaMode {
+    match filter_mode {
+        0 => AlphaMode::Blend,
+        1 => AlphaMode::Add,
+        2 | 3 => AlphaMode::Multiply,
+        4 => AlphaMode::Mask(0.5),
+        _ => AlphaMode::Blend,
+    }
+}
+
+fn wc3_material_alpha_mode(filter_mode: &str, fallback: AlphaMode) -> AlphaMode {
+    match filter_mode {
+        "Transparent" => AlphaMode::Mask(0.5),
+        "Blend" => AlphaMode::Blend,
+        "Additive" | "AddAlpha" => AlphaMode::Add,
+        "Modulate" | "Modulate2x" => AlphaMode::Multiply,
+        "None" => fallback,
+        _ => fallback,
+    }
+}
+
+pub fn fix_wc3_scene_materials(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    parents: Query<&ChildOf>,
+    team_roots: Query<&Wc3TeamTint>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut team_materials: Local<HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>>,
+    mut team_glow_materials: Local<
+        HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>,
+    >,
+    mut meshes: Query<
+        (
+            Entity,
+            &Mesh3d,
+            &mut MeshMaterial3d<StandardMaterial>,
+            &GltfMaterialExtras,
+            Option<&SkinnedMesh>,
+        ),
+        Without<Wc3MaterialProcessed>,
+    >,
+) {
+    for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
+        let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
+            commands.entity(entity).insert(Wc3MaterialProcessed);
+            continue;
+        };
+        if extras.filter_mode.is_none() && !extras.team_color_underlay && !extras.team_glow_layer {
+            commands.entity(entity).insert(Wc3MaterialProcessed);
+            continue;
+        }
+
+        let source_material_id = material_handle.0.id();
+        let material_template = {
+            let Some(mut material) = materials.get_mut(&material_handle.0) else {
+                continue;
+            };
+            if let Some(filter_mode) = extras.filter_mode.as_deref() {
+                material.alpha_mode = wc3_material_alpha_mode(filter_mode, material.alpha_mode);
+            }
+            material.clone()
+        };
+        let team = wc3_team_tint(entity, &parents, &team_roots);
+
+        if extras.team_glow_layer
+            && let Some(team) = team
+        {
+            let key = (source_material_id, team.index);
+            let team_glow_handle = if let Some(handle) = team_glow_materials.get(&key) {
+                handle.clone()
+            } else {
+                let mut team_glow = material_template.clone();
+                let texture = if team.index == 0 {
+                    TEAM_GLOW_BLUE_TEXTURE
+                } else {
+                    TEAM_GLOW_RED_TEXTURE
+                };
+                team_glow.base_color = Color::WHITE;
+                team_glow.base_color_texture =
+                    Some(asset_server.load(format!("{UNIT_ASSET_PREFIX}/{texture}")));
+                team_glow.emissive = LinearRgba::WHITE;
+                team_glow.alpha_mode = AlphaMode::Add;
+                team_glow.unlit = true;
+                let handle = materials.add(team_glow);
+                team_glow_materials.insert(key, handle.clone());
+                handle
+            };
+            material_handle.0 = team_glow_handle;
+        }
+
+        if extras.team_color_underlay
+            && let Some(team) = team
+        {
+            let mut underlay = material_template;
+            let key = (source_material_id, team.index);
+            let underlay_handle = if let Some(handle) = team_materials.get(&key) {
+                handle.clone()
+            } else {
+                underlay.base_color_texture = None;
+                underlay.base_color = team.color;
+                underlay.emissive = LinearRgba::BLACK;
+                underlay.alpha_mode = AlphaMode::Opaque;
+                let handle = materials.add(underlay);
+                team_materials.insert(key, handle.clone());
+                handle
+            };
+            let mut underlay_entity = commands.spawn((
+                Mesh3d(mesh.0.clone()),
+                MeshMaterial3d(underlay_handle),
+                Transform::IDENTITY,
+                Visibility::default(),
+                NoFrustumCulling,
+            ));
+            if let Some(skin) = skin {
+                underlay_entity.insert(skin.clone());
+            }
+            let underlay_entity = underlay_entity.id();
+            commands.entity(entity).add_child(underlay_entity);
+        }
+
+        commands.entity(entity).insert(Wc3MaterialProcessed);
+    }
+}
+
+fn wc3_team_tint(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    team_roots: &Query<&Wc3TeamTint>,
+) -> Option<Wc3TeamTint> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(team) = team_roots.get(current) {
+            return Some(*team);
+        }
+        let Ok(parent) = parents.get(current) else {
+            return None;
+        };
+        current = parent.parent();
+    }
+    None
 }
 
 pub fn emit_wc3_particles(
@@ -351,7 +527,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
     let manifest: VisualManifest =
         serde_json::from_str(&json).map_err(|error| format!("invalid visual manifest: {error}"))?;
-    if manifest.schema_version != 1 {
+    if manifest.schema_version != 2 {
         return Err(format!(
             "unsupported visual asset manifest schema {}",
             manifest.schema_version
@@ -375,7 +551,20 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         let visual = resolve_visual_model(gltf, model, asset_server)?;
         match (binding.owner_kind.as_str(), binding.role.as_str()) {
             ("units", "attack1_projectile") => {
-                projectile_by_rawcode.insert(parse_rawcode(&binding.owner_rawcode)?, visual);
+                let missile_arc = binding.missile_arc.unwrap_or(0.0);
+                if !missile_arc.is_finite() || missile_arc < 0.0 {
+                    return Err(format!(
+                        "projectile {} has invalid missile arc {missile_arc}",
+                        binding.owner_rawcode
+                    ));
+                }
+                projectile_by_rawcode.insert(
+                    parse_rawcode(&binding.owner_rawcode)?,
+                    Wc3ProjectileVisual {
+                        model: visual,
+                        missile_arc,
+                    },
+                );
             }
             ("abilities", role @ ("target" | "effect" | "special" | "caster")) => {
                 ability_by_rawcode
@@ -480,6 +669,23 @@ mod tests {
         assert_eq!(wc3_direction_to_bevy(Vec3::Z), Vec3::Y);
         assert_eq!(wc3_direction_to_bevy(Vec3::Y), Vec3::NEG_Z);
         assert_eq!(wc3_direction_to_bevy(Vec3::X), Vec3::X);
+    }
+
+    #[test]
+    fn wc3_filter_modes_preserve_additive_and_transparent_rendering() {
+        assert_eq!(particle_alpha_mode(0), AlphaMode::Blend);
+        assert_eq!(particle_alpha_mode(1), AlphaMode::Add);
+        assert_eq!(particle_alpha_mode(2), AlphaMode::Multiply);
+        assert_eq!(particle_alpha_mode(3), AlphaMode::Multiply);
+        assert_eq!(particle_alpha_mode(4), AlphaMode::Mask(0.5));
+        assert_eq!(
+            wc3_material_alpha_mode("Transparent", AlphaMode::Blend),
+            AlphaMode::Mask(0.5)
+        );
+        assert_eq!(
+            wc3_material_alpha_mode("Additive", AlphaMode::Blend),
+            AlphaMode::Add
+        );
     }
 
     #[test]

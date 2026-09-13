@@ -20,8 +20,8 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3VisualModel, Wc3VisualSet,
-        emit_wc3_particles, update_wc3_particles,
+        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3TeamTint, Wc3VisualModel,
+        Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials, update_wc3_particles,
     },
 };
 
@@ -36,7 +36,7 @@ const AIR_WING_FLAP_AMPLITUDE: f32 = 0.72;
 const AIR_WING_BASE_ANGLE: f32 = 0.18;
 const BUILDING_HEIGHT: f32 = 96.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
-const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
+const DEFAULT_BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
 const PROJECTILE_IMPACT_SECONDS: f32 = 0.22;
 const PROJECTILE_IMPACT_RADIUS: f32 = 8.0;
@@ -255,6 +255,7 @@ struct PresentedEntry {
 struct PresentedProjectile {
     entity: Entity,
     last_position: Vec3,
+    missile_arc: Option<f32>,
 }
 
 #[derive(Resource, Default)]
@@ -410,6 +411,9 @@ struct HealthBarGizmos;
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct ProjectileEffectGizmos;
 
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct LightningEffectGizmos;
+
 #[derive(Resource, Debug, Default)]
 struct FpsDisplay {
     elapsed_seconds: f32,
@@ -453,6 +457,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<TimedWc3Effects>()
             .init_gizmo_group::<HealthBarGizmos>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
+            .init_gizmo_group::<LightningEffectGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -465,6 +470,7 @@ impl Plugin for CastlePresentationPlugin {
                     update_camera,
                     prepare_unit_model_animations,
                     sync_render_entities,
+                    fix_wc3_scene_materials,
                     setup_imported_unit_animation_players,
                     trigger_attack_animations,
                     update_imported_unit_animations,
@@ -525,6 +531,9 @@ fn setup_scene(
     health_bar_config.line.perspective = false;
     let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
     projectile_effect_config.line.width = 3.0;
+    let (lightning_effect_config, _) = gizmo_configs.config_mut::<LightningEffectGizmos>();
+    lightning_effect_config.line.width = 9.0;
+    lightning_effect_config.line.perspective = false;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
     let ranged_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
     let ballistic_unit_mesh = meshes.add(Cuboid::new(7.0, UNIT_RANGED_HEIGHT, 7.0));
@@ -1724,17 +1733,6 @@ fn sync_render_entities(
                 AbilityCastTarget::AllEnemyUnits => None,
             });
 
-        if wc3_visuals.is_chain_lightning(cast.ability.0)
-            && let (Some(start), Some(end)) = (source_position, target_position)
-        {
-            lightning_impacts.0.push(LightningImpact {
-                start: start + Vec3::Y * 8.0,
-                end: end + Vec3::Y * 8.0,
-                seed: cast.ability.0 ^ cast.source.0 as u32 ^ samples.current.tick as u32,
-                remaining: LIGHTNING_EFFECT_SECONDS,
-            });
-        }
-
         for visual in wc3_visuals.ability(cast.ability.0) {
             let position = match visual.anchor {
                 Wc3AbilityVisualAnchor::Source => source_position,
@@ -1789,6 +1787,10 @@ fn sync_render_entities(
                     sim_id: unit.id,
                     rawcode,
                     presentation_root: entity,
+                },
+                Wc3TeamTint {
+                    index: unit.team.0,
+                    color: team_color(unit.team),
                 },
                 Transform {
                     translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
@@ -1847,7 +1849,7 @@ fn sync_render_entities(
                 continue;
             }
             let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
-                + Vec3::Y * unit_height(unit) * 1.15;
+                + Vec3::Y * unit_stun_height(unit, &render_map, &unit_models);
             spawn_stun_effect(
                 &mut commands,
                 &mut render_map,
@@ -1927,6 +1929,10 @@ fn sync_render_entities(
                     rawcode,
                     presentation_root: entity,
                 },
+                Wc3TeamTint {
+                    index: corpse.source_team.0,
+                    color: team_color(corpse.source_team),
+                },
                 Transform {
                     rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
                     scale: Vec3::splat(model.scale),
@@ -1953,9 +1959,11 @@ fn sync_render_entities(
         }
         let position = sim_point_to_terrain_world(projectile.launch_position, &terrain)
             + Vec3::Y * PROJECTILE_HEIGHT;
-        let imported_model = projectile_source_rawcode(projectile, &samples)
+        let imported_projectile = projectile_source_rawcode(projectile, &samples)
             .and_then(|rawcode| wc3_visuals.projectile(rawcode));
-        let entity = if let Some(model) = imported_model {
+        let missile_arc = imported_projectile.map(|visual| visual.missile_arc);
+        let entity = if let Some(visual) = imported_projectile {
+            let model = &visual.model;
             commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .with_child((
@@ -1978,6 +1986,7 @@ fn sync_render_entities(
             PresentedProjectile {
                 entity,
                 last_position: position,
+                missile_arc,
             },
         );
     }
@@ -1989,12 +1998,13 @@ fn interpolate_render_transforms(
         Res<PresentationSamples>,
         Res<WorldMetrics>,
         Res<TerrainSurface>,
+        Res<UnitModelSet>,
     ),
     mut render_map: ResMut<RenderMap>,
     mut transforms: Query<&mut Transform>,
 ) {
     let (time, fixed_time, playback) = clocks;
-    let (samples, metrics, terrain) = world;
+    let (samples, metrics, terrain, unit_models) = world;
     let alpha = playback.interpolation_alpha(&fixed_time);
     let render_tick = samples.previous.tick as f32
         + (samples.current.tick.saturating_sub(samples.previous.tick) as f32) * alpha;
@@ -2028,7 +2038,8 @@ fn interpolate_render_transforms(
         if let Some(stun_entity) = render_map.stun_effects.get(id)
             && let Ok(mut transform) = transforms.get_mut(*stun_entity)
         {
-            transform.translation = ground_position + Vec3::Y * unit_height(current) * 1.15;
+            transform.translation =
+                ground_position + Vec3::Y * unit_stun_height(current, &render_map, &unit_models);
         }
     }
 
@@ -2059,8 +2070,15 @@ fn interpolate_render_transforms(
         let Some(projectile_entry) = render_map.projectiles.get_mut(id) else {
             continue;
         };
-        let (position, rotation) =
-            projectile_pose(projectile, &samples, &metrics, &terrain, alpha, render_tick);
+        let (position, rotation) = projectile_pose(
+            projectile,
+            projectile_entry.missile_arc,
+            &samples,
+            &metrics,
+            &terrain,
+            alpha,
+            render_tick,
+        );
         projectile_entry.last_position = position;
         if let Ok(mut transform) = transforms.get_mut(projectile_entry.entity) {
             if transform.translation != position {
@@ -2073,6 +2091,7 @@ fn interpolate_render_transforms(
 
 fn projectile_pose(
     projectile: &ProjectileView,
+    missile_arc: Option<f32>,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
     terrain: &TerrainSurface,
@@ -2086,14 +2105,15 @@ fn projectile_pose(
         .saturating_sub(projectile.launch_tick)
         .max(1) as f32;
     let progress = ((render_tick - projectile.launch_tick as f32) / travel_ticks).clamp(0.0, 1.0);
-    let position = projectile_position_at_progress(projectile, start, target, progress);
+    let position =
+        projectile_position_at_progress(projectile, start, target, progress, missile_arc);
     let tangent_progress = if progress < 0.98 {
         (progress + 0.02).min(1.0)
     } else {
         (progress - 0.02).max(0.0)
     };
     let tangent_position =
-        projectile_position_at_progress(projectile, start, target, tangent_progress);
+        projectile_position_at_progress(projectile, start, target, tangent_progress, missile_arc);
     let rotation = projectile_rotation(position, tangent_position, progress < 0.98);
     (position, rotation)
 }
@@ -2135,13 +2155,26 @@ fn projectile_position_at_progress(
     start: Vec3,
     target: Vec3,
     progress: f32,
+    missile_arc: Option<f32>,
 ) -> Vec3 {
     let mut position = start.lerp(target, progress);
     position.y += PROJECTILE_HEIGHT;
-    if matches!(projectile.kind, ProjectileViewKind::Ballistic { .. }) {
-        position.y += BALLISTIC_ARC_HEIGHT * 4.0 * progress * (1.0 - progress);
+    let arc_height = missile_arc
+        .map(|arc| wc3_missile_arc_height(start, target, arc))
+        .or_else(|| {
+            matches!(projectile.kind, ProjectileViewKind::Ballistic { .. })
+                .then_some(DEFAULT_BALLISTIC_ARC_HEIGHT)
+        });
+    if let Some(arc_height) = arc_height {
+        position.y += arc_height * 4.0 * progress * (1.0 - progress);
     }
     position
+}
+
+fn wc3_missile_arc_height(start: Vec3, target: Vec3, missile_arc: f32) -> f32 {
+    let horizontal_distance = (target - start).xz().length();
+    let launch_angle = missile_arc.clamp(0.0, 0.99) * std::f32::consts::FRAC_PI_2;
+    launch_angle.tan() * horizontal_distance * 0.25
 }
 
 fn unit_facing_rotation(
@@ -2334,7 +2367,7 @@ fn age_timed_wc3_effects(
 
 fn draw_lightning_effects(
     impacts: Res<LightningImpacts>,
-    mut gizmos: Gizmos<ProjectileEffectGizmos>,
+    mut gizmos: Gizmos<LightningEffectGizmos>,
 ) {
     const SEGMENTS: usize = 10;
     for impact in &impacts.0 {
@@ -2876,6 +2909,16 @@ pub(crate) fn unit_height(unit: &UnitSample) -> f32 {
     base * unit_render_scale(unit)
 }
 
+fn unit_stun_height(unit: &UnitSample, render_map: &RenderMap, models: &UnitModelSet) -> f32 {
+    render_map
+        .units
+        .get(&unit.id)
+        .and_then(|entry| entry.imported_rawcode)
+        .and_then(|rawcode| models.get(rawcode))
+        .and_then(|model| model.overhead_height)
+        .map_or_else(|| unit_height(unit) * 1.15, |height| height * 1.05)
+}
+
 fn building_height(building: &BuildingSample) -> f32 {
     match building.visual_kind {
         BuildingVisualKind::Structure => BUILDING_HEIGHT * 1.25,
@@ -3101,8 +3144,8 @@ mod tests {
         };
         let start = Vec3::ZERO;
         let target = Vec3::new(100.0, 0.0, 0.0);
-        let position = projectile_position_at_progress(&projectile, start, target, 0.40);
-        let tangent = projectile_position_at_progress(&projectile, start, target, 0.42);
+        let position = projectile_position_at_progress(&projectile, start, target, 0.40, None);
+        let tangent = projectile_position_at_progress(&projectile, start, target, 0.42, None);
         let rotation = projectile_rotation(position, tangent, true);
         assert!((rotation * Vec3::Z - Vec3::X).length() < 1e-5);
     }
@@ -3128,14 +3171,23 @@ mod tests {
         };
         let start = Vec3::ZERO;
         let target = Vec3::new(100.0, 0.0, 0.0);
-        let rising = projectile_position_at_progress(&projectile, start, target, 0.25);
-        let rising_next = projectile_position_at_progress(&projectile, start, target, 0.27);
-        let falling = projectile_position_at_progress(&projectile, start, target, 0.75);
-        let falling_next = projectile_position_at_progress(&projectile, start, target, 0.77);
+        let rising = projectile_position_at_progress(&projectile, start, target, 0.25, None);
+        let rising_next = projectile_position_at_progress(&projectile, start, target, 0.27, None);
+        let falling = projectile_position_at_progress(&projectile, start, target, 0.75, None);
+        let falling_next = projectile_position_at_progress(&projectile, start, target, 0.77, None);
         assert!(rising_next.y > rising.y);
         assert!(falling_next.y < falling.y);
         assert!((projectile_rotation(rising, rising_next, true) * Vec3::Z).y > 0.0);
         assert!((projectile_rotation(falling, falling_next, true) * Vec3::Z).y < 0.0);
+    }
+
+    #[test]
+    fn extracted_catapult_arc_is_much_higher_than_placeholder_arc() {
+        let start = Vec3::ZERO;
+        let target = Vec3::new(1_000.0, 0.0, 0.0);
+        let extracted = wc3_missile_arc_height(start, target, 0.4);
+        assert!(extracted > DEFAULT_BALLISTIC_ARC_HEIGHT * 5.0);
+        assert!(extracted < 250.0);
     }
 
     #[test]

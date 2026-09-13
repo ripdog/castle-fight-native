@@ -35,6 +35,7 @@ struct VisualAssetSpec {
     owner_rawcode: String,
     role: String,
     model_path: String,
+    missile_arc: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -327,6 +328,7 @@ fn load_visual_assets(
     let recovered = header_index(&headers, "recovered_value_json")?;
 
     let mut assets = BTreeSet::<(String, String, String, String)>::new();
+    let mut missile_arcs = BTreeMap::<(String, String), f32>::new();
     let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
     let mut stun_model_path = None;
     for row in fields.records() {
@@ -355,6 +357,19 @@ fn load_visual_assets(
             ("buffs", "fsat") => Some("special"),
             _ => None,
         };
+        if kind == "units" {
+            let projectile_role = match field {
+                "uma1" => Some("attack1_projectile"),
+                "uma2" => Some("attack2_projectile"),
+                _ => None,
+            };
+            if let Some(projectile_role) = projectile_role
+                && let Some(arc) = parse_json_f32(row.get(recovered).unwrap_or_default())
+            {
+                missile_arcs.insert((rawcode.to_owned(), projectile_role.to_owned()), arc);
+            }
+        }
+
         if let Some(role) = role
             && matches!(row.get(value_type), Some("model") | Some("modelList"))
         {
@@ -379,14 +394,18 @@ fn load_visual_assets(
     Ok(VisualAssetCatalog {
         assets: assets
             .into_iter()
-            .map(
-                |(owner_kind, owner_rawcode, role, model_path)| VisualAssetSpec {
+            .map(|(owner_kind, owner_rawcode, role, model_path)| {
+                let missile_arc = missile_arcs
+                    .get(&(owner_rawcode.clone(), role.clone()))
+                    .copied();
+                VisualAssetSpec {
                     owner_kind,
                     owner_rawcode,
                     role,
                     model_path,
-                },
-            )
+                    missile_arc,
+                }
+            })
             .collect(),
         chain_lightning_abilities: chain_lightning_abilities.into_keys().collect(),
         stun_model_path,
