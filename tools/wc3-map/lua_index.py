@@ -4447,7 +4447,14 @@ def _extract_production_unit_special_mechanics(
     # VTlt tree in front of it and is issued the native Grab Tree order. The
     # follow-up callback resumes attack after 1.6 s and schedules destruction
     # of that temporary destructable another 2 s later.
-    enter_start, _ = require_tokens("onUnitEnteredMap", {"1697656902", "castNatureAttackTree"})
+    enter_start, _ = require_tokens(
+        "onUnitEnteredMap",
+        {"1848652098", "1697656902", "__wurst_safe_SetUnitVertexColor", "castNatureAttackTree"},
+    )
+    enter_function = next(function for function in functions if function["name"] == "onUnitEnteredMap")
+    enter_source = data[int(enter_function["start"]):int(enter_function["end"])]
+    if b"if(qcs==1848652098)then __wurst_safe_SetUnitVertexColor(ocs,82,0,135,102)" not in enter_source:
+        raise ValueError("Shadow Drake on-enter branch is no longer the verified visual-only vertex tint")
     giant_start, _ = require_tokens(
         "castNatureAttackTree",
         {

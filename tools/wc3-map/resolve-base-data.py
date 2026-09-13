@@ -2061,6 +2061,122 @@ def main() -> None:
         production_special_rows,
     )
 
+    # Closure audit for production-unit-specific branches in core runtime event
+    # handlers. A new explicit production rawcode in these handlers must either
+    # gain an importer-ready special row, already be covered by the scripted
+    # unit-spell registry, or be one of the two strictly classified exceptions.
+    special_kinds_by_unit: dict[str, set[str]] = defaultdict(set)
+    for row in production_special_rows:
+        special_kinds_by_unit[str(row[2])].add(str(row[4]))
+
+    registered_unit_spell_units: set[str] = set()
+    if unit_spell_registration_path.exists():
+        with unit_spell_registration_path.open(encoding="utf-8", newline="") as handle:
+            registered_unit_spell_units = {
+                row["unit_rawcode"] for row in csv.DictReader(handle, delimiter="\t")
+            }
+
+    core_runtime_handler_functions = {
+        "onUnitEnteredMap",
+        "onSummonedUnit",
+        "onUnitTrained",
+        "fJ",
+        "mJ",
+        "checkForWrongOrder",
+        "handleSourceDamageEffects",
+        "handleTargetDamageEffects",
+        "handleFanOfKnives",
+        "applyVampireArmorReduction",
+        "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+        "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood",
+        "EventListener_add_FireElemental_onEvent_add_FireElemental",
+        "EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend",
+    }
+    explicit_runtime_functions_by_unit: dict[str, set[str]] = defaultdict(set)
+    rawcode_reference_path = map_root / "script" / "rawcode-reference-sites.tsv"
+    if rawcode_reference_path.exists():
+        with rawcode_reference_path.open(encoding="utf-8", newline="") as handle:
+            for reference in csv.DictReader(handle, delimiter="\t"):
+                rawcode = reference["rawcode"]
+                if (
+                    reference["categories"] == "units"
+                    and rawcode in production_source_by_unit
+                    and reference["function"] in core_runtime_handler_functions
+                ):
+                    explicit_runtime_functions_by_unit[rawcode].add(reference["function"])
+
+    # Marker-driven branches do not mention their production rawcodes in the
+    # handler, so include those owners in the same audit explicitly.
+    marker_requirements = {
+        "A0DW": "source-damage-health-scaled-aftershock",
+        "A0DX": "target-damage-melee-thunderbolt-retaliation",
+    }
+    marker_runtime_hooks_by_unit: dict[str, set[str]] = defaultdict(set)
+    for unit_rawcode in production_source_by_unit:
+        unit = static_units.get(unit_rawcode)
+        if unit is None:
+            continue
+        attached = set(rawcode_list(unit["abilities"]))
+        for marker_rawcode, required_kind in marker_requirements.items():
+            if marker_rawcode not in attached:
+                continue
+            if required_kind not in special_kinds_by_unit.get(unit_rawcode, set()):
+                raise ValueError(
+                    f"marker-driven production runtime hook is not normalized: "
+                    f"{unit_rawcode} {marker_rawcode} expected {required_kind}"
+                )
+            marker_runtime_hooks_by_unit[unit_rawcode].add(f"ability-marker:{marker_rawcode}")
+
+    runtime_coverage_exceptions = {
+        "h02Z": (
+            "parent-special-endpoint",
+            "Fire Elemental is the h02Z replacement endpoint already proven by Greater Fire Elemental's u00F split row",
+        ),
+        "n01B": (
+            "verified-visual-only",
+            "Shadow Drake's onUnitEnteredMap rawcode branch is strictly asserted in lua_index.py to only set vertex color 82,0,135,102",
+        ),
+    }
+    runtime_coverage_rows: list[list[Any]] = []
+    audited_runtime_units = sorted(set(explicit_runtime_functions_by_unit) | set(marker_runtime_hooks_by_unit))
+    for unit_rawcode in audited_runtime_units:
+        production = production_source_by_unit[unit_rawcode]
+        unit = static_units[unit_rawcode]
+        special_kinds = sorted(special_kinds_by_unit.get(unit_rawcode, set()))
+        has_unit_spell = unit_rawcode in registered_unit_spell_units
+        if special_kinds and has_unit_spell:
+            status = "special-mechanic+unit-spell"
+            note = "runtime branch has dedicated special normalization and scripted unit-spell coverage"
+        elif special_kinds:
+            status = "special-mechanic"
+            note = "runtime branch has dedicated importer-ready special normalization"
+        elif has_unit_spell:
+            status = "unit-spell"
+            note = "runtime branch is covered by the scripted unit-spell normalization"
+        elif unit_rawcode in runtime_coverage_exceptions:
+            status, note = runtime_coverage_exceptions[unit_rawcode]
+        else:
+            raise ValueError(
+                f"uncovered production-unit runtime branch: {unit_rawcode} {unit['name']} "
+                f"functions={sorted(explicit_runtime_functions_by_unit.get(unit_rawcode, set()))}"
+            )
+        runtime_coverage_rows.append([
+            production["building_rawcode"], production["building_names"],
+            unit_rawcode, unit["name"],
+            ",".join(sorted(explicit_runtime_functions_by_unit.get(unit_rawcode, set()))),
+            ",".join(sorted(marker_runtime_hooks_by_unit.get(unit_rawcode, set()))),
+            ",".join(special_kinds), int(has_unit_spell), status, note,
+        ])
+    write_tsv(
+        output / "production-unit-runtime-coverage.tsv",
+        [
+            "building_rawcode", "building_names", "unit_rawcode", "unit_names",
+            "explicit_runtime_functions", "marker_runtime_hooks", "special_mechanic_kinds",
+            "has_scripted_unit_spell", "coverage_status", "coverage_note",
+        ],
+        runtime_coverage_rows,
+    )
+
     if unit_spell_registration_path.exists():
         with unit_spell_registration_path.open(encoding="utf-8", newline="") as handle:
             for registration in csv.DictReader(handle, delimiter="\t"):
@@ -3630,6 +3746,10 @@ def main() -> None:
         "production_unit_special_mechanic_kinds": dict(sorted(Counter(
             row[4] for row in production_special_rows
         ).items())),
+        "production_unit_runtime_coverage_rows": len(runtime_coverage_rows),
+        "production_unit_runtime_coverage_status_counts": dict(sorted(Counter(
+            row[8] for row in runtime_coverage_rows
+        ).items())),
         "building_improvement_spawn_mechanic_rows": len(building_improvement_spawn_by_source),
         "production_unit_ability_links": len(production_ability_rows),
         "production_unit_unique_abilities": len(production_ability_unique),
@@ -3697,6 +3817,7 @@ def main() -> None:
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
+            "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus marker-driven Earth/Lightning hooks; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

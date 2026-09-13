@@ -453,6 +453,29 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(rocketeer["death_explosion_object_data"]["Partial Damage Amount"], 175)
         self.assertEqual(rocketeer["death_explosion_object_data"]["Partial Damage Radius"], 320)
 
+    def test_production_unit_runtime_coverage_is_closed(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["production_unit_runtime_coverage_rows"], 32)
+        self.assertEqual(summary["production_unit_runtime_coverage_status_counts"], {
+            "parent-special-endpoint": 1,
+            "special-mechanic": 22,
+            "special-mechanic+unit-spell": 8,
+            "verified-visual-only": 1,
+        })
+        with (self.resolved / "production-unit-runtime-coverage.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 32)
+        self.assertEqual(rows["n01B"]["coverage_status"], "verified-visual-only")
+        self.assertIn("vertex color 82,0,135,102", rows["n01B"]["coverage_note"])
+        self.assertEqual(rows["h02Z"]["coverage_status"], "parent-special-endpoint")
+        self.assertIn("u00F split row", rows["h02Z"]["coverage_note"])
+        for rawcode in ("h034", "h03N"):
+            self.assertEqual(rows[rawcode]["marker_runtime_hooks"], "ability-marker:A0DW")
+            self.assertIn("source-damage-health-scaled-aftershock", rows[rawcode]["special_mechanic_kinds"])
+        for rawcode in ("h03P", "h03R"):
+            self.assertEqual(rows[rawcode]["marker_runtime_hooks"], "ability-marker:A0DX")
+            self.assertIn("target-damage-melee-thunderbolt-retaliation", rows[rawcode]["special_mechanic_kinds"])
+
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
             units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
