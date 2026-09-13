@@ -4119,19 +4119,21 @@ def _extract_protected_filter_bindings(
     data: bytes,
     functions: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Resolve W3P-protected Filter wrappers when Wurst emits their predicate next.
+    """Resolve generated Filter wrappers only when their binding is structurally proven.
 
-    Castle Fight's protected runtime stores several Filter callbacks as opaque
-    ``_I[key](...)`` function-value lookups. For the North/Rescue subsystem the
-    generated initializer emits the wrapper assignments first and the concrete
-    named predicate implementations immediately afterwards. That compiler
-    ordering is static evidence: the predicate bodies themselves remain visible,
-    so we can recover the semantic filter without decrypting the protected key.
+    W3P replaces many Wurst filter-function values with opaque ``_I[key]``
+    lookups while leaving the concrete generated predicate functions readable.
+    Source adjacency alone is *not* enough to pair them: initializers can emit
+    helper functions between wrappers and predicates, and the predicate function
+    order can differ from the wrapper priority order. The previous resolver
+    skipped non-matching functions independently for each wrapper, which could
+    silently shift a whole group of bindings.
 
-    This is intentionally narrower than general virtual-dispatch resolution. A
-    binding is promoted only when the wrapper is a Filter assignment and a nearby
-    generated function has an unambiguous ``isAliveCombatSapper`` + enemy/ally
-    predicate body. Otherwise the symbol remains unresolved.
+    This extractor therefore uses two conservative sources of evidence:
+    1. exact Castle Fight bindings whose use sites prove wrapper priority/role;
+    2. an atomic adjacency fallback only when the number of wrappers exactly
+       matches the complete nearby enemy/ally predicate sequence.
+    Everything else remains explicit unresolved/dynamic provenance.
     """
     ordered_functions = sorted(functions, key=lambda function: int(function["start"]))
     bindings: list[dict[str, object]] = []
@@ -4139,8 +4141,14 @@ def _extract_protected_filter_bindings(
     def function_tokens(function_name: str) -> tuple[int, list[LuaToken]] | None:
         return _function_body_tokens(data, functions, function_name)
 
-    def predicate_kind(tokens: list[LuaToken]) -> str | None:
-        texts = [token.text for token in tokens]
+    def token_texts(function_name: str) -> set[str]:
+        body = function_tokens(function_name)
+        if body is None:
+            raise ValueError(f"protected filter binding target is missing: {function_name}")
+        return {token.text for token in body[1]}
+
+    def classic_predicate_kind(tokens: list[LuaToken]) -> str | None:
+        texts = {token.text for token in tokens}
         if "isAliveCombatSapper" not in texts or "mIb" not in texts:
             return None
         if "unit_isEnemyOf" in texts:
@@ -4148,6 +4156,96 @@ def _extract_protected_filter_bindings(
         if "unit_isAllyOf" in texts:
             return "alive-combat-sapper;ally-of-mIb"
         return None
+
+    # These mappings are not guesses from source order. Their surrounding use
+    # sites make the role unique. Examples: Assassin chooses its common mana
+    # group first, then normal (<150 HP) versus Royal (<300 HP) ambush groups;
+    # Desert Replenishment must progress from >200 missing HP to any wounded
+    # ally to the remaining ally-state filter; Peyote alone consumes V0 and
+    # therefore proves the enemy filter; QX is enumerated after fJ sets UX/TX
+    # specifically for wL's side-effect healing callback.
+    exact_specs: dict[tuple[str, str], tuple[str, str, set[str]]] = {
+        ("jG", "Gib"): (
+            "kG",
+            "wurst-closure-for-groups-dispatch;filterCallback(GetFilterUnit);side-effect-only",
+            {"_I", "_b"},
+        ),
+        ("lE", "NAb"): (
+            "mE",
+            "life>0.405;valid-assassin-target;max-mana>10",
+            {"widget_getLife", "isValidAssassinTarget", "UNIT_STATE_MAX_MANA", "10."},
+        ),
+        ("lE", "MAb"): (
+            "nE",
+            "life>0.405;valid-assassin-target;life<150",
+            {"widget_getLife", "isValidAssassinTarget", "150."},
+        ),
+        ("lE", "LAb"): (
+            "oE",
+            "life>0.405;valid-assassin-target;life<300",
+            {"widget_getLife", "isValidAssassinTarget", "300."},
+        ),
+        ("lN", "xdo"): (
+            "KN",
+            "destructable-type-in-generated-six-type-set",
+            {"GetFilterDestructable", "__wurst_safe_GetDestructableTypeId"},
+        ),
+        ("nH", "ycb"): (
+            "oH",
+            "alive;structure;gobbo-repairable-target",
+            {"widget_getLife", "UNIT_TYPE_STRUCTURE", "isGobboRepairableTarget"},
+        ),
+        ("nH", "xcb"): (
+            "pH",
+            "alive;mechanical;gobbo-repairable-target",
+            {"widget_getLife", "UNIT_TYPE_MECHANICAL", "isGobboRepairableTarget"},
+        ),
+        ("oL", "e0"): (
+            "pL",
+            "normal-player-owner;missing-A02E;unit-type-not-x002;unit-type-not-Tdb",
+            {"bj_MAX_PLAYERS", "unit_getAbilityLevel", "1093677637", "2016423986", "Tdb"},
+        ),
+        ("pJ", "G6"): (
+            "qJ",
+            "alive-combat-sapper;enemy-of-mIb;vulnerable;not-tentacle;mana>100",
+            {"isAliveCombatSapper", "unit_isEnemyOf", "isVulnerable", "isNotTentacle", "unit_getMana", "100."},
+        ),
+        ("pJ", "F6"): (
+            "rJ",
+            "alive-combat-sapper;enemy-of-mIb;vulnerable;not-tentacle;mana>0",
+            {"isAliveCombatSapper", "unit_isEnemyOf", "isVulnerable", "isNotTentacle", "unit_getMana", "0.0"},
+        ),
+        ("rK", "Y0"): (
+            "tK",
+            "life>0.405;ally-of-mIb;combat-sapper;missing-hp>200",
+            {"widget_getLife", "unit_isAllyOf", "isCombatSapper", "__wurst_safe_BlzGetUnitMaxHP", "200"},
+        ),
+        ("rK", "X0"): (
+            "sK",
+            "life>0.405;ally-of-mIb;combat-sapper;wounded",
+            {"widget_getLife", "unit_isAllyOf", "isCombatSapper", "__wurst_safe_BlzGetUnitMaxHP"},
+        ),
+        ("rK", "W0"): (
+            "uK",
+            "alive-combat-sapper;ally-of-mIb;protected-state>0-and<99.9",
+            {"isAliveCombatSapper", "unit_isAllyOf", "0.0", "99.9"},
+        ),
+        ("rK", "V0"): (
+            "vK",
+            "alive-combat-sapper;enemy-of-mIb;vulnerable;not-tentacle",
+            {"isAliveCombatSapper", "unit_isEnemyOf", "isVulnerable", "isNotTentacle"},
+        ),
+        ("uL", "SX"): (
+            "vL",
+            "alive-combat-sapper;enemy-of-mIb",
+            {"isAliveCombatSapper", "unit_isEnemyOf"},
+        ),
+        ("uL", "QX"): (
+            "wL",
+            "side-effect-heal-alive-allied-combat-sappers;matching-UX:+TX;others:+0.2*TX;always-false",
+            {"isAliveCombatSapper", "unit_isAllyOf", "UX", "TX", "__wurst_safe_SetWidgetLife", "false"},
+        ),
+    }
 
     for initializer in ordered_functions:
         initializer_name = str(initializer["name"])
@@ -4168,48 +4266,80 @@ def _extract_protected_filter_bindings(
         if not filter_assignments:
             continue
 
-        following = [
-            function for function in ordered_functions
-            if int(function["start"]) >= int(initializer["end"])
-        ]
-        used_candidates: set[str] = set()
-        for variable, byte_offset in filter_assignments:
-            resolved: dict[str, object] | None = None
-            for candidate in following:
-                candidate_name = str(candidate["name"])
-                if candidate_name in used_candidates:
-                    continue
-                distance = int(candidate["start"]) - int(initializer["end"])
-                if distance > 10000:
-                    break
-                candidate_body = function_tokens(candidate_name)
-                if candidate_body is None:
-                    continue
-                candidate_kind = predicate_kind(candidate_body[1])
-                if candidate_kind is None:
-                    continue
-                used_candidates.add(candidate_name)
-                resolved = {
+        # Safe generic fallback for small unprotected/synthetic compiler shapes:
+        # pair only if the *complete* nearby classic predicate sequence has the
+        # same cardinality as the wrapper sequence. No per-wrapper skipping.
+        following_classic: list[tuple[str, str]] = []
+        for candidate in ordered_functions:
+            if int(candidate["start"]) < int(initializer["end"]):
+                continue
+            if int(candidate["start"]) - int(initializer["end"]) > 10000:
+                break
+            candidate_body = function_tokens(str(candidate["name"]))
+            if candidate_body is None:
+                continue
+            kind = classic_predicate_kind(candidate_body[1])
+            if kind is not None:
+                following_classic.append((str(candidate["name"]), kind))
+        atomic_fallback = following_classic if len(following_classic) == len(filter_assignments) else []
+
+        for assignment_index, (variable, byte_offset) in enumerate(filter_assignments):
+            spec = exact_specs.get((initializer_name, variable))
+            if spec is not None:
+                resolved_function, predicate, required_tokens = spec
+                missing = required_tokens - token_texts(resolved_function)
+                if missing:
+                    raise ValueError(
+                        f"protected filter binding {initializer_name}.{variable}->{resolved_function} changed; "
+                        f"missing tokens={sorted(missing)}"
+                    )
+                bindings.append({
                     "symbol": variable,
                     "initializer_function": initializer_name,
-                    "resolved_function": str(candidate["name"]),
-                    "predicate": candidate_kind,
+                    "resolved_function": resolved_function,
+                    "predicate": predicate,
                     "resolution_status": "resolved",
-                    "evidence_kind": "static-generated-filter-adjacent-function",
+                    "evidence_kind": "static-use-site-and-generated-function-structure",
                     "byte_offset": byte_offset,
-                }
-                break
-            if resolved is None:
-                resolved = {
+                })
+                continue
+
+            # registerPlayerUnitEvent wraps a caller-supplied function value; SCr
+            # is a transient local, not one globally fixed protected predicate.
+            if initializer_name == "registerPlayerUnitEvent" and variable == "SCr":
+                bindings.append({
                     "symbol": variable,
                     "initializer_function": initializer_name,
                     "resolved_function": "",
-                    "predicate": "",
-                    "resolution_status": "unresolved",
-                    "evidence_kind": "protected-filter-symbol-unresolved",
+                    "predicate": "function-argument-NCr",
+                    "resolution_status": "dynamic",
+                    "evidence_kind": "runtime-function-argument-filter-wrapper",
                     "byte_offset": byte_offset,
-                }
-            bindings.append(resolved)
+                })
+                continue
+
+            if atomic_fallback:
+                resolved_function, predicate = atomic_fallback[assignment_index]
+                bindings.append({
+                    "symbol": variable,
+                    "initializer_function": initializer_name,
+                    "resolved_function": resolved_function,
+                    "predicate": predicate,
+                    "resolution_status": "resolved",
+                    "evidence_kind": "static-generated-filter-atomic-adjacency",
+                    "byte_offset": byte_offset,
+                })
+                continue
+
+            bindings.append({
+                "symbol": variable,
+                "initializer_function": initializer_name,
+                "resolved_function": "",
+                "predicate": "",
+                "resolution_status": "unresolved",
+                "evidence_kind": "protected-filter-symbol-unresolved",
+                "byte_offset": byte_offset,
+            })
 
     bindings.sort(key=lambda row: (str(row["initializer_function"]), int(row["byte_offset"]), str(row["symbol"])))
     return bindings

@@ -482,12 +482,31 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_unit_spell_semantic_rows"], 37)
         self.assertEqual(summary["protected_filter_binding_rows"], 22)
-        self.assertEqual(summary["protected_filter_binding_resolved_rows"], 6)
+        self.assertEqual(summary["protected_filter_binding_resolved_rows"], 16)
+        self.assertEqual(summary["protected_filter_binding_status_counts"], {
+            "dynamic": 1, "resolved": 16, "unresolved": 5,
+        })
         with (self.resolved / "protected-filter-bindings.tsv").open(encoding="utf-8") as handle:
             filters = {row["symbol"]: row for row in csv.DictReader(handle, delimiter="\t")}
         self.assertEqual(filters["SX"]["resolved_function"], "vL")
         self.assertEqual(filters["SX"]["predicate"], "alive-combat-sapper;enemy-of-mIb")
-        self.assertEqual(filters["QX"]["resolution_status"], "unresolved")
+        self.assertEqual(filters["QX"]["resolved_function"], "wL")
+        self.assertIn("always-false", filters["QX"]["predicate"])
+        self.assertEqual(filters["RX"]["resolution_status"], "unresolved")
+        self.assertEqual(filters["Y0"]["resolved_function"], "tK")
+        self.assertEqual(filters["X0"]["resolved_function"], "sK")
+        self.assertEqual(filters["W0"]["resolved_function"], "uK")
+        self.assertEqual(filters["V0"]["resolved_function"], "vK")
+        self.assertEqual(filters["G6"]["resolved_function"], "qJ")
+        self.assertIn("mana>100", filters["G6"]["predicate"])
+        self.assertEqual(filters["F6"]["resolved_function"], "rJ")
+        self.assertIn("mana>0", filters["F6"]["predicate"])
+        self.assertEqual(filters["Gib"]["resolved_function"], "kG")
+        self.assertIn("closure-for-groups-dispatch", filters["Gib"]["predicate"])
+        self.assertEqual(filters["NAb"]["resolved_function"], "mE")
+        self.assertEqual(filters["MAb"]["resolved_function"], "nE")
+        self.assertEqual(filters["LAb"]["resolved_function"], "oE")
+        self.assertEqual(filters["SCr"]["resolution_status"], "dynamic")
         self.assertEqual(summary["scripted_unit_spell_semantic_status_counts"], {
             "object-effect-ready": 17,
             "script-native-ready": 20,

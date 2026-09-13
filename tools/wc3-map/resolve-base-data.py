@@ -3269,6 +3269,9 @@ def main() -> None:
         "scripted_unit_spell_semantic_kind_counts": dict(sorted(unit_spell_semantic_kind_counts.items())),
         "protected_filter_binding_rows": len(protected_filter_rows),
         "protected_filter_binding_resolved_rows": len(protected_filters_by_symbol),
+        "protected_filter_binding_status_counts": dict(sorted(Counter(
+            row["resolution_status"] for row in protected_filter_rows
+        ).items())),
         "resolved_item_rows": len(item_rows),
         "castle_shop_item_rows": len(castle_shop_rows),
         "scripted_item_pickup_mechanic_rows": len(item_mechanic_rows),
@@ -3316,7 +3319,7 @@ def main() -> None:
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
-            "protected-filter-bindings.tsv resolves the W3P Filter wrapper SX to generated predicate vL using static Wurst emission order; its predicate is alive combat sapper and enemy of the subsystem owner, so Master of Elements and Snowveil no longer depend on an opaque target-filter symbol",
+            "protected-filter-bindings.tsv resolves generated W3P Filter wrappers only from exact use-site/compiler structure rather than independent adjacency guessing; 16 fixed bindings are currently proven, including the Wurst ClosureForGroups dispatcher Gib=kG, generic registerPlayerUnitEvent local SCr is classified dynamic, and five opaque globals stay unresolved. This corrects Desert priority filters (Y0=tK, X0=sK, W0=uK, V0=vK) and Elemental linker QX=wL while retaining SX=vL",
             "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
             "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
             "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
