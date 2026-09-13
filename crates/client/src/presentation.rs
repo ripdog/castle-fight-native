@@ -20,8 +20,9 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3TeamTint, Wc3VisualModel,
-        Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials, update_wc3_particles,
+        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3RibbonSource, Wc3TeamTint,
+        Wc3VisualModel, Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials,
+        spawn_wc3_ribbon_trails, update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
 
@@ -490,6 +491,8 @@ impl Plugin for CastlePresentationPlugin {
                     age_ability_area_impacts,
                     age_lightning_impacts,
                     age_timed_wc3_effects,
+                    spawn_wc3_ribbon_trails,
+                    update_wc3_ribbon_trails,
                     update_wc3_particles,
                     emit_wc3_particles,
                     draw_projectile_effects,
@@ -1746,6 +1749,7 @@ fn sync_render_entities(
                     WorldAssetRoot(visual.model.scene.clone()),
                     Transform::from_translation(position),
                     Wc3EmitterSource::new(&visual.model.emitters),
+                    Wc3RibbonSource::new(&visual.model.ribbons),
                 ))
                 .id();
             timed_effects.0.push(TimedWc3Effect {
@@ -1970,6 +1974,7 @@ fn sync_render_entities(
                     WorldAssetRoot(model.scene.clone()),
                     Transform::from_rotation(Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET)),
                     Wc3EmitterSource::new(&model.emitters),
+                    Wc3RibbonSource::new(&model.ribbons),
                 ))
                 .id()
         } else {
@@ -2256,6 +2261,7 @@ fn spawn_stun_effect(
             WorldAssetRoot(model.scene.clone()),
             Transform::from_translation(position),
             Wc3EmitterSource::new(&model.emitters),
+            Wc3RibbonSource::new(&model.ribbons),
         ))
         .id();
     render_map.stun_effects.insert(id, entity);

@@ -1,12 +1,15 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fs,
     path::{Component, Path},
 };
 
 use bevy::{
-    asset::AssetId, camera::visibility::NoFrustumCulling, gltf::GltfMaterialExtras,
-    mesh::skinning::SkinnedMesh, prelude::*,
+    asset::{AssetId, RenderAssetUsages},
+    camera::visibility::NoFrustumCulling,
+    gltf::GltfMaterialExtras,
+    mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
+    prelude::*,
 };
 use serde::Deserialize;
 
@@ -18,6 +21,8 @@ const UNIT_ASSET_PREFIX: &str = "wc3/units";
 const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow00.png";
 const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
+const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
+const MAX_RIBBON_POINTS: usize = 512;
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
@@ -31,6 +36,7 @@ pub struct Wc3VisualSet {
 pub struct Wc3VisualModel {
     pub scene: Handle<WorldAsset>,
     pub emitters: Vec<Wc3ParticleEmitter>,
+    pub ribbons: Vec<Wc3RibbonEmitter>,
 }
 
 #[derive(Clone)]
@@ -68,6 +74,22 @@ pub struct Wc3ParticleEmitter {
     pub squirt: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Wc3RibbonEmitter {
+    pub position: [f32; 3],
+    pub height_above: f32,
+    pub height_below: f32,
+    pub alpha: f32,
+    pub color: [f32; 3],
+    pub lifespan: f32,
+    pub emission_rate: u32,
+    pub rows: u32,
+    pub columns: u32,
+    pub filter_mode: String,
+    pub texture: Option<String>,
+    pub gravity: f32,
+}
+
 #[derive(Debug, Deserialize)]
 struct VisualManifest {
     schema_version: u32,
@@ -92,11 +114,18 @@ struct ModelManifest {
     gltf: String,
     #[serde(default)]
     particle_emitters: Vec<Wc3ParticleEmitter>,
+    #[serde(default)]
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
 }
 
 #[derive(Component)]
 pub struct Wc3EmitterSource {
     emitters: Vec<EmitterRuntime>,
+}
+
+#[derive(Component)]
+pub struct Wc3RibbonSource {
+    ribbons: Vec<Wc3RibbonEmitter>,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -123,6 +152,24 @@ pub struct Wc3Particle {
     age: f32,
     lifespan: f32,
     scales: [f32; 3],
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RibbonPoint {
+    center: Vec3,
+    up: Vec3,
+    age: f32,
+}
+
+#[derive(Component)]
+pub(crate) struct Wc3RibbonTrail {
+    source: Entity,
+    spec: Wc3RibbonEmitter,
+    points: VecDeque<RibbonPoint>,
+    emission_accumulator: f32,
+    previous_origin: Option<Vec3>,
+    previous_up: Option<Vec3>,
+    mesh: Handle<Mesh>,
 }
 
 #[derive(Resource)]
@@ -198,6 +245,15 @@ impl Wc3EmitterSource {
     }
 }
 
+impl Wc3RibbonSource {
+    #[must_use]
+    pub fn new(ribbons: &[Wc3RibbonEmitter]) -> Self {
+        Self {
+            ribbons: ribbons.to_vec(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct Wc3MaterialExtras {
     #[serde(rename = "wc3FilterMode")]
@@ -250,6 +306,41 @@ impl Wc3ParticleAssets {
         self.materials.insert(key, handle.clone());
         handle
     }
+
+    fn ribbon_material(
+        &mut self,
+        ribbon: &Wc3RibbonEmitter,
+        asset_server: &AssetServer,
+        materials: &mut Assets<StandardMaterial>,
+    ) -> Handle<StandardMaterial> {
+        let texture_key = ribbon.texture.as_deref().unwrap_or("<none>");
+        let key = format!(
+            "ribbon|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{:.3}",
+            ribbon.filter_mode, ribbon.color[0], ribbon.color[1], ribbon.color[2], ribbon.alpha
+        );
+        if let Some(handle) = self.materials.get(&key) {
+            return handle.clone();
+        }
+        let base_color_texture = ribbon
+            .texture
+            .as_ref()
+            .map(|texture| asset_server.load(format!("{EFFECT_ASSET_PREFIX}/{texture}")));
+        let handle = materials.add(StandardMaterial {
+            base_color: Color::srgba(
+                ribbon.color[0],
+                ribbon.color[1],
+                ribbon.color[2],
+                ribbon.alpha.clamp(0.0, 1.0),
+            ),
+            base_color_texture,
+            alpha_mode: wc3_material_alpha_mode(&ribbon.filter_mode, AlphaMode::Blend),
+            unlit: true,
+            double_sided: true,
+            ..default()
+        });
+        self.materials.insert(key, handle.clone());
+        handle
+    }
 }
 
 fn particle_alpha_mode(filter_mode: u32) -> AlphaMode {
@@ -273,27 +364,41 @@ fn wc3_material_alpha_mode(filter_mode: &str, fallback: AlphaMode) -> AlphaMode 
     }
 }
 
+type TeamMaterialCache = HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>;
+
+type Wc3MaterialWorld<'w, 's> = (
+    Res<'w, AssetServer>,
+    Query<'w, 's, &'static ChildOf>,
+    Query<'w, 's, &'static Wc3TeamTint>,
+);
+
+type Wc3MaterialAssets<'w, 's> = (
+    ResMut<'w, Assets<StandardMaterial>>,
+    Local<'s, TeamMaterialCache>,
+    Local<'s, TeamMaterialCache>,
+);
+
+type Wc3MaterialMeshQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static Mesh3d,
+        &'static mut MeshMaterial3d<StandardMaterial>,
+        &'static GltfMaterialExtras,
+        Option<&'static SkinnedMesh>,
+    ),
+    Without<Wc3MaterialProcessed>,
+>;
+
 pub fn fix_wc3_scene_materials(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    parents: Query<&ChildOf>,
-    team_roots: Query<&Wc3TeamTint>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut team_materials: Local<HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>>,
-    mut team_glow_materials: Local<
-        HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>,
-    >,
-    mut meshes: Query<
-        (
-            Entity,
-            &Mesh3d,
-            &mut MeshMaterial3d<StandardMaterial>,
-            &GltfMaterialExtras,
-            Option<&SkinnedMesh>,
-        ),
-        Without<Wc3MaterialProcessed>,
-    >,
+    world: Wc3MaterialWorld<'_, '_>,
+    material_assets: Wc3MaterialAssets<'_, '_>,
+    mut meshes: Wc3MaterialMeshQuery<'_, '_>,
 ) {
+    let (asset_server, parents, team_roots) = world;
+    let (mut materials, mut team_materials, mut team_glow_materials) = material_assets;
     for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
             commands.entity(entity).insert(Wc3MaterialProcessed);
@@ -392,6 +497,156 @@ fn wc3_team_tint(
         current = parent.parent();
     }
     None
+}
+
+pub fn spawn_wc3_ribbon_trails(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut ribbon_assets: ResMut<Wc3ParticleAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    sources: Query<(Entity, &Wc3RibbonSource), Added<Wc3RibbonSource>>,
+) {
+    for (source, source_ribbons) in &sources {
+        for spec in &source_ribbons.ribbons {
+            if spec.emission_rate == 0
+                || spec.lifespan <= 0.0
+                || (spec.height_above <= 0.0 && spec.height_below <= 0.0)
+            {
+                continue;
+            }
+            let mesh = meshes.add(build_wc3_ribbon_mesh(spec, &VecDeque::new()));
+            let material = ribbon_assets.ribbon_material(spec, &asset_server, &mut materials);
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material),
+                Transform::IDENTITY,
+                Visibility::default(),
+                NoFrustumCulling,
+                Wc3RibbonTrail {
+                    source,
+                    spec: spec.clone(),
+                    points: VecDeque::new(),
+                    emission_accumulator: 0.0,
+                    previous_origin: None,
+                    previous_up: None,
+                    mesh,
+                },
+            ));
+        }
+    }
+}
+
+pub fn update_wc3_ribbon_trails(
+    mut commands: Commands,
+    time: Res<Time>,
+    sources: Query<&GlobalTransform, With<Wc3RibbonSource>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut trails: Query<(Entity, &mut Wc3RibbonTrail)>,
+) {
+    let dt = time.delta_secs().min(0.1);
+    for (entity, mut trail) in &mut trails {
+        for point in &mut trail.points {
+            point.age += dt;
+        }
+        while trail
+            .points
+            .front()
+            .is_some_and(|point| point.age >= trail.spec.lifespan)
+        {
+            trail.points.pop_front();
+        }
+
+        let source_transform = sources.get(trail.source).ok();
+        if let Some(transform) = source_transform {
+            let origin = transform.transform_point(Vec3::from_array(trail.spec.position));
+            let up = (transform.rotation() * Vec3::Y).normalize_or(Vec3::Y);
+            if trail.previous_origin.is_none() {
+                trail.points.push_back(RibbonPoint {
+                    center: origin,
+                    up,
+                    age: 0.0,
+                });
+            }
+
+            trail.emission_accumulator += trail.spec.emission_rate.min(240) as f32 * dt;
+            let due = trail.emission_accumulator.floor() as u32;
+            trail.emission_accumulator -= due as f32;
+            let count = due.min(MAX_RIBBON_SAMPLES_PER_FRAME);
+            if count > 0 {
+                let previous_origin = trail.previous_origin.unwrap_or(origin);
+                let previous_up = trail.previous_up.unwrap_or(up);
+                for sample_index in 1..=count {
+                    let t = sample_index as f32 / count as f32;
+                    trail.points.push_back(RibbonPoint {
+                        center: previous_origin.lerp(origin, t),
+                        up: previous_up.lerp(up, t).normalize_or(up),
+                        age: 0.0,
+                    });
+                }
+            }
+            trail.previous_origin = Some(origin);
+            trail.previous_up = Some(up);
+        }
+
+        while trail.points.len() > MAX_RIBBON_POINTS {
+            trail.points.pop_front();
+        }
+        if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
+            *mesh = build_wc3_ribbon_mesh(&trail.spec, &trail.points);
+        }
+
+        if source_transform.is_none() && trail.points.is_empty() {
+            meshes.remove(trail.mesh.id());
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn build_wc3_ribbon_mesh(spec: &Wc3RibbonEmitter, points: &VecDeque<RibbonPoint>) -> Mesh {
+    let mut positions = Vec::with_capacity(points.len() * 2);
+    let mut normals = Vec::with_capacity(points.len() * 2);
+    let mut uvs = Vec::with_capacity(points.len() * 2);
+    let mut colors = Vec::with_capacity(points.len() * 2);
+    let mut indices = Vec::with_capacity(points.len().saturating_sub(1) * 6);
+    let last = points.len().saturating_sub(1).max(1) as f32;
+    let atlas_u = 1.0 / spec.columns.max(1) as f32;
+    let atlas_v = 1.0 / spec.rows.max(1) as f32;
+
+    for (index, point) in points.iter().enumerate() {
+        let gravity_offset = Vec3::NEG_Y * (0.5 * spec.gravity * point.age * point.age);
+        let center = point.center + gravity_offset;
+        let up = point.up.normalize_or(Vec3::Y);
+        let top = center + up * spec.height_above.max(0.0);
+        let bottom = center - up * spec.height_below.max(0.0);
+        positions.push(top.to_array());
+        positions.push(bottom.to_array());
+        normals.push(Vec3::Z.to_array());
+        normals.push(Vec3::Z.to_array());
+        let v = index as f32 / last * atlas_v;
+        uvs.push([0.0, v]);
+        uvs.push([atlas_u, v]);
+        let fade = (1.0 - point.age / spec.lifespan.max(0.01)).clamp(0.0, 1.0);
+        colors.push([1.0, 1.0, 1.0, fade]);
+        colors.push([1.0, 1.0, 1.0, fade]);
+    }
+    for segment in 0..points.len().saturating_sub(1) {
+        let top = u32::try_from(segment * 2).expect("ribbon vertex count is bounded");
+        let bottom = top + 1;
+        let next_top = top + 2;
+        let next_bottom = top + 3;
+        indices.extend_from_slice(&[top, bottom, next_top, next_top, bottom, next_bottom]);
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
+    .with_inserted_indices(Indices::U32(indices))
 }
 
 pub fn emit_wc3_particles(
@@ -527,7 +782,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
     let manifest: VisualManifest =
         serde_json::from_str(&json).map_err(|error| format!("invalid visual manifest: {error}"))?;
-    if manifest.schema_version != 2 {
+    if manifest.schema_version != 3 {
         return Err(format!(
             "unsupported visual asset manifest schema {}",
             manifest.schema_version
@@ -614,6 +869,7 @@ fn resolve_visual_model(
     Ok(Wc3VisualModel {
         scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path)),
         emitters: model.particle_emitters.clone(),
+        ribbons: model.ribbon_emitters.clone(),
     })
 }
 
@@ -686,6 +942,50 @@ mod tests {
             wc3_material_alpha_mode("Additive", AlphaMode::Blend),
             AlphaMode::Add
         );
+        assert_eq!(
+            wc3_material_alpha_mode("AddAlpha", AlphaMode::Blend),
+            AlphaMode::Add
+        );
+    }
+
+    #[test]
+    fn ribbon_mesh_builds_a_fading_two_vertex_strip() {
+        let spec = Wc3RibbonEmitter {
+            position: [0.0; 3],
+            height_above: 2.0,
+            height_below: 3.0,
+            alpha: 0.4,
+            color: [0.4, 0.5, 0.6],
+            lifespan: 1.0,
+            emission_rate: 12,
+            rows: 1,
+            columns: 1,
+            filter_mode: "AddAlpha".to_owned(),
+            texture: Some("textures/ribbon.png".to_owned()),
+            gravity: 0.0,
+        };
+        let points = VecDeque::from([
+            RibbonPoint {
+                center: Vec3::ZERO,
+                up: Vec3::Y,
+                age: 0.75,
+            },
+            RibbonPoint {
+                center: Vec3::X * 10.0,
+                up: Vec3::Y,
+                age: 0.0,
+            },
+        ]);
+        let mesh = build_wc3_ribbon_mesh(&spec, &points);
+        let positions = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .expect("ribbon positions")
+            .as_float3()
+            .expect("float positions");
+        assert_eq!(positions.len(), 4);
+        assert_eq!(positions[0], [0.0, 2.0, 0.0]);
+        assert_eq!(positions[1], [0.0, -3.0, 0.0]);
+        assert!(mesh.attribute(Mesh::ATTRIBUTE_COLOR).is_some());
     }
 
     #[test]

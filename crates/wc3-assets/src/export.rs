@@ -171,6 +171,8 @@ pub struct RibbonEmitterManifest {
     pub rows: u32,
     pub columns: u32,
     pub material_id: u32,
+    pub filter_mode: String,
+    pub texture: Option<String>,
     pub gravity: f32,
 }
 
@@ -474,7 +476,7 @@ impl Exporter {
         });
 
         Ok(VisualAssetManifest {
-            schema_version: 2,
+            schema_version: 3,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -799,7 +801,7 @@ impl Exporter {
         let animations = animation_manifests_from_gltf(&gltf)?;
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests);
         let model_particle_emitters = model_particle_emitter_manifests(&model);
-        let ribbon_emitters = ribbon_emitter_manifests(&model);
+        let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests);
 
         Ok(ModelManifest {
             source_model: logical_path.to_owned(),
@@ -1100,12 +1102,17 @@ fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterMa
         .collect()
 }
 
-fn ribbon_emitter_manifests(model: &Model) -> Vec<RibbonEmitterManifest> {
+fn ribbon_emitter_manifests(
+    model: &Model,
+    texture_manifests: &[TextureManifest],
+) -> Vec<RibbonEmitterManifest> {
     model
         .ribbon_emitters_iter()
         .map(|emitter| {
             let node = emitter.node();
             let color = emitter.color();
+            let (filter_mode, texture) =
+                ribbon_material_properties(model, texture_manifests, emitter.material_id());
             RibbonEmitterManifest {
                 object_id: node.object_id(),
                 name: node.name(),
@@ -1119,10 +1126,36 @@ fn ribbon_emitter_manifests(model: &Model) -> Vec<RibbonEmitterManifest> {
                 rows: emitter.rows(),
                 columns: emitter.columns(),
                 material_id: emitter.material_id(),
+                filter_mode,
+                texture,
                 gravity: emitter.gravity(),
             }
         })
         .collect()
+}
+
+fn ribbon_material_properties(
+    model: &Model,
+    texture_manifests: &[TextureManifest],
+    material_id: u32,
+) -> (String, Option<String>) {
+    let Some(material) = model.materials(material_id as usize) else {
+        return ("Blend".to_owned(), None);
+    };
+    let selected = material.layers_iter().find(|layer| {
+        texture_manifests
+            .get(layer_diffuse_texture_id(layer) as usize)
+            .and_then(|texture| texture.png.as_ref())
+            .is_some()
+    });
+    let layer = selected.or_else(|| material.layers(0));
+    let Some(layer) = layer else {
+        return ("Blend".to_owned(), None);
+    };
+    let texture = texture_manifests
+        .get(layer_diffuse_texture_id(&layer) as usize)
+        .and_then(|texture| texture.png.clone());
+    (format!("{:?}", layer.filter_mode()), texture)
 }
 
 fn model_node_position(model: &Model, node: &Node) -> [f32; 3] {
@@ -3365,6 +3398,35 @@ mod tests {
         assert_eq!(layer_diffuse_texture_id(&layer), 0);
         assert!(layer_uses_replaceable(&model, &layer, 1));
         assert!(!layer_uses_replaceable(&model, &layer, 2));
+    }
+
+    #[test]
+    fn ribbon_material_properties_resolve_texture_and_filter_mode() {
+        let mut model = Model::new();
+        model.resize_textures(1);
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(1);
+            let mut layer = material.layers_mut(0).expect("layer");
+            layer.set_texture_id(0);
+            layer.set_filter_mode(LayerFilterMode::AddAlpha);
+        }
+        let textures = vec![TextureManifest {
+            source_texture: r"Textures\Ribbon.blp".to_owned(),
+            source_casc_path: None,
+            png: Some("textures/ribbon.png".to_owned()),
+            replaceable_id: 0,
+            has_transparency: true,
+        }];
+
+        assert_eq!(
+            ribbon_material_properties(&model, &textures, 0),
+            (
+                "AddAlpha".to_owned(),
+                Some("textures/ribbon.png".to_owned())
+            )
+        );
     }
 
     #[test]
