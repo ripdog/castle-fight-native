@@ -230,14 +230,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 2)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 5)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
+            "automatic-defend-state-maintenance": 1,
             "damage-triggered-echo-step-and-remnant": 1,
+            "retarget-flying-damage-source": 2,
         })
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(set(rows), {"e00F", "n03I"})
+        self.assertEqual(set(rows), {"e00F", "h03A", "n02S", "n02T", "n03I"})
 
         giant = json.loads(rows["e00F"]["parameters_json"])
         self.assertEqual(rows["e00F"]["building_rawcode"], "h028")
@@ -263,6 +265,21 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(echo["remnant_target_filter_function"], "UC")
         self.assertIn("enemy-of-mIb", echo["remnant_target_predicate"])
         self.assertEqual(echo["remnant_activation_object_data"]["Activation Delay"], 0.75)
+
+        for rawcode in ("n02S", "n02T"):
+            retaliation = json.loads(rows[rawcode]["parameters_json"])
+            self.assertTrue(retaliation["trigger_source_requires_flying"])
+            self.assertEqual(retaliation["retaliation_target"], "damage-source")
+            self.assertEqual(retaliation["issued_order"], "attack")
+            self.assertEqual(retaliation["per_unit_retarget_throttle_seconds"], 2.5)
+
+        defender = json.loads(rows["h03A"]["parameters_json"])
+        self.assertEqual(defender["defend_order_id"], 852055)
+        self.assertEqual(defender["undefend_order_id"], 852056)
+        self.assertEqual(defender["initial_defend_delay_seconds"], 0.7)
+        self.assertEqual(defender["undefend_reactivation_delay_seconds"], 5.5)
+        self.assertEqual(defender["defend_object_data"]["Damage Taken (%)"], 0.4)
+        self.assertEqual(defender["defend_object_data"]["Chance to Deflect"], 50)
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

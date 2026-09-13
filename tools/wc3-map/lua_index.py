@@ -4518,6 +4518,100 @@ def _extract_production_unit_special_mechanics(
         "byte_offset": min(echo_start, death_start),
     })
 
+    retaliation_start, _ = require_tokens(
+        "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+        {
+            "1848652371", "1848652372", "UNIT_TYPE_FLYING", "2.5", "unit_getIndex",
+            "getElapsedGameTime", "unit_issueTargetOrder",
+        },
+    )
+    retaliation_function = next(
+        function for function in functions
+        if function["name"] == "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire"
+    )
+    retaliation_source = data[int(retaliation_function["start"]):int(retaliation_function["end"])]
+    if b'unit_issueTargetOrder(x6n,"attack",w6n)' not in retaliation_source:
+        raise ValueError("Gnoll anti-air retaliation order changed")
+    for unit_id in (1848652371, 1848652372):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "retarget-flying-damage-source",
+            "trigger": "damage-event",
+            "parameters": {
+                "trigger_source_requires_flying": True,
+                "retaliation_target": "damage-source",
+                "issued_order": "attack",
+                "per_unit_retarget_throttle_seconds": 2.5,
+                "requires_positive_unit_index": True,
+            },
+            "related_rawcode_ids": [],
+            "source_functions": [
+                "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+            ],
+            "evidence_kind": "exact-shared-damage-handler",
+            "byte_offset": retaliation_start,
+        })
+
+    # Human Defender: Defend is automatically enabled shortly after spawn, then
+    # normal attack movement resumes. If the unit receives the native undefend
+    # order, FixDefend re-enables Defend after 5.5 seconds. This keeps A03G's
+    # native ranged-damage/deflection behavior active without custom damage math.
+    defender_spawn_start, _ = require_tokens(
+        "onSummonedUnit",
+        {"1747989313", "Cy", "create1000", "doAfter"},
+    )
+    require_tokens(
+        "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1",
+        {"852055", "unit_issueImmediateOrderById", "jY", "Dy", "create1001", "doAfter"},
+    )
+    require_tokens(
+        "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime1",
+        {"orderCodeAttackIfAllowed"},
+    )
+    defender_order_start, _ = require_tokens(
+        "EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend",
+        {"1747989313", "N6", "Um", "create506", "5.5", "doAfter"},
+    )
+    require_tokens(
+        "CallbackSingle_doAfter_add_doAfter_FixDefend_call_doAfter_add_doAfter_FixDefend",
+        {"U6", "unit_issueImmediateOrderById"},
+    )
+    spawn_function = next(function for function in functions if function["name"] == "onSummonedUnit")
+    spawn_source = data[int(spawn_function["start"]):int(spawn_function["end"])]
+    if b"doAfter(.7,xXr)" not in spawn_source:
+        raise ValueError("Defender initial auto-defend delay changed")
+    defend_callback = next(
+        function for function in functions
+        if function["name"] == "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1"
+    )
+    defend_callback_source = data[int(defend_callback["start"]):int(defend_callback["end"])]
+    if b"doAfter(.1,yBn)" not in defend_callback_source:
+        raise ValueError("Defender post-defend attack resume delay changed")
+    rows.append({
+        "unit_id": 1747989313,
+        "mechanic_kind": "automatic-defend-state-maintenance",
+        "trigger": "summon-and-order-events",
+        "parameters": {
+            "defend_ability_id": 1093677895,
+            "defend_order_id": 852055,
+            "undefend_order_id": 852056,
+            "initial_defend_delay_seconds": 0.7,
+            "resume_attack_delay_after_defend_seconds": 0.1,
+            "undefend_reactivation_delay_seconds": 5.5,
+            "auto_defend_bypasses_wrong_order_guard": True,
+        },
+        "related_rawcode_ids": [1093677895],
+        "source_functions": [
+            "onSummonedUnit",
+            "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1",
+            "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime1",
+            "EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend",
+            "CallbackSingle_doAfter_add_doAfter_FixDefend_call_doAfter_add_doAfter_FixDefend",
+        ],
+        "evidence_kind": "exact-summon-order-and-delayed-callback-chain",
+        "byte_offset": min(defender_spawn_start, defender_order_start),
+    })
+
     return rows
 
 

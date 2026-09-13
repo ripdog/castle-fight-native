@@ -1792,6 +1792,11 @@ def main() -> None:
                     parameters["script_proc_cooldown_overrides_protected_ability_cooldown"] = (
                         numeric(protected_cooldown) != numeric(parameters["runtime_cooldown_seconds"])
                     )
+                elif unit_rawcode == "h03A":
+                    defend = next((row for row in ability_levels.get("A03G", []) if row["level"] == "1"), None)
+                    if defend is None:
+                        raise ValueError("Defender special mechanic is missing A03G object data")
+                    parameters["defend_object_data"] = json.loads(defend["data_fields_labeled_json"])
 
                 production_special_rows.append([
                     production["building_rawcode"], production["building_names"],
@@ -3415,7 +3420,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant's automatic temporary-tree War Club setup and Echofoot Mystic's damage-triggered Echo Step/remnant lifecycle and explosion",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant's automatic temporary-tree War Club setup, Echofoot Mystic's damage-triggered Echo Step/remnant lifecycle and explosion, Gnoll/Fire Gnoll flying-attacker retargeting, and Defender native Defend-state maintenance",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

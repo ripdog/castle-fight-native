@@ -116,10 +116,12 @@
   "production_unit_available_attack_profiles": 174,
   "production_unit_conditional_attack_profiles": 1,
   "production_unit_two_profile_sum_patterns": 2,
-  "production_unit_special_mechanic_rows": 2,
+  "production_unit_special_mechanic_rows": 5,
   "production_unit_special_mechanic_kinds": {
     "auto-spawn-tree-and-grab-war-club": 1,
-    "damage-triggered-echo-step-and-remnant": 1
+    "automatic-defend-state-maintenance": 1,
+    "damage-triggered-echo-step-and-remnant": 1,
+    "retarget-flying-damage-source": 2
   },
   "production_unit_ability_links": 481,
   "production_unit_unique_abilities": 291,
@@ -242,7 +244,7 @@
     "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
     "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-    "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant's automatic temporary-tree War Club setup and Echofoot Mystic's damage-triggered Echo Step/remnant lifecycle and explosion",
+    "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant's automatic temporary-tree War Club setup, Echofoot Mystic's damage-triggered Echo Step/remnant lifecycle and explosion, Gnoll/Fire Gnoll flying-attacker retargeting, and Defender native Defend-state maintenance",
     "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
     "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
     "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
