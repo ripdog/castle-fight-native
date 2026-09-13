@@ -332,6 +332,10 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
     let position = sim_point_to_world(unit.position);
     let mut lines = vec![
         format!("UNIT #{}", unit.id.0),
+        format!(
+            "Name: {}",
+            unit.content.map_or("Unknown", |content| content.name)
+        ),
         format!("Side: {}", team_label(unit.team)),
         format!("Type: {}", unit_kind_label(unit.visual_kind)),
         format!("Movement: {:?}", unit.movement_class),
@@ -364,6 +368,10 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
 fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
     let mut lines = vec![
         format!("BUILDING #{}", building.id.0),
+        format!(
+            "Name: {}",
+            building.content.map_or("Unknown", |content| content.name)
+        ),
         format!("Side: {}", team_label(building.team)),
         format!("Type: {}", building_kind_label(building.visual_kind)),
         format!("Health: {}", building.health),
@@ -480,7 +488,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use castle_fight_sim::{
-        BuildingFootprint, MovementClass, NavCell, SimPoint, SimulationConfig, TerrainElevationMap,
+        BuildingFootprint, ContentIdentity, MovementClass, NavCell, SimPoint, SimulationConfig,
+        TerrainElevationMap,
     };
 
     use super::*;
@@ -529,6 +538,10 @@ mod tests {
             SimId(7),
             UnitSample {
                 id: SimId(7),
+                content: Some(ContentIdentity {
+                    rawcode: u32::from_be_bytes(*b"hfoo"),
+                    name: "Footman",
+                }),
                 team: Team(0),
                 position: SimPoint::new(
                     100 * SUBUNITS_PER_WORLD_UNIT,
@@ -553,6 +566,9 @@ mod tests {
             pick_unit_on_ray(Vec3::new(103.0, 5.0, 0.0), Vec3::Z, &samples, &terrain, 1.0,),
             Some(SimId(7))
         );
+        assert!(
+            format_unit_inspector(&samples.current.units[&SimId(7)], 10).contains("Name: Footman")
+        );
     }
 
     #[test]
@@ -562,6 +578,10 @@ mod tests {
             SimId(9),
             BuildingSample {
                 id: SimId(9),
+                content: Some(ContentIdentity {
+                    rawcode: u32::from_be_bytes(*b"h000"),
+                    name: "Barracks",
+                }),
                 team: Team(1),
                 footprint: BuildingFootprint::new(10, 20, 4, 4),
                 health: 1_000,
@@ -583,6 +603,10 @@ mod tests {
             pick_building_at_ground(Vec3::new(145.0, 0.0, 220.0), &samples, &metrics()),
             None
         );
+        assert!(
+            format_building_inspector(&samples.current.buildings[&SimId(9)], 10)
+                .contains("Name: Barracks")
+        );
     }
 
     #[test]
@@ -592,6 +616,10 @@ mod tests {
             SimId(11),
             UnitSample {
                 id: SimId(11),
+                content: Some(ContentIdentity {
+                    rawcode: u32::from_be_bytes(*b"h016"),
+                    name: "Gryphon Rider",
+                }),
                 team: Team(0),
                 position: SimPoint::new(
                     100 * SUBUNITS_PER_WORLD_UNIT,

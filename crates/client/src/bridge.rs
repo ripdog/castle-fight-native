@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AbilityCastEvent, AttackDelivery, AttackEvent, BuildingFootprint, CorpseView, MovementClass,
-    ProjectileView, SimId, SimPoint, Simulation, Team,
+    AbilityCastEvent, AttackDelivery, AttackEvent, BuildingFootprint, ContentIdentity, CorpseView,
+    MovementClass, ProjectileView, SimId, SimPoint, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +80,7 @@ impl BuildingVisualKind {
 #[derive(Debug, Clone, Copy)]
 pub struct UnitSample {
     pub id: SimId,
+    pub content: Option<ContentIdentity>,
     pub team: Team,
     pub position: SimPoint,
     pub collision_radius: i32,
@@ -99,6 +100,7 @@ pub struct UnitSample {
 #[derive(Debug, Clone, Copy)]
 pub struct BuildingSample {
     pub id: SimId,
+    pub content: Option<ContentIdentity>,
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
@@ -134,6 +136,7 @@ impl PresentationSnapshot {
                     unit.id,
                     UnitSample {
                         id: unit.id,
+                        content: unit.content,
                         team: unit.team,
                         position: unit.position,
                         collision_radius: unit.collision_radius,
@@ -168,6 +171,7 @@ impl PresentationSnapshot {
                     building.id,
                     BuildingSample {
                         id: building.id,
+                        content: building.content,
                         team: building.team,
                         footprint: building.footprint,
                         health: building.health,
@@ -229,7 +233,8 @@ impl PresentationSamples {
 #[cfg(test)]
 mod tests {
     use castle_fight_sim::{
-        AttackProfile, CorpseDefinitionId, CorpseProfile, MovementProfile, SUBUNITS_PER_WORLD_UNIT,
+        AttackProfile, BuildingFootprint, CastleFightProductionKind, CastleFightUnitKind,
+        CorpseDefinitionId, CorpseProfile, MovementProfile, SUBUNITS_PER_WORLD_UNIT,
         SimulationConfig, UnitSpawn,
     };
 
@@ -285,6 +290,49 @@ mod tests {
                 .attacks
                 .iter()
                 .any(|attack| attack.target == victim)
+        );
+    }
+
+    #[test]
+    fn capture_preserves_imported_content_names() {
+        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        let footman = CastleFightUnitKind::Footman.definition();
+        simulation.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(40 * SUBUNITS_PER_WORLD_UNIT, 0),
+                footman.template(),
+            ),
+            footman.gameplay_properties(),
+        );
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        simulation.spawn_building_with_properties(
+            barracks.spawn(Team(0), BuildingFootprint::new(80, 0, 4, 4)),
+            barracks.gameplay_properties(),
+        );
+
+        let snapshot = PresentationSnapshot::capture(&simulation);
+        assert_eq!(
+            snapshot
+                .units
+                .values()
+                .next()
+                .unwrap()
+                .content
+                .unwrap()
+                .name,
+            "Footman"
+        );
+        assert_eq!(
+            snapshot
+                .buildings
+                .values()
+                .next()
+                .unwrap()
+                .content
+                .unwrap()
+                .name,
+            "Barracks"
         );
     }
 

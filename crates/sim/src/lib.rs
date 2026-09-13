@@ -10,9 +10,9 @@ mod topology;
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
     AutomaticAbilityProfile, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
-    CollisionRadius, CorpseDefinitionId, CorpseProfile, ManaProfile, ModifierId, MovementClass,
-    MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState, Team,
-    UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile, ManaProfile, ModifierId,
+    MovementClass, MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState,
+    Team, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_SIMULATION_HZ,
@@ -285,6 +285,48 @@ mod tests {
             attack_targets,
             ..UnitGameplayProperties::default()
         }
+    }
+
+    #[test]
+    fn imported_content_identity_survives_building_and_production_spawn() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        let mut barracks_spawn = barracks.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4));
+        let production = barracks_spawn
+            .production
+            .as_mut()
+            .expect("Barracks must remain a production building");
+        production.initial_delay_ticks = 0;
+        production.interval_ticks = 1;
+        let barracks_id =
+            sim.spawn_building_with_properties(barracks_spawn, barracks.gameplay_properties());
+
+        let building_content = sim.building(barracks_id).unwrap().content.unwrap();
+        assert_eq!(building_content.rawcode, barracks.rawcode);
+        assert_eq!(building_content.name, "Barracks");
+
+        sim.step();
+        let produced = sim
+            .units()
+            .into_iter()
+            .find(|unit| unit.team == Team(0))
+            .expect("Barracks should produce immediately in this fixture");
+        let unit_content = produced.content.unwrap();
+        assert_eq!(
+            unit_content.rawcode,
+            CastleFightUnitKind::Footman.definition().rawcode
+        );
+        assert_eq!(unit_content.name, "Footman");
+
+        let tower = CastleFightTowerKind::WatchTower.definition();
+        let tower_id = sim.spawn_building_with_properties(
+            tower.spawn(Team(1), BuildingFootprint::new(100, 0, 4, 4)),
+            tower.gameplay_properties(),
+        );
+        assert_eq!(
+            sim.building(tower_id).unwrap().content.unwrap().name,
+            "Watch Tower"
+        );
     }
 
     #[test]

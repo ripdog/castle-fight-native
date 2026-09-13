@@ -1,8 +1,8 @@
 use crate::{
     components::{
         AttackDelivery, AttackProfile, AttackTargetMask, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, CorpseDefinitionId,
-        CorpseProfile, MovementClass, MovementProfile, ProductionProfile, Team,
+        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity,
+        CorpseDefinitionId, CorpseProfile, MovementClass, MovementProfile, ProductionProfile, Team,
         UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -188,6 +188,10 @@ impl CastleFightUnitDefinition {
     #[must_use]
     pub const fn gameplay_properties(self) -> UnitGameplayProperties {
         UnitGameplayProperties {
+            content: Some(ContentIdentity {
+                rawcode: self.rawcode,
+                name: self.name,
+            }),
             corpse: self.corpse,
             collision_radius: Some(self.collision_radius),
             movement_class: self.movement_class,
@@ -296,6 +300,10 @@ impl CastleFightProductionDefinition {
     #[must_use]
     pub const fn gameplay_properties(self) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
+            content: Some(ContentIdentity {
+                rawcode: self.rawcode,
+                name: self.name,
+            }),
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
             armor: self.armor,
@@ -390,10 +398,15 @@ impl CastleFightTowerDefinition {
     #[must_use]
     pub const fn gameplay_properties(self) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
+            content: Some(ContentIdentity {
+                rawcode: self.rawcode,
+                name: self.name,
+            }),
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
             production_unit: UnitGameplayProperties {
+                content: None,
                 corpse: None,
                 collision_radius: None,
                 movement_class: MovementClass::Ground,

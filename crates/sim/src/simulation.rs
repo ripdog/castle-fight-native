@@ -18,14 +18,14 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, Corpse, CorpseDefinitionId,
-        CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
-        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass, MovementProfile,
-        NavigationGoal, NavigationState, Position, ProductionArmorProfile, ProductionAttackTargets,
-        ProductionCollisionRadius, ProductionCorpseProfile, ProductionDamageType,
-        ProductionMovementClass, ProductionProfile, ProductionSpellcastingProfile, ProductionState,
-        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
-        UnitGameplayProperties, UnitSpawn,
+        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity, Corpse,
+        CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
+        MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass,
+        MovementProfile, NavigationGoal, NavigationState, Position, ProductionArmorProfile,
+        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
+        ProductionCorpseProfile, ProductionDamageType, ProductionMovementClass, ProductionProfile,
+        ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId, SpawnTick,
+        SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties, UnitSpawn,
     },
     damage::{ArmorProfile, DamageRules, DamageType},
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
@@ -205,6 +205,7 @@ pub struct CorpseView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnitView {
     pub id: SimId,
+    pub content: Option<ContentIdentity>,
     pub team: Team,
     pub position: SimPoint,
     pub collision_radius: i32,
@@ -227,6 +228,7 @@ pub struct UnitView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildingView {
     pub id: SimId,
+    pub content: Option<ContentIdentity>,
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
@@ -648,6 +650,9 @@ impl Simulation {
                 max: building.health,
             },
         ));
+        if let Some(content) = properties.content {
+            entity.insert(content);
+        }
         if let Some(production) = building.production {
             let next_spawn_tick = self
                 .next_tick
@@ -659,6 +664,9 @@ impl Simulation {
                 ProductionMovementClass(properties.production_unit.movement_class),
                 ProductionAttackTargets(properties.production_unit.attack_targets),
             ));
+            if let Some(content) = properties.production_unit.content {
+                entity.insert(ProductionContentIdentity(content));
+            }
             if let Some(corpse) = properties.production_unit.corpse {
                 entity.insert(ProductionCorpseProfile(corpse));
             }
@@ -1785,6 +1793,9 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
+        if let Some(content) = properties.content {
+            entity.insert(content);
+        }
         if let Some(corpse) = properties.corpse {
             entity.insert(CorpseProducer(corpse));
         }
@@ -1877,6 +1888,7 @@ impl Simulation {
             &BuildingFootprint,
             &ProductionProfile,
             &ProductionState,
+            Option<&ProductionContentIdentity>,
             Option<&ProductionCorpseProfile>,
             Option<&ProductionCollisionRadius>,
             &ProductionMovementClass,
@@ -1887,7 +1899,7 @@ impl Simulation {
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _)| {
+            .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _, _)| {
                 state.next_spawn_tick <= self.next_tick
             })
             .map(
@@ -1898,6 +1910,7 @@ impl Simulation {
                     footprint,
                     profile,
                     state,
+                    content,
                     corpse,
                     collision_radius,
                     movement_class,
@@ -1912,6 +1925,7 @@ impl Simulation {
                         team: *team,
                         footprint: *footprint,
                         profile: *profile,
+                        content: content.map(|content| content.0),
                         corpse: corpse.map(|corpse| corpse.0),
                         collision_radius: collision_radius.map(|radius| radius.0),
                         movement_class: movement_class.0,
@@ -2022,6 +2036,7 @@ impl Simulation {
                 self.spawn_unit_unchecked(
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                     UnitGameplayProperties {
+                        content: attempt.content,
                         corpse: attempt.corpse,
                         collision_radius: attempt.collision_radius,
                         movement_class: attempt.movement_class,
@@ -4978,6 +4993,7 @@ struct ProductionAttempt {
     team: Team,
     footprint: BuildingFootprint,
     profile: ProductionProfile,
+    content: Option<ContentIdentity>,
     corpse: Option<CorpseProfile>,
     collision_radius: Option<CollisionRadius>,
     movement_class: MovementClass,
@@ -5581,6 +5597,7 @@ fn unit_view_from_entity(
     let ability_state = entity.get::<AutomaticAbilityState>().copied();
     Some(UnitView {
         id: *entity.get::<SimId>()?,
+        content: entity.get::<ContentIdentity>().copied(),
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
         collision_radius: entity
@@ -5610,6 +5627,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
     let ability_state = entity.get::<AutomaticAbilityState>().copied();
     Some(BuildingView {
         id: *entity.get::<SimId>()?,
+        content: entity.get::<ContentIdentity>().copied(),
         team: *entity.get::<Team>()?,
         footprint: *entity.get::<BuildingFootprint>()?,
         health: entity.get::<Health>()?.current,

@@ -199,8 +199,15 @@ impl Default for AttackTargetMask {
     }
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContentIdentity {
+    pub rawcode: u32,
+    pub name: &'static str,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct UnitGameplayProperties {
+    pub content: Option<ContentIdentity>,
     pub corpse: Option<CorpseProfile>,
     pub collision_radius: Option<CollisionRadius>,
     pub movement_class: MovementClass,
@@ -211,12 +218,16 @@ pub struct UnitGameplayProperties {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BuildingGameplayProperties {
+    pub content: Option<ContentIdentity>,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
     pub production_unit: UnitGameplayProperties,
     pub production_spellcasting: Option<SpellcastingProfile>,
 }
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionContentIdentity(pub ContentIdentity);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionCollisionRadius(pub CollisionRadius);
