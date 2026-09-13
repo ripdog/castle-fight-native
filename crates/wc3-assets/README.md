@@ -20,6 +20,20 @@ cf-wc3-assets --wc3 "$WC3_INSTALL" -o /tmp/cf-assets --unit hfoo --unit hrif
 
 Use `--keep-source` to retain the extracted MDX and original texture payloads beside the converted output. `--production` and `--object-fields` are development overrides and must be supplied together; normal shipped use relies on the embedded catalog.
 
+## Castle Fight client integration
+
+The 3D client automatically looks for a generated unit pack at `assets/wc3/units/manifest.json`. The generated Warcraft files are gitignored, so they stay local to the player's installation. A useful first-pass pack for the current demo is:
+
+```sh
+cargo run -p castle-fight-wc3-assets -- \
+  --wc3 "$WC3_INSTALL" \
+  --output assets/wc3/units \
+  --unit hfoo \
+  --unit n015
+```
+
+Those rawcodes currently replace the placeholder meshes for Footman and Ice Troll Shadow Priest. If the manifest or either model is absent, the client silently retains its normal placeholder visual. The client instantiates the converted scene and scale now; animation selection/playback is not wired yet, so these first imported units render in their static exported pose. Ranger and Gryphon Rider already convert, but their Warcraft skins use more than four bone influences on some vertices; Bevy 0.19 ignores glTF `JOINTS_1/WEIGHTS_1`, so they remain placeholders until the runtime or exporter has an explicit compatible path. Catapult is also intentionally still a placeholder because its Warcraft model uses hidden geoset state that the current converter does not yet reproduce.
+
 ## Output
 
 The output root contains `manifest.json`, `models/*.gltf`, matching `models/*.bin` buffers, and converted `textures/*.png` files. Unit entries in the manifest carry their rawcode, model path, model scale, converted glTF path, and whether install-resident base art had to replace a custom map model that is unavailable in a stock Warcraft III installation.

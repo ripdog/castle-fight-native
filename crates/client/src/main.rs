@@ -4,6 +4,7 @@ mod demo;
 mod inspection;
 mod presentation;
 mod terrain;
+mod unit_models;
 
 use bevy::{
     asset::AssetPlugin,

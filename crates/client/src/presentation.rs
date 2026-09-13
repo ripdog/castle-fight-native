@@ -17,6 +17,7 @@ use crate::{
     SimulationPlayback,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
+    unit_models::UnitModelSet,
 };
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
@@ -47,6 +48,7 @@ const UNIT_WALK_PHASE_PER_TICK: f32 = 0.58;
 const UNIT_FACING_RESPONSE: f32 = 14.0;
 const MISS_INDICATOR_SECONDS: f32 = 1.0;
 const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
+const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -342,6 +344,7 @@ impl CastlePresentationPlugin {
 impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
+            .init_resource::<UnitModelSet>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
@@ -379,6 +382,7 @@ impl Plugin for CastlePresentationPlugin {
 
 fn setup_scene(
     mut commands: Commands,
+    mut unit_models: ResMut<UnitModelSet>,
     world: (
         Res<WorldMetrics>,
         Res<TerrainSurface>,
@@ -394,6 +398,7 @@ fn setup_scene(
 ) {
     let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
     let (asset_server, mut meshes, mut materials) = assets;
+    *unit_models = UnitModelSet::load_default(&asset_server);
     let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
     health_bar_config.line.width = 6.0;
     health_bar_config.line.perspective = false;
@@ -1125,13 +1130,14 @@ fn sync_render_entities(
         Res<WorldMetrics>,
         Res<TerrainSurface>,
         Res<PresentationAssets>,
+        Res<UnitModelSet>,
     ),
     mut render_map: ResMut<RenderMap>,
     mut remnants: ResMut<DeathRemnants>,
     mut projectile_impacts: ResMut<ProjectileImpacts>,
     mut ability_impacts: ResMut<AbilityAreaImpacts>,
 ) {
-    let (metrics, terrain, assets) = world;
+    let (metrics, terrain, assets, unit_models) = world;
     if !samples.is_changed() {
         return;
     }
@@ -1239,24 +1245,44 @@ fn sync_render_entities(
         }
         let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
             + Vec3::Y * (unit_height(unit) * 0.5);
-        let entity = commands
-            .spawn((
-                Mesh3d(assets.unit_mesh(unit.visual_kind)),
-                MeshMaterial3d(assets.unit_material(unit.team)),
-                Transform {
-                    translation: position,
-                    scale: Vec3::splat(unit_render_scale(unit)),
-                    ..default()
-                },
-            ))
-            .id();
-        let weapon = spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
-        spawn_air_wings(&mut commands, &assets, entity, unit);
+        let imported_model = unit
+            .content
+            .and_then(|content| unit_models.get(content.rawcode));
+        let (entity, weapon) = if let Some(model) = imported_model {
+            let entity = commands
+                .spawn((Transform::from_translation(position), Visibility::default()))
+                .with_child((
+                    WorldAssetRoot(model.scene.clone()),
+                    Transform {
+                        translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
+                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                        scale: Vec3::splat(model.scale),
+                    },
+                ))
+                .id();
+            (entity, None)
+        } else {
+            let entity = commands
+                .spawn((
+                    Mesh3d(assets.unit_mesh(unit.visual_kind)),
+                    MeshMaterial3d(assets.unit_material(unit.team)),
+                    Transform {
+                        translation: position,
+                        scale: Vec3::splat(unit_render_scale(unit)),
+                        ..default()
+                    },
+                ))
+                .id();
+            let weapon =
+                spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
+            spawn_air_wings(&mut commands, &assets, entity, unit);
+            (entity, Some(weapon))
+        };
         render_map.units.insert(
             unit.id,
             PresentedEntry {
                 entity,
-                weapon: Some(weapon),
+                weapon,
                 max_health_seen: unit.health.max(1),
             },
         );
