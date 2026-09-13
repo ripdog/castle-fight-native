@@ -170,8 +170,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
             dict(sorted(Counter(row["coverage_status"] for row in listeners.values()).items())),
             {
                 "e2e-only": 1,
+                "normalized-ai-runtime-semantics": 2,
                 "normalized-gameplay-semantics": 16,
-                "runtime-ai-subsystem-unmodeled": 2,
                 "telemetry-only": 1,
             },
         )
@@ -188,7 +188,66 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
         self.assertEqual(summary["perk_mechanics"], 19)
+        self.assertEqual(summary["runtime_ai_mechanics"], 2)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
+        self.assertEqual(
+            listeners["DamageListener_addListener_AiEngagement_onEvent_addListener_AiEngagement"]["coverage_status"],
+            "normalized-ai-runtime-semantics",
+        )
+        self.assertEqual(
+            listeners["DamageListener_addListener_CustomAI_onEvent_addListener_CustomAI"]["coverage_status"],
+            "normalized-ai-runtime-semantics",
+        )
+
+    def test_runtime_ai_damage_signals_and_rescue_strike_controller_are_normalized(self) -> None:
+        with (self.resolved / "runtime-ai-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(set(rows), {"ai-engagement-damage-signals", "ai-rescue-strike-controller"})
+
+        engagement = json.loads(rows["ai-engagement-damage-signals"]["parameters_json"])
+        self.assertFalse(engagement["rewrites_damage"])
+        self.assertEqual(engagement["decay_period_seconds"], 2.0)
+        self.assertEqual(engagement["decay_factor_per_period"], 0.8)
+        self.assertEqual(engagement["engagement_sample_position"], "midpoint(source-position,target-position)")
+        self.assertEqual(engagement["engagement_sample_weight"], "damage-amount")
+        self.assertFalse(engagement["structure_target_contributes_to_engagement_centroid"])
+        self.assertEqual(engagement["engagement_axis_invalid_value"], -1.0)
+        self.assertEqual(
+            engagement["structure_push_dominance_formula"],
+            "clamp((team-damage-other-team-damage)/(team-damage+other-team-damage),-1,1)",
+        )
+
+        rescue = json.loads(rows["ai-rescue-strike-controller"]["parameters_json"])
+        self.assertFalse(rescue["rewrites_damage"])
+        self.assertEqual(rescue["target_hp_ratio_below_exclusive"], 0.65)
+        self.assertEqual(rescue["evaluation_debounce_seconds_per_team"], 0.25)
+        self.assertEqual(rescue["global_commit_lock_seconds"], 3.0)
+        self.assertEqual(rescue["effect_radius"], 700.0)
+        self.assertEqual(rescue["candidate_search_radius_around_damaged_structure"], 900.0)
+        self.assertEqual(rescue["maximum_candidate_units_scored"], 16)
+        self.assertEqual(rescue["tower_target_vs_siege_attacker_score_delta"], -4)
+        self.assertEqual(rescue["required_score_hp_ratio_clamp"], [0.2, 0.65])
+        self.assertEqual(
+            rescue["required_score_formula"],
+            "2 + 14*((clamp(hp_ratio,0.20,0.65)-0.20)/0.45)",
+        )
+        self.assertTrue(rescue["comparison_is_strict"])
+        self.assertEqual(rescue["non_castle_recent_commit_throttle_seconds"], 28.0)
+        self.assertEqual(rescue["same_area_distance_threshold"], 900.0)
+        self.assertEqual(rescue["same_area_repeat_throttle_seconds"], 75.0)
+        self.assertTrue(rescue["castle_targets_bypass_repeat_throttles"])
+        self.assertEqual(rescue["target_filter"], "alive-combat-sapper;enemy-of-mIb")
+        ability = rescue["rescue_strike_ability"]
+        self.assertEqual(ability["rawcode"], "A005")
+        self.assertEqual(ability["effective_mana_cost"], 0.0)
+        self.assertEqual(ability["effective_cooldown_seconds"], 60.0)
+        self.assertEqual(ability["static_mana_cost"], 9999.0)
+        self.assertEqual(ability["static_cooldown_seconds"], 99.0)
+        self.assertEqual(ability["range"], 1000.0)
+        self.assertEqual(ability["area"], 700.0)
+
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["runtime_ai_mechanic_rows"], 2)
 
     def test_all_proven_live_perk_mechanics_are_importer_ready(self) -> None:
         with (self.resolved / "perk-mechanics.tsv").open(encoding="utf-8") as handle:

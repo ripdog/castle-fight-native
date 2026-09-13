@@ -5088,20 +5088,215 @@ def _extract_perk_mechanics(
     return rows
 
 
+def _extract_runtime_ai_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    protected_filter_bindings: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize live AI-only damage observers/controllers without treating them as combat rewrites."""
+    functions_by_name = {str(row["name"]): row for row in functions}
+    engagement_listener = "DamageListener_addListener_AiEngagement_onEvent_addListener_AiEngagement"
+    custom_ai_listener = "DamageListener_addListener_CustomAI_onEvent_addListener_CustomAI"
+    if engagement_listener not in functions_by_name or custom_ai_listener not in functions_by_name:
+        return []
+
+    def source(name: str, fragments: Iterable[bytes] = ()) -> tuple[int, bytes]:
+        row = functions_by_name.get(name)
+        if row is None:
+            raise ValueError(f"runtime AI mechanic source function missing: {name}")
+        start = int(row["start"])
+        body = data[start:int(row["end"])]
+        for fragment in fragments:
+            if fragment not in body:
+                raise ValueError(f"runtime AI mechanic source changed: {name}: missing {fragment!r}")
+        return start, body
+
+    def require_global_fragment(fragment: bytes) -> None:
+        if data.count(fragment) != 1:
+            raise ValueError(f"runtime AI global constant changed or became ambiguous: {fragment!r}")
+
+    for fragment in (
+        b"oDb=2.0", b"nDb=0.8",
+        b"Ghb=28.0", b"Fhb=75.0", b"Ehb=810000.0", b"Dhb=900.0", b"Chb=700.0",
+        b"zhb=16", b"yhb=0.25",
+    ):
+        require_global_fragment(fragment)
+
+    sx_rows = [row for row in protected_filter_bindings if str(row["symbol"]) == "SX"]
+    if len(sx_rows) != 1:
+        raise ValueError(f"runtime AI Rescue Strike filter SX resolution changed: {len(sx_rows)} rows")
+    sx = sx_rows[0]
+    if str(sx["resolution_status"]) != "resolved" or str(sx["predicate"]) != "alive-combat-sapper;enemy-of-mIb":
+        raise ValueError(f"runtime AI Rescue Strike filter SX changed: {sx}")
+
+    rows: list[dict[str, object]] = []
+
+    def add(
+        system_id: str,
+        mechanic_kind: str,
+        trigger: str,
+        parameters: dict[str, object],
+        source_functions: list[tuple[str, tuple[bytes, ...]]],
+        *,
+        related_rawcode_ids: Iterable[int] = (),
+    ) -> None:
+        offsets: list[int] = []
+        names: list[str] = []
+        for name, fragments in source_functions:
+            start, _body = source(name, fragments)
+            offsets.append(start)
+            names.append(name)
+        rows.append({
+            "system_id": system_id,
+            "mechanic_kind": mechanic_kind,
+            "trigger": trigger,
+            "parameters": parameters,
+            "related_rawcode_ids": list(related_rawcode_ids),
+            "source_functions": list(dict.fromkeys(names)),
+            "evidence_kind": "exact-readable-ai-runtime-control-flow",
+            "byte_offset": min(offsets),
+        })
+
+    add(
+        "ai-engagement-damage-signals",
+        "decayed-damage-weighted-engagement-and-structure-pressure-signals",
+        "damage-event-plus-periodic-decay-and-round-reset",
+        {
+            "rewrites_damage": False,
+            "requires_positive_damage": True,
+            "source_structure_ignored": True,
+            "source_currently_caged_ignored": True,
+            "structure_target_behavior": "accumulate damage into source-team structure-pressure bucket and stop",
+            "structure_target_contributes_to_engagement_centroid": False,
+            "non_structure_caged_target_ignored": True,
+            "engagement_sample_position": "midpoint(source-position,target-position)",
+            "engagement_sample_weight": "damage-amount",
+            "centroid_accumulators": "sum(midpoint.x*damage), sum(midpoint.y*damage), sum(damage)",
+            "decay_period_seconds": 2.0,
+            "decay_factor_per_period": 0.8,
+            "decayed_values": ["engagement-x-weighted-sum", "engagement-y-weighted-sum", "engagement-damage-weight", "team-0-structure-damage", "team-1-structure-damage"],
+            "round_start_resets_all_accumulators": True,
+            "engagement_axis_formula": "clamp(dot(weighted-centroid-castle0,castle1-castle0)/length_sq(castle1-castle0),0,1)",
+            "engagement_axis_invalid_value": -1.0,
+            "engagement_dominance_formula": "team0=(axis-0.5)*2; other-team=negative(team0)",
+            "structure_push_dominance_formula": "clamp((team-damage-other-team-damage)/(team-damage+other-team-damage),-1,1)",
+        },
+        [
+            (engagement_listener, (
+                b"DamageEvent_getSource()", b"DamageEvent_getTarget()", b"DamageEvent_getAmount()", b"jyk<=0.0",
+                b"UNIT_TYPE_STRUCTURE", b"vec2_isCagedAt(unit_getPos(hyk),unit_getOwner(hyk))",
+                b"jDb[kyk]=(__wurst_ensureReal(jDb[kyk])+jyk)", b"vec2_isCagedAt(unit_getPos(iyk),unit_getOwner(iyk))",
+                b"vec2_op_mult(vec2_op_plus(unit_getPos(hyk),unit_getPos(iyk)),0.5)",
+                b"mDb=(mDb+(lyk[1]*jyk))", b"lDb=(lDb+(lyk[2]*jyk))", b"kDb=(kDb+jyk)",
+            )),
+            ("RD", (b"oDb=2.0", b"nDb=0.8", b"DamageEvent_addListener", b"doPeriodically(ZSo,YSo)")),
+            ("CallbackPeriodic_doPeriodically_AiEngagement_call_doPeriodically_AiEngagement", (
+                b"mDb=(mDb*nDb)", b"lDb=(lDb*nDb)", b"kDb=(kDb*nDb)",
+                b"jDb[0]=(__wurst_ensureReal(jDb[0])*nDb)", b"jDb[1]=(__wurst_ensureReal(jDb[1])*nDb)",
+            )),
+            ("Action_batch_AiRoundState_run_batch_AiRoundState", (
+                b"mDb=0.0", b"lDb=0.0", b"kDb=0.0", b"jDb[0]=0.0", b"jDb[1]=0.0",
+            )),
+            ("getEngagementAxisPos", (
+                b"mDb/kDb", b"lDb/kDb", b"unit_getPos(cX[0])", b"unit_getPos(cX[1])", b"real_clamp", b"return(-1.0)",
+            )),
+            ("getEngagementDominance", (b"getEngagementAxisPos()", b"(iTo-0.5)*2.0", b"kTo=(-jTo)")),
+            ("getStructurePushDominance", (b"jDb[lTo]", b"jDb[oTo]", b"(mTo-nTo)/pTo", b"real_clamp")),
+        ],
+    )
+
+    add(
+        "ai-rescue-strike-controller",
+        "damage-triggered-ai-rescue-strike-targeting-and-throttling",
+        "damage-event-on-low-hp-structure",
+        {
+            "rewrites_damage": False,
+            "rescue_strike_ability_id": 1093677109,
+            "damaged_unit_source": "EventData trigger unit",
+            "attacker_source": "DamageEvent source",
+            "target_requires_structure": True,
+            "target_hp_ratio_below_exclusive": 0.65,
+            "target_must_not_be_in_construction": True,
+            "team_index_range": [0, 1],
+            "evaluation_debounce_seconds_per_team": 0.25,
+            "global_commit_lock_seconds": 3.0,
+            "requires_positive_team_rescue_strike_count": True,
+            "non_castle_disabled_mode_restricts_target_to_team_castle": True,
+            "caster_requirement": "active AI executor with builder carrying A005 and not build-locked",
+            "target_filter": str(sx["predicate"]),
+            "target_filter_symbol": "SX",
+            "target_filter_owner_context": "mIb = damaged-structure owner",
+            "effect_radius": 700.0,
+            "candidate_search_radius_around_damaged_structure": 900.0,
+            "maximum_candidate_units_scored": 16,
+            "initial_candidate_point": "attacker position",
+            "candidate_score": "number of filtered units within 700 radius",
+            "best_candidate_tie_behavior": "keep earlier candidate; replace only on strictly greater score",
+            "tower_target_vs_siege_attacker_score_delta": -4,
+            "required_score_hp_ratio_clamp": [0.20, 0.65],
+            "required_score_formula": "2 + 14*((clamp(hp_ratio,0.20,0.65)-0.20)/0.45)",
+            "commit_condition": "adjusted-score > 16 OR adjusted-score > required-score",
+            "comparison_is_strict": True,
+            "non_castle_recent_commit_throttle_seconds": 28.0,
+            "non_castle_recent_commit_throttle_applies_when_score_lte": 16,
+            "same_area_distance_squared_threshold": 810000.0,
+            "same_area_distance_threshold": 900.0,
+            "same_area_repeat_throttle_seconds": 75.0,
+            "same_area_repeat_score_limit_formula": "real_toInt(required-score+5)",
+            "castle_targets_bypass_repeat_throttles": True,
+            "commit_selects_first_eligible_ai_player_in_team_force": True,
+            "commit_updates_last_time_and_target_position": True,
+        },
+        [
+            (custom_ai_listener, (b"onAttackStrikeCheck()",)),
+            ("resetAiRescueStrikeCoordination", (b"Lhb=false", b"Khb[amq]=0.", b"Jhb[amq]=0.", b"Ihb[amq]=0.", b"Hhb[amq]=0.")),
+            ("requiredCount", (b"clamp(emq,0.20,0.65)", b"2.+(14*((fmq-0.20)/0.45))")),
+            ("shouldRescueStrike", (b"hmq>16", b"hmq>requiredCount(gmq)")),
+            ("countRescueStrikeHitsAt", (b"mmq=Chb", b"nmq=SX", b"GroupEnumUnitsInRange", b"group_size(imq)")),
+            ("findBestRescueStrikeTarget", (
+                b"qmq=tupleCopy1(unit_getPos(pmq))", b"countRescueStrikeHitsAt(Ahb,qmq)", b"Dhb", b"Cmq=SX",
+                b"if(smq<zhb)then", b"countRescueStrikeHitsAt(Ahb,vmq)", b"if(wmq>rmq)then",
+            )),
+            ("hasAvailableAiRescueStrikeCaster", (
+                b"aIb[player_getId(Imq)]", b"AiExecutor_builder", b"unit_hasAbility(Jmq.AiExecutor_builder,1093677109)",
+                b"not AiExecutor_AiExecutor_isBuildLocked(Jmq)",
+            )),
+            ("shouldThrottleAiRescueStrike", (
+                b"if(Qmq or(Smq<=0.0))then return false", b"Zmq<Ghb", b"Ymq<=16", b"<=Ehb", b"Zmq<Fhb",
+                b"Ymq<=real_toInt((requiredCount(Xmq)+5.0))",
+            )),
+            ("onAttackStrikeCheck", (
+                b"DamageEvent_getSource()", b"EventData_getTriggerUnit()", b"getElapsedGameTime()-__wurst_ensureReal(Khb[gnq]))>=yhb",
+                b"UNIT_TYPE_STRUCTURE", b"unit_getHPRatio(enq)<0.65", b"not unit_isInConstruction(enq)",
+                b"isRsNonCastleDisabled(gnq)", b"getRescueStrikesForTeam(gnq)", b"hasAvailableAiRescueStrikeCaster(inq)",
+                b"mIb=unit_getOwner(enq)", b"findBestRescueStrikeTarget(enq,dnq)", b"Chb", b"SX", b"group_size(nIb)",
+                b"CFBuilding_isTower", b"CFBuilding_isSiege_field", b"qnq=(qnq-4)", b"shouldRescueStrike(mnq,qnq)",
+                b"shouldThrottleAiRescueStrike", b"unit_hasAbility(tnq.AiExecutor_builder,1093677109)", b"FSM_FSM_changeState",
+                b"Jhb[gnq]=getElapsedGameTime()", b"Ihb[gnq]=knq[1]", b"Hhb[gnq]=knq[2]", b"Lhb=true", b"doAfter(3.,unq)",
+            )),
+            ("CallbackSingle_doAfter_CustomAI_call_doAfter_CustomAI1", (b"Lhb=false",)),
+            ("getRescueStrikesForTeam", (b"S1q==0", b"Computed_Computed_get(T7)", b"S1q==1", b"Computed_Computed_get(S7)")),
+        ],
+        related_rawcode_ids=(1093677109,),
+    )
+
+    return rows
+
+
 def _extract_damage_listener_coverage(
     functions: list[dict[str, object]],
     production_unit_special_mechanics: list[dict[str, object]],
     runtime_system_mechanics: list[dict[str, object]],
     building_spell_mechanics: list[dict[str, object]],
     perk_mechanics: list[dict[str, object]],
+    runtime_ai_mechanics: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Strict closure audit for authored DamageListener callbacks.
 
-    A new gameplay damage listener must either be referenced by a normalized
-    mechanic row or be explicitly classified here. Proven-live perk listeners
-    remain an explicit importer gap until their behavior is normalized; merely
-    proving registry reachability does not make their mechanics implementation-ready.
+    Every authored damage listener must either be referenced by normalized
+    gameplay/AI-runtime semantics or be explicitly classified as telemetry/E2E.
+    The fallback classifications remain fail-loud guards for future map drift.
     """
     if not protected_perk_registry_audit:
         return []
@@ -5118,6 +5313,7 @@ def _extract_damage_listener_coverage(
     add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
     add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
     add_sources("perk-mechanics", perk_mechanics, "perk_id")
+    add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
 
     perk_by_listener = {
         str(row["damage_listener_function"]): row
@@ -5148,9 +5344,12 @@ def _extract_damage_listener_coverage(
         normalized = sorted(normalized_sources.get(listener_name, ()))
         perk_registration = perk_by_listener.get(listener_name)
         candidate_factory = str(perk_registration["factory_function"]) if perk_registration is not None else ""
-        if normalized:
+        if normalized and all(source.startswith("runtime-ai-mechanics:") for source in normalized):
+            status = "normalized-ai-runtime-semantics"
+            note = "listener is referenced by importer-facing normalized AI-runtime semantics and does not rewrite damage"
+        elif normalized:
             status = "normalized-gameplay-semantics"
-            note = "listener is referenced by one or more importer-facing normalized mechanic rows"
+            note = "listener is referenced by one or more importer-facing normalized gameplay mechanic rows"
         elif candidate_factory and bool(perk_registration["individual_factory_registration_proven"]):
             status = "registered-perk-semantics-unmodeled"
             note = (
@@ -8641,12 +8840,14 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     )
     protected_perk_registry_audit = _extract_protected_perk_registry_audit(data, functions)
     perk_mechanics = _extract_perk_mechanics(data, functions, protected_perk_registry_audit)
+    runtime_ai_mechanics = _extract_runtime_ai_mechanics(data, functions, protected_filter_bindings)
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
         runtime_system_mechanics,
         building_spell_mechanics,
         perk_mechanics,
+        runtime_ai_mechanics,
         protected_perk_registry_audit,
     )
     for reference in function_value_arguments:
@@ -8690,5 +8891,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "building_spell_mechanics": building_spell_mechanics,
         "protected_perk_registry_audit": protected_perk_registry_audit,
         "perk_mechanics": perk_mechanics,
+        "runtime_ai_mechanics": runtime_ai_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
     }

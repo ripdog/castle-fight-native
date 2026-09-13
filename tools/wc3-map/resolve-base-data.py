@@ -2234,6 +2234,62 @@ def main() -> None:
         perk_mechanic_rows,
     )
 
+    runtime_ai_rows: list[list[Any]] = []
+    runtime_ai_path = map_root / "script" / "runtime-ai-mechanics.tsv"
+    if runtime_ai_path.exists():
+        with runtime_ai_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                system_id = mechanic["system_id"]
+                parameters = json.loads(mechanic["parameters_json"])
+                if system_id == "ai-rescue-strike-controller":
+                    ability = next((row for row in ability_levels.get("A005", []) if row["level"] == "1"), None)
+                    if ability is None:
+                        raise ValueError("AI Rescue Strike runtime mechanic is missing A005 level 1")
+                    effective_mana = numeric(protected_ability_values.get(("A005", 1, "mana_cost"), ability["mana_cost"]))
+                    effective_cooldown = numeric(protected_ability_values.get(("A005", 1, "cooldown"), ability["cooldown"]))
+                    ability_area = numeric(ability["area"])
+                    ability_range = numeric(ability["range"])
+                    if effective_mana != 0 or effective_cooldown != 60:
+                        raise ValueError(
+                            f"AI Rescue Strike protected ability fields changed: mana={effective_mana} cooldown={effective_cooldown}"
+                        )
+                    if ability_area != 700 or ability_range != 1000:
+                        raise ValueError(
+                            f"AI Rescue Strike object geometry changed: area={ability_area} range={ability_range}"
+                        )
+                    parameters["rescue_strike_ability"] = {
+                        "rawcode": "A005",
+                        "name": ability["name"],
+                        "tip": ability["tip"],
+                        "ubertip": ability["ubertip"],
+                        "base_rawcode": ability["base_rawcode"],
+                        "effective_mana_cost": effective_mana,
+                        "effective_cooldown_seconds": effective_cooldown,
+                        "static_mana_cost": numeric(ability["mana_cost"]),
+                        "static_cooldown_seconds": numeric(ability["cooldown"]),
+                        "range": ability_range,
+                        "area": ability_area,
+                        "targets": ability["targets"],
+                        "buffs": ability["buffs"],
+                        "object_data": json.loads(ability["data_fields_labeled_json"]),
+                    }
+                elif system_id != "ai-engagement-damage-signals":
+                    raise ValueError(f"unrecognized runtime AI mechanic: {system_id}")
+
+                runtime_ai_rows.append([
+                    system_id, mechanic["mechanic_kind"], mechanic["trigger"],
+                    mechanic["related_objects_json"], stable_json(parameters),
+                    mechanic["source_functions"], mechanic["evidence_kind"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "runtime-ai-mechanics.tsv",
+        [
+            "system_id", "mechanic_kind", "trigger", "related_objects_json", "parameters_json",
+            "source_functions", "evidence_kind", "byte_offset",
+        ],
+        runtime_ai_rows,
+    )
+
     runtime_system_rows: list[list[Any]] = []
     runtime_system_path = map_root / "script" / "runtime-system-mechanics.tsv"
     if runtime_system_path.exists():
@@ -4479,6 +4535,8 @@ def main() -> None:
         "building_improvement_spawn_mechanic_rows": len(building_improvement_spawn_by_source),
         "perk_mechanic_rows": len(perk_mechanic_rows),
         "perk_mechanic_kinds": dict(sorted(Counter(row[3] for row in perk_mechanic_rows).items())),
+        "runtime_ai_mechanic_rows": len(runtime_ai_rows),
+        "runtime_ai_mechanic_kinds": dict(sorted(Counter(row[1] for row in runtime_ai_rows).items())),
         "runtime_system_mechanic_rows": len(runtime_system_rows),
         "runtime_system_mechanic_kinds": dict(sorted(Counter(
             row[1] for row in runtime_system_rows
@@ -4552,6 +4610,7 @@ def main() -> None:
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
             "perk-mechanics.tsv currently normalizes all eight proven-live damage-listener draft perks, including target-type damage tradeoffs, cage-conditioned damage/base-damage changes, Combat Stance HP bands and toggle abilities, Mana Shielding, Spell's Edge and Containment Focus; remaining live perks stay separate until their non-damage runtime paths are normalized",
             "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
+            "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals plus the damage-triggered Rescue Strike controller, including its HP/count threshold curve, 700/900 target geometry, siege-vs-tower -4 score, 28/75-second repeat throttles, 3-second coordination lock and protected A005 runtime fields (0 mana, 60-second cooldown)",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
