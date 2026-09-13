@@ -1094,7 +1094,7 @@ fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: 
         mana: ManaProfile {
             maximum: 1_000_000_000,
             starting: 1_000_000_000,
-            regen_per_tick: 1,
+            regen_per_tick_per_10k: 10_000,
         },
         ability: AutomaticAbilityProfile {
             id: AbilityId(1),
@@ -1167,7 +1167,7 @@ fn populate_global_stun_density(simulation: &mut Simulation, total_units: usize)
         mana: ManaProfile {
             maximum: 1_000_000_000,
             starting: 1_000_000_000,
-            regen_per_tick: 0,
+            regen_per_tick_per_10k: 0,
         },
         ability: AutomaticAbilityProfile {
             id: AbilityId(2),
@@ -1241,7 +1241,7 @@ fn populate_timed_movement_modifier_density(simulation: &mut Simulation, total_u
         mana: ManaProfile {
             maximum: 1_000_000_000,
             starting: 1_000_000_000,
-            regen_per_tick: 0,
+            regen_per_tick_per_10k: 0,
         },
         ability: AutomaticAbilityProfile {
             id: AbilityId(ability_id),
@@ -1398,7 +1398,7 @@ fn populate_mixed_battle(simulation: &mut Simulation, total_units: usize) {
         mana: ManaProfile {
             maximum: 100,
             starting: 100,
-            regen_per_tick: 1,
+            regen_per_tick_per_10k: 10_000,
         },
         ability: AutomaticAbilityProfile {
             id: AbilityId(2),
@@ -1413,7 +1413,7 @@ fn populate_mixed_battle(simulation: &mut Simulation, total_units: usize) {
         mana: ManaProfile {
             maximum: 100,
             starting: 100,
-            regen_per_tick: 1,
+            regen_per_tick_per_10k: 10_000,
         },
         ability: AutomaticAbilityProfile {
             id: AbilityId(3),

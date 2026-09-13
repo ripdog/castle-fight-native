@@ -1,18 +1,38 @@
+use std::fmt;
+
 use crate::{
     components::{
         AttackDelivery, AttackProfile, AttackTargetMask, BuildingFootprint,
         BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity,
-        CorpseDefinitionId, CorpseProfile, MovementClass, MovementProfile, ProductionProfile, Team,
-        UnitGameplayProperties, UnitTemplate,
+        CorpseDefinitionId, CorpseProfile, MovementClass, MovementProfile, PassiveUnitEffects,
+        ProductionProfile, SpellcastingProfile, Team, UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     math::SUBUNITS_PER_WORLD_UNIT,
+    native_effects::native_unit_mechanics_for,
+    version::MapVersion,
 };
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
+pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
 pub const CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS: u16 = 4;
 const CASTLE_FIGHT_COLLISION_WORLD_UNITS: i32 = 16;
 const PRODUCTION_SPAWN_SEARCH_RADIUS_CELLS: u16 = 12;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnsupportedCastleFightMapVersion(pub MapVersion);
+
+impl fmt::Display for UnsupportedCastleFightMapVersion {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "Castle Fight {} content is not available",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CastleFightUnitKind {
@@ -33,13 +53,35 @@ impl CastleFightUnitKind {
     ];
 
     #[must_use]
-    pub const fn definition(self) -> CastleFightUnitDefinition {
+    pub fn definition(self) -> CastleFightUnitDefinition {
+        self.definition_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn definition_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<CastleFightUnitDefinition, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        let mut definition = self.definition_9_27();
+        let mechanics = native_unit_mechanics_for(version, definition.rawcode)
+            .expect("supported Castle Fight version must have native-effect tuning");
+        definition.passive_effects = mechanics.passive_effects;
+        definition.spellcasting = mechanics.spellcasting;
+        Ok(definition)
+    }
+
+    const fn definition_9_27(self) -> CastleFightUnitDefinition {
         match self {
             Self::Footman => CastleFightUnitDefinition {
                 rawcode: u32::from_be_bytes(*b"hfoo"),
                 name: "Footman",
                 health: 250,
                 armor: ArmorProfile::new(ArmorType::Large, 4),
+                passive_effects: PassiveUnitEffects::EMPTY,
+                spellcasting: None,
                 damage_type: DamageType::Normal,
                 attack_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
                 movement_class: MovementClass::Ground,
@@ -64,6 +106,8 @@ impl CastleFightUnitKind {
                 name: "Ranger",
                 health: 500,
                 armor: ArmorProfile::new(ArmorType::Small, 3),
+                passive_effects: PassiveUnitEffects::EMPTY,
+                spellcasting: None,
                 damage_type: DamageType::Pierce,
                 attack_targets: AttackTargetMask::ALL,
                 movement_class: MovementClass::Ground,
@@ -88,6 +132,8 @@ impl CastleFightUnitKind {
                 name: "Catapult",
                 health: 475,
                 armor: ArmorProfile::new(ArmorType::Medium, 5),
+                passive_effects: PassiveUnitEffects::EMPTY,
+                spellcasting: None,
                 damage_type: DamageType::Siege,
                 attack_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
                 movement_class: MovementClass::Ground,
@@ -113,6 +159,8 @@ impl CastleFightUnitKind {
                 name: "Ice Troll Shadow Priest",
                 health: 350,
                 armor: ArmorProfile::new(ArmorType::Small, 1),
+                passive_effects: PassiveUnitEffects::EMPTY,
+                spellcasting: None,
                 damage_type: DamageType::Magic,
                 attack_targets: AttackTargetMask::ALL,
                 movement_class: MovementClass::Ground,
@@ -137,6 +185,8 @@ impl CastleFightUnitKind {
                 name: "Gryphon Rider",
                 health: 500,
                 armor: ArmorProfile::new(ArmorType::Medium, 2),
+                passive_effects: PassiveUnitEffects::EMPTY,
+                spellcasting: None,
                 damage_type: DamageType::Magic,
                 attack_targets: AttackTargetMask::ALL,
                 movement_class: MovementClass::Air,
@@ -166,6 +216,8 @@ pub struct CastleFightUnitDefinition {
     pub name: &'static str,
     pub health: i32,
     pub armor: ArmorProfile,
+    pub passive_effects: PassiveUnitEffects,
+    pub spellcasting: Option<SpellcastingProfile>,
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
     pub movement_class: MovementClass,
@@ -198,6 +250,7 @@ impl CastleFightUnitDefinition {
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
+            passive_effects: self.passive_effects,
         }
     }
 }
@@ -221,7 +274,22 @@ impl CastleFightProductionKind {
     ];
 
     #[must_use]
-    pub const fn definition(self) -> CastleFightProductionDefinition {
+    pub fn definition(self) -> CastleFightProductionDefinition {
+        self.definition_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn definition_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<CastleFightProductionDefinition, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        Ok(self.definition_9_27())
+    }
+
+    const fn definition_9_27(self) -> CastleFightProductionDefinition {
         match self {
             Self::Barracks => production_definition(
                 u32::from_be_bytes(*b"h000"),
@@ -277,6 +345,7 @@ pub struct CastleFightProductionDefinition {
     pub spawn_interval_ticks: u16,
     pub footprint_size_cells: u16,
     pub unit: CastleFightUnitKind,
+    pub map_version: MapVersion,
 }
 
 impl CastleFightProductionDefinition {
@@ -290,7 +359,11 @@ impl CastleFightProductionDefinition {
                 initial_delay_ticks: self.spawn_interval_ticks,
                 interval_ticks: self.spawn_interval_ticks,
                 search_radius_cells: PRODUCTION_SPAWN_SEARCH_RADIUS_CELLS,
-                unit: self.unit.definition().template(),
+                unit: self
+                    .unit
+                    .definition_for_version(self.map_version)
+                    .expect("production definition map version must have matching unit content")
+                    .template(),
             }),
             attack: None,
             spellcasting: None,
@@ -298,7 +371,7 @@ impl CastleFightProductionDefinition {
     }
 
     #[must_use]
-    pub const fn gameplay_properties(self) -> BuildingGameplayProperties {
+    pub fn gameplay_properties(self) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
             content: Some(ContentIdentity {
                 rawcode: self.rawcode,
@@ -307,8 +380,16 @@ impl CastleFightProductionDefinition {
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
             armor: self.armor,
-            production_unit: self.unit.definition().gameplay_properties(),
-            production_spellcasting: None,
+            production_unit: self
+                .unit
+                .definition_for_version(self.map_version)
+                .expect("production definition map version must have matching unit content")
+                .gameplay_properties(),
+            production_spellcasting: self
+                .unit
+                .definition_for_version(self.map_version)
+                .expect("production definition map version must have matching unit content")
+                .spellcasting,
         }
     }
 }
@@ -413,6 +494,7 @@ impl CastleFightTowerDefinition {
                 attack_targets: AttackTargetMask::ALL,
                 damage_type: DamageType::Normal,
                 armor: ArmorProfile::UNARMORED,
+                passive_effects: PassiveUnitEffects::EMPTY,
             },
             production_spellcasting: None,
         }
@@ -444,6 +526,7 @@ const fn production_definition(
         spawn_interval_ticks: spawn_seconds * CASTLE_FIGHT_SIMULATION_HZ as u16,
         footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS,
         unit,
+        map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
 }
 

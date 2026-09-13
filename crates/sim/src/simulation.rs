@@ -9,7 +9,9 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
 const RANDOM_PURPOSE_UPHILL_MISS: u64 = 0x5550_4849_4c4c_0001;
+const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
+const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 
@@ -18,15 +20,21 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity, Corpse,
-        CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
-        MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass,
-        MovementProfile, NavigationGoal, NavigationState, Position, ProductionArmorProfile,
-        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
-        ProductionCorpseProfile, ProductionDamageType, ProductionMovementClass, ProductionProfile,
+        BuildingGameplayProperties, BuildingSpawn, BurningOilZone, CollisionRadius,
+        ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile,
+        GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
+        ManaState, ModifierId, MovementClass, MovementProfile, NavigationGoal, NavigationState,
+        PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
+        ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
+        ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
+        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
         ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties, UnitSpawn,
+        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
+        UnitGameplayProperties, UnitSpawn,
     },
+    content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, DamageRules, DamageType},
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
@@ -676,6 +684,7 @@ impl Simulation {
             entity.insert((
                 ProductionDamageType(properties.production_unit.damage_type),
                 ProductionArmorProfile(properties.production_unit.armor),
+                ProductionPassiveEffects(properties.production_unit.passive_effects),
             ));
             if let Some(spellcasting) = properties.production_spellcasting {
                 entity.insert(ProductionSpellcastingProfile(spellcasting));
@@ -696,6 +705,7 @@ impl Simulation {
                 spellcasting,
                 ManaState {
                     current: spellcasting.mana.starting,
+                    regen_remainder_per_10k: 0,
                 },
                 AutomaticAbilityState {
                     ready_tick: self.next_tick,
@@ -815,29 +825,35 @@ impl Simulation {
         let phase_start = Instant::now();
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
+        resolve_periodic_unit_statuses(&mut units, completed_tick, self.combat_rules.damage_rules);
+        self.resolve_burning_oil_zones(&mut units, &mut buildings, completed_tick);
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
-            units.iter().enumerate().flat_map(|(index, unit)| {
-                let component_entry = (unit.movement_class == MovementClass::Ground)
-                    .then(|| {
-                        self.topology
-                            .component_id(self.topology.cell_of_point(unit.position))
-                    })
+            units
+                .iter()
+                .enumerate()
+                .filter(|(_, unit)| unit.health > 0)
+                .flat_map(|(index, unit)| {
+                    let component_entry = (unit.movement_class == MovementClass::Ground)
+                        .then(|| {
+                            self.topology
+                                .component_id(self.topology.cell_of_point(unit.position))
+                        })
+                        .flatten()
+                        .map(|component| {
+                            (
+                                SpatialPartition::new(unit.team.0, component),
+                                index,
+                                unit.position,
+                            )
+                        });
+                    [
+                        component_entry,
+                        Some((SpatialPartition::global(unit.team.0), index, unit.position)),
+                    ]
+                    .into_iter()
                     .flatten()
-                    .map(|component| {
-                        (
-                            SpatialPartition::new(unit.team.0, component),
-                            index,
-                            unit.position,
-                        )
-                    });
-                [
-                    component_entry,
-                    Some((SpatialPartition::global(unit.team.0), index, unit.position)),
-                ]
-                .into_iter()
-                .flatten()
-            }),
+                }),
         );
         let mut snapshot_and_spatial = phase_start.elapsed();
 
@@ -982,6 +998,15 @@ impl Simulation {
                     )
                     .is_some()
                     {
+                        apply_pending_attack_effects(
+                            target,
+                            snapshot.projectile.on_hit,
+                            snapshot.projectile.source_team,
+                            completed_tick,
+                            &mut units,
+                            &mut unit_health,
+                            self.combat_rules.damage_rules,
+                        );
                         projectile_impacts += 1;
                         projectile_effects += 1;
                     } else {
@@ -1107,14 +1132,22 @@ impl Simulation {
             };
 
             let missed =
-                self.uphill_attack_misses(&intent, target_position, completed_tick, &units);
+                self.uphill_attack_misses(&intent, target_position, completed_tick, &units)
+                    || self.attack_is_evaded(&intent, &units, completed_tick);
             if !missed {
+                let (bonus_damage, on_hit) =
+                    self.resolve_passive_attack_effects(&intent, &units, completed_tick);
+                let damage = intent
+                    .attack
+                    .damage
+                    .checked_add(bonus_damage)
+                    .expect("attack plus passive bonus damage overflowed");
                 match intent.attack.delivery {
                     AttackDelivery::Melee => {
                         let applied = apply_damage_to_target(
                             intent.target,
                             intent.source_id,
-                            intent.attack.damage,
+                            damage,
                             intent.damage_type,
                             completed_tick,
                             DamageTargetState {
@@ -1130,6 +1163,28 @@ impl Simulation {
                             },
                         );
                         debug_assert!(applied.is_some());
+                        apply_pending_attack_effects(
+                            intent.target,
+                            on_hit,
+                            intent.source_team,
+                            completed_tick,
+                            &mut units,
+                            &mut unit_health,
+                            self.combat_rules.damage_rules,
+                        );
+                        if let (
+                            AttackSourceIndex::Unit(source_index),
+                            TargetIndex::Unit(target_index),
+                        ) = (intent.source, intent.target)
+                        {
+                            apply_melee_reactive_armor_effects(
+                                source_index,
+                                target_index,
+                                completed_tick,
+                                &mut units,
+                                &unit_health,
+                            );
+                        }
                     }
                     AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
                         let travel_ticks =
@@ -1139,8 +1194,10 @@ impl Simulation {
                             .expect("projectile impact tick overflow");
                         projectile_launches.push(ProjectileLaunch {
                             source: intent.source_id,
+                            source_team: intent.source_team,
                             target: intent.target_id,
-                            damage: intent.attack.damage,
+                            damage,
+                            on_hit,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             launch_tick: completed_tick,
@@ -1151,6 +1208,15 @@ impl Simulation {
                         speed_per_tick,
                         impact_radius,
                     } => {
+                        assert_eq!(
+                            bonus_damage, 0,
+                            "ballistic passive bonus damage is unsupported"
+                        );
+                        assert_eq!(
+                            (on_hit.stun_duration_ticks, on_hit.triggered_spell),
+                            (0, None),
+                            "ballistic stun/triggered-spell passives are unsupported"
+                        );
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
                         let impact_tick = completed_tick
@@ -1161,6 +1227,7 @@ impl Simulation {
                             source_team: intent.source_team,
                             target_mask: intent.attack_targets,
                             damage: intent.attack.damage,
+                            burning_oil: on_hit.burning_oil,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,
@@ -1176,6 +1243,11 @@ impl Simulation {
                         damage_percent_per_bounce,
                         allow_repeat_targets,
                     } => {
+                        assert_eq!(
+                            (bonus_damage, on_hit),
+                            (0, PendingAttackEffects::default()),
+                            "passive on-hit effects are not yet defined for bounce attacks"
+                        );
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
                         let impact_tick = completed_tick
@@ -1202,7 +1274,10 @@ impl Simulation {
             }
             match intent.source {
                 AttackSourceIndex::Unit(index) => {
-                    cooldowns[index] = intent.attack.cooldown_ticks;
+                    cooldowns[index] = effective_attack_cooldown_ticks(
+                        intent.attack.cooldown_ticks,
+                        units[index].status,
+                    );
                     attack_sequences[index] = attack_sequences[index]
                         .checked_add(1)
                         .expect("unit attack sequence overflow");
@@ -1236,6 +1311,7 @@ impl Simulation {
         );
 
         let phase_start = Instant::now();
+        let mut burning_oil_zone_launches = Vec::new();
         if !due_ballistic_projectiles.is_empty() {
             let impact_grid = SpatialGrid::build(
                 self.config.spatial_cell_size,
@@ -1322,6 +1398,14 @@ impl Simulation {
                         projectile_effects += 1;
                     }
                 }
+                if let Some(profile) = snapshot.projectile.burning_oil {
+                    burning_oil_zone_launches.push((
+                        snapshot.projectile.source,
+                        snapshot.projectile.source_team,
+                        snapshot.projectile.destination,
+                        profile,
+                    ));
+                }
             }
         }
         let ballistic_impact = phase_start.elapsed();
@@ -1337,14 +1421,30 @@ impl Simulation {
                 .get_mut::<BounceProjectile>()
                 .expect("bounce projectile missing during hop update") = update.projectile;
         }
+        for (source, source_team, center, profile) in burning_oil_zone_launches {
+            let id = self.allocate_id();
+            self.world.spawn((
+                id,
+                BurningOilZone {
+                    source,
+                    source_team,
+                    center,
+                    profile,
+                    created_tick: completed_tick,
+                    pulse_index: 1,
+                },
+            ));
+        }
         for launch in projectile_launches {
             let id = self.allocate_id();
             self.world.spawn((
                 id,
                 GuaranteedHitProjectile {
                     source: launch.source,
+                    source_team: launch.source_team,
                     target: launch.target,
                     damage: launch.damage,
+                    on_hit: launch.on_hit,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     launch_tick: launch.launch_tick,
@@ -1361,6 +1461,7 @@ impl Simulation {
                     source_team: launch.source_team,
                     target_mask: launch.target_mask,
                     damage: launch.damage,
+                    burning_oil: launch.burning_oil,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,
@@ -1802,12 +1903,17 @@ impl Simulation {
         if let Some(collision_radius) = properties.collision_radius {
             entity.insert(collision_radius);
         }
-        entity.insert((properties.damage_type, properties.armor));
+        entity.insert((
+            properties.damage_type,
+            properties.armor,
+            properties.passive_effects,
+        ));
         if let Some(spellcasting) = spellcasting {
             entity.insert((
                 spellcasting,
                 ManaState {
                     current: spellcasting.mana.starting,
+                    regen_remainder_per_10k: 0,
                 },
                 AutomaticAbilityState {
                     ready_tick: self.next_tick,
@@ -1851,14 +1957,31 @@ impl Simulation {
 
         let mut mana_query = self.world.query::<(&SpellcastingProfile, &mut ManaState)>();
         for (profile, mut mana) in mana_query.iter_mut(&mut self.world) {
-            let regenerated = i64::from(mana.current) + i64::from(profile.mana.regen_per_tick);
-            mana.current = i32::try_from(regenerated.min(i64::from(profile.mana.maximum)))
-                .expect("mana regeneration overflowed validated bounds");
+            if mana.current >= profile.mana.maximum {
+                mana.current = profile.mana.maximum;
+                mana.regen_remainder_per_10k = 0;
+                continue;
+            }
+            let accumulated = u64::from(mana.regen_remainder_per_10k)
+                + u64::from(profile.mana.regen_per_tick_per_10k);
+            let whole_mana = accumulated / 10_000;
+            let remainder = accumulated % 10_000;
+            let regenerated = i64::from(mana.current)
+                + i64::try_from(whole_mana).expect("mana regeneration exceeds i64");
+            if regenerated >= i64::from(profile.mana.maximum) {
+                mana.current = profile.mana.maximum;
+                mana.regen_remainder_per_10k = 0;
+            } else {
+                mana.current = i32::try_from(regenerated)
+                    .expect("mana regeneration overflowed validated bounds");
+                mana.regen_remainder_per_10k =
+                    u16::try_from(remainder).expect("mana remainder fits 1/10,000 scale");
+            }
         }
 
         let mut status_query = self.world.query::<&mut StatusState>();
         for mut status in status_query.iter_mut(&mut self.world) {
-            purge_expired_movement_modifiers(&mut status, self.next_tick);
+            purge_expired_status_modifiers(&mut status, self.next_tick);
         }
     }
 
@@ -1880,6 +2003,104 @@ impl Simulation {
         expired.len()
     }
 
+    fn resolve_burning_oil_zones(
+        &mut self,
+        units: &mut [UnitSnapshot],
+        buildings: &mut [BuildingSnapshot],
+        completed_tick: u64,
+    ) {
+        let mut query = self.world.query::<(Entity, &SimId, &BurningOilZone)>();
+        let mut zones: Vec<_> = query
+            .iter(&self.world)
+            .map(|(entity, id, zone)| (entity, *id, *zone))
+            .collect();
+        zones.sort_unstable_by_key(|(_, id, _)| *id);
+
+        let mut expired = Vec::new();
+        let mut updates = Vec::new();
+        for (entity, _, mut zone) in zones {
+            let expires_tick = zone
+                .created_tick
+                .checked_add(ceil_millis_to_ticks(u64::from(
+                    zone.profile.total_duration_millis,
+                )))
+                .expect("Burning Oil expiry tick overflow");
+            if completed_tick >= expires_tick {
+                expired.push(entity);
+                continue;
+            }
+
+            while let Some((offset_millis, damage)) =
+                burning_oil_pulse(zone.profile, zone.pulse_index)
+            {
+                let due_tick = zone
+                    .created_tick
+                    .checked_add(ceil_millis_to_ticks(u64::from(offset_millis)))
+                    .expect("Burning Oil pulse tick overflow");
+                if due_tick > completed_tick {
+                    break;
+                }
+                let radius_sq = square_i32(zone.profile.radius);
+                if zone.profile.target_ground_units {
+                    for unit in units.iter_mut() {
+                        if unit.health <= 0
+                            || unit.team == zone.source_team
+                            || unit.movement_class != MovementClass::Ground
+                            || zone.center.distance_sq(unit.position) > radius_sq
+                        {
+                            continue;
+                        }
+                        let adjusted = self
+                            .combat_rules
+                            .damage_rules
+                            .apply_spell(damage, unit.armor.armor_type);
+                        unit.health = unit
+                            .health
+                            .checked_sub(adjusted)
+                            .expect("Burning Oil unit damage overflow");
+                    }
+                }
+                if zone.profile.target_buildings {
+                    for building in buildings.iter_mut() {
+                        if building.health <= 0 || building.team == zone.source_team {
+                            continue;
+                        }
+                        if point_to_footprint_distance_sq(
+                            zone.center,
+                            building.footprint,
+                            self.config.navigation_cell_size,
+                        ) > radius_sq
+                        {
+                            continue;
+                        }
+                        let adjusted = self
+                            .combat_rules
+                            .damage_rules
+                            .apply_spell(damage, building.armor.armor_type);
+                        building.health = building
+                            .health
+                            .checked_sub(adjusted)
+                            .expect("Burning Oil building damage overflow");
+                    }
+                }
+                zone.pulse_index = zone
+                    .pulse_index
+                    .checked_add(1)
+                    .expect("Burning Oil pulse index overflow");
+            }
+            updates.push((entity, zone));
+        }
+
+        for entity in expired {
+            self.world.despawn(entity);
+        }
+        for (entity, zone) in updates {
+            if let Some(mut stored) = self.world.entity_mut(entity).get_mut::<BurningOilZone>() {
+                *stored = zone;
+            }
+        }
+    }
+
     fn advance_production(&mut self) -> (usize, usize) {
         let mut query = self.world.query::<(
             Entity,
@@ -1895,11 +2116,12 @@ impl Simulation {
             &ProductionAttackTargets,
             &ProductionDamageType,
             &ProductionArmorProfile,
+            &ProductionPassiveEffects,
             Option<&ProductionSpellcastingProfile>,
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _, _)| {
+            .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _, _, _)| {
                 state.next_spawn_tick <= self.next_tick
             })
             .map(
@@ -1917,6 +2139,7 @@ impl Simulation {
                     attack_targets,
                     damage_type,
                     armor,
+                    passive_effects,
                     spellcasting,
                 )| {
                     ProductionAttempt {
@@ -1932,6 +2155,7 @@ impl Simulation {
                         attack_targets: attack_targets.0,
                         damage_type: damage_type.0,
                         armor: armor.0,
+                        passive_effects: passive_effects.0,
                         spellcasting: spellcasting.map(|profile| profile.0),
                         next_spawn_tick: state.next_spawn_tick,
                     }
@@ -2043,6 +2267,7 @@ impl Simulation {
                         attack_targets: attempt.attack_targets,
                         damage_type: attempt.damage_type,
                         armor: attempt.armor,
+                        passive_effects: attempt.passive_effects,
                     },
                     attempt.spellcasting,
                 );
@@ -2122,6 +2347,9 @@ impl Simulation {
                     let armor = *entity_ref
                         .get::<ArmorProfile>()
                         .expect("unit armor profile missing");
+                    let passive_effects = *entity_ref
+                        .get::<PassiveUnitEffects>()
+                        .expect("unit passive effects missing");
                     let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
                     let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
                     let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
@@ -2151,6 +2379,7 @@ impl Simulation {
                         attack_targets,
                         damage_type,
                         armor,
+                        passive_effects,
                         spellcasting,
                         mana_current,
                         ability_state,
@@ -2571,6 +2800,17 @@ impl Simulation {
                     .any(|unit| unit.health > 0 && unit.team != source.team)
                     .then_some(AbilityIntentTarget::AllEnemyUnits)
             }
+            AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => self
+                .recently_attacked_friendly_ability_target(
+                    source,
+                    spellcasting.ability,
+                    units,
+                    &mut candidate_checks,
+                )
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
         };
         AbilityEvaluation {
             intent: target.map(|target| AbilityIntent {
@@ -2637,6 +2877,49 @@ impl Simulation {
         best.map(|(_, _, unit_index)| unit_index)
     }
 
+    fn recently_attacked_friendly_ability_target(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        units: &[UnitSnapshot],
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let previous_tick = self.next_tick.saturating_sub(1);
+        let modifier = match ability.effect {
+            AbilityEffect::FrostArmor { modifier, .. } => Some(modifier),
+            _ => None,
+        };
+        let range_sq = square_i32(ability.range);
+        units
+            .iter()
+            .enumerate()
+            .filter_map(|(index, candidate)| {
+                *candidate_checks += 1;
+                if candidate.health <= 0
+                    || candidate.team != source.team
+                    || candidate.retaliation.attacked_tick != Some(previous_tick)
+                    || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
+                {
+                    return None;
+                }
+                if modifier.is_some_and(|modifier| {
+                    candidate.status.armor_modifiers
+                        [..usize::from(candidate.status.armor_modifier_count)]
+                        .iter()
+                        .any(|active| active.id == modifier && self.next_tick < active.expires_tick)
+                }) {
+                    return None;
+                }
+                Some((
+                    self.ability_source_distance_sq(source.origin, candidate.position),
+                    candidate.id,
+                    index,
+                ))
+            })
+            .min()
+            .map(|(_, _, index)| index)
+    }
+
     fn random_enemy_ability_target_global(
         &self,
         source: AbilitySourceSnapshot,
@@ -2687,14 +2970,33 @@ impl Simulation {
                 let target = &units[index];
                 target.id == id
                     && target.health > 0
-                    && target.team != source.team
                     && match ability.target_policy {
                         AbilityTargetPolicy::RandomEnemyUnit => {
-                            self.ability_source_distance_sq(source.origin, target.position)
-                                <= square_i32(ability.range)
+                            target.team != source.team
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
                         }
-                        AbilityTargetPolicy::RandomEnemyUnitGlobal => true,
+                        AbilityTargetPolicy::RandomEnemyUnitGlobal => target.team != source.team,
                         AbilityTargetPolicy::AllEnemyUnits => false,
+                        AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => {
+                            target.team == source.team
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
+                                && target.retaliation.attacked_tick
+                                    == Some(self.next_tick.saturating_sub(1))
+                                && match ability.effect {
+                                    AbilityEffect::FrostArmor { modifier, .. } => {
+                                        !target.status.armor_modifiers
+                                            [..usize::from(target.status.armor_modifier_count)]
+                                            .iter()
+                                            .any(|active| {
+                                                active.id == modifier
+                                                    && self.next_tick < active.expires_tick
+                                            })
+                                    }
+                                    _ => true,
+                                }
+                        }
                     }
             }
             AbilityIntentTarget::AllEnemyUnits => {
@@ -3551,6 +3853,113 @@ impl Simulation {
             < u64::from(chance)
     }
 
+    fn attack_is_evaded(
+        &self,
+        intent: &AttackIntent,
+        units: &[UnitSnapshot],
+        completed_tick: u64,
+    ) -> bool {
+        let TargetIndex::Unit(target_index) = intent.target else {
+            return false;
+        };
+        let target = &units[target_index];
+        for effect in target.passive_effects.iter() {
+            let PassiveUnitEffect::Evasion(profile) = effect else {
+                continue;
+            };
+            if profile.chance_per_10k == 0 {
+                continue;
+            }
+            let roll = deterministic_random(
+                self.config.match_seed,
+                completed_tick,
+                intent.source_id,
+                RANDOM_PURPOSE_ATTACK_PROC
+                    ^ u64::from(profile.ability.0)
+                    ^ target.id.0.rotate_left(13),
+                intent.attack_sequence,
+            ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+            if roll < u64::from(profile.chance_per_10k) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn resolve_passive_attack_effects(
+        &self,
+        intent: &AttackIntent,
+        units: &[UnitSnapshot],
+        completed_tick: u64,
+    ) -> (i32, PendingAttackEffects) {
+        let mut bonus_damage = 0i32;
+        let mut on_hit = PendingAttackEffects::default();
+        for effect in intent.passive_effects.iter() {
+            match effect {
+                PassiveUnitEffect::Bash(profile) => {
+                    let target_matches = match intent.target {
+                        TargetIndex::Unit(index) => {
+                            profile.targets.can_target_unit(units[index].movement_class)
+                        }
+                        TargetIndex::Building(_) => profile.targets.can_target_buildings(),
+                    };
+                    if !target_matches || profile.chance_per_10k == 0 {
+                        continue;
+                    }
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        completed_tick,
+                        intent.source_id,
+                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                        intent.attack_sequence,
+                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                    if roll >= u64::from(profile.chance_per_10k) {
+                        continue;
+                    }
+                    bonus_damage = bonus_damage
+                        .checked_add(profile.bonus_damage)
+                        .expect("passive attack bonus damage overflowed");
+                    on_hit.stun_duration_ticks =
+                        on_hit.stun_duration_ticks.max(profile.stun_duration_ticks);
+                }
+                PassiveUnitEffect::TriggeredSpellProc(profile) => {
+                    let target_matches = match intent.target {
+                        TargetIndex::Unit(index) => {
+                            profile.targets.can_target_unit(units[index].movement_class)
+                        }
+                        TargetIndex::Building(_) => profile.targets.can_target_buildings(),
+                    };
+                    if !target_matches || profile.chance_per_10k == 0 {
+                        continue;
+                    }
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        completed_tick,
+                        intent.source_id,
+                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                        intent.attack_sequence,
+                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                    if roll < u64::from(profile.chance_per_10k) {
+                        assert!(
+                            on_hit.triggered_spell.is_none(),
+                            "multiple triggered spell procs on one attack are not yet supported"
+                        );
+                        on_hit.triggered_spell = Some(profile.effect);
+                    }
+                }
+                PassiveUnitEffect::BurningOil(profile) => {
+                    assert!(
+                        on_hit.burning_oil.is_none(),
+                        "multiple Burning Oil effects on one attack are not supported"
+                    );
+                    on_hit.burning_oil = Some(profile);
+                }
+                PassiveUnitEffect::Evasion(_) => {}
+            }
+        }
+        (bonus_damage, on_hit)
+    }
+
     fn attack_intents(
         &self,
         units: &[UnitSnapshot],
@@ -3607,6 +4016,7 @@ impl Simulation {
                         attack: source.attack,
                         attack_targets: source.attack_targets,
                         damage_type: source.damage_type,
+                        passive_effects: source.passive_effects,
                         attack_sequence: source.attack_sequence,
                         distance_sq,
                     })
@@ -3676,6 +4086,7 @@ impl Simulation {
                             .attack_targets
                             .expect("attack building target mask missing"),
                         damage_type: source.damage_type,
+                        passive_effects: PassiveUnitEffects::EMPTY,
                         attack_sequence: 0,
                         distance_sq,
                     })
@@ -4961,6 +5372,7 @@ struct UnitSnapshot {
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
     armor: ArmorProfile,
+    passive_effects: PassiveUnitEffects,
     spellcasting: Option<SpellcastingProfile>,
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
@@ -5000,6 +5412,7 @@ struct ProductionAttempt {
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
     armor: ArmorProfile,
+    passive_effects: PassiveUnitEffects,
     spellcasting: Option<SpellcastingProfile>,
     next_spawn_tick: u64,
 }
@@ -5052,6 +5465,7 @@ struct AttackIntent {
     attack: AttackProfile,
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
+    passive_effects: PassiveUnitEffects,
     attack_sequence: u64,
     distance_sq: u64,
 }
@@ -5140,8 +5554,10 @@ impl DueTargetProjectileSnapshot {
 #[derive(Debug, Clone, Copy)]
 struct ProjectileLaunch {
     source: SimId,
+    source_team: Team,
     target: SimId,
     damage: i32,
+    on_hit: PendingAttackEffects,
     damage_type: DamageType,
     launch_position: SimPoint,
     launch_tick: u64,
@@ -5154,6 +5570,7 @@ struct BallisticProjectileLaunch {
     source_team: Team,
     target_mask: AttackTargetMask,
     damage: i32,
+    burning_oil: Option<crate::components::BurningOilEffectProfile>,
     damage_type: DamageType,
     launch_position: SimPoint,
     destination: SimPoint,
@@ -5446,12 +5863,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.mana.maximum >= 0);
     assert!(spellcasting.mana.starting >= 0);
     assert!(spellcasting.mana.starting <= spellcasting.mana.maximum);
-    assert!(spellcasting.mana.regen_per_tick >= 0);
+    assert!(spellcasting.mana.regen_per_tick_per_10k <= 10_000_000);
     assert!(spellcasting.ability.mana_cost >= 0);
     assert!(spellcasting.ability.mana_cost <= spellcasting.mana.maximum);
     assert!(spellcasting.ability.range >= 0);
     match spellcasting.ability.target_policy {
-        AbilityTargetPolicy::RandomEnemyUnit => {}
+        AbilityTargetPolicy::RandomEnemyUnit
+        | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => {}
         AbilityTargetPolicy::AllEnemyUnits | AbilityTargetPolicy::RandomEnemyUnitGlobal => {
             assert_eq!(spellcasting.ability.range, 0);
         }
@@ -5475,6 +5893,24 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::AllEnemyUnits,
                 "area damage requires a selected enemy unit as its center"
+            );
+        }
+        AbilityEffect::FrostArmor {
+            modifier: _,
+            armor_bonus_per_100,
+            armor_duration_ticks,
+            slow_duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+        } => {
+            assert!(armor_bonus_per_100 > 0);
+            assert!(armor_duration_ticks > 0);
+            assert!(slow_duration_ticks > 0);
+            assert!((-100..0).contains(&movement_percent_delta));
+            assert!((-100..0).contains(&attack_speed_percent_delta));
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
             );
         }
     }
@@ -5706,10 +6142,12 @@ fn apply_damage_to_target(
             if state.unit_health[index] <= 0 {
                 return None;
             }
-            let adjusted_damage =
-                state
-                    .damage_rules
-                    .apply_attack(damage, damage_type, state.units[index].armor);
+            let adjusted_damage = state.damage_rules.apply_attack_with_armor_per_100(
+                damage,
+                damage_type,
+                state.units[index].armor.armor_type,
+                effective_armor_points_per_100(&state.units[index]),
+            );
             state.unit_health[index] = state.unit_health[index]
                 .checked_sub(adjusted_damage)
                 .expect("unit damage arithmetic overflowed validated bounds");
@@ -5740,6 +6178,116 @@ fn apply_damage_to_target(
             ))
         }
     }
+}
+
+fn apply_pending_attack_effects(
+    target: TargetIndex,
+    effects: PendingAttackEffects,
+    source_team: Team,
+    completed_tick: u64,
+    units: &mut [UnitSnapshot],
+    unit_health: &mut [i32],
+    damage_rules: DamageRules,
+) -> bool {
+    let TargetIndex::Unit(index) = target else {
+        return false;
+    };
+    if unit_health[index] <= 0 {
+        return false;
+    }
+    let mut applied = false;
+    if effects.stun_duration_ticks > 0 {
+        let stunned_until_tick = completed_tick
+            .checked_add(u64::from(effects.stun_duration_ticks))
+            .expect("passive stun expiry tick overflow");
+        units[index].status.stunned_until_tick = units[index]
+            .status
+            .stunned_until_tick
+            .max(stunned_until_tick);
+        applied = true;
+    }
+    if let Some(effect) = effects.triggered_spell {
+        match effect {
+            TriggeredAttackEffect::ChainLightning(profile) => {
+                let mut hit = [SimId(0); MAX_BOUNCE_HITS];
+                let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);
+                if max_targets > 0 {
+                    let mut current_index = index;
+                    let mut damage = profile.initial_damage;
+                    for hit_index in 0..max_targets {
+                        if unit_health[current_index] <= 0 {
+                            break;
+                        }
+                        let adjusted =
+                            damage_rules.apply_spell(damage, units[current_index].armor.armor_type);
+                        unit_health[current_index] = unit_health[current_index]
+                            .checked_sub(adjusted)
+                            .expect("Chain Lightning damage overflow");
+                        hit[hit_index] = units[current_index].id;
+                        applied = true;
+                        if hit_index + 1 >= max_targets {
+                            break;
+                        }
+                        let origin = units[current_index].position;
+                        let radius_sq = square_i32(profile.jump_radius);
+                        let next = units
+                            .iter()
+                            .enumerate()
+                            .filter(|(candidate_index, candidate)| {
+                                unit_health[*candidate_index] > 0
+                                    && candidate.team != source_team
+                                    && profile.targets.can_target_unit(candidate.movement_class)
+                                    && !hit[..=hit_index].contains(&candidate.id)
+                                    && origin.distance_sq(candidate.position) <= radius_sq
+                            })
+                            .min_by_key(|(_, candidate)| {
+                                (origin.distance_sq(candidate.position), candidate.id)
+                            })
+                            .map(|(candidate_index, _)| candidate_index);
+                        let Some(next_index) = next else {
+                            break;
+                        };
+                        damage = i32::try_from(
+                            i64::from(damage)
+                                * i64::from(10_000 - profile.damage_reduction_per_10k)
+                                / 10_000,
+                        )
+                        .expect("Chain Lightning damage scaling overflow");
+                        if damage <= 0 {
+                            break;
+                        }
+                        current_index = next_index;
+                    }
+                }
+            }
+            TriggeredAttackEffect::EntanglingRoots(profile) => {
+                if profile.targets.can_target_unit(units[index].movement_class) {
+                    let expires_tick = completed_tick
+                        .checked_add(u64::from(profile.duration_ticks))
+                        .expect("Entangling Roots expiry overflow");
+                    apply_timed_movement_modifier(
+                        &mut units[index].status,
+                        ModifierId(profile.ability.0),
+                        -100,
+                        expires_tick,
+                    );
+                    let dot_expires_tick = expires_tick
+                        .checked_add(1)
+                        .expect("Entangling Roots damage-over-time expiry overflow");
+                    apply_timed_damage_over_time(
+                        &mut units[index].status,
+                        ModifierId(profile.ability.0),
+                        profile.damage_per_second,
+                        u16::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz fits u16"),
+                        completed_tick,
+                        dot_expires_tick,
+                    );
+                    applied = true;
+                }
+            }
+        }
+    }
+    applied
 }
 
 fn apply_ability_effect_to_unit(
@@ -5788,8 +6336,83 @@ fn apply_ability_effect_to_unit(
                 .checked_sub(adjusted)
                 .expect("area ability damage overflowed validated bounds");
         }
+        AbilityEffect::FrostArmor {
+            modifier,
+            armor_bonus_per_100,
+            armor_duration_ticks,
+            slow_duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+        } => {
+            let expires_tick = completed_tick
+                .checked_add(u64::from(armor_duration_ticks))
+                .expect("Frost Armor expiry tick overflow");
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id: modifier,
+                    armor_bonus_per_100,
+                    expires_tick,
+                    reactive_slow_duration_ticks: slow_duration_ticks,
+                    reactive_movement_percent_delta: movement_percent_delta,
+                    reactive_attack_speed_percent_delta: attack_speed_percent_delta,
+                },
+            );
+        }
     }
     true
+}
+
+fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
+    purge_expired_movement_modifiers(status, tick);
+
+    let attack_speed_count = usize::from(status.attack_speed_modifier_count);
+    debug_assert!(attack_speed_count <= MAX_TIMED_ATTACK_SPEED_MODIFIERS);
+    let mut attack_speed_write = 0usize;
+    for read_index in 0..attack_speed_count {
+        let modifier = status.attack_speed_modifiers[read_index];
+        if tick < modifier.expires_tick {
+            status.attack_speed_modifiers[attack_speed_write] = modifier;
+            attack_speed_write += 1;
+        }
+    }
+    for slot in &mut status.attack_speed_modifiers[attack_speed_write..attack_speed_count] {
+        *slot = Default::default();
+    }
+    status.attack_speed_modifier_count =
+        u8::try_from(attack_speed_write).expect("attack-speed modifier count exceeds u8");
+
+    let armor_count = usize::from(status.armor_modifier_count);
+    debug_assert!(armor_count <= MAX_TIMED_ARMOR_MODIFIERS);
+    let mut armor_write = 0usize;
+    for read_index in 0..armor_count {
+        let modifier = status.armor_modifiers[read_index];
+        if tick < modifier.expires_tick {
+            status.armor_modifiers[armor_write] = modifier;
+            armor_write += 1;
+        }
+    }
+    for slot in &mut status.armor_modifiers[armor_write..armor_count] {
+        *slot = Default::default();
+    }
+    status.armor_modifier_count =
+        u8::try_from(armor_write).expect("armor modifier count exceeds u8");
+
+    let dot_count = usize::from(status.damage_over_time_count);
+    debug_assert!(dot_count <= MAX_TIMED_DAMAGE_OVER_TIME);
+    let mut dot_write = 0usize;
+    for read_index in 0..dot_count {
+        let effect = status.damage_over_time[read_index];
+        if tick < effect.expires_tick {
+            status.damage_over_time[dot_write] = effect;
+            dot_write += 1;
+        }
+    }
+    for slot in &mut status.damage_over_time[dot_write..dot_count] {
+        *slot = Default::default();
+    }
+    status.damage_over_time_count =
+        u8::try_from(dot_write).expect("damage-over-time count exceeds u8");
 }
 
 fn purge_expired_movement_modifiers(status: &mut StatusState, tick: u64) {
@@ -5849,6 +6472,233 @@ fn apply_timed_movement_modifier(
     }
 }
 
+fn apply_timed_attack_speed_modifier(
+    status: &mut StatusState,
+    modifier_id: ModifierId,
+    percent_delta: i16,
+    expires_tick: u64,
+) {
+    let count = usize::from(status.attack_speed_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ATTACK_SPEED_MODIFIERS);
+    let active = &status.attack_speed_modifiers[..count];
+    match active.binary_search_by_key(&modifier_id, |modifier| modifier.id) {
+        Ok(index) => {
+            let modifier = &mut status.attack_speed_modifiers[index];
+            assert_eq!(
+                modifier.percent_delta, percent_delta,
+                "same ModifierId authored with conflicting attack-speed percentages"
+            );
+            modifier.expires_tick = modifier.expires_tick.max(expires_tick);
+        }
+        Err(index) => {
+            assert!(
+                count < MAX_TIMED_ATTACK_SPEED_MODIFIERS,
+                "timed attack-speed modifier capacity exceeded"
+            );
+            status
+                .attack_speed_modifiers
+                .copy_within(index..count, index + 1);
+            status.attack_speed_modifiers[index] = TimedAttackSpeedModifier {
+                id: modifier_id,
+                percent_delta,
+                expires_tick,
+            };
+            status.attack_speed_modifier_count = status
+                .attack_speed_modifier_count
+                .checked_add(1)
+                .expect("attack-speed modifier count overflow");
+        }
+    }
+}
+
+fn apply_timed_armor_modifier(status: &mut StatusState, incoming: TimedArmorModifier) {
+    let count = usize::from(status.armor_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
+    let active = &status.armor_modifiers[..count];
+    match active.binary_search_by_key(&incoming.id, |modifier| modifier.id) {
+        Ok(index) => {
+            let modifier = &mut status.armor_modifiers[index];
+            assert_eq!(
+                (
+                    modifier.armor_bonus_per_100,
+                    modifier.reactive_slow_duration_ticks,
+                    modifier.reactive_movement_percent_delta,
+                    modifier.reactive_attack_speed_percent_delta,
+                ),
+                (
+                    incoming.armor_bonus_per_100,
+                    incoming.reactive_slow_duration_ticks,
+                    incoming.reactive_movement_percent_delta,
+                    incoming.reactive_attack_speed_percent_delta,
+                ),
+                "same ModifierId authored with conflicting armor/Frost Armor semantics"
+            );
+            modifier.expires_tick = modifier.expires_tick.max(incoming.expires_tick);
+        }
+        Err(index) => {
+            assert!(
+                count < MAX_TIMED_ARMOR_MODIFIERS,
+                "timed armor modifier capacity exceeded"
+            );
+            status.armor_modifiers.copy_within(index..count, index + 1);
+            status.armor_modifiers[index] = incoming;
+            status.armor_modifier_count = status
+                .armor_modifier_count
+                .checked_add(1)
+                .expect("armor modifier count overflow");
+        }
+    }
+}
+
+fn apply_timed_damage_over_time(
+    status: &mut StatusState,
+    modifier_id: ModifierId,
+    damage_per_pulse: i32,
+    pulse_interval_ticks: u16,
+    applied_tick: u64,
+    expires_tick: u64,
+) {
+    assert!(damage_per_pulse >= 0);
+    assert!(pulse_interval_ticks > 0);
+    let count = usize::from(status.damage_over_time_count);
+    debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
+    let active = &status.damage_over_time[..count];
+    let next_pulse_tick = applied_tick
+        .checked_add(u64::from(pulse_interval_ticks))
+        .expect("damage-over-time pulse tick overflow");
+    match active.binary_search_by_key(&modifier_id, |effect| effect.id) {
+        Ok(index) => {
+            let effect = &mut status.damage_over_time[index];
+            assert_eq!(
+                (effect.damage_per_pulse, effect.pulse_interval_ticks),
+                (damage_per_pulse, pulse_interval_ticks),
+                "same ModifierId authored with conflicting damage-over-time parameters"
+            );
+            effect.expires_tick = effect.expires_tick.max(expires_tick);
+            effect.next_pulse_tick = next_pulse_tick;
+        }
+        Err(index) => {
+            assert!(
+                count < MAX_TIMED_DAMAGE_OVER_TIME,
+                "damage-over-time capacity exceeded"
+            );
+            status.damage_over_time.copy_within(index..count, index + 1);
+            status.damage_over_time[index] = TimedDamageOverTime {
+                id: modifier_id,
+                damage_per_pulse,
+                pulse_interval_ticks,
+                next_pulse_tick,
+                expires_tick,
+            };
+            status.damage_over_time_count = status
+                .damage_over_time_count
+                .checked_add(1)
+                .expect("damage-over-time count overflow");
+        }
+    }
+}
+
+fn resolve_periodic_unit_statuses(
+    units: &mut [UnitSnapshot],
+    completed_tick: u64,
+    damage_rules: DamageRules,
+) {
+    for unit in units {
+        if unit.health <= 0 {
+            continue;
+        }
+        let count = usize::from(unit.status.damage_over_time_count);
+        debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
+        for index in 0..count {
+            let effect = &mut unit.status.damage_over_time[index];
+            while completed_tick >= effect.next_pulse_tick
+                && effect.next_pulse_tick < effect.expires_tick
+                && unit.health > 0
+            {
+                let adjusted =
+                    damage_rules.apply_spell(effect.damage_per_pulse, unit.armor.armor_type);
+                unit.health = unit
+                    .health
+                    .checked_sub(adjusted)
+                    .expect("damage-over-time health arithmetic overflow");
+                effect.next_pulse_tick = effect
+                    .next_pulse_tick
+                    .checked_add(u64::from(effect.pulse_interval_ticks))
+                    .expect("damage-over-time pulse tick overflow");
+            }
+        }
+    }
+}
+
+fn effective_armor_points_per_100(unit: &UnitSnapshot) -> i32 {
+    let count = usize::from(unit.status.armor_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
+    unit.status.armor_modifiers[..count].iter().fold(
+        i32::from(unit.armor.armor_points) * 100,
+        |total, modifier| {
+            total
+                .checked_add(i32::from(modifier.armor_bonus_per_100))
+                .expect("effective armor overflow")
+        },
+    )
+}
+
+fn apply_melee_reactive_armor_effects(
+    source_index: usize,
+    target_index: usize,
+    completed_tick: u64,
+    units: &mut [UnitSnapshot],
+    unit_health: &[i32],
+) {
+    if unit_health[source_index] <= 0 {
+        return;
+    }
+    let target_status = units[target_index].status;
+    let count = usize::from(target_status.armor_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
+    for armor in target_status.armor_modifiers[..count].iter().copied() {
+        if armor.reactive_slow_duration_ticks == 0 || completed_tick >= armor.expires_tick {
+            continue;
+        }
+        let expires_tick = completed_tick
+            .checked_add(u64::from(armor.reactive_slow_duration_ticks))
+            .expect("reactive Frost Armor slow expiry overflow");
+        if armor.reactive_movement_percent_delta != 0 {
+            apply_timed_movement_modifier(
+                &mut units[source_index].status,
+                armor.id,
+                armor.reactive_movement_percent_delta,
+                expires_tick,
+            );
+        }
+        if armor.reactive_attack_speed_percent_delta != 0 {
+            apply_timed_attack_speed_modifier(
+                &mut units[source_index].status,
+                armor.id,
+                armor.reactive_attack_speed_percent_delta,
+                expires_tick,
+            );
+        }
+    }
+}
+
+fn effective_attack_cooldown_ticks(base_ticks: u16, status: StatusState) -> u16 {
+    let count = usize::from(status.attack_speed_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ATTACK_SPEED_MODIFIERS);
+    let percent = status.attack_speed_modifiers[..count]
+        .iter()
+        .fold(100_i32, |total, modifier| {
+            total
+                .checked_add(i32::from(modifier.percent_delta))
+                .expect("attack-speed percentage overflow")
+        })
+        .clamp(1, 1_000);
+    let scaled = u64::from(base_ticks) * 100;
+    u16::try_from(scaled.div_ceil(u64::try_from(percent).expect("positive attack speed")))
+        .expect("effective attack cooldown exceeds u16")
+        .max(1)
+}
+
 fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
     let count = usize::from(unit.status.movement_modifier_count);
     debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
@@ -5862,6 +6712,42 @@ fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
         .clamp(0, 1_000);
     i32::try_from(i64::from(unit.movement.speed_per_tick) * i64::from(percent) / 100)
         .expect("effective movement speed overflowed validated bounds")
+}
+
+fn ceil_millis_to_ticks(millis: u64) -> u64 {
+    millis
+        .checked_mul(u64::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz is positive"))
+        .expect("millisecond-to-tick conversion overflow")
+        .div_ceil(1_000)
+}
+
+fn burning_oil_pulse(
+    profile: crate::components::BurningOilEffectProfile,
+    pulse_index: u16,
+) -> Option<(u32, i32)> {
+    if pulse_index == 0 {
+        return None;
+    }
+    let full_count = profile.full_duration_millis / profile.full_interval_millis;
+    if pulse_index <= full_count {
+        return Some((
+            u32::from(pulse_index) * u32::from(profile.full_interval_millis),
+            profile.full_damage,
+        ));
+    }
+    let half_index = pulse_index - full_count;
+    let half_window = profile
+        .total_duration_millis
+        .saturating_sub(profile.full_duration_millis);
+    let half_count = half_window / profile.half_interval_millis;
+    if half_index <= half_count {
+        return Some((
+            u32::from(profile.full_duration_millis)
+                + u32::from(half_index) * u32::from(profile.half_interval_millis),
+            profile.half_damage,
+        ));
+    }
+    None
 }
 
 fn projectile_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
@@ -6160,6 +7046,12 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     },
                 ));
             }
+            if let Some(zone) = entity.get::<BurningOilZone>() {
+                return Some(CanonicalEntity::BurningOil(CanonicalBurningOil {
+                    id,
+                    zone: *zone,
+                }));
+            }
             if let Some(corpse) = entity.get::<Corpse>() {
                 return Some(CanonicalEntity::Corpse(CanonicalCorpse {
                     id,
@@ -6179,6 +7071,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     attack_targets: *entity.get::<AttackTargetMask>()?,
                     damage_type: *entity.get::<DamageType>()?,
                     armor: *entity.get::<ArmorProfile>()?,
+                    passive_effects: *entity.get::<PassiveUnitEffects>()?,
                     movement_class: *entity.get::<MovementClass>()?,
                     movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
@@ -6218,6 +7111,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                         .get::<ProductionDamageType>()
                         .map(|damage_type| damage_type.0),
                     production_armor: entity.get::<ProductionArmorProfile>().map(|armor| armor.0),
+                    production_passive_effects: entity
+                        .get::<ProductionPassiveEffects>()
+                        .map(|effects| effects.0),
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
                         .map(|profile| profile.0),
@@ -6256,6 +7152,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u8(unit.damage_type.stable_tag());
                 hash.write_u8(unit.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(unit.armor.armor_points));
+                hash_passive_unit_effects(&mut hash, unit.passive_effects);
                 hash.write_u8(match unit.movement_class {
                     MovementClass::Ground => 0,
                     MovementClass::Air => 1,
@@ -6296,13 +7193,11 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u64(0x5350_454c_4c55_4e54);
                     hash.write_i32(spellcasting.mana.maximum);
                     hash.write_i32(spellcasting.mana.starting);
-                    hash.write_i32(spellcasting.mana.regen_per_tick);
+                    hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
                     hash_automatic_ability(&mut hash, spellcasting.ability);
-                    hash.write_i32(
-                        unit.mana
-                            .expect("spellcasting unit missing mana state")
-                            .current,
-                    );
+                    let mana = unit.mana.expect("spellcasting unit missing mana state");
+                    hash.write_i32(mana.current);
+                    hash.write_u16(mana.regen_remainder_per_10k);
                     let state = unit
                         .ability_state
                         .expect("spellcasting unit missing ability state");
@@ -6374,11 +7269,17 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u8(production_damage_type.stable_tag());
                     hash.write_u8(production_armor.armor_type.stable_tag());
                     hash.write_i32(i32::from(production_armor.armor_points));
+                    hash_passive_unit_effects(
+                        &mut hash,
+                        building
+                            .production_passive_effects
+                            .expect("production building missing unit passive effects"),
+                    );
                     if let Some(spellcasting) = building.production_spellcasting {
                         hash.write_u64(0x5350_454c_4c50_524f);
                         hash.write_i32(spellcasting.mana.maximum);
                         hash.write_i32(spellcasting.mana.starting);
-                        hash.write_i32(spellcasting.mana.regen_per_tick);
+                        hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
                         hash_automatic_ability(&mut hash, spellcasting.ability);
                     }
                 } else {
@@ -6427,14 +7328,13 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u8(1);
                     hash.write_i32(spellcasting.mana.maximum);
                     hash.write_i32(spellcasting.mana.starting);
-                    hash.write_i32(spellcasting.mana.regen_per_tick);
+                    hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
                     hash_automatic_ability(&mut hash, spellcasting.ability);
-                    hash.write_i32(
-                        building
-                            .mana
-                            .expect("spellcasting building missing mana state")
-                            .current,
-                    );
+                    let mana = building
+                        .mana
+                        .expect("spellcasting building missing mana state");
+                    hash.write_i32(mana.current);
+                    hash.write_u16(mana.regen_remainder_per_10k);
                     let state = building
                         .ability_state
                         .expect("spellcasting building missing ability state");
@@ -6448,8 +7348,10 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u8(2);
                 hash.write_u64(projectile.id.0);
                 hash.write_u64(projectile.projectile.source.0);
+                hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
+                hash_pending_attack_effects(&mut hash, projectile.projectile.on_hit);
                 hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
@@ -6463,6 +7365,13 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_i32(projectile.projectile.damage);
+                match projectile.projectile.burning_oil {
+                    Some(profile) => {
+                        hash.write_u8(1);
+                        hash_burning_oil_profile(&mut hash, profile);
+                    }
+                    None => hash.write_u8(0),
+                }
                 hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
@@ -6507,6 +7416,17 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(corpse.corpse.created_tick);
                 hash.write_u64(corpse.corpse.expires_tick.unwrap_or(u64::MAX));
             }
+            CanonicalEntity::BurningOil(zone) => {
+                hash.write_u8(6);
+                hash.write_u64(zone.id.0);
+                hash.write_u64(zone.zone.source.0);
+                hash.write_u8(zone.zone.source_team.0);
+                hash.write_i32(zone.zone.center.x);
+                hash.write_i32(zone.zone.center.y);
+                hash_burning_oil_profile(&mut hash, zone.zone.profile);
+                hash.write_u64(zone.zone.created_tick);
+                hash.write_u16(zone.zone.pulse_index);
+            }
         }
     }
 
@@ -6541,6 +7461,7 @@ enum CanonicalEntity {
     BallisticProjectile(CanonicalBallisticProjectile),
     BounceProjectile(CanonicalBounceProjectile),
     Corpse(CanonicalCorpse),
+    BurningOil(CanonicalBurningOil),
 }
 
 impl CanonicalEntity {
@@ -6552,6 +7473,7 @@ impl CanonicalEntity {
             Self::BallisticProjectile(projectile) => projectile.id,
             Self::BounceProjectile(projectile) => projectile.id,
             Self::Corpse(corpse) => corpse.id,
+            Self::BurningOil(zone) => zone.id,
         }
     }
 }
@@ -6566,6 +7488,7 @@ struct CanonicalUnit {
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
     armor: ArmorProfile,
+    passive_effects: PassiveUnitEffects,
     movement_class: MovementClass,
     movement: MovementProfile,
     cooldown: AttackCooldown,
@@ -6596,6 +7519,7 @@ struct CanonicalBuilding {
     production_attack_targets: Option<AttackTargetMask>,
     production_damage_type: Option<DamageType>,
     production_armor: Option<ArmorProfile>,
+    production_passive_effects: Option<PassiveUnitEffects>,
     production_spellcasting: Option<SpellcastingProfile>,
     attack: Option<AttackProfile>,
     attack_targets: Option<AttackTargetMask>,
@@ -6635,6 +7559,12 @@ struct CanonicalCorpse {
     corpse: Corpse,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CanonicalBurningOil {
+    id: SimId,
+    zone: BurningOilZone,
+}
+
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
     hash.write_u8(status.movement_modifier_count);
@@ -6644,6 +7574,120 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(u64::from(modifier.id.0));
         hash.write_i32(i32::from(modifier.percent_delta));
         hash.write_u64(modifier.expires_tick);
+    }
+    hash.write_u8(status.attack_speed_modifier_count);
+    let count = usize::from(status.attack_speed_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ATTACK_SPEED_MODIFIERS);
+    for modifier in &status.attack_speed_modifiers[..count] {
+        hash.write_u64(u64::from(modifier.id.0));
+        hash.write_i32(i32::from(modifier.percent_delta));
+        hash.write_u64(modifier.expires_tick);
+    }
+    hash.write_u8(status.armor_modifier_count);
+    let count = usize::from(status.armor_modifier_count);
+    debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
+    for modifier in &status.armor_modifiers[..count] {
+        hash.write_u64(u64::from(modifier.id.0));
+        hash.write_i32(i32::from(modifier.armor_bonus_per_100));
+        hash.write_u64(modifier.expires_tick);
+        hash.write_u16(modifier.reactive_slow_duration_ticks);
+        hash.write_i32(i32::from(modifier.reactive_movement_percent_delta));
+        hash.write_i32(i32::from(modifier.reactive_attack_speed_percent_delta));
+    }
+    hash.write_u8(status.damage_over_time_count);
+    let count = usize::from(status.damage_over_time_count);
+    debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
+    for effect in &status.damage_over_time[..count] {
+        hash.write_u64(u64::from(effect.id.0));
+        hash.write_i32(effect.damage_per_pulse);
+        hash.write_u16(effect.pulse_interval_ticks);
+        hash.write_u64(effect.next_pulse_tick);
+        hash.write_u64(effect.expires_tick);
+    }
+}
+
+fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
+    let effects: Vec<_> = effects.iter().collect();
+    hash.write_u8(u8::try_from(effects.len()).expect("passive effect count fits u8"));
+    for effect in effects {
+        match effect {
+            PassiveUnitEffect::Bash(profile) => {
+                hash.write_u8(0);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_u16(profile.chance_per_10k);
+                hash.write_i32(profile.bonus_damage);
+                hash.write_u16(profile.stun_duration_ticks);
+                hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::Evasion(profile) => {
+                hash.write_u8(1);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_u16(profile.chance_per_10k);
+            }
+            PassiveUnitEffect::TriggeredSpellProc(profile) => {
+                hash.write_u8(2);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_u16(profile.chance_per_10k);
+                hash.write_u8(profile.targets.bits());
+                hash_triggered_attack_effect(hash, profile.effect);
+            }
+            PassiveUnitEffect::BurningOil(profile) => {
+                hash.write_u8(3);
+                hash_burning_oil_profile(hash, profile);
+            }
+        }
+    }
+}
+
+fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect) {
+    match effect {
+        TriggeredAttackEffect::ChainLightning(profile) => {
+            hash.write_u8(0);
+            hash.write_u64(u64::from(profile.ability.0));
+            hash.write_i32(profile.initial_damage);
+            hash.write_u8(profile.maximum_targets);
+            hash.write_i32(profile.jump_radius);
+            hash.write_u16(profile.damage_reduction_per_10k);
+            hash.write_u8(profile.targets.bits());
+        }
+        TriggeredAttackEffect::EntanglingRoots(profile) => {
+            hash.write_u8(1);
+            hash.write_u64(u64::from(profile.ability.0));
+            hash.write_i32(profile.damage_per_second);
+            hash.write_u16(profile.duration_ticks);
+            hash.write_u8(profile.targets.bits());
+        }
+    }
+}
+
+fn hash_burning_oil_profile(hash: &mut Fnv64, profile: crate::components::BurningOilEffectProfile) {
+    hash.write_u64(u64::from(profile.ability.0));
+    hash.write_i32(profile.radius);
+    hash.write_i32(profile.full_damage);
+    hash.write_u16(profile.full_interval_millis);
+    hash.write_i32(profile.half_damage);
+    hash.write_u16(profile.half_interval_millis);
+    hash.write_u16(profile.full_duration_millis);
+    hash.write_u16(profile.total_duration_millis);
+    hash.write_u8(u8::from(profile.target_ground_units));
+    hash.write_u8(u8::from(profile.target_buildings));
+}
+
+fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+    hash.write_u16(effects.stun_duration_ticks);
+    match effects.triggered_spell {
+        Some(effect) => {
+            hash.write_u8(1);
+            hash_triggered_attack_effect(hash, effect);
+        }
+        None => hash.write_u8(0),
+    }
+    match effects.burning_oil {
+        Some(profile) => {
+            hash.write_u8(1);
+            hash_burning_oil_profile(hash, profile);
+        }
+        None => hash.write_u8(0),
     }
 }
 
@@ -6669,6 +7713,21 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
         AbilityEffect::AreaDamage { amount, radius } => {
             hash.write_i32(amount);
             hash.write_i32(radius);
+        }
+        AbilityEffect::FrostArmor {
+            modifier,
+            armor_bonus_per_100,
+            armor_duration_ticks,
+            slow_duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+        } => {
+            hash.write_u64(u64::from(modifier.0));
+            hash.write_i32(i32::from(armor_bonus_per_100));
+            hash.write_u16(armor_duration_ticks);
+            hash.write_u16(slow_duration_ticks);
+            hash.write_i32(i32::from(movement_percent_delta));
+            hash.write_i32(i32::from(attack_speed_percent_delta));
         }
     }
 }

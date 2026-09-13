@@ -2,28 +2,34 @@ mod components;
 mod content;
 mod damage;
 mod math;
+mod native_effects;
 mod simulation;
 mod spatial;
 mod terrain;
 mod topology;
+mod version;
 
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
-    CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile, ManaProfile, ModifierId,
-    MovementClass, MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState,
-    Team, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    AutomaticAbilityProfile, BashEffectProfile, BuildingFootprint, BuildingGameplayProperties,
+    BuildingSpawn, BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius,
+    ContentIdentity, CorpseDefinitionId, CorpseProfile, EntanglingRootsEffectProfile,
+    EvasionEffectProfile, ManaProfile, ModifierId, MovementClass, MovementProfile,
+    PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, SimId, SpellcastingProfile,
+    StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile, UnitGameplayProperties,
+    UnitSpawn, UnitTemplate,
 };
 pub use content::{
-    CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_SIMULATION_HZ,
-    CastleFightProductionDefinition, CastleFightProductionKind, CastleFightTowerDefinition,
-    CastleFightTowerKind, CastleFightUnitDefinition, CastleFightUnitKind,
-    castle_fight_damage_rules,
+    CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_DEFAULT_MAP_VERSION,
+    CASTLE_FIGHT_SIMULATION_HZ, CastleFightProductionDefinition, CastleFightProductionKind,
+    CastleFightTowerDefinition, CastleFightTowerKind, CastleFightUnitDefinition,
+    CastleFightUnitKind, UnsupportedCastleFightMapVersion, castle_fight_damage_rules,
 };
 pub use damage::{
     ArmorProfile, ArmorType, DAMAGE_MULTIPLIER_SCALE, DamageRules, DamageRulesLoadError, DamageType,
 };
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
+pub use native_effects::{NativeEffectImplementationId, native_effect_implementation_for};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuildingPlacementError, BuildingView,
     CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
@@ -33,6 +39,7 @@ pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
 };
 pub use topology::NavCell;
+pub use version::{MapVersion, MapVersionParseError, MapVersionRange};
 
 #[cfg(test)]
 mod tests {
@@ -191,7 +198,7 @@ mod tests {
             mana: ManaProfile {
                 maximum: 1_000,
                 starting: 1_000,
-                regen_per_tick: 0,
+                regen_per_tick_per_10k: 0,
             },
             ability: AutomaticAbilityProfile {
                 id: AbilityId(id),
@@ -215,7 +222,7 @@ mod tests {
             mana: ManaProfile {
                 maximum: 1_000,
                 starting: 1_000,
-                regen_per_tick: 0,
+                regen_per_tick_per_10k: 0,
             },
             ability: AutomaticAbilityProfile {
                 id: AbilityId(ability_id),
@@ -401,6 +408,471 @@ mod tests {
     }
 
     #[test]
+    fn imported_gryphon_bash_is_versioned_and_data_driven() {
+        let gryphon = CastleFightUnitKind::GryphonRider
+            .definition_for_version(MapVersion::new(9, 27))
+            .unwrap();
+        let effects: Vec<_> = gryphon.passive_effects.iter().collect();
+        assert_eq!(effects.len(), 2);
+        assert!(
+            effects.contains(&PassiveUnitEffect::Bash(BashEffectProfile {
+                ability: AbilityId(u32::from_be_bytes(*b"A05K")),
+                chance_per_10k: 1_500,
+                bonus_damage: 25,
+                stun_duration_ticks: 60,
+                targets: AttackTargetMask::GROUND_UNITS,
+            }))
+        );
+        assert!(effects.iter().any(|effect| matches!(
+            effect,
+            PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                ability: AbilityId(ability),
+                chance_per_10k: 1_000,
+                effect: TriggeredAttackEffect::ChainLightning(ChainLightningEffectProfile {
+                    ability: AbilityId(chain_ability),
+                    initial_damage: 150,
+                    maximum_targets: 5,
+                    damage_reduction_per_10k: 2_500,
+                    ..
+                }),
+                ..
+            }) if *ability == u32::from_be_bytes(*b"A01B")
+                && *chain_ability == u32::from_be_bytes(*b"A05X")
+        )));
+        assert!(
+            CastleFightUnitKind::GryphonRider
+                .definition_for_version(MapVersion::new(9, 28))
+                .is_err()
+        );
+
+        let rock = CastleFightProductionKind::GryphonRock
+            .definition_for_version(MapVersion::new(9, 27))
+            .unwrap();
+        assert_eq!(rock.map_version, MapVersion::new(9, 27));
+        assert_eq!(
+            rock.gameplay_properties().production_unit.passive_effects,
+            gryphon.passive_effects
+        );
+    }
+
+    #[test]
+    fn bash_proc_adds_damage_and_stuns_melee_target() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 10,
+            range: 2 * world,
+            acquisition_range: 8 * world,
+            cooldown_ticks: 100,
+        };
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Bash(
+                    BashEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"TEST")),
+                        chance_per_10k: 10_000,
+                        bonus_damage: 25,
+                        stun_duration_ticks: 2,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(41 * world, 0),
+            health: 100,
+            attack: AttackProfile {
+                damage: 0,
+                ..attack
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        let resolved = sim.step();
+        assert_eq!(resolved.completed_tick, 1);
+        let target = sim.unit(target).unwrap();
+        assert_eq!(target.health, 65);
+        assert_eq!(target.stunned_until_tick, 3);
+    }
+
+    #[test]
+    fn ranged_bash_proc_is_carried_by_projectile_until_impact() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: 2 * world,
+            },
+            damage: 10,
+            range: 20 * world,
+            acquisition_range: 20 * world,
+            cooldown_ticks: 100,
+        };
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Bash(
+                    BashEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"TEST")),
+                        chance_per_10k: 10_000,
+                        bonus_damage: 25,
+                        stun_duration_ticks: 2,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(50 * world, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: 8 * world,
+                cooldown_ticks: 100,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        let launch = sim.step();
+        assert_eq!(launch.projectiles_launched, 1);
+        assert_eq!(sim.unit(target).unwrap().health, 100);
+        assert_eq!(sim.unit(target).unwrap().stunned_until_tick, 0);
+        let impact_tick = sim.projectiles()[0].impact_tick;
+        while sim.tick() <= impact_tick {
+            sim.step();
+        }
+        let target = sim.unit(target).unwrap();
+        assert_eq!(target.health, 65);
+        assert_eq!(target.stunned_until_tick, impact_tick + 2);
+    }
+
+    #[test]
+    fn evasion_marks_the_attack_missed_and_prevents_damage() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 25,
+            range: 4 * world,
+            acquisition_range: 8 * world,
+            cooldown_ticks: 100,
+        };
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(40 * world, 0),
+            health: 100,
+            attack,
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let target = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(41 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    damage: 0,
+                    ..attack
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Evasion(
+                    EvasionEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"EVAD")),
+                        chance_per_10k: 10_000,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 100);
+        assert_eq!(sim.attacks_last_tick().len(), 2);
+        assert!(
+            sim.attacks_last_tick()
+                .iter()
+                .any(|event| event.target == target && event.missed)
+        );
+    }
+
+    #[test]
+    fn triggered_chain_lightning_hits_nearest_valid_jump_targets() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 0,
+            range: 4 * world,
+            acquisition_range: 8 * world,
+            cooldown_ticks: 100,
+        };
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                    TriggeredSpellProcProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
+                        chance_per_10k: 10_000,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                        effect: TriggeredAttackEffect::ChainLightning(
+                            ChainLightningEffectProfile {
+                                ability: AbilityId(u32::from_be_bytes(*b"CHLN")),
+                                initial_damage: 100,
+                                maximum_targets: 3,
+                                jump_radius: 3 * world,
+                                damage_reduction_per_10k: 5_000,
+                                targets: AttackTargetMask::GROUND_UNITS,
+                            },
+                        ),
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let first = sim.spawn_unit(duel_unit(1, 41 * world, 0, 1_000));
+        let second = sim.spawn_unit(duel_unit(1, 43 * world, 0, 1_000));
+        let third = sim.spawn_unit(duel_unit(1, 45 * world, 0, 1_000));
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(first).unwrap().health, 900);
+        assert_eq!(sim.unit(second).unwrap().health, 950);
+        assert_eq!(sim.unit(third).unwrap().health, 975);
+    }
+
+    #[test]
+    fn entangling_roots_immobilizes_and_deals_one_pulse_per_second() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 0,
+            range: 30 * world,
+            acquisition_range: 30 * world,
+            cooldown_ticks: 1_000,
+        };
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                    TriggeredSpellProcProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"ORBR")),
+                        chance_per_10k: 10_000,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                        effect: TriggeredAttackEffect::EntanglingRoots(
+                            EntanglingRootsEffectProfile {
+                                ability: AbilityId(u32::from_be_bytes(*b"ROOT")),
+                                damage_per_second: 30,
+                                duration_ticks: 60,
+                                targets: AttackTargetMask::GROUND_UNITS,
+                            },
+                        ),
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(60 * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                damage: 0,
+                ..attack
+            },
+            movement: MovementProfile {
+                speed_per_tick: world,
+            },
+        });
+
+        sim.step();
+        sim.step();
+        let rooted_position = sim.unit(target).unwrap().position;
+        for _ in 0..30 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(target).unwrap().position, rooted_position);
+        assert_eq!(sim.unit(target).unwrap().health, 970);
+        for _ in 0..30 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(target).unwrap().health, 940);
+    }
+
+    #[test]
+    fn burning_oil_creates_persistent_ground_damage_after_ballistic_impact() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::RangedBallistic {
+                speed_per_tick: 10 * world,
+                impact_radius: 0,
+            },
+            damage: 0,
+            range: 30 * world,
+            acquisition_range: 30 * world,
+            cooldown_ticks: 1_000,
+        };
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::BurningOil(
+                    BurningOilEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"BOIL")),
+                        radius: 5 * world,
+                        full_damage: 12,
+                        full_interval_millis: 250,
+                        half_damage: 3,
+                        half_interval_millis: 1_000,
+                        full_duration_millis: 1_010,
+                        total_duration_millis: 2_510,
+                        target_ground_units: true,
+                        target_buildings: true,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let target = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(60 * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 1_000,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        sim.step();
+        let impact_tick = sim
+            .projectiles()
+            .iter()
+            .find(|projectile| matches!(projectile.kind, ProjectileViewKind::Ballistic { .. }))
+            .expect("ballistic projectile must launch")
+            .impact_tick;
+        while sim.tick() <= impact_tick + 62 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(target).unwrap().health, 949);
+    }
+
+    #[test]
+    fn imported_ice_troll_frost_armor_autocasts_and_slows_melee_attackers() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let troll = CastleFightUnitKind::IceTrollShadowPriest.definition();
+        let spellcasting = troll
+            .spellcasting
+            .expect("Ice Troll Shadow Priest must have Frost Armor autocast");
+        let caster = sim.spawn_unit_with_properties_and_spellcasting(
+            UnitSpawn::from_template(Team(0), SimPoint::new(30 * world, 0), troll.template()),
+            troll.gameplay_properties(),
+            spellcasting,
+        );
+        let ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(60 * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 100,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(85 * world, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 10,
+                range: 30 * world,
+                acquisition_range: 30 * world,
+                cooldown_ticks: 100,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(ally).unwrap().last_attacked_tick, Some(1));
+        sim.step();
+        assert_eq!(sim.unit(caster).unwrap().mana_current, Some(115));
+        assert!(sim.ability_casts_last_tick().iter().any(|event| {
+            event.source == caster
+                && event.ability == AbilityId(u32::from_be_bytes(*b"A03Z"))
+                && event.target == AbilityCastTarget::Unit(ally)
+        }));
+
+        let slowed_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(90 * world, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 10,
+                range: 30 * world,
+                acquisition_range: 30 * world,
+                cooldown_ticks: 40,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(slowed_attacker).unwrap().cooldown_remaining, 54);
+    }
+
+    #[test]
     fn imported_siege_damage_uses_fortified_multiplier_on_buildings() {
         let mut sim = Simulation::new_with_combat_rules(
             SimulationConfig::default(),
@@ -449,7 +921,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 1,
                     starting: 1,
-                    regen_per_tick: 0,
+                    regen_per_tick_per_10k: 0,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(0x4441_4d47),
@@ -1834,7 +2306,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 6,
                     starting: 0,
-                    regen_per_tick: 2,
+                    regen_per_tick_per_10k: 20_000,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(7),
@@ -1897,7 +2369,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 2,
                     starting: 0,
-                    regen_per_tick: 1,
+                    regen_per_tick_per_10k: 10_000,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(8),
@@ -1971,7 +2443,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 1,
                     starting: 1,
-                    regen_per_tick: 0,
+                    regen_per_tick_per_10k: 0,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(9),
@@ -2021,7 +2493,7 @@ mod tests {
             mana: ManaProfile {
                 maximum: 10,
                 starting: 0,
-                regen_per_tick: 1,
+                regen_per_tick_per_10k: 10_000,
             },
             ability: AutomaticAbilityProfile {
                 id: AbilityId(10),
@@ -2079,7 +2551,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 10,
                     starting: 10,
-                    regen_per_tick: 0,
+                    regen_per_tick_per_10k: 0,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(11),
@@ -2138,7 +2610,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 10,
                     starting: 10,
-                    regen_per_tick: 0,
+                    regen_per_tick_per_10k: 0,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(13),
@@ -2487,7 +2959,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 1_000,
                     starting: 1_000,
-                    regen_per_tick: 1,
+                    regen_per_tick_per_10k: 10_000,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(17),
@@ -2542,7 +3014,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 1_000,
                     starting: 1_000,
-                    regen_per_tick: 1,
+                    regen_per_tick_per_10k: 10_000,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(71),
@@ -2560,7 +3032,7 @@ mod tests {
                 mana: ManaProfile {
                     maximum: 1_000,
                     starting: 1_000,
-                    regen_per_tick: 1,
+                    regen_per_tick_per_10k: 10_000,
                 },
                 ability: AutomaticAbilityProfile {
                     id: AbilityId(72),

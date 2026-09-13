@@ -78,11 +78,20 @@ impl AttackProfile {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct PendingAttackEffects {
+    pub stun_duration_ticks: u16,
+    pub triggered_spell: Option<TriggeredAttackEffect>,
+    pub burning_oil: Option<BurningOilEffectProfile>,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct GuaranteedHitProjectile {
     pub source: SimId,
+    pub source_team: Team,
     pub target: SimId,
     pub damage: i32,
+    pub on_hit: PendingAttackEffects,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub launch_tick: u64,
@@ -95,6 +104,7 @@ pub(crate) struct BallisticProjectile {
     pub source_team: Team,
     pub target_mask: AttackTargetMask,
     pub damage: i32,
+    pub burning_oil: Option<BurningOilEffectProfile>,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,
@@ -123,6 +133,9 @@ pub(crate) struct BounceProjectile {
     pub hit_targets: [SimId; MAX_BOUNCE_HITS],
     pub hit_count: u8,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AbilityId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CorpseDefinitionId(pub u32);
@@ -205,6 +218,130 @@ pub struct ContentIdentity {
     pub name: &'static str,
 }
 
+pub const MAX_PASSIVE_UNIT_EFFECTS: usize = 8;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BashEffectProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    pub bonus_damage: i32,
+    pub stun_duration_ticks: u16,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EvasionEffectProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChainLightningEffectProfile {
+    pub ability: AbilityId,
+    pub initial_damage: i32,
+    pub maximum_targets: u8,
+    pub jump_radius: i32,
+    pub damage_reduction_per_10k: u16,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntanglingRootsEffectProfile {
+    pub ability: AbilityId,
+    pub damage_per_second: i32,
+    pub duration_ticks: u16,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TriggeredAttackEffect {
+    ChainLightning(ChainLightningEffectProfile),
+    EntanglingRoots(EntanglingRootsEffectProfile),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TriggeredSpellProcProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    pub targets: AttackTargetMask,
+    pub effect: TriggeredAttackEffect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BurningOilEffectProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub full_damage: i32,
+    pub full_interval_millis: u16,
+    pub half_damage: i32,
+    pub half_interval_millis: u16,
+    pub full_duration_millis: u16,
+    pub total_duration_millis: u16,
+    pub target_ground_units: bool,
+    pub target_buildings: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PassiveUnitEffect {
+    Bash(BashEffectProfile),
+    Evasion(EvasionEffectProfile),
+    TriggeredSpellProc(TriggeredSpellProcProfile),
+    BurningOil(BurningOilEffectProfile),
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PassiveUnitEffects {
+    effects: [Option<PassiveUnitEffect>; MAX_PASSIVE_UNIT_EFFECTS],
+    count: u8,
+}
+
+impl PassiveUnitEffects {
+    pub const EMPTY: Self = Self {
+        effects: [None; MAX_PASSIVE_UNIT_EFFECTS],
+        count: 0,
+    };
+
+    #[must_use]
+    pub const fn single(effect: PassiveUnitEffect) -> Self {
+        let mut effects = [None; MAX_PASSIVE_UNIT_EFFECTS];
+        effects[0] = Some(effect);
+        Self { effects, count: 1 }
+    }
+
+    #[must_use]
+    pub fn from_slice(effects: &[PassiveUnitEffect]) -> Self {
+        assert!(
+            effects.len() <= MAX_PASSIVE_UNIT_EFFECTS,
+            "too many passive effects for one unit"
+        );
+        let mut stored = [None; MAX_PASSIVE_UNIT_EFFECTS];
+        for (slot, effect) in stored.iter_mut().zip(effects.iter().copied()) {
+            *slot = Some(effect);
+        }
+        Self {
+            effects: stored,
+            count: u8::try_from(effects.len()).expect("passive effect count fits u8"),
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = PassiveUnitEffect> + '_ {
+        self.effects[..usize::from(self.count)]
+            .iter()
+            .map(|effect| effect.expect("active passive effect slot must be populated"))
+    }
+
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.count == 0
+    }
+}
+
+impl Default for PassiveUnitEffects {
+    fn default() -> Self {
+        Self::EMPTY
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct UnitGameplayProperties {
     pub content: Option<ContentIdentity>,
@@ -214,6 +351,7 @@ pub struct UnitGameplayProperties {
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
+    pub passive_effects: PassiveUnitEffects,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -243,6 +381,9 @@ pub(crate) struct ProductionDamageType(pub DamageType);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionArmorProfile(pub ArmorProfile);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionPassiveEffects(pub PassiveUnitEffects);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
@@ -371,9 +512,6 @@ pub struct ProductionState {
     pub next_spawn_tick: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AbilityId(pub u32);
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ModifierId(pub u32);
 
@@ -382,6 +520,7 @@ pub enum AbilityTargetPolicy {
     RandomEnemyUnit,
     AllEnemyUnits,
     RandomEnemyUnitGlobal,
+    RecentlyAttackedFriendlyUnit,
 }
 
 impl AbilityTargetPolicy {
@@ -391,6 +530,7 @@ impl AbilityTargetPolicy {
             Self::RandomEnemyUnit => 0,
             Self::AllEnemyUnits => 1,
             Self::RandomEnemyUnitGlobal => 2,
+            Self::RecentlyAttackedFriendlyUnit => 3,
         }
     }
 }
@@ -412,6 +552,14 @@ pub enum AbilityEffect {
         amount: i32,
         radius: i32,
     },
+    FrostArmor {
+        modifier: ModifierId,
+        armor_bonus_per_100: i16,
+        armor_duration_ticks: u16,
+        slow_duration_ticks: u16,
+        movement_percent_delta: i16,
+        attack_speed_percent_delta: i16,
+    },
 }
 
 impl AbilityEffect {
@@ -422,6 +570,7 @@ impl AbilityEffect {
             Self::Stun { .. } => 1,
             Self::ModifyMovementSpeedPercent { .. } => 2,
             Self::AreaDamage { .. } => 3,
+            Self::FrostArmor { .. } => 4,
         }
     }
 }
@@ -430,7 +579,8 @@ impl AbilityEffect {
 pub struct ManaProfile {
     pub maximum: i32,
     pub starting: i32,
-    pub regen_per_tick: i32,
+    /// Mana regenerated per simulation tick in 1/10,000 mana units.
+    pub regen_per_tick_per_10k: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -452,6 +602,7 @@ pub struct SpellcastingProfile {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ManaState {
     pub current: i32,
+    pub regen_remainder_per_10k: u16,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -467,11 +618,57 @@ pub struct TimedMovementModifier {
     pub expires_tick: u64,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TimedAttackSpeedModifier {
+    pub id: ModifierId,
+    pub percent_delta: i16,
+    pub expires_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TimedArmorModifier {
+    pub id: ModifierId,
+    pub armor_bonus_per_100: i16,
+    pub expires_tick: u64,
+    pub reactive_slow_duration_ticks: u16,
+    pub reactive_movement_percent_delta: i16,
+    pub reactive_attack_speed_percent_delta: i16,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TimedDamageOverTime {
+    pub id: ModifierId,
+    pub damage_per_pulse: i32,
+    pub pulse_interval_ticks: u16,
+    pub next_pulse_tick: u64,
+    pub expires_tick: u64,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BurningOilZone {
+    pub source: SimId,
+    pub source_team: Team,
+    pub center: SimPoint,
+    pub profile: BurningOilEffectProfile,
+    pub created_tick: u64,
+    pub pulse_index: u16,
+}
+
+pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
+pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 8;
+pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
+
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
     pub movement_modifier_count: u8,
+    pub attack_speed_modifiers: [TimedAttackSpeedModifier; MAX_TIMED_ATTACK_SPEED_MODIFIERS],
+    pub attack_speed_modifier_count: u8,
+    pub armor_modifiers: [TimedArmorModifier; MAX_TIMED_ARMOR_MODIFIERS],
+    pub armor_modifier_count: u8,
+    pub damage_over_time: [TimedDamageOverTime; MAX_TIMED_DAMAGE_OVER_TIME],
+    pub damage_over_time_count: u8,
 }
 
 impl StatusState {

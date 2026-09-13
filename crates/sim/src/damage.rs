@@ -189,22 +189,39 @@ impl DamageRules {
         damage_type: DamageType,
         armor: ArmorProfile,
     ) -> i32 {
+        self.apply_attack_with_armor_per_100(
+            raw_damage,
+            damage_type,
+            armor.armor_type,
+            i32::from(armor.armor_points) * 100,
+        )
+    }
+
+    #[must_use]
+    pub fn apply_attack_with_armor_per_100(
+        self,
+        raw_damage: i32,
+        damage_type: DamageType,
+        armor_type: ArmorType,
+        armor_points_per_100: i32,
+    ) -> i32 {
         if raw_damage <= 0 {
             return raw_damage;
         }
-        let bonus = i128::from(self.bonus_per_10k(damage_type, armor.armor_type));
+        let bonus = i128::from(self.bonus_per_10k(damage_type, armor_type));
         if bonus == 0 {
             return 0;
         }
         let raw = i128::from(raw_damage);
         let factor = i128::from(self.armor_factor_per_10k);
-        let adjusted = if armor.armor_points >= 0 {
-            let denominator =
-                i128::from(DAMAGE_MULTIPLIER_SCALE) + factor * i128::from(armor.armor_points);
-            round_ratio(raw * bonus, denominator)
-        } else {
+        let adjusted = if armor_points_per_100 >= 0 {
+            let denominator = i128::from(DAMAGE_MULTIPLIER_SCALE) * 100
+                + factor * i128::from(armor_points_per_100);
+            round_ratio(raw * bonus * 100, denominator)
+        } else if armor_points_per_100 % 100 == 0 {
             let base = i128::from(DAMAGE_MULTIPLIER_SCALE) - factor;
-            let mut remaining = armor.armor_points.unsigned_abs();
+            let mut remaining = u32::try_from((-armor_points_per_100) / 100)
+                .expect("negative armor magnitude exceeds u32");
             let mut power = ARMOR_EXP_SCALE;
             while remaining > 0 {
                 power = round_ratio(power * base, i128::from(DAMAGE_MULTIPLIER_SCALE));
@@ -215,6 +232,8 @@ impl DamageRules {
                 raw * bonus * armor_multiplier,
                 i128::from(DAMAGE_MULTIPLIER_SCALE) * ARMOR_EXP_SCALE,
             )
+        } else {
+            panic!("fractional negative armor is not yet supported");
         };
         i32::try_from(adjusted.max(1)).expect("adjusted damage exceeds i32")
     }

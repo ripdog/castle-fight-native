@@ -186,21 +186,21 @@ pub(crate) enum BuildKind {
 }
 
 impl BuildKind {
-    pub(crate) const fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Production(kind) => kind.definition().name,
             Self::Tower(kind) => kind.definition().name,
         }
     }
 
-    pub(crate) const fn footprint_size(self) -> u16 {
+    pub(crate) fn footprint_size(self) -> u16 {
         match self {
             Self::Production(kind) => kind.definition().footprint_size_cells,
             Self::Tower(kind) => kind.definition().footprint_size_cells,
         }
     }
 
-    pub(crate) const fn gold_cost(self) -> Option<u16> {
+    pub(crate) fn gold_cost(self) -> Option<u16> {
         Some(match self {
             Self::Production(kind) => kind.definition().gold_cost,
             Self::Tower(kind) => kind.definition().gold_cost,

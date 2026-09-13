@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "bindings": [
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CV",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Channel marker used by Castle Fight support/assassin ordering code; no direct gameplay effect when present on these production units."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03N",
+      "implementation": "warcraft-zero-damage-barrage-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Ranger Barrage is configured with Damage Per Target=0 and is gameplay-neutral in the 9.27 object data."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00U",
+      "implementation": "warcraft-evasion-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Warcraft Evasion passive attack-miss semantics."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05K",
+      "implementation": "warcraft-bash-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Warcraft Bash attack proc semantics."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01B",
+      "implementation": "warcraft-orb-spell-proc-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Gryphon Rider AIlx orb proc; Effect Ability is A05X."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A049",
+      "implementation": "warcraft-orb-spell-proc-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Ice Troll AIlx orb proc; Effect Ability is A03W."
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A05X",
+      "implementation": "warcraft-chain-lightning-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Chain Lightning effect invoked by Gryphon Rider's A01B orb proc."
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A03W",
+      "implementation": "warcraft-entangling-roots-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Entangling Roots effect invoked by Ice Troll's A049 orb proc."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02J",
+      "implementation": "warcraft-burning-oil-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Catapult Burning Oil persistent impact-zone semantics."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03Z",
+      "implementation": "warcraft-frost-armor-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Ice Troll native Frost Armor autocast, including armor buff and melee frost retaliation slow."
+    }
+  ]
+}
