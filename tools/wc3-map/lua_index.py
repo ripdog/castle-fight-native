@@ -2644,6 +2644,722 @@ def _extract_building_spell_mechanics(
             "byte_offset": byte_offset,
         })
 
+    def protected_filter_evidence(*symbols: str) -> list[dict[str, object]]:
+        """Retain protected-filter provenance without trusting coarse pairing as full semantics."""
+        by_symbol = {str(row["symbol"]): row for row in protected_filter_bindings}
+        result: list[dict[str, object]] = []
+        for symbol in symbols:
+            row = by_symbol.get(symbol)
+            result.append({
+                "symbol": symbol,
+                "resolution_status": row["resolution_status"] if row is not None else "not-indexed",
+                "resolved_function": row["resolved_function"] if row is not None else "",
+                "coarse_predicate": row["predicate"] if row is not None else "",
+                "semantic_use": "deferred-protected-filter-audit",
+            })
+        return result
+
+    # The map has a second building-spell registration family built directly on
+    # EVENT_PLAYER_UNIT_SPELL_EFFECT. These handlers are ordinary generated
+    # closures rather than protected-registry calls, but their implementation is
+    # just as statically visible and belongs in the same importer-facing catalog.
+
+    # Gjallarhorn: every living allied combat sapper within 500 receives A016.
+    # The applied level is capped at four and derives from the owner's generated
+    # Gjallarhorn/team count table. DummyCaster.delay is a recycle delay, not a
+    # cast delay (same DummyCaster convention used by item spell extraction).
+    gjallar_handler = registrations_by_building.get(rawcode("h010"))
+    if gjallar_handler is not None:
+        gjallar_name = str(gjallar_handler["handler_function"])
+        _gjallar_start, gjallar_tokens = body(gjallar_name)
+        _range_index, range_call = one_call(gjallar_tokens, "forUnitsInRange")
+        if len(range_call) != 4 or decimal_argument(range_call[1]) != Decimal(500):
+            raise ValueError("Gjallarhorn range enumeration changed")
+        gjallar_callback_name = "ForGroupCallback_forUnitsInRange_GjallarHorn_callback_forUnitsInRange_GjallarHorn"
+        _callback_start, gjallar_callback = body(gjallar_callback_name)
+        for required in ("unit_isAlive", "unit_isAllyOf", "isCombatSapper"):
+            if len(call_sites(gjallar_callback, required)) != 1:
+                raise ValueError(f"Gjallarhorn target predicate changed: {required}")
+        _cast_index, gjallar_cast = one_call(gjallar_callback, "DummyCaster_DummyCaster_castTarget")
+        if len(gjallar_cast) != 5 or integer_argument(gjallar_cast[1]) != rawcode("A016") or integer_argument(gjallar_cast[3]) != 852101:
+            raise ValueError("Gjallarhorn buff cast changed")
+        add(
+            "h010",
+            "area-allied-buff",
+            "all-units-within-500-of-building",
+            "alive;ally-of-owner;combat-sapper",
+            (rawcode("A016"),),
+            {
+                "radius": 500,
+                "effect_ability_id": rawcode("A016"),
+                "effect_level_formula": "min(4, Icb[lGb[player_getId(owner)]])",
+                "order_id": 852101,
+                "dummy_recycle_delay_seconds": "1",
+                "effect_parameters_source": "linked-ability-object-data",
+            },
+            (gjallar_callback_name,),
+        )
+
+    # Withering Hall: prioritize one protected generated filter, fall back to a
+    # second, burn up to 200 mana, then deal twice the amount burned as sonic
+    # damage. The exact protected predicates are deliberately kept as symbols
+    # until the filter-pairing audit is complete.
+    _withering_start, withering = body("spellWitheringTouch")
+    _withering_damage_index, withering_damage = one_call(withering, "__wurst_safe_UnitDamageTarget")
+    withering_constants = literal_assignments("pJ")
+    if withering_constants.get("H6") != Decimal(200):
+        raise ValueError("Withering Hall mana cap changed")
+    if "DAMAGE_TYPE_SONIC" not in {token.text for token in withering_damage[6]}:
+        raise ValueError("Withering Hall damage type changed")
+    add(
+        "h07T",
+        "mana-burn-random-target",
+        "random-from-G6-filter;fallback-random-from-F6-filter",
+        "protected-generated-filters-G6/F6;shield-check-passes",
+        (),
+        {
+            "target_filters": protected_filter_evidence("G6", "F6"),
+            "mana_burn_cap": 200,
+            "damage_formula": "2 * min(target_mana, 200)",
+            "attack_type": "normal",
+            "damage_type": "sonic",
+            "attack_flag": True,
+            "ranged_flag": False,
+        },
+        ("spellWitheringTouch",),
+        evidence_kind="script-direct-with-protected-target-filters",
+    )
+
+    # Magic Ruin: one random live enemy, shield-gated, followed by a uniform
+    # ten-way branch table. Branches 8 and 9 deliberately have no gameplay
+    # effect beyond the E2E bookkeeping call.
+    _ruin_start, ruin = body("magicRuinSpell")
+    _ruin_random_index, ruin_random = one_call(ruin, "GetRandomInt")
+    if [integer_argument(argument) for argument in ruin_random] != [0, 9]:
+        raise ValueError("Magic Ruin branch range changed")
+    ruin_damage_calls = call_sites(ruin, "__wurst_safe_UnitDamageTarget")
+    ruin_damage_amounts = [decimal_argument(args[2]) for _index, args in ruin_damage_calls]
+    if ruin_damage_amounts != [Decimal(50000), Decimal(500)]:
+        raise ValueError(f"Magic Ruin direct damage branches changed: {ruin_damage_amounts}")
+    add(
+        "h05I",
+        "uniform-random-effect-table",
+        "random-alive-enemy",
+        "randomAliveEnemy-helper;shield-check-passes;ground-retarget-only-for-stun-branch",
+        (rawcode("A018"), rawcode("A0BL"), rawcode("A06S"), rawcode("A06T"), rawcode("A06U"), rawcode("n01S")),
+        {
+            "selection": "uniform-GetRandomInt(0,9)",
+            "branch_probability_percent": 10,
+            "branches": [
+                {"roll": 0, "effect": "explode-target", "increments_o0": True},
+                {"roll": 1, "effect": "direct-damage", "damage": 50000, "attack_type": "normal", "damage_type": "death"},
+                {"roll": 2, "effect": "direct-damage", "damage": 500, "attack_type": "normal", "damage_type": "death"},
+                {"roll": 3, "effect": "add-A06T-and-A06U;heal-to-max", "ability_ids": [rawcode("A06T"), rawcode("A06U")]},
+                {"roll": 4, "effect": "dummy-target-hex", "ability_id": rawcode("A018"), "order_id": 852502, "dummy_lifetime_seconds": "1", "reengage": True},
+                {"roll": 5, "effect": "dummy-target-banish", "ability_id": rawcode("A0BL"), "order_id": 852486, "dummy_lifetime_seconds": "1", "reengage": True},
+                {"roll": 6, "effect": "dummy-target-stun;retarget-ground-if-needed", "ability_id": rawcode("A06S"), "order_id": 852095, "dummy_lifetime_seconds": "2", "reengage": False},
+                {"roll": 7, "effect": "replace-target-with-mutation", "unit_id": rawcode("n01S"), "increments_o0": True},
+                {"roll": 8, "effect": "no-gameplay-effect"},
+                {"roll": 9, "effect": "no-gameplay-effect"},
+            ],
+        },
+        ("magicRuinSpell", "chaosControlDummy"),
+    )
+
+    # Eraser tiers share one implementation. A random live enemy chooses the
+    # unit type; every live enemy of that type across the battlefield is then
+    # hit for lethal chaos/death damage if it passes the callback exclusions.
+    _eraser_start, eraser = body("eraserSpell")
+    if len(call_sites(eraser, "randomAliveEnemy")) != 1 or len(call_sites(eraser, "__wurst_safe_GroupEnumUnitsInRect")) != 1:
+        raise ValueError("Eraser selection structure changed")
+    eraser_callback_name = "ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities"
+    _eraser_callback_start, eraser_callback = body(eraser_callback_name)
+    _eraser_damage_index, eraser_damage = one_call(eraser_callback, "__wurst_safe_UnitDamageTarget")
+    if decimal_argument(eraser_damage[2]) != Decimal(100500):
+        raise ValueError("Eraser damage changed")
+    eraser_callback_text = {token.text for token in eraser_callback}
+    if not {"ATTACK_TYPE_CHAOS", "DAMAGE_TYPE_DEATH"} <= eraser_callback_text:
+        raise ValueError("Eraser attack/damage type changed")
+    for eraser_building in ("h01M", "h01W", "h01X"):
+        add(
+            eraser_building,
+            "same-unit-type-battlefield-wipe",
+            "random-alive-enemy-selects-unit-type;then-all-battlefield-matches",
+            "life>0.405;enemy;same-unit-type;passes-Id-exclusion;missing-A070",
+            (rawcode("A070"),),
+            {
+                "damage": 100500,
+                "attack_type": "chaos",
+                "damage_type": "death",
+                "attack_flag": True,
+                "ranged_flag": False,
+                "protected_or_helper_exclusion": "not Id(unit)",
+                "excluded_ability_id": rawcode("A070"),
+            },
+            ("eraserSpell", eraser_callback_name),
+        )
+
+    # Volcano: point-cast Flame Strike at a random living ground enemy. The
+    # artillery-mode switch substitutes the alternate -na object but leaves the
+    # script delivery constants unchanged.
+    _volcano_start, volcano = body("volcanoSpell")
+    _volcano_cast_index, volcano_cast = one_call(volcano, "dummyCastPointFrom")
+    if integer_argument(volcano_cast[2]) != 852488 or decimal_argument(volcano_cast[5]) != Decimal(6):
+        raise ValueError("Volcano dummy cast changed")
+    artillery_switch_text = {token.text for token in body("setArtilleryModeAbilityIds")[1]}
+    for integer_id in (rawcode("A01I"), rawcode("A05H")):
+        if str(integer_id) not in artillery_switch_text:
+            raise ValueError("Volcano artillery-mode ability mapping changed")
+    add(
+        "h01F",
+        "dummy-point-ability",
+        "random-alive-enemy-ground",
+        "randomAliveEnemyGround-helper;linked-ability-target-mask",
+        (rawcode("A01I"), rawcode("A05H")),
+        {
+            "normal_ability_id": rawcode("A01I"),
+            "alternate_mode_ability_id": rawcode("A05H"),
+            "order_id": 852488,
+            "dummy_lifetime_seconds": "6",
+            "effect_parameters_source": "selected-linked-ability-object-data",
+        },
+        ("volcanoSpell", "setArtilleryModeAbilityIds"),
+    )
+
+    # Shrine of Destruction: choose a random enemy structure with explicit
+    # castle/legendary exclusions, create the SoD attack dummy, then scale its
+    # freeze/DoT ability levels at 20/25/35 round-minute thresholds.
+    _sod_start, sod = body("shrineOfDestructionSpell")
+    sod_callback_name = "ForGroupCallback_forUnitsInRect_RaceChaosAbilities_callback_forUnitsInRect_RaceChaosAbilities1"
+    _sod_filter_start, sod_filter = body(sod_callback_name)
+    sod_filter_text = {token.text for token in sod_filter}
+    if not {"UNIT_TYPE_STRUCTURE", "bj_MAX_PLAYERS"} <= sod_filter_text:
+        raise ValueError("Shrine of Destruction structure filter changed")
+    _sod_life_index, sod_life = one_call(sod, "__wurst_safe_UnitApplyTimedLife")
+    _sod_order_index, sod_order = one_call(sod, "unit_issueTargetOrderById")
+    if decimal_argument(sod_life[2]) != Decimal(10) or integer_argument(sod_order[1]) != 851983:
+        raise ValueError("Shrine of Destruction dummy lifetime/order changed")
+    add(
+        "h01E",
+        "spawn-attack-dummy-with-round-scaling",
+        "random-battlefield-enemy-structure",
+        "alive;enemy;structure;normal-player;not-hcas/h06M/h07J/h07K;missing-A06V",
+        (rawcode("h06C"), rawcode("A0EU"), rawcode("A0FE"), rawcode("A06V"), rawcode("hcas"), rawcode("h06M"), rawcode("h07J"), rawcode("h07K")),
+        {
+            "dummy_unit_id": rawcode("h06C"),
+            "freeze_ability_id": rawcode("A0EU"),
+            "damage_over_time_ability_id": rawcode("A0FE"),
+            "timed_life_seconds": "10",
+            "order_id": 851983,
+            "ability_level_schedule": [
+                {"round_minutes_gt": 19, "level": 2},
+                {"round_minutes_gt": 24, "level": 3},
+                {"round_minutes_gt": 34, "level": 4},
+            ],
+            "excluded_unit_ids": [rawcode("hcas"), rawcode("h06M"), rawcode("h07J"), rawcode("h07K")],
+            "excluded_ability_id": rawcode("A06V"),
+            "effect_parameters_source": "dummy-unit-and-linked-ability-object-data",
+        },
+        ("shrineOfDestructionSpell", sod_callback_name),
+    )
+
+    # Forgotten One: six temporary dummies form a radius-64 hexagon around a
+    # random living ground enemy. The dummy rawcode switches in -na mode.
+    _forgotten_start, forgotten = body("forgottenOneSpell")
+    _forgotten_life_index, forgotten_life = one_call(forgotten, "__wurst_safe_UnitApplyTimedLife")
+    if decimal_argument(forgotten_life[2]) != Decimal(9):
+        raise ValueError("Forgotten One dummy lifetime changed")
+    add(
+        "h04R",
+        "six-dummy-ring",
+        "random-alive-enemy-ground",
+        "randomAliveEnemyGround-helper",
+        (rawcode("n01C"), rawcode("n021")),
+        {
+            "dummy_count": 6,
+            "ring_radius": 64,
+            "angle_step_degrees": 60,
+            "normal_dummy_unit_id": rawcode("n01C"),
+            "alternate_mode_dummy_unit_id": rawcode("n021"),
+            "timed_life_seconds": "9",
+            "effect_parameters_source": "selected-dummy-unit-object-data",
+        },
+        ("forgottenOneSpell", "setArtilleryModeAbilityIds"),
+    )
+
+    # Well of Pain: wounded enemies are preferred, with a random-live fallback.
+    # A successful shield-gated hit deals 160 sonic damage; a lethal hit spawns
+    # one Ghost of Sorrow at the victim position.
+    _pain_start, pain = body("wellOfPainSpell")
+    _pain_damage_index, pain_damage = one_call(pain, "__wurst_safe_UnitDamageTarget")
+    _pain_spawn_index, pain_spawn = one_call(pain, "createUnit")
+    if decimal_argument(pain_damage[2]) != Decimal(160) or integer_argument(pain_spawn[1]) != rawcode("n03C"):
+        raise ValueError("Well of Pain damage/spawn changed")
+    add(
+        "h04K",
+        "damage-with-on-kill-summon",
+        "random-wounded-enemy;fallback-random-alive-enemy",
+        "randomWoundedEnemy/randomAliveEnemy helpers;shield-check-passes",
+        (rawcode("n03C"),),
+        {
+            "damage": 160,
+            "attack_type": "normal",
+            "damage_type": "sonic",
+            "attack_flag": True,
+            "ranged_flag": False,
+            "kill_threshold_life": "<0.405",
+            "on_kill_unit_id": rawcode("n03C"),
+        },
+        ("wellOfPainSpell", "randomWoundedEnemy"),
+    )
+
+    # Beacon of the Oasis: three protected generated filters form an exact
+    # priority sequence. The chosen unit receives +175 life and +40 mana. Keep
+    # the filter symbols intact until the protected-filter audit proves their
+    # complete predicates; the old coarse pairing is insufficient here.
+    _replenish_start, replenish = body("spellReplenish")
+    replenish_life = call_sites(replenish, "__wurst_safe_SetUnitState")
+    if len(replenish_life) != 2 or "175." not in {token.text for token in replenish} or "40." not in {token.text for token in replenish}:
+        raise ValueError("Beacon of the Oasis replenish amounts changed")
+    add(
+        "h079",
+        "priority-random-replenish",
+        "random-from-Y0;fallback-X0;fallback-W0",
+        "protected-generated-filter-sequence-Y0/X0/W0",
+        (),
+        {
+            "target_filters": protected_filter_evidence("Y0", "X0", "W0"),
+            "selection_order": ["Y0", "X0", "W0"],
+            "life_gain": 175,
+            "mana_gain": 40,
+        },
+        ("spellReplenish",),
+        evidence_kind="script-direct-with-protected-target-filters",
+    )
+
+    # Sacred Peyote: one random unit from protected filter V0, shield-gated,
+    # receives the Item Illusions ability. Object data supplies 125% dealt,
+    # 75% received and 60-second duration; the script order is the canonical
+    # illusion order 852274.
+    _peyote_start, peyote = body("spellPeyote")
+    _peyote_cast_index, peyote_cast = one_call(peyote, "dummyCastTargetWithVision")
+    desert_constants = literal_assignments("rK")
+    if desert_constants.get("Z0") != Decimal(rawcode("AM0y")) or "Z0" not in {token.text for token in peyote_cast[1]}:
+        raise ValueError("Sacred Peyote illusion ability alias changed")
+    add(
+        "h07A",
+        "dummy-target-illusion",
+        "random-from-V0-filter",
+        "protected-generated-filter-V0;shield-check-passes",
+        (rawcode("AM0y"),),
+        {
+            "target_filters": protected_filter_evidence("V0"),
+            "effect_ability_id": rawcode("AM0y"),
+            "order_id": 852274,
+            "dummy_lifetime_seconds": "1",
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("spellPeyote",),
+        evidence_kind="script-direct-with-protected-target-filter",
+    )
+
+    # Temple of Storm: a six-second map-scale Sandstorm carrier combines the
+    # miss/slow ability A0G4 with the periodic damage ability A0GC. Weather and
+    # building animation are restored by the generated delayed callback.
+    storm_registration = registrations_by_building.get(rawcode("n03A"))
+    if storm_registration is not None:
+        storm_handler_name = str(storm_registration["handler_function"])
+        _storm_start, storm = body(storm_handler_name)
+        _storm_carrier_index, storm_carrier = one_call(storm, "dummyCarrierWithAbilities")
+        _storm_order_index, storm_order = one_call(storm, "unit_issuePointOrderById")
+        _storm_delay_index, storm_delay = one_call(storm, "doAfter")
+        if (
+            integer_argument(storm_carrier[1]) != rawcode("A0G4")
+            or integer_argument(storm_carrier[2]) != rawcode("A0GC")
+            or decimal_argument(storm_carrier[4]) != Decimal(6)
+            or integer_argument(storm_order[1]) != 852592
+            or decimal_argument(storm_delay[0]) != Decimal(6)
+        ):
+            raise ValueError("Temple of Storm carrier/order/duration changed")
+        add(
+            "n03A",
+            "global-weather-ability-carrier",
+            "map-wide-via-20000-area-linked-abilities",
+            "linked-ability-target-masks",
+            (rawcode("A0G4"), rawcode("A0GC")),
+            {
+                "carrier_ability_ids": [rawcode("A0G4"), rawcode("A0GC")],
+                "carrier_position": [0, 3500],
+                "order_id": 852592,
+                "order_position": [16, 3500],
+                "duration_seconds": "6",
+                "weather_effect_symbol": "U0",
+                "effect_parameters_source": "linked-ability-object-data",
+            },
+            (storm_handler_name, "CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities"),
+        )
+
+    # Obelisk of Elements: prefer an eligible ally missing A0F4, then relax that
+    # preference. If more than 350 HP are missing it heals 450; otherwise it
+    # chooses uniformly among currently absent A0D7/A0F3/A0F1 effects, with the
+    # generated index-sensitive A03Q branch preserved exactly, then adds A0F4.
+    _holy_start, holy = body("holyShrineSpell")
+    _holy_predicate_start, holy_predicate = body("isHolyShrineTarget")
+    for required in ("isAliveCombatSapper", "unit_isAllyOf", "unit_getAbilityLevel", "passesRetryTargetGate"):
+        if not call_sites(holy_predicate, required):
+            raise ValueError(f"Obelisk of Elements target predicate changed: {required}")
+    holy_added: list[int] = []
+    for _index, args in call_sites(holy, "addProtectedAbility"):
+        if len(args) != 2:
+            continue
+        try:
+            holy_added.append(integer_argument(args[1]))
+        except ValueError:
+            # The chosen A0D7/A0F3/A0F1 candidate is carried through Wpr.
+            pass
+    expected_holy_added = [rawcode("A03Q"), rawcode("A0F4")]
+    if holy_added != expected_holy_added:
+        raise ValueError(f"Obelisk of Elements literal ability additions changed: {holy_added}")
+    holy_text = {token.text for token in holy}
+    for integer_id in (rawcode("A0D7"), rawcode("A0F3"), rawcode("A0F1"), rawcode("A03Q"), rawcode("A0F4")):
+        if str(integer_id) not in holy_text:
+            raise ValueError("Obelisk of Elements candidate ability table changed")
+    add(
+        "h060",
+        "heal-or-random-missing-buff",
+        "random-eligible-ally;fallback-relaxes-A0F4-preference",
+        "alive-combat-sapper;ally;missing-Avul;first-pass-missing-A0F4",
+        (rawcode("Avul"), rawcode("A0D7"), rawcode("A0F3"), rawcode("A0F1"), rawcode("A03Q"), rawcode("A0F4")),
+        {
+            "preferred_missing_ability_id": rawcode("A0F4"),
+            "heal_if_missing_hp_gt": 350,
+            "heal_amount": 450,
+            "candidate_ability_ids": [rawcode("A0D7"), rawcode("A0F3"), rawcode("A0F1")],
+            "candidate_selection": "uniform-among-currently-absent-candidates",
+            "fallback_if_no_candidate": "heal-450",
+            "always_after-buff_ability_id": rawcode("A0F4"),
+            "generated_selected-index-2_extra_ability_id": rawcode("A03Q"),
+            "generated_index_note": "A03Q is keyed to the selected compacted-array index, not normalized ability identity",
+        },
+        ("holyShrineSpell", "holyPick", "isHolyShrineTarget", "ForGroupCallback_forUnitsInRect_RaceElementalAbilities_callback_forUnitsInRect_RaceElementalAbilities1"),
+    )
+
+    # Elemental Rain: one random living ground enemy point, then a 50/50 choice
+    # between Blizzard and Monsoon. Each has a normal and -na object selected by
+    # the shared artillery-mode switch.
+    _lightning_start, lightning = body("lightningSpell")
+    _lightning_random_index, lightning_random = one_call(lightning, "GetRandomInt")
+    if [integer_argument(argument) for argument in lightning_random] != [0, 1]:
+        raise ValueError("Elemental Rain 50/50 selection changed")
+    add(
+        "h06F",
+        "uniform-random-point-ability",
+        "random-alive-enemy-ground",
+        "randomAliveEnemyGround-helper;linked-ability-target-mask",
+        (rawcode("A0D1"), rawcode("A0D2"), rawcode("A0E3"), rawcode("A0E4")),
+        {
+            "selection": "uniform-GetRandomInt(0,1)",
+            "normal_options": [
+                {"ability_id": rawcode("A0D1"), "order_id": 852089},
+                {"ability_id": rawcode("A0E3"), "order_id": 852591},
+            ],
+            "alternate_mode_options": [
+                {"ability_id": rawcode("A0D2"), "order_id": 852089},
+                {"ability_id": rawcode("A0E4"), "order_id": 852591},
+            ],
+            "dummy_lifetime_seconds": "10",
+            "effect_parameters_source": "selected-linked-ability-object-data",
+        },
+        ("lightningSpell", "setArtilleryModeAbilityIds"),
+    )
+
+    # Meteor Shower: explicit visible filter selects a random living enemy
+    # flying combat sapper lacking Avul, then point-casts A0D0 for ten seconds.
+    _meteor_start, meteor = body("frostSpell")
+    meteor_filter_name = "ForGroupCallback_forUnitsInRect_RaceElementalAbilities_callback_forUnitsInRect_RaceElementalAbilities"
+    _meteor_filter_start, meteor_filter = body(meteor_filter_name)
+    for required in ("isAliveCombatSapper", "unit_isEnemyOf", "unit_isType", "unit_getAbilityLevel"):
+        if len(call_sites(meteor_filter, required)) != 1:
+            raise ValueError(f"Meteor Shower target predicate changed: {required}")
+    _meteor_cast_index, meteor_cast = one_call(meteor, "dummyCastPointFrom")
+    if integer_argument(meteor_cast[1]) != rawcode("A0D0") or integer_argument(meteor_cast[2]) != 852238 or decimal_argument(meteor_cast[5]) != Decimal(10):
+        raise ValueError("Meteor Shower dummy cast changed")
+    add(
+        "h06E",
+        "dummy-point-ability",
+        "random-battlefield-unit",
+        "alive-combat-sapper;enemy;flying;missing-Avul",
+        (rawcode("A0D0"), rawcode("Avul")),
+        {
+            "effect_ability_id": rawcode("A0D0"),
+            "order_id": 852238,
+            "dummy_lifetime_seconds": "10",
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("frostSpell", meteor_filter_name),
+    )
+
+    # City of Magic: shield-gated random live enemy Hex. The linked A018 object
+    # carries the actual 45-second duration; generated re-engage callbacks are
+    # implementation detail and remain present in building-spell-evidence.tsv.
+    _hex_start, hex_spell = body("hexSpell")
+    _hex_cast_index, hex_cast = one_call(hex_spell, "dummyCastTargetWithVision")
+    if integer_argument(hex_cast[1]) != rawcode("A018") or integer_argument(hex_cast[2]) != 852502:
+        raise ValueError("City of Magic Hex cast changed")
+    add(
+        "h00Z",
+        "dummy-target-ability",
+        "random-alive-enemy",
+        "randomAliveEnemy-helper;shield-check-passes",
+        (rawcode("A018"),),
+        {
+            "effect_ability_id": rawcode("A018"),
+            "order_id": 852502,
+            "dummy_lifetime_seconds": "1",
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("hexSpell",),
+    )
+
+    # Blue/Red Shield Generator share the visible randomAllySapper selector.
+    # Blue requires an unshielded target and applies A09L level 1. Red prefers
+    # an unshielded target, falls back to any eligible ally, then enforces level
+    # 2; this upgrades an existing shield on the fallback path.
+    mech_filter_name = "ForGroupCallback_forUnitsInRect_RaceMechAbilities_callback_forUnitsInRect_RaceMechAbilities"
+    _mech_filter_start, mech_filter = body(mech_filter_name)
+    for required in ("isAliveCombatSapper", "unit_isAllyOf", "unit_getAbilityLevel"):
+        if not call_sites(mech_filter, required):
+            raise ValueError(f"Shield Generator target predicate changed: {required}")
+    add(
+        "h06J",
+        "apply-shield-level-1",
+        "randomAllySapper(owner,true)",
+        "alive-combat-sapper;ally;missing-Avul;missing-A09L",
+        (rawcode("A09L"), rawcode("Avul")),
+        {
+            "shield_ability_id": rawcode("A09L"),
+            "shield_level": 1,
+            "building_animation_reset_delay_seconds": "0.3",
+        },
+        ("blueShieldSpell", "randomAllySapper", mech_filter_name),
+    )
+    add(
+        "h05R",
+        "apply-or-upgrade-shield-level-2",
+        "randomAllySapper(owner,true);fallback-randomAllySapper(owner,false)",
+        "alive-combat-sapper;ally;missing-Avul;prefer-missing-A09L",
+        (rawcode("A09L"), rawcode("Avul")),
+        {
+            "shield_ability_id": rawcode("A09L"),
+            "shield_level": 2,
+            "fallback_can_upgrade_existing_shield": True,
+            "building_animation_reset_delay_seconds": "0.3",
+        },
+        ("redShieldSpell", "randomAllySapper", mech_filter_name),
+    )
+
+    # Naga utility trio: all use the common random enemy helpers and explicit
+    # dummy casts. Tidal Guardian is cooldown-driven (15s) rather than mana-
+    # cadence-driven; that distinction is represented in building-spells.tsv.
+    for building_code, helper_name, selector, predicate, ability_code, order_id, lifetime, cast_helper in (
+        ("h00N", "tidalSpell", "random-alive-enemy-ground", "randomAliveEnemyGround-helper", "A00P", 852218, Decimal(20), "dummyCastTargetWithVision"),
+        ("h00M", "oracleSpell", "random-alive-enemy", "randomAliveEnemy-helper;shield-check-passes", "A00N", 852581, Decimal(1), "dummyCastTargetWithVision"),
+        ("h00I", "pyramidSpell", "random-alive-enemy-ground", "randomAliveEnemyGround-helper", "A00B", 852096, Decimal(1), "dummyCastImmediateFrom1"),
+    ):
+        _naga_start, naga_spell = body(helper_name)
+        _naga_cast_index, naga_cast = one_call(naga_spell, cast_helper)
+        if integer_argument(naga_cast[1]) != rawcode(ability_code) or integer_argument(naga_cast[2]) != order_id or decimal_argument(naga_cast[-1]) != lifetime:
+            raise ValueError(f"{helper_name} dummy cast changed")
+        add(
+            building_code,
+            "dummy-target-ability" if cast_helper == "dummyCastTargetWithVision" else "dummy-immediate-ability-at-target-point",
+            selector,
+            predicate,
+            (rawcode(ability_code),),
+            {
+                "effect_ability_id": rawcode(ability_code),
+                "order_id": order_id,
+                "dummy_lifetime_seconds": _decimal_text(lifetime),
+                "effect_parameters_source": "linked-ability-object-data",
+            },
+            (helper_name,),
+        )
+
+    # Ancient of Wonders: six activations at 0.3-second intervals, alternating
+    # between two generated preplaced-unit slots for the owner's team. Each unit
+    # is transferred to the owner, marked sapper, ordered to attack and receives
+    # 42 seconds timed life. The concrete preplaced unit type is map-placement
+    # state rather than an authored rawcode literal in this handler.
+    wonders_registration = registrations_by_building.get(rawcode("h02D"))
+    if wonders_registration is not None:
+        wonders_handler_name = str(wonders_registration["handler_function"])
+        _wonders_start, wonders_handler = body(wonders_handler_name)
+        _periodic_index, periodic_call = one_call(wonders_handler, "doPeriodically")
+        if decimal_argument(periodic_call[0]) != Decimal("0.3"):
+            raise ValueError("Ancient of Wonders periodic interval changed")
+        wonders_callback_name = "CallbackPeriodic_doPeriodically_RaceNatureAbilities_call_doPeriodically_RaceNatureAbilities"
+        _wonders_callback_start, wonders_callback = body(wonders_callback_name)
+        _wonders_life_index, wonders_life = one_call(wonders_callback, "__wurst_safe_UnitApplyTimedLife")
+        if decimal_argument(wonders_life[2]) != Decimal(42):
+            raise ValueError("Ancient of Wonders timed life changed")
+        add(
+            "h02D",
+            "periodic-preplaced-unit-release",
+            "alternating-generated-preplaced-slots-for-owner-team",
+            "slot-source-sA(baseSlot + iteration%2);preplaced-unit-exists",
+            (rawcode("Awha"),),
+            {
+                "period_seconds": "0.3",
+                "iterations": 6,
+                "base_slot_formula": "2 * lGb[player_getId(owner)]",
+                "slot_formula": "baseSlot + (iteration % 2)",
+                "unit_source_function": "sA",
+                "removed_ability_id": rawcode("Awha"),
+                "sets_owner_to_building_owner": True,
+                "adds_unit_type": "UNIT_TYPE_SAPPER",
+                "issues_attack_order": True,
+                "timed_life_seconds": "42",
+            },
+            (wonders_handler_name, wonders_callback_name, "sA"),
+        )
+
+    # Ancient Guardian: shield-gated Banish on one random live enemy.
+    _banish_start, banish = body("banishGuardianSpell")
+    _banish_cast_index, banish_cast = one_call(banish, "dummyCastTargetWithVision")
+    if integer_argument(banish_cast[1]) != rawcode("A0BL") or integer_argument(banish_cast[2]) != 852486:
+        raise ValueError("Ancient Guardian Banish cast changed")
+    add(
+        "h02C",
+        "dummy-target-ability",
+        "random-alive-enemy",
+        "randomAliveEnemy-helper;shield-check-passes",
+        (rawcode("A0BL"),),
+        {
+            "effect_ability_id": rawcode("A0BL"),
+            "order_id": 852486,
+            "dummy_lifetime_seconds": "1",
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("banishGuardianSpell",),
+    )
+
+    # Ancient of Gale: point-cast the tornado ability at one random live enemy.
+    # The shared artillery-mode switch substitutes A0BQ for A0BD in -na mode.
+    _gale_start, gale = body("galeSpell")
+    _gale_cast_index, gale_cast = one_call(gale, "dummyCastPointFrom")
+    if integer_argument(gale_cast[2]) != 852597 or decimal_argument(gale_cast[5]) != Decimal(5):
+        raise ValueError("Ancient of Gale cast changed")
+    add(
+        "h02A",
+        "dummy-point-ability",
+        "random-alive-enemy",
+        "randomAliveEnemy-helper;linked-ability-target-mask",
+        (rawcode("A0BD"), rawcode("A0BQ")),
+        {
+            "normal_ability_id": rawcode("A0BD"),
+            "alternate_mode_ability_id": rawcode("A0BQ"),
+            "order_id": 852597,
+            "dummy_lifetime_seconds": "5",
+            "effect_parameters_source": "selected-linked-ability-object-data",
+        },
+        ("galeSpell", "setArtilleryModeAbilityIds"),
+    )
+
+    # Obelisk of Wilderness: exact visible helper selects a random allied combat
+    # sapper. applyWildernessObeliskBuff conditionally adds spell resistance when
+    # none of the four exclusion effects is present, then always adds Hardened
+    # Skin and Endurance Aura.
+    wilderness_predicate_name = "isWildernessObeliskTarget"
+    _wilderness_predicate_start, wilderness_predicate = body(wilderness_predicate_name)
+    for required in ("isAliveCombatSapper", "unit_isAllyOf", "unit_getAbilityLevel", "hasWildernessObeliskBuff"):
+        if len(call_sites(wilderness_predicate, required)) != 1:
+            raise ValueError(f"Obelisk of Wilderness target predicate changed: {required}")
+    _wilderness_apply_start, wilderness_apply = body("applyWildernessObeliskBuff")
+    wilderness_added = [integer_argument(args[1]) for _index, args in call_sites(wilderness_apply, "addProtectedAbility") if len(args) == 2]
+    if wilderness_added != [rawcode("A08C"), rawcode("A08D"), rawcode("A08F")]:
+        raise ValueError(f"Obelisk of Wilderness buff bundle changed: {wilderness_added}")
+    add(
+        "h07H",
+        "persistent-buff-bundle",
+        "random-from-isWildernessObeliskTarget",
+        "alive-combat-sapper;ally;predicate-helper-hasWildernessObeliskBuff/ability-gate",
+        (rawcode("A08C"), rawcode("A08D"), rawcode("A08F"), rawcode("A08K"), rawcode("A0AH"), rawcode("A0AI"), rawcode("A0BV")),
+        {
+            "conditional_spell_resistance_ability_id": rawcode("A08C"),
+            "spell_resistance_exclusion_ability_ids": [rawcode("A08K"), rawcode("A0AH"), rawcode("A0AI"), rawcode("A0BV")],
+            "always_ability_ids": [rawcode("A08D"), rawcode("A08F")],
+            "selection_function": wilderness_predicate_name,
+            "effect_parameters_source": "linked-ability-object-data",
+        },
+        ("wildernessObeliskSpell", wilderness_predicate_name, "hasWildernessObeliskBuff", "applyWildernessObeliskBuff"),
+    )
+
+    # Silver Glade: each cast adds one team charge and enables the shared
+    # EVENT_PLAYER_UNIT_ATTACKED trigger. A qualifying event consumes one team
+    # charge and casts A08A at the event unit. The protected NK call is the exact
+    # charge test/decrement function; both team counters reset on the watched
+    # round/progress signal.
+    silver_registration = registrations_by_building.get(rawcode("h08P"))
+    if silver_registration is not None:
+        silver_handler_name = str(silver_registration["handler_function"])
+        _silver_start, silver_handler = body(silver_handler_name)
+        if len(call_sites(silver_handler, "addSilverGladeChargeForTeam")) != 1:
+            raise ValueError("Silver Glade charge grant changed")
+        _silver_proc_start, silver_proc = body("PK")
+        _silver_cast_index, silver_cast = one_call(silver_proc, "dummyCastImmediateFrom1")
+        if integer_argument(silver_cast[1]) != rawcode("A08A") or integer_argument(silver_cast[2]) != 852269:
+            raise ValueError("Silver Glade proc cast changed")
+        add(
+            "h08P",
+            "team-charge-next-attack-proc",
+            "shared-EVENT_PLAYER_UNIT_ATTACKED-trigger",
+            "event-unit-is-combat-sapper;missing-A08H;owner-team-has-charge",
+            (rawcode("A08A"), rawcode("A08H")),
+            {
+                "charges_granted_per_cast": 1,
+                "charge_counter": "R0[team]",
+                "charge_consume_function": "NK",
+                "trigger_symbol": "Q0",
+                "trigger_event": "EVENT_PLAYER_UNIT_ATTACKED",
+                "excluded_ability_id": rawcode("A08H"),
+                "effect_ability_id": rawcode("A08A"),
+                "order_id": 852269,
+                "dummy_lifetime_seconds": "1",
+                "counter_reset_function": "resetSilverGladeCounterForTeam",
+            },
+            (silver_handler_name, "addSilverGladeChargeForTeam", "OK", "PK", "NK", "resetSilverGladeCounterForTeam"),
+        )
+
+    # Starfall Obelisk: choose one random live enemy and cast the Starfall object
+    # at its coordinates. Normal mode uses A07T, -na mode A08T. A temporary 1100
+    # vision modifier is created unless NGb is active; visual/fog cleanup occurs
+    # after eight seconds while the dummy cast lifetime is eleven seconds.
+    _starfall_start, starfall = body("starfallSpell")
+    _starfall_cast_index, starfall_cast = one_call(starfall, "dummyCastImmediateFrom1")
+    if integer_argument(starfall_cast[2]) != 852183 or decimal_argument(starfall_cast[4]) != Decimal(11):
+        raise ValueError("Starfall Obelisk cast changed")
+    _starfall_cleanup_index, starfall_cleanup = one_call(starfall, "doAfter")
+    if decimal_argument(starfall_cleanup[0]) != Decimal(8):
+        raise ValueError("Starfall Obelisk cleanup delay changed")
+    add(
+        "h07I",
+        "dummy-immediate-area-ability",
+        "random-alive-enemy-position",
+        "randomAliveEnemy-helper;linked-ability-target-mask",
+        (rawcode("A07T"), rawcode("A08T")),
+        {
+            "normal_ability_id": rawcode("A07T"),
+            "alternate_mode_ability_id": rawcode("A08T"),
+            "order_id": 852183,
+            "dummy_lifetime_seconds": "11",
+            "temporary_vision_radius": 1100,
+            "vision_skipped_when_symbol_true": "NGb",
+            "visual_and_fog_cleanup_delay_seconds": "8",
+            "effect_parameters_source": "selected-linked-ability-object-data",
+        },
+        ("starfallSpell", "setArtilleryModeAbilityIds", "CallbackSingle_doAfter_RaceNelfAbilities_call_doAfter_RaceNelfAbilities"),
+    )
+
     # Chilling Mushroom: random eligible flying enemy, shield-gated, delivered
     # through one dummy Storm Bolt ability. Damage/duration are intentionally
     # left to the object-data join (the map tooltip disagrees with DataA).
@@ -3072,18 +3788,11 @@ def _extract_building_spell_mechanics(
     rows.sort(key=lambda row: (int(row["building_id"]), int(row["ability_id"])))
     if len(building_spell_registrations) >= 10:
         covered = {(int(row["building_id"]), int(row["ability_id"])) for row in rows}
-        protected_registered = {
-            (int(row["building_id"]), int(row["ability_id"]))
-            for row in building_spell_registrations
-            if row.get("evidence_kind") == "protected-registry-call"
-        }
         registered = {(int(row["building_id"]), int(row["ability_id"])) for row in building_spell_registrations}
-        missing_protected = sorted(protected_registered - covered)
-        extra = sorted(covered - registered)
-        if missing_protected or extra:
-            raise ValueError(
-                f"building-spell semantic coverage mismatch; missing_protected={missing_protected} extra={extra}"
-            )
+        if covered != registered:
+            missing = sorted(registered - covered)
+            extra = sorted(covered - registered)
+            raise ValueError(f"building-spell semantic coverage mismatch; missing={missing} extra={extra}")
     return rows
 
 

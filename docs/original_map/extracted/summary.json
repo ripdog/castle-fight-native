@@ -109,7 +109,7 @@
     "unit_spell_inlined_registrations": 1,
     "protected_filter_bindings": 22,
     "protected_filter_bindings_resolved": 6,
-    "building_spell_mechanics": 15,
+    "building_spell_mechanics": 43,
     "building_spell_mechanics_with_unresolved_target_filter": 0,
     "corpse_building_mechanics": 3,
     "corpse_building_raise_mechanics": 2,

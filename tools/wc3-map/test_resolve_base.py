@@ -671,14 +671,63 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertIn("A00B", reachable)
         self.assertEqual(reachable["A00B"]["ability_level1"]["area"], "375")
 
-    def test_scripted_building_spell_mechanics_normalize_protected_registry_handlers(self) -> None:
+    def test_scripted_building_spell_mechanics_normalize_all_registered_handlers(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["scripted_building_spell_mechanic_rows"], 15)
+        self.assertEqual(summary["scripted_building_spell_mechanic_rows"], 43)
         self.assertEqual(summary["scripted_building_spell_mechanic_rows_with_evidence_disagreement"], 1)
 
         with (self.resolved / "building-spell-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 15)
+        self.assertEqual(len(rows), 43)
+
+        ruin = rows["h05I"]
+        self.assertEqual(ruin["mechanic_kind"], "uniform-random-effect-table")
+        ruin_params = json.loads(ruin["parameters_json"])
+        self.assertEqual(ruin_params["selection"], "uniform-GetRandomInt(0,9)")
+        self.assertEqual(ruin_params["branch_probability_percent"], 10)
+        self.assertEqual([branch["roll"] for branch in ruin_params["branches"]], list(range(10)))
+        self.assertEqual(ruin_params["branches"][1]["damage"], 50000)
+        self.assertEqual(ruin_params["branches"][7]["unit_id"], int.from_bytes(b"n01S", "big"))
+
+        replenish = rows["h079"]
+        replenish_params = json.loads(replenish["parameters_json"])
+        self.assertEqual(replenish_params["selection_order"], ["Y0", "X0", "W0"])
+        self.assertEqual(replenish_params["life_gain"], 175)
+        self.assertEqual(replenish_params["mana_gain"], 40)
+        self.assertEqual(replenish["evidence_kind"], "script-direct-with-protected-target-filters")
+
+        peyote = rows["h07A"]
+        peyote_effects = {row["rawcode"]: row for row in json.loads(peyote["effect_objects_json"])}
+        illusion = peyote_effects["AM0y"]["ability_level1"]
+        illusion_data = json.loads(illusion["data_fields_labeled_json"])
+        self.assertEqual(illusion_data["Damage Dealt (% of normal)"], 1.25)
+        self.assertEqual(illusion_data["Damage Received Multiplier"], 0.75)
+        self.assertEqual(illusion["duration_normal"], "60")
+        self.assertEqual(json.loads(peyote["parameters_json"])["order_id"], 852274)
+
+        storm = rows["n03A"]
+        storm_params = json.loads(storm["parameters_json"])
+        self.assertEqual(storm_params["duration_seconds"], "6")
+        storm_effects = {row["rawcode"]: row for row in json.loads(storm["effect_objects_json"])}
+        sandstorm = json.loads(storm_effects["A0G4"]["ability_level1"]["data_fields_labeled_json"])
+        self.assertEqual(sandstorm["Chance To Miss (%)"], 0.65)
+        self.assertEqual(sandstorm["Attack Speed Modifier"], -0.3)
+        self.assertEqual(sandstorm["Movement Speed Modifier"], -0.3)
+
+        withering = json.loads(rows["h07T"]["parameters_json"])
+        self.assertEqual(withering["mana_burn_cap"], 200)
+        self.assertEqual(withering["damage_formula"], "2 * min(target_mana, 200)")
+        self.assertEqual(withering["damage_type"], "sonic")
+
+        silver = json.loads(rows["h08P"]["parameters_json"])
+        self.assertEqual(silver["charges_granted_per_cast"], 1)
+        self.assertEqual(silver["trigger_event"], "EVENT_PLAYER_UNIT_ATTACKED")
+        self.assertEqual(silver["effect_ability_id"], int.from_bytes(b"A08A", "big"))
+
+        wonders = json.loads(rows["h02D"]["parameters_json"])
+        self.assertEqual(wonders["period_seconds"], "0.3")
+        self.assertEqual(wonders["iterations"], 6)
+        self.assertEqual(wonders["timed_life_seconds"], "42")
 
         mushroom = rows["h047"]
         self.assertEqual(mushroom["mechanic_kind"], "dummy-target-ability")
