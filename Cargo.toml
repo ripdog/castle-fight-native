@@ -4,7 +4,6 @@ members = [
     "crates/sim",
     "crates/sim-bench",
     "crates/debug-viewer",
-    "crates/verification-game",
     "crates/client",
 ]
 

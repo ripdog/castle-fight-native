@@ -37,7 +37,7 @@ Implemented:
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
 - open-lane, dense-cage, crossing-crowd, mixed-radius collision, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, global-stun/status-density, and long mixed-combat release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
-- a separate playable verification game with mirrored production-building placement and procedural placeholder visuals.
+- the 3D Bevy client with interactive placement, procedural placeholder combat visuals, and render-stress controls.
 
 Not implemented yet:
 
@@ -140,34 +140,6 @@ cargo run -p castle-fight-debug-viewer -- --scenario lane
 
 The viewer is presentation-only. Disabling or changing it must not change simulation checksums.
 
-## Playable verification game
-
-Run:
-
-```bash
-cargo run -p castle-fight-verification-game
-```
-
-The harness intentionally contains only enough game structure to exercise the simulation interactively:
-
-- map: 2,000 × 750 world units;
-- player base: left third;
-- enemy base: right third;
-- center third is blocked above/below a centered 350-unit-high lane;
-- one castle is centered in each base;
-- **left click** in the player base queues a melee production building;
-- **right click** queues a ranged production building;
-- every player placement is mirrored horizontally into the enemy base;
-- production starts after 10 seconds and repeats every 10 seconds;
-- both unit types have 10 HP and launch/deal exactly 1 damage every 30 simulation ticks (1 DPS at 30 Hz before travel delay);
-- melee attacks are shown as short-lived source→target lines;
-- ranged units launch authoritative guaranteed-hit projectiles at 10 world units/tick (300 world units/sec at 30 Hz), and the viewer interpolates the live authoritative projectile population toward each retained target;
-- building/unit art is entirely procedural placeholder geometry.
-
-This is deliberately **not** the production input/game-rule layer. It bypasses the builder, resources, network command scheduling, and normal construction UI so we can rapidly generate symmetric battles and inspect pathing, crowd behavior, targeting, production, and combat. That bypass does not change the normative builder-only control rules in `docs/spec`.
-
-The ranged verification attack now uses authoritative guaranteed-hit travel. Launch creates canonical projectile state with source/target IDs, damage, launch position, launch tick, and due impact tick. Moving targets remain hit at the scheduled tick; source death does not cancel an already-launched projectile; a target that has already died or been removed before impact causes deterministic projectile invalidation instead of retargeting.
-
 ## Initial baseline — 2026-09-12
 
 Hardware:
@@ -253,9 +225,9 @@ The defense-alert spatial query is deliberately lazy: units already in a mutual 
 
 ## Hard non-overlap and terminal-match regression — 2026-09-12
 
-Leaving the playable verification game running after castle destruction exposed two separate issues. First, the client continued stepping the simulation after victory, so production never stopped and surviving units continued following the now-ownerless static objective field. Second, crowd separation was only a bounded steering force and therefore could not guarantee non-overlap under sustained compression.
+An earlier interactive verification run left active after castle destruction exposed two separate issues. First, the client continued stepping the simulation after victory, so production never stopped and surviving units continued following the now-ownerless static objective field. Second, crowd separation was only a bounded steering force and therefore could not guarantee non-overlap under sustained compression.
 
-The verification match now becomes terminal immediately after the victory phase: the final state remains visible, but no further production, movement, combat, or placement ticks advance. Simultaneous castle loss resolves as a draw in this harness.
+The now-removed 2D verifier was changed to become terminal immediately after the victory phase: the final state remained visible, but no further production, movement, combat, or placement ticks advanced. Simultaneous castle loss resolved as a draw in that harness.
 
 Movement now has a hard deterministic collision commit after the parallel steering pass. Proposed positions are reserved in stable unit order using a dense intrusive spatial grid; an overlapping move is rejected or replaced with a legal local sidestep, and a legal state must always finish the movement phase with non-overlapping live combat-unit collision footprints. A dedicated fixture drives 100 friendly units toward one objective for 300 ticks and checks every pair after every commit.
 
@@ -277,7 +249,7 @@ A later long-running playable match exposed a panic in the hard commit (`legal s
 
 The fix makes production use the same real collision-distance reservation test as movement, makes physical unit collision global across navigation components, and lets emergency collision repair search the reachable map rather than assuming a free point exists within one navigation cell. The dense reservation grid was simplified accordingly so its hot path no longer stores or compares component IDs.
 
-Regression coverage now includes the neighboring-cell spawn case, collision across disconnected topology, and a verification-game stress run with 50 production buildings for 1,800 ticks. That run builds a few hundred units converging on one objective and finishes without a panic or pairwise collision violation.
+Regression coverage includes the neighboring-cell spawn case and collision across disconnected topology. The dedicated 50-production-building harness stress test was removed with the 2D verifier; ongoing production-churn stress remains in `sim-bench`, while interactive verification is handled by the 3D client.
 
 The 10,000-unit regression after this fix remains worker-count deterministic:
 
@@ -365,7 +337,7 @@ With that architecture, the final density sweep is worker-count deterministic:
 
 At 5,000 units the final one-worker targeting phase is about **12.7x faster** than the naive defense-alert scan with the same checksum. In the 10,000-unit eight-worker case, the separately timed verification checksum accounts for ~13.4 ms of the 41.5 ms total; the other timed simulation phases sum to roughly 28.0 ms. That is useful architectural evidence, not a 10,000-unit support promise: production checksum cadence may be lower than every tick, while richer projectile/effect behavior will add work that this synthetic guaranteed-hit case does not contain.
 
-Projectile entity count and impact/launch structural work were not the dominant cost in this fixture. At the time of this sweep, long-range target/defense evaluation remained the largest phase even after removing the pathological alert scan. The later sticky-target correction below removes most of that work because units with valid engagements no longer re-query ally-defense every tick. The playable verification game now renders the authoritative in-flight guaranteed-hit population instead of drawing ranged attacks as immediate hit lines.
+Projectile entity count and impact/launch structural work were not the dominant cost in this fixture. At the time of this sweep, long-range target/defense evaluation remained the largest phase even after removing the pathological alert scan. The later sticky-target correction below removes most of that work because units with valid engagements no longer re-query ally-defense every tick. The 3D client renders the authoritative in-flight guaranteed-hit population rather than drawing ranged attacks as immediate hit lines.
 
 ## Sticky target / first-attacker retaliation regression — 2026-09-12
 

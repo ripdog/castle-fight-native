@@ -1949,14 +1949,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "castle-fight-verification-game"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "castle-fight-sim",
-]
-
-[[package]]
 name = "cc"
 version = "1.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
