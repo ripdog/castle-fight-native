@@ -23,9 +23,7 @@ const CATAPULT_COLLISION_WORLD: i32 = 16;
 const ICE_TROLL_PRIEST_COLLISION_WORLD: i32 = 16;
 const GRYPHON_COLLISION_WORLD: i32 = 16;
 const TICKS_PER_SECOND: u16 = SIMULATION_HZ_I32 as u16;
-const ATTACK_COOLDOWN_TICKS: u16 = TICKS_PER_SECOND;
 const PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
-const TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 110;
 // Visual-verification value only; the exact original Castle Fight uphill miss chance is still
 // compatibility data to recover.
 const DEMO_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
@@ -243,8 +241,8 @@ impl ProductionKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuildKind {
     Production(ProductionKind),
-    GuaranteedTower,
-    ProjectileTower,
+    WatchTower,
+    PoofTower,
     GlobalAreaSpell,
 }
 
@@ -252,23 +250,24 @@ impl BuildKind {
     pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::Production(kind) => kind.label(),
-            Self::GuaranteedTower => "Hit Tower",
-            Self::ProjectileTower => "Splash Tower",
+            Self::WatchTower => "Watch Tower",
+            Self::PoofTower => "Poof Tower",
             Self::GlobalAreaSpell => "Global AOE Shrine",
         }
     }
 
     pub(crate) const fn footprint_size(self) -> u16 {
         match self {
-            Self::GuaranteedTower | Self::ProjectileTower => 3,
-            Self::Production(_) | Self::GlobalAreaSpell => 4,
+            Self::Production(_) | Self::WatchTower | Self::PoofTower | Self::GlobalAreaSpell => 4,
         }
     }
 
     pub(crate) const fn gold_cost(self) -> Option<u16> {
         match self {
             Self::Production(kind) => Some(kind.gold_cost()),
-            Self::GuaranteedTower | Self::ProjectileTower | Self::GlobalAreaSpell => None,
+            Self::WatchTower => Some(150),
+            Self::PoofTower => Some(230),
+            Self::GlobalAreaSpell => None,
         }
     }
 }
@@ -335,15 +334,17 @@ pub(crate) fn try_spawn_demo_building(
             production_structure(team, footprint, kind),
             production_building_properties(kind),
         ),
-        BuildKind::GuaranteedTower => simulation.try_spawn_building(attack_structure(
+        BuildKind::WatchTower => simulation.try_spawn_building(attack_structure(
             team,
             footprint,
-            guaranteed_tower_attack(),
+            1_500,
+            watch_tower_attack(),
         )),
-        BuildKind::ProjectileTower => simulation.try_spawn_building(attack_structure(
+        BuildKind::PoofTower => simulation.try_spawn_building(attack_structure(
             team,
             footprint,
-            projectile_tower_attack(),
+            1_250,
+            poof_tower_attack(),
         )),
         BuildKind::GlobalAreaSpell => simulation.try_spawn_building(spell_structure(
             team,
@@ -377,12 +378,13 @@ pub(crate) fn production_structure(
 fn attack_structure(
     team: Team,
     footprint: BuildingFootprint,
+    health: i32,
     attack: AttackProfile,
 ) -> BuildingSpawn {
     BuildingSpawn {
         team,
         footprint,
-        health: 1_600,
+        health,
         production: None,
         attack: Some(attack),
         spellcasting: None,
@@ -489,30 +491,33 @@ fn projectile_speed_per_tick(world_units_per_second: i32) -> i32 {
     world_units_per_second * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32
 }
 
-fn guaranteed_tower_attack() -> AttackProfile {
+fn watch_tower_attack() -> AttackProfile {
     AttackProfile {
         delivery: AttackDelivery::RangedGuaranteedHit {
-            speed_per_tick: PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
-                / SIMULATION_HZ_I32,
+            speed_per_tick: projectile_speed_per_tick(1_800),
         },
-        damage: 18,
-        range: 300 * SUBUNITS_PER_WORLD_UNIT,
-        acquisition_range: 300 * SUBUNITS_PER_WORLD_UNIT,
-        cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+        // Extracted damage is 40-50 (45 average) at a 0.5 second cooldown = 90 DPS.
+        damage: 45,
+        range: 950 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 1_000 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 15,
     }
 }
 
-fn projectile_tower_attack() -> AttackProfile {
+fn poof_tower_attack() -> AttackProfile {
     AttackProfile {
         delivery: AttackDelivery::RangedBallistic {
-            speed_per_tick: TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
-                / SIMULATION_HZ_I32,
-            impact_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+            speed_per_tick: projectile_speed_per_tick(900),
+            // WC3 authors 175/200/250 splash tiers at 100%/75%/45%. The current ballistic
+            // primitive has one radius, so retain the extracted outer radius until tiered
+            // splash falloff is represented authoritatively.
+            impact_radius: 250 * SUBUNITS_PER_WORLD_UNIT,
         },
-        damage: 30,
-        range: 340 * SUBUNITS_PER_WORLD_UNIT,
-        acquisition_range: 340 * SUBUNITS_PER_WORLD_UNIT,
-        cooldown_ticks: 2 * ATTACK_COOLDOWN_TICKS,
+        // Extracted damage is 156-171 (163.5 average); fixed integer damage rounds to 164.
+        damage: 164,
+        range: 800 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 1_000 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 95, // 3.15 seconds at 30 Hz, rounded to nearest whole tick.
     }
 }
 
@@ -561,8 +566,8 @@ mod tests {
             BuildKind::Production(ProductionKind::Catapult),
             BuildKind::Production(ProductionKind::IceTrollPriest),
             BuildKind::Production(ProductionKind::GryphonRider),
-            BuildKind::GuaranteedTower,
-            BuildKind::ProjectileTower,
+            BuildKind::WatchTower,
+            BuildKind::PoofTower,
             BuildKind::GlobalAreaSpell,
         ];
 
@@ -697,6 +702,50 @@ mod tests {
                 Some(CollisionRadius(16 * SUBUNITS_PER_WORLD_UNIT))
             );
         }
+    }
+
+    #[test]
+    fn towers_use_extracted_castle_fight_values() {
+        assert_eq!(BuildKind::WatchTower.label(), "Watch Tower");
+        assert_eq!(BuildKind::WatchTower.gold_cost(), Some(150));
+        assert_eq!(BuildKind::WatchTower.footprint_size(), 4);
+        let watch = watch_tower_attack();
+        assert_eq!(watch.damage, 45);
+        assert_eq!(watch.range, 950 * SUBUNITS_PER_WORLD_UNIT);
+        assert_eq!(watch.acquisition_range, 1_000 * SUBUNITS_PER_WORLD_UNIT);
+        assert_eq!(watch.cooldown_ticks, 15);
+        assert_eq!(
+            watch.delivery,
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: projectile_speed_per_tick(1_800),
+            }
+        );
+
+        assert_eq!(BuildKind::PoofTower.label(), "Poof Tower");
+        assert_eq!(BuildKind::PoofTower.gold_cost(), Some(230));
+        assert_eq!(BuildKind::PoofTower.footprint_size(), 4);
+        let poof = poof_tower_attack();
+        assert_eq!(poof.damage, 164);
+        assert_eq!(poof.range, 800 * SUBUNITS_PER_WORLD_UNIT);
+        assert_eq!(poof.acquisition_range, 1_000 * SUBUNITS_PER_WORLD_UNIT);
+        assert_eq!(poof.cooldown_ticks, 95);
+        assert_eq!(
+            poof.delivery,
+            AttackDelivery::RangedBallistic {
+                speed_per_tick: projectile_speed_per_tick(900),
+                impact_radius: 250 * SUBUNITS_PER_WORLD_UNIT,
+            }
+        );
+
+        let footprint = BuildingFootprint::new(-220, 0, 4, 4);
+        assert_eq!(
+            attack_structure(Team(0), footprint, 1_500, watch).health,
+            1_500
+        );
+        assert_eq!(
+            attack_structure(Team(0), footprint, 1_250, poof).health,
+            1_250
+        );
     }
 
     #[test]

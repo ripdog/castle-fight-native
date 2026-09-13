@@ -145,11 +145,7 @@ fn setup_build_ui(mut commands: Commands) {
                 BuildKind::Production(ProductionKind::GryphonRider),
                 None,
             );
-            spawn_building_button_row(
-                panel,
-                BuildKind::GuaranteedTower,
-                Some(BuildKind::ProjectileTower),
-            );
+            spawn_building_button_row(panel, BuildKind::WatchTower, Some(BuildKind::PoofTower));
             spawn_building_button_row(panel, BuildKind::GlobalAreaSpell, None);
             spawn_button(panel, "Cancel placement (Esc)", BuildUiAction::Cancel);
             panel.spawn((
@@ -432,12 +428,9 @@ mod tests {
         );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
 
-        let tower = placement_footprint(
-            &metrics,
-            Vec3::new(105.0, 0.0, 75.0),
-            BuildKind::GuaranteedTower,
-        );
-        assert_eq!(tower, BuildingFootprint::new(9, 6, 3, 3));
+        let tower =
+            placement_footprint(&metrics, Vec3::new(105.0, 0.0, 75.0), BuildKind::WatchTower);
+        assert_eq!(tower, BuildingFootprint::new(8, 5, 4, 4));
     }
 
     #[test]
