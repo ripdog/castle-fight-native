@@ -26,6 +26,7 @@ Implemented:
 - authoritative ground/air movement classes with separate collision layers, air movement that ignores ground topology while remaining map-bounded, explicit ground/air/building ordinary-attack target masks, and target-filter preservation through ballistic splash/bounce effects;
 - attack-capable buildings with independent target/cooldown state, footprint-based static acquisition, shared canonical unit/building combat ordering, and ordinary projectile delivery;
 - automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, canonical map-wide enemy-unit targeting, atomic cast commitment, immediate non-retaliatory damage, and timed stun effects;
+- versioned native-effect behavior bindings separated from per-map numeric tuning, with explicit inclusive validity ranges, uncovered-version rejection, and an extraction-driven coverage report; the first playable-unit slice covers the currently exposed 9.27 Footman/Ranger/Catapult/Ice Troll Shadow Priest/Gryphon Rider roster: Ranger 15% Evasion, Catapult Burning Oil, Ice Troll 10% Roots proc plus Frost Armor autocast/fractional mana regeneration, Gryphon 15% Bash plus 10% Chain Lightning proc, and explicit no-runtime coverage for the shared Channel marker and Ranger's zero-damage Barrage;
 - authoritative timed stun state with exclusive absolute expiry, max-expiry refresh, and exact suppression of fresh targeting, ordinary attacks, and intentional movement while active;
 - a bounded timed movement-speed modifier verification primitive with stable modifier identity, exact expiry, same-ID refresh, distinct-ID additive stacking, and derived integer effective movement speed without mutating authored base stats;
 - authoritative corpse entities with stable identity/source metadata, explicit corpse definitions, optional tick-exact expiry, direct- and production-spawn corpse profiles, canonical checksumming, and exclusion from ordinary unit targeting/collision/building occupancy;
@@ -45,7 +46,7 @@ Not implemented yet:
 
 - richer non-circular unit collision shapes / physically stronger crowd response beyond the current authoritative circle-distance exclusion;
 - builder control/items;
-- broader imported buff/debuff/aura semantics beyond the narrow movement-speed verification primitive, manual/legendary ability activation, and multi-ability buildings;
+- the remaining imported buff/debuff/aura/passive/spell inventory beyond the first currently exposed unit slice, plus manual/legendary ability activation and multi-ability buildings;
 - corpse-query/consume effects such as raise dead and corpse explosion, plus imported per-unit corpse-profile assignment;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
@@ -58,6 +59,8 @@ The benchmark remains an architectural scaling probe, not a final game performan
 ```bash
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
+python tools/wc3-map/native_effect_coverage.py --map-version 9.27
+python -m unittest tools/wc3-map/test_native_effect_coverage.py
 cargo run --release -p castle-fight-sim-bench -- \
   --scenario lane,cage,crowd --units 700,1000,5000,10000 \
   --workers 1,2,4,8 --warmup 5 --ticks 20

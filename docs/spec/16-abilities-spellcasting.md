@@ -327,6 +327,10 @@ stacking/refresh policy
 
 All authoritative numeric quantities use deterministic types.
 
+Imported abilities additionally separate native behavior from map-version tuning. A behavior binding identifies a stable native implementation and the inclusive Castle Fight map-version range for which that implementation's semantics are valid. A selected map version then supplies extracted numeric tuning to that implementation. Balance-only changes therefore do not require duplicated Rust behavior, while semantic rewrites require a new implementation ID and a new, non-overlapping validity range. A missing binding for the selected version is an implementation gap and MUST NOT fall back to an adjacent map version.
+
+Passive/on-hit effects use the same rule. The current 9.27 playable-unit verification slice covers Ranger Evasion (`A00U`), Catapult Burning Oil (`A02J`), Ice Troll Shadow Priest's orb-triggered Entangling Roots (`A049` → `A03W`) and Frost Armor autocast (`A03Z`), plus Gryphon Rider Bash (`A05K`) and orb-triggered Chain Lightning (`A01B` → `A05X`). Proc RNG is keyed by match seed, tick, attacking `SimId`, ability rawcode, and authoritative attack sequence, and procs are resolved only for non-missed/non-evaded attacks. Guaranteed-hit ranged attacks carry already-resolved on-hit payloads until impact. Roots uses deterministic timed immobilization/damage state, Chain Lightning selects each next target by canonical nearest-distance/`SimId` ordering, Burning Oil creates deterministic persistent impact zones, and Frost Armor uses fixed-point mana regeneration plus timed armor and melee-retaliation slow state. All pending/projectile/status/zone state that can change future gameplay participates in canonical checksums.
+
 Distinct item copies MUST retain `ItemInstanceId` through source attribution, deterministic ordering, cooldown/charge state, and RNG keys wherever identity matters. Two copies of the same `ItemId` MUST NOT accidentally share a random stream or effect-order identity.
 
 ## 18. Effect expansion and termination
@@ -363,4 +367,9 @@ The ability test suite MUST eventually include:
 12. replay of the same finalized input stream reproduces all ability outcomes exactly;
 13. two identical item types with different `ItemInstanceId`s do not share RNG/cooldown/effect identity;
 14. recursive effect definitions are rejected or deterministically trip the expansion guard rather than hanging;
-15. timed movement modifiers expire on the exact tick, same-ID reapplication refreshes without duplicate stacking, distinct IDs combine deterministically, and worker count does not alter the resulting state.
+15. timed movement modifiers expire on the exact tick, same-ID reapplication refreshes without duplicate stacking, distinct IDs combine deterministically, and worker count does not alter the resulting state;
+16. a versioned native effect loads numeric tuning from the selected map version, rejects uncovered versions, and switches implementation IDs rather than silently reusing behavior when semantic ranges differ;
+17. passive attack procs and evasion are deterministic across worker counts, do not trigger through a missed/evaded attack, and ranged on-hit status is applied at projectile impact rather than launch;
+18. Roots periodic damage includes the final whole-second pulse of its configured duration and immobilization expires independently on the exact tick;
+19. Frost Armor friendly autocast targets an eligible ally attacked on the preceding tick, spends exact fixed-point-regenerated mana, refreshes no duplicate active armor instance, and applies its melee retaliation slow deterministically;
+20. persistent Burning Oil zones and Chain Lightning jump selection produce identical authoritative state across worker counts.

@@ -290,7 +290,19 @@ Ability definitions compose target policy, activation mode, cost/cooldown/charge
 
 The effect system SHOULD be constrained and explicitly ordered rather than becoming an unconstrained scripting VM prematurely.
 
-## 14.1 Item definitions
+### 14.1 Versioned native-effect implementations
+
+Imported Warcraft/Castle Fight behavior MUST distinguish **behavior identity** from **per-map-version tuning**. A native effect implementation has a stable implementation ID and an inclusive map-version range for which its semantics have been verified. Numeric fields such as chance, damage, radius, duration, mana cost, cooldown, or armor bonus are loaded from the selected map version's extracted/validated tuning snapshot rather than copied into the native implementation.
+
+If a later map changes only numeric tuning, that map version SHOULD reuse the same native implementation while supplying different tuning data. If the original map rewrites the mechanic's semantics, the engine MUST add a distinct native implementation ID and assign it a non-overlapping validity range. The runtime MUST NOT silently select the nearest implementation when the requested map version has a gap; missing behavior coverage is a content error.
+
+The selected Castle Fight map version is authoritative match content. Production definitions and every produced unit/effect MUST resolve against that same version rather than falling back independently to a default version. The selected version must eventually participate in the canonical match/content identity used by multiplayer, snapshots, replays, and UI map-version selection.
+
+Native-effect coverage is derived from two sources: extracted effect/ability inventories define what exists, while the native binding registry defines which stable source keys have implementations for a requested version. Unbound inventory entries are explicitly **unimplemented** until either a native behavior binding is added or later compatibility work classifies the extracted row as requiring no native runtime behavior. Coverage tooling MUST make gaps queryable per map version.
+
+The first executable content slice is the currently exposed Castle Fight 9.27 production-unit roster. Footman has no extra extracted ability behavior. Ranger binds 15% Evasion (`A00U`) and explicitly classifies its Channel marker (`A0CV`) and zero-damage Barrage (`A03N`) as requiring no runtime effect. Catapult binds Burning Oil (`A02J`). Ice Troll Shadow Priest binds its 10% orb proc (`A049`) to Entangling Roots (`A03W`) and Frost Armor autocast (`A03Z`), including exact 1.5 mana/sec regeneration via deterministic fixed-point state. Gryphon Rider binds Bash (`A05K`) and its 10% orb proc (`A01B`) to Chain Lightning (`A05X`). Numeric chance/damage/radius/duration/mana/cooldown fields remain in the 9.27 tuning snapshot while the behavior IDs/ranges remain in the binding registry. Guaranteed-hit projectiles carry resolved on-hit payloads until impact, and persistent/timed native-effect state participates in canonical checksums.
+
+### 14.2 Item definitions
 
 Builder-held item content may include:
 

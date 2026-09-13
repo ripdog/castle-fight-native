@@ -207,11 +207,26 @@ Mountain Giant's special spawn state is also directly visible in runtime Lua. `o
 
 The absence of a canonical member such as `war3mapUnits.doo`, `war3map.w3q`, or `war3map.imp` means it could not be opened under that standard name in this protected archive. Do not infer from that alone that the original editor project never contained equivalent data; protected-map packaging can remove editor-only sources and hide imported assets.
 
+## Native runtime effect coverage
+
+The extractor inventory and native engine implementation ledger are intentionally separate. `crates/sim/data/castle-fight/native-effect-bindings.json` binds extracted stable source keys to native implementation IDs and inclusive map-version ranges; per-version numeric tuning lives under `crates/sim/data/castle-fight/<version>/`. This means a balance-only change can reuse the same behavior implementation while a semantic rewrite gets a new implementation ID/range.
+
+Report the current 9.27 implementation gaps with:
+
+```sh
+python tools/wc3-map/native_effect_coverage.py --map-version 9.27
+python tools/wc3-map/native_effect_coverage.py --map-version 9.27 --show-unimplemented
+```
+
+The report inventories normalized unit abilities, scripted unit spells, scripted building spells, and production-unit special mechanics directly from the resolved extraction. A row is `implemented` only when a binding covers the requested version; otherwise it remains explicitly `unimplemented`. The first playable-unit slice covers all eight distinct 9.27 unit-ability keys attached to the currently exposed Footman/Ranger/Catapult/Ice Troll Shadow Priest/Gryphon Rider roster, so the repository currently reports `8/398` distinct inventory keys covered for 9.27. The ledger includes explicit no-runtime bindings for the shared Channel marker (`A0CV`) and Ranger's zero-damage Barrage (`A03N`) rather than silently dropping them. Other currently unimplemented entries may likewise prove data-only/marker behavior, but that classification must remain explicit.
+
+Use `--output-tsv <path>` when a reviewable snapshot is useful. For a newer extracted map, point `--resolved-dir` at that version's resolved output and use the matching `--map-version`; this keeps extraction data version-conscious without baking 9.27 paths into the coverage algorithm.
+
 ## Tests
 
 ```sh
-python -m unittest tools/wc3-map/test_decode.py tools/wc3-map/test_resolve_base.py
-python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/lua_index.py tools/wc3-map/resolve-base-data.py
+python -m unittest tools/wc3-map/test_decode.py tools/wc3-map/test_resolve_base.py tools/wc3-map/test_native_effect_coverage.py
+python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/lua_index.py tools/wc3-map/resolve-base-data.py tools/wc3-map/native_effect_coverage.py
 ```
 
 A full end-to-end validation is `tools/wc3-map/extract-base-data.sh` followed by `tools/wc3-map/extract.sh` and inspection of both `summary.json` and `resolved/summary.json`. The current resolved summary requires zero unresolved inheritance anchors, missing referenced pathing textures, or unknown placed doodad rawcodes.
