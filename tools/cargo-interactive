@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Keep compile-heavy work off half of the physical CPU cores so the desktop,
+# game client, and other interactive processes retain real execution resources.
+# Override when needed, for example: CF_BUILD_CPUS=0-11 tools/cargo-interactive check
+choose_build_cpus() {
+    if [[ -n "${CF_BUILD_CPUS:-}" ]]; then
+        printf '%s\n' "$CF_BUILD_CPUS"
+        return
+    fi
+
+    local topology_dir=/sys/devices/system/cpu
+    local sibling_file
+    local -a sibling_sets=()
+
+    while IFS= read -r sibling_file; do
+        sibling_sets+=("$(<"$sibling_file")")
+    done < <(find "$topology_dir" -path '*/topology/thread_siblings_list' -type f -print 2>/dev/null | sort -V)
+
+    if ((${#sibling_sets[@]} == 0)); then
+        # taskset accepts this on any machine with CPU 0; this is only a fallback
+        # for unusual environments without Linux CPU topology information.
+        printf '0\n'
+        return
+    fi
+
+    # thread_siblings_list is identical for every SMT sibling, so deduplicate it
+    # into physical cores while preserving CPU order.
+    local -a physical_cores=()
+    local -A seen_cores=()
+    local siblings
+    for siblings in "${sibling_sets[@]}"; do
+        if [[ -z "${seen_cores[$siblings]:-}" ]]; then
+            physical_cores+=("$siblings")
+            seen_cores[$siblings]=1
+        fi
+    done
+
+    local keep=$(( ${#physical_cores[@]} / 2 ))
+    ((keep < 1)) && keep=1
+
+    local cpu_list=""
+    local i
+    for ((i = 0; i < keep; i++)); do
+        [[ -n "$cpu_list" ]] && cpu_list+=","
+        cpu_list+="${physical_cores[$i]}"
+    done
+    printf '%s\n' "$cpu_list"
+}
+
+if ! command -v taskset >/dev/null 2>&1; then
+    exec cargo "$@"
+fi
+
+build_cpus="$(choose_build_cpus)"
+build_nice="${CF_BUILD_NICE:-10}"
+
+# sccache is a long-lived daemon and launches rustc itself. Constraining only
+# Cargo is therefore insufficient: pin the daemon as well so current and future
+# rustc children inherit the same CPU affinity.
+if command -v sccache >/dev/null 2>&1; then
+    taskset --cpu-list "$build_cpus" sccache --start-server >/dev/null 2>&1 || true
+    while IFS= read -r pid; do
+        [[ -z "$pid" ]] && continue
+        taskset --all-tasks --pid --cpu-list "$build_cpus" "$pid" >/dev/null 2>&1 || true
+    done < <(pgrep -u "$(id -u)" -x sccache 2>/dev/null || true)
+fi
+
+exec taskset --cpu-list "$build_cpus" nice -n "$build_nice" ionice -c 2 -n 7 cargo "$@"
