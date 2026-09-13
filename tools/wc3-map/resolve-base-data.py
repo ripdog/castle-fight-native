@@ -1756,6 +1756,59 @@ def main() -> None:
             production_source_by_unit = {
                 row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")
             }
+    production_special_rows: list[list[Any]] = []
+    production_special_path = map_root / "script" / "production-unit-special-mechanics.tsv"
+    if production_special_path.exists():
+        with production_special_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                unit_rawcode = mechanic["unit_rawcode"]
+                unit = static_units.get(unit_rawcode)
+                if unit is None:
+                    raise ValueError(f"special production-unit mechanic has no resolved unit: {unit_rawcode}")
+                production = production_source_by_unit.get(unit_rawcode)
+                if production is None:
+                    raise ValueError(f"special production-unit mechanic is not linked to a production building: {unit_rawcode}")
+                parameters = json.loads(mechanic["parameters_json"])
+
+                if unit_rawcode == "e00F":
+                    war_club = next((row for row in ability_levels.get("A0BC", []) if row["level"] == "1"), None)
+                    if war_club is None:
+                        raise ValueError("Mountain Giant special mechanic is missing A0BC object data")
+                    war_club_fields = json.loads(war_club["data_fields_labeled_json"])
+                    if war_club_fields.get("Maximum Attacks") != 10:
+                        raise ValueError(f"Mountain Giant War Club maximum attacks changed: {war_club_fields}")
+                    parameters["war_club_object_data"] = war_club_fields
+                elif unit_rawcode == "n03I":
+                    remnant_activation = next((row for row in ability_levels.get("A0HD", []) if row["level"] == "1"), None)
+                    if remnant_activation is None:
+                        raise ValueError("Echofoot Mystic special mechanic is missing A0HD object data")
+                    parameters["remnant_activation_object_data"] = json.loads(
+                        remnant_activation["data_fields_labeled_json"]
+                    )
+                    protected_cooldown = protected_ability_values.get(("A0H4", 1, "cooldown"))
+                    if protected_cooldown is None:
+                        raise ValueError("Echofoot Mystic special mechanic is missing protected A0H4 cooldown")
+                    parameters["protected_ability_cooldown_seconds"] = numeric(protected_cooldown)
+                    parameters["script_proc_cooldown_overrides_protected_ability_cooldown"] = (
+                        numeric(protected_cooldown) != numeric(parameters["runtime_cooldown_seconds"])
+                    )
+
+                production_special_rows.append([
+                    production["building_rawcode"], production["building_names"],
+                    unit_rawcode, unit["name"], mechanic["mechanic_kind"], mechanic["trigger"],
+                    mechanic["related_objects_json"], stable_json(parameters),
+                    mechanic["source_functions"], mechanic["evidence_kind"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "production-unit-special-mechanics.tsv",
+        [
+            "building_rawcode", "building_names", "unit_rawcode", "unit_names",
+            "mechanic_kind", "trigger", "related_objects_json", "parameters_json",
+            "source_functions", "evidence_kind", "byte_offset",
+        ],
+        production_special_rows,
+    )
+
     if unit_spell_registration_path.exists():
         with unit_spell_registration_path.open(encoding="utf-8", newline="") as handle:
             for registration in csv.DictReader(handle, delimiter="\t"):
@@ -3293,6 +3346,10 @@ def main() -> None:
         "production_unit_available_attack_profiles": production_attack_profiles,
         "production_unit_conditional_attack_profiles": conditional_attack_profiles,
         "production_unit_two_profile_sum_patterns": two_profile_sum_patterns,
+        "production_unit_special_mechanic_rows": len(production_special_rows),
+        "production_unit_special_mechanic_kinds": dict(sorted(Counter(
+            row[4] for row in production_special_rows
+        ).items())),
         "production_unit_ability_links": len(production_ability_rows),
         "production_unit_unique_abilities": len(production_ability_unique),
         "production_unit_inherited_ability_links": production_ability_inherited_links,
@@ -3358,6 +3415,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant's automatic temporary-tree War Club setup and Echofoot Mystic's damage-triggered Echo Step/remnant lifecycle and explosion",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

@@ -228,6 +228,42 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(snow_abilities["selection"], "map-stable-final-write")
         self.assertEqual(json.loads(snow_abilities["recovered_value_json"]), "A0HO,AM0{")
 
+    def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 2)
+        self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
+            "auto-spawn-tree-and-grab-war-club": 1,
+            "damage-triggered-echo-step-and-remnant": 1,
+        })
+        with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(set(rows), {"e00F", "n03I"})
+
+        giant = json.loads(rows["e00F"]["parameters_json"])
+        self.assertEqual(rows["e00F"]["building_rawcode"], "h028")
+        self.assertEqual(giant["tree_forward_offset"], 32)
+        self.assertEqual(giant["grab_tree_order_id"], 852511)
+        self.assertEqual(giant["resume_attack_delay_seconds"], 1.6)
+        self.assertEqual(giant["tree_total_lifetime_seconds"], 3.6)
+        self.assertEqual(giant["war_club_object_data"]["Maximum Attacks"], 10)
+        self.assertEqual(giant["war_club_object_data"]["Enabled Attack Index"], 1)
+
+        echo = json.loads(rows["n03I"]["parameters_json"])
+        self.assertEqual(rows["n03I"]["building_rawcode"], "n03H")
+        self.assertEqual(echo["trigger_range"], 250)
+        self.assertEqual(echo["runtime_cooldown_seconds"], 15)
+        self.assertEqual(echo["protected_ability_cooldown_seconds"], 20.0)
+        self.assertTrue(echo["script_proc_cooldown_overrides_protected_ability_cooldown"])
+        self.assertEqual(echo["blink_distance_toward_own_castle"], 1200)
+        self.assertEqual(echo["remnant_unit_id"], 1848652626)
+        self.assertEqual(echo["remnant_timed_life_seconds"], 60)
+        self.assertEqual(echo["remnant_explosion_radius"], 300)
+        self.assertEqual(echo["remnant_explosion_damage"], 150)
+        self.assertEqual(echo["remnant_explosion_damage_type"], "magic")
+        self.assertEqual(echo["remnant_target_filter_function"], "UC")
+        self.assertIn("enemy-of-mIb", echo["remnant_target_predicate"])
+        self.assertEqual(echo["remnant_activation_object_data"]["Activation Delay"], 0.75)
+
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
             units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}

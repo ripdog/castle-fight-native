@@ -770,6 +770,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     protected_filter_bindings = analysis["protected_filter_bindings"]
+    production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
     castle_item_mechanics = analysis["castle_item_mechanics"]
     building_spell_registrations = analysis["building_spell_registrations"]
     building_spell_evidence = analysis["building_spell_evidence"]
@@ -1027,6 +1028,41 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             writer.writerow([
                 row["symbol"], row["initializer_function"], row["resolved_function"], row["predicate"],
                 row["resolution_status"], row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "production-unit-special-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "unit_rawcode", "unit_rawcode_integer", "unit_names", "mechanic_kind", "trigger",
+            "related_objects_json", "parameters_json", "source_functions", "evidence_kind", "byte_offset",
+        ])
+        for row in production_unit_special_mechanics:
+            unit_id = int(row["unit_id"])
+            unit_rawcode, categories, _tables, unit_names, _defs = rawcode_metadata(unit_id)
+            if categories != "units":
+                raise ValueError(f"special production-unit mechanic resolves to non-unit rawcode: {unit_rawcode}")
+            related_objects: list[dict[str, object]] = []
+            for related_id_value in row["related_rawcode_ids"]:
+                related_id = int(related_id_value)
+                related = {
+                    "rawcode": rawcode_text(related_id),
+                    "rawcode_integer": related_id,
+                    "categories": "",
+                    "names": "",
+                }
+                if related_id in object_metadata:
+                    rawcode, related_categories, _rtables, related_names, _rdefs = rawcode_metadata(related_id)
+                    related.update({
+                        "rawcode": rawcode,
+                        "categories": related_categories,
+                        "names": related_names,
+                    })
+                related_objects.append(related)
+            writer.writerow([
+                unit_rawcode, unit_id, unit_names, row["mechanic_kind"], row["trigger"],
+                script_json(related_objects), script_json(row["parameters"]),
+                ",".join(str(value) for value in row["source_functions"]),
+                row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "castle-shop-items.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1700,6 +1736,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "protected_filter_bindings_resolved": sum(
             row["resolution_status"] == "resolved" for row in protected_filter_bindings
         ),
+        "production_unit_special_mechanics": len(production_unit_special_mechanics),
+        "production_unit_special_mechanic_kinds": dict(sorted(Counter(
+            str(row["mechanic_kind"]) for row in production_unit_special_mechanics
+        ).items())),
         "building_spell_mechanics": len(building_spell_mechanics),
         "building_spell_mechanics_with_unresolved_target_filter": sum(
             "unresolved" in str(row["evidence_kind"]) for row in building_spell_mechanics

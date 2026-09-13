@@ -4370,6 +4370,157 @@ def _extract_protected_filter_bindings(
     return bindings
 
 
+def _extract_production_unit_special_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    protected_filter_bindings: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize runtime-only production-unit mechanics outside spell registries.
+
+    These mechanics are implemented by shared damage/death/unit-enter handlers,
+    so they are invisible to the ordinary unit-spell registration extractor.
+    Keep this intentionally strict: every row is emitted only after checking
+    the exact generated functions and constants that define the behavior.
+    """
+
+    def require_tokens(function_name: str, required: set[str]) -> tuple[int, set[str]]:
+        body = _function_body_tokens(data, functions, function_name)
+        if body is None:
+            raise ValueError(f"special unit mechanic source function is missing: {function_name}")
+        start, tokens = body
+        texts = {token.text for token in tokens}
+        missing = required - texts
+        if missing:
+            raise ValueError(
+                f"special unit mechanic source {function_name} changed; missing tokens={sorted(missing)}"
+            )
+        return start, texts
+
+    rows: list[dict[str, object]] = []
+
+    # Mountain Giant: every newly-entered e00F automatically gets a temporary
+    # VTlt tree in front of it and is issued the native Grab Tree order. The
+    # follow-up callback resumes attack after 1.6 s and schedules destruction
+    # of that temporary destructable another 2 s later.
+    enter_start, _ = require_tokens("onUnitEnteredMap", {"1697656902", "castNatureAttackTree"})
+    giant_start, _ = require_tokens(
+        "castNatureAttackTree",
+        {
+            "1448373364", "32.", "360.", "852511", "1.6",
+            "CreateDestructable", "__wurst_safe_IssueTargetOrderById", "doAfter",
+        },
+    )
+    giant_function = next(function for function in functions if function["name"] == "castNatureAttackTree")
+    giant_source = data[int(giant_function["start"]):int(giant_function["end"])]
+    if b"GetRandomReal(.5,.8)" not in giant_source:
+        raise ValueError("Mountain Giant temporary-tree scale range changed")
+    require_tokens(
+        "CallbackSingle_doAfter_UnitEnterRuntime_call_doAfter_UnitEnterRuntime",
+        {"orderCodeAttack", "2.", "doAfter"},
+    )
+    resume_function = next(
+        function for function in functions
+        if function["name"] == "CallbackSingle_doAfter_UnitEnterRuntime_call_doAfter_UnitEnterRuntime"
+    )
+    resume_source = data[int(resume_function["start"]):int(resume_function["end"])]
+    if b"widget_getLife(L8n.u)>.405" not in resume_source:
+        raise ValueError("Mountain Giant post-Grab-Tree alive threshold changed")
+    require_tokens(
+        "CallbackSingle_doAfter_doAfter_UnitEnterRuntime_call_doAfter_doAfter_UnitEnterRuntime",
+        {"__wurst_safe_RemoveDestructable"},
+    )
+    rows.append({
+        "unit_id": 1697656902,
+        "mechanic_kind": "auto-spawn-tree-and-grab-war-club",
+        "trigger": "on-unit-entered-map",
+        "parameters": {
+            "war_club_ability_id": 1093681731,
+            "tree_destructable_id": 1448373364,
+            "tree_forward_offset": 32,
+            "tree_facing_random_degrees": [0, 360],
+            "tree_scale_random": [0.5, 0.8],
+            "grab_tree_order_id": 852511,
+            "resume_attack_delay_seconds": 1.6,
+            "remove_tree_delay_after_resume_seconds": 2.0,
+            "tree_total_lifetime_seconds": 3.6,
+            "bypasses_wrong_order_guard": True,
+        },
+        "related_rawcode_ids": [1093681731, 1448373364],
+        "source_functions": [
+            "onUnitEnteredMap",
+            "castNatureAttackTree",
+            "CallbackSingle_doAfter_UnitEnterRuntime_call_doAfter_UnitEnterRuntime",
+            "CallbackSingle_doAfter_doAfter_UnitEnterRuntime_call_doAfter_doAfter_UnitEnterRuntime",
+        ],
+        "evidence_kind": "exact-runtime-handler-and-callback-chain",
+        "byte_offset": min(enter_start, giant_start),
+    })
+
+    # Echofoot Mystic: the shared damage listener performs the blink/remnant
+    # spawn, while fJ applies the remnant's scripted death explosion. Native
+    # A0HD land-mine data supplies the enemy-proximity activation behavior.
+    echo_start, _ = require_tokens(
+        "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+        {
+            "1848652617", "1848652626", "1093683252", "62500.0", "1200.", "15.", "60.",
+            "unit_isAlive", "isCombatSapper", "__wurst_safe_BlzGetUnitAbilityCooldownRemaining",
+            "vec2_distanceToSq", "createUnit", "__wurst_safe_UnitApplyTimedLife",
+            "__wurst_safe_SetUnitPosition", "orderCodeAttack", "__wurst_safe_BlzStartUnitAbilityCooldown",
+        },
+    )
+    death_start, _ = require_tokens(
+        "fJ",
+        {
+            "1848652626", "cHb", "300.", "150.", "ATTACK_TYPE_NORMAL", "DAMAGE_TYPE_MAGIC",
+            "__wurst_safe_GroupEnumUnitsInRange", "__wurst_safe_UnitDamageTarget",
+        },
+    )
+    filter_binding = next(
+        (row for row in protected_filter_bindings if row["symbol"] == "cHb"),
+        None,
+    )
+    if filter_binding is None or filter_binding["resolution_status"] != "resolved":
+        raise ValueError("Echo Remnant mechanic requires resolved protected filter cHb")
+    if filter_binding["resolved_function"] != "UC":
+        raise ValueError(f"Echo Remnant cHb binding changed: {filter_binding}")
+
+    rows.append({
+        "unit_id": 1848652617,
+        "mechanic_kind": "damage-triggered-echo-step-and-remnant",
+        "trigger": "damage-event",
+        "parameters": {
+            "trigger_source_requires_combat_sapper": True,
+            "trigger_target_requires_alive": True,
+            "trigger_range": 250,
+            "trigger_range_squared": 62500,
+            "trigger_ability_id": 1093683252,
+            "runtime_cooldown_seconds": 15,
+            "blink_distance_toward_own_castle": 1200,
+            "resume_attack_immediately": True,
+            "remnant_unit_id": 1848652626,
+            "remnant_timed_life_seconds": 60,
+            "remnant_activation_ability_id": 1093683268,
+            "remnant_explosion_radius": 300,
+            "remnant_explosion_damage": 150,
+            "remnant_explosion_attack_type": "normal",
+            "remnant_explosion_damage_type": "magic",
+            "remnant_target_filter_symbol": "cHb",
+            "remnant_target_filter_function": str(filter_binding["resolved_function"]),
+            "remnant_target_predicate": str(filter_binding["predicate"]),
+        },
+        "related_rawcode_ids": [1093683252, 1848652626, 1093683268],
+        "source_functions": [
+            "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+            "fJ",
+            "UC",
+        ],
+        "evidence_kind": "exact-damage-and-death-handler-with-resolved-filter",
+        "byte_offset": min(echo_start, death_start),
+    })
+
+    return rows
+
+
 def _enclosing_named_function(
     functions: list[dict[str, object]],
     byte_offset: int,
@@ -4552,6 +4703,9 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     )
     function_aliases, function_value_arguments = _function_value_links(data, functions)
     protected_filter_bindings = _extract_protected_filter_bindings(data, functions)
+    production_unit_special_mechanics = _extract_production_unit_special_mechanics(
+        data, functions, protected_filter_bindings
+    )
     castle_item_mechanics = _extract_castle_item_mechanics(data, functions, function_aliases)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
@@ -4604,6 +4758,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
             "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
         "protected_filter_bindings": protected_filter_bindings,
+        "production_unit_special_mechanics": production_unit_special_mechanics,
         "castle_item_mechanics": castle_item_mechanics,
         "building_spell_registrations": building_spell_registrations,
         "building_spell_evidence": building_spell_evidence,
