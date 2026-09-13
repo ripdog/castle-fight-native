@@ -465,7 +465,7 @@ impl Exporter {
         let mut model_outputs = BTreeMap::<String, String>::new();
         for (key, group) in &grouped {
             let source = group[0].source_model.clone();
-            match self.export_model(&source) {
+            match self.export_building_model(&source) {
                 Ok(model) => {
                     model_outputs.insert(key.clone(), model.gltf.clone());
                     models.push(model);
@@ -498,7 +498,7 @@ impl Exporter {
             .collect();
 
         Ok(BuildingAssetManifest {
-            schema_version: 2,
+            schema_version: 3,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -636,8 +636,11 @@ impl Exporter {
             if model_outputs.contains_key(&key) || model_errors.contains_key(&key) {
                 continue;
             }
-            match self.export_model_with_replacements(source_model, &resolved.replaceable_textures)
-            {
+            match self.export_model_with_replacements(
+                source_model,
+                &resolved.replaceable_textures,
+                false,
+            ) {
                 Ok(model) => {
                     model_outputs.insert(key, model.gltf.clone());
                     models.push(model);
@@ -909,13 +912,21 @@ impl Exporter {
     }
 
     fn export_model(&mut self, logical_path: &str) -> Result<ModelManifest, Box<dyn Error>> {
-        self.export_model_with_replacements(logical_path, &BTreeMap::new())
+        self.export_model_with_replacements(logical_path, &BTreeMap::new(), false)
+    }
+
+    fn export_building_model(
+        &mut self,
+        logical_path: &str,
+    ) -> Result<ModelManifest, Box<dyn Error>> {
+        self.export_model_with_replacements(logical_path, &BTreeMap::new(), true)
     }
 
     fn export_model_with_replacements(
         &mut self,
         logical_path: &str,
         replaceable_textures: &BTreeMap<u32, String>,
+        omit_team_glow_geosets: bool,
     ) -> Result<ModelManifest, Box<dyn Error>> {
         let (source_casc_path, model_bytes) = self.read_model(logical_path)?;
         let mut parser = MdxParser::new();
@@ -944,6 +955,7 @@ impl Exporter {
             &asset_name,
             &gltf_texture_indices,
             &texture_manifests,
+            omit_team_glow_geosets,
         )?;
         warnings.extend(material_warnings);
 
@@ -1313,6 +1325,36 @@ fn ribbon_material_properties(
     (format!("{:?}", layer.filter_mode()), texture)
 }
 
+fn is_team_glow_texture(texture: &TextureManifest) -> bool {
+    texture.replaceable_id == 2
+        || texture
+            .source_texture
+            .replace('\\', "/")
+            .to_ascii_lowercase()
+            .contains("replaceabletextures/teamglow/")
+}
+
+fn material_is_team_glow_geometry(
+    model: &Model,
+    material_id: usize,
+    texture_manifests: &[TextureManifest],
+) -> bool {
+    let Some(material) = model.materials(material_id) else {
+        return false;
+    };
+    let mut saw_layer = false;
+    for layer in material.layers_iter() {
+        saw_layer = true;
+        let Some(texture) = texture_manifests.get(layer_diffuse_texture_id(&layer) as usize) else {
+            return false;
+        };
+        if !is_team_glow_texture(texture) {
+            return false;
+        }
+    }
+    saw_layer
+}
+
 fn model_node_position(model: &Model, node: &Node) -> [f32; 3] {
     model
         .pivot_points()
@@ -1327,6 +1369,7 @@ fn build_gltf(
     asset_name: &str,
     texture_indices: &[Option<usize>],
     texture_manifests: &[TextureManifest],
+    omit_team_glow_geosets: bool,
 ) -> Result<GltfBuildOutput, Box<dyn Error>> {
     let mut binary = BinaryBuilder::default();
     let mut warnings = Vec::new();
@@ -1337,6 +1380,18 @@ fn build_gltf(
     let mut geoset_node_by_index = BTreeMap::new();
     for (geoset_index, geoset) in model.geosets_iter().enumerate() {
         if geoset.vertex_positions().is_empty() || geoset.faces().is_empty() {
+            continue;
+        }
+        if omit_team_glow_geosets
+            && material_is_team_glow_geometry(
+                model,
+                geoset.material_id() as usize,
+                texture_manifests,
+            )
+        {
+            warnings.push(format!(
+                "omitting building team-glow geoset {geoset_index}; Warcraft renders team glow with engine-specific billboard/decal semantics"
+            ));
             continue;
         }
 
@@ -3012,6 +3067,7 @@ fn build_materials(
         let mut double_sided = false;
         let mut extensions = serde_json::Map::new();
         let mut extras = serde_json::Map::new();
+        extras.insert("wc3PriorityPlane".into(), json!(material.priority_plane()));
 
         let has_team_color_underlay = material
             .layers_iter()
@@ -3599,6 +3655,47 @@ mod tests {
     }
 
     #[test]
+    fn team_glow_geometry_detection_catches_replaceable_and_fixed_palette_textures() {
+        let mut model = Model::new();
+        model.resize_materials(2);
+        {
+            let mut material = model.materials_mut(0).expect("replaceable glow material");
+            material.resize_layers(1);
+            material
+                .layers_mut(0)
+                .expect("replaceable glow layer")
+                .set_texture_id(0);
+        }
+        {
+            let mut material = model.materials_mut(1).expect("fixed glow material");
+            material.resize_layers(1);
+            material
+                .layers_mut(0)
+                .expect("fixed glow layer")
+                .set_texture_id(1);
+        }
+        let textures = vec![
+            TextureManifest {
+                source_texture: String::new(),
+                source_casc_path: None,
+                png: Some("textures/teamglow01.png".to_owned()),
+                replaceable_id: 2,
+                has_transparency: false,
+            },
+            TextureManifest {
+                source_texture: r"ReplaceableTextures\TeamGlow\TeamGlow08.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/teamglow08.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: false,
+            },
+        ];
+
+        assert!(material_is_team_glow_geometry(&model, 0, &textures));
+        assert!(material_is_team_glow_geometry(&model, 1, &textures));
+    }
+
+    #[test]
     fn ribbon_material_properties_resolve_texture_and_filter_mode() {
         let mut model = Model::new();
         model.resize_textures(1);
@@ -3625,6 +3722,20 @@ mod tests {
                 Some("textures/ribbon.png".to_owned())
             )
         );
+    }
+
+    #[test]
+    fn material_priority_plane_is_preserved_for_native_depth_ordering() {
+        let mut model = Model::new();
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.set_priority_plane(3);
+            material.resize_layers(1);
+            material.layers_mut(0).expect("layer").set_texture_id(0);
+        }
+        let (materials, _, _) = build_materials(&model, &[None], &[]);
+        assert_eq!(materials[0]["extras"]["wc3PriorityPlane"], json!(3));
     }
 
     #[test]

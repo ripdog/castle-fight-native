@@ -19,6 +19,8 @@ const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
 const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow00.png";
 const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
+const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
+const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
@@ -269,6 +271,8 @@ impl Wc3RibbonSource {
 struct Wc3MaterialExtras {
     #[serde(rename = "wc3FilterMode")]
     filter_mode: Option<String>,
+    #[serde(rename = "wc3PriorityPlane", default)]
+    priority_plane: i32,
     #[serde(rename = "wc3TeamColorUnderlay", default)]
     team_color_underlay: bool,
     #[serde(rename = "wc3TeamGlowLayer", default)]
@@ -428,6 +432,8 @@ pub fn fix_wc3_scene_materials(
             if let Some(filter_mode) = extras.filter_mode.as_deref() {
                 material.alpha_mode = wc3_material_alpha_mode(filter_mode, material.alpha_mode);
             }
+            material.depth_bias =
+                wc3_material_depth_bias(extras.priority_plane, extras.team_color_underlay);
             material.clone()
         };
         let team = wc3_team_tint(entity, &parents, &team_roots);
@@ -456,15 +462,11 @@ pub fn fix_wc3_scene_materials(
         if extras.team_color_underlay
             && let Some(team) = team
         {
-            let mut underlay = material_template;
             let key = (source_material_id, team.index);
             let underlay_handle = if let Some(handle) = team_materials.get(&key) {
                 handle.clone()
             } else {
-                underlay.base_color_texture = None;
-                underlay.base_color = team.color;
-                underlay.emissive = LinearRgba::BLACK;
-                underlay.alpha_mode = AlphaMode::Opaque;
+                let underlay = team_color_underlay_material(material_template, team.color);
                 let handle = materials.add(underlay);
                 team_materials.insert(key, handle.clone());
                 handle
@@ -485,6 +487,24 @@ pub fn fix_wc3_scene_materials(
 
         commands.entity(entity).insert(Wc3MaterialProcessed);
     }
+}
+
+fn wc3_material_depth_bias(priority_plane: i32, team_color_underlay: bool) -> f32 {
+    priority_plane as f32
+        + if team_color_underlay {
+            TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET
+        } else {
+            0.0
+        }
+}
+
+fn team_color_underlay_material(mut material: StandardMaterial, color: Color) -> StandardMaterial {
+    material.base_color_texture = None;
+    material.base_color = color;
+    material.emissive = LinearRgba::BLACK;
+    material.alpha_mode = AlphaMode::Opaque;
+    material.depth_bias += TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET;
+    material
 }
 
 fn team_glow_texture_path(team: Wc3TeamTint) -> String {
@@ -922,6 +942,23 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn team_color_overlay_and_underlay_have_stable_depth_ordering() {
+        assert_eq!(wc3_material_depth_bias(0, false), 0.0);
+        assert_eq!(wc3_material_depth_bias(0, true), 2.0);
+        assert_eq!(wc3_material_depth_bias(3, true), 5.0);
+
+        let source = StandardMaterial {
+            depth_bias: wc3_material_depth_bias(3, true),
+            ..default()
+        };
+        let material = team_color_underlay_material(source, Color::srgb(1.0, 0.0, 0.0));
+        assert_eq!(material.depth_bias, 4.0);
+        assert!(material.depth_bias < wc3_material_depth_bias(3, true));
+        assert!(material.base_color_texture.is_none());
+        assert_eq!(material.alpha_mode, AlphaMode::Opaque);
+    }
 
     #[test]
     fn team_glow_texture_uses_the_owning_model_pack() {

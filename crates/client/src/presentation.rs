@@ -62,6 +62,7 @@ const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
 const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
 const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
+const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -993,7 +994,8 @@ fn setup_imported_building_animation_players(
         let mut transitions = AnimationTransitions::new();
         transitions
             .play(&mut player, animation.stand, Duration::ZERO)
-            .repeat();
+            .repeat()
+            .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
         commands.entity(entity).insert((
             AnimationGraphHandle(animation.graph.clone()),
             transitions,
@@ -1977,8 +1979,8 @@ fn sync_render_entities(
                 Wc3TeamTint::new(building.team.0, team_color(building.team), "wc3/buildings"),
                 Transform {
                     translation: Vec3::NEG_Y * visual_height * 0.5,
+                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
                     scale: Vec3::splat(model.scale),
-                    ..default()
                 },
             ));
             Some(rawcode)
@@ -3248,6 +3250,12 @@ mod tests {
     #[test]
     fn imported_wc3_projectile_models_map_positive_x_onto_client_forward() {
         let correction = Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET);
+        assert!((correction * Vec3::X - Vec3::Z).length() < 1e-5);
+    }
+
+    #[test]
+    fn imported_wc3_buildings_use_the_same_clockwise_facing_correction() {
+        let correction = Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET);
         assert!((correction * Vec3::X - Vec3::Z).length() < 1e-5);
     }
 
