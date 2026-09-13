@@ -8,15 +8,17 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
+const RANDOM_PURPOSE_UPHILL_MISS: u64 = 0x5550_4849_4c4c_0001;
+pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 
 use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
-        AttackProfile, AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile,
-        BounceProjectile, BuildingFootprint, BuildingSpawn, CollisionRadius, Corpse,
-        CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
+        AttackProfile, AttackSequence, AutomaticAbilityProfile, AutomaticAbilityState,
+        BallisticProjectile, BounceProjectile, BuildingFootprint, BuildingSpawn, CollisionRadius,
+        Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
         MAX_BOUNCE_HITS, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementProfile,
         NavigationGoal, NavigationState, Position, ProductionCollisionRadius,
         ProductionCorpseProfile, ProductionProfile, ProductionSpellcastingProfile, ProductionState,
@@ -25,6 +27,7 @@ use crate::{
     },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
+    terrain::TerrainElevationMap,
     topology::{NavCell, TopologyGrid},
 };
 
@@ -40,6 +43,12 @@ pub struct SimulationConfig {
     pub max_separation_per_tick: i32,
     pub static_blockers: Vec<BuildingFootprint>,
     pub team_objective: [SimPoint; 2],
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CombatRules {
+    pub terrain_elevation: Option<TerrainElevationMap>,
+    pub uphill_miss_chance_per_10k: u16,
 }
 
 impl Default for SimulationConfig {
@@ -130,6 +139,7 @@ pub struct AttackEvent {
     pub source_position: SimPoint,
     pub target_position: SimPoint,
     pub delivery: AttackDelivery,
+    pub missed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -232,6 +242,7 @@ const PURSUIT_CACHE_CAPACITY: usize = 65_536;
 pub struct Simulation {
     world: World,
     config: SimulationConfig,
+    combat_rules: CombatRules,
     pool: ThreadPool,
     topology: TopologyGrid,
     topology_dirty: bool,
@@ -246,6 +257,14 @@ pub struct Simulation {
 
 impl Simulation {
     pub fn new(config: SimulationConfig, workers: usize) -> Self {
+        Self::new_with_combat_rules(config, workers, CombatRules::default())
+    }
+
+    pub fn new_with_combat_rules(
+        config: SimulationConfig,
+        workers: usize,
+        combat_rules: CombatRules,
+    ) -> Self {
         assert!(workers > 0, "simulation requires at least one worker");
         assert!(config.spatial_cell_size > 0);
         assert!(config.navigation_cell_size > 0);
@@ -257,6 +276,7 @@ impl Simulation {
             "fallback unit separation must be an even collision diameter"
         );
         assert!(config.max_separation_per_tick >= 0);
+        validate_combat_rules(&config, &combat_rules);
 
         let pool = ThreadPoolBuilder::new()
             .num_threads(workers)
@@ -274,6 +294,7 @@ impl Simulation {
         Self {
             world: World::new(),
             config,
+            combat_rules,
             pool,
             topology,
             topology_dirty: false,
@@ -774,6 +795,8 @@ impl Simulation {
         let mut building_health: Vec<i32> =
             buildings.iter().map(|building| building.health).collect();
         let mut cooldowns: Vec<u16> = units.iter().map(|unit| unit.cooldown_remaining).collect();
+        let mut attack_sequences: Vec<u64> =
+            units.iter().map(|unit| unit.attack_sequence).collect();
         let mut building_cooldowns: Vec<u16> = buildings
             .iter()
             .map(|building| building.cooldown_remaining.unwrap_or(0))
@@ -960,89 +983,98 @@ impl Simulation {
                 continue;
             };
 
-            match intent.attack.delivery {
-                AttackDelivery::Melee => {
-                    let applied = apply_damage_to_target(
-                        intent.target,
-                        intent.source_id,
-                        intent.attack.damage,
-                        completed_tick,
-                        DamageTargetState {
-                            units: &units,
-                            buildings: &buildings,
-                            unit_positions: &positions,
-                            unit_health: &mut unit_health,
-                            building_health: &mut building_health,
-                            attackers_this_tick: &mut attackers_this_tick,
-                            next_defense_alerts: &mut next_defense_alerts,
-                            navigation_cell_size: self.config.navigation_cell_size,
-                        },
-                    );
-                    debug_assert!(applied.is_some());
-                }
-                AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
-                    let travel_ticks = projectile_travel_ticks(intent.distance_sq, speed_per_tick);
-                    let impact_tick = completed_tick
-                        .checked_add(travel_ticks)
-                        .expect("projectile impact tick overflow");
-                    projectile_launches.push(ProjectileLaunch {
-                        source: intent.source_id,
-                        target: intent.target_id,
-                        damage: intent.attack.damage,
-                        launch_position: intent.source_position,
-                        launch_tick: completed_tick,
-                        impact_tick,
-                    });
-                }
-                AttackDelivery::RangedBallistic {
-                    speed_per_tick,
-                    impact_radius,
-                } => {
-                    let travel_ticks = projectile_travel_ticks(intent.distance_sq, speed_per_tick);
-                    let impact_tick = completed_tick
-                        .checked_add(travel_ticks)
-                        .expect("projectile impact tick overflow");
-                    ballistic_projectile_launches.push(BallisticProjectileLaunch {
-                        source: intent.source_id,
-                        source_team: intent.source_team,
-                        damage: intent.attack.damage,
-                        launch_position: intent.source_position,
-                        destination: target_position,
+            let missed = self.uphill_attack_misses(&intent, target_position, completed_tick);
+            if !missed {
+                match intent.attack.delivery {
+                    AttackDelivery::Melee => {
+                        let applied = apply_damage_to_target(
+                            intent.target,
+                            intent.source_id,
+                            intent.attack.damage,
+                            completed_tick,
+                            DamageTargetState {
+                                units: &units,
+                                buildings: &buildings,
+                                unit_positions: &positions,
+                                unit_health: &mut unit_health,
+                                building_health: &mut building_health,
+                                attackers_this_tick: &mut attackers_this_tick,
+                                next_defense_alerts: &mut next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        );
+                        debug_assert!(applied.is_some());
+                    }
+                    AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
+                        let travel_ticks =
+                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                        let impact_tick = completed_tick
+                            .checked_add(travel_ticks)
+                            .expect("projectile impact tick overflow");
+                        projectile_launches.push(ProjectileLaunch {
+                            source: intent.source_id,
+                            target: intent.target_id,
+                            damage: intent.attack.damage,
+                            launch_position: intent.source_position,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                        });
+                    }
+                    AttackDelivery::RangedBallistic {
+                        speed_per_tick,
                         impact_radius,
-                        launch_tick: completed_tick,
-                        impact_tick,
-                    });
-                }
-                AttackDelivery::Bounce {
-                    speed_per_tick,
-                    bounce_range,
-                    max_bounces,
-                    damage_percent_per_bounce,
-                    allow_repeat_targets,
-                } => {
-                    let travel_ticks = projectile_travel_ticks(intent.distance_sq, speed_per_tick);
-                    let impact_tick = completed_tick
-                        .checked_add(travel_ticks)
-                        .expect("projectile impact tick overflow");
-                    bounce_projectile_launches.push(BounceProjectileLaunch {
-                        source: intent.source_id,
-                        source_team: intent.source_team,
-                        target: intent.target_id,
-                        damage: intent.attack.damage,
-                        launch_position: intent.source_position,
-                        launch_tick: completed_tick,
-                        impact_tick,
+                    } => {
+                        let travel_ticks =
+                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                        let impact_tick = completed_tick
+                            .checked_add(travel_ticks)
+                            .expect("projectile impact tick overflow");
+                        ballistic_projectile_launches.push(BallisticProjectileLaunch {
+                            source: intent.source_id,
+                            source_team: intent.source_team,
+                            damage: intent.attack.damage,
+                            launch_position: intent.source_position,
+                            destination: target_position,
+                            impact_radius,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                        });
+                    }
+                    AttackDelivery::Bounce {
                         speed_per_tick,
                         bounce_range,
                         max_bounces,
                         damage_percent_per_bounce,
                         allow_repeat_targets,
-                    });
+                    } => {
+                        let travel_ticks =
+                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                        let impact_tick = completed_tick
+                            .checked_add(travel_ticks)
+                            .expect("projectile impact tick overflow");
+                        bounce_projectile_launches.push(BounceProjectileLaunch {
+                            source: intent.source_id,
+                            source_team: intent.source_team,
+                            target: intent.target_id,
+                            damage: intent.attack.damage,
+                            launch_position: intent.source_position,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                            speed_per_tick,
+                            bounce_range,
+                            max_bounces,
+                            damage_percent_per_bounce,
+                            allow_repeat_targets,
+                        });
+                    }
                 }
             }
             match intent.source {
                 AttackSourceIndex::Unit(index) => {
                     cooldowns[index] = intent.attack.cooldown_ticks;
+                    attack_sequences[index] = attack_sequences[index]
+                        .checked_add(1)
+                        .expect("unit attack sequence overflow");
                 }
                 AttackSourceIndex::Building(index) => {
                     building_cooldowns[index] = intent.attack.cooldown_ticks;
@@ -1054,6 +1086,7 @@ impl Simulation {
                 source_position: intent.source_position,
                 target_position,
                 delivery: intent.attack.delivery,
+                missed,
             });
             attacks_resolved += 1;
         }
@@ -1245,6 +1278,10 @@ impl Simulation {
                 .get_mut::<AttackCooldown>()
                 .expect("unit cooldown missing")
                 .remaining = cooldowns[index];
+            entity
+                .get_mut::<AttackSequence>()
+                .expect("unit attack sequence missing")
+                .0 = attack_sequences[index];
             entity
                 .get_mut::<Position>()
                 .expect("unit position missing")
@@ -1602,6 +1639,7 @@ impl Simulation {
             },
             unit.attack,
             AttackCooldown::default(),
+            AttackSequence::default(),
             TargetState::default(),
             RetaliationState::default(),
             StatusState::default(),
@@ -1866,6 +1904,10 @@ impl Simulation {
                 )| {
                     let entity_ref = self.world.entity(entity);
                     let corpse = entity_ref.get::<CorpseProducer>().map(|corpse| corpse.0);
+                    let attack_sequence = entity_ref
+                        .get::<AttackSequence>()
+                        .expect("unit attack sequence missing")
+                        .0;
                     let collision_radius = entity_ref.get::<CollisionRadius>().copied();
                     let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
                     let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
@@ -1880,6 +1922,7 @@ impl Simulation {
                         health: health.current,
                         attack: *attack,
                         cooldown_remaining: cooldown.remaining,
+                        attack_sequence,
                         target: target.current,
                         direct_retaliation_lock: target.direct_retaliation_lock,
                         retaliation: *retaliation,
@@ -3054,7 +3097,7 @@ impl Simulation {
                     context.completed_tick,
                     projectile_id,
                     RANDOM_PURPOSE_BOUNCE_TARGET ^ candidate.id.0,
-                    next_bounce_index,
+                    u64::from(next_bounce_index),
                 );
                 let key = (rank, candidate.id, unit_index);
                 if best.is_none_or(|current| key < current) {
@@ -3164,6 +3207,45 @@ impl Simulation {
                 .is_some()
     }
 
+    fn uphill_attack_misses(
+        &self,
+        intent: &AttackIntent,
+        target_position: SimPoint,
+        completed_tick: u64,
+    ) -> bool {
+        let chance = self.combat_rules.uphill_miss_chance_per_10k;
+        if chance == 0
+            || !matches!(intent.source, AttackSourceIndex::Unit(_))
+            || !matches!(intent.target, TargetIndex::Unit(_))
+        {
+            return false;
+        }
+
+        let terrain = self
+            .combat_rules
+            .terrain_elevation
+            .as_ref()
+            .expect("uphill miss chance requires authoritative terrain elevation");
+        let source_level = terrain
+            .cliff_level_at(intent.source_position)
+            .expect("attacking unit position lies outside authoritative terrain elevation");
+        let target_level = terrain
+            .cliff_level_at(target_position)
+            .expect("target unit position lies outside authoritative terrain elevation");
+        if target_level <= source_level {
+            return false;
+        }
+
+        deterministic_random(
+            self.config.match_seed,
+            completed_tick,
+            intent.source_id,
+            RANDOM_PURPOSE_UPHILL_MISS,
+            intent.attack_sequence,
+        ) % u64::from(UPHILL_MISS_CHANCE_SCALE)
+            < u64::from(chance)
+    }
+
     fn attack_intents(
         &self,
         units: &[UnitSnapshot],
@@ -3209,6 +3291,7 @@ impl Simulation {
                         source_position: source.position,
                         target_id,
                         attack: source.attack,
+                        attack_sequence: source.attack_sequence,
                         distance_sq,
                     })
                 })
@@ -3264,6 +3347,7 @@ impl Simulation {
                         ),
                         target_id,
                         attack,
+                        attack_sequence: 0,
                         distance_sq,
                     })
                 })
@@ -4394,6 +4478,7 @@ struct UnitSnapshot {
     health: i32,
     attack: AttackProfile,
     cooldown_remaining: u16,
+    attack_sequence: u64,
     target: Option<SimId>,
     direct_retaliation_lock: bool,
     retaliation: RetaliationState,
@@ -4485,6 +4570,7 @@ struct AttackIntent {
     source_position: SimPoint,
     target_id: SimId,
     attack: AttackProfile,
+    attack_sequence: u64,
     distance_sq: u64,
 }
 
@@ -4779,6 +4865,54 @@ fn grouped_defense_victims(
         }
     }
     victims
+}
+
+fn validate_combat_rules(config: &SimulationConfig, rules: &CombatRules) {
+    assert!(
+        rules.uphill_miss_chance_per_10k <= UPHILL_MISS_CHANCE_SCALE,
+        "uphill miss chance must be between 0 and {UPHILL_MISS_CHANCE_SCALE} per 10k"
+    );
+    if rules.uphill_miss_chance_per_10k == 0 {
+        return;
+    }
+
+    let terrain = rules
+        .terrain_elevation
+        .as_ref()
+        .expect("non-zero uphill miss chance requires authoritative terrain elevation");
+    let min_point = SimPoint::new(
+        navigation_boundary_coordinate(config.navigation_min.x, config.navigation_cell_size),
+        navigation_boundary_coordinate(config.navigation_min.y, config.navigation_cell_size),
+    );
+    let max_point = SimPoint::new(
+        navigation_boundary_coordinate(
+            config
+                .navigation_max
+                .x
+                .checked_add(1)
+                .expect("navigation x boundary overflow"),
+            config.navigation_cell_size,
+        ),
+        navigation_boundary_coordinate(
+            config
+                .navigation_max
+                .y
+                .checked_add(1)
+                .expect("navigation y boundary overflow"),
+            config.navigation_cell_size,
+        ),
+    );
+    assert!(
+        terrain.contains(min_point) && terrain.contains(max_point),
+        "authoritative terrain elevation must cover the full navigation bounds when uphill miss is enabled"
+    );
+}
+
+fn navigation_boundary_coordinate(cell: i32, cell_size: i32) -> i32 {
+    let coordinate = i64::from(cell)
+        .checked_mul(i64::from(cell_size))
+        .expect("navigation boundary coordinate overflowed i64");
+    i32::try_from(coordinate).expect("navigation boundary coordinate overflowed i32")
 }
 
 fn validate_attack_profile(attack: AttackProfile) {
@@ -5228,11 +5362,11 @@ fn scaled_bounce_damage(damage: i32, percent: u16) -> i32 {
         .expect("bounce damage scaling overflowed validated bounds")
 }
 
-fn deterministic_random(seed: u64, tick: u64, entity: SimId, purpose: u64, index: u32) -> u64 {
+fn deterministic_random(seed: u64, tick: u64, entity: SimId, purpose: u64, index: u64) -> u64 {
     let state = splitmix64(seed ^ tick.rotate_left(17));
     let state = splitmix64(state ^ entity.0.rotate_left(31));
     let state = splitmix64(state ^ purpose);
-    splitmix64(state ^ u64::from(index))
+    splitmix64(state ^ index)
 }
 
 fn deterministic_ability_target_rank(
@@ -5515,6 +5649,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     attack: *entity.get::<AttackProfile>()?,
                     movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
+                    attack_sequence: *entity.get::<AttackSequence>()?,
                     target: *entity.get::<TargetState>()?,
                     retaliation: *entity.get::<RetaliationState>()?,
                     status: *entity.get::<StatusState>()?,
@@ -5577,6 +5712,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u16(unit.attack.cooldown_ticks);
                 hash.write_i32(unit.movement.speed_per_tick);
                 hash.write_u16(unit.cooldown.remaining);
+                hash.write_u64(unit.attack_sequence.0);
                 hash.write_u64(unit.target.current.map_or(0, |target| target.0));
                 hash.write_u8(u8::from(unit.target.direct_retaliation_lock));
                 hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
@@ -5837,6 +5973,7 @@ struct CanonicalUnit {
     attack: AttackProfile,
     movement: MovementProfile,
     cooldown: AttackCooldown,
+    attack_sequence: AttackSequence,
     target: TargetState,
     retaliation: RetaliationState,
     status: StatusState,

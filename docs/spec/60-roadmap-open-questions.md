@@ -317,6 +317,8 @@ The verification implementation now also has provisional executable `RangedGuara
 
 Automatic building spell scheduling is now executable as well. The verification slice regenerates integer mana during timers, evaluates one automatic ability per spellcasting building before combat targeting, uses keyed order-independent random enemy-unit selection or canonical map-wide enemy-unit sets, commits successful casts atomically in canonical source/ability/sequence order, spends mana and starts cooldown only after resolution revalidation, and exposes ability-caused deaths/statuses to all later combat phases that tick. Non-retaliatory building spell damage does not populate ordinary retaliation or ally-defense threat state. Timed stun now uses authoritative exclusive expiry (`stunned_until_tick`): a duration-`D` stun cast on tick `T` suppresses autonomous actions for exactly ticks `[T, T + D)`, reapplication keeps the later expiry, and cooldown/mana timers continue while stunned. The broader ability/effect vocabulary remains open, but this base scheduling/resource/status precedence is now an explicit provisional rule.
 
+Terrain-height combat is executable as well. The sim loads the committed W3E-derived terrain JSON, validates the `(width + 1) × (height + 1)` vertex arrays, preserves raw ground-height samples, and uses the extracted discrete `layerHeight` cliff level for uphill eligibility. Ordinary unit attacks sample both units at pre-movement attack resolution; a strictly higher target cliff level enables the configurable keyed miss roll. Misses consume the attempt/cooldown without damage, projectile launch, or on-hit/retaliation effects. Attack buildings remain exempt from this unit rule.
+
 Compatibility work still needs to establish:
 
 - attack windup and backswing details;
@@ -324,7 +326,8 @@ Compatibility work still needs to establish:
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;
 - whether observed Castle Fight behavior requires revising the provisional ballistic circular-zone, hostile-only splash, building-intersection, or travel rules;
 - whether observed Castle Fight behavior requires revising the provisional bounce range, repeat/building eligibility, chain cap, damage falloff, travel, or keyed-random selection rules;
-- exact uphill-miss probability, authoritative elevation/cliff threshold, and the combat subphase at which attacker/target elevation is sampled; map extraction should recover these from Warcraft/Castle Fight data where possible rather than choosing guessed constants;
+- exact Castle Fight/Warcraft uphill-miss probability; the native rule deliberately keeps this as a `0..=10_000` per-10k rule parameter rather than embedding a guessed constant;
+- whether Warcraft has any edge-case cliff-transition sampling behavior that differs from the current nearest-terrain-vertex `layerHeight` lookup; normal base/lane plateaus are already represented unambiguously by the extracted data;
 - target-retention/range hysteresis details;
 - splash/chain ordering;
 - compatibility-specific cast windup/channeling/interruption details beyond the current atomic automatic-cast slice;

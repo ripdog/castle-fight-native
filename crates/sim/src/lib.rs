@@ -3,6 +3,7 @@ mod fixture;
 mod math;
 mod simulation;
 mod spatial;
+mod terrain;
 mod topology;
 
 pub use components::{
@@ -15,8 +16,11 @@ pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuildingPlacementError, BuildingView,
-    CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TickResult,
-    TickTimings, UnitView,
+    CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
+    TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+};
+pub use terrain::{
+    TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
 };
 pub use topology::NavCell;
 
@@ -143,6 +147,49 @@ mod tests {
         }
     }
 
+    fn original_map_terrain_config() -> SimulationConfig {
+        let tile = WC3_TERRAIN_TILE_WORLD_UNITS * SUBUNITS_PER_WORLD_UNIT;
+        SimulationConfig {
+            match_seed: 0x5550_4849_4c4c,
+            spatial_cell_size: 4 * tile,
+            navigation_cell_size: tile,
+            navigation_min: NavCell::new(-64, -32),
+            navigation_max: NavCell::new(67, 31),
+            target_pursuit_extra_range: tile,
+            unit_separation_distance: 2 * SUBUNITS_PER_WORLD_UNIT,
+            max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
+            static_blockers: Vec::new(),
+            team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
+        }
+    }
+
+    fn original_map_terrain() -> TerrainElevationMap {
+        TerrainElevationMap::from_wc3_terrain_json(include_str!(
+            "../../../docs/original_map/extracted/terrain.json"
+        ))
+        .unwrap()
+    }
+
+    fn wc3_point(x: i32, y: i32) -> SimPoint {
+        SimPoint::new(x * SUBUNITS_PER_WORLD_UNIT, y * SUBUNITS_PER_WORLD_UNIT)
+    }
+
+    fn terrain_attacker(team: u8, position: SimPoint, delivery: AttackDelivery) -> UnitSpawn {
+        UnitSpawn {
+            team: Team(team),
+            position,
+            health: 10_000,
+            attack: AttackProfile {
+                delivery,
+                damage: 7,
+                range: 7_000 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 7_000 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        }
+    }
+
     fn production_building(
         team: u8,
         footprint: BuildingFootprint,
@@ -171,6 +218,164 @@ mod tests {
             attack: None,
             spellcasting: None,
         }
+    }
+
+    #[test]
+    fn uphill_miss_chance_is_configurable_and_uses_extracted_cliff_levels() {
+        fn run(chance: u16, attacker: SimPoint, target: SimPoint) -> (i32, AttackEvent) {
+            let rules = CombatRules {
+                terrain_elevation: Some(original_map_terrain()),
+                uphill_miss_chance_per_10k: chance,
+            };
+            let mut sim =
+                Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
+            sim.spawn_unit(terrain_attacker(0, attacker, AttackDelivery::Melee));
+            let target_id = sim.spawn_unit(UnitSpawn {
+                team: Team(1),
+                position: target,
+                health: 10_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+
+            sim.step();
+            sim.step();
+            let event = *sim
+                .attacks_last_tick()
+                .first()
+                .expect("attack attempt missing");
+            (sim.unit(target_id).unwrap().health, event)
+        }
+
+        let lane = wc3_point(0, 0);
+        let left_base = wc3_point(-6_000, 0);
+
+        let (uphill_health, uphill_event) = run(UPHILL_MISS_CHANCE_SCALE, lane, left_base);
+        assert_eq!(uphill_health, 10_000);
+        assert!(uphill_event.missed);
+
+        let (disabled_health, disabled_event) = run(0, lane, left_base);
+        assert_eq!(disabled_health, 9_993);
+        assert!(!disabled_event.missed);
+
+        let (downhill_health, downhill_event) = run(UPHILL_MISS_CHANCE_SCALE, left_base, lane);
+        assert_eq!(downhill_health, 9_993);
+        assert!(!downhill_event.missed);
+    }
+
+    #[test]
+    fn uphill_miss_prevents_guaranteed_hit_projectile_launch() {
+        let rules = CombatRules {
+            terrain_elevation: Some(original_map_terrain()),
+            uphill_miss_chance_per_10k: UPHILL_MISS_CHANCE_SCALE,
+        };
+        let mut sim = Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
+        sim.spawn_unit(terrain_attacker(
+            0,
+            wc3_point(0, 0),
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: 100 * SUBUNITS_PER_WORLD_UNIT,
+            },
+        ));
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: wc3_point(-6_000, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        let result = sim.step();
+        assert_eq!(result.attacks_resolved, 1);
+        assert_eq!(result.projectiles_launched, 0);
+        assert!(sim.attacks_last_tick()[0].missed);
+    }
+
+    #[test]
+    fn attack_buildings_do_not_use_unit_uphill_miss_rule() {
+        let rules = CombatRules {
+            terrain_elevation: Some(original_map_terrain()),
+            uphill_miss_chance_per_10k: UPHILL_MISS_CHANCE_SCALE,
+        };
+        let mut sim = Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
+        sim.spawn_building(attack_building(
+            0,
+            BuildingFootprint::new(0, 0, 1, 1),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 100 * SUBUNITS_PER_WORLD_UNIT,
+                },
+                damage: 7,
+                range: 7_000 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 7_000 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1,
+            },
+        ));
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: wc3_point(-6_000, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        let result = sim.step();
+        assert_eq!(result.projectiles_launched, 1);
+        assert!(!sim.attacks_last_tick()[0].missed);
+    }
+
+    #[test]
+    fn uphill_miss_is_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let rules = CombatRules {
+                terrain_elevation: Some(original_map_terrain()),
+                uphill_miss_chance_per_10k: 2_500,
+            };
+            let mut sim =
+                Simulation::new_with_combat_rules(original_map_terrain_config(), workers, rules);
+            sim.spawn_unit(terrain_attacker(0, wc3_point(0, 0), AttackDelivery::Melee));
+            sim.spawn_unit(UnitSpawn {
+                team: Team(1),
+                position: wc3_point(-6_000, 0),
+                health: 100_000,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            });
+
+            let mut checksum = 0;
+            for _ in 0..64 {
+                checksum = sim.step().checksum;
+            }
+            checksum
+        }
+
+        assert_eq!(run(1), run(8));
     }
 
     #[test]

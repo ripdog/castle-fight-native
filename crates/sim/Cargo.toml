@@ -8,3 +8,5 @@ license.workspace = true
 [dependencies]
 bevy_ecs.workspace = true
 rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -22,6 +22,7 @@ Implemented:
 - authoritative `RangedGuaranteedHit` projectiles with integer travel time, retained target identity, source-death independence, and deterministic target-death invalidation;
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
 - authoritative `Bounce` projectiles with persistent chain identity, bounded hit history, integer travel/falloff, and keyed deterministic subsequent-target selection;
+- authoritative terrain combat elevation loaded from the extracted WC3 W3E terrain grid, with discrete cliff-level uphill detection, configurable per-10k miss probability, canonical attack-attempt sequencing, and keyed worker-independent miss rolls;
 - attack-capable buildings with independent target/cooldown state, footprint-based static acquisition, shared canonical unit/building combat ordering, and ordinary projectile delivery;
 - automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, canonical map-wide enemy-unit targeting, atomic cast commitment, immediate non-retaliatory damage, and timed stun effects;
 - authoritative timed stun state with exclusive absolute expiry, max-expiry refresh, and exact suppression of fresh targeting, ordinary attacks, and intentional movement while active;

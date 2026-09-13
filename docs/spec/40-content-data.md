@@ -339,6 +339,8 @@ Authoritative map content includes:
 
 Authoritative combat elevation SHOULD be represented in a deterministic queryable form appropriate to the imported map (for example discrete cliff/elevation levels or regions), rather than recomputed from presentation mesh geometry at runtime. The standard Castle Fight bases are elevated above the lane, so imported map data must preserve that relationship for combat even if the presentation terrain is rebuilt differently.
 
+The current Warcraft importer consumes the committed W3E-derived `terrain.json`. Its `width`/`height` are terrain-tile dimensions while `groundHeight` and `layerHeight` are vertex arrays of exactly `(width + 1) × (height + 1)` samples. The extraction translator stores those rows north-to-south even though Warcraft world Y increases from the map's bottom edge; native loading must preserve that row-orientation convention. Combat uses the discrete `layerHeight` cliff level, while the raw `groundHeight` samples remain available for future terrain/presentation work without silently becoming combat elevation.
+
 Decorative terrain/props MAY be client-only where they do not affect navigation/visibility/gameplay.
 
 ## 17. Content validation

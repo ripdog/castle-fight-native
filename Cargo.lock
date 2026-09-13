@@ -1939,6 +1939,8 @@ version = "0.1.0"
 dependencies = [
  "bevy_ecs",
  "rayon",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
