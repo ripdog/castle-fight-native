@@ -6,10 +6,11 @@ use std::{
 
 use castle_fight_sim::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CollisionRadius, ManaProfile,
-    ModifierId, MovementProfile, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
-    Simulation, SimulationConfig, SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn,
-    UnitTemplate, populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CastleFightProductionKind,
+    CastleFightUnitKind, CollisionRadius, CombatRules, ManaProfile, ModifierId, MovementProfile,
+    ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
+    SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
+    castle_fight_damage_rules,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -401,7 +402,14 @@ fn run_case(
     warmup: u64,
     ticks: u64,
 ) -> BenchResult {
-    let mut simulation = Simulation::new(scenario_config(scenario), workers);
+    let mut simulation = Simulation::new_with_combat_rules(
+        scenario_config(scenario),
+        workers,
+        CombatRules {
+            damage_rules: castle_fight_damage_rules(),
+            ..CombatRules::default()
+        },
+    );
     let mut state = populate_scenario(scenario, &mut simulation, units);
 
     for _ in 0..warmup {
@@ -524,6 +532,23 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
     if scenario == Scenario::Mixed {
         config.match_seed = 0x5eed_7000_cafe_2026;
     }
+    if matches!(
+        scenario,
+        Scenario::Lane | Scenario::Cage | Scenario::Crowd | Scenario::Topology
+    ) {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        config.spatial_cell_size = 256 * world;
+        config.navigation_cell_size = 32 * world;
+        config.navigation_min = castle_fight_sim::NavCell::new(-256, -128);
+        config.navigation_max = castle_fight_sim::NavCell::new(256, 128);
+        config.target_pursuit_extra_range = 96 * world;
+        config.unit_separation_distance = 32 * world;
+        config.max_separation_per_tick = world;
+        config.team_objective = [
+            SimPoint::new(6_000 * world, 0),
+            SimPoint::new(-6_000 * world, 0),
+        ];
+    }
     if scenario == Scenario::Pathing {
         config
             .static_blockers
@@ -567,17 +592,132 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
     config
 }
 
+fn spawn_imported_unit(
+    simulation: &mut Simulation,
+    kind: CastleFightUnitKind,
+    team: Team,
+    position: SimPoint,
+) {
+    let definition = kind.definition();
+    simulation.spawn_unit_with_properties(
+        UnitSpawn::from_template(team, position, definition.template()),
+        definition.gameplay_properties(),
+    );
+}
+
+fn populate_imported_lane_battle(simulation: &mut Simulation, total_units: usize) {
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let per_team = total_units / 2;
+    const COLUMNS: usize = 100;
+    let spacing = 40 * world;
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let column = index % COLUMNS;
+            let row = index / COLUMNS;
+            let x = if team == 0 {
+                -512 * world - i32::try_from(column).expect("column fits i32") * spacing
+            } else {
+                512 * world + i32::try_from(column).expect("column fits i32") * spacing
+            };
+            let y = (i32::try_from(row).expect("row fits i32")
+                - i32::try_from(per_team.div_ceil(COLUMNS) / 2).expect("row count fits i32"))
+                * spacing;
+            let kind = CastleFightUnitKind::ALL[index % CastleFightUnitKind::ALL.len()];
+            spawn_imported_unit(simulation, kind, Team(team), SimPoint::new(x, y));
+        }
+    }
+}
+
+fn populate_imported_crossing_crowd(simulation: &mut Simulation, total_units: usize) {
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let per_team = total_units / 2;
+    const COLUMNS: usize = 100;
+    let spacing = 40 * world;
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let column = index % COLUMNS;
+            let row = index / COLUMNS;
+            let x = if team == 0 {
+                -320 * world - i32::try_from(column).expect("column fits i32") * spacing
+            } else {
+                320 * world + i32::try_from(column).expect("column fits i32") * spacing
+            };
+            let y = (i32::try_from(row).expect("row fits i32")
+                - i32::try_from(per_team.div_ceil(COLUMNS) / 2).expect("row count fits i32"))
+                * spacing;
+            spawn_imported_unit(
+                simulation,
+                CastleFightUnitKind::Footman,
+                Team(team),
+                SimPoint::new(x, y),
+            );
+        }
+    }
+}
+
+fn populate_imported_cage_battle(simulation: &mut Simulation, total_units: usize) {
+    let barracks = CastleFightProductionKind::Barracks.definition();
+    let cage_team = Team(1);
+    for y in (-32..=28).step_by(4) {
+        for x in [-24, 20] {
+            let footprint = BuildingFootprint::new(x, y, 4, 4);
+            simulation.spawn_building_with_properties(
+                barracks.spawn(cage_team, footprint),
+                barracks.gameplay_properties(),
+            );
+        }
+    }
+    for x in (-20..=16).step_by(4) {
+        for y in [-32, 28] {
+            let footprint = BuildingFootprint::new(x, y, 4, 4);
+            simulation.spawn_building_with_properties(
+                barracks.spawn(cage_team, footprint),
+                barracks.gameplay_properties(),
+            );
+        }
+    }
+
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let per_team = total_units / 2;
+    const COLUMNS: usize = 40;
+    let spacing = 40 * world;
+    for index in 0..per_team {
+        let column = index % COLUMNS;
+        let row = index / COLUMNS;
+        let y = (i32::try_from(row).expect("row fits i32")
+            - i32::try_from(per_team.div_ceil(COLUMNS) / 2).expect("row count fits i32"))
+            * spacing;
+        let outside_x = -1_200 * world - i32::try_from(column).expect("column fits i32") * spacing;
+        spawn_imported_unit(
+            simulation,
+            CastleFightUnitKind::Footman,
+            Team(0),
+            SimPoint::new(outside_x, y),
+        );
+
+        let inside_column = i32::try_from(column % 18).expect("column fits i32");
+        let inside_x = (-340 + inside_column * 40) * world;
+        let inside_y = ((i32::try_from(index / 18).expect("row fits i32") % 40) - 20) * 40 * world;
+        spawn_imported_unit(
+            simulation,
+            CastleFightUnitKind::Footman,
+            cage_team,
+            SimPoint::new(inside_x, inside_y),
+        );
+    }
+}
+
 fn populate_scenario(
     scenario: Scenario,
     simulation: &mut Simulation,
     units: usize,
 ) -> ScenarioState {
     match scenario {
-        Scenario::Lane => populate_lane_battle(simulation, units),
-        Scenario::Cage => populate_dense_cage_battle(simulation, units),
-        Scenario::Crowd => populate_crossing_crowd(simulation, units),
+        Scenario::Lane => populate_imported_lane_battle(simulation, units),
+        Scenario::Cage => populate_imported_cage_battle(simulation, units),
+        Scenario::Crowd => populate_imported_crossing_crowd(simulation, units),
         Scenario::Pathing => populate_pathing_wall_battle(simulation, units),
-        Scenario::Topology => populate_lane_battle(simulation, units),
+        Scenario::Topology => populate_imported_lane_battle(simulation, units),
         Scenario::Production => populate_production_churn(simulation, units),
         Scenario::Projectile => populate_projectile_density_battle(simulation, units),
         Scenario::Ballistic => populate_ballistic_density_battle(simulation, units),

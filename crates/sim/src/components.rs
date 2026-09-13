@@ -1,6 +1,9 @@
 use bevy_ecs::prelude::Component;
 
-use crate::math::SimPoint;
+use crate::{
+    damage::{ArmorProfile, DamageType},
+    math::SimPoint,
+};
 
 pub(crate) const MAX_BOUNCE_COUNT: u8 = 8;
 pub(crate) const MAX_BOUNCE_HITS: usize = MAX_BOUNCE_COUNT as usize + 1;
@@ -80,6 +83,7 @@ pub(crate) struct GuaranteedHitProjectile {
     pub source: SimId,
     pub target: SimId,
     pub damage: i32,
+    pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub launch_tick: u64,
     pub impact_tick: u64,
@@ -91,6 +95,7 @@ pub(crate) struct BallisticProjectile {
     pub source_team: Team,
     pub target_mask: AttackTargetMask,
     pub damage: i32,
+    pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,
     pub impact_radius: i32,
@@ -105,6 +110,7 @@ pub(crate) struct BounceProjectile {
     pub target_mask: AttackTargetMask,
     pub target: SimId,
     pub damage: i32,
+    pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub launch_tick: u64,
     pub impact_tick: u64,
@@ -199,11 +205,15 @@ pub struct UnitGameplayProperties {
     pub collision_radius: Option<CollisionRadius>,
     pub movement_class: MovementClass,
     pub attack_targets: AttackTargetMask,
+    pub damage_type: DamageType,
+    pub armor: ArmorProfile,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BuildingGameplayProperties {
     pub attack_targets: AttackTargetMask,
+    pub damage_type: DamageType,
+    pub armor: ArmorProfile,
     pub production_unit: UnitGameplayProperties,
     pub production_spellcasting: Option<SpellcastingProfile>,
 }
@@ -216,6 +226,12 @@ pub(crate) struct ProductionMovementClass(pub MovementClass);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionAttackTargets(pub AttackTargetMask);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionDamageType(pub DamageType);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionArmorProfile(pub ArmorProfile);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);

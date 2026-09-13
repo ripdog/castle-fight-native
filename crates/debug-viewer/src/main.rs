@@ -5,8 +5,9 @@ use std::{
 
 use bevy::{prelude::*, time::Fixed};
 use castle_fight_sim::{
-    BuildingFootprint, SUBUNITS_PER_WORLD_UNIT, SimId, Simulation, SimulationConfig, Team,
-    populate_dense_cage_battle, populate_lane_battle,
+    BuildingFootprint, CastleFightProductionKind, CastleFightUnitKind, CombatRules,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, Team, UnitSpawn,
+    castle_fight_damage_rules,
 };
 
 const PIXELS_PER_WORLD_UNIT: f32 = 10.0;
@@ -61,10 +62,17 @@ fn main() {
 struct InitialScenario(ViewerScenario);
 
 fn setup(mut commands: Commands, scenario: Res<InitialScenario>) {
-    let mut simulation = Simulation::new(SimulationConfig::default(), default_worker_count());
+    let mut simulation = Simulation::new_with_combat_rules(
+        SimulationConfig::default(),
+        default_worker_count(),
+        CombatRules {
+            damage_rules: castle_fight_damage_rules(),
+            ..CombatRules::default()
+        },
+    );
     match scenario.0 {
-        ViewerScenario::Lane => populate_lane_battle(&mut simulation, VIEWER_UNITS),
-        ViewerScenario::Cage => populate_dense_cage_battle(&mut simulation, VIEWER_UNITS),
+        ViewerScenario::Lane => populate_imported_lane(&mut simulation, VIEWER_UNITS),
+        ViewerScenario::Cage => populate_imported_cage(&mut simulation, VIEWER_UNITS),
     }
 
     commands.spawn((
@@ -76,6 +84,83 @@ fn setup(mut commands: Commands, scenario: Res<InitialScenario>) {
         presented_units: HashMap::new(),
         presented_buildings: HashMap::new(),
     });
+}
+
+fn spawn_imported_unit(
+    simulation: &mut Simulation,
+    kind: CastleFightUnitKind,
+    team: Team,
+    position: SimPoint,
+) {
+    let definition = kind.definition();
+    simulation.spawn_unit_with_properties(
+        UnitSpawn::from_template(team, position, definition.template()),
+        definition.gameplay_properties(),
+    );
+}
+
+fn populate_imported_lane(simulation: &mut Simulation, total_units: usize) {
+    let per_team = total_units / 2;
+    let columns = 32usize;
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    for team in 0..2u8 {
+        for index in 0..per_team {
+            let column = (index % columns) as i32;
+            let row = (index / columns) as i32;
+            let y = (row - (per_team.div_ceil(columns) as i32 / 2)) * spacing;
+            let x = if team == 0 {
+                48 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+            } else {
+                72 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+            };
+            let kind = CastleFightUnitKind::ALL[index % CastleFightUnitKind::ALL.len()];
+            spawn_imported_unit(simulation, kind, Team(team), SimPoint::new(x, y));
+        }
+    }
+}
+
+fn populate_imported_cage(simulation: &mut Simulation, total_units: usize) {
+    let barracks = CastleFightProductionKind::Barracks.definition();
+    let cage_team = Team(1);
+    for y in (-58..=54).step_by(4) {
+        for x in [55, 109] {
+            let footprint = BuildingFootprint::new(x, y, 4, 4);
+            simulation.spawn_building_with_properties(
+                barracks.spawn(cage_team, footprint),
+                barracks.gameplay_properties(),
+            );
+        }
+    }
+    for x in (59..=105).step_by(4) {
+        for y in [-58, 55] {
+            let footprint = BuildingFootprint::new(x, y, 4, 4);
+            simulation.spawn_building_with_properties(
+                barracks.spawn(cage_team, footprint),
+                barracks.gameplay_properties(),
+            );
+        }
+    }
+
+    let per_team = total_units / 2;
+    let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+    let columns = 32usize;
+    for index in 0..per_team {
+        let column = (index % columns) as i32;
+        let row = (index / columns) as i32;
+        let y = (row - (per_team.div_ceil(columns) as i32 / 2)) * spacing;
+        spawn_imported_unit(
+            simulation,
+            CastleFightUnitKind::Footman,
+            Team(0),
+            SimPoint::new(36 * SUBUNITS_PER_WORLD_UNIT - column * spacing, y),
+        );
+        spawn_imported_unit(
+            simulation,
+            CastleFightUnitKind::Footman,
+            cage_team,
+            SimPoint::new(82 * SUBUNITS_PER_WORLD_UNIT + (column % 10) * spacing, y),
+        );
+    }
 }
 
 fn step_simulation(mut state: ResMut<SimState>) {

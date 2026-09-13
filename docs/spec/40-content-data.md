@@ -166,7 +166,7 @@ on-hit/on-impact effects
 
 `RangedGuaranteedHit` retains its intended target and cannot become missable merely because the target moves after launch. `RangedBallistic` captures a fixed impact position and may miss the original target or hit other eligible units present in the impact zone. `Bounce` guarantees its first hit and selects later bounce targets according to explicit deterministic-random rules.
 
-All values that influence gameplay are authoritative content.
+All values that influence gameplay are authoritative content. In particular, imported ordinary attacks MUST carry their extracted Castle Fight attack/damage type, while every damageable unit/building MUST carry its extracted defense/armor type and base armor value. The native content layer currently centralizes these fields for the imported Footman, Ranger, Catapult, Ice Troll Shadow Priest, Gryphon Rider, Watch Tower, Poof Tower, and their production buildings. Type-versus-type multipliers come from the committed extracted `war3mapMisc.txt`; object classifications and base armor values come from resolved unit/building object data and protected runtime-stat extraction where required.
 
 Targeting policy should reference explicit rule sets rather than deriving behavior from presentation asset type.
 

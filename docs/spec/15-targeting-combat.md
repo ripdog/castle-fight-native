@@ -284,24 +284,29 @@ The final model may mix both approaches by effect class.
 
 Thread completion order MUST NEVER define combat order.
 
-## 11. Damage and secondary effects
+## 11. Damage, attack types, and armor
 
-Damage resolution may involve:
+Every ordinary damaging attack has an authoritative Warcraft/Castle Fight attack/damage class and every damageable unit or building has an authoritative defense/armor class plus numeric armor. These values are content, not presentation metadata, and they remain attached to persistent projectiles until impact so ranged, ballistic, splash, and bounce resolution cannot lose the source attack type.
 
-- base damage;
-- armor/resistance;
-- damage type;
-- critical/random modifiers;
-- shields;
-- lifesteal;
-- reflected damage;
-- on-hit effects;
-- on-damage triggers;
-- death triggers.
+Castle Fight's exact attack-type-versus-defense-type table is extracted from the map's `war3mapMisc.txt` gameplay constants. The native armor order is Warcraft's eight-column order: Small/Light, Medium, Large/Heavy, Fortified, Normal, Hero, Divine, Unarmored. The committed Castle Fight table is:
 
-Each operation that can interact with another same-tick effect needs an explicit deterministic ordering/subphase.
+| Attack type | Light | Medium | Heavy | Fortified | Normal | Hero | Divine | Unarmored |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Normal | 70% | 175% | 100% | 50% | 100% | 60% | 25% | 105% |
+| Pierce | 175% | 100% | 70% | 45% | 100% | 60% | 25% | 105% |
+| Siege | 70% | 70% | 70% | 160% | 80% | 40% | 20% | 100% |
+| Magic | 100% | 70% | 175% | 40% | 100% | 60% | 25% | 105% |
+| Hero | 110% | 110% | 110% | 60% | 110% | 60% | 40% | 110% |
+| Spells | 100% | 100% | 100% | 100% | 100% | 70% | 25% | 100% |
+| Chaos | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
 
-The simulation SHOULD avoid a generic unconstrained callback graph where effect ordering emerges from registration order.
+The first six rows above are direct map overrides. The map does not override Chaos, so Chaos uses Warcraft III's 100%-against-all baseline. `war3mapSkin.txt` contains human-facing tooltip text for the same table, but where tooltip text and gameplay constants disagree the gameplay constants are authoritative; notably the extracted Pierce-versus-Fortified gameplay value is 45%.
+
+Ordinary attack damage then applies numeric armor. Castle Fight does not override Warcraft's armor coefficient, so the native compatibility rule uses the Warcraft III factor `0.06` per armor point. Positive armor therefore multiplies post-type damage by `1 / (1 + 0.06 * armor)`. Negative armor uses Warcraft's `2 - 0.94^(-armor)` amplification rule. The deterministic implementation evaluates these with integer/fixed-point arithmetic and one defined rounding step rather than authoritative floating-point math. Current imported base armor values are integral; exact compatibility for future fractional armor modifiers remains a separate fixed-point-content question.
+
+Automatic ability `Damage` and `AreaDamage` are currently ordinary Warcraft-style spell damage: they use Castle Fight's `DamageBonusSpells` defense-type row but do **not** use the target's numeric armor rating. A future effect that represents triggered physical damage, universal damage, or another Warcraft damage-type category MUST declare that semantic explicitly rather than reusing the spell default accidentally.
+
+Damage resolution may additionally involve critical/random modifiers, shields, spell resistance/immunity, lifesteal, reflected damage, on-hit/on-damage effects, and death triggers. Each operation that can interact with another same-tick effect needs an explicit deterministic ordering/subphase. The simulation SHOULD avoid a generic unconstrained callback graph where effect ordering emerges from registration order.
 
 ## 12. Damage source does not imply retaliation
 

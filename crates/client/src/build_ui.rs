@@ -132,21 +132,26 @@ fn setup_build_ui(mut commands: Commands) {
             ));
             spawn_building_button_row(
                 panel,
-                BuildKind::Production(ProductionKind::Footman),
-                Some(BuildKind::Production(ProductionKind::Ranger)),
+                BuildKind::Production(ProductionKind::Barracks),
+                Some(BuildKind::Production(ProductionKind::RangersHall)),
             );
             spawn_building_button_row(
                 panel,
-                BuildKind::Production(ProductionKind::Catapult),
-                Some(BuildKind::Production(ProductionKind::IceTrollPriest)),
+                BuildKind::Production(ProductionKind::OrcishSiegeFactory),
+                Some(BuildKind::Production(ProductionKind::IceTrollHut)),
             );
             spawn_building_button_row(
                 panel,
-                BuildKind::Production(ProductionKind::GryphonRider),
+                BuildKind::Production(ProductionKind::GryphonRock),
                 None,
             );
-            spawn_building_button_row(panel, BuildKind::WatchTower, Some(BuildKind::PoofTower));
-            spawn_building_button_row(panel, BuildKind::GlobalAreaSpell, None);
+            spawn_building_button_row(
+                panel,
+                BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
+                Some(BuildKind::Tower(
+                    castle_fight_sim::CastleFightTowerKind::PoofTower,
+                )),
+            );
             spawn_button(panel, "Cancel placement (Esc)", BuildUiAction::Cancel);
             panel.spawn((
                 Text::new("No building selected"),
@@ -424,12 +429,15 @@ mod tests {
         let footprint = placement_footprint(
             &metrics,
             Vec3::new(105.0, 0.0, 75.0),
-            BuildKind::Production(ProductionKind::Footman),
+            BuildKind::Production(ProductionKind::Barracks),
         );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
 
-        let tower =
-            placement_footprint(&metrics, Vec3::new(105.0, 0.0, 75.0), BuildKind::WatchTower);
+        let tower = placement_footprint(
+            &metrics,
+            Vec3::new(105.0, 0.0, 75.0),
+            BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
+        );
         assert_eq!(tower, BuildingFootprint::new(8, 5, 4, 4));
     }
 

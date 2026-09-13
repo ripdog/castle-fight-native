@@ -21,12 +21,13 @@ use crate::{
         BuildingGameplayProperties, BuildingSpawn, CollisionRadius, Corpse, CorpseDefinitionId,
         CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
         MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass, MovementProfile,
-        NavigationGoal, NavigationState, Position, ProductionAttackTargets,
-        ProductionCollisionRadius, ProductionCorpseProfile, ProductionMovementClass,
-        ProductionProfile, ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId,
-        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, UnitGameplayProperties,
-        UnitSpawn,
+        NavigationGoal, NavigationState, Position, ProductionArmorProfile, ProductionAttackTargets,
+        ProductionCollisionRadius, ProductionCorpseProfile, ProductionDamageType,
+        ProductionMovementClass, ProductionProfile, ProductionSpellcastingProfile, ProductionState,
+        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
+        UnitGameplayProperties, UnitSpawn,
     },
+    damage::{ArmorProfile, DamageRules, DamageType},
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
     terrain::TerrainElevationMap,
@@ -54,6 +55,7 @@ pub struct SimulationConfig {
 pub struct CombatRules {
     pub terrain_elevation: Option<TerrainElevationMap>,
     pub uphill_miss_chance_per_10k: u16,
+    pub damage_rules: DamageRules,
 }
 
 impl Default for SimulationConfig {
@@ -661,10 +663,15 @@ impl Simulation {
             if let Some(collision_radius) = properties.production_unit.collision_radius {
                 entity.insert(ProductionCollisionRadius(collision_radius));
             }
+            entity.insert((
+                ProductionDamageType(properties.production_unit.damage_type),
+                ProductionArmorProfile(properties.production_unit.armor),
+            ));
             if let Some(spellcasting) = properties.production_spellcasting {
                 entity.insert(ProductionSpellcastingProfile(spellcasting));
             }
         }
+        entity.insert((properties.damage_type, properties.armor));
         if let Some(attack) = building.attack {
             entity.insert((
                 attack,
@@ -949,8 +956,10 @@ impl Simulation {
                         target,
                         snapshot.projectile.source,
                         snapshot.projectile.damage,
+                        snapshot.projectile.damage_type,
                         completed_tick,
                         DamageTargetState {
+                            damage_rules: self.combat_rules.damage_rules,
                             units: &units,
                             buildings: &buildings,
                             unit_positions: &positions,
@@ -981,8 +990,10 @@ impl Simulation {
                         target,
                         snapshot.projectile.source,
                         snapshot.projectile.damage,
+                        snapshot.projectile.damage_type,
                         completed_tick,
                         DamageTargetState {
+                            damage_rules: self.combat_rules.damage_rules,
                             units: &units,
                             buildings: &buildings,
                             unit_positions: &positions,
@@ -1094,8 +1105,10 @@ impl Simulation {
                             intent.target,
                             intent.source_id,
                             intent.attack.damage,
+                            intent.damage_type,
                             completed_tick,
                             DamageTargetState {
+                                damage_rules: self.combat_rules.damage_rules,
                                 units: &units,
                                 buildings: &buildings,
                                 unit_positions: &positions,
@@ -1118,6 +1131,7 @@ impl Simulation {
                             source: intent.source_id,
                             target: intent.target_id,
                             damage: intent.attack.damage,
+                            damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             launch_tick: completed_tick,
                             impact_tick,
@@ -1137,6 +1151,7 @@ impl Simulation {
                             source_team: intent.source_team,
                             target_mask: intent.attack_targets,
                             damage: intent.attack.damage,
+                            damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,
                             impact_radius,
@@ -1162,6 +1177,7 @@ impl Simulation {
                             target_mask: intent.attack_targets,
                             target: intent.target_id,
                             damage: intent.attack.damage,
+                            damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             launch_tick: completed_tick,
                             impact_tick,
@@ -1277,8 +1293,10 @@ impl Simulation {
                         target,
                         snapshot.projectile.source,
                         snapshot.projectile.damage,
+                        snapshot.projectile.damage_type,
                         completed_tick,
                         DamageTargetState {
+                            damage_rules: self.combat_rules.damage_rules,
                             units: &units,
                             buildings: &buildings,
                             unit_positions: &positions,
@@ -1317,6 +1335,7 @@ impl Simulation {
                     source: launch.source,
                     target: launch.target,
                     damage: launch.damage,
+                    damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     launch_tick: launch.launch_tick,
                     impact_tick: launch.impact_tick,
@@ -1332,6 +1351,7 @@ impl Simulation {
                     source_team: launch.source_team,
                     target_mask: launch.target_mask,
                     damage: launch.damage,
+                    damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,
                     impact_radius: launch.impact_radius,
@@ -1352,6 +1372,7 @@ impl Simulation {
                     target_mask: launch.target_mask,
                     target: launch.target,
                     damage: launch.damage,
+                    damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     launch_tick: launch.launch_tick,
                     impact_tick: launch.impact_tick,
@@ -1768,6 +1789,7 @@ impl Simulation {
         if let Some(collision_radius) = properties.collision_radius {
             entity.insert(collision_radius);
         }
+        entity.insert((properties.damage_type, properties.armor));
         if let Some(spellcasting) = spellcasting {
             entity.insert((
                 spellcasting,
@@ -1857,11 +1879,15 @@ impl Simulation {
             Option<&ProductionCollisionRadius>,
             &ProductionMovementClass,
             &ProductionAttackTargets,
+            &ProductionDamageType,
+            &ProductionArmorProfile,
             Option<&ProductionSpellcastingProfile>,
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _, _, _, _, _)| state.next_spawn_tick <= self.next_tick)
+            .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _)| {
+                state.next_spawn_tick <= self.next_tick
+            })
             .map(
                 |(
                     entity,
@@ -1874,6 +1900,8 @@ impl Simulation {
                     collision_radius,
                     movement_class,
                     attack_targets,
+                    damage_type,
+                    armor,
                     spellcasting,
                 )| {
                     ProductionAttempt {
@@ -1886,6 +1914,8 @@ impl Simulation {
                         collision_radius: collision_radius.map(|radius| radius.0),
                         movement_class: movement_class.0,
                         attack_targets: attack_targets.0,
+                        damage_type: damage_type.0,
+                        armor: armor.0,
                         spellcasting: spellcasting.map(|profile| profile.0),
                         next_spawn_tick: state.next_spawn_tick,
                     }
@@ -1994,6 +2024,8 @@ impl Simulation {
                         collision_radius: attempt.collision_radius,
                         movement_class: attempt.movement_class,
                         attack_targets: attempt.attack_targets,
+                        damage_type: attempt.damage_type,
+                        armor: attempt.armor,
                     },
                     attempt.spellcasting,
                 );
@@ -2067,6 +2099,12 @@ impl Simulation {
                     let attack_targets = *entity_ref
                         .get::<AttackTargetMask>()
                         .expect("unit attack target mask missing");
+                    let damage_type = *entity_ref
+                        .get::<DamageType>()
+                        .expect("unit damage type missing");
+                    let armor = *entity_ref
+                        .get::<ArmorProfile>()
+                        .expect("unit armor profile missing");
                     let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
                     let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
                     let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
@@ -2094,6 +2132,8 @@ impl Simulation {
                         collision_radius_override: collision_radius.map(|radius| radius.0),
                         movement_class,
                         attack_targets,
+                        damage_type,
+                        armor,
                         spellcasting,
                         mana_current,
                         ability_state,
@@ -2142,6 +2182,12 @@ impl Simulation {
                 )| {
                     let entity_ref = self.world.entity(entity);
                     let attack_targets = entity_ref.get::<AttackTargetMask>().copied();
+                    let damage_type = *entity_ref
+                        .get::<DamageType>()
+                        .expect("building damage type missing");
+                    let armor = *entity_ref
+                        .get::<ArmorProfile>()
+                        .expect("building armor profile missing");
                     debug_assert_eq!(attack.is_some(), cooldown.is_some());
                     debug_assert_eq!(attack.is_some(), target.is_some());
                     debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
@@ -2157,6 +2203,8 @@ impl Simulation {
                         health: health.current,
                         attack: attack.copied(),
                         attack_targets,
+                        damage_type,
+                        armor,
                         cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
                         target: target.and_then(|target| target.current),
                         spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
@@ -2407,6 +2455,7 @@ impl Simulation {
                                 target,
                                 intent.ability.effect,
                                 self.next_tick,
+                                self.combat_rules.damage_rules,
                             ) {
                                 metrics.effects += 1;
                             }
@@ -2415,6 +2464,7 @@ impl Simulation {
                         &mut units[index],
                         intent.ability.effect,
                         self.next_tick,
+                        self.combat_rules.damage_rules,
                     ) {
                         metrics.effects += 1;
                     }
@@ -2428,6 +2478,7 @@ impl Simulation {
                             target,
                             intent.ability.effect,
                             self.next_tick,
+                            self.combat_rules.damage_rules,
                         ) {
                             metrics.effects += 1;
                         }
@@ -3538,6 +3589,7 @@ impl Simulation {
                         target_id,
                         attack: source.attack,
                         attack_targets: source.attack_targets,
+                        damage_type: source.damage_type,
                         attack_sequence: source.attack_sequence,
                         distance_sq,
                     })
@@ -3606,6 +3658,7 @@ impl Simulation {
                         attack_targets: source
                             .attack_targets
                             .expect("attack building target mask missing"),
+                        damage_type: source.damage_type,
                         attack_sequence: 0,
                         distance_sq,
                     })
@@ -4872,6 +4925,8 @@ struct UnitSnapshot {
     collision_radius_override: Option<i32>,
     movement_class: MovementClass,
     attack_targets: AttackTargetMask,
+    damage_type: DamageType,
+    armor: ArmorProfile,
     spellcasting: Option<SpellcastingProfile>,
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
@@ -4886,6 +4941,8 @@ struct BuildingSnapshot {
     health: i32,
     attack: Option<AttackProfile>,
     attack_targets: Option<AttackTargetMask>,
+    damage_type: DamageType,
+    armor: ArmorProfile,
     cooldown_remaining: Option<u16>,
     target: Option<SimId>,
     spawn_tick: Option<u64>,
@@ -4906,6 +4963,8 @@ struct ProductionAttempt {
     collision_radius: Option<CollisionRadius>,
     movement_class: MovementClass,
     attack_targets: AttackTargetMask,
+    damage_type: DamageType,
+    armor: ArmorProfile,
     spellcasting: Option<SpellcastingProfile>,
     next_spawn_tick: u64,
 }
@@ -4957,6 +5016,7 @@ struct AttackIntent {
     target_id: SimId,
     attack: AttackProfile,
     attack_targets: AttackTargetMask,
+    damage_type: DamageType,
     attack_sequence: u64,
     distance_sq: u64,
 }
@@ -5047,6 +5107,7 @@ struct ProjectileLaunch {
     source: SimId,
     target: SimId,
     damage: i32,
+    damage_type: DamageType,
     launch_position: SimPoint,
     launch_tick: u64,
     impact_tick: u64,
@@ -5058,6 +5119,7 @@ struct BallisticProjectileLaunch {
     source_team: Team,
     target_mask: AttackTargetMask,
     damage: i32,
+    damage_type: DamageType,
     launch_position: SimPoint,
     destination: SimPoint,
     impact_radius: i32,
@@ -5072,6 +5134,7 @@ struct BounceProjectileLaunch {
     target_mask: AttackTargetMask,
     target: SimId,
     damage: i32,
+    damage_type: DamageType,
     launch_position: SimPoint,
     launch_tick: u64,
     impact_tick: u64,
@@ -5096,6 +5159,7 @@ struct BounceSearchContext<'a> {
 }
 
 struct DamageTargetState<'a> {
+    damage_rules: DamageRules,
     units: &'a [UnitSnapshot],
     buildings: &'a [BuildingSnapshot],
     unit_positions: &'a [SimPoint],
@@ -5594,6 +5658,7 @@ fn apply_damage_to_target(
     target: TargetIndex,
     source_id: SimId,
     damage: i32,
+    damage_type: DamageType,
     completed_tick: u64,
     state: DamageTargetState<'_>,
 ) -> Option<SimPoint> {
@@ -5602,8 +5667,12 @@ fn apply_damage_to_target(
             if state.unit_health[index] <= 0 {
                 return None;
             }
+            let adjusted_damage =
+                state
+                    .damage_rules
+                    .apply_attack(damage, damage_type, state.units[index].armor);
             state.unit_health[index] = state.unit_health[index]
-                .checked_sub(damage)
+                .checked_sub(adjusted_damage)
                 .expect("unit damage arithmetic overflowed validated bounds");
             state.attackers_this_tick[index].get_or_insert(source_id);
             state.next_defense_alerts.push(DefenseAlert {
@@ -5619,8 +5688,12 @@ fn apply_damage_to_target(
             if state.building_health[index] <= 0 {
                 return None;
             }
+            let adjusted_damage =
+                state
+                    .damage_rules
+                    .apply_attack(damage, damage_type, state.buildings[index].armor);
             state.building_health[index] = state.building_health[index]
-                .checked_sub(damage)
+                .checked_sub(adjusted_damage)
                 .expect("building damage arithmetic overflowed validated bounds");
             Some(footprint_center_point(
                 state.buildings[index].footprint,
@@ -5634,15 +5707,17 @@ fn apply_ability_effect_to_unit(
     target: &mut UnitSnapshot,
     effect: AbilityEffect,
     completed_tick: u64,
+    damage_rules: DamageRules,
 ) -> bool {
     if target.health <= 0 {
         return false;
     }
     match effect {
         AbilityEffect::Damage { amount } => {
+            let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             target.health = target
                 .health
-                .checked_sub(amount)
+                .checked_sub(adjusted)
                 .expect("ability damage overflowed validated bounds");
         }
         AbilityEffect::Stun { duration_ticks } => {
@@ -5668,9 +5743,10 @@ fn apply_ability_effect_to_unit(
             );
         }
         AbilityEffect::AreaDamage { amount, radius: _ } => {
+            let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             target.health = target
                 .health
-                .checked_sub(amount)
+                .checked_sub(adjusted)
                 .expect("area ability damage overflowed validated bounds");
         }
     }
@@ -6062,6 +6138,8 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     health,
                     attack: *entity.get::<AttackProfile>()?,
                     attack_targets: *entity.get::<AttackTargetMask>()?,
+                    damage_type: *entity.get::<DamageType>()?,
+                    armor: *entity.get::<ArmorProfile>()?,
                     movement_class: *entity.get::<MovementClass>()?,
                     movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
@@ -6097,11 +6175,17 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     production_attack_targets: entity
                         .get::<ProductionAttackTargets>()
                         .map(|targets| targets.0),
+                    production_damage_type: entity
+                        .get::<ProductionDamageType>()
+                        .map(|damage_type| damage_type.0),
+                    production_armor: entity.get::<ProductionArmorProfile>().map(|armor| armor.0),
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
                         .map(|profile| profile.0),
                     attack: entity.get::<AttackProfile>().copied(),
                     attack_targets: entity.get::<AttackTargetMask>().copied(),
+                    damage_type: *entity.get::<DamageType>()?,
+                    armor: *entity.get::<ArmorProfile>()?,
                     cooldown: entity.get::<AttackCooldown>().copied(),
                     target: entity.get::<TargetState>().copied(),
                     spawn_tick: entity.get::<SpawnTick>().copied(),
@@ -6130,6 +6214,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_i32(unit.health.max);
                 hash_attack_delivery(&mut hash, unit.attack.delivery);
                 hash.write_u8(unit.attack_targets.bits());
+                hash.write_u8(unit.damage_type.stable_tag());
+                hash.write_u8(unit.armor.armor_type.stable_tag());
+                hash.write_i32(i32::from(unit.armor.armor_points));
                 hash.write_u8(match unit.movement_class {
                     MovementClass::Ground => 0,
                     MovementClass::Air => 1,
@@ -6194,6 +6281,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u16(building.footprint.height);
                 hash.write_i32(building.health.current);
                 hash.write_i32(building.health.max);
+                hash.write_u8(building.damage_type.stable_tag());
+                hash.write_u8(building.armor.armor_type.stable_tag());
+                hash.write_i32(i32::from(building.armor.armor_points));
                 if let Some(profile) = building.production {
                     hash.write_u8(1);
                     hash.write_u16(profile.initial_delay_ticks);
@@ -6236,6 +6326,15 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                             .expect("production building missing attack target mask")
                             .bits(),
                     );
+                    let production_damage_type = building
+                        .production_damage_type
+                        .expect("production building missing unit damage type");
+                    let production_armor = building
+                        .production_armor
+                        .expect("production building missing unit armor profile");
+                    hash.write_u8(production_damage_type.stable_tag());
+                    hash.write_u8(production_armor.armor_type.stable_tag());
+                    hash.write_i32(i32::from(production_armor.armor_points));
                     if let Some(spellcasting) = building.production_spellcasting {
                         hash.write_u64(0x5350_454c_4c50_524f);
                         hash.write_i32(spellcasting.mana.maximum);
@@ -6312,6 +6411,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
+                hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
                 hash.write_u64(projectile.projectile.launch_tick);
@@ -6324,6 +6424,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_i32(projectile.projectile.damage);
+                hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
                 hash.write_i32(projectile.projectile.destination.x);
@@ -6340,6 +6441,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
+                hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
                 hash.write_u64(projectile.projectile.launch_tick);
@@ -6423,6 +6525,8 @@ struct CanonicalUnit {
     health: Health,
     attack: AttackProfile,
     attack_targets: AttackTargetMask,
+    damage_type: DamageType,
+    armor: ArmorProfile,
     movement_class: MovementClass,
     movement: MovementProfile,
     cooldown: AttackCooldown,
@@ -6451,9 +6555,13 @@ struct CanonicalBuilding {
     production_collision_radius: Option<CollisionRadius>,
     production_movement_class: Option<MovementClass>,
     production_attack_targets: Option<AttackTargetMask>,
+    production_damage_type: Option<DamageType>,
+    production_armor: Option<ArmorProfile>,
     production_spellcasting: Option<SpellcastingProfile>,
     attack: Option<AttackProfile>,
     attack_targets: Option<AttackTargetMask>,
+    damage_type: DamageType,
+    armor: ArmorProfile,
     cooldown: Option<AttackCooldown>,
     target: Option<TargetState>,
     spawn_tick: Option<SpawnTick>,

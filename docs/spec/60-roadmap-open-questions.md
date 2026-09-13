@@ -232,7 +232,6 @@ Important compatibility areas likely include:
 - attack-building target priorities;
 - production timing;
 - building footprints/spacing;
-- armor/damage types;
 - special abilities;
 - spawn congestion;
 - caging/attack soaking nuances;
@@ -321,8 +320,11 @@ Terrain-height combat is executable as well. The sim loads the committed W3E-der
 
 Air/ground unit classes are executable. Every combat unit has an authoritative `Ground` or `Air` movement class and every ordinary attack source has an explicit ground-unit/air-unit/building target mask. Ground units retain the existing topology, building-blocker, radius-clearance, and collision behavior. Air units ignore ground blockers and connected components, move directly within map bounds, and collide only with other air units; they do not block ground units or building placement. Target masks are enforced consistently through acquisition/retention/retaliation, attack intent, ballistic splash, and bounce chains, and all new class/filter state participates in the canonical checksum. The 3D presentation offsets air units above terrain so the authoritative class is visually inspectable.
 
+Damage/armor classes are executable from extracted Castle Fight data. The sim loads all six map-authored `DamageBonus*` rows from `war3mapMisc.txt`, retains Warcraft's 100%-all Chaos baseline and 0.06 numeric-armor coefficient where the map supplies no override, and carries attack type through persistent projectile/bounce/splash state. Imported units, production buildings, and Watch/Poof towers now carry their extracted attack type, defense type, and base armor. Ordinary attacks combine the type table with numeric armor; ordinary spell effects use the extracted `Spells` row while ignoring numeric armor. These fields participate in canonical checksums.
+
 Compatibility work still needs to establish:
 
+- exact Warcraft rounding/minimum-damage semantics at type/armor boundaries and a fixed-point representation for future fractional armor modifiers; current imported base armor is integral;
 - attack windup and backswing details;
 - exact canonical ordering for otherwise simultaneous strikes beyond the stable-ID fallback;
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;

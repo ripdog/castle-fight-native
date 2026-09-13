@@ -1,5 +1,6 @@
 mod components;
-mod fixture;
+mod content;
+mod damage;
 mod math;
 mod simulation;
 mod spatial;
@@ -13,7 +14,15 @@ pub use components::{
     MovementProfile, ProductionProfile, SimId, SpellcastingProfile, StatusState, Team,
     UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
-pub use fixture::{populate_crossing_crowd, populate_dense_cage_battle, populate_lane_battle};
+pub use content::{
+    CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_SIMULATION_HZ,
+    CastleFightProductionDefinition, CastleFightProductionKind, CastleFightTowerDefinition,
+    CastleFightTowerKind, CastleFightUnitDefinition, CastleFightUnitKind,
+    castle_fight_damage_rules,
+};
+pub use damage::{
+    ArmorProfile, ArmorType, DAMAGE_MULTIPLIER_SCALE, DamageRules, DamageRulesLoadError, DamageType,
+};
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuildingPlacementError, BuildingView,
@@ -42,6 +51,81 @@ mod tests {
                 cooldown_ticks: 10,
             },
             movement: MovementProfile { speed_per_tick: 0 },
+        }
+    }
+
+    fn populate_crossing_test_units(simulation: &mut Simulation, total_units: usize) {
+        assert!(total_units >= 2 && total_units.is_multiple_of(2));
+        let per_team = total_units / 2;
+        let columns = 50usize;
+        let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+        let center_x = 60 * SUBUNITS_PER_WORLD_UNIT;
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 0,
+            range: SUBUNITS_PER_WORLD_UNIT,
+            acquisition_range: 4 * SUBUNITS_PER_WORLD_UNIT,
+            cooldown_ticks: 30,
+        };
+        let movement = MovementProfile {
+            speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+        };
+        for team in 0..2u8 {
+            for index in 0..per_team {
+                let column = (index % columns) as i32;
+                let row = (index / columns) as i32;
+                let y = (row - per_team.div_ceil(columns) as i32 / 2) * spacing;
+                let x = if team == 0 {
+                    center_x - 4 * SUBUNITS_PER_WORLD_UNIT - column * spacing
+                } else {
+                    center_x + 4 * SUBUNITS_PER_WORLD_UNIT + column * spacing
+                };
+                simulation.spawn_unit(UnitSpawn {
+                    team: Team(team),
+                    position: SimPoint::new(x, y),
+                    health: 10_000,
+                    attack,
+                    movement,
+                });
+            }
+        }
+    }
+
+    fn populate_lane_test_units(simulation: &mut Simulation, total_units: usize) {
+        assert!(total_units >= 2 && total_units.is_multiple_of(2));
+        let per_team = total_units / 2;
+        let columns = 32usize;
+        let spacing = 3 * SUBUNITS_PER_WORLD_UNIT / 4;
+        let front_left = 48 * SUBUNITS_PER_WORLD_UNIT;
+        let front_right = 72 * SUBUNITS_PER_WORLD_UNIT;
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 5,
+            range: 2 * SUBUNITS_PER_WORLD_UNIT,
+            acquisition_range: 8 * SUBUNITS_PER_WORLD_UNIT,
+            cooldown_ticks: 10,
+        };
+        let movement = MovementProfile {
+            speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+        };
+        for team in 0..2u8 {
+            for index in 0..per_team {
+                let column = (index % columns) as i32;
+                let row = (index / columns) as i32;
+                let y = (row - per_team.div_ceil(columns) as i32 / 2) * spacing;
+                let x = if team == 0 {
+                    front_left - column * spacing
+                } else {
+                    front_right + column * spacing
+                };
+                simulation.spawn_unit(UnitSpawn {
+                    team: Team(team),
+                    position: SimPoint::new(x, y),
+                    health: 10_000,
+                    attack,
+                    movement,
+                });
+            }
         }
     }
 
@@ -201,6 +285,194 @@ mod tests {
             attack_targets,
             ..UnitGameplayProperties::default()
         }
+    }
+
+    #[test]
+    fn imported_melee_damage_uses_castle_fight_type_and_armor_rules() {
+        let mut sim = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            2,
+            CombatRules {
+                damage_rules: castle_fight_damage_rules(),
+                ..CombatRules::default()
+            },
+        );
+        let footman = CastleFightUnitKind::Footman.definition();
+        let catapult = CastleFightUnitKind::Catapult.definition();
+        sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(40 * SUBUNITS_PER_WORLD_UNIT, 0),
+                footman.template(),
+            ),
+            footman.gameplay_properties(),
+        );
+        let target = sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(1),
+                SimPoint::new(80 * SUBUNITS_PER_WORLD_UNIT, 0),
+                catapult.template(),
+            ),
+            catapult.gameplay_properties(),
+        );
+
+        sim.step();
+        sim.step();
+        // 26 Normal * 175% vs Medium, then 5 armor => exactly 35 after rounding.
+        assert_eq!(sim.unit(target).unwrap().health, catapult.health - 35);
+    }
+
+    #[test]
+    fn imported_projectile_preserves_damage_type_until_impact() {
+        let mut sim = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            2,
+            CombatRules {
+                damage_rules: castle_fight_damage_rules(),
+                ..CombatRules::default()
+            },
+        );
+        let ranger = CastleFightUnitKind::Ranger.definition();
+        let footman = CastleFightUnitKind::Footman.definition();
+        sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(40 * SUBUNITS_PER_WORLD_UNIT, 0),
+                ranger.template(),
+            ),
+            ranger.gameplay_properties(),
+        );
+        let target = sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(1),
+                SimPoint::new(80 * SUBUNITS_PER_WORLD_UNIT, 0),
+                footman.template(),
+            ),
+            footman.gameplay_properties(),
+        );
+
+        for _ in 0..5 {
+            sim.step();
+        }
+        // 65 Pierce * 70% vs Large, then 4 armor => 37 damage after rounding.
+        assert_eq!(sim.unit(target).unwrap().health, footman.health - 37);
+    }
+
+    #[test]
+    fn imported_siege_damage_uses_fortified_multiplier_on_buildings() {
+        let mut sim = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            2,
+            CombatRules {
+                damage_rules: castle_fight_damage_rules(),
+                ..CombatRules::default()
+            },
+        );
+        let catapult = CastleFightUnitKind::Catapult.definition();
+        sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(40 * SUBUNITS_PER_WORLD_UNIT, 0),
+                catapult.template(),
+            ),
+            catapult.gameplay_properties(),
+        );
+        let tower = CastleFightTowerKind::WatchTower.definition();
+        let target = sim.spawn_building_with_properties(
+            tower.spawn(Team(1), BuildingFootprint::new(80, 0, 4, 4)),
+            tower.gameplay_properties(),
+        );
+
+        for _ in 0..10 {
+            sim.step();
+        }
+        // 135 Siege * 160% vs Fortified, then 5 armor => 166 damage after rounding.
+        assert_eq!(sim.building(target).unwrap().health, tower.health - 166);
+    }
+
+    #[test]
+    fn castle_fight_spell_damage_uses_spell_row_but_ignores_numeric_armor() {
+        let mut sim = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            2,
+            CombatRules {
+                damage_rules: castle_fight_damage_rules(),
+                ..CombatRules::default()
+            },
+        );
+        sim.spawn_building(spell_building(
+            0,
+            BuildingFootprint::new(10, 0, 1, 1),
+            SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 1,
+                    starting: 1,
+                    regen_per_tick: 0,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(0x4441_4d47),
+                    mana_cost: 1,
+                    cooldown_ticks: 30,
+                    range: 8 * SUBUNITS_PER_WORLD_UNIT,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                    effect: AbilityEffect::Damage { amount: 100 },
+                },
+            },
+        ));
+        let target = sim.spawn_unit_with_properties(
+            passive_unit(1, 15 * SUBUNITS_PER_WORLD_UNIT),
+            UnitGameplayProperties {
+                armor: ArmorProfile::new(ArmorType::Large, 4),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 9_900);
+    }
+
+    #[test]
+    fn imported_typed_battle_is_worker_count_independent() {
+        fn run(workers: usize) -> u64 {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                navigation_max: NavCell::new(500, 64),
+                team_objective: [SimPoint::new(500 * world, 0), SimPoint::new(0, 0)],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new_with_combat_rules(
+                config,
+                workers,
+                CombatRules {
+                    damage_rules: castle_fight_damage_rules(),
+                    ..CombatRules::default()
+                },
+            );
+            for team in 0..2u8 {
+                for (index, kind) in CastleFightUnitKind::ALL.into_iter().enumerate() {
+                    let definition = kind.definition();
+                    let x = if team == 0 {
+                        40 + index as i32 * 36
+                    } else {
+                        460 - index as i32 * 36
+                    };
+                    sim.spawn_unit_with_properties(
+                        UnitSpawn::from_template(
+                            Team(team),
+                            SimPoint::new(x * SUBUNITS_PER_WORLD_UNIT, 0),
+                            definition.template(),
+                        ),
+                        definition.gameplay_properties(),
+                    );
+                }
+            }
+            for _ in 0..120 {
+                sim.step();
+            }
+            sim.checksum()
+        }
+
+        assert_eq!(run(1), run(8));
     }
 
     fn air_unit(team: u8, position: SimPoint, speed_per_tick: i32) -> UnitSpawn {
@@ -480,6 +752,7 @@ mod tests {
         let rules = CombatRules {
             terrain_elevation: Some(original_map_terrain()),
             uphill_miss_chance_per_10k: UPHILL_MISS_CHANCE_SCALE,
+            ..CombatRules::default()
         };
         let mut sim = Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
         sim.spawn_unit_with_properties(
@@ -579,6 +852,7 @@ mod tests {
             let rules = CombatRules {
                 terrain_elevation: Some(original_map_terrain()),
                 uphill_miss_chance_per_10k: chance,
+                ..CombatRules::default()
             };
             let mut sim =
                 Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
@@ -627,6 +901,7 @@ mod tests {
         let rules = CombatRules {
             terrain_elevation: Some(original_map_terrain()),
             uphill_miss_chance_per_10k: UPHILL_MISS_CHANCE_SCALE,
+            ..CombatRules::default()
         };
         let mut sim = Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
         sim.spawn_unit(terrain_attacker(
@@ -662,6 +937,7 @@ mod tests {
         let rules = CombatRules {
             terrain_elevation: Some(original_map_terrain()),
             uphill_miss_chance_per_10k: UPHILL_MISS_CHANCE_SCALE,
+            ..CombatRules::default()
         };
         let mut sim = Simulation::new_with_combat_rules(original_map_terrain_config(), 2, rules);
         sim.spawn_building(attack_building(
@@ -703,6 +979,7 @@ mod tests {
             let rules = CombatRules {
                 terrain_elevation: Some(original_map_terrain()),
                 uphill_miss_chance_per_10k: 2_500,
+                ..CombatRules::default()
             };
             let mut sim =
                 Simulation::new_with_combat_rules(original_map_terrain_config(), workers, rules);
@@ -3294,7 +3571,7 @@ mod tests {
         let mut expected = None;
         for workers in [1, 2, 4, 8] {
             let mut sim = Simulation::new(SimulationConfig::default(), workers);
-            populate_crossing_crowd(&mut sim, 2_048);
+            populate_crossing_test_units(&mut sim, 2_048);
             for _ in 0..100 {
                 sim.step();
             }
@@ -4736,7 +5013,7 @@ mod tests {
         let mut expected = None;
         for workers in [1, 2, 4] {
             let mut sim = Simulation::new(SimulationConfig::default(), workers);
-            populate_lane_battle(&mut sim, 512);
+            populate_lane_test_units(&mut sim, 512);
             for _ in 0..200 {
                 sim.step();
             }

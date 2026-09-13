@@ -1,15 +1,12 @@
 use castle_fight_sim::{
-    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingGameplayProperties, BuildingPlacementError,
-    BuildingSpawn, CollisionRadius, CombatRules, CorpseDefinitionId, CorpseProfile, ManaProfile,
-    MovementClass, MovementProfile, NavCell, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId,
-    SimPoint, Simulation, SimulationConfig, SpellcastingProfile, Team, TerrainElevationMap,
-    UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    ArmorProfile, ArmorType, BuildingFootprint, BuildingGameplayProperties, BuildingPlacementError,
+    BuildingSpawn, CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind,
+    CombatRules, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
+    SimulationConfig, Team, TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
 };
 
 use crate::presentation::WorldMetrics;
 
-const SIMULATION_HZ_I32: i32 = 30;
 const NAV_CELL_WORLD: i32 = 32;
 const NAV_CELL_SUBUNITS: i32 = NAV_CELL_WORLD * SUBUNITS_PER_WORLD_UNIT;
 const MIDDLE_MIN_X: i32 = -128;
@@ -17,13 +14,6 @@ const MIDDLE_MAX_X: i32 = 127;
 const LANE_MIN_Y: i32 = -24;
 const LANE_MAX_Y: i32 = 23;
 const CASTLE_HEALTH: i32 = 20_000;
-const FOOTMAN_COLLISION_WORLD: i32 = 16;
-const RANGER_COLLISION_WORLD: i32 = 16;
-const CATAPULT_COLLISION_WORLD: i32 = 16;
-const ICE_TROLL_PRIEST_COLLISION_WORLD: i32 = 16;
-const GRYPHON_COLLISION_WORLD: i32 = 16;
-const TICKS_PER_SECOND: u16 = SIMULATION_HZ_I32 as u16;
-const PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
 // Visual-verification value only; the exact original Castle Fight uphill miss chance is still
 // compatibility data to recover.
 const DEMO_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
@@ -45,11 +35,23 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
     let combat_rules = CombatRules {
         terrain_elevation: Some(terrain.clone()),
         uphill_miss_chance_per_10k: DEMO_UPHILL_MISS_CHANCE_PER_10K,
+        damage_rules: castle_fight_damage_rules(),
     };
     let mut simulation = Simulation::new_with_combat_rules(config, workers, combat_rules);
 
-    simulation.spawn_building(passive_structure(Team(0), PLAYER_CASTLE, CASTLE_HEALTH));
-    simulation.spawn_building(passive_structure(Team(1), ENEMY_CASTLE, CASTLE_HEALTH));
+    let castle_properties = BuildingGameplayProperties {
+        damage_type: DamageType::Normal,
+        armor: ArmorProfile::new(ArmorType::Fortified, 5),
+        ..BuildingGameplayProperties::default()
+    };
+    simulation.spawn_building_with_properties(
+        passive_structure(Team(0), PLAYER_CASTLE, CASTLE_HEALTH),
+        castle_properties,
+    );
+    simulation.spawn_building_with_properties(
+        passive_structure(Team(1), ENEMY_CASTLE, CASTLE_HEALTH),
+        castle_properties,
+    );
 
     if let Some(unit_count) = stress_units {
         populate_render_stress_units(&mut simulation, unit_count);
@@ -57,15 +59,16 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
         for team in [Team(0), Team(1)] {
             let x = if team.0 == 0 { -152 } else { 148 };
             for (y, kind) in [
-                (-24, ProductionKind::Footman),
-                (-14, ProductionKind::Ranger),
-                (-4, ProductionKind::Catapult),
-                (6, ProductionKind::IceTrollPriest),
-                (16, ProductionKind::GryphonRider),
+                (-24, ProductionKind::Barracks),
+                (-14, ProductionKind::RangersHall),
+                (-4, ProductionKind::OrcishSiegeFactory),
+                (6, ProductionKind::IceTrollHut),
+                (16, ProductionKind::GryphonRock),
             ] {
+                let definition = kind.definition();
                 simulation.spawn_building_with_properties(
-                    production_structure(team, BuildingFootprint::new(x, y, 4, 4), kind),
-                    production_building_properties(kind),
+                    definition.spawn(team, BuildingFootprint::new(x, y, 4, 4)),
+                    definition.gameplay_properties(),
                 );
             }
         }
@@ -80,9 +83,9 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
 
 fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) {
     const COLUMNS: usize = 120;
-    const SPACING_WORLD: i32 = 10;
-    const START_X_WORLD: i32 = -600;
-    const START_Y_WORLD: i32 = -300;
+    const SPACING_WORLD: i32 = 40;
+    const START_X_WORLD: i32 = -2_400;
+    const START_Y_WORLD: i32 = -1_200;
 
     for index in 0..unit_count {
         let column = index % COLUMNS;
@@ -91,27 +94,12 @@ fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) 
             (START_X_WORLD + column as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
             (START_Y_WORLD + row as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
         );
-        let delivery = if index % 2 == 0 {
-            AttackDelivery::Melee
-        } else {
-            AttackDelivery::RangedGuaranteedHit {
-                speed_per_tick: PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
-                    / SIMULATION_HZ_I32,
-            }
-        };
-        simulation.spawn_unit(UnitSpawn {
-            team: Team((index & 1) as u8),
-            position,
-            health: 100,
-            attack: AttackProfile {
-                delivery,
-                damage: 0,
-                range: 0,
-                acquisition_range: 0,
-                cooldown_ticks: 1,
-            },
-            movement: MovementProfile { speed_per_tick: 0 },
-        });
+        let kind = CastleFightUnitKind::ALL[index % CastleFightUnitKind::ALL.len()];
+        let definition = kind.definition();
+        simulation.spawn_unit_with_properties(
+            UnitSpawn::from_template(Team((index & 1) as u8), position, definition.template()),
+            definition.gameplay_properties(),
+        );
     }
 }
 
@@ -189,137 +177,34 @@ fn passive_structure(team: Team, footprint: BuildingFootprint, health: i32) -> B
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProductionKind {
-    Footman,
-    Ranger,
-    Catapult,
-    IceTrollPriest,
-    GryphonRider,
-}
-
-impl ProductionKind {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Footman => "Barracks",
-            Self::Ranger => "Ranger's Hall",
-            Self::Catapult => "Orcish Siege Factory",
-            Self::IceTrollPriest => "Ice Troll Hut",
-            Self::GryphonRider => "Gryphon Rock",
-        }
-    }
-
-    const fn gold_cost(self) -> u16 {
-        match self {
-            Self::Footman => 100,
-            Self::Ranger => 200,
-            Self::Catapult => 380,
-            Self::IceTrollPriest => 175,
-            Self::GryphonRider => 250,
-        }
-    }
-
-    const fn building_health(self) -> i32 {
-        match self {
-            Self::Footman | Self::IceTrollPriest => 1_200,
-            Self::Ranger | Self::Catapult => 1_400,
-            Self::GryphonRider => 1_300,
-        }
-    }
-
-    const fn spawn_seconds(self) -> u16 {
-        match self {
-            Self::Footman => 20,
-            Self::Ranger => 32,
-            Self::Catapult => 34,
-            Self::IceTrollPriest => 23,
-            Self::GryphonRider => 27,
-        }
-    }
-}
+pub(crate) type ProductionKind = CastleFightProductionKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuildKind {
     Production(ProductionKind),
-    WatchTower,
-    PoofTower,
-    GlobalAreaSpell,
+    Tower(CastleFightTowerKind),
 }
 
 impl BuildKind {
     pub(crate) const fn label(self) -> &'static str {
         match self {
-            Self::Production(kind) => kind.label(),
-            Self::WatchTower => "Watch Tower",
-            Self::PoofTower => "Poof Tower",
-            Self::GlobalAreaSpell => "Global AOE Shrine",
+            Self::Production(kind) => kind.definition().name,
+            Self::Tower(kind) => kind.definition().name,
         }
     }
 
     pub(crate) const fn footprint_size(self) -> u16 {
         match self {
-            Self::Production(_) | Self::WatchTower | Self::PoofTower | Self::GlobalAreaSpell => 4,
+            Self::Production(kind) => kind.definition().footprint_size_cells,
+            Self::Tower(kind) => kind.definition().footprint_size_cells,
         }
     }
 
     pub(crate) const fn gold_cost(self) -> Option<u16> {
-        match self {
-            Self::Production(kind) => Some(kind.gold_cost()),
-            Self::WatchTower => Some(150),
-            Self::PoofTower => Some(230),
-            Self::GlobalAreaSpell => None,
-        }
-    }
-}
-
-fn biological_corpse_profile(definition: u32) -> CorpseProfile {
-    CorpseProfile {
-        definition: CorpseDefinitionId(definition),
-        // Extracted biological corpses persist for about 30 seconds including death/flesh/bone
-        // phases. The sim currently models this as one authoritative corpse lifetime.
-        lifetime_ticks: Some(u32::from(TICKS_PER_SECOND) * 30),
-    }
-}
-
-fn production_building_properties(kind: ProductionKind) -> BuildingGameplayProperties {
-    let (movement_class, attack_targets, corpse) = match kind {
-        ProductionKind::Footman => (
-            MovementClass::Ground,
-            AttackTargetMask::GROUND_AND_BUILDINGS,
-            Some(biological_corpse_profile(u32::from_be_bytes(*b"hfoo"))),
-        ),
-        ProductionKind::Ranger => (
-            MovementClass::Ground,
-            AttackTargetMask::ALL,
-            Some(biological_corpse_profile(u32::from_be_bytes(*b"e003"))),
-        ),
-        ProductionKind::Catapult => (
-            MovementClass::Ground,
-            AttackTargetMask::GROUND_AND_BUILDINGS,
-            None,
-        ),
-        ProductionKind::IceTrollPriest => (
-            MovementClass::Ground,
-            AttackTargetMask::ALL,
-            Some(biological_corpse_profile(u32::from_be_bytes(*b"n015"))),
-        ),
-        ProductionKind::GryphonRider => (MovementClass::Air, AttackTargetMask::ALL, None),
-    };
-    let collision_world = match kind {
-        ProductionKind::Footman => FOOTMAN_COLLISION_WORLD,
-        ProductionKind::Ranger => RANGER_COLLISION_WORLD,
-        ProductionKind::Catapult => CATAPULT_COLLISION_WORLD,
-        ProductionKind::IceTrollPriest => ICE_TROLL_PRIEST_COLLISION_WORLD,
-        ProductionKind::GryphonRider => GRYPHON_COLLISION_WORLD,
-    };
-    BuildingGameplayProperties {
-        production_unit: UnitGameplayProperties {
-            corpse,
-            collision_radius: Some(CollisionRadius(collision_world * SUBUNITS_PER_WORLD_UNIT)),
-            movement_class,
-            attack_targets,
-        },
-        ..BuildingGameplayProperties::default()
+        Some(match self {
+            Self::Production(kind) => kind.definition().gold_cost,
+            Self::Tower(kind) => kind.definition().gold_cost,
+        })
     }
 }
 
@@ -330,215 +215,20 @@ pub(crate) fn try_spawn_demo_building(
     kind: BuildKind,
 ) -> Result<SimId, BuildingPlacementError> {
     match kind {
-        BuildKind::Production(kind) => simulation.try_spawn_building_with_properties(
-            production_structure(team, footprint, kind),
-            production_building_properties(kind),
-        ),
-        BuildKind::WatchTower => simulation.try_spawn_building(attack_structure(
-            team,
-            footprint,
-            1_500,
-            watch_tower_attack(),
-        )),
-        BuildKind::PoofTower => simulation.try_spawn_building(attack_structure(
-            team,
-            footprint,
-            1_250,
-            poof_tower_attack(),
-        )),
-        BuildKind::GlobalAreaSpell => simulation.try_spawn_building(spell_structure(
-            team,
-            footprint,
-            global_area_spell_profile(),
-        )),
-    }
-}
-
-pub(crate) fn production_structure(
-    team: Team,
-    footprint: BuildingFootprint,
-    kind: ProductionKind,
-) -> BuildingSpawn {
-    let spawn_ticks = kind.spawn_seconds() * TICKS_PER_SECOND;
-    BuildingSpawn {
-        team,
-        footprint,
-        health: kind.building_health(),
-        production: Some(ProductionProfile {
-            initial_delay_ticks: spawn_ticks,
-            interval_ticks: spawn_ticks,
-            search_radius_cells: 12,
-            unit: unit_template(kind),
-        }),
-        attack: None,
-        spellcasting: None,
-    }
-}
-
-fn attack_structure(
-    team: Team,
-    footprint: BuildingFootprint,
-    health: i32,
-    attack: AttackProfile,
-) -> BuildingSpawn {
-    BuildingSpawn {
-        team,
-        footprint,
-        health,
-        production: None,
-        attack: Some(attack),
-        spellcasting: None,
-    }
-}
-
-fn spell_structure(
-    team: Team,
-    footprint: BuildingFootprint,
-    spellcasting: SpellcastingProfile,
-) -> BuildingSpawn {
-    BuildingSpawn {
-        team,
-        footprint,
-        health: 1_400,
-        production: None,
-        attack: None,
-        spellcasting: Some(spellcasting),
-    }
-}
-
-fn unit_template(kind: ProductionKind) -> UnitTemplate {
-    match kind {
-        ProductionKind::Footman => UnitTemplate {
-            health: 250,
-            attack: AttackProfile {
-                delivery: AttackDelivery::Melee,
-                // Extracted damage is 25-26 (25.5 average). The current sim has integer fixed
-                // damage, so use the nearest integer while preserving the extracted cadence.
-                damage: 26,
-                range: 90 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: 41, // 1.35 s at 30 Hz, rounded to nearest tick.
-            },
-            movement: movement_profile(270),
-        },
-        ProductionKind::Ranger => UnitTemplate {
-            health: 500,
-            attack: AttackProfile {
-                delivery: AttackDelivery::RangedGuaranteedHit {
-                    speed_per_tick: projectile_speed_per_tick(1_000),
-                },
-                damage: 65,
-                range: 425 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: 31, // 1.04 s at 30 Hz.
-            },
-            movement: movement_profile(300),
-        },
-        ProductionKind::Catapult => UnitTemplate {
-            health: 475,
-            attack: AttackProfile {
-                delivery: AttackDelivery::RangedBallistic {
-                    speed_per_tick: projectile_speed_per_tick(900),
-                    // Warcraft uses 60/110/160 radii with 100%/70%/35% falloff. The current
-                    // ballistic primitive has one radius, so preserve the extracted outer area;
-                    // tiered falloff remains a separate combat-model extension.
-                    impact_radius: 160 * SUBUNITS_PER_WORLD_UNIT,
-                },
-                damage: 135,
-                range: 1_000 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 1_200 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: 150, // 5.0 s.
-            },
-            movement: movement_profile(220),
-        },
-        ProductionKind::IceTrollPriest => UnitTemplate {
-            health: 350,
-            attack: AttackProfile {
-                delivery: AttackDelivery::RangedGuaranteedHit {
-                    speed_per_tick: projectile_speed_per_tick(1_200),
-                },
-                damage: 50,
-                range: 350 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: 54, // 1.8 s.
-            },
-            movement: movement_profile(270),
-        },
-        ProductionKind::GryphonRider => UnitTemplate {
-            health: 500,
-            attack: AttackProfile {
-                delivery: AttackDelivery::RangedGuaranteedHit {
-                    speed_per_tick: projectile_speed_per_tick(1_100),
-                },
-                // Extracted damage is 45-50 (47.5 average).
-                damage: 48,
-                range: 450 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: 60, // 2.0 s.
-            },
-            movement: movement_profile(320),
-        },
-    }
-}
-
-fn movement_profile(world_units_per_second: i32) -> MovementProfile {
-    MovementProfile {
-        speed_per_tick: world_units_per_second * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32,
-    }
-}
-
-fn projectile_speed_per_tick(world_units_per_second: i32) -> i32 {
-    world_units_per_second * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32
-}
-
-fn watch_tower_attack() -> AttackProfile {
-    AttackProfile {
-        delivery: AttackDelivery::RangedGuaranteedHit {
-            speed_per_tick: projectile_speed_per_tick(1_800),
-        },
-        // Extracted damage is 40-50 (45 average) at a 0.5 second cooldown = 90 DPS.
-        damage: 45,
-        range: 950 * SUBUNITS_PER_WORLD_UNIT,
-        acquisition_range: 1_000 * SUBUNITS_PER_WORLD_UNIT,
-        cooldown_ticks: 15,
-    }
-}
-
-fn poof_tower_attack() -> AttackProfile {
-    AttackProfile {
-        delivery: AttackDelivery::RangedBallistic {
-            speed_per_tick: projectile_speed_per_tick(900),
-            // WC3 authors 175/200/250 splash tiers at 100%/75%/45%. The current ballistic
-            // primitive has one radius, so retain the extracted outer radius until tiered
-            // splash falloff is represented authoritatively.
-            impact_radius: 250 * SUBUNITS_PER_WORLD_UNIT,
-        },
-        // Extracted damage is 156-171 (163.5 average); fixed integer damage rounds to 164.
-        damage: 164,
-        range: 800 * SUBUNITS_PER_WORLD_UNIT,
-        acquisition_range: 1_000 * SUBUNITS_PER_WORLD_UNIT,
-        cooldown_ticks: 95, // 3.15 seconds at 30 Hz, rounded to nearest whole tick.
-    }
-}
-
-fn global_area_spell_profile() -> SpellcastingProfile {
-    SpellcastingProfile {
-        mana: ManaProfile {
-            maximum: 180,
-            starting: 0,
-            regen_per_tick: 1,
-        },
-        ability: AutomaticAbilityProfile {
-            id: AbilityId(1_001),
-            mana_cost: 180,
-            cooldown_ticks: 1,
-            range: 0,
-            target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
-            effect: AbilityEffect::AreaDamage {
-                amount: 30,
-                radius: 50 * SUBUNITS_PER_WORLD_UNIT,
-            },
-        },
+        BuildKind::Production(kind) => {
+            let definition = kind.definition();
+            simulation.try_spawn_building_with_properties(
+                definition.spawn(team, footprint),
+                definition.gameplay_properties(),
+            )
+        }
+        BuildKind::Tower(kind) => {
+            let definition = kind.definition();
+            simulation.try_spawn_building_with_properties(
+                definition.spawn(team, footprint),
+                definition.gameplay_properties(),
+            )
+        }
     }
 }
 
@@ -558,17 +248,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn demo_exposes_every_verification_build_kind() {
+    fn demo_exposes_every_imported_build_kind() {
         let DemoWorld { mut simulation, .. } = create_demo_world(1, None);
         let kinds = [
-            BuildKind::Production(ProductionKind::Footman),
-            BuildKind::Production(ProductionKind::Ranger),
-            BuildKind::Production(ProductionKind::Catapult),
-            BuildKind::Production(ProductionKind::IceTrollPriest),
-            BuildKind::Production(ProductionKind::GryphonRider),
-            BuildKind::WatchTower,
-            BuildKind::PoofTower,
-            BuildKind::GlobalAreaSpell,
+            BuildKind::Production(ProductionKind::Barracks),
+            BuildKind::Production(ProductionKind::RangersHall),
+            BuildKind::Production(ProductionKind::OrcishSiegeFactory),
+            BuildKind::Production(ProductionKind::IceTrollHut),
+            BuildKind::Production(ProductionKind::GryphonRock),
+            BuildKind::Tower(CastleFightTowerKind::WatchTower),
+            BuildKind::Tower(CastleFightTowerKind::PoofTower),
         ];
 
         for (index, kind) in kinds.into_iter().enumerate() {
@@ -587,165 +276,16 @@ mod tests {
     }
 
     #[test]
-    fn production_roster_uses_extracted_castle_fight_values() {
-        let cases = [
-            (
-                ProductionKind::Footman,
-                100,
-                1_200,
-                20,
-                250,
-                270,
-                90,
-                800,
-                41,
-                MovementClass::Ground,
-                AttackTargetMask::GROUND_AND_BUILDINGS,
-            ),
-            (
-                ProductionKind::Ranger,
-                200,
-                1_400,
-                32,
-                500,
-                300,
-                425,
-                800,
-                31,
-                MovementClass::Ground,
-                AttackTargetMask::ALL,
-            ),
-            (
-                ProductionKind::Catapult,
-                380,
-                1_400,
-                34,
-                475,
-                220,
-                1_000,
-                1_200,
-                150,
-                MovementClass::Ground,
-                AttackTargetMask::GROUND_AND_BUILDINGS,
-            ),
-            (
-                ProductionKind::IceTrollPriest,
-                175,
-                1_200,
-                23,
-                350,
-                270,
-                350,
-                800,
-                54,
-                MovementClass::Ground,
-                AttackTargetMask::ALL,
-            ),
-            (
-                ProductionKind::GryphonRider,
-                250,
-                1_300,
-                27,
-                500,
-                320,
-                450,
-                800,
-                60,
-                MovementClass::Air,
-                AttackTargetMask::ALL,
-            ),
-        ];
+    fn build_selectors_read_names_and_costs_from_imported_content() {
+        let barracks = BuildKind::Production(ProductionKind::Barracks);
+        assert_eq!(barracks.label(), "Barracks");
+        assert_eq!(barracks.gold_cost(), Some(100));
+        assert_eq!(barracks.footprint_size(), 4);
 
-        for (
-            kind,
-            gold,
-            building_health,
-            spawn_seconds,
-            unit_health,
-            move_speed,
-            range,
-            acquisition,
-            cooldown,
-            movement_class,
-            attack_targets,
-        ) in cases
-        {
-            let building =
-                production_structure(Team(0), BuildingFootprint::new(-220, 0, 4, 4), kind);
-            let production = building.production.expect("production profile missing");
-            let properties = production_building_properties(kind).production_unit;
-            assert_eq!(kind.gold_cost(), gold);
-            assert_eq!(building.health, building_health);
-            assert_eq!(
-                production.initial_delay_ticks,
-                spawn_seconds * TICKS_PER_SECOND
-            );
-            assert_eq!(production.interval_ticks, spawn_seconds * TICKS_PER_SECOND);
-            assert_eq!(production.unit.health, unit_health);
-            assert_eq!(
-                production.unit.movement.speed_per_tick,
-                move_speed * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32
-            );
-            assert_eq!(
-                production.unit.attack.range,
-                range * SUBUNITS_PER_WORLD_UNIT
-            );
-            assert_eq!(
-                production.unit.attack.acquisition_range,
-                acquisition * SUBUNITS_PER_WORLD_UNIT
-            );
-            assert_eq!(production.unit.attack.cooldown_ticks, cooldown);
-            assert_eq!(properties.movement_class, movement_class);
-            assert_eq!(properties.attack_targets, attack_targets);
-            assert_eq!(
-                properties.collision_radius,
-                Some(CollisionRadius(16 * SUBUNITS_PER_WORLD_UNIT))
-            );
-        }
-    }
-
-    #[test]
-    fn towers_use_extracted_castle_fight_values() {
-        assert_eq!(BuildKind::WatchTower.label(), "Watch Tower");
-        assert_eq!(BuildKind::WatchTower.gold_cost(), Some(150));
-        assert_eq!(BuildKind::WatchTower.footprint_size(), 4);
-        let watch = watch_tower_attack();
-        assert_eq!(watch.damage, 45);
-        assert_eq!(watch.range, 950 * SUBUNITS_PER_WORLD_UNIT);
-        assert_eq!(watch.acquisition_range, 1_000 * SUBUNITS_PER_WORLD_UNIT);
-        assert_eq!(watch.cooldown_ticks, 15);
-        assert_eq!(
-            watch.delivery,
-            AttackDelivery::RangedGuaranteedHit {
-                speed_per_tick: projectile_speed_per_tick(1_800),
-            }
-        );
-
-        assert_eq!(BuildKind::PoofTower.label(), "Poof Tower");
-        assert_eq!(BuildKind::PoofTower.gold_cost(), Some(230));
-        assert_eq!(BuildKind::PoofTower.footprint_size(), 4);
-        let poof = poof_tower_attack();
-        assert_eq!(poof.damage, 164);
-        assert_eq!(poof.range, 800 * SUBUNITS_PER_WORLD_UNIT);
-        assert_eq!(poof.acquisition_range, 1_000 * SUBUNITS_PER_WORLD_UNIT);
-        assert_eq!(poof.cooldown_ticks, 95);
-        assert_eq!(
-            poof.delivery,
-            AttackDelivery::RangedBallistic {
-                speed_per_tick: projectile_speed_per_tick(900),
-                impact_radius: 250 * SUBUNITS_PER_WORLD_UNIT,
-            }
-        );
-
-        let footprint = BuildingFootprint::new(-220, 0, 4, 4);
-        assert_eq!(
-            attack_structure(Team(0), footprint, 1_500, watch).health,
-            1_500
-        );
-        assert_eq!(
-            attack_structure(Team(0), footprint, 1_250, poof).health,
-            1_250
-        );
+        let watch = BuildKind::Tower(CastleFightTowerKind::WatchTower);
+        assert_eq!(watch.label(), "Watch Tower");
+        assert_eq!(watch.gold_cost(), Some(150));
+        assert_eq!(watch.footprint_size(), 4);
     }
 
     #[test]
