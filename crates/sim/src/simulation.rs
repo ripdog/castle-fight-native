@@ -174,6 +174,21 @@ pub struct AbilityCastEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChainLightningEvent {
+    pub source: SimId,
+    pub ability: AbilityId,
+    points: [SimPoint; MAX_BOUNCE_HITS + 1],
+    point_count: u8,
+}
+
+impl ChainLightningEvent {
+    #[must_use]
+    pub fn points(&self) -> &[SimPoint] {
+        &self.points[..usize::from(self.point_count)]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectileViewKind {
     GuaranteedHit {
         target: SimId,
@@ -278,6 +293,7 @@ pub struct Simulation {
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
+    last_chain_lightnings: Vec<ChainLightningEvent>,
     next_tick: u64,
     next_id: u64,
 }
@@ -330,6 +346,7 @@ impl Simulation {
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
+            last_chain_lightnings: Vec::new(),
             next_tick: 0,
             next_id: 1,
         }
@@ -806,6 +823,7 @@ impl Simulation {
     pub fn step(&mut self) -> TickResult {
         self.last_attacks.clear();
         self.last_ability_casts.clear();
+        self.last_chain_lightnings.clear();
         let tick_start = Instant::now();
         let completed_tick = self.next_tick;
 
@@ -998,15 +1016,23 @@ impl Simulation {
                     )
                     .is_some()
                     {
-                        apply_pending_attack_effects(
+                        if let Some(event) = apply_pending_attack_effects(
                             target,
                             snapshot.projectile.on_hit,
-                            snapshot.projectile.source_team,
-                            completed_tick,
-                            &mut units,
-                            &mut unit_health,
-                            self.combat_rules.damage_rules,
-                        );
+                            PendingAttackEffectSource {
+                                id: snapshot.projectile.source,
+                                position: snapshot.projectile.launch_position,
+                                team: snapshot.projectile.source_team,
+                            },
+                            PendingAttackEffectState {
+                                completed_tick,
+                                units: &mut units,
+                                unit_health: &mut unit_health,
+                                damage_rules: self.combat_rules.damage_rules,
+                            },
+                        ) {
+                            self.last_chain_lightnings.push(event);
+                        }
                         projectile_impacts += 1;
                         projectile_effects += 1;
                     } else {
@@ -1163,15 +1189,23 @@ impl Simulation {
                             },
                         );
                         debug_assert!(applied.is_some());
-                        apply_pending_attack_effects(
+                        if let Some(event) = apply_pending_attack_effects(
                             intent.target,
                             on_hit,
-                            intent.source_team,
-                            completed_tick,
-                            &mut units,
-                            &mut unit_health,
-                            self.combat_rules.damage_rules,
-                        );
+                            PendingAttackEffectSource {
+                                id: intent.source_id,
+                                position: intent.source_position,
+                                team: intent.source_team,
+                            },
+                            PendingAttackEffectState {
+                                completed_tick,
+                                units: &mut units,
+                                unit_health: &mut unit_health,
+                                damage_rules: self.combat_rules.damage_rules,
+                            },
+                        ) {
+                            self.last_chain_lightnings.push(event);
+                        }
                         if let (
                             AttackSourceIndex::Unit(source_index),
                             TargetIndex::Unit(target_index),
@@ -1745,6 +1779,11 @@ impl Simulation {
     #[must_use]
     pub fn ability_casts_last_tick(&self) -> &[AbilityCastEvent] {
         &self.last_ability_casts
+    }
+
+    #[must_use]
+    pub fn chain_lightnings_last_tick(&self) -> &[ChainLightningEvent] {
+        &self.last_chain_lightnings
     }
 
     #[must_use]
@@ -6193,22 +6232,38 @@ fn apply_damage_to_target(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PendingAttackEffectSource {
+    id: SimId,
+    position: SimPoint,
+    team: Team,
+}
+
+struct PendingAttackEffectState<'a> {
+    completed_tick: u64,
+    units: &'a mut [UnitSnapshot],
+    unit_health: &'a mut [i32],
+    damage_rules: DamageRules,
+}
+
 fn apply_pending_attack_effects(
     target: TargetIndex,
     effects: PendingAttackEffects,
-    source_team: Team,
-    completed_tick: u64,
-    units: &mut [UnitSnapshot],
-    unit_health: &mut [i32],
-    damage_rules: DamageRules,
-) -> bool {
+    source: PendingAttackEffectSource,
+    state: PendingAttackEffectState<'_>,
+) -> Option<ChainLightningEvent> {
+    let PendingAttackEffectState {
+        completed_tick,
+        units,
+        unit_health,
+        damage_rules,
+    } = state;
     let TargetIndex::Unit(index) = target else {
-        return false;
+        return None;
     };
     if unit_health[index] <= 0 {
-        return false;
+        return None;
     }
-    let mut applied = false;
     if effects.stun_duration_ticks > 0 {
         let stunned_until_tick = completed_tick
             .checked_add(u64::from(effects.stun_duration_ticks))
@@ -6217,13 +6272,16 @@ fn apply_pending_attack_effects(
             .status
             .stunned_until_tick
             .max(stunned_until_tick);
-        applied = true;
     }
+    let mut chain_lightning = None;
     if let Some(effect) = effects.triggered_spell {
         match effect {
             TriggeredAttackEffect::ChainLightning(profile) => {
                 let mut hit = [SimId(0); MAX_BOUNCE_HITS];
+                let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
+                points[0] = source.position;
                 let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);
+                let mut point_count = 1usize;
                 if max_targets > 0 {
                     let mut current_index = index;
                     let mut damage = profile.initial_damage;
@@ -6237,7 +6295,8 @@ fn apply_pending_attack_effects(
                             .checked_sub(adjusted)
                             .expect("Chain Lightning damage overflow");
                         hit[hit_index] = units[current_index].id;
-                        applied = true;
+                        points[point_count] = units[current_index].position;
+                        point_count += 1;
                         if hit_index + 1 >= max_targets {
                             break;
                         }
@@ -6248,7 +6307,7 @@ fn apply_pending_attack_effects(
                             .enumerate()
                             .filter(|(candidate_index, candidate)| {
                                 unit_health[*candidate_index] > 0
-                                    && candidate.team != source_team
+                                    && candidate.team != source.team
                                     && profile.targets.can_target_unit(candidate.movement_class)
                                     && !hit[..=hit_index].contains(&candidate.id)
                                     && origin.distance_sq(candidate.position) <= radius_sq
@@ -6271,6 +6330,15 @@ fn apply_pending_attack_effects(
                         }
                         current_index = next_index;
                     }
+                }
+                if point_count > 1 {
+                    chain_lightning = Some(ChainLightningEvent {
+                        source: source.id,
+                        ability: profile.ability,
+                        points,
+                        point_count: u8::try_from(point_count)
+                            .expect("Chain Lightning point count fits in u8"),
+                    });
                 }
             }
             TriggeredAttackEffect::EntanglingRoots(profile) => {
@@ -6295,12 +6363,11 @@ fn apply_pending_attack_effects(
                         completed_tick,
                         dot_expires_tick,
                     );
-                    applied = true;
                 }
             }
         }
     }
-    applied
+    chain_lightning
 }
 
 fn apply_ability_effect_to_unit(

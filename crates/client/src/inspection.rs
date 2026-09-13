@@ -527,6 +527,7 @@ mod tests {
             projectiles: BTreeMap::new(),
             attacks: Vec::new(),
             ability_casts: Vec::new(),
+            chain_lightnings: Vec::new(),
         };
         PresentationSamples::new(snapshot)
     }

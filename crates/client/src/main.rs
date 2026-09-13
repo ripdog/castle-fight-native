@@ -6,6 +6,7 @@ mod inspection;
 mod presentation;
 mod terrain;
 mod unit_models;
+mod wc3_effects;
 
 use bevy::{
     asset::AssetPlugin,

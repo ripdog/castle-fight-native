@@ -9,8 +9,8 @@ use bevy::{
     window::PrimaryWindow,
 };
 use castle_fight_sim::{
-    AbilityEffect, BuildingFootprint, MovementClass, ProjectileView, ProjectileViewKind,
-    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig, Team,
+    AbilityCastTarget, AbilityEffect, BuildingFootprint, MovementClass, ProjectileView,
+    ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig, Team,
 };
 
 use crate::{
@@ -18,6 +18,10 @@ use crate::{
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::UnitModelSet,
+    wc3_effects::{
+        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3VisualModel, Wc3VisualSet,
+        emit_wc3_particles, update_wc3_particles,
+    },
 };
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
@@ -36,6 +40,8 @@ const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
 const PROJECTILE_IMPACT_SECONDS: f32 = 0.22;
 const PROJECTILE_IMPACT_RADIUS: f32 = 8.0;
 const ABILITY_AREA_EFFECT_SECONDS: f32 = 0.65;
+const ABILITY_MODEL_EFFECT_SECONDS: f32 = 0.9;
+const LIGHTNING_EFFECT_SECONDS: f32 = 0.22;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
 const HEALTH_BAR_DEPTH: f32 = 6.0;
@@ -50,6 +56,7 @@ const MISS_INDICATOR_SECONDS: f32 = 1.0;
 const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
 const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
 const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
+const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -252,6 +259,7 @@ struct RenderMap {
     buildings: HashMap<SimId, PresentedEntry>,
     corpses: HashMap<SimId, Entity>,
     projectiles: HashMap<SimId, PresentedProjectile>,
+    stun_effects: HashMap<SimId, Entity>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -284,6 +292,26 @@ struct AbilityAreaImpact {
 
 #[derive(Resource, Default)]
 struct AbilityAreaImpacts(Vec<AbilityAreaImpact>);
+
+#[derive(Debug, Clone, Copy)]
+struct LightningImpact {
+    start: Vec3,
+    end: Vec3,
+    seed: u32,
+    remaining: f32,
+}
+
+#[derive(Resource, Default)]
+struct LightningImpacts(Vec<LightningImpact>);
+
+#[derive(Debug, Clone, Copy)]
+struct TimedWc3Effect {
+    entity: Entity,
+    remaining: f32,
+}
+
+#[derive(Resource, Default)]
+struct TimedWc3Effects(Vec<TimedWc3Effect>);
 
 #[derive(Resource)]
 struct DebugPresentation {
@@ -398,10 +426,13 @@ impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RenderMap>()
             .init_resource::<UnitModelSet>()
+            .init_resource::<Wc3VisualSet>()
             .init_resource::<FpsDisplay>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
+            .init_resource::<LightningImpacts>()
+            .init_resource::<TimedWc3Effects>()
             .init_gizmo_group::<HealthBarGizmos>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .insert_resource(DebugPresentation {
@@ -421,19 +452,31 @@ impl Plugin for CastlePresentationPlugin {
                     update_imported_unit_animations,
                     spawn_miss_indicators,
                     interpolate_render_transforms,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                Update,
+                (
                     update_miss_indicators,
                     animate_unit_weapons,
                     animate_air_wings,
                     age_death_remnants,
                     age_projectile_impacts,
                     age_ability_area_impacts,
+                    age_lightning_impacts,
+                    age_timed_wc3_effects,
+                    update_wc3_particles,
+                    emit_wc3_particles,
                     draw_projectile_effects,
+                    draw_lightning_effects,
                     draw_health_bars,
                     draw_presentation_gizmos,
                     sample_display_fps,
                     update_window_title,
                 )
-                    .chain(),
+                    .chain()
+                    .after(interpolate_render_transforms),
             );
     }
 }
@@ -441,6 +484,7 @@ impl Plugin for CastlePresentationPlugin {
 fn setup_scene(
     mut commands: Commands,
     mut unit_models: ResMut<UnitModelSet>,
+    mut wc3_visuals: ResMut<Wc3VisualSet>,
     world: (
         Res<WorldMetrics>,
         Res<TerrainSurface>,
@@ -457,6 +501,7 @@ fn setup_scene(
     let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
     let (asset_server, mut meshes, mut materials) = assets;
     *unit_models = UnitModelSet::load_default(&asset_server);
+    *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
     let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
     health_bar_config.line.width = 6.0;
     health_bar_config.line.perspective = false;
@@ -483,6 +528,7 @@ fn setup_scene(
     let ballistic_projectile_mesh = meshes.add(Cuboid::new(3.8, 3.8, 3.8));
     let bounce_projectile_mesh = meshes.add(Cuboid::new(2.1, 2.1, 4.8));
     let corpse_mesh = meshes.add(Cuboid::new(CORPSE_SIZE, CORPSE_THICKNESS, CORPSE_SIZE));
+    commands.insert_resource(Wc3ParticleAssets::new(&mut meshes));
 
     let unit_materials = [
         materials.add(StandardMaterial {
@@ -1303,21 +1349,37 @@ fn spawn_building_spell_details(
     ));
 }
 
+type SyncRenderWorld<'w> = (
+    Res<'w, WorldMetrics>,
+    Res<'w, TerrainSurface>,
+    Res<'w, PresentationAssets>,
+    Res<'w, UnitModelSet>,
+    Res<'w, Wc3VisualSet>,
+);
+
+type SyncRenderEffects<'w> = (
+    ResMut<'w, DeathRemnants>,
+    ResMut<'w, ProjectileImpacts>,
+    ResMut<'w, AbilityAreaImpacts>,
+    ResMut<'w, LightningImpacts>,
+    ResMut<'w, TimedWc3Effects>,
+);
+
 fn sync_render_entities(
     mut commands: Commands,
     samples: Res<PresentationSamples>,
-    world: (
-        Res<WorldMetrics>,
-        Res<TerrainSurface>,
-        Res<PresentationAssets>,
-        Res<UnitModelSet>,
-    ),
+    world: SyncRenderWorld<'_>,
     mut render_map: ResMut<RenderMap>,
-    mut remnants: ResMut<DeathRemnants>,
-    mut projectile_impacts: ResMut<ProjectileImpacts>,
-    mut ability_impacts: ResMut<AbilityAreaImpacts>,
+    effects: SyncRenderEffects<'_>,
 ) {
-    let (metrics, terrain, assets, unit_models) = world;
+    let (metrics, terrain, assets, unit_models, wc3_visuals) = world;
+    let (
+        mut remnants,
+        mut projectile_impacts,
+        mut ability_impacts,
+        mut lightning_impacts,
+        mut timed_effects,
+    ) = effects;
     if !samples.is_changed() {
         return;
     }
@@ -1404,18 +1466,77 @@ fn sync_render_entities(
         }
     }
 
+    for chain in &samples.current.chain_lightnings {
+        if !wc3_visuals.is_chain_lightning(chain.ability.0) {
+            continue;
+        }
+        for (segment_index, points) in chain.points().windows(2).enumerate() {
+            lightning_impacts.0.push(LightningImpact {
+                start: sim_point_to_terrain_world(points[0], &terrain) + Vec3::Y * 8.0,
+                end: sim_point_to_terrain_world(points[1], &terrain) + Vec3::Y * 8.0,
+                seed: chain.ability.0
+                    ^ chain.source.0 as u32
+                    ^ samples.current.tick as u32
+                    ^ lightning_segment_seed(segment_index as u32, 0x9e37_79b9),
+                remaining: LIGHTNING_EFFECT_SECONDS,
+            });
+        }
+    }
+
     for cast in &samples.current.ability_casts {
-        let AbilityEffect::AreaDamage { radius, .. } = cast.effect else {
-            continue;
-        };
-        let Some(target_position) = cast.target_position else {
-            continue;
-        };
-        ability_impacts.0.push(AbilityAreaImpact {
-            position: sim_point_to_terrain_world(target_position, &terrain) + Vec3::Y * 2.0,
-            radius: radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
-            remaining: ABILITY_AREA_EFFECT_SECONDS,
-        });
+        let source_position =
+            entity_render_position(cast.source, &samples, &metrics, &terrain, 1.0);
+        let target_position = cast
+            .target_position
+            .map(|position| sim_point_to_terrain_world(position, &terrain))
+            .or_else(|| match cast.target {
+                AbilityCastTarget::Unit(target) => {
+                    entity_render_position(target, &samples, &metrics, &terrain, 1.0)
+                }
+                AbilityCastTarget::AllEnemyUnits => None,
+            });
+
+        if wc3_visuals.is_chain_lightning(cast.ability.0)
+            && let (Some(start), Some(end)) = (source_position, target_position)
+        {
+            lightning_impacts.0.push(LightningImpact {
+                start: start + Vec3::Y * 8.0,
+                end: end + Vec3::Y * 8.0,
+                seed: cast.ability.0 ^ cast.source.0 as u32 ^ samples.current.tick as u32,
+                remaining: LIGHTNING_EFFECT_SECONDS,
+            });
+        }
+
+        for visual in wc3_visuals.ability(cast.ability.0) {
+            let position = match visual.anchor {
+                Wc3AbilityVisualAnchor::Source => source_position,
+                Wc3AbilityVisualAnchor::Target => target_position,
+            };
+            let Some(position) = position else {
+                continue;
+            };
+            let entity = commands
+                .spawn((
+                    WorldAssetRoot(visual.model.scene.clone()),
+                    Transform::from_translation(position),
+                    Wc3EmitterSource::new(&visual.model.emitters),
+                ))
+                .id();
+            timed_effects.0.push(TimedWc3Effect {
+                entity,
+                remaining: ABILITY_MODEL_EFFECT_SECONDS,
+            });
+        }
+
+        if let AbilityEffect::AreaDamage { radius, .. } = cast.effect
+            && let Some(target_position) = cast.target_position
+        {
+            ability_impacts.0.push(AbilityAreaImpact {
+                position: sim_point_to_terrain_world(target_position, &terrain) + Vec3::Y * 2.0,
+                radius: radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
+                remaining: ABILITY_AREA_EFFECT_SECONDS,
+            });
+        }
     }
 
     for unit in samples.current.units.values() {
@@ -1474,6 +1595,58 @@ fn sync_render_entities(
         );
     }
 
+    let stale_stun_effects: Vec<_> = render_map
+        .stun_effects
+        .keys()
+        .copied()
+        .filter(|id| !entity_is_stunned(*id, &samples.current, samples.current.tick))
+        .collect();
+    for id in stale_stun_effects {
+        if let Some(entity) = render_map.stun_effects.remove(&id) {
+            commands.entity(entity).despawn();
+        }
+    }
+    if let Some(stun_model) = wc3_visuals.stun() {
+        for unit in samples
+            .current
+            .units
+            .values()
+            .filter(|unit| unit.stunned_until_tick > samples.current.tick)
+        {
+            if render_map.stun_effects.contains_key(&unit.id) {
+                continue;
+            }
+            let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
+                + Vec3::Y * unit_height(unit) * 1.15;
+            spawn_stun_effect(
+                &mut commands,
+                &mut render_map,
+                unit.id,
+                position,
+                stun_model,
+            );
+        }
+        for building in samples.current.buildings.values().filter(|building| {
+            building
+                .stunned_until_tick
+                .is_some_and(|until| until > samples.current.tick)
+        }) {
+            if render_map.stun_effects.contains_key(&building.id) {
+                continue;
+            }
+            let (mut center, _) = metrics.footprint_center_size(building.footprint);
+            center.y = terrain.height_at_world(center.xz());
+            let position = center + Vec3::Y * building_height(building) * 1.08;
+            spawn_stun_effect(
+                &mut commands,
+                &mut render_map,
+                building.id,
+                position,
+                stun_model,
+            );
+        }
+    }
+
     for building in samples.current.buildings.values() {
         if let Some(entry) = render_map.buildings.get_mut(&building.id) {
             entry.max_health_seen = entry.max_health_seen.max(building.health);
@@ -1527,13 +1700,26 @@ fn sync_render_entities(
         }
         let position = sim_point_to_terrain_world(projectile.launch_position, &terrain)
             + Vec3::Y * PROJECTILE_HEIGHT;
-        let entity = commands
-            .spawn((
-                Mesh3d(assets.projectile_mesh(projectile)),
-                MeshMaterial3d(assets.projectile_material(projectile)),
-                Transform::from_translation(position),
-            ))
-            .id();
+        let imported_model = projectile_source_rawcode(projectile, &samples)
+            .and_then(|rawcode| wc3_visuals.projectile(rawcode));
+        let entity = if let Some(model) = imported_model {
+            commands
+                .spawn((Transform::from_translation(position), Visibility::default()))
+                .with_child((
+                    WorldAssetRoot(model.scene.clone()),
+                    Transform::from_rotation(Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET)),
+                    Wc3EmitterSource::new(&model.emitters),
+                ))
+                .id()
+        } else {
+            commands
+                .spawn((
+                    Mesh3d(assets.projectile_mesh(projectile)),
+                    MeshMaterial3d(assets.projectile_material(projectile)),
+                    Transform::from_translation(position),
+                ))
+                .id()
+        };
         render_map.projectiles.insert(
             projectile.id,
             PresentedProjectile {
@@ -1586,6 +1772,11 @@ fn interpolate_render_transforms(
                 transform.rotation = transform.rotation.slerp(desired_rotation, facing_blend);
             }
         }
+        if let Some(stun_entity) = render_map.stun_effects.get(id)
+            && let Ok(mut transform) = transforms.get_mut(*stun_entity)
+        {
+            transform.translation = ground_position + Vec3::Y * unit_height(current) * 1.15;
+        }
     }
 
     for (id, current) in &samples.current.buildings {
@@ -1603,6 +1794,11 @@ fn interpolate_render_transforms(
             && transform.translation != position
         {
             transform.translation = position;
+        }
+        if let Some(stun_entity) = render_map.stun_effects.get(id)
+            && let Ok(mut transform) = transforms.get_mut(*stun_entity)
+        {
+            transform.translation = center + Vec3::Y * building_height(current) * 1.08;
         }
     }
 
@@ -1750,6 +1946,68 @@ fn walk_bob(id: SimId, render_tick: f32, moving: bool) -> f32 {
     phase.sin().abs() * UNIT_WALK_BOB_HEIGHT
 }
 
+fn entity_is_stunned(id: SimId, snapshot: &crate::bridge::PresentationSnapshot, tick: u64) -> bool {
+    snapshot
+        .units
+        .get(&id)
+        .is_some_and(|unit| unit.stunned_until_tick > tick)
+        || snapshot.buildings.get(&id).is_some_and(|building| {
+            building
+                .stunned_until_tick
+                .is_some_and(|until| until > tick)
+        })
+}
+
+fn spawn_stun_effect(
+    commands: &mut Commands,
+    render_map: &mut RenderMap,
+    id: SimId,
+    position: Vec3,
+    model: &Wc3VisualModel,
+) {
+    let entity = commands
+        .spawn((
+            WorldAssetRoot(model.scene.clone()),
+            Transform::from_translation(position),
+            Wc3EmitterSource::new(&model.emitters),
+        ))
+        .id();
+    render_map.stun_effects.insert(id, entity);
+}
+
+fn projectile_source_rawcode(
+    projectile: &ProjectileView,
+    samples: &PresentationSamples,
+) -> Option<u32> {
+    samples
+        .current
+        .units
+        .get(&projectile.source)
+        .and_then(|unit| unit.content)
+        .or_else(|| {
+            samples
+                .previous
+                .units
+                .get(&projectile.source)
+                .and_then(|unit| unit.content)
+        })
+        .or_else(|| {
+            samples
+                .current
+                .buildings
+                .get(&projectile.source)
+                .and_then(|building| building.content)
+        })
+        .or_else(|| {
+            samples
+                .previous
+                .buildings
+                .get(&projectile.source)
+                .and_then(|building| building.content)
+        })
+        .map(|content| content.rawcode)
+}
+
 fn entity_render_position(
     id: SimId,
     samples: &PresentationSamples,
@@ -1796,6 +2054,83 @@ fn age_ability_area_impacts(time: Res<Time>, mut impacts: ResMut<AbilityAreaImpa
         impact.remaining -= delta;
     }
     impacts.0.retain(|impact| impact.remaining > 0.0);
+}
+
+fn age_lightning_impacts(time: Res<Time>, mut impacts: ResMut<LightningImpacts>) {
+    let delta = time.delta_secs();
+    for impact in &mut impacts.0 {
+        impact.remaining -= delta;
+    }
+    impacts.0.retain(|impact| impact.remaining > 0.0);
+}
+
+fn age_timed_wc3_effects(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut effects: ResMut<TimedWc3Effects>,
+) {
+    let delta = time.delta_secs();
+    for effect in &mut effects.0 {
+        effect.remaining -= delta;
+        if effect.remaining <= 0.0 {
+            commands.entity(effect.entity).despawn();
+        }
+    }
+    effects.0.retain(|effect| effect.remaining > 0.0);
+}
+
+fn draw_lightning_effects(
+    impacts: Res<LightningImpacts>,
+    mut gizmos: Gizmos<ProjectileEffectGizmos>,
+) {
+    const SEGMENTS: usize = 10;
+    for impact in &impacts.0 {
+        let life = (impact.remaining / LIGHTNING_EFFECT_SECONDS).clamp(0.0, 1.0);
+        let delta = impact.end - impact.start;
+        let lateral = delta
+            .normalize_or_zero()
+            .cross(Vec3::Y)
+            .normalize_or(Vec3::X);
+        let vertical = delta
+            .normalize_or_zero()
+            .cross(lateral)
+            .normalize_or(Vec3::Y);
+        let mut previous = impact.start;
+        for segment in 1..=SEGMENTS {
+            let t = segment as f32 / SEGMENTS as f32;
+            let mut point = impact.start.lerp(impact.end, t);
+            if segment != SEGMENTS {
+                let hash_a = lightning_hash(
+                    impact.seed ^ lightning_segment_seed(segment as u32, 0x9e37_79b9),
+                );
+                let hash_b = lightning_hash(
+                    impact.seed ^ lightning_segment_seed(segment as u32, 0x85eb_ca6b),
+                );
+                let envelope = (std::f32::consts::PI * t).sin();
+                point += lateral * ((hash_a * 2.0 - 1.0) * 8.0 * envelope);
+                point += vertical * ((hash_b * 2.0 - 1.0) * 5.0 * envelope);
+            }
+            gizmos.line(
+                previous,
+                point,
+                Color::srgb(0.52, 0.82, 1.0).with_alpha(life),
+            );
+            previous = point;
+        }
+    }
+}
+
+const fn lightning_segment_seed(segment: u32, salt: u32) -> u32 {
+    segment.wrapping_mul(salt)
+}
+
+fn lightning_hash(mut value: u32) -> f32 {
+    value ^= value >> 16;
+    value = value.wrapping_mul(0x7feb_352d);
+    value ^= value >> 15;
+    value = value.wrapping_mul(0x846c_a68b);
+    value ^= value >> 16;
+    value as f32 / u32::MAX as f32
 }
 
 fn draw_projectile_effects(
@@ -2337,6 +2672,18 @@ mod tests {
     }
 
     #[test]
+    fn lightning_segment_seed_wraps_without_debug_overflow() {
+        assert_eq!(
+            lightning_segment_seed(2, 0x9e37_79b9),
+            2u32.wrapping_mul(0x9e37_79b9)
+        );
+        assert_eq!(
+            lightning_segment_seed(u32::MAX, 0x85eb_ca6b),
+            u32::MAX.wrapping_mul(0x85eb_ca6b)
+        );
+    }
+
+    #[test]
     fn fps_display_updates_only_after_each_sample_window() {
         let mut display = FpsDisplay::default();
 
@@ -2459,6 +2806,12 @@ mod tests {
         let tangent = projectile_position_at_progress(&projectile, start, target, 0.42);
         let rotation = projectile_rotation(position, tangent, true);
         assert!((rotation * Vec3::Z - Vec3::X).length() < 1e-5);
+    }
+
+    #[test]
+    fn imported_wc3_projectile_models_map_positive_x_onto_client_forward() {
+        let correction = Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET);
+        assert!((correction * Vec3::X - Vec3::Z).length() < 1e-5);
     }
 
     #[test]

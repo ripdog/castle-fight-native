@@ -32,8 +32,8 @@ pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use native_effects::{NativeEffectImplementationId, native_effect_implementation_for};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuildingPlacementError, BuildingView,
-    CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    ChainLightningEvent, CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation,
+    SimulationConfig, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -630,7 +630,7 @@ mod tests {
             acquisition_range: 8 * world,
             cooldown_ticks: 100,
         };
-        sim.spawn_unit_with_properties(
+        let source = sim.spawn_unit_with_properties(
             UnitSpawn {
                 team: Team(0),
                 position: SimPoint::new(40 * world, 0),
@@ -668,6 +668,19 @@ mod tests {
         assert_eq!(sim.unit(first).unwrap().health, 900);
         assert_eq!(sim.unit(second).unwrap().health, 950);
         assert_eq!(sim.unit(third).unwrap().health, 975);
+        let events = sim.chain_lightnings_last_tick();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].source, source);
+        assert_eq!(events[0].ability, AbilityId(u32::from_be_bytes(*b"CHLN")));
+        assert_eq!(
+            events[0].points(),
+            &[
+                SimPoint::new(40 * world, 0),
+                SimPoint::new(41 * world, 0),
+                SimPoint::new(43 * world, 0),
+                SimPoint::new(45 * world, 0),
+            ]
+        );
     }
 
     #[test]

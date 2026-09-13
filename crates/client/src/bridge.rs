@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AbilityCastEvent, AttackDelivery, AttackEvent, BuildingFootprint, ContentIdentity, CorpseView,
-    MovementClass, ProjectileView, SimId, SimPoint, Simulation, Team,
+    AbilityCastEvent, AttackDelivery, AttackEvent, BuildingFootprint, ChainLightningEvent,
+    ContentIdentity, CorpseView, MovementClass, ProjectileView, SimId, SimPoint, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +123,7 @@ pub struct PresentationSnapshot {
     pub projectiles: BTreeMap<SimId, ProjectileView>,
     pub attacks: Vec<AttackEvent>,
     pub ability_casts: Vec<AbilityCastEvent>,
+    pub chain_lightnings: Vec<ChainLightningEvent>,
 }
 
 impl PresentationSnapshot {
@@ -206,6 +207,7 @@ impl PresentationSnapshot {
             projectiles,
             attacks: simulation.attacks_last_tick().to_vec(),
             ability_casts: simulation.ability_casts_last_tick().to_vec(),
+            chain_lightnings: simulation.chain_lightnings_last_tick().to_vec(),
         }
     }
 }
