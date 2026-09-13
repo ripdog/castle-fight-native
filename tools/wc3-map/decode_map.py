@@ -769,6 +769,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     protected_unit_stats = analysis["protected_unit_stats"]
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
+    protected_filter_bindings = analysis["protected_filter_bindings"]
     building_spell_registrations = analysis["building_spell_registrations"]
     unit_spell_registrations = analysis["unit_spell_registrations"]
     unit_spell_mechanics = analysis["unit_spell_mechanics"]
@@ -963,6 +964,18 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 script_json([list(values) for values in row["random_real_ranges"]]),
                 ",".join(direct_map_rawcodes), script_json(reachable_paths), script_json(list(row["semantic_effect_sites"])),
                 script_json(list(row["source_numeric_literals"])), row["handler_function"], row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "protected-filter-bindings.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "symbol", "initializer_function", "resolved_function", "predicate",
+            "resolution_status", "evidence_kind", "byte_offset",
+        ])
+        for row in protected_filter_bindings:
+            writer.writerow([
+                row["symbol"], row["initializer_function"], row["resolved_function"], row["predicate"],
+                row["resolution_status"], row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "corpse-building-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1510,6 +1523,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "unit_spell_mechanics_with_dynamic_callbacks": sum(bool(row["dynamic_callback_functions"]) for row in unit_spell_mechanics),
         "unit_spell_inlined_registrations": sum(
             str(row["evidence_kind"]) == "inlined-registration" for row in unit_spell_registrations
+        ),
+        "protected_filter_bindings": len(protected_filter_bindings),
+        "protected_filter_bindings_resolved": sum(
+            row["resolution_status"] == "resolved" for row in protected_filter_bindings
         ),
         "building_spell_mechanics": len(building_spell_mechanics),
         "building_spell_mechanics_with_unresolved_target_filter": sum(

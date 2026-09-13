@@ -1800,6 +1800,15 @@ def main() -> None:
         unit_spell_mechanic_rows,
     )
 
+    protected_filter_path = map_root / "script" / "protected-filter-bindings.tsv"
+    protected_filter_rows: list[dict[str, str]] = []
+    if protected_filter_path.exists():
+        with protected_filter_path.open(encoding="utf-8", newline="") as handle:
+            protected_filter_rows = list(csv.DictReader(handle, delimiter="\t"))
+    protected_filters_by_symbol = {
+        row["symbol"]: row for row in protected_filter_rows if row["resolution_status"] == "resolved"
+    }
+
     element_bucket_path = map_root / "script" / "element-building-buckets.tsv"
     element_bucket_rows: list[dict[str, str]] = []
     if element_bucket_path.exists():
@@ -2043,7 +2052,8 @@ def main() -> None:
             require_literals(mechanic, "processSnowMissiles", ("26.", "38.", "852226", "1.", "20."))
             require_literals(mechanic, "findMasterLightningHit", ("34.",))
             semantic_kind = "element-scaled-dual-projectile-system"
-            normalization_status = "partial"
+            sx_filter = protected_filters_by_symbol.get("SX")
+            normalization_status = "script-native-ready" if sx_filter is not None else "partial"
             effect_rawcodes = ["h03H", "h068", "A043"]
             parameters.update({
                 "branch_roll": {"min": 0, "max": 99, "lightning_if_less_than": 50, "frost_otherwise": True},
@@ -2095,10 +2105,17 @@ def main() -> None:
                     "frost_nova_dummy_lifetime_seconds": 1,
                     "frost_nova_only_if_target_survives_direct_hit": True,
                     "target_filter_symbol": "SX",
-                    "target_filter_status": "protected-global-filter-not-yet-resolved",
+                    "target_filter_status": "resolved" if sx_filter is not None else "protected-global-filter-not-yet-resolved",
+                    "target_filter_function": sx_filter["resolved_function"] if sx_filter is not None else "",
+                    "target_predicate": sx_filter["predicate"] if sx_filter is not None else "",
                     "state_machine_source": "processSnowMissiles",
                 },
-                "normalization_blocker": "resolve protected global Frost target filter SX",
+                **({
+                    "normalization_blocker": "",
+                    "resolved_filter_evidence_kind": sx_filter["evidence_kind"],
+                } if sx_filter is not None else {
+                    "normalization_blocker": "resolve protected global Frost target filter SX",
+                }),
             })
             source_functions.extend([
                 "onMasterSpell", "onLightningBolt", "processMasterLightningBolts", "findMasterLightningHit",
@@ -2398,6 +2415,20 @@ def main() -> None:
             "effect_rawcodes", "effect_objects_json", "parameters_json", "source_functions", "evidence_kind", "byte_offset",
         ],
         unit_spell_semantic_rows,
+    )
+    write_tsv(
+        output / "protected-filter-bindings.tsv",
+        [
+            "symbol", "initializer_function", "resolved_function", "predicate",
+            "resolution_status", "evidence_kind", "byte_offset",
+        ],
+        [
+            [
+                row["symbol"], row["initializer_function"], row["resolved_function"], row["predicate"],
+                row["resolution_status"], row["evidence_kind"], row["byte_offset"],
+            ]
+            for row in protected_filter_rows
+        ],
     )
 
     # Join the map's generated UnitObjectMeta table to its complete race
@@ -2957,6 +2988,8 @@ def main() -> None:
         "scripted_unit_spell_semantic_rows": len(unit_spell_semantic_rows),
         "scripted_unit_spell_semantic_status_counts": dict(sorted(unit_spell_semantic_status_counts.items())),
         "scripted_unit_spell_semantic_kind_counts": dict(sorted(unit_spell_semantic_kind_counts.items())),
+        "protected_filter_binding_rows": len(protected_filter_rows),
+        "protected_filter_binding_resolved_rows": len(protected_filters_by_symbol),
         "element_building_bucket_rows": len(element_bucket_rows),
         "scripted_building_spell_rows": len(building_spell_rows),
         "scripted_building_spell_mana_timed_rows": sum(
@@ -2994,10 +3027,11 @@ def main() -> None:
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
-            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: 36/37 rows are implementation-ready; Master of Elements alone remains partial because its full element-scaled projectile state machines are decoded but the shared protected Frost target-filter symbol SX is not yet resolved",
+            "protected-filter-bindings.tsv resolves the W3P Filter wrapper SX to generated predicate vL using static Wurst emission order; its predicate is alive combat sapper and enemy of the subsystem owner, so Master of Elements and Snowveil no longer depend on an opaque target-filter symbol",
+            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
             "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
             "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
-            "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; explicit tooltip-vs-object disagreements are retained rather than resolved silently",
+            "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; Snowveil Fountain's SX target filter is now statically resolved to the generated alive-combat-sapper/enemy predicate, and explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",

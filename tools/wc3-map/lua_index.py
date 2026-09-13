@@ -2387,6 +2387,7 @@ def _extract_building_spell_mechanics(
     functions: list[dict[str, object]],
     building_spell_registrations: list[dict[str, object]],
     corpse_building_mechanics: list[dict[str, object]],
+    protected_filter_bindings: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Normalize concrete mechanics behind generated scripted building spells.
 
@@ -2803,6 +2804,10 @@ def _extract_building_spell_mechanics(
     # snow detonation constants; the automatic random-target filter SX remains
     # obfuscated and is explicitly retained as unresolved rather than guessed.
     snow_constants = literal_assignments("FL")
+    snow_filter = next((
+        binding for binding in protected_filter_bindings
+        if binding["symbol"] == "SX" and binding["resolution_status"] == "resolved"
+    ), None)
     required_snow = {"aW", "bW", "ZV", "YV", "XV", "WV", "VV"}
     if not required_snow <= snow_constants.keys():
         raise ValueError(f"Snowveil constants missing: {sorted(required_snow - snow_constants.keys())}")
@@ -2823,7 +2828,11 @@ def _extract_building_spell_mechanics(
         "h07W",
         "team-snowfield",
         "random-unit-from-generated-SX-filter",
-        "SX-filter-unresolved;damage-reduction-applies-when-target-team-owns-snow-tile",
+        (
+            snow_filter["predicate"] + ";damage-reduction-applies-when-target-team-owns-snow-tile"
+            if snow_filter is not None
+            else "SX-filter-unresolved;damage-reduction-applies-when-target-team-owns-snow-tile"
+        ),
         (int(snow_constants["bW"]),),
         {
             "tile_spacing_world_units": 128,
@@ -2837,10 +2846,15 @@ def _extract_building_spell_mechanics(
             "manual_explosion_damage_type": "universal",
             "manual_explosion_normal_cooldown_seconds": _decimal_text(snow_constants["WV"]),
             "manual_explosion_Pcb_cooldown_seconds": _decimal_text(snow_constants["VV"]),
-            "automatic_target_filter_status": "unresolved-generated-filter-SX",
+            "automatic_target_filter_status": "resolved-generated-filter-SX" if snow_filter is not None else "unresolved-generated-filter-SX",
+            "automatic_target_filter_function": snow_filter["resolved_function"] if snow_filter is not None else "",
+            "automatic_target_filter_predicate": snow_filter["predicate"] if snow_filter is not None else "",
         },
         ("createSnowveilSnow", "vec2_setSnow", "DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain", "damageUnitsOnSnowInArea", "explodeSnowInArea", "FL"),
-        evidence_kind="script-direct-with-unresolved-target-filter",
+        evidence_kind=(
+            "script-direct-with-resolved-generated-target-filter"
+            if snow_filter is not None else "script-direct-with-unresolved-target-filter"
+        ),
     )
 
     # Thunderpaw: each cast grants one team charge. The next qualifying melee
@@ -2939,6 +2953,106 @@ def _extract_building_spell_mechanics(
             extra = sorted(covered - registered)
             raise ValueError(f"building-spell mechanic coverage mismatch; missing={missing} extra={extra}")
     return rows
+
+
+def _extract_protected_filter_bindings(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Resolve W3P-protected Filter wrappers when Wurst emits their predicate next.
+
+    Castle Fight's protected runtime stores several Filter callbacks as opaque
+    ``_I[key](...)`` function-value lookups. For the North/Rescue subsystem the
+    generated initializer emits the wrapper assignments first and the concrete
+    named predicate implementations immediately afterwards. That compiler
+    ordering is static evidence: the predicate bodies themselves remain visible,
+    so we can recover the semantic filter without decrypting the protected key.
+
+    This is intentionally narrower than general virtual-dispatch resolution. A
+    binding is promoted only when the wrapper is a Filter assignment and a nearby
+    generated function has an unambiguous ``isAliveCombatSapper`` + enemy/ally
+    predicate body. Otherwise the symbol remains unresolved.
+    """
+    ordered_functions = sorted(functions, key=lambda function: int(function["start"]))
+    bindings: list[dict[str, object]] = []
+
+    def function_tokens(function_name: str) -> tuple[int, list[LuaToken]] | None:
+        return _function_body_tokens(data, functions, function_name)
+
+    def predicate_kind(tokens: list[LuaToken]) -> str | None:
+        texts = [token.text for token in tokens]
+        if "isAliveCombatSapper" not in texts or "mIb" not in texts:
+            return None
+        if "unit_isEnemyOf" in texts:
+            return "alive-combat-sapper;enemy-of-mIb"
+        if "unit_isAllyOf" in texts:
+            return "alive-combat-sapper;ally-of-mIb"
+        return None
+
+    for initializer in ordered_functions:
+        initializer_name = str(initializer["name"])
+        body = function_tokens(initializer_name)
+        if body is None:
+            continue
+        initializer_start, tokens = body
+        filter_assignments: list[tuple[str, int]] = []
+        for index in range(len(tokens) - 3):
+            if (
+                tokens[index].kind == "ident"
+                and tokens[index + 1].text == "="
+                and tokens[index + 2].kind == "ident"
+                and tokens[index + 2].text in {"Filter", "__wurst_safe_Filter"}
+                and tokens[index + 3].text == "("
+            ):
+                filter_assignments.append((tokens[index].text, initializer_start + tokens[index].start))
+        if not filter_assignments:
+            continue
+
+        following = [
+            function for function in ordered_functions
+            if int(function["start"]) >= int(initializer["end"])
+        ]
+        used_candidates: set[str] = set()
+        for variable, byte_offset in filter_assignments:
+            resolved: dict[str, object] | None = None
+            for candidate in following:
+                candidate_name = str(candidate["name"])
+                if candidate_name in used_candidates:
+                    continue
+                distance = int(candidate["start"]) - int(initializer["end"])
+                if distance > 10000:
+                    break
+                candidate_body = function_tokens(candidate_name)
+                if candidate_body is None:
+                    continue
+                candidate_kind = predicate_kind(candidate_body[1])
+                if candidate_kind is None:
+                    continue
+                used_candidates.add(candidate_name)
+                resolved = {
+                    "symbol": variable,
+                    "initializer_function": initializer_name,
+                    "resolved_function": str(candidate["name"]),
+                    "predicate": candidate_kind,
+                    "resolution_status": "resolved",
+                    "evidence_kind": "static-generated-filter-adjacent-function",
+                    "byte_offset": byte_offset,
+                }
+                break
+            if resolved is None:
+                resolved = {
+                    "symbol": variable,
+                    "initializer_function": initializer_name,
+                    "resolved_function": "",
+                    "predicate": "",
+                    "resolution_status": "unresolved",
+                    "evidence_kind": "protected-filter-symbol-unresolved",
+                    "byte_offset": byte_offset,
+                }
+            bindings.append(resolved)
+
+    bindings.sort(key=lambda row: (str(row["initializer_function"]), int(row["byte_offset"]), str(row["symbol"])))
+    return bindings
 
 
 def _enclosing_named_function(
@@ -3122,6 +3236,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_mutators,
     )
     function_aliases, function_value_arguments = _function_value_links(data, functions)
+    protected_filter_bindings = _extract_protected_filter_bindings(data, functions)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
     unit_spell_mechanics = _extract_unit_spell_mechanics(
@@ -3134,7 +3249,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     )
     corpse_building_mechanics = _extract_corpse_building_mechanics(data, functions, building_spell_registrations)
     building_spell_mechanics = _extract_building_spell_mechanics(
-        data, functions, building_spell_registrations, corpse_building_mechanics
+        data, functions, building_spell_registrations, corpse_building_mechanics, protected_filter_bindings
     )
     for reference in function_value_arguments:
         reference["function"] = _enclosing_named_function(
@@ -3162,8 +3277,9 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "element_building_buckets": element_building_buckets,
         "effective_unit_stats": effective_unit_stats,
         "protected_unit_stats": protected_unit_stats,
-        "function_aliases": function_aliases,
+            "function_aliases": function_aliases,
         "function_value_arguments": function_value_arguments,
+        "protected_filter_bindings": protected_filter_bindings,
         "building_spell_registrations": building_spell_registrations,
         "unit_spell_registrations": unit_spell_registrations,
         "unit_spell_mechanics": unit_spell_mechanics,

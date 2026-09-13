@@ -406,10 +406,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
     def test_scripted_unit_spell_semantics_mark_ready_and_partial_rows_explicitly(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_unit_spell_semantic_rows"], 37)
+        self.assertEqual(summary["protected_filter_binding_rows"], 22)
+        self.assertEqual(summary["protected_filter_binding_resolved_rows"], 6)
+        with (self.resolved / "protected-filter-bindings.tsv").open(encoding="utf-8") as handle:
+            filters = {row["symbol"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(filters["SX"]["resolved_function"], "vL")
+        self.assertEqual(filters["SX"]["predicate"], "alive-combat-sapper;enemy-of-mIb")
+        self.assertEqual(filters["QX"]["resolution_status"], "unresolved")
         self.assertEqual(summary["scripted_unit_spell_semantic_status_counts"], {
             "object-effect-ready": 17,
-            "partial": 1,
-            "script-native-ready": 19,
+            "script-native-ready": 20,
         })
 
         with (self.resolved / "unit-spell-semantics.tsv").open(encoding="utf-8") as handle:
@@ -417,7 +423,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(rows), 37)
         self.assertEqual(
             {rawcode for rawcode, row in rows.items() if row["normalization_status"] == "partial"},
-            {"h03V"},
+            set(),
         )
 
         faerie = rows["e000"]
@@ -452,6 +458,12 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(paladin["armor_bonus"], 9)
         self.assertEqual(paladin["life_regen_per_second"], 24)
         self.assertEqual(paladin["permanent_max_hp_bonus"], 100)
+
+        master = json.loads(rows["h03V"]["parameters_json"])
+        self.assertEqual(rows["h03V"]["normalization_status"], "script-native-ready")
+        self.assertEqual(master["frost"]["target_filter_status"], "resolved")
+        self.assertEqual(master["frost"]["target_filter_function"], "vL")
+        self.assertEqual(master["frost"]["target_predicate"], "alive-combat-sapper;enemy-of-mIb")
         self.assertEqual(paladin["resurrection_precheck_radius"], 900)
         self.assertFalse(paladin["resurrection_precheck_checks_wc3_can_raise"])
         self.assertTrue(paladin["resurrection_effect_uses_wc3_corpse_eligibility"])
@@ -503,7 +515,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
         master = rows["h03V"]
         self.assertEqual(master["semantic_kind"], "element-scaled-dual-projectile-system")
-        self.assertEqual(master["normalization_status"], "partial")
+        self.assertEqual(master["normalization_status"], "script-native-ready")
         master_params = json.loads(master["parameters_json"])
         self.assertEqual(master_params["branch_roll"]["lightning_if_less_than"], 50)
         self.assertEqual(master_params["lightning"]["projectile_count_formula"], "2 + floor(lightning_building_count / 3)")
@@ -514,8 +526,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(master_params["frost"]["frost_nova_level_formula"], "clamp(floor(wind_building_count / 4), 1, 3)")
         self.assertEqual(master_params["frost"]["hit_radius"], 38)
         self.assertEqual(master_params["frost"]["target_filter_symbol"], "SX")
-        self.assertEqual(master_params["frost"]["target_filter_status"], "protected-global-filter-not-yet-resolved")
-        self.assertEqual(master_params["normalization_blocker"], "resolve protected global Frost target filter SX")
+        self.assertEqual(master_params["frost"]["target_filter_status"], "resolved")
+        self.assertEqual(master_params["frost"]["target_filter_function"], "vL")
+        self.assertEqual(master_params["frost"]["target_predicate"], "alive-combat-sapper;enemy-of-mIb")
 
     def test_element_building_buckets_resolve_master_scaling_inputs(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
@@ -634,7 +647,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(snow["incoming_damage_reduction_percent"], 20)
         self.assertEqual(snow["manual_explosion_radius"], "384")
         self.assertEqual(snow["manual_explosion_damage"], "350")
-        self.assertEqual(rows["h07W"]["evidence_kind"], "script-direct-with-unresolved-target-filter")
+        self.assertEqual(rows["h07W"]["evidence_kind"], "script-direct-with-resolved-generated-target-filter")
 
         thunder = json.loads(rows["h07R"]["parameters_json"])
         self.assertEqual(thunder["damage_multiplier"], 2)

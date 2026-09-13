@@ -1,0 +1,23 @@
+symbol	initializer_function	resolved_function	predicate	resolution_status	evidence_kind	byte_offset
+Gib	jG			unresolved	protected-filter-symbol-unresolved	2958906
+NAb	lE			unresolved	protected-filter-symbol-unresolved	2284806
+MAb	lE			unresolved	protected-filter-symbol-unresolved	2285673
+LAb	lE			unresolved	protected-filter-symbol-unresolved	2286545
+xdo	lN			unresolved	protected-filter-symbol-unresolved	1689624
+vFb	main			unresolved	protected-filter-symbol-unresolved	1745889
+cHb	main			unresolved	protected-filter-symbol-unresolved	1756074
+dHb	main			unresolved	protected-filter-symbol-unresolved	1756922
+ZGb	main			unresolved	protected-filter-symbol-unresolved	1758574
+ycb	nH			unresolved	protected-filter-symbol-unresolved	3171957
+xcb	nH			unresolved	protected-filter-symbol-unresolved	3172823
+e0	oL			unresolved	protected-filter-symbol-unresolved	3680835
+G6	pJ	qJ	alive-combat-sapper;enemy-of-mIb	resolved	static-generated-filter-adjacent-function	3434335
+F6	pJ	rJ	alive-combat-sapper;enemy-of-mIb	resolved	static-generated-filter-adjacent-function	3435196
+Y0	rK	uK	alive-combat-sapper;ally-of-mIb	resolved	static-generated-filter-adjacent-function	3547452
+X0	rK	vK	alive-combat-sapper;enemy-of-mIb	resolved	static-generated-filter-adjacent-function	3548317
+W0	rK			unresolved	protected-filter-symbol-unresolved	3549174
+V0	rK			unresolved	protected-filter-symbol-unresolved	3550031
+SCr	registerPlayerUnitEvent			unresolved	protected-filter-symbol-unresolved	3668821
+SX	uL	vL	alive-combat-sapper;enemy-of-mIb	resolved	static-generated-filter-adjacent-function	3699568
+RX	uL	wL	alive-combat-sapper;ally-of-mIb	resolved	static-generated-filter-adjacent-function	3700447
+QX	uL			unresolved	protected-filter-symbol-unresolved	3701302

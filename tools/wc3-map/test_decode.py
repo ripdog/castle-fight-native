@@ -336,6 +336,24 @@ class LuaIndexTests(unittest.TestCase):
 
         self.assertEqual(indexed["rawcode_mutator_traces"], [])
 
+    def test_resolves_generated_filter_to_adjacent_predicate_function(self) -> None:
+        source = (
+            "function init() "
+            "SX=Filter((function(...) local x=nil return x end)) "
+            "RX=Filter((function(...) local x=nil return x end)) end "
+            "function enemy() local u=nil return(isAliveCombatSapper(u)and unit_isEnemyOf(u,mIb))end "
+            "function ally() local u=nil return(isAliveCombatSapper(u)and unit_isAllyOf(u,mIb))end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, set())
+
+        bindings = {row["symbol"]: row for row in indexed["protected_filter_bindings"]}
+        self.assertEqual(bindings["SX"]["resolved_function"], "enemy")
+        self.assertEqual(bindings["SX"]["predicate"], "alive-combat-sapper;enemy-of-mIb")
+        self.assertEqual(bindings["RX"]["resolved_function"], "ally")
+        self.assertEqual(bindings["RX"]["predicate"], "alive-combat-sapper;ally-of-mIb")
+        self.assertEqual(bindings["SX"]["resolution_status"], "resolved")
+
     def test_recovers_building_spell_registration_from_closure_dispatch(self) -> None:
         source = (
             "function handler(building) return building end "
