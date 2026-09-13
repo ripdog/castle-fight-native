@@ -624,12 +624,18 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_scripted_building_spells_recover_handlers_and_mana_timed_cadence(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["scripted_building_spell_rows"], 15)
-        self.assertEqual(summary["scripted_building_spell_mana_timed_rows"], 15)
+        self.assertEqual(summary["scripted_building_spell_rows"], 43)
+        self.assertEqual(summary["scripted_building_spell_registration_evidence_kinds"], {
+            "direct-spell-effect-event-listener": 28,
+            "protected-registry-call": 15,
+        })
+        self.assertEqual(summary["scripted_building_spell_mana_timed_rows"], 42)
+        self.assertEqual(summary["scripted_building_spell_wc3_cooldown_timed_rows"], 1)
+        self.assertEqual(summary["scripted_building_spell_evidence_rows"], 43)
 
         with (self.resolved / "building-spells.tsv").open(encoding="utf-8") as handle:
             rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 15)
+        self.assertEqual(len(rows), 43)
 
         skull_pile = rows["h01P"]
         self.assertEqual(skull_pile["ability_rawcode"], "A01Q")
@@ -649,7 +655,23 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(vessel["cadence_seconds"], "15")
         self.assertIn("VesselOfPurity", vessel["handler_function"])
 
-    def test_scripted_building_spell_mechanics_normalize_all_registered_handlers(self) -> None:
+        tidal = rows["h00N"]
+        self.assertEqual(tidal["ability_rawcode"], "A09X")
+        self.assertEqual(tidal["effective_mana_cost"], "0")
+        self.assertEqual(tidal["cadence_seconds"], "15")
+        self.assertEqual(tidal["cadence_source"], "effective-wc3-ability-cooldown")
+        self.assertEqual(tidal["registration_evidence_kind"], "direct-spell-effect-event-listener")
+
+        with (self.resolved / "building-spell-evidence.tsv").open(encoding="utf-8") as handle:
+            evidence = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(evidence), 43)
+        pyramid = evidence["h00I"]
+        self.assertEqual(pyramid["helper_functions"], "pyramidSpell")
+        reachable = {row["rawcode"]: row for row in json.loads(pyramid["reachable_map_objects_json"])}
+        self.assertIn("A00B", reachable)
+        self.assertEqual(reachable["A00B"]["ability_level1"]["area"], "375")
+
+    def test_scripted_building_spell_mechanics_normalize_protected_registry_handlers(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_building_spell_mechanic_rows"], 15)
         self.assertEqual(summary["scripted_building_spell_mechanic_rows_with_evidence_disagreement"], 1)

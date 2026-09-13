@@ -772,6 +772,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     protected_filter_bindings = analysis["protected_filter_bindings"]
     castle_item_mechanics = analysis["castle_item_mechanics"]
     building_spell_registrations = analysis["building_spell_registrations"]
+    building_spell_evidence = analysis["building_spell_evidence"]
     unit_spell_registrations = analysis["unit_spell_registrations"]
     unit_spell_mechanics = analysis["unit_spell_mechanics"]
     corpse_building_mechanics = analysis["corpse_building_mechanics"]
@@ -862,7 +863,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         writer.writerow([
             "building_rawcode", "building_rawcode_integer", "building_names",
             "ability_rawcode", "ability_rawcode_integer", "ability_names",
-            "handler_function", "closure_class", "closure_variable", "registration_function", "byte_offset",
+            "handler_function", "closure_class", "closure_variable", "registration_function", "evidence_kind", "byte_offset",
         ])
         for row in building_spell_registrations:
             building_id = int(row["building_id"])
@@ -878,7 +879,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 building_rawcode, building_id, building_names,
                 ability_rawcode, ability_id, ability_names,
                 row["handler_function"], row["closure_class"], row["closure_variable"],
-                row["registration_function"], row["byte_offset"],
+                row["registration_function"], row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "unit-spell-registrations.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -958,6 +959,55 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 })
             writer.writerow([
                 unit_rawcode, unit_id, unit_names,
+                ability_rawcode, ability_id, ability_names,
+                row["mechanic_kind"], ",".join(row["direct_calls"]), ",".join(row["helper_functions"]),
+                ",".join(row["delayed_callback_functions"]), ",".join(row["dynamic_callback_functions"]),
+                script_json(list(row["scheduled_delays"])), script_json(list(row["periodic_intervals"])),
+                script_json([list(values) for values in row["random_real_ranges"]]),
+                ",".join(direct_map_rawcodes), script_json(reachable_paths), script_json(list(row["semantic_effect_sites"])),
+                script_json(list(row["source_numeric_literals"])), row["handler_function"], row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "building-spell-evidence.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "building_rawcode", "building_rawcode_integer", "building_names",
+            "ability_rawcode", "ability_rawcode_integer", "ability_names",
+            "mechanic_kind", "direct_calls", "helper_functions", "delayed_callback_functions", "dynamic_callback_functions",
+            "scheduled_delays_json", "periodic_intervals_json", "random_real_ranges_json",
+            "direct_map_rawcodes", "reachable_map_rawcode_paths_json", "semantic_effect_sites_json", "source_numeric_literals_json",
+            "handler_function", "evidence_kind", "byte_offset",
+        ])
+        for row in building_spell_evidence:
+            building_id = int(row["building_id"])
+            ability_id = int(row["ability_id"])
+            building_rawcode = rawcode_text(building_id)
+            building_names = ""
+            if building_id in object_metadata:
+                building_rawcode, _bcategories, _btables, building_names, _bdefs = rawcode_metadata(building_id)
+            ability_rawcode = rawcode_text(ability_id)
+            ability_names = ""
+            if ability_id in object_metadata:
+                ability_rawcode, _acategories, _atables, ability_names, _adefs = rawcode_metadata(ability_id)
+            direct_map_rawcodes = [rawcode_text(int(value)) for value in row["direct_map_rawcodes"]]
+            reachable_paths = []
+            for path in row["reachable_map_rawcode_paths"]:
+                integer_id = int(path["rawcode_integer"])
+                rawcode = rawcode_text(integer_id)
+                names = ""
+                categories = ""
+                if integer_id in object_metadata:
+                    rawcode, categories, _tables, names, _defs = rawcode_metadata(integer_id)
+                reachable_paths.append({
+                    "rawcode": rawcode,
+                    "rawcode_integer": integer_id,
+                    "categories": categories,
+                    "names": names,
+                    "hops": int(path["hops"]),
+                    "path": path["path"],
+                })
+            writer.writerow([
+                building_rawcode, building_id, building_names,
                 ability_rawcode, ability_id, ability_names,
                 row["mechanic_kind"], ",".join(row["direct_calls"]), ",".join(row["helper_functions"]),
                 ",".join(row["delayed_callback_functions"]), ",".join(row["dynamic_callback_functions"]),

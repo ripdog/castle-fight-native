@@ -1577,6 +1577,16 @@ def _extract_building_spell_registrations(
         if not variable_classes:
             continue
 
+        def integer_argument(argument: list[LuaToken]) -> int | None:
+            try:
+                return _integer_literal_value(argument)
+            except ValueError:
+                pass
+            if len(argument) == 1 and argument[0].kind == "ident":
+                return integer_variables.get(argument[0].text)
+            return None
+
+        registered_closures: set[str] = set()
         for index, token in enumerate(tokens):
             if token.kind != "ident" or token.text != "_I":
                 continue
@@ -1590,15 +1600,6 @@ def _extract_building_spell_registrations(
             closure_class = variable_classes.get(closure_variable)
             if closure_class is None:
                 continue
-            def integer_argument(argument: list[LuaToken]) -> int | None:
-                try:
-                    return _integer_literal_value(argument)
-                except ValueError:
-                    pass
-                if len(argument) == 1 and argument[0].kind == "ident":
-                    return integer_variables.get(argument[0].text)
-                return None
-
             building_id = integer_argument(args[0])
             ability_id = integer_argument(args[1])
             if building_id is None or ability_id is None:
@@ -1612,8 +1613,89 @@ def _extract_building_spell_registrations(
                 "closure_class": closure_class,
                 "handler_function": handler_by_class[closure_class],
                 "registration_function": function_name,
+                "evidence_kind": "protected-registry-call",
                 "byte_offset": function_start + token.start,
             })
+            registered_closures.add(closure_variable)
+
+        # Some generated building spells bypass the protected three-argument
+        # registry and construct the spell-effect EventListener explicitly. The
+        # listener stores the same exact tuple in visible fields: unitTypeId,
+        # abilId and a BuildingSpellClosure callback. Require an exact
+        # EVENT_PLAYER_UNIT_SPELL_EFFECT EventListener_add site before promoting
+        # this second representation to a registration.
+        listener_unit_ids: dict[str, int] = {}
+        listener_ability_ids: dict[str, int] = {}
+        listener_closures: dict[str, str] = {}
+        spell_effect_event_variables: set[str] = {"EVENT_PLAYER_UNIT_SPELL_EFFECT"}
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            if token.kind == "ident" and index + 2 < len(tokens) and tokens[index + 1].text == "=":
+                rhs = tokens[index + 2]
+                if rhs.kind == "ident" and rhs.text in spell_effect_event_variables:
+                    spell_effect_event_variables.add(token.text)
+
+            if (
+                token.kind == "ident"
+                and index + 4 < len(tokens)
+                and tokens[index + 1].text == "."
+                and tokens[index + 2].kind == "ident"
+                and tokens[index + 3].text == "="
+            ):
+                listener = token.text
+                member = tokens[index + 2].text
+                rhs = tokens[index + 4]
+                if member in {"unitTypeId", "abilId"}:
+                    value = integer_argument([rhs])
+                    if value is not None:
+                        target = listener_unit_ids if member == "unitTypeId" else listener_ability_ids
+                        target[listener] = value
+                elif member == "cb" and rhs.kind == "ident" and rhs.text in variable_classes:
+                    listener_closures[listener] = rhs.text
+
+            if token.kind == "ident" and token.text == "EventListener_add":
+                try:
+                    args, next_index = _call_arguments(tokens, index)
+                except ValueError:
+                    index += 1
+                    continue
+                if (
+                    len(args) == 2
+                    and len(args[0]) == 1
+                    and args[0][0].kind == "ident"
+                    and args[0][0].text in spell_effect_event_variables
+                    and len(args[1]) == 1
+                    and args[1][0].kind == "ident"
+                ):
+                    listener = args[1][0].text
+                    closure_variable = listener_closures.get(listener)
+                    closure_class = variable_classes.get(closure_variable) if closure_variable is not None else None
+                    building_id = listener_unit_ids.get(listener)
+                    ability_id = listener_ability_ids.get(listener)
+                    if (
+                        closure_variable is not None
+                        and closure_variable not in registered_closures
+                        and closure_class is not None
+                        and building_id is not None
+                        and building_id > 0
+                        and ability_id is not None
+                        and ability_id > 0
+                    ):
+                        rows.append({
+                            "building_id": building_id,
+                            "ability_id": ability_id,
+                            "closure_variable": closure_variable,
+                            "closure_class": closure_class,
+                            "handler_function": handler_by_class[closure_class],
+                            "registration_function": function_name,
+                            "evidence_kind": "direct-spell-effect-event-listener",
+                            "byte_offset": function_start + token.start,
+                        })
+                        registered_closures.add(closure_variable)
+                index = max(index + 1, next_index)
+                continue
+            index += 1
 
     rows.sort(key=lambda row: (int(row["byte_offset"]), int(row["building_id"]), int(row["ability_id"])))
     return rows
@@ -2167,6 +2249,47 @@ def _extract_unit_spell_mechanics(
     rows.sort(key=lambda row: (int(row["unit_id"]), int(row["ability_id"])))
     if len(rows) != len(unit_spell_registrations):
         raise ValueError("unit-spell mechanic profile coverage mismatch")
+    return rows
+
+
+def _extract_building_spell_evidence(
+    data: bytes,
+    functions: list[dict[str, object]],
+    building_spell_registrations: list[dict[str, object]],
+    function_aliases: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+    function_rawcodes: Counter[tuple[str, int]],
+) -> list[dict[str, object]]:
+    """Reuse the generic spell-handler profiler for every building spell.
+
+    Building and unit closure handlers use the same generated callback/runtime
+    primitives. Converting the registration key temporarily lets the mature unit
+    profiler preserve exact helper/callback/timing/rawcode evidence for the full
+    building catalog, including direct EventListener registrations that are not
+    yet represented by the stricter hand-normalized semantic layer.
+    """
+    proxy_registrations = [
+        {
+            "unit_id": int(row["building_id"]),
+            "ability_id": int(row["ability_id"]),
+            "handler_function": row["handler_function"],
+        }
+        for row in building_spell_registrations
+    ]
+    evidence_rows = _extract_unit_spell_mechanics(
+        data,
+        functions,
+        proxy_registrations,
+        function_aliases,
+        call_edges,
+        function_rawcodes,
+    )
+    rows: list[dict[str, object]] = []
+    for evidence in evidence_rows:
+        row = dict(evidence)
+        row["building_id"] = row.pop("unit_id")
+        rows.append(row)
+    rows.sort(key=lambda row: (int(row["building_id"]), int(row["ability_id"])))
     return rows
 
 
@@ -2903,7 +3026,9 @@ def _extract_building_spell_mechanics(
         )
 
     # Fold the already-validated corpse-dependent building mechanics into this
-    # generic catalog so all 15 registrations have one import-facing row.
+    # stricter semantic catalog. Direct EventListener registrations are covered
+    # by building-spell-evidence until their script-specific normalization is
+    # promoted here.
     for corpse in corpse_building_mechanics:
         building_id = int(corpse["building_id"])
         registration = registrations_by_building.get(building_id)
@@ -2947,11 +3072,18 @@ def _extract_building_spell_mechanics(
     rows.sort(key=lambda row: (int(row["building_id"]), int(row["ability_id"])))
     if len(building_spell_registrations) >= 10:
         covered = {(int(row["building_id"]), int(row["ability_id"])) for row in rows}
+        protected_registered = {
+            (int(row["building_id"]), int(row["ability_id"]))
+            for row in building_spell_registrations
+            if row.get("evidence_kind") == "protected-registry-call"
+        }
         registered = {(int(row["building_id"]), int(row["ability_id"])) for row in building_spell_registrations}
-        if covered != registered:
-            missing = sorted(registered - covered)
-            extra = sorted(covered - registered)
-            raise ValueError(f"building-spell mechanic coverage mismatch; missing={missing} extra={extra}")
+        missing_protected = sorted(protected_registered - covered)
+        extra = sorted(covered - registered)
+        if missing_protected or extra:
+            raise ValueError(
+                f"building-spell semantic coverage mismatch; missing_protected={missing_protected} extra={extra}"
+            )
     return rows
 
 
@@ -3567,6 +3699,14 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         call_edges,
         function_rawcodes,
     )
+    building_spell_evidence = _extract_building_spell_evidence(
+        data,
+        functions,
+        building_spell_registrations,
+        function_aliases,
+        call_edges,
+        function_rawcodes,
+    )
     corpse_building_mechanics = _extract_corpse_building_mechanics(data, functions, building_spell_registrations)
     building_spell_mechanics = _extract_building_spell_mechanics(
         data, functions, building_spell_registrations, corpse_building_mechanics, protected_filter_bindings
@@ -3602,6 +3742,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "protected_filter_bindings": protected_filter_bindings,
         "castle_item_mechanics": castle_item_mechanics,
         "building_spell_registrations": building_spell_registrations,
+        "building_spell_evidence": building_spell_evidence,
         "unit_spell_registrations": unit_spell_registrations,
         "unit_spell_mechanics": unit_spell_mechanics,
         "corpse_building_mechanics": corpse_building_mechanics,

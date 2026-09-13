@@ -2704,10 +2704,20 @@ def main() -> None:
                     raise ValueError(f"scripted building spell has no static unit definition: {building_rawcode}")
                 mana_regen = numeric(building_unit["mana_regen"])
                 mana_cost = numeric(effective_mana)
-                if mana_regen is None or mana_regen <= 0 or mana_cost is None:
-                    raise ValueError(f"scripted building spell lacks numeric mana cadence inputs: {building_rawcode}/{ability_rawcode}")
-                cadence_seconds = mana_cost / mana_regen
-                cadence_text = value_as_text(cadence_seconds)
+                wc3_cooldown = numeric(effective_wc3_cooldown)
+                if mana_regen is not None and mana_regen > 0 and mana_cost is not None and mana_cost > 0:
+                    cadence_seconds = mana_cost / mana_regen
+                    cadence_text = value_as_text(cadence_seconds)
+                    cadence_source = "ability-mana-cost/building-mana-regen"
+                elif wc3_cooldown is not None and wc3_cooldown > 0:
+                    # Direct event-listener building spells can be ordinary
+                    # cooldown-driven WC3 casts rather than the Castle Fight
+                    # full-mana timer convention (for example Tidal Guardian).
+                    cadence_text = value_as_text(wc3_cooldown)
+                    cadence_source = "effective-wc3-ability-cooldown"
+                else:
+                    cadence_text = ""
+                    cadence_source = "event-driven/no-static-cadence"
                 building_spell_by_pair[(building_rawcode, ability_rawcode)] = {
                     "race_index": race["race_index"],
                     "race_function": race["race_function"],
@@ -2719,7 +2729,7 @@ def main() -> None:
                     "ability_tip": definition["tip"],
                     "ability_ubertip": definition["ubertip"],
                     "cadence_seconds": cadence_text,
-                    "cadence_source": "ability-mana-cost/building-mana-regen",
+                    "cadence_source": cadence_source,
                 }
                 building_spell_rows.append([
                     race["race_index"], race["race_function"], race["builder_rawcode"], race["builder_names"], race["campaign_only"],
@@ -2727,12 +2737,12 @@ def main() -> None:
                     ability_rawcode, definition_source, definition["base_rawcode"], definition["name"], definition["tip"], definition["ubertip"],
                     static_mana, effective_mana,
                     "protected-runtime" if runtime_mana is not None else "static-resolved",
-                    building_unit["mana_regen"], cadence_text, "ability-mana-cost/building-mana-regen",
+                    building_unit["mana_regen"], cadence_text, cadence_source,
                     static_cooldown, effective_wc3_cooldown,
                     "protected-runtime" if runtime_cooldown is not None else "static-resolved",
                     definition["range"], definition["area"], definition["targets"], definition["buffs"],
                     definition["data_fields_json"], definition["data_fields_labeled_json"],
-                    registration["handler_function"], registration["registration_function"], registration["byte_offset"],
+                    registration["handler_function"], registration["registration_function"], registration.get("evidence_kind", ""), registration["byte_offset"],
                 ])
     write_tsv(
         output / "building-spells.tsv",
@@ -2742,9 +2752,75 @@ def main() -> None:
             "name", "tip", "ubertip", "static_mana_cost", "effective_mana_cost", "mana_cost_source",
             "building_mana_regen", "cadence_seconds", "cadence_source",
             "static_wc3_cooldown", "effective_wc3_cooldown", "wc3_cooldown_source", "range", "area", "targets", "buffs",
-            "data_fields_json", "data_fields_labeled_json", "handler_function", "registration_function", "byte_offset",
+            "data_fields_json", "data_fields_labeled_json", "handler_function", "registration_function", "registration_evidence_kind", "byte_offset",
         ],
         building_spell_rows,
+    )
+
+    building_spell_evidence_rows: list[list[Any]] = []
+    building_spell_evidence_path = map_root / "script" / "building-spell-evidence.tsv"
+    if building_spell_evidence_path.exists():
+        with building_spell_evidence_path.open(encoding="utf-8", newline="") as handle:
+            for evidence in csv.DictReader(handle, delimiter="\t"):
+                pair = (evidence["building_rawcode"], evidence["ability_rawcode"])
+                spell = building_spell_by_pair.get(pair)
+                if spell is None:
+                    raise ValueError(f"building-spell evidence has no scripted registration: {pair}")
+                reachable = json.loads(evidence["reachable_map_rawcode_paths_json"])
+                enriched_objects: list[dict[str, Any]] = []
+                for effect in reachable:
+                    rawcode = str(effect["rawcode"])
+                    enriched: dict[str, Any] = dict(effect)
+                    definitions = ability_levels.get(rawcode, [])
+                    definition = next((row for row in definitions if row["level"] == "1"), None)
+                    if definition is None:
+                        definition = inherited_ability_level_one(rawcode)
+                    if definition is not None:
+                        enriched["ability_level1"] = {
+                            "name": definition["name"],
+                            "range": definition["range"],
+                            "area": definition["area"],
+                            "targets": definition["targets"],
+                            "buffs": definition["buffs"],
+                            "duration_normal": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "adur", 1, 0)),
+                            "duration_hero": value_as_text(field_lookup(rows_by_object, "abilities", rawcode, "ahdu", 1, 0)),
+                            "data_fields_labeled_json": definition["data_fields_labeled_json"],
+                        }
+                    unit_effect = static_units.get(rawcode)
+                    if unit_effect is not None:
+                        enriched["unit_object"] = {
+                            "name": unit_effect["name"],
+                            "abilities": unit_effect["abilities"],
+                            "move_speed": unit_effect["move_speed"],
+                            "attack1_type": unit_effect["attack1_type"],
+                            "attack1_weapon_type": unit_effect["attack1_weapon_type"],
+                            "attack1_targets": unit_effect["attack1_targets"],
+                        }
+                    enriched_objects.append(enriched)
+                building_spell_evidence_rows.append([
+                    spell["race_index"], spell["builder_rawcode"], spell["builder_names"], spell["campaign_only"],
+                    evidence["building_rawcode"], spell["building_names"], evidence["ability_rawcode"],
+                    spell["ability_name"], spell["ability_tip"], spell["ability_ubertip"],
+                    spell["cadence_seconds"], spell["cadence_source"],
+                    evidence["mechanic_kind"], evidence["direct_calls"], evidence["helper_functions"],
+                    evidence["delayed_callback_functions"], evidence["dynamic_callback_functions"],
+                    evidence["scheduled_delays_json"], evidence["periodic_intervals_json"], evidence["random_real_ranges_json"],
+                    evidence["direct_map_rawcodes"],
+                    json.dumps(enriched_objects, separators=(",", ":"), sort_keys=True, ensure_ascii=False),
+                    evidence["semantic_effect_sites_json"], evidence["source_numeric_literals_json"],
+                    evidence["handler_function"], evidence["evidence_kind"], evidence["byte_offset"],
+                ])
+    write_tsv(
+        output / "building-spell-evidence.tsv",
+        [
+            "race_index", "builder_rawcode", "builder_names", "campaign_only",
+            "building_rawcode", "building_names", "ability_rawcode", "ability_name", "ability_tip", "ability_ubertip",
+            "cadence_seconds", "cadence_source", "mechanic_kind", "direct_calls", "helper_functions",
+            "delayed_callback_functions", "dynamic_callback_functions", "scheduled_delays_json", "periodic_intervals_json",
+            "random_real_ranges_json", "direct_map_rawcodes", "reachable_map_objects_json", "semantic_effect_sites_json",
+            "source_numeric_literals_json", "handler_function", "evidence_kind", "byte_offset",
+        ],
+        building_spell_evidence_rows,
     )
 
     corpse_building_rows: list[list[Any]] = []
@@ -3200,9 +3276,14 @@ def main() -> None:
         "resolved_item_mechanic_rows": len(resolved_item_mechanics),
         "element_building_bucket_rows": len(element_bucket_rows),
         "scripted_building_spell_rows": len(building_spell_rows),
+        "scripted_building_spell_registration_evidence_kinds": dict(sorted(Counter(row[30] for row in building_spell_rows).items())),
         "scripted_building_spell_mana_timed_rows": sum(
             row[18] == "ability-mana-cost/building-mana-regen" for row in building_spell_rows
         ),
+        "scripted_building_spell_wc3_cooldown_timed_rows": sum(
+            row[18] == "effective-wc3-ability-cooldown" for row in building_spell_rows
+        ),
+        "scripted_building_spell_evidence_rows": len(building_spell_evidence_rows),
         "scripted_building_spell_mechanic_rows": len(building_spell_mechanic_rows),
         "scripted_building_spell_mechanic_rows_with_evidence_disagreement": sum(
             bool(row[16]) for row in building_spell_mechanic_rows
@@ -3240,8 +3321,9 @@ def main() -> None:
             "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
             "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate",
             "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
-            "building-spells.tsv joins exact generated building/ability/handler registrations to protected ability fields; Castle Fight's scripted building cadence is ability mana cost divided by building mana regeneration, while the separate WC3 ability cooldown remains 0/1 second",
-            "building-spell-mechanics.tsv normalizes all 15 scripted building handlers into target/delivery/mechanic parameters while keeping linked WC3 object effects as separately sourced evidence; Snowveil Fountain's SX target filter is now statically resolved to the generated alive-combat-sapper/enemy predicate, and explicit tooltip-vs-object disagreements are retained rather than resolved silently",
+            "building-spells.tsv now covers both generated registration representations: 15 protected registry calls and 28 direct EVENT_PLAYER_UNIT_SPELL_EFFECT listeners. Forty-two use Castle Fight's mana-cost/building-regen cadence; Tidal Guardian is the explicit cooldown-driven exception at its protected 15-second WC3 cooldown",
+            "building-spell-evidence.tsv gives all 43 scripted building spells the same bounded static handler/helper/callback/effect evidence used for unit spells, including direct and reachable rawcodes enriched with resolved WC3 object data; this is the complete evidence layer while stricter semantic normalization is promoted spell by spell",
+            "building-spell-mechanics.tsv currently contains the stricter normalized protected-registry family (15 rows) with target/delivery/mechanic parameters and separately sourced linked WC3 object effects; Snowveil Fountain's SX target filter is statically resolved, and explicit tooltip-vs-object disagreements are retained rather than resolved silently",
             "corpse-building-mechanics.tsv normalizes the two scripted Undead raise handlers and Vessel of Purity from exact Lua predicates/control flow; these mechanics do not consult Warcraft's Death Type can-raise bit, which remains a separate corpse capability",
             "production-buildings.tsv joins UnitObjectMeta, race wrapper semantics, the complete generated race partition, authored upgrade edges, exact footprints and xO coverage; spawn_time is the recurring CF production interval, while static_object_build_time is the Warcraft building-construction field",
             "all 167 authored production buildings have static_object_build_time=2; Castle Fight uses this as the short construction/cancellation window, distinct from recurring spawn_time",

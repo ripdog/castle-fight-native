@@ -437,7 +437,31 @@ class LuaIndexTests(unittest.TestCase):
             "closure_class": "fy",
             "handler_function": "handler",
             "registration_function": "bL",
+            "evidence_kind": "protected-registry-call",
             "byte_offset": source.find(b"_I[_d[1]]"),
+        }])
+
+    def test_recovers_building_spell_registration_from_direct_spell_effect_listener(self) -> None:
+        source = (
+            "function handler(building) return building end "
+            "fu.BuildingSpellClosure_cast=handler "
+            "function init() local closure=nil local listener=nil local event=nil "
+            "closure=fu:create823() event=EVENT_PLAYER_UNIT_SPELL_EFFECT listener=qe:create140() "
+            "listener.abilId=1093683013 listener.unitTypeId=1747990329 listener.cb=closure "
+            "EventListener_add(event,listener) end"
+        ).encode("ascii")
+
+        indexed = DECODE.analyze_lua(source, {1747990329, 1093683013})
+
+        self.assertEqual(indexed["building_spell_registrations"], [{
+            "building_id": 1747990329,
+            "ability_id": 1093683013,
+            "closure_variable": "closure",
+            "closure_class": "fu",
+            "handler_function": "handler",
+            "registration_function": "init",
+            "evidence_kind": "direct-spell-effect-event-listener",
+            "byte_offset": source.find(b"EventListener_add"),
         }])
 
     def test_recovers_unit_spell_registration_from_closure_dispatch(self) -> None:
