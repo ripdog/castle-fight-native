@@ -498,7 +498,7 @@ impl Exporter {
             .collect();
 
         Ok(BuildingAssetManifest {
-            schema_version: 3,
+            schema_version: 4,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -1325,16 +1325,28 @@ fn ribbon_material_properties(
     (format!("{:?}", layer.filter_mode()), texture)
 }
 
-fn is_team_glow_texture(texture: &TextureManifest) -> bool {
+fn is_building_background_texture(texture: &TextureManifest) -> bool {
+    let normalized = texture
+        .source_texture
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "textures/background.blp" | "textures/background.dds" | "textures/background.tga"
+    )
+}
+
+fn is_building_engine_plane_texture(texture: &TextureManifest) -> bool {
     texture.replaceable_id == 2
         || texture
             .source_texture
             .replace('\\', "/")
             .to_ascii_lowercase()
             .contains("replaceabletextures/teamglow/")
+        || is_building_background_texture(texture)
 }
 
-fn material_is_team_glow_geometry(
+fn material_is_building_engine_plane(
     model: &Model,
     material_id: usize,
     texture_manifests: &[TextureManifest],
@@ -1348,11 +1360,34 @@ fn material_is_team_glow_geometry(
         let Some(texture) = texture_manifests.get(layer_diffuse_texture_id(&layer) as usize) else {
             return false;
         };
-        if !is_team_glow_texture(texture) {
+        if !is_building_engine_plane_texture(texture) {
             return false;
         }
     }
     saw_layer
+}
+
+fn material_selected_diffuse_is_background(
+    model: &Model,
+    material_id: usize,
+    texture_manifests: &[TextureManifest],
+) -> bool {
+    let Some(material) = model.materials(material_id) else {
+        return false;
+    };
+    let selected = material.layers_iter().find(|layer| {
+        texture_manifests
+            .get(layer_diffuse_texture_id(layer) as usize)
+            .and_then(|texture| texture.png.as_ref())
+            .is_some()
+    });
+    let layer = selected.or_else(|| material.layers(0));
+    let Some(layer) = layer else {
+        return false;
+    };
+    texture_manifests
+        .get(layer_diffuse_texture_id(&layer) as usize)
+        .is_some_and(is_building_background_texture)
 }
 
 fn model_node_position(model: &Model, node: &Node) -> [f32; 3] {
@@ -1382,15 +1417,16 @@ fn build_gltf(
         if geoset.vertex_positions().is_empty() || geoset.faces().is_empty() {
             continue;
         }
+        let material_id = geoset.material_id() as usize;
+        let is_background_quad = geoset.vertex_positions().len() == 4
+            && geoset.faces().len() == 6
+            && material_selected_diffuse_is_background(model, material_id, texture_manifests);
         if omit_team_glow_geosets
-            && material_is_team_glow_geometry(
-                model,
-                geoset.material_id() as usize,
-                texture_manifests,
-            )
+            && (material_is_building_engine_plane(model, material_id, texture_manifests)
+                || is_background_quad)
         {
             warnings.push(format!(
-                "omitting building team-glow geoset {geoset_index}; Warcraft renders team glow with engine-specific billboard/decal semantics"
+                "omitting building engine-plane geoset {geoset_index}; Warcraft renders team glow/background planes with engine-specific billboard/decal semantics"
             ));
             continue;
         }
@@ -3655,9 +3691,9 @@ mod tests {
     }
 
     #[test]
-    fn team_glow_geometry_detection_catches_replaceable_and_fixed_palette_textures() {
+    fn building_engine_plane_detection_catches_team_glow_and_background_textures() {
         let mut model = Model::new();
-        model.resize_materials(2);
+        model.resize_materials(3);
         {
             let mut material = model.materials_mut(0).expect("replaceable glow material");
             material.resize_layers(1);
@@ -3674,6 +3710,14 @@ mod tests {
                 .expect("fixed glow layer")
                 .set_texture_id(1);
         }
+        {
+            let mut material = model.materials_mut(2).expect("background material");
+            material.resize_layers(1);
+            material
+                .layers_mut(0)
+                .expect("background layer")
+                .set_texture_id(2);
+        }
         let textures = vec![
             TextureManifest {
                 source_texture: String::new(),
@@ -3689,10 +3733,57 @@ mod tests {
                 replaceable_id: 0,
                 has_transparency: false,
             },
+            TextureManifest {
+                source_texture: r"Textures\Background.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/background.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: false,
+            },
         ];
 
-        assert!(material_is_team_glow_geometry(&model, 0, &textures));
-        assert!(material_is_team_glow_geometry(&model, 1, &textures));
+        assert!(material_is_building_engine_plane(&model, 0, &textures));
+        assert!(material_is_building_engine_plane(&model, 1, &textures));
+        assert!(material_is_building_engine_plane(&model, 2, &textures));
+    }
+
+    #[test]
+    fn selected_background_layer_marks_multilayer_quad_for_omission() {
+        let mut model = Model::new();
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("background material");
+            material.resize_layers(2);
+            material
+                .layers_mut(0)
+                .expect("background layer")
+                .set_texture_id(0);
+            material
+                .layers_mut(1)
+                .expect("ordinary layer")
+                .set_texture_id(1);
+        }
+        let textures = vec![
+            TextureManifest {
+                source_texture: r"Textures\Background.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/background.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: false,
+            },
+            TextureManifest {
+                source_texture: r"Textures\NorthrendNatural03.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/northrendnatural03.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: false,
+            },
+        ];
+
+        assert!(!material_is_building_engine_plane(&model, 0, &textures));
+        assert!(material_selected_diffuse_is_background(
+            &model, 0, &textures
+        ));
     }
 
     #[test]

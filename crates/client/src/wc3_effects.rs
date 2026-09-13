@@ -21,6 +21,8 @@ const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__tea
 const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
 const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
 const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
+const BUILDING_TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 16.0;
+const BUILDING_TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -8.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
@@ -425,6 +427,8 @@ pub fn fix_wc3_scene_materials(
         }
 
         let source_material_id = material_handle.0.id();
+        let team = wc3_team_tint(entity, &parents, &team_roots);
+        let (overlay_depth_bias, underlay_depth_bias) = team_color_depth_bias_offsets(team);
         let material_template = {
             let Some(mut material) = materials.get_mut(&material_handle.0) else {
                 continue;
@@ -432,11 +436,13 @@ pub fn fix_wc3_scene_materials(
             if let Some(filter_mode) = extras.filter_mode.as_deref() {
                 material.alpha_mode = wc3_material_alpha_mode(filter_mode, material.alpha_mode);
             }
-            material.depth_bias =
-                wc3_material_depth_bias(extras.priority_plane, extras.team_color_underlay);
+            material.depth_bias = wc3_material_depth_bias(
+                extras.priority_plane,
+                extras.team_color_underlay,
+                overlay_depth_bias,
+            );
             material.clone()
         };
-        let team = wc3_team_tint(entity, &parents, &team_roots);
 
         if extras.team_glow_layer
             && let Some(team) = team
@@ -466,7 +472,11 @@ pub fn fix_wc3_scene_materials(
             let underlay_handle = if let Some(handle) = team_materials.get(&key) {
                 handle.clone()
             } else {
-                let underlay = team_color_underlay_material(material_template, team.color);
+                let underlay = team_color_underlay_material(
+                    material_template,
+                    team.color,
+                    underlay_depth_bias,
+                );
                 let handle = materials.add(underlay);
                 team_materials.insert(key, handle.clone());
                 handle
@@ -489,21 +499,43 @@ pub fn fix_wc3_scene_materials(
     }
 }
 
-fn wc3_material_depth_bias(priority_plane: i32, team_color_underlay: bool) -> f32 {
+fn team_color_depth_bias_offsets(team: Option<Wc3TeamTint>) -> (f32, f32) {
+    if team.is_some_and(|team| team.asset_prefix == "wc3/buildings") {
+        (
+            BUILDING_TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET,
+            BUILDING_TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET,
+        )
+    } else {
+        (
+            TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET,
+            TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET,
+        )
+    }
+}
+
+fn wc3_material_depth_bias(
+    priority_plane: i32,
+    team_color_underlay: bool,
+    overlay_depth_bias: f32,
+) -> f32 {
     priority_plane as f32
         + if team_color_underlay {
-            TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET
+            overlay_depth_bias
         } else {
             0.0
         }
 }
 
-fn team_color_underlay_material(mut material: StandardMaterial, color: Color) -> StandardMaterial {
+fn team_color_underlay_material(
+    mut material: StandardMaterial,
+    color: Color,
+    underlay_depth_bias: f32,
+) -> StandardMaterial {
     material.base_color_texture = None;
     material.base_color = color;
     material.emissive = LinearRgba::BLACK;
     material.alpha_mode = AlphaMode::Opaque;
-    material.depth_bias += TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET;
+    material.depth_bias += underlay_depth_bias;
     material
 }
 
@@ -944,18 +976,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn team_color_overlay_and_underlay_have_stable_depth_ordering() {
-        assert_eq!(wc3_material_depth_bias(0, false), 0.0);
-        assert_eq!(wc3_material_depth_bias(0, true), 2.0);
-        assert_eq!(wc3_material_depth_bias(3, true), 5.0);
+    fn building_team_color_layers_use_wider_stable_depth_ordering() {
+        let unit = Wc3TeamTint::new(0, Color::WHITE, "wc3/units");
+        let building = Wc3TeamTint::new(0, Color::WHITE, "wc3/buildings");
+        assert_eq!(team_color_depth_bias_offsets(Some(unit)), (2.0, -1.0));
+        assert_eq!(team_color_depth_bias_offsets(Some(building)), (16.0, -8.0));
+
+        let (overlay_bias, underlay_bias) = team_color_depth_bias_offsets(Some(building));
+        assert_eq!(wc3_material_depth_bias(0, false, overlay_bias), 0.0);
+        assert_eq!(wc3_material_depth_bias(0, true, overlay_bias), 16.0);
+        assert_eq!(wc3_material_depth_bias(3, true, overlay_bias), 19.0);
 
         let source = StandardMaterial {
-            depth_bias: wc3_material_depth_bias(3, true),
+            depth_bias: wc3_material_depth_bias(3, true, overlay_bias),
             ..default()
         };
-        let material = team_color_underlay_material(source, Color::srgb(1.0, 0.0, 0.0));
-        assert_eq!(material.depth_bias, 4.0);
-        assert!(material.depth_bias < wc3_material_depth_bias(3, true));
+        let material =
+            team_color_underlay_material(source, Color::srgb(1.0, 0.0, 0.0), underlay_bias);
+        assert_eq!(material.depth_bias, 11.0);
+        assert!(material.depth_bias < wc3_material_depth_bias(3, true, overlay_bias));
         assert!(material.base_color_texture.is_none());
         assert_eq!(material.alpha_mode, AlphaMode::Opaque);
     }

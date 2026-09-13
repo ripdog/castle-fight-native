@@ -11,7 +11,7 @@ use crate::terrain::client_asset_root;
 
 const BUILDING_MODEL_MANIFEST: &str = "wc3/buildings/manifest.json";
 const BUILDING_MODEL_ASSET_PREFIX: &str = "wc3/buildings";
-const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 3;
+const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Resource, Default)]
 pub struct BuildingModelSet {
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn resolves_building_manifest_paths_scales_and_animation_properties() {
         let json = r#"{
-            "schema_version": 3,
+            "schema_version": 4,
             "buildings": [
                 {"rawcode": "h000", "scale": 0.5, "animation_properties": [], "fallback_to_base_art": false, "gltf": "models/humanbarracks.gltf"},
                 {"rawcode": "h006", "scale": 0.8, "animation_properties": ["upgrade", "first"], "fallback_to_base_art": false, "gltf": "models/tower.gltf"},
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn rejects_invalid_building_manifest_entries() {
         let stale_schema = r#"{
-            "schema_version": 2,
+            "schema_version": 3,
             "buildings": []
         }"#;
         assert!(
@@ -350,7 +350,7 @@ mod tests {
         );
 
         let bad_scale = r#"{
-            "schema_version": 3,
+            "schema_version": 4,
             "buildings": [{"rawcode": "h000", "scale": 0.0, "gltf": "models/foo.gltf"}]
         }"#;
         assert!(
@@ -360,7 +360,7 @@ mod tests {
         );
 
         let bad_path = r#"{
-            "schema_version": 3,
+            "schema_version": 4,
             "buildings": [{"rawcode": "h000", "scale": 1.0, "gltf": "../escape.gltf"}]
         }"#;
         assert!(
