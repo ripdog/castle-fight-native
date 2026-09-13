@@ -1039,14 +1039,17 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         writer.writerow([
             "perk_id", "perk_name", "factory_function", "damage_listener_function",
             "protected_initializer_function", "protected_vm_index", "protected_registry_slot_count",
-            "normal_draft_initializer_callers", "runtime_registry_path_status",
-            "individual_factory_registration_status", "individual_factory_registration_proven",
-            "evidence_kind", "byte_offset",
+            "protected_registry_slot", "factory_global_index", "signature_global_index", "signature_global_name",
+            "factory_value_evidence", "registration_pc", "normal_draft_initializer_callers",
+            "runtime_registry_path_status", "individual_factory_registration_status",
+            "individual_factory_registration_proven", "evidence_kind", "byte_offset",
         ])
         for row in protected_perk_registry_audit:
             writer.writerow([
                 row["perk_id"], row["perk_name"], row["factory_function"], row["damage_listener_function"],
                 row["protected_initializer_function"], row["protected_vm_index"], row["protected_registry_slot_count"],
+                row["protected_registry_slot"], row["factory_global_index"], row["signature_global_index"],
+                row["signature_global_name"], row["factory_value_evidence"], row["registration_pc"],
                 ",".join(str(value) for value in row["normal_draft_initializer_callers"]),
                 row["runtime_registry_path_status"], row["individual_factory_registration_status"],
                 int(bool(row["individual_factory_registration_proven"])), row["evidence_kind"], row["byte_offset"],

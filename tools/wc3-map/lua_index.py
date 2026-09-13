@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Iterable, Iterator
 
 
@@ -3796,17 +3797,298 @@ def _extract_building_spell_mechanics(
     return rows
 
 
+def _decode_lua_short_string_contents(value: bytes) -> bytes:
+    """Decode the escape subset used by W3P's generated short string literals."""
+    simple_escapes = {
+        ord("a"): 7,
+        ord("b"): 8,
+        ord("f"): 12,
+        ord("n"): 10,
+        ord("r"): 13,
+        ord("t"): 9,
+        ord("v"): 11,
+        ord("\\"): ord("\\"),
+        ord('"'): ord('"'),
+        ord("'"): ord("'"),
+    }
+    result = bytearray()
+    index = 0
+    while index < len(value):
+        current = value[index]
+        if current != ord("\\"):
+            result.append(current)
+            index += 1
+            continue
+        if index + 1 >= len(value):
+            raise ValueError("unterminated Lua short-string escape")
+        escape = value[index + 1]
+        if escape == ord("x"):
+            if index + 3 >= len(value):
+                raise ValueError("truncated Lua hex escape")
+            try:
+                result.append(int(value[index + 2:index + 4].decode("ascii"), 16))
+            except ValueError as error:
+                raise ValueError("invalid Lua hex escape") from error
+            index += 4
+            continue
+        if escape in simple_escapes:
+            result.append(simple_escapes[escape])
+            index += 2
+            continue
+        if ord("0") <= escape <= ord("9"):
+            end = index + 2
+            while end < min(index + 4, len(value)) and ord("0") <= value[end] <= ord("9"):
+                end += 1
+            decimal = int(value[index + 1:end].decode("ascii"), 10)
+            if decimal > 255:
+                raise ValueError("Lua decimal escape exceeds one byte")
+            result.append(decimal)
+            index = end
+            continue
+        raise ValueError(f"unsupported Lua short-string escape: {chr(escape)!r}")
+    return bytes(result)
+
+
+def _decode_w3p_hex_escaped(value: bytes) -> bytes:
+    """Decode the all-hex escaped form used by protected VM byte payloads."""
+    decoded = _decode_lua_short_string_contents(value)
+    if len(decoded) * 4 != len(value):
+        raise ValueError("unexpected W3P protected hex-string encoding")
+    return decoded
+
+
+def _w3p_vm_static_strings(data: bytes, vm_index: int) -> list[str]:
+    marker = f"_fr({vm_index},".encode("ascii")
+    start = data.find(marker)
+    if start < 0:
+        raise ValueError(f"W3P VM block missing: {vm_index}")
+    table_start = data.find(b"_s={", start)
+    table_end = data.find(b"};_Y=", table_start)
+    if table_start < 0 or table_end < 0:
+        raise ValueError(f"W3P VM static-string table missing: {vm_index}")
+    rows: list[str] = []
+    for expression in data[table_start + len(b"_s={"):table_end].split(b";"):
+        match = re.fullmatch(rb'"((?:\\.|[^"\\])*)"', expression)
+        if match is None:
+            raise ValueError(f"W3P VM {vm_index} has non-literal static string entry")
+        rows.append(_decode_lua_short_string_contents(match.group(1)).decode("utf-8"))
+    return rows
+
+
+def _w3p_vm_global_expressions(data: bytes, vm_index: int) -> list[bytes]:
+    marker = f"_fr({vm_index},".encode("ascii")
+    start = data.find(marker)
+    if start < 0:
+        raise ValueError(f"W3P VM block missing: {vm_index}")
+    table_start = data.find(b"_Y={", start)
+    table_end = data.find(b"};_v=", table_start)
+    if table_start < 0 or table_end < 0:
+        raise ValueError(f"W3P VM global-name table missing: {vm_index}")
+    return data[table_start + len(b"_Y={"):table_end].split(b";")
+
+
+def _w3p_global_payload(expression: bytes) -> tuple[bytes, bool]:
+    """Return the encrypted payload plus whether W3P's extra _a layer is applied."""
+    match = re.search(rb'"((?:\\.|[^"\\])*)"', expression)
+    if match is None:
+        raise ValueError("W3P global-name expression has no short string literal")
+    return _decode_lua_short_string_contents(match.group(1)), expression.startswith(b"_a(")
+
+
+def _decode_w3p_hr_payload(payload: bytes, lane: int, seed: int) -> list[int]:
+    """Mirror the visible top-level _hr transform without executing protected Lua."""
+    state = (seed + len(payload) + lane * 17) & 0xFF
+    decoded: list[int] = []
+    for index, cipher in enumerate(payload, 1):
+        key = ((state * state + seed * index) ^ (lane * 31 + index)) & 0xFF
+        decoded.append(cipher ^ key)
+        state = (cipher + state) & 0xFF
+    return decoded
+
+
+def _w3p_vm_integrity(payloads: Iterable[list[int]]) -> int:
+    accumulator = 173
+    rolling = 89
+    position = 0
+    for payload in payloads:
+        for value in payload:
+            position += 1
+            accumulator = (accumulator + value * 11 + position * 17 + rolling % 37) % 4093
+            rolling = (rolling ^ ((value * 13 + accumulator + position * 7) & 0xFF)) & 0xFF
+            rolling = (rolling + ((accumulator * 3 + value + position) & 0xFF)) & 0xFF
+    return accumulator * 257 + rolling
+
+
+def _decode_w3p_string_payload(payload: bytes, multiplier: int, offset: int) -> bytes:
+    """Mirror the visible _T/_L/_r/_j protected-string transform."""
+    if len(payload) < 5:
+        raise ValueError("W3P protected string payload is too short")
+    if payload[0] == 1:
+        key = payload[1] * 256 + payload[2]
+        cipher = payload[3:]
+    else:
+        try:
+            key = int(payload[1:5].decode("ascii"), 16)
+            cipher = bytes.fromhex(payload[5:].decode("ascii"))
+        except ValueError as error:
+            raise ValueError("W3P protected string has invalid hex key/ciphertext") from error
+
+    modulus = 32749
+    key %= modulus
+    first = ((key * multiplier + offset + 25) % modulus) + 1
+    second = ((key + multiplier * 18) % modulus) + 1
+    third = ((first * second + 17) % modulus) + 1
+    decoded = bytearray()
+    for value in cipher:
+        previous_first, previous_second = first, second
+        first = second
+        second = third
+        third = (previous_second * third + previous_first + 17) % modulus
+        decoded.append((value - third) & 0xFF)
+    return bytes(decoded)
+
+
+def _decode_w3p_global_name(expression: bytes, multiplier: int, offset: int) -> str:
+    payload, extra_shift = _w3p_global_payload(expression)
+    decoded = _decode_w3p_string_payload(payload, multiplier, offset)
+    if extra_shift:
+        decoded = bytes((value - offset) & 0xFF for value in decoded)
+    try:
+        return decoded.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("W3P global name did not decode as UTF-8") from error
+
+
+def _decode_w3p_vm_program(data: bytes, vm_index: int) -> dict[str, object]:
+    """Statically decode one W3P VM instruction stream.
+
+    This only reverses the visible byte transforms and instruction framing. It
+    does not evaluate the protected VM or invoke any map/runtime functions.
+    """
+    marker = f"_fr({vm_index},".encode("ascii")
+    start = data.find(marker)
+    if start < 0:
+        raise ValueError(f"W3P VM block missing: {vm_index}")
+    wrapper_marker = f"function ".encode("ascii")
+    end = data.find(wrapper_marker, start)
+    if end < 0:
+        raise ValueError(f"W3P VM wrapper missing after block: {vm_index}")
+    block = data[start:end]
+
+    payload_matches = re.findall(rb'_hr\("((?:\\x[0-9a-fA-F]{2})+)",([123])\)', block)
+    if len(payload_matches) < 3:
+        raise ValueError(f"W3P VM block {vm_index} has fewer than three encoded payloads")
+    encoded_payloads = [_decode_w3p_hex_escaped(value) for value, _lane in payload_matches[:3]]
+
+    integrity_match = re.search(rb"_N=([0-9]+)", block)
+    mode_match = re.search(rb"_J=([0-9]+)", block)
+    if integrity_match is None or mode_match is None:
+        raise ValueError(f"W3P VM block {vm_index} is missing integrity/mode metadata")
+    expected_integrity = int(integrity_match.group(1))
+    operand_mode = int(mode_match.group(1))
+
+    candidates: list[tuple[int, list[list[int]]]] = []
+    for seed in range(256):
+        decoded = [
+            _decode_w3p_hr_payload(payload, lane, seed)
+            for lane, payload in enumerate(encoded_payloads, 1)
+        ]
+        if _w3p_vm_integrity(decoded) == expected_integrity:
+            candidates.append((seed, decoded))
+    if len(candidates) != 1:
+        raise ValueError(f"W3P VM block {vm_index} hidden-byte seed is not unique: {len(candidates)} candidates")
+    hidden_seed, (opcodes_encrypted, opcode_keys, remap_bytes) = candidates[0]
+
+    interpreter_at = data.find(b"local Er={")
+    interpreter_end = data.find(b"}local Hr=", interpreter_at)
+    if interpreter_at < 0 or interpreter_end < 0:
+        raise ValueError("W3P VM opcode-width table missing")
+    widths = [int(value) for value in data[interpreter_at + len(b"local Er={"):interpreter_end].split(b";")]
+    handled_opcodes = {
+        int(value)
+        for value in re.findall(rb"(?:if|elseif)\(_S==([0-9]+)\)", data[interpreter_end:start])
+    }
+
+    opcode_map: dict[int, int] = {}
+    for offset in range(0, len(remap_bytes), 2):
+        if offset + 1 >= len(remap_bytes):
+            raise ValueError(f"W3P VM block {vm_index} has odd remap table length")
+        opcode_map[remap_bytes[offset]] = (((remap_bytes[offset + 1] * 139) + 96) & 0xFF) + 1
+
+    xor_candidates: list[int] = []
+    for xor_byte in range(256):
+        cursor = 0
+        valid = True
+        while cursor < len(opcodes_encrypted):
+            encrypted_opcode = opcodes_encrypted[cursor]
+            key_byte = opcode_keys[cursor]
+            opcode = opcode_map.get(encrypted_opcode ^ key_byte ^ xor_byte)
+            if opcode is None or opcode not in handled_opcodes or opcode > len(widths):
+                valid = False
+                break
+            cursor += 1 + widths[opcode - 1]
+        if valid and cursor == len(opcodes_encrypted):
+            xor_candidates.append(xor_byte)
+    if len(xor_candidates) != 1:
+        raise ValueError(f"W3P VM block {vm_index} opcode xor byte is not unique: {len(xor_candidates)} candidates")
+    xor_byte = xor_candidates[0]
+
+    if operand_mode == 1:
+        operand_transform = lambda value: (value - xor_byte) & 0xFF
+    elif operand_mode == 2:
+        rotate = ((xor_byte << 1) | (xor_byte >> 7)) & 0xFF
+        operand_transform = lambda value: value ^ rotate
+    elif operand_mode == 3:
+        operand_transform = lambda value: (value + xor_byte) & 0xFF
+    elif operand_mode == 4:
+        rotate = ((xor_byte << 1) | (xor_byte >> 7)) & 0xFF
+        operand_transform = lambda value: (value - rotate) & 0xFF
+    elif operand_mode == 5:
+        operand_transform = lambda value: ((((value ^ xor_byte) << 4) | ((value ^ xor_byte) >> 4)) & 0xFF)
+    elif operand_mode == 6:
+        inverse = (~xor_byte) & 0xFF
+        operand_transform = lambda value: value ^ inverse
+    else:
+        operand_transform = lambda value: value ^ xor_byte
+
+    raw_jump_last = {240, 10, 124, 131}
+    instructions: list[dict[str, object]] = []
+    cursor = 0
+    while cursor < len(opcodes_encrypted):
+        pc = cursor
+        opcode = opcode_map[opcodes_encrypted[cursor] ^ opcode_keys[cursor] ^ xor_byte]
+        width = widths[opcode - 1]
+        cursor += 1
+        operands: list[int] = []
+        for operand_index in range(width):
+            value = opcodes_encrypted[cursor + operand_index]
+            if opcode in raw_jump_last and operand_index == width - 1:
+                operands.append(value)
+            else:
+                operands.append(operand_transform(value))
+        cursor += width
+        instructions.append({"pc": pc + 1, "opcode": opcode, "operands": operands})
+
+    return {
+        "vm_index": vm_index,
+        "hidden_seed": hidden_seed,
+        "opcode_xor_byte": xor_byte,
+        "operand_mode": operand_mode,
+        "integrity": expected_integrity,
+        "instructions": instructions,
+    }
+
+
 def _extract_protected_perk_registry_audit(
     data: bytes,
     functions: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Inventory authored draft perks without guessing protected registry call targets.
 
-    The normal draft runtime calls initPerks__w3p_vmProtect, and the protected VM
-    block for that initializer exposes 19 registry slots (0..18).  The individual
-    calls inside that VM block are deliberately opaque, however, so matching the
-    19 readable factories to those 19 slots is useful structural evidence but is
-    not sufficient proof that any one factory is actually registered.
+    The normal draft runtime calls initPerks__w3p_vmProtect. Its protected VM
+    bytecode is decoded statically from the visible W3P transforms, then each
+    three-argument addRegisteredPerk call is tied to the exact readable factory
+    that produced its first argument and the exact numeric registry slot.
     """
     functions_by_name = {str(row["name"]): row for row in functions}
     if "initPerks__w3p_vmProtect" not in functions_by_name:
@@ -3845,6 +4127,88 @@ def _extract_protected_perk_registry_audit(
     )
     if slot_sequence not in vm_source:
         raise ValueError("protected perk registry slot sequence changed")
+
+    # These two W3P string-transform parameters are recovered from the visible
+    # decoder using the exact readable setReminderAbility anchor. Keep them
+    # asserted against two independent protected globals so protection drift
+    # fails loudly rather than silently mis-decoding VM names.
+    string_multiplier = 11351
+    string_offset = 1106
+    global_expressions = _w3p_vm_global_expressions(data, 65)
+    global_names = [
+        _decode_w3p_global_name(expression, string_multiplier, string_offset)
+        for expression in global_expressions
+    ]
+    if global_names[14] != "DraftPerk_DraftPerk_setReminderAbility":
+        raise ValueError("protected perk VM string decoder no longer resolves setReminderAbility anchor")
+    if global_names[16] != "addRegisteredPerk__w3p_vmProtect":
+        raise ValueError("protected perk VM string decoder no longer resolves addRegisteredPerk anchor")
+
+    program = list(_decode_w3p_vm_program(data, 65)["instructions"])
+    static_strings = _w3p_vm_static_strings(data, 65)
+    local_factories: dict[int, tuple[int, str]] = {}
+    for current, following in zip(program, program[1:]):
+        if (
+            int(current["opcode"]) == 42
+            and list(current["operands"])[1:] == [1]
+            and int(following["opcode"]) == 24
+        ):
+            global_index = int(list(current["operands"])[0])
+            factory_name = global_names[global_index - 1]
+            if factory_name.startswith("create") and factory_name.endswith("Perk"):
+                local_factories[int(list(following["operands"])[0])] = (global_index, factory_name)
+
+    registrations: dict[str, dict[str, object]] = {}
+    for index in range(len(program) - 4):
+        load_registry, perk_value, load_slot, load_signature, invoke = program[index:index + 5]
+        if not (
+            int(load_registry["opcode"]) == 218
+            and global_names[int(list(load_registry["operands"])[0]) - 1] == "addRegisteredPerk__w3p_vmProtect"
+            and int(load_slot["opcode"]) == 144
+            and int(load_signature["opcode"]) == 218
+            and int(invoke["opcode"]) == 98
+            and list(invoke["operands"]) == [48]
+        ):
+            continue
+
+        if int(perk_value["opcode"]) == 253:
+            local_index = int(list(perk_value["operands"])[0])
+            factory = local_factories.get(local_index)
+            if factory is None:
+                raise ValueError(f"protected perk registry call uses unresolved local factory: {local_index}")
+            factory_global_index, factory_name = factory
+            factory_evidence = "factory-result-via-local"
+        elif int(perk_value["opcode"]) == 42 and list(perk_value["operands"])[1:] == [1]:
+            factory_global_index = int(list(perk_value["operands"])[0])
+            factory_name = global_names[factory_global_index - 1]
+            factory_evidence = "factory-result-direct-on-stack"
+            if not (factory_name.startswith("create") and factory_name.endswith("Perk")):
+                raise ValueError(f"protected perk direct registry argument is not a perk factory: {factory_name}")
+        else:
+            continue
+
+        slot_string_index = int(list(load_slot["operands"])[0])
+        try:
+            registry_slot = int(static_strings[slot_string_index - 1])
+        except (IndexError, ValueError) as error:
+            raise ValueError(f"protected perk registry slot is not numeric: static index {slot_string_index}") from error
+        signature_global_index = int(list(load_signature["operands"])[0])
+        signature_global_name = global_names[signature_global_index - 1]
+        if factory_name in registrations:
+            raise ValueError(f"protected perk factory registered multiple times: {factory_name}")
+        registrations[factory_name] = {
+            "protected_registry_slot": registry_slot,
+            "factory_global_index": factory_global_index,
+            "signature_global_index": signature_global_index,
+            "signature_global_name": signature_global_name,
+            "factory_value_evidence": factory_evidence,
+            "registration_pc": int(load_registry["pc"]),
+        }
+
+    if len(registrations) != 19:
+        raise ValueError(f"protected perk VM registration call count changed: {len(registrations)}")
+    if {int(row["protected_registry_slot"]) for row in registrations.values()} != set(range(19)):
+        raise ValueError("protected perk VM registry slots are not exactly 0..18")
 
     damage_listener_names = {
         str(row["name"])
@@ -3889,6 +4253,15 @@ def _extract_protected_perk_registry_audit(
         matching_listeners = sorted(name for name in damage_listener_names if f"Perk{stem}" in name)
         if len(matching_listeners) > 1:
             raise ValueError(f"draft perk has multiple damage listeners: {factory_name}: {matching_listeners}")
+        registration = registrations.get(factory_name)
+        if registration is None:
+            raise ValueError(f"readable draft perk factory is absent from protected registry VM: {factory_name}")
+        expected_slot = int(perk_id.removeprefix("perk_")) - 1
+        if int(registration["protected_registry_slot"]) != expected_slot:
+            raise ValueError(
+                f"protected perk registry slot disagrees with readable perk id: {perk_id} -> "
+                f"{registration['protected_registry_slot']}"
+            )
         rows.append({
             "perk_id": perk_id,
             "perk_name": perk_name,
@@ -3897,11 +4270,17 @@ def _extract_protected_perk_registry_audit(
             "protected_initializer_function": initializer,
             "protected_vm_index": 65,
             "protected_registry_slot_count": 19,
+            "protected_registry_slot": int(registration["protected_registry_slot"]),
+            "factory_global_index": int(registration["factory_global_index"]),
+            "signature_global_index": int(registration["signature_global_index"]),
+            "signature_global_name": str(registration["signature_global_name"]),
+            "factory_value_evidence": str(registration["factory_value_evidence"]),
+            "registration_pc": int(registration["registration_pc"]),
             "normal_draft_initializer_callers": live_callers,
             "runtime_registry_path_status": "reachable-protected-initializer",
-            "individual_factory_registration_status": "protected-call-target-unresolved",
-            "individual_factory_registration_proven": False,
-            "evidence_kind": "exact-readable-factory-plus-live-protected-initializer-and-registry-cardinality;individual-vm-call-target-unresolved",
+            "individual_factory_registration_status": "exact-protected-vm-call",
+            "individual_factory_registration_proven": True,
+            "evidence_kind": "exact-readable-factory-plus-statically-decoded-protected-vm-registration-call",
             "byte_offset": factory_start,
         })
 
@@ -3922,10 +4301,9 @@ def _extract_damage_listener_coverage(
     """Strict closure audit for authored DamageListener callbacks.
 
     A new gameplay damage listener must either be referenced by a normalized
-    mechanic row or be explicitly classified here.  Perk listeners are retained
-    as unresolved until the protected registry proves their individual factory
-    targets; cardinality matching alone is intentionally not promoted to live
-    importer semantics.
+    mechanic row or be explicitly classified here. Proven-live perk listeners
+    remain an explicit importer gap until their behavior is normalized; merely
+    proving registry reachability does not make their mechanics implementation-ready.
     """
     if not protected_perk_registry_audit:
         return []
@@ -3942,8 +4320,8 @@ def _extract_damage_listener_coverage(
     add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
     add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
 
-    perk_factory_by_listener = {
-        str(row["damage_listener_function"]): str(row["factory_function"])
+    perk_by_listener = {
+        str(row["damage_listener_function"]): row
         for row in protected_perk_registry_audit
         if row["damage_listener_function"]
     }
@@ -3969,10 +4347,17 @@ def _extract_damage_listener_coverage(
     rows: list[dict[str, object]] = []
     for listener_name in listener_names:
         normalized = sorted(normalized_sources.get(listener_name, ()))
-        candidate_factory = perk_factory_by_listener.get(listener_name, "")
+        perk_registration = perk_by_listener.get(listener_name)
+        candidate_factory = str(perk_registration["factory_function"]) if perk_registration is not None else ""
         if normalized:
             status = "normalized-gameplay-semantics"
             note = "listener is referenced by one or more importer-facing normalized mechanic rows"
+        elif candidate_factory and bool(perk_registration["individual_factory_registration_proven"]):
+            status = "registered-perk-semantics-unmodeled"
+            note = (
+                "listener belongs to an exactly proven protected-VM perk registration, but its gameplay semantics have not "
+                "yet been promoted into importer-facing normalized mechanics"
+            )
         elif candidate_factory:
             status = "protected-perk-registration-unresolved"
             note = (

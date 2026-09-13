@@ -111,13 +111,13 @@
     "protected_filter_bindings_resolved": 21,
     "protected_perk_registry_audit_rows": 19,
     "protected_perk_registry_registration_status_counts": {
-      "protected-call-target-unresolved": 19
+      "exact-protected-vm-call": 19
     },
     "damage_listener_coverage_rows": 20,
     "damage_listener_coverage_status_counts": {
       "e2e-only": 1,
       "normalized-gameplay-semantics": 8,
-      "protected-perk-registration-unresolved": 8,
+      "registered-perk-semantics-unmodeled": 8,
       "runtime-ai-subsystem-unmodeled": 2,
       "telemetry-only": 1
     },
