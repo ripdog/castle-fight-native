@@ -63,6 +63,6 @@ Warcraft multi-layer materials are flattened to one representative glTF material
 
 Models imported into the Castle Fight map are not present in a vanilla Warcraft III installation. When the map requests such a model, the extractor falls back to the corresponding install-resident base object art and marks `fallback_to_base_art: true` while retaining `requested_model` in the manifest. An optional map-archive asset source can later provide exact imported art without changing the install-only path.
 
-MDX particle/ribbon emitters are not yet translated to glTF. Most Castle Fight doodads have normal mesh geometry; the two bubble-geyser doodads are emitter-only and therefore currently instantiate empty scenes until an emitter presentation path is added.
+The native client only autoplays an emitted animation whose name is exactly `Stand` (case-insensitive), at half presentation speed. It deliberately ignores `Stand Hit`, numbered stand variants, destruction/death clips, and declared WC3 sequences that produced no glTF transform channels. This keeps ambient fish/birds/etc. moving without accidentally animating static walls or trees through hit/death states. MDX particle/ribbon emitters are not yet translated to glTF. Most Castle Fight doodads have normal mesh geometry; the two bubble-geyser doodads are emitter-only and therefore currently instantiate empty scenes until an emitter presentation path is added.
 
 Only assets the user is authorized to access should be extracted. The extractor itself does not bundle Warcraft III asset files.

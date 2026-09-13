@@ -595,16 +595,7 @@ impl Exporter {
             serde_json::to_vec_pretty(&gltf)?,
         )?;
 
-        let animations = model
-            .sequences_iter()
-            .map(|sequence| AnimationManifest {
-                name: sequence.name(),
-                start_ms: sequence.interval_start(),
-                end_ms: sequence.interval_end(),
-                move_speed: sequence.move_speed(),
-                non_looping: sequence.flags() == SequenceFlag::NonLooping,
-            })
-            .collect();
+        let animations = animation_manifests_from_gltf(&gltf)?;
 
         Ok(ModelManifest {
             source_model: logical_path.to_owned(),
@@ -1281,6 +1272,54 @@ struct QuatSamples {
     times: Vec<f32>,
     values: Vec<[f32; 4]>,
     interpolation: &'static str,
+}
+
+fn animation_manifests_from_gltf(gltf: &Value) -> Result<Vec<AnimationManifest>, Box<dyn Error>> {
+    let Some(animations) = gltf.get("animations").and_then(Value::as_array) else {
+        return Ok(Vec::new());
+    };
+    animations
+        .iter()
+        .map(|animation| {
+            let name = animation
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| io::Error::other("emitted glTF animation has no name"))?;
+            let extras = animation
+                .get("extras")
+                .and_then(Value::as_object)
+                .ok_or_else(|| io::Error::other("emitted glTF animation has no WC3 extras"))?;
+            let start_ms = extras
+                .get("wc3StartMs")
+                .and_then(Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(|| io::Error::other("emitted glTF animation has invalid wc3StartMs"))?;
+            let end_ms = extras
+                .get("wc3EndMs")
+                .and_then(Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(|| io::Error::other("emitted glTF animation has invalid wc3EndMs"))?;
+            let move_speed = extras
+                .get("wc3MoveSpeed")
+                .and_then(Value::as_f64)
+                .ok_or_else(|| {
+                    io::Error::other("emitted glTF animation has invalid wc3MoveSpeed")
+                })? as f32;
+            let non_looping = extras
+                .get("wc3NonLooping")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    io::Error::other("emitted glTF animation has invalid wc3NonLooping")
+                })?;
+            Ok(AnimationManifest {
+                name: name.to_owned(),
+                start_ms,
+                end_ms,
+                move_speed,
+                non_looping,
+            })
+        })
+        .collect()
 }
 
 fn build_animations(
@@ -2613,6 +2652,27 @@ mod tests {
             profile.replaceable_texture.as_deref(),
             Some(r"ReplaceableTextures\AshenvaleTree\AshenTree")
         );
+    }
+
+    #[test]
+    fn animation_manifest_only_reports_emitted_gltf_clips() {
+        let gltf = json!({
+            "animations": [{
+                "name": "Death",
+                "extras": {
+                    "wc3StartMs": 1000,
+                    "wc3EndMs": 2500,
+                    "wc3MoveSpeed": 0.0,
+                    "wc3NonLooping": true
+                }
+            }]
+        });
+        let animations = animation_manifests_from_gltf(&gltf).unwrap();
+        assert_eq!(animations.len(), 1);
+        assert_eq!(animations[0].name, "Death");
+        assert_eq!(animations[0].start_ms, 1000);
+        assert_eq!(animations[0].end_ms, 2500);
+        assert!(animations[0].non_looping);
     }
 
     #[test]
