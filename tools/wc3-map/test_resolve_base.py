@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+from collections import Counter
 import importlib.util
 import json
 import struct
@@ -140,7 +141,51 @@ class ResolvedEvidenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.root = Path(__file__).resolve().parents[2]
-        cls.resolved = cls.root / "docs" / "original_map" / "extracted" / "resolved"
+        cls.extracted = cls.root / "docs" / "original_map" / "extracted"
+        cls.resolved = cls.extracted / "resolved"
+        cls.script = cls.extracted / "script"
+
+    def test_protected_perk_registry_and_damage_listener_audits_preserve_reachability_uncertainty(self) -> None:
+        with (self.script / "protected-perk-registry-audit.tsv").open(encoding="utf-8") as handle:
+            perks = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(perks), 19)
+        self.assertEqual([row["perk_id"] for row in perks], [f"perk_{index:02d}" for index in range(1, 20)])
+        self.assertEqual({row["protected_registry_slot_count"] for row in perks}, {"19"})
+        self.assertEqual({row["runtime_registry_path_status"] for row in perks}, {"reachable-protected-initializer"})
+        self.assertEqual({row["individual_factory_registration_status"] for row in perks}, {"protected-call-target-unresolved"})
+        self.assertEqual({row["individual_factory_registration_proven"] for row in perks}, {"0"})
+        breaching = next(row for row in perks if row["perk_id"] == "perk_10")
+        self.assertEqual(breaching["perk_name"], "Breaching Doctrine")
+        self.assertEqual(breaching["factory_function"], "createBreachingDoctrinePerk")
+        self.assertEqual(
+            breaching["damage_listener_function"],
+            "DamageListener_perkListenDamage_PerkBreachingDoctrine_onEvent_perkListenDamage_PerkBreachingDoctrine",
+        )
+
+        with (self.script / "damage-listener-coverage.tsv").open(encoding="utf-8") as handle:
+            listeners = {row["listener_function"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(listeners), 20)
+        self.assertEqual(
+            dict(sorted(Counter(row["coverage_status"] for row in listeners.values()).items())),
+            {
+                "e2e-only": 1,
+                "normalized-gameplay-semantics": 8,
+                "protected-perk-registration-unresolved": 8,
+                "runtime-ai-subsystem-unmodeled": 2,
+                "telemetry-only": 1,
+            },
+        )
+        self.assertEqual(
+            listeners["DamageListener_addListener_RaceCorrupted_onEvent_addListener_RaceCorrupted"]["coverage_status"],
+            "normalized-gameplay-semantics",
+        )
+        self.assertEqual(
+            listeners[breaching["damage_listener_function"]]["candidate_perk_factory"],
+            "createBreachingDoctrinePerk",
+        )
+        summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
+        self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
+        self.assertEqual(summary["damage_listener_coverage_rows"], 20)
 
     def test_wurst_generated_object_marker_is_classified_as_compiler_provenance(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))

@@ -770,6 +770,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_aliases = analysis["function_aliases"]
     function_value_arguments = analysis["function_value_arguments"]
     protected_filter_bindings = analysis["protected_filter_bindings"]
+    protected_perk_registry_audit = analysis["protected_perk_registry_audit"]
+    damage_listener_coverage = analysis["damage_listener_coverage"]
     production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
     building_improvement_spawn_mechanics = analysis["building_improvement_spawn_mechanics"]
     runtime_system_mechanics = analysis["runtime_system_mechanics"]
@@ -1030,6 +1032,37 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             writer.writerow([
                 row["symbol"], row["initializer_function"], row["resolved_function"], row["predicate"],
                 row["resolution_status"], row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "protected-perk-registry-audit.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "perk_id", "perk_name", "factory_function", "damage_listener_function",
+            "protected_initializer_function", "protected_vm_index", "protected_registry_slot_count",
+            "normal_draft_initializer_callers", "runtime_registry_path_status",
+            "individual_factory_registration_status", "individual_factory_registration_proven",
+            "evidence_kind", "byte_offset",
+        ])
+        for row in protected_perk_registry_audit:
+            writer.writerow([
+                row["perk_id"], row["perk_name"], row["factory_function"], row["damage_listener_function"],
+                row["protected_initializer_function"], row["protected_vm_index"], row["protected_registry_slot_count"],
+                ",".join(str(value) for value in row["normal_draft_initializer_callers"]),
+                row["runtime_registry_path_status"], row["individual_factory_registration_status"],
+                int(bool(row["individual_factory_registration_proven"])), row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "damage-listener-coverage.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "listener_function", "coverage_status", "candidate_perk_factory",
+            "normalized_sources", "evidence_note", "byte_offset",
+        ])
+        for row in damage_listener_coverage:
+            writer.writerow([
+                row["listener_function"], row["coverage_status"], row["candidate_perk_factory"],
+                ",".join(str(value) for value in row["normalized_sources"]),
+                row["evidence_note"], row["byte_offset"],
             ])
 
     with (script_dir / "production-unit-special-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1805,6 +1838,14 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "protected_filter_bindings_resolved": sum(
             row["resolution_status"] == "resolved" for row in protected_filter_bindings
         ),
+        "protected_perk_registry_audit_rows": len(protected_perk_registry_audit),
+        "protected_perk_registry_registration_status_counts": dict(sorted(Counter(
+            str(row["individual_factory_registration_status"]) for row in protected_perk_registry_audit
+        ).items())),
+        "damage_listener_coverage_rows": len(damage_listener_coverage),
+        "damage_listener_coverage_status_counts": dict(sorted(Counter(
+            str(row["coverage_status"]) for row in damage_listener_coverage
+        ).items())),
         "production_unit_special_mechanics": len(production_unit_special_mechanics),
         "production_unit_special_mechanic_kinds": dict(sorted(Counter(
             str(row["mechanic_kind"]) for row in production_unit_special_mechanics

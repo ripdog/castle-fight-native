@@ -3796,6 +3796,211 @@ def _extract_building_spell_mechanics(
     return rows
 
 
+def _extract_protected_perk_registry_audit(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Inventory authored draft perks without guessing protected registry call targets.
+
+    The normal draft runtime calls initPerks__w3p_vmProtect, and the protected VM
+    block for that initializer exposes 19 registry slots (0..18).  The individual
+    calls inside that VM block are deliberately opaque, however, so matching the
+    19 readable factories to those 19 slots is useful structural evidence but is
+    not sufficient proof that any one factory is actually registered.
+    """
+    functions_by_name = {str(row["name"]): row for row in functions}
+    if "initPerks__w3p_vmProtect" not in functions_by_name:
+        return []
+
+    def source(name: str) -> tuple[int, bytes]:
+        row = functions_by_name.get(name)
+        if row is None:
+            raise ValueError(f"protected-perk audit source function missing: {name}")
+        start = int(row["start"])
+        end = int(row["end"])
+        return start, data[start:end]
+
+    initializer = "initPerks__w3p_vmProtect"
+    _initializer_start, initializer_source = source(initializer)
+    if initializer_source != b"function initPerks__w3p_vmProtect()return _qr(65)end":
+        raise ValueError("protected perk initializer wrapper changed")
+
+    live_callers = [
+        "CallbackSingle_doAfter_DraftOrchestrator_call_doAfter_DraftOrchestrator",
+        "restartDraftAfterRoundEnd",
+        "startDraft__w3p_vmProtect",
+    ]
+    for caller in live_callers:
+        _caller_start, caller_source = source(caller)
+        if b"initPerks__w3p_vmProtect()" not in caller_source:
+            raise ValueError(f"normal draft runtime no longer calls protected perk initializer: {caller}")
+
+    vm_start = data.find(b"_fr(65,")
+    vm_end = data.find(b"function initPerks__w3p_vmProtect", vm_start)
+    if vm_start < 0 or vm_end < 0:
+        raise ValueError("protected perk initializer VM block missing")
+    vm_source = data[vm_start:vm_end]
+    slot_sequence = b'"DraftPerkRegistry_perkRegistryRollingToken";' + b";".join(
+        f'"{index}"'.encode("ascii") for index in range(19)
+    )
+    if slot_sequence not in vm_source:
+        raise ValueError("protected perk registry slot sequence changed")
+
+    damage_listener_names = {
+        str(row["name"])
+        for row in functions
+        if str(row["name"]).startswith("DamageListener_perkListenDamage_")
+    }
+    factory_names = sorted(
+        str(row["name"])
+        for row in functions
+        if str(row["name"]).startswith("create") and str(row["name"]).endswith("Perk")
+    )
+    if len(factory_names) != 19:
+        raise ValueError(f"authored draft perk factory count changed: {len(factory_names)}")
+
+    rows: list[dict[str, object]] = []
+    seen_ids: set[str] = set()
+    for factory_name in factory_names:
+        factory_start, factory_source = source(factory_name)
+        marker = b'DraftPerk_new_DraftPerk("'
+        marker_at = factory_source.find(marker)
+        if marker_at < 0:
+            raise ValueError(f"draft perk factory has no direct DraftPerk constructor: {factory_name}")
+        cursor = marker_at + len(marker)
+        id_end = factory_source.find(b'"', cursor)
+        if id_end < 0:
+            raise ValueError(f"draft perk factory id literal is unterminated: {factory_name}")
+        perk_id = factory_source[cursor:id_end].decode("utf-8")
+        name_marker = b',"'
+        name_start = factory_source.find(name_marker, id_end)
+        if name_start < 0:
+            raise ValueError(f"draft perk factory name literal is missing: {factory_name}")
+        name_start += len(name_marker)
+        name_end = factory_source.find(b'"', name_start)
+        if name_end < 0:
+            raise ValueError(f"draft perk factory name literal is unterminated: {factory_name}")
+        perk_name = factory_source[name_start:name_end].decode("utf-8")
+        if perk_id in seen_ids:
+            raise ValueError(f"duplicate authored draft perk id: {perk_id}")
+        seen_ids.add(perk_id)
+
+        stem = factory_name[len("create"):-len("Perk")]
+        matching_listeners = sorted(name for name in damage_listener_names if f"Perk{stem}" in name)
+        if len(matching_listeners) > 1:
+            raise ValueError(f"draft perk has multiple damage listeners: {factory_name}: {matching_listeners}")
+        rows.append({
+            "perk_id": perk_id,
+            "perk_name": perk_name,
+            "factory_function": factory_name,
+            "damage_listener_function": matching_listeners[0] if matching_listeners else "",
+            "protected_initializer_function": initializer,
+            "protected_vm_index": 65,
+            "protected_registry_slot_count": 19,
+            "normal_draft_initializer_callers": live_callers,
+            "runtime_registry_path_status": "reachable-protected-initializer",
+            "individual_factory_registration_status": "protected-call-target-unresolved",
+            "individual_factory_registration_proven": False,
+            "evidence_kind": "exact-readable-factory-plus-live-protected-initializer-and-registry-cardinality;individual-vm-call-target-unresolved",
+            "byte_offset": factory_start,
+        })
+
+    expected_ids = {f"perk_{index:02d}" for index in range(1, 20)}
+    if seen_ids != expected_ids:
+        raise ValueError(f"authored draft perk id sequence changed: {sorted(seen_ids)}")
+    rows.sort(key=lambda row: str(row["perk_id"]))
+    return rows
+
+
+def _extract_damage_listener_coverage(
+    functions: list[dict[str, object]],
+    production_unit_special_mechanics: list[dict[str, object]],
+    runtime_system_mechanics: list[dict[str, object]],
+    building_spell_mechanics: list[dict[str, object]],
+    protected_perk_registry_audit: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Strict closure audit for authored DamageListener callbacks.
+
+    A new gameplay damage listener must either be referenced by a normalized
+    mechanic row or be explicitly classified here.  Perk listeners are retained
+    as unresolved until the protected registry proves their individual factory
+    targets; cardinality matching alone is intentionally not promoted to live
+    importer semantics.
+    """
+    if not protected_perk_registry_audit:
+        return []
+
+    normalized_sources: dict[str, set[str]] = defaultdict(set)
+
+    def add_sources(domain: str, rows: list[dict[str, object]], identity_key: str) -> None:
+        for row in rows:
+            identity = str(row[identity_key])
+            for function_name in row.get("source_functions", []):
+                normalized_sources[str(function_name)].add(f"{domain}:{identity}")
+
+    add_sources("production-unit-special-mechanics", production_unit_special_mechanics, "mechanic_kind")
+    add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
+    add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
+
+    perk_factory_by_listener = {
+        str(row["damage_listener_function"]): str(row["factory_function"])
+        for row in protected_perk_registry_audit
+        if row["damage_listener_function"]
+    }
+    function_offsets = {str(row["name"]): int(row["start"]) for row in functions}
+    listener_names = sorted(
+        name for name in function_offsets
+        if name.startswith("DamageListener_addListener_") or name.startswith("DamageListener_perkListenDamage_")
+    )
+    if len(listener_names) != 20:
+        raise ValueError(f"damage-listener callback inventory changed: {len(listener_names)}")
+
+    e2e_only = {
+        "DamageListener_addListener_BuildingCatalogE2E_onEvent_addListener_BuildingCatalogE2E",
+    }
+    telemetry_only = {
+        "DamageListener_addListener_RoundStatsTracking_onEvent_addListener_RoundStatsTracking",
+    }
+    ai_runtime = {
+        "DamageListener_addListener_AiEngagement_onEvent_addListener_AiEngagement",
+        "DamageListener_addListener_CustomAI_onEvent_addListener_CustomAI",
+    }
+
+    rows: list[dict[str, object]] = []
+    for listener_name in listener_names:
+        normalized = sorted(normalized_sources.get(listener_name, ()))
+        candidate_factory = perk_factory_by_listener.get(listener_name, "")
+        if normalized:
+            status = "normalized-gameplay-semantics"
+            note = "listener is referenced by one or more importer-facing normalized mechanic rows"
+        elif candidate_factory:
+            status = "protected-perk-registration-unresolved"
+            note = (
+                "listener semantics and readable perk factory are present, but the individual factory-to-protected-registry "
+                "call target is not structurally proven"
+            )
+        elif listener_name in e2e_only:
+            status = "e2e-only"
+            note = "generated building-catalog end-to-end verification listener; not production gameplay semantics"
+        elif listener_name in telemetry_only:
+            status = "telemetry-only"
+            note = "round statistics observer records damage and does not define a gameplay damage rewrite"
+        elif listener_name in ai_runtime:
+            status = "runtime-ai-subsystem-unmodeled"
+            note = "live/runtime AI observation or controller hook; tracked separately from combat mechanic normalization"
+        else:
+            raise ValueError(f"unclassified damage-listener callback: {listener_name}")
+        rows.append({
+            "listener_function": listener_name,
+            "coverage_status": status,
+            "candidate_perk_factory": candidate_factory,
+            "normalized_sources": normalized,
+            "evidence_note": note,
+            "byte_offset": function_offsets[listener_name],
+        })
+    return rows
+
+
 def _extract_castle_item_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
@@ -7250,6 +7455,14 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     building_spell_mechanics = _extract_building_spell_mechanics(
         data, functions, building_spell_registrations, corpse_building_mechanics, protected_filter_bindings
     )
+    protected_perk_registry_audit = _extract_protected_perk_registry_audit(data, functions)
+    damage_listener_coverage = _extract_damage_listener_coverage(
+        functions,
+        production_unit_special_mechanics,
+        runtime_system_mechanics,
+        building_spell_mechanics,
+        protected_perk_registry_audit,
+    )
     for reference in function_value_arguments:
         reference["function"] = _enclosing_named_function(
             functions,
@@ -7289,4 +7502,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "unit_spell_mechanics": unit_spell_mechanics,
         "corpse_building_mechanics": corpse_building_mechanics,
         "building_spell_mechanics": building_spell_mechanics,
+        "protected_perk_registry_audit": protected_perk_registry_audit,
+        "damage_listener_coverage": damage_listener_coverage,
     }

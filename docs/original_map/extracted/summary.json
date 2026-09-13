@@ -109,6 +109,18 @@
     "unit_spell_inlined_registrations": 1,
     "protected_filter_bindings": 22,
     "protected_filter_bindings_resolved": 21,
+    "protected_perk_registry_audit_rows": 19,
+    "protected_perk_registry_registration_status_counts": {
+      "protected-call-target-unresolved": 19
+    },
+    "damage_listener_coverage_rows": 20,
+    "damage_listener_coverage_status_counts": {
+      "e2e-only": 1,
+      "normalized-gameplay-semantics": 8,
+      "protected-perk-registration-unresolved": 8,
+      "runtime-ai-subsystem-unmodeled": 2,
+      "telemetry-only": 1
+    },
     "production_unit_special_mechanics": 35,
     "production_unit_special_mechanic_kinds": {
       "attack-damage-flying-target-multiplier": 1,
