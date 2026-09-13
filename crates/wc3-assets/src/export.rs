@@ -27,7 +27,7 @@ const GL_FLOAT: u32 = 5_126;
 const GL_UNSIGNED_SHORT: u32 = 5_123;
 const NO_PARENT: u32 = u32::MAX;
 const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
-const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 2;
+const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 3;
 
 type TextureExport = (Vec<TextureManifest>, Vec<Option<usize>>);
 type GltfBuildOutput = (Value, Vec<u8>, Vec<String>);
@@ -1162,18 +1162,17 @@ fn build_gltf(
         if let Some(accessor) = texcoord_accessor {
             attributes.insert("TEXCOORD_0".into(), json!(accessor));
         }
+        if geoset.matrix_groups().iter().any(|&count| count > 4) {
+            let max_influences = geoset.matrix_groups().iter().copied().max().unwrap_or(0);
+            warnings.push(format!(
+                "geoset {geoset_index} uses up to {max_influences} classic skin influences per vertex; truncating to four and renormalizing for Bevy glTF compatibility"
+            ));
+        }
         if let Some(skin) = build_geoset_skin(&geoset, &skeleton)? {
             let joints_accessor = binary.push_vec4_u16(&skin.joints_0, Some(GL_ARRAY_BUFFER));
             let weights_accessor = binary.push_vec4_f32(&skin.weights_0, Some(GL_ARRAY_BUFFER));
             attributes.insert("JOINTS_0".into(), json!(joints_accessor));
             attributes.insert("WEIGHTS_0".into(), json!(weights_accessor));
-            if let (Some(joints), Some(weights)) = (skin.joints_1.as_ref(), skin.weights_1.as_ref())
-            {
-                let joints_accessor = binary.push_vec4_u16(joints, Some(GL_ARRAY_BUFFER));
-                let weights_accessor = binary.push_vec4_f32(weights, Some(GL_ARRAY_BUFFER));
-                attributes.insert("JOINTS_1".into(), json!(joints_accessor));
-                attributes.insert("WEIGHTS_1".into(), json!(weights_accessor));
-            }
         }
 
         let primitive = json!({
@@ -1495,8 +1494,6 @@ fn insert_skeleton_node(
 struct GeosetSkin {
     joints_0: Vec<[u16; 4]>,
     weights_0: Vec<[f32; 4]>,
-    joints_1: Option<Vec<[u16; 4]>>,
-    weights_1: Option<Vec<[f32; 4]>>,
 }
 
 fn build_geoset_skin(
@@ -1541,8 +1538,6 @@ fn build_geoset_skin(
         return Ok(Some(GeosetSkin {
             joints_0: joints,
             weights_0: weights,
-            joints_1: None,
-            weights_1: None,
         }));
     }
 
@@ -1573,19 +1568,16 @@ fn build_geoset_skin(
         .into());
     }
 
-    let uses_second_set = geoset.matrix_groups().iter().any(|&count| count > 4);
     let mut joints_0 = Vec::with_capacity(vertex_count);
     let mut weights_0 = Vec::with_capacity(vertex_count);
-    let mut joints_1 = uses_second_set.then(|| Vec::with_capacity(vertex_count));
-    let mut weights_1 = uses_second_set.then(|| Vec::with_capacity(vertex_count));
     for &group in geoset.vertex_groups() {
         let group = group as usize;
         let count = *geoset.matrix_groups().get(group).ok_or_else(|| {
             io::Error::other(format!("vertex references missing matrix group {group}"))
         })? as usize;
-        if count == 0 || count > 8 {
+        if count == 0 {
             return Err(io::Error::other(format!(
-                "classic matrix group {group} has {count} influences; exporter supports 1..=8 via JOINTS_0/1"
+                "classic matrix group {group} has no bone influences"
             ))
             .into());
         }
@@ -1593,37 +1585,23 @@ fn build_geoset_skin(
         let matrix_ids = &geoset.matrix_indices()[first..first + count];
         let mut vertex_joints_0 = [0u16; 4];
         let mut vertex_weights_0 = [0.0f32; 4];
-        let mut vertex_joints_1 = [0u16; 4];
-        let mut vertex_weights_1 = [0.0f32; 4];
-        let weight = 1.0 / count as f32;
-        for (slot, &object_id) in matrix_ids.iter().enumerate() {
+        let exported_count = count.min(4);
+        let weight = 1.0 / exported_count as f32;
+        for (slot, &object_id) in matrix_ids.iter().take(exported_count).enumerate() {
             let joint = skeleton.joint_by_object.get(&object_id).ok_or_else(|| {
                 io::Error::other(format!(
                     "classic geoset matrix group references non-bone object id {object_id}"
                 ))
             })?;
-            if slot < 4 {
-                vertex_joints_0[slot] = *joint;
-                vertex_weights_0[slot] = weight;
-            } else {
-                vertex_joints_1[slot - 4] = *joint;
-                vertex_weights_1[slot - 4] = weight;
-            }
+            vertex_joints_0[slot] = *joint;
+            vertex_weights_0[slot] = weight;
         }
         joints_0.push(vertex_joints_0);
         weights_0.push(vertex_weights_0);
-        if let Some(joints) = joints_1.as_mut() {
-            joints.push(vertex_joints_1);
-        }
-        if let Some(weights) = weights_1.as_mut() {
-            weights.push(vertex_weights_1);
-        }
     }
     Ok(Some(GeosetSkin {
         joints_0,
         weights_0,
-        joints_1,
-        weights_1,
     }))
 }
 
@@ -3300,7 +3278,7 @@ mod tests {
     }
 
     #[test]
-    fn classic_skin_preserves_more_than_four_equal_influences() {
+    fn classic_skin_truncates_to_four_equal_influences_for_bevy() {
         let mut geoset = whiteout::mdx::Geoset::new();
         geoset.set_vertex_positions(&[whiteout::math::Vector3f::default()]);
         geoset.set_vertex_groups(&[0]);
@@ -3319,11 +3297,8 @@ mod tests {
             .unwrap()
             .expect("classic geoset should be skinned");
         assert_eq!(skin.joints_0[0], [0, 1, 2, 3]);
-        assert_eq!(skin.joints_1.as_ref().unwrap()[0], [4, 5, 6, 0]);
-        let total: f32 = skin.weights_0[0]
-            .iter()
-            .chain(skin.weights_1.as_ref().unwrap()[0].iter())
-            .sum();
+        assert_eq!(skin.weights_0[0], [0.25; 4]);
+        let total: f32 = skin.weights_0[0].iter().sum();
         assert!((total - 1.0).abs() < 1.0e-6);
     }
 

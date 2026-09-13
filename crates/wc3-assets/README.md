@@ -52,10 +52,13 @@ cargo run -p castle-fight-wc3-assets -- \
   --wc3 "$WC3_INSTALL" \
   --output assets/wc3/units \
   --unit hfoo \
-  --unit n015
+  --unit e003 \
+  --unit o001 \
+  --unit n015 \
+  --unit h016
 ```
 
-Those rawcodes currently replace the placeholder meshes for Footman and Ice Troll Shadow Priest. If the manifest or either model is absent, the client silently retains its normal placeholder visual. The client selects normal stand, walk, and attack clips from the converted glTF and transitions between them from simulation movement/attack events. Re-run the extractor after exporter updates: unit-pack schema 2 includes per-geoset visibility animation, and the client deliberately rejects older packs so stale exports cannot keep rendering decay/corpse meshes under live units. Ranger and Gryphon Rider already convert, but their Warcraft skins use more than four bone influences on some vertices; Bevy 0.19 ignores glTF `JOINTS_1/WEIGHTS_1`, so they remain placeholders until the runtime or exporter has an explicit compatible path. Catapult remains a placeholder while its additional model-state requirements are audited.
+Those rawcodes cover the complete current native unit slice: Footman, Ranger, Catapult, Ice Troll Shadow Priest, and Gryphon Rider. If a generated model is absent, the client silently retains its normal placeholder visual. The client selects stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates: unit-pack schema 3 includes per-geoset visibility animation and Bevy-compatible four-influence skins, and the client deliberately rejects older packs so stale exports cannot keep rendering decay geometry or unsupported `JOINTS_1/WEIGHTS_1` data.
 
 ## Output
 
@@ -67,7 +70,7 @@ The extractor follows texture references from MDX files and handles modern insta
 
 ## Current conversion scope
 
-The converter currently targets classic/SD art. It exports mesh geometry, normals, UVs, glTF skins, Warcraft bone/helper hierarchy, named animation clips, representative glTF materials, texture alpha modes, two-sided flags, and unlit material hints. Classic matrix groups with up to eight influences are preserved through `JOINTS_0/WEIGHTS_0` and `JOINTS_1/WEIGHTS_1` rather than truncating weights.
+The converter currently targets classic/SD art. It exports mesh geometry, normals, UVs, glTF skins, Warcraft bone/helper hierarchy, named animation clips, representative glTF materials, texture alpha modes, two-sided flags, and unlit material hints. Bevy 0.19 only consumes the first four glTF skin influences, so classic Warcraft matrix groups with more than four equal-weight bones are deterministically truncated to the first four and renormalized. The manifest records a warning for affected geosets instead of emitting `JOINTS_1/WEIGHTS_1` that the runtime would silently ignore.
 
 Warcraft `DontInterp` and linear transform tracks map directly to glTF step/linear animation. Hermite and Bezier tracks are evaluated with Warcraft's interpolation rules and linearized at the source keys plus interval midpoints, which keeps output compact while retaining curve shape. Geosets are exported as separate skinned glTF nodes so Warcraft geoset alpha animation can drive visibility; binary visible/hidden states are preserved exactly, while partial alpha fades are currently approximated as binary visibility because core glTF has no animated material-alpha channel. Global-sequence transforms are baked into each exported clip from global time zero; Warcraft normally keeps that global animation clock running across sequence changes, so models using global transforms carry a warning in `manifest.json`. The manifest also preserves sequence timing, movement speed, and non-looping metadata for the runtime animation selector.
 
@@ -75,7 +78,7 @@ Warcraft multi-layer materials are flattened to one representative glTF material
 
 Models imported into Castle Fight are not present in a vanilla Warcraft III installation. Unit/doodad extraction can fall back to corresponding install-resident base object art where available, while effect extraction can read exact imported models and textures when `--map` supplies the matching `.w3x`/MPQ archive. Missing custom references remain explicit failures in the generated manifest rather than being silently substituted with unrelated art.
 
-The native client only autoplays an emitted doodad animation whose name is exactly `Stand` (case-insensitive), at half presentation speed. It deliberately ignores `Stand Hit`, numbered stand variants, destruction/death clips, and declared WC3 sequences that produced no glTF transform channels. This keeps ambient fish/birds/etc. moving without accidentally animating static walls or trees through hit/death states.
+For doodads, the native client only autoplays an emitted animation whose name is exactly `Stand` (case-insensitive), at half presentation speed. It deliberately ignores `Stand Hit`, numbered stand variants, destruction/death clips, and declared WC3 sequences that produced no glTF transform channels. This keeps ambient fish/birds/etc. moving without accidentally animating static walls or trees through hit/death states.
 
 MDX ParticleEmitter2, legacy model-particle, and ribbon definitions are retained in `manifest.json`; emitter nodes are also kept in the converted hierarchy even when a model has no bones or mesh geometry. The native client currently renders ParticleEmitter2 data with textured billboards using the source emission rate, speed/cone, gravity, lifetime, colors, and segment scaling, with a bounded one-shot fallback for `Squirt` emitters whose source emission rate is animation-driven. Ribbon and legacy model-particle metadata are preserved for later exact rendering but are not yet reproduced natively, and animated emitter tracks/texture-atlas frame selection are still approximated. Projectile glTF geometry remains visible alongside the native particle pass, while Chain Lightning is rendered procedurally from the authoritative resolved jump path because Warcraft represents it as a lightning primitive rather than an MDX projectile model.
 

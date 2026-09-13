@@ -11,9 +11,14 @@ use crate::terrain::client_asset_root;
 
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
-const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 2;
-const INITIAL_WC3_MODEL_RAWCODES: [u32; 2] =
-    [u32::from_be_bytes(*b"hfoo"), u32::from_be_bytes(*b"n015")];
+const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 3;
+const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 5] = [
+    u32::from_be_bytes(*b"hfoo"),
+    u32::from_be_bytes(*b"e003"),
+    u32::from_be_bytes(*b"o001"),
+    u32::from_be_bytes(*b"n015"),
+    u32::from_be_bytes(*b"h016"),
+];
 
 #[derive(Resource, Default)]
 pub struct UnitModelSet {
@@ -28,12 +33,22 @@ pub struct UnitModelAsset {
     animations: Option<UnitAnimationSet>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct UnitAnimationClip {
+    pub node: AnimationNodeIndex,
+    pub duration_seconds: f32,
+}
+
 #[derive(Debug, Clone)]
 pub struct UnitAnimationSet {
     pub graph: Handle<AnimationGraph>,
     pub stand: AnimationNodeIndex,
     pub walk: Option<AnimationNodeIndex>,
     pub attack: Option<AnimationNodeIndex>,
+    pub cast: Option<AnimationNodeIndex>,
+    pub death: Option<UnitAnimationClip>,
+    pub decay_flesh: Option<UnitAnimationClip>,
+    pub decay_bone: Option<UnitAnimationClip>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,7 +84,7 @@ impl UnitModelSet {
             Ok(entries) => {
                 let mut models = BTreeMap::new();
                 for entry in entries {
-                    if !INITIAL_WC3_MODEL_RAWCODES.contains(&entry.rawcode) {
+                    if !CURRENT_SLICE_WC3_MODEL_RAWCODES.contains(&entry.rawcode) {
                         continue;
                     }
                     if !asset_root.join(&entry.asset_path).is_file() {
@@ -107,6 +122,7 @@ impl UnitModelSet {
     pub fn prepare_animations(
         &mut self,
         gltfs: &Assets<Gltf>,
+        animation_clips: &Assets<AnimationClip>,
         graphs: &mut Assets<AnimationGraph>,
     ) {
         for model in self
@@ -122,18 +138,44 @@ impl UnitModelSet {
             };
             let walk = find_animation(gltf, AnimationRole::Walk);
             let attack = find_animation(gltf, AnimationRole::Attack);
+            let cast = find_animation(gltf, AnimationRole::Cast);
+            let death = find_animation(gltf, AnimationRole::Death);
+            let decay_flesh = find_animation(gltf, AnimationRole::DecayFlesh);
+            let decay_bone = find_animation(gltf, AnimationRole::DecayBone);
+
+            let selected = [
+                Some(&stand),
+                walk.as_ref(),
+                attack.as_ref(),
+                cast.as_ref(),
+                death.as_ref(),
+                decay_flesh.as_ref(),
+                decay_bone.as_ref(),
+            ];
+            if selected
+                .into_iter()
+                .flatten()
+                .any(|clip| animation_clips.get(clip).is_none())
+            {
+                continue;
+            }
 
             let mut clips = vec![stand];
-            let walk_slot = walk.map(|clip| {
-                let slot = clips.len();
-                clips.push(clip);
-                slot
-            });
-            let attack_slot = attack.map(|clip| {
-                let slot = clips.len();
-                clips.push(clip);
-                slot
-            });
+            let walk_slot = append_optional_clip(&mut clips, walk);
+            let attack_slot = append_optional_clip(&mut clips, attack);
+            let cast_slot = append_optional_clip(&mut clips, cast);
+            let death_slot = append_optional_clip(&mut clips, death);
+            let decay_flesh_slot = append_optional_clip(&mut clips, decay_flesh);
+            let decay_bone_slot = append_optional_clip(&mut clips, decay_bone);
+            let durations: Vec<f32> = clips
+                .iter()
+                .map(|clip| {
+                    animation_clips
+                        .get(clip)
+                        .expect("selected glTF animation clip must be loaded")
+                        .duration()
+                })
+                .collect();
             let (graph, nodes) = AnimationGraph::from_clips(clips);
             let graph = graphs.add(graph);
             model.animations = Some(UnitAnimationSet {
@@ -141,6 +183,19 @@ impl UnitModelSet {
                 stand: nodes[0],
                 walk: walk_slot.map(|slot| nodes[slot]),
                 attack: attack_slot.map(|slot| nodes[slot]),
+                cast: cast_slot.map(|slot| nodes[slot]),
+                death: death_slot.map(|slot| UnitAnimationClip {
+                    node: nodes[slot],
+                    duration_seconds: durations[slot],
+                }),
+                decay_flesh: decay_flesh_slot.map(|slot| UnitAnimationClip {
+                    node: nodes[slot],
+                    duration_seconds: durations[slot],
+                }),
+                decay_bone: decay_bone_slot.map(|slot| UnitAnimationClip {
+                    node: nodes[slot],
+                    duration_seconds: durations[slot],
+                }),
             });
         }
     }
@@ -161,6 +216,10 @@ enum AnimationRole {
     Stand,
     Walk,
     Attack,
+    Cast,
+    Death,
+    DecayFlesh,
+    DecayBone,
 }
 
 fn find_animation(gltf: &Gltf, role: AnimationRole) -> Option<Handle<AnimationClip>> {
@@ -197,7 +256,40 @@ fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
             _ if name.starts_with("attack") && !name.contains("defend") => Some(2),
             _ => None,
         },
+        AnimationRole::Cast => match name.as_str() {
+            "spell" => Some(0),
+            "spell - 1" | "spell 1" => Some(1),
+            _ if name.starts_with("spell") => Some(2),
+            _ => None,
+        },
+        AnimationRole::Death => match name.as_str() {
+            "death" => Some(0),
+            _ if name.starts_with("death") => Some(1),
+            _ => None,
+        },
+        AnimationRole::DecayFlesh => match name.as_str() {
+            "decay flesh" => Some(0),
+            "decay" => Some(1),
+            _ if name.starts_with("decay flesh") => Some(2),
+            _ => None,
+        },
+        AnimationRole::DecayBone => match name.as_str() {
+            "decay bone" => Some(0),
+            _ if name.starts_with("decay bone") => Some(1),
+            _ => None,
+        },
     }
+}
+
+fn append_optional_clip(
+    clips: &mut Vec<Handle<AnimationClip>>,
+    clip: Option<Handle<AnimationClip>>,
+) -> Option<usize> {
+    clip.map(|clip| {
+        let slot = clips.len();
+        clips.push(clip);
+        slot
+    })
 }
 
 fn load_manifest_entries(
@@ -284,7 +376,7 @@ mod tests {
     #[test]
     fn resolves_generated_unit_manifest_paths_and_scales() {
         let json = r#"{
-            "schema_version": 2,
+            "schema_version": 3,
             "units": [
                 {
                     "rawcode": "hfoo",
@@ -318,12 +410,12 @@ mod tests {
     #[test]
     fn rejects_stale_unit_asset_manifest_schema() {
         let json = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "units": []
         }"#;
         let error = resolve_manifest_entries(json, "wc3/units")
             .expect_err("stale generated packs must be regenerated");
-        assert!(error.contains("unsupported unit asset manifest schema 1"));
+        assert!(error.contains("unsupported unit asset manifest schema 2"));
     }
 
     #[test]
@@ -331,7 +423,7 @@ mod tests {
         for path in ["../escape.gltf", "..\\\\escape.gltf"] {
             let json = format!(
                 r#"{{
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "units": [{{"rawcode": "hfoo", "scale": 1.0, "gltf": {path:?}}}]
                 }}"#
             );
@@ -356,12 +448,23 @@ mod tests {
             animation_score("Attack Defend", AnimationRole::Attack),
             None
         );
+        assert_eq!(animation_score("Spell", AnimationRole::Cast), Some(0));
+        assert_eq!(animation_score("Spell - 1", AnimationRole::Cast), Some(1));
+        assert_eq!(animation_score("Death", AnimationRole::Death), Some(0));
+        assert_eq!(
+            animation_score("Decay Flesh", AnimationRole::DecayFlesh),
+            Some(0)
+        );
+        assert_eq!(
+            animation_score("Decay Bone", AnimationRole::DecayBone),
+            Some(0)
+        );
     }
 
     #[test]
     fn rejects_invalid_rawcodes_and_scales() {
         let bad_rawcode = r#"{
-            "schema_version": 2,
+            "schema_version": 3,
             "units": [{"rawcode": "foo", "scale": 1.0, "gltf": "models/foo.gltf"}]
         }"#;
         assert!(
@@ -371,7 +474,7 @@ mod tests {
         );
 
         let bad_scale = r#"{
-            "schema_version": 2,
+            "schema_version": 3,
             "units": [{"rawcode": "hfoo", "scale": 0.0, "gltf": "models/foo.gltf"}]
         }"#;
         assert!(

@@ -9,15 +9,16 @@ use bevy::{
     window::PrimaryWindow,
 };
 use castle_fight_sim::{
-    AbilityCastTarget, AbilityEffect, BuildingFootprint, MovementClass, ProjectileView,
-    ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig, Team,
+    AbilityCastTarget, AbilityEffect, BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CorpseView,
+    MovementClass, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
+    SimulationConfig, Team,
 };
 
 use crate::{
     SimulationPlayback,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
-    unit_models::UnitModelSet,
+    unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3VisualModel, Wc3VisualSet,
         emit_wc3_particles, update_wc3_particles,
@@ -43,6 +44,8 @@ const ABILITY_AREA_EFFECT_SECONDS: f32 = 0.65;
 const ABILITY_MODEL_EFFECT_SECONDS: f32 = 0.9;
 const LIGHTNING_EFFECT_SECONDS: f32 = 0.22;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
+const FLESH_DECAY_TICKS: u64 = 2 * CASTLE_FIGHT_SIMULATION_HZ as u64;
+const BONE_DECAY_TICKS: u64 = 25 * CASTLE_FIGHT_SIMULATION_HZ as u64;
 const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
 const HEALTH_BAR_DEPTH: f32 = 6.0;
 const CORPSE_SIZE: f32 = 7.5;
@@ -245,6 +248,7 @@ struct PresentedEntry {
     entity: Entity,
     weapon: Option<Entity>,
     max_health_seen: i32,
+    imported_rawcode: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -354,23 +358,37 @@ struct WeaponPresentation {
 struct ImportedUnitModelRoot {
     sim_id: SimId,
     rawcode: u32,
+    presentation_root: Entity,
 }
+
+#[derive(Component, Debug, Clone, Copy)]
+struct ImportedDeathRemnant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ImportedUnitAnimationState {
     Stand,
     Walk,
     Attack,
+    Cast,
+    Death,
+    DecayFlesh,
+    DecayBone,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
 struct ImportedUnitAnimationController {
     sim_id: SimId,
+    presentation_root: Entity,
     stand: AnimationNodeIndex,
     walk: Option<AnimationNodeIndex>,
     attack: Option<AnimationNodeIndex>,
+    cast: Option<AnimationNodeIndex>,
+    death: Option<UnitAnimationClip>,
+    decay_flesh: Option<UnitAnimationClip>,
+    decay_bone: Option<UnitAnimationClip>,
     state: ImportedUnitAnimationState,
     last_attack_snapshot_tick: Option<u64>,
+    last_cast_snapshot_tick: Option<u64>,
 }
 
 #[derive(Component)]
@@ -744,9 +762,10 @@ fn setup_scene(
 fn prepare_unit_model_animations(
     mut unit_models: ResMut<UnitModelSet>,
     gltfs: Res<Assets<Gltf>>,
+    animation_clips: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
-    unit_models.prepare_animations(&gltfs, &mut graphs);
+    unit_models.prepare_animations(&gltfs, &animation_clips, &mut graphs);
 }
 
 fn spawn_unit_weapon(
@@ -903,11 +922,17 @@ fn setup_imported_unit_animation_players(
             transitions,
             ImportedUnitAnimationController {
                 sim_id: root.sim_id,
+                presentation_root: root.presentation_root,
                 stand: animations.stand,
                 walk: animations.walk,
                 attack: animations.attack,
+                cast: animations.cast,
+                death: animations.death,
+                decay_flesh: animations.decay_flesh,
+                decay_bone: animations.decay_bone,
                 state: ImportedUnitAnimationState::Stand,
                 last_attack_snapshot_tick: None,
+                last_cast_snapshot_tick: None,
             },
         ));
     }
@@ -932,7 +957,9 @@ fn imported_model_root(
 }
 
 fn update_imported_unit_animations(
+    mut commands: Commands,
     samples: Res<PresentationSamples>,
+    dying_roots: Query<(), With<ImportedDeathRemnant>>,
     mut players: Query<(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
@@ -940,57 +967,240 @@ fn update_imported_unit_animations(
     )>,
 ) {
     for (mut player, mut transitions, mut controller) in &mut players {
-        let Some(current) = samples.current.units.get(&controller.sim_id) else {
+        if let Some(current) = samples.current.units.get(&controller.sim_id) {
+            update_live_imported_unit_animation(
+                &samples,
+                current,
+                &mut player,
+                &mut transitions,
+                &mut controller,
+            );
             continue;
-        };
-        let attack_this_snapshot = controller.last_attack_snapshot_tick
-            != Some(samples.current.tick)
-            && samples
-                .current
-                .attacks
-                .iter()
-                .any(|attack| attack.source == controller.sim_id);
-        if attack_this_snapshot {
-            controller.last_attack_snapshot_tick = Some(samples.current.tick);
-            if let Some(attack) = controller.attack {
-                transitions.play(&mut player, attack, Duration::from_millis(50));
-                controller.state = ImportedUnitAnimationState::Attack;
-                continue;
-            }
         }
 
-        if controller.state == ImportedUnitAnimationState::Attack
-            && controller
-                .attack
-                .and_then(|attack| player.animation(attack))
-                .is_some_and(|animation| !animation.is_finished())
+        if let Some(corpse) = samples
+            .current
+            .corpses
+            .values()
+            .find(|corpse| corpse.source_unit == controller.sim_id)
         {
+            update_imported_corpse_animation(
+                samples.current.tick,
+                corpse,
+                &mut player,
+                &mut transitions,
+                &mut controller,
+            );
             continue;
         }
 
-        let previous = samples
-            .previous
-            .units
-            .get(&controller.sim_id)
-            .unwrap_or(current);
-        let desired = if previous.position != current.position && controller.walk.is_some() {
-            ImportedUnitAnimationState::Walk
-        } else {
-            ImportedUnitAnimationState::Stand
-        };
-        if controller.state == desired {
-            continue;
+        if dying_roots.get(controller.presentation_root).is_ok() {
+            update_imported_death_remnant(
+                &mut commands,
+                &mut player,
+                &mut transitions,
+                &mut controller,
+            );
         }
-        let animation = match desired {
-            ImportedUnitAnimationState::Stand => controller.stand,
-            ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
-            ImportedUnitAnimationState::Attack => unreachable!("attack is handled above"),
-        };
-        transitions
-            .play(&mut player, animation, Duration::from_millis(100))
-            .repeat();
-        controller.state = desired;
     }
+}
+
+fn update_live_imported_unit_animation(
+    samples: &PresentationSamples,
+    current: &UnitSample,
+    player: &mut AnimationPlayer,
+    transitions: &mut AnimationTransitions,
+    controller: &mut ImportedUnitAnimationController,
+) {
+    let cast_this_snapshot = controller.last_cast_snapshot_tick != Some(samples.current.tick)
+        && samples
+            .current
+            .ability_casts
+            .iter()
+            .any(|cast| cast.source == controller.sim_id);
+    if cast_this_snapshot {
+        controller.last_cast_snapshot_tick = Some(samples.current.tick);
+        if let Some(cast) = controller.cast {
+            transitions.play(player, cast, Duration::from_millis(50));
+            controller.state = ImportedUnitAnimationState::Cast;
+            return;
+        }
+    }
+
+    let attack_this_snapshot = controller.last_attack_snapshot_tick != Some(samples.current.tick)
+        && samples
+            .current
+            .attacks
+            .iter()
+            .any(|attack| attack.source == controller.sim_id);
+    if attack_this_snapshot {
+        controller.last_attack_snapshot_tick = Some(samples.current.tick);
+        if let Some(attack) = controller.attack {
+            transitions.play(player, attack, Duration::from_millis(50));
+            controller.state = ImportedUnitAnimationState::Attack;
+            return;
+        }
+    }
+
+    let one_shot_still_playing = match controller.state {
+        ImportedUnitAnimationState::Attack => controller.attack,
+        ImportedUnitAnimationState::Cast => controller.cast,
+        _ => None,
+    }
+    .and_then(|animation| player.animation(animation))
+    .is_some_and(|animation| !animation.is_finished());
+    if one_shot_still_playing {
+        return;
+    }
+
+    let previous = samples
+        .previous
+        .units
+        .get(&controller.sim_id)
+        .unwrap_or(current);
+    let desired = if previous.position != current.position && controller.walk.is_some() {
+        ImportedUnitAnimationState::Walk
+    } else {
+        ImportedUnitAnimationState::Stand
+    };
+    if controller.state == desired {
+        return;
+    }
+    let animation = match desired {
+        ImportedUnitAnimationState::Stand => controller.stand,
+        ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
+        ImportedUnitAnimationState::Attack
+        | ImportedUnitAnimationState::Cast
+        | ImportedUnitAnimationState::Death
+        | ImportedUnitAnimationState::DecayFlesh
+        | ImportedUnitAnimationState::DecayBone => {
+            unreachable!("one-shot/death animation is handled before locomotion")
+        }
+    };
+    transitions
+        .play(player, animation, Duration::from_millis(100))
+        .repeat();
+    controller.state = desired;
+}
+
+fn update_imported_death_remnant(
+    commands: &mut Commands,
+    player: &mut AnimationPlayer,
+    transitions: &mut AnimationTransitions,
+    controller: &mut ImportedUnitAnimationController,
+) {
+    let Some(death) = controller.death else {
+        commands.entity(controller.presentation_root).despawn();
+        return;
+    };
+    if controller.state != ImportedUnitAnimationState::Death {
+        transitions.play(player, death.node, Duration::from_millis(50));
+        controller.state = ImportedUnitAnimationState::Death;
+        return;
+    }
+    if player
+        .animation(death.node)
+        .is_some_and(|animation| animation.is_finished())
+    {
+        commands.entity(controller.presentation_root).despawn();
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CorpseAnimationPlayback {
+    state: ImportedUnitAnimationState,
+    clip: UnitAnimationClip,
+    elapsed_ticks: u64,
+    duration_ticks: u64,
+}
+
+fn update_imported_corpse_animation(
+    current_tick: u64,
+    corpse: &CorpseView,
+    player: &mut AnimationPlayer,
+    transitions: &mut AnimationTransitions,
+    controller: &mut ImportedUnitAnimationController,
+) {
+    let Some(playback) = corpse_animation_playback(current_tick, corpse, controller) else {
+        return;
+    };
+    if controller.state != playback.state {
+        transitions.play(player, playback.clip.node, Duration::ZERO);
+        controller.state = playback.state;
+    }
+    let Some(animation) = player.animation_mut(playback.clip.node) else {
+        return;
+    };
+    let phase = playback.elapsed_ticks as f32 / playback.duration_ticks.max(1) as f32;
+    animation
+        .set_seek_time(playback.clip.duration_seconds * phase.clamp(0.0, 1.0))
+        .pause();
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CorpseAnimationPhase {
+    state: ImportedUnitAnimationState,
+    elapsed_ticks: u64,
+    duration_ticks: u64,
+}
+
+fn corpse_animation_playback(
+    current_tick: u64,
+    corpse: &CorpseView,
+    controller: &ImportedUnitAnimationController,
+) -> Option<CorpseAnimationPlayback> {
+    let phase = corpse_animation_phase(current_tick, corpse)?;
+    let clip = match phase.state {
+        ImportedUnitAnimationState::Death => controller.death,
+        ImportedUnitAnimationState::DecayFlesh => controller
+            .decay_flesh
+            .or(controller.decay_bone)
+            .or(controller.death),
+        ImportedUnitAnimationState::DecayBone => controller
+            .decay_bone
+            .or(controller.decay_flesh)
+            .or(controller.death),
+        _ => None,
+    }?;
+    Some(CorpseAnimationPlayback {
+        state: phase.state,
+        clip,
+        elapsed_ticks: phase.elapsed_ticks,
+        duration_ticks: phase.duration_ticks,
+    })
+}
+
+fn corpse_animation_phase(current_tick: u64, corpse: &CorpseView) -> Option<CorpseAnimationPhase> {
+    let total_ticks = corpse
+        .expires_tick
+        .map(|expires| expires.saturating_sub(corpse.created_tick))?;
+    let death_ticks = total_ticks
+        .saturating_sub(FLESH_DECAY_TICKS + BONE_DECAY_TICKS)
+        .max(1);
+    let age = current_tick.saturating_sub(corpse.created_tick);
+
+    if age < death_ticks {
+        return Some(CorpseAnimationPhase {
+            state: ImportedUnitAnimationState::Death,
+            elapsed_ticks: age,
+            duration_ticks: death_ticks,
+        });
+    }
+
+    let flesh_age = age.saturating_sub(death_ticks);
+    if flesh_age < FLESH_DECAY_TICKS {
+        return Some(CorpseAnimationPhase {
+            state: ImportedUnitAnimationState::DecayFlesh,
+            elapsed_ticks: flesh_age,
+            duration_ticks: FLESH_DECAY_TICKS,
+        });
+    }
+
+    Some(CorpseAnimationPhase {
+        state: ImportedUnitAnimationState::DecayBone,
+        elapsed_ticks: age.saturating_sub(death_ticks + FLESH_DECAY_TICKS),
+        duration_ticks: BONE_DECAY_TICKS,
+    })
 }
 
 fn trigger_attack_animations(
@@ -1395,13 +1605,31 @@ fn sync_render_entities(
             .units
             .remove(&id)
             .expect("stale unit entry disappeared during presentation sync");
-        commands.entity(entry.entity).despawn();
-        let became_authoritative_corpse = samples
+        let authoritative_corpse = samples
             .current
             .corpses
             .values()
-            .any(|corpse| corpse.source_unit == id);
-        if !became_authoritative_corpse && let Some(unit) = samples.previous.units.get(&id) {
+            .find(|corpse| corpse.source_unit == id)
+            .copied();
+        if let Some(corpse) = authoritative_corpse
+            && entry.imported_rawcode.is_some()
+        {
+            render_map.corpses.insert(corpse.id, entry.entity);
+            continue;
+        }
+        if let Some(rawcode) = entry.imported_rawcode
+            && unit_models
+                .animations(rawcode)
+                .is_some_and(|animations| animations.death.is_some())
+        {
+            commands.entity(entry.entity).insert(ImportedDeathRemnant);
+            continue;
+        }
+
+        commands.entity(entry.entity).despawn();
+        if authoritative_corpse.is_none()
+            && let Some(unit) = samples.previous.units.get(&id)
+        {
             remnants.0.push(DeathRemnant {
                 position: sim_point_to_terrain_world(unit.position, &terrain),
                 team: unit.team,
@@ -1551,23 +1779,24 @@ fn sync_render_entities(
                 .get(content.rawcode)
                 .map(|model| (content.rawcode, model))
         });
-        let (entity, weapon) = if let Some((rawcode, model)) = imported_model {
+        let (entity, weapon, imported_rawcode) = if let Some((rawcode, model)) = imported_model {
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
-                .with_child((
-                    WorldAssetRoot(model.scene.clone()),
-                    ImportedUnitModelRoot {
-                        sim_id: unit.id,
-                        rawcode,
-                    },
-                    Transform {
-                        translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
-                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                        scale: Vec3::splat(model.scale),
-                    },
-                ))
                 .id();
-            (entity, None)
+            commands.entity(entity).with_child((
+                WorldAssetRoot(model.scene.clone()),
+                ImportedUnitModelRoot {
+                    sim_id: unit.id,
+                    rawcode,
+                    presentation_root: entity,
+                },
+                Transform {
+                    translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
+                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                    scale: Vec3::splat(model.scale),
+                },
+            ));
+            (entity, None, Some(rawcode))
         } else {
             let entity = commands
                 .spawn((
@@ -1583,7 +1812,7 @@ fn sync_render_entities(
             let weapon =
                 spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
             spawn_air_wings(&mut commands, &assets, entity, unit);
-            (entity, Some(weapon))
+            (entity, Some(weapon), None)
         };
         render_map.units.insert(
             unit.id,
@@ -1591,6 +1820,7 @@ fn sync_render_entities(
                 entity,
                 weapon,
                 max_health_seen: unit.health.max(1),
+                imported_rawcode,
             },
         );
     }
@@ -1675,6 +1905,7 @@ fn sync_render_entities(
                 entity,
                 weapon: None,
                 max_health_seen: building.health.max(1),
+                imported_rawcode: None,
             },
         );
     }
@@ -1683,14 +1914,36 @@ fn sync_render_entities(
         if render_map.corpses.contains_key(&corpse.id) {
             continue;
         }
-        let position = corpse_render_position(corpse.position, &terrain);
-        let entity = commands
-            .spawn((
-                Mesh3d(assets.corpse_mesh.clone()),
-                MeshMaterial3d(assets.corpse_material(corpse.source_team)),
-                Transform::from_translation(position),
-            ))
-            .id();
+        let rawcode = corpse.definition.0;
+        let entity = if let Some(model) = unit_models.get(rawcode) {
+            let position = sim_point_to_terrain_world(corpse.position, &terrain);
+            let entity = commands
+                .spawn((Transform::from_translation(position), Visibility::default()))
+                .id();
+            commands.entity(entity).with_child((
+                WorldAssetRoot(model.scene.clone()),
+                ImportedUnitModelRoot {
+                    sim_id: corpse.source_unit,
+                    rawcode,
+                    presentation_root: entity,
+                },
+                Transform {
+                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                    scale: Vec3::splat(model.scale),
+                    ..default()
+                },
+            ));
+            entity
+        } else {
+            let position = corpse_render_position(corpse.position, &terrain);
+            commands
+                .spawn((
+                    Mesh3d(assets.corpse_mesh.clone()),
+                    MeshMaterial3d(assets.corpse_material(corpse.source_team)),
+                    Transform::from_translation(position),
+                ))
+                .id()
+        };
         render_map.corpses.insert(corpse.id, entity);
     }
 
@@ -2658,7 +2911,7 @@ fn team_color(team: Team) -> Color {
 
 #[cfg(test)]
 mod tests {
-    use castle_fight_sim::{NavCell, TerrainElevationMap};
+    use castle_fight_sim::{CorpseDefinitionId, NavCell, TerrainElevationMap};
 
     use super::*;
 
@@ -2719,6 +2972,52 @@ mod tests {
         let gun_end = weapon_transform(WeaponKind::Gun, Some(1.0));
         assert!(gun_mid.translation.z < gun_rest.translation.z);
         assert!(gun_end.translation.distance(gun_rest.translation) < 1.0e-5);
+    }
+
+    #[test]
+    fn authoritative_corpse_timing_maps_to_death_flesh_and_bone_phases() {
+        let corpse = CorpseView {
+            id: SimId(20),
+            position: SimPoint::new(0, 0),
+            source_unit: SimId(7),
+            source_team: Team(0),
+            definition: CorpseDefinitionId(u32::from_be_bytes(*b"n015")),
+            created_tick: 100,
+            expires_tick: Some(1_000),
+        };
+
+        assert_eq!(
+            corpse_animation_phase(100, &corpse),
+            Some(CorpseAnimationPhase {
+                state: ImportedUnitAnimationState::Death,
+                elapsed_ticks: 0,
+                duration_ticks: 90,
+            })
+        );
+        assert_eq!(
+            corpse_animation_phase(190, &corpse),
+            Some(CorpseAnimationPhase {
+                state: ImportedUnitAnimationState::DecayFlesh,
+                elapsed_ticks: 0,
+                duration_ticks: 60,
+            })
+        );
+        assert_eq!(
+            corpse_animation_phase(250, &corpse),
+            Some(CorpseAnimationPhase {
+                state: ImportedUnitAnimationState::DecayBone,
+                elapsed_ticks: 0,
+                duration_ticks: 750,
+            })
+        );
+        assert_eq!(
+            corpse_animation_phase(999, &corpse),
+            Some(CorpseAnimationPhase {
+                state: ImportedUnitAnimationState::DecayBone,
+                elapsed_ticks: 749,
+                duration_ticks: 750,
+            })
+        );
     }
 
     #[test]
