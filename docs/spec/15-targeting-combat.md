@@ -119,9 +119,9 @@ A current target is dropped when, as applicable:
 
 A short pursuit leash is part of standard behavior: units chase a retreating target for only a modest distance before giving up. The verification implementation initially uses a **3-tile extra pursuit allowance** beyond ordinary attack range, while never making retention shorter than the unit's normal acquisition range. The exact content-compatible value may be tuned later.
 
-Direct retaliation has a one-time lock rule. If unit `A` has no direct-retaliation lock and valid enemy `C` is the first hostile entity to actually attack `A` in canonical combat-event order, `A` switches to `C` on the next targeting phase and marks `C` as its direct-retaliation target. While `C` remains valid, later attackers do not replace it. The lock is cleared only when `C` fails the ordinary target-retention rules or an explicit forced-target rule overrides it.
+Direct retaliation has a one-time lock rule. If unit `A` has no direct-retaliation lock and valid enemy `C` is the first hostile entity to actually attack `A` in canonical combat-event order, `A` switches to `C` on the next targeting phase and marks `C` as its direct-retaliation target. A direct attacker is considered retaliation-valid while it remains hostile/alive and within **3× `A`'s ordinary target acquisition range**, even when it is outside ordinary acquisition range or has no currently reachable attack position. This lets an attacked unit commit to fighting back and attempt best-effort pursuit rather than silently ignoring a nearby attacker because of a cage or other disconnected topology. While `C` remains inside this retaliation leash, later attackers do not replace it. The lock is cleared when `C` dies/disappears, leaves the retaliation leash, or an explicit forced-target rule overrides it.
 
-If the current target is already the first direct attacker, the same target is retained and becomes locked. If several enemies first attack `A` during the same tick, canonical combat resolution order defines which attack is first; worker completion or spatial enumeration order MUST NOT participate.
+If the current target is already the first direct attacker, the same target is retained and becomes locked. If several enemies first attack `A` during the same tick, canonical combat resolution order defines which attack is first; worker completion or spatial enumeration order MUST NOT participate. The 3× retaliation leash applies to both unit and attack-building sources, using point distance for unit attackers and point-to-footprint distance for building attackers.
 
 Ally-defense alerts are considered while `A` has no valid current target **or** while its valid current target is a building. Once ally defense or ordinary acquisition chooses a valid enemy combat unit, attacks on other nearby allies cannot make `A` revolve between those attackers. If `A` is attacking a building and a nearby ally is actually attacked, `A` may instead engage the valid attacker; this allows groups pounding a castle or other structure to peel off and fight arriving defenders.
 
@@ -144,7 +144,7 @@ Candidate discovery MAY use an expanded center-radius broad-phase query, but exa
 
 For projectile delivery, the current verification launch position is the building footprint center while attack-range/travel distance uses the same exact footprint-distance rule used by the intent. This is provisional presentation/compatibility behavior and MUST remain explicit if revised.
 
-Damage caused by an attack building is otherwise ordinary combat damage. Its building `SimId` is the damage source, so a struck unit may establish that building as its first direct-retaliation target and nearby allies may consume the corresponding defense alert when the attacker is valid/reachable under their own rules.
+Damage caused by an attack building is otherwise ordinary combat damage. Its building `SimId` is the damage source, so a struck unit may establish that building as its first direct-retaliation target. The unit's 3× acquisition-range retaliation leash applies even if the building lies outside ordinary acquisition range; nearby allies may separately consume the corresponding defense alert when the attacker is valid/reachable under their own rules.
 
 ## 8. Combat intent
 
@@ -303,9 +303,9 @@ The simulation SHOULD avoid a generic unconstrained callback graph where effect 
 
 ## 12. Damage source does not imply retaliation
 
-Receiving damage or a hostile effect MUST NOT automatically create a player-like attack order against the source.
+Receiving damage from a **non-attack effect** or a hostile effect MUST NOT automatically create a player-like attack order against the source.
 
-Ordinary units retain/reacquire targets only through their autonomous target rules or an explicit taunt/forced-target mechanic. This is required for builder-held offensive items: they may damage a unit while the non-combat builder remains invalid as a target and does not alter that unit's behavior merely by being the source/carrier.
+Ordinary units retain/reacquire targets through their autonomous target rules. An ordinary attack is the explicit exception: a resolved ordinary attack records a one-tick retaliation source, and the next targeting phase may establish the source as the unit's direct-retaliation target under the 3× acquisition-range rule in §7. Builder-held offensive items and other explicitly non-retaliatory effects may damage a unit while their non-combat source remains invalid as a target and does not alter that unit's behavior merely by being the source/carrier.
 
 ## 13. Random combat effects
 

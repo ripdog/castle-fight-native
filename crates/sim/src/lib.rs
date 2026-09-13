@@ -593,6 +593,70 @@ mod tests {
     }
 
     #[test]
+    fn direct_retaliation_reaches_three_times_acquisition_range_and_stays_locked() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let source = sim.spawn_unit(duel_unit(0, 0, 0, 1_000));
+        let decoy = sim.spawn_unit(passive_unit(1, 3 * cell));
+        let attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(23 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 100 * cell,
+                },
+                damage: 1,
+                range: 24 * cell,
+                acquisition_range: 24 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(decoy));
+        sim.step();
+        assert_eq!(sim.projectile_count(), 1);
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().last_attacker, Some(attacker));
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(attacker));
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(attacker));
+    }
+
+    #[test]
+    fn direct_retaliation_does_not_extend_beyond_three_times_acquisition_range() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let source = sim.spawn_unit(duel_unit(0, 0, 0, 1_000));
+        let decoy = sim.spawn_unit(passive_unit(1, 3 * cell));
+        let _attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(25 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 100 * cell,
+                },
+                damage: 1,
+                range: 26 * cell,
+                acquisition_range: 26 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(decoy));
+        sim.step();
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(decoy));
+    }
+
+    #[test]
     fn unreachable_caged_unit_is_ignored_in_favor_of_cage_building() {
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let source = sim.spawn_unit(duel_unit(0, 6 * SUBUNITS_PER_WORLD_UNIT, 0, 1_000));
@@ -1703,14 +1767,14 @@ mod tests {
         let decoy = sim.spawn_unit(passive_unit(1, 12 * cell));
         let tower = sim.spawn_building(attack_building(
             1,
-            BuildingFootprint::new(14, 0, 1, 1),
+            BuildingFootprint::new(20, 0, 1, 1),
             AttackProfile {
                 delivery: AttackDelivery::RangedGuaranteedHit {
                     speed_per_tick: 10 * cell,
                 },
                 damage: 1,
-                range: 8 * cell,
-                acquisition_range: 8 * cell,
+                range: 12 * cell,
+                acquisition_range: 12 * cell,
                 cooldown_ticks: 30,
             },
         ));

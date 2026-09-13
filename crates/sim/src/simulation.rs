@@ -8,6 +8,7 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
+const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 
 use crate::{
@@ -2435,7 +2436,7 @@ impl Simulation {
         }
         let current = unit
             .target
-            .filter(|target| self.target_retainable_for(unit, *target, units, buildings));
+            .filter(|target| self.current_target_retainable_for(unit, *target, units, buildings));
         if let Some(current) = current
             && (unit.direct_retaliation_lock || find_building_index(buildings, current).is_none())
         {
@@ -2462,7 +2463,7 @@ impl Simulation {
                         return TargetDecision::without_defense(None, false);
                     }
                     let current = unit.target.filter(|target| {
-                        self.target_retainable_for(unit, *target, units, buildings)
+                        self.current_target_retainable_for(unit, *target, units, buildings)
                     });
                     if self.next_tick < unit.status.stunned_until_tick {
                         return TargetDecision::without_defense(
@@ -2789,8 +2790,54 @@ impl Simulation {
             return None;
         }
         let attacker = source.retaliation.attacker?;
-        self.target_retainable_for(source, attacker, units, buildings)
+        self.direct_retaliation_target_retainable_for(source, attacker, units, buildings)
             .then_some(attacker)
+    }
+
+    fn current_target_retainable_for(
+        &self,
+        source: &UnitSnapshot,
+        target_id: SimId,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> bool {
+        if source.direct_retaliation_lock {
+            self.direct_retaliation_target_retainable_for(source, target_id, units, buildings)
+        } else {
+            self.target_retainable_for(source, target_id, units, buildings)
+        }
+    }
+
+    fn direct_retaliation_target_retainable_for(
+        &self,
+        source: &UnitSnapshot,
+        target_id: SimId,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> bool {
+        let retaliation_range = source
+            .attack
+            .acquisition_range
+            .checked_mul(DIRECT_RETALIATION_RANGE_MULTIPLIER)
+            .expect("direct retaliation range overflowed validated bounds");
+        let retaliation_range_sq = square_i32(retaliation_range);
+        if let Some(index) = find_unit_index(units, target_id) {
+            let target = &units[index];
+            return source.team != target.team
+                && target.health > 0
+                && source.position.distance_sq(target.position) <= retaliation_range_sq;
+        }
+        if let Some(index) = find_building_index(buildings, target_id) {
+            let target = &buildings[index];
+            return source.team != target.team
+                && target.health > 0
+                && point_to_footprint_distance_sq(
+                    source.position,
+                    target.footprint,
+                    self.config.navigation_cell_size,
+                ) <= retaliation_range_sq;
+        }
+        false
     }
 
     fn recent_ally_defense_target(
