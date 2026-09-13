@@ -482,9 +482,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_unit_spell_semantic_rows"], 37)
         self.assertEqual(summary["protected_filter_binding_rows"], 22)
-        self.assertEqual(summary["protected_filter_binding_resolved_rows"], 16)
+        self.assertEqual(summary["protected_filter_binding_resolved_rows"], 21)
         self.assertEqual(summary["protected_filter_binding_status_counts"], {
-            "dynamic": 1, "resolved": 16, "unresolved": 5,
+            "dynamic": 1, "resolved": 21,
         })
         with (self.resolved / "protected-filter-bindings.tsv").open(encoding="utf-8") as handle:
             filters = {row["symbol"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -492,7 +492,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(filters["SX"]["predicate"], "alive-combat-sapper;enemy-of-mIb")
         self.assertEqual(filters["QX"]["resolved_function"], "wL")
         self.assertIn("always-false", filters["QX"]["predicate"])
-        self.assertEqual(filters["RX"]["resolution_status"], "unresolved")
+        self.assertEqual(filters["RX"]["resolved_function"], "AC")
+        self.assertIn("missing-hp>1", filters["RX"]["predicate"])
+        self.assertEqual(filters["vFb"]["resolved_function"], "IC")
+        self.assertEqual(filters["vFb"]["predicate"], "always-true-marketplace-stock-filter")
+        self.assertEqual(filters["cHb"]["resolved_function"], "UC")
+        self.assertIn("unit-type-not-h06C", filters["cHb"]["predicate"])
+        self.assertEqual(filters["dHb"]["resolved_function"], "TC")
+        self.assertEqual(filters["dHb"]["predicate"], "life>0.405;sapper;vulnerable")
+        self.assertEqual(filters["ZGb"]["resolved_function"], "VC")
+        self.assertEqual(filters["ZGb"]["predicate"], "life>0.405;peon")
         self.assertEqual(filters["Y0"]["resolved_function"], "tK")
         self.assertEqual(filters["X0"]["resolved_function"], "sK")
         self.assertEqual(filters["W0"]["resolved_function"], "uK")

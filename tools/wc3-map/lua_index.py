@@ -4190,6 +4190,26 @@ def _extract_protected_filter_bindings(
             "destructable-type-in-generated-six-type-set",
             {"GetFilterDestructable", "__wurst_safe_GetDestructableTypeId"},
         ),
+        ("main", "vFb"): (
+            "IC",
+            "always-true-marketplace-stock-filter",
+            {"true"},
+        ),
+        ("main", "cHb"): (
+            "UC",
+            "life>0.405;enemy-of-mIb;sapper;vulnerable;not-tentacle;unit-type-not-h06C",
+            {"__wurst_safe_GetWidgetLife", "__wurst_safe_IsUnitEnemy", "UNIT_TYPE_SAPPER", "isVulnerable", "isNotTentacle", "1747990082"},
+        ),
+        ("main", "dHb"): (
+            "TC",
+            "life>0.405;sapper;vulnerable",
+            {"__wurst_safe_GetWidgetLife", "UNIT_TYPE_SAPPER", "isVulnerable"},
+        ),
+        ("main", "ZGb"): (
+            "VC",
+            "life>0.405;peon",
+            {"__wurst_safe_GetWidgetLife", "UNIT_TYPE_PEON"},
+        ),
         ("nH", "ycb"): (
             "oH",
             "alive;structure;gobbo-repairable-target",
@@ -4234,6 +4254,11 @@ def _extract_protected_filter_bindings(
             "vK",
             "alive-combat-sapper;enemy-of-mIb;vulnerable;not-tentacle",
             {"isAliveCombatSapper", "unit_isEnemyOf", "isVulnerable", "isNotTentacle"},
+        ),
+        ("uL", "RX"): (
+            "AC",
+            "life>0.405;ally-of-mIb;structure;missing-hp>1;not-vIb-handle-child7",
+            {"__wurst_safe_GetWidgetLife", "__wurst_safe_IsUnitAlly", "UNIT_TYPE_STRUCTURE", "UNIT_STATE_MAX_LIFE", "vIb", "7"},
         ),
         ("uL", "SX"): (
             "vL",

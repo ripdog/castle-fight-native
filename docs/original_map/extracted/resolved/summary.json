@@ -173,11 +173,10 @@
     "taunt-plus-resume": 1
   },
   "protected_filter_binding_rows": 22,
-  "protected_filter_binding_resolved_rows": 16,
+  "protected_filter_binding_resolved_rows": 21,
   "protected_filter_binding_status_counts": {
     "dynamic": 1,
-    "resolved": 16,
-    "unresolved": 5
+    "resolved": 21
   },
   "resolved_item_rows": 16,
   "castle_shop_item_rows": 10,

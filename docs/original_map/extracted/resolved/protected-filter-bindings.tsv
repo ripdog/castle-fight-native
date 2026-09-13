@@ -4,10 +4,10 @@ NAb	lE	mE	life>0.405;valid-assassin-target;max-mana>10	resolved	static-use-site-
 MAb	lE	nE	life>0.405;valid-assassin-target;life<150	resolved	static-use-site-and-generated-function-structure	2285673
 LAb	lE	oE	life>0.405;valid-assassin-target;life<300	resolved	static-use-site-and-generated-function-structure	2286545
 xdo	lN	KN	destructable-type-in-generated-six-type-set	resolved	static-use-site-and-generated-function-structure	1689624
-vFb	main			unresolved	protected-filter-symbol-unresolved	1745889
-cHb	main			unresolved	protected-filter-symbol-unresolved	1756074
-dHb	main			unresolved	protected-filter-symbol-unresolved	1756922
-ZGb	main			unresolved	protected-filter-symbol-unresolved	1758574
+vFb	main	IC	always-true-marketplace-stock-filter	resolved	static-use-site-and-generated-function-structure	1745889
+cHb	main	UC	life>0.405;enemy-of-mIb;sapper;vulnerable;not-tentacle;unit-type-not-h06C	resolved	static-use-site-and-generated-function-structure	1756074
+dHb	main	TC	life>0.405;sapper;vulnerable	resolved	static-use-site-and-generated-function-structure	1756922
+ZGb	main	VC	life>0.405;peon	resolved	static-use-site-and-generated-function-structure	1758574
 ycb	nH	oH	alive;structure;gobbo-repairable-target	resolved	static-use-site-and-generated-function-structure	3171957
 xcb	nH	pH	alive;mechanical;gobbo-repairable-target	resolved	static-use-site-and-generated-function-structure	3172823
 e0	oL	pL	normal-player-owner;missing-A02E;unit-type-not-x002;unit-type-not-Tdb	resolved	static-use-site-and-generated-function-structure	3680835
@@ -19,5 +19,5 @@ W0	rK	uK	alive-combat-sapper;ally-of-mIb;protected-state>0-and<99.9	resolved	sta
 V0	rK	vK	alive-combat-sapper;enemy-of-mIb;vulnerable;not-tentacle	resolved	static-use-site-and-generated-function-structure	3550031
 SCr	registerPlayerUnitEvent		function-argument-NCr	dynamic	runtime-function-argument-filter-wrapper	3668821
 SX	uL	vL	alive-combat-sapper;enemy-of-mIb	resolved	static-use-site-and-generated-function-structure	3699568
-RX	uL			unresolved	protected-filter-symbol-unresolved	3700447
+RX	uL	AC	life>0.405;ally-of-mIb;structure;missing-hp>1;not-vIb-handle-child7	resolved	static-use-site-and-generated-function-structure	3700447
 QX	uL	wL	side-effect-heal-alive-allied-combat-sappers;matching-UX:+TX;others:+0.2*TX;always-false	resolved	static-use-site-and-generated-function-structure	3701302
