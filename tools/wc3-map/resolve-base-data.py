@@ -2118,6 +2118,47 @@ def main() -> None:
         production_special_rows,
     )
 
+    perk_mechanic_rows: list[list[Any]] = []
+    perk_mechanics_path = map_root / "script" / "perk-mechanics.tsv"
+    if perk_mechanics_path.exists():
+        with perk_mechanics_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                parameters = json.loads(mechanic["parameters_json"])
+                if mechanic["perk_id"] == "perk_09":
+                    toggle_abilities: list[dict[str, Any]] = []
+                    for rawcode in ("AM06", "AM07"):
+                        ability = next((row for row in ability_levels.get(rawcode, []) if row["level"] == "1"), None)
+                        if ability is None:
+                            raise ValueError(f"Combat Stance perk is missing toggle ability {rawcode}")
+                        toggle_abilities.append({
+                            "rawcode": rawcode,
+                            "name": ability["name"],
+                            "tip": ability["tip"],
+                            "ubertip": ability["ubertip"],
+                            "base_rawcode": ability["base_rawcode"],
+                            "mana_cost": numeric(protected_ability_values.get((rawcode, 1, "mana_cost"), ability["mana_cost"])),
+                            "cooldown": numeric(protected_ability_values.get((rawcode, 1, "cooldown"), ability["cooldown"])),
+                            "range": numeric(ability["range"]),
+                            "area": numeric(ability["area"]),
+                            "targets": ability["targets"],
+                            "object_data": json.loads(ability["data_fields_labeled_json"]),
+                        })
+                    parameters["toggle_abilities"] = toggle_abilities
+
+                perk_mechanic_rows.append([
+                    mechanic["perk_id"], mechanic["perk_name"], mechanic["protected_registry_slot"],
+                    mechanic["mechanic_kind"], mechanic["trigger"], mechanic["related_objects_json"],
+                    stable_json(parameters), mechanic["source_functions"], mechanic["evidence_kind"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "perk-mechanics.tsv",
+        [
+            "perk_id", "perk_name", "protected_registry_slot", "mechanic_kind", "trigger",
+            "related_objects_json", "parameters_json", "source_functions", "evidence_kind", "byte_offset",
+        ],
+        perk_mechanic_rows,
+    )
+
     runtime_system_rows: list[list[Any]] = []
     runtime_system_path = map_root / "script" / "runtime-system-mechanics.tsv"
     if runtime_system_path.exists():
@@ -4361,6 +4402,8 @@ def main() -> None:
             row[8] for row in runtime_coverage_rows
         ).items())),
         "building_improvement_spawn_mechanic_rows": len(building_improvement_spawn_by_source),
+        "perk_mechanic_rows": len(perk_mechanic_rows),
+        "perk_mechanic_kinds": dict(sorted(Counter(row[3] for row in perk_mechanic_rows).items())),
         "runtime_system_mechanic_rows": len(runtime_system_rows),
         "runtime_system_mechanic_kinds": dict(sorted(Counter(
             row[1] for row in runtime_system_rows
@@ -4432,6 +4475,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
+            "perk-mechanics.tsv currently normalizes all eight proven-live damage-listener draft perks, including target-type damage tradeoffs, cage-conditioned damage/base-damage changes, Combat Stance HP bands and toggle abilities, Mana Shielding, Spell's Edge and Containment Focus; remaining live perks stay separate until their non-damage runtime paths are normalized",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",

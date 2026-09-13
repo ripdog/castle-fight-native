@@ -4291,11 +4291,339 @@ def _extract_protected_perk_registry_audit(
     return rows
 
 
+def _extract_perk_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    protected_perk_registry_audit: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize the proven-live damage-driven draft perks into importer semantics."""
+    if not protected_perk_registry_audit:
+        return []
+
+    functions_by_name = {str(row["name"]): row for row in functions}
+    audit_by_id = {str(row["perk_id"]): row for row in protected_perk_registry_audit}
+
+    def source(name: str, fragments: Iterable[bytes] = ()) -> tuple[int, bytes]:
+        row = functions_by_name.get(name)
+        if row is None:
+            raise ValueError(f"perk mechanic source function missing: {name}")
+        start = int(row["start"])
+        body = data[start:int(row["end"])]
+        for fragment in fragments:
+            if fragment not in body:
+                raise ValueError(f"perk mechanic source changed: {name}: missing {fragment!r}")
+        return start, body
+
+    def require_global_fragment(fragment: bytes) -> None:
+        if data.count(fragment) != 1:
+            raise ValueError(f"perk mechanic global constant changed or became ambiguous: {fragment!r}")
+
+    for fragment in (
+        b"q6=1.20", b"o6=0.75",
+        b"q5=0.75", b"o5=(-50)",
+        b"m5=1.20", b"k5=0.90",
+        b"L3=1.18", b"K3=0.85",
+        b"o3=3.0", b"T2=1.15", b"L2=45.", b"M2=(-15)",
+        b"R4=0.85", b"S4=1.18", b"T4=0.85", b"U4=1.25",
+        b"V4=0.70", b"W4=0.35", b"Q4=10.",
+        b"e5=__wurst_ensureInt(1095577654)", b"Z4=__wurst_ensureInt(1095577655)",
+    ):
+        require_global_fragment(fragment)
+
+    rows: list[dict[str, object]] = []
+
+    def add(
+        perk_id: str,
+        mechanic_kind: str,
+        trigger: str,
+        parameters: dict[str, object],
+        source_functions: list[tuple[str, tuple[bytes, ...]]],
+        related_rawcode_ids: Iterable[int] = (),
+        evidence_kind: str = "exact-proven-perk-registration-plus-readable-runtime-handlers",
+    ) -> None:
+        audit = audit_by_id.get(perk_id)
+        if audit is None or not bool(audit["individual_factory_registration_proven"]):
+            raise ValueError(f"perk mechanic lacks proven protected registration: {perk_id}")
+        offsets: list[int] = []
+        names: list[str] = [str(audit["factory_function"])]
+        factory_start, _factory_source = source(str(audit["factory_function"]))
+        offsets.append(factory_start)
+        for name, fragments in source_functions:
+            start, _body = source(name, fragments)
+            offsets.append(start)
+            names.append(name)
+        rows.append({
+            "perk_id": perk_id,
+            "perk_name": str(audit["perk_name"]),
+            "protected_registry_slot": int(audit["protected_registry_slot"]),
+            "mechanic_kind": mechanic_kind,
+            "trigger": trigger,
+            "parameters": parameters,
+            "related_rawcode_ids": list(related_rawcode_ids),
+            "source_functions": list(dict.fromkeys(names)),
+            "evidence_kind": evidence_kind,
+            "byte_offset": min(offsets),
+        })
+
+    add(
+        "perk_10",
+        "attack-damage-target-type-tradeoff",
+        "positive-attack-damage-event-from-perk-owner-to-enemy",
+        {
+            "attack_damage_event_type": 0,
+            "base_damage_factor": 1.0,
+            "structure_damage_factor": 1.20,
+            "flying_damage_factor": 0.75,
+            "factors_multiply_when_target_matches_both": True,
+            "source_requires_perk_owner": True,
+            "target_requires_enemy": True,
+            "source_structure_is_not_excluded_by_script": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("DamageListener_perkListenDamage_PerkBreachingDoctrine_onEvent_perkListenDamage_PerkBreachingDoctrine", (
+                b"DamageEvent_getType()==0", b"DamageEvent_getAmount()>0.", b"UNIT_TYPE_STRUCTURE",
+                b"UNIT_TYPE_FLYING", b"q6", b"o6", b"DamageInstance_DamageInstance_setAmount",
+            )),
+        ],
+    )
+
+    add(
+        "perk_07",
+        "attack-damage-target-type-tradeoff",
+        "positive-attack-damage-event-from-perk-owner-to-enemy",
+        {
+            "attack_damage_event_type": 0,
+            "base_damage_factor": 1.0,
+            "flying_damage_factor": 1.18,
+            "structure_damage_factor": 0.85,
+            "factors_multiply_when_target_matches_both": True,
+            "source_requires_perk_owner": True,
+            "target_requires_enemy": True,
+            "source_structure_is_not_excluded_by_script": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("DamageListener_perkListenDamage_setCleanup_PerkGroundControl_onEvent_perkListenDamage_setCleanup_PerkGroundControl", (
+                b"DamageEvent_getType()==0", b"DamageEvent_getAmount()>0.", b"UNIT_TYPE_FLYING",
+                b"UNIT_TYPE_STRUCTURE", b"L3", b"K3", b"DamageInstance_DamageInstance_setAmount",
+            )),
+        ],
+    )
+
+    add(
+        "perk_18",
+        "bidirectional-spell-damage-amplification",
+        "positive-non-attack-damage-event",
+        {
+            "attack_damage_event_type_excluded": 0,
+            "per_owned_source_factor": 1.15,
+            "per_owned_target_factor": 1.15,
+            "owned_source_and_owned_target_factor": 1.3225,
+            "enemy_relationship_not_required": True,
+            "source_and_target_factors_multiply": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("isSpellsEdgeSpellDamage", (b"not(DamageEvent_getType()==0)", b"DamageEvent_getAmount()>0.")),
+            ("DamageListener_perkListenDamage_PerkSpellsEdge_onEvent_perkListenDamage_PerkSpellsEdge", (
+                b"isSpellsEdgeSpellDamage()", b"unit_getOwner(ehn)==dhn.plr", b"unit_getOwner(fhn)==dhn.plr",
+                b"T2", b"DamageInstance_DamageInstance_setAmount",
+            )),
+        ],
+    )
+
+    add(
+        "perk_19",
+        "cage-conditional-spell-damage-tradeoff",
+        "positive-non-attack-damage-event-from-perk-owner-to-enemy",
+        {
+            "attack_damage_event_type_excluded": 0,
+            "caged_target_damage_factor": 1.20,
+            "uncaged_target_damage_factor": 0.90,
+            "cage_test_owner": "damage-target-owner",
+            "cage_test": "vec2_isCagedAt(target-position,target-owner)",
+            "source_requires_perk_owner": True,
+            "target_requires_enemy": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("getContainmentFocusSpellDamageFactor", (b"if g8q then h8q=m5 else h8q=k5 end",)),
+            ("isContainmentFocusSpellDamage", (b"not(DamageEvent_getType()==0)", b"DamageEvent_getAmount()>0.")),
+            ("isTargetCagedForContainmentFocus", (b"vec2_isCagedAt(unit_getPos(i8q),unit_getOwner(i8q))",)),
+            ("DamageListener_perkListenDamage_PerkContainmentFocus_onEvent_perkListenDamage_PerkContainmentFocus", (
+                b"isContainmentFocusSpellDamage()", b"unit_getOwner(Ndn)==Mdn.plr", b"unit_isEnemyOf(Odn,Mdn.plr)",
+                b"getContainmentFocusSpellDamageFactor", b"DamageInstance_DamageInstance_setAmount",
+            )),
+        ],
+    )
+
+    add(
+        "perk_16",
+        "mana-shield-damage-absorption",
+        "positive-damage-event-targeting-owned-eligible-unit",
+        {
+            "damage_per_mana": 3.0,
+            "absorb_formula": "min(current_mana*3,damage_amount)",
+            "mana_spent_formula": "absorbed_damage/3",
+            "remaining_damage_formula": "damage_amount-absorbed_damage",
+            "eligible_requires_combat_sapper": True,
+            "eligible_excludes_peon": True,
+            "eligible_excludes_invulnerable": True,
+            "eligible_requires_positive_max_mana": True,
+            "requires_positive_current_mana": True,
+            "applies_to_attack_and_non_attack_damage": True,
+            "enemy_relationship_not_required": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("isManaShieldEligible", (
+                b"isCombatSapper(hcr)", b"UNIT_TYPE_PEON", b"BlzIsUnitInvulnerable",
+                b"UNIT_STATE_MAX_MANA", b">0.",
+            )),
+            ("applyManaShield", (
+                b"DamageEvent_getAmount()", b"unit_getMana(icr)", b"min1((kcr*o3),jcr)",
+                b"(-(lcr/o3))", b"UNIT_STATE_MANA", b"DamageInstance_DamageInstance_setAmount",
+            )),
+            ("DamageListener_perkListenDamage_PerkManaLeak_onEvent_perkListenDamage_PerkManaLeak", (
+                b"DamageEvent_getTarget()", b"unit_getOwner(Agn)==zgn.plr", b"applyManaShield(Agn)",
+            )),
+        ],
+    )
+
+    add(
+        "perk_08",
+        "caged-spell-resistance-and-base-damage-penalty",
+        "owned-unit-indexing-plus-positive-non-attack-damage-event",
+        {
+            "spell_damage_factor_while_currently_caged": 0.75,
+            "spell_damage_reduction_percent": 25,
+            "base_damage_delta_on_qualifying_index": -50,
+            "base_damage_floor": 0,
+            "base_damage_weapon_indices": [0, 1],
+            "indexed_unit_qualifies_if": "(has-cage-data-at-position and currently-caged-by-perk-owner) or spawn-building-is-cage",
+            "damage_listener_cage_test": "vec2_isCagedAt(target-position,perk-owner)",
+            "damage_listener_excludes_attack_damage_event_type": 0,
+            "damage_listener_requires_positive_damage": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("PerkIndexHandler_perkOnIndex_setCleanup_PerkCagedAegis_call_perkOnIndex_setCleanup_PerkCagedAegis", (
+                b"isCagedUnitForPerk", b"getSpawnBuilding", b"applyCagedDamagePenalty",
+            )),
+            ("applyCagedDamagePenalty", (
+                b"unit_getBaseDamage", b"P7q+o5", b"Q7q+o5", b"BlzSetUnitBaseDamage",
+            )),
+            ("isCagedUnitForPerk", (
+                b"hasCageDataAt(V7q,Y7q)", b"vec2_isCagedAt(Y7q,V7q)", b"unit_isCageBuilding(W7q)",
+            )),
+            ("DamageListener_perkListenDamage_setCleanup_PerkCagedAegis_onEvent_perkListenDamage_setCleanup_PerkCagedAegis", (
+                b"not(DamageEvent_getType()==0)", b"DamageEvent_getAmount()>0.", b"vec2_isCagedAt",
+                b"getCagedAegisSpellDamageFactor()", b"DamageInstance_DamageInstance_setAmount",
+            )),
+            ("getCagedAegisSpellDamageFactor", (b"return q5",)),
+        ],
+    )
+
+    add(
+        "perk_06",
+        "flat-armor-class-attack-bonus-with-base-damage-penalty",
+        "owned-unit-indexing-plus-positive-attack-damage-event",
+        {
+            "base_damage_delta_on_non_structure_index": -15,
+            "base_damage_floor": 0,
+            "base_damage_weapon_indices": [0, 1],
+            "flat_triggering_damage_bonus": 45,
+            "bonus_target_defense_types": ["none", "hero", "divine"],
+            "damage_source_requires_non_structure": True,
+            "damage_source_requires_perk_owner": True,
+            "damage_target_requires_enemy": True,
+            "damage_event_type": 0,
+            "damage_listener_requires_positive_damage": True,
+            "modifies_current_damage_instance_additively": True,
+        },
+        [
+            ("PerkIndexHandler_perkOnIndex_PerkTranscendentBlades_call_perkOnIndex_PerkTranscendentBlades", (
+                b"not unit_isType(Rhn,UNIT_TYPE_STRUCTURE)", b"applyTranscendentBladesTo(Rhn)",
+            )),
+            ("applyTranscendentBladesTo", (
+                b"unit_getBaseDamage", b"Qdr+M2", b"Rdr+M2", b"BlzSetUnitBaseDamage",
+            )),
+            ("isTranscendentBladesArmor", (
+                b"DEFENSE_TYPE_NONE", b"DEFENSE_TYPE_HERO", b"DEFENSE_TYPE_DIVINE",
+            )),
+            ("DamageListener_perkListenDamage_PerkTranscendentBlades_onEvent_perkListenDamage_PerkTranscendentBlades", (
+                b"unit_getOwner(Uhn)==Thn.plr", b"unit_isEnemyOf(Vhn,Thn.plr)", b"not unit_isType(Uhn,UNIT_TYPE_STRUCTURE)",
+                b"DamageEvent_getType()==0", b"DamageEvent_getAmount()>0.", b"DamageEvent_getAmount()+L2",
+                b"DamageInstance_DamageInstance_setAmount",
+            )),
+        ],
+    )
+
+    add(
+        "perk_09",
+        "toggleable-health-band-attack-damage-stance",
+        "positive-attack-damage-event-plus-builder-toggle-spell",
+        {
+            "initial_mode": "execute",
+            "modes": {
+                "execute": {
+                    "target_hp_ratio_below_0_35_factor": 1.25,
+                    "target_hp_ratio_above_0_70_factor": 0.85,
+                    "middle_band_factor": 1.0,
+                },
+                "open-fire": {
+                    "target_hp_ratio_below_0_35_factor": 0.85,
+                    "target_hp_ratio_above_0_70_factor": 1.18,
+                    "middle_band_factor": 1.0,
+                },
+            },
+            "low_hp_threshold_exclusive": 0.35,
+            "high_hp_threshold_exclusive": 0.70,
+            "attack_damage_event_type": 0,
+            "source_requires_perk_owner": True,
+            "target_requires_enemy": True,
+            "toggle_cooldown_seconds": 10.0,
+            "execute_mode_ability_id": 1095577654,
+            "open_fire_mode_ability_id": 1095577655,
+            "round_start_resets_to_execute": True,
+            "cleanup_removes_both_toggle_abilities": True,
+            "modifies_current_damage_instance": True,
+        },
+        [
+            ("registerExecutionOrderPlayer", (b"O4[L8q]=true", b"P4[L8q]=0", b"ensureExecutionOrderBuilderAbility",)),
+            ("Action_watch_PerkExecutionOrder_run_watch_PerkExecutionOrder", (b"P4[Tdn]=0", b"ensureExecutionOrderBuilderAbility",)),
+            ("executionOrderDamageFactor", (
+                b"P4[o8q])==1", b"p8q>V4", b"return S4", b"p8q<W4", b"return R4",
+                b"return U4", b"return T4",
+            )),
+            ("toggleExecutionOrderMode", (b"P4[A8q]=1", b"P4[A8q]=0", b"Q4", b"BlzStartUnitAbilityCooldown",)),
+            ("EventListener_perkListen_setCleanup_PerkExecutionOrder_onEvent_perkListen_setCleanup_PerkExecutionOrder", (
+                b"GetSpellAbilityId()", b"fen==e5", b"fen==Z4", b"toggleExecutionOrderMode",
+            )),
+            ("DamageListener_perkListenDamage_setCleanup_PerkExecutionOrder_onEvent_perkListenDamage_setCleanup_PerkExecutionOrder", (
+                b"DamageEvent_getType()==0", b"DamageEvent_getAmount()>0.", b"BlzGetUnitMaxHP",
+                b"widget_getLife(jen)/ken", b"executionOrderDamageFactor", b"DamageInstance_DamageInstance_setAmount",
+            )),
+            ("PerkCleanupFunc_setCleanup_PerkExecutionOrder_call_setCleanup_PerkExecutionOrder", (
+                b"O4[ren]=false", b"P4[ren]=0", b"unit_removeAbility(sen,e5)", b"unit_removeAbility(sen,Z4)",
+            )),
+        ],
+        related_rawcode_ids=(1095577654, 1095577655),
+    )
+
+    rows.sort(key=lambda row: int(row["protected_registry_slot"]))
+    if len(rows) != 8:
+        raise ValueError(f"damage-driven perk semantic row count changed: {len(rows)}")
+    return rows
+
+
 def _extract_damage_listener_coverage(
     functions: list[dict[str, object]],
     production_unit_special_mechanics: list[dict[str, object]],
     runtime_system_mechanics: list[dict[str, object]],
     building_spell_mechanics: list[dict[str, object]],
+    perk_mechanics: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Strict closure audit for authored DamageListener callbacks.
@@ -4319,6 +4647,7 @@ def _extract_damage_listener_coverage(
     add_sources("production-unit-special-mechanics", production_unit_special_mechanics, "mechanic_kind")
     add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
     add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
+    add_sources("perk-mechanics", perk_mechanics, "perk_id")
 
     perk_by_listener = {
         str(row["damage_listener_function"]): row
@@ -7841,11 +8170,13 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         data, functions, building_spell_registrations, corpse_building_mechanics, protected_filter_bindings
     )
     protected_perk_registry_audit = _extract_protected_perk_registry_audit(data, functions)
+    perk_mechanics = _extract_perk_mechanics(data, functions, protected_perk_registry_audit)
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
         runtime_system_mechanics,
         building_spell_mechanics,
+        perk_mechanics,
         protected_perk_registry_audit,
     )
     for reference in function_value_arguments:
@@ -7888,5 +8219,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "corpse_building_mechanics": corpse_building_mechanics,
         "building_spell_mechanics": building_spell_mechanics,
         "protected_perk_registry_audit": protected_perk_registry_audit,
+        "perk_mechanics": perk_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
     }

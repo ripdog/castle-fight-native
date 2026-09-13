@@ -113,11 +113,20 @@
     "protected_perk_registry_registration_status_counts": {
       "exact-protected-vm-call": 19
     },
+    "perk_mechanics": 8,
+    "perk_mechanic_kinds": {
+      "attack-damage-target-type-tradeoff": 2,
+      "bidirectional-spell-damage-amplification": 1,
+      "cage-conditional-spell-damage-tradeoff": 1,
+      "caged-spell-resistance-and-base-damage-penalty": 1,
+      "flat-armor-class-attack-bonus-with-base-damage-penalty": 1,
+      "mana-shield-damage-absorption": 1,
+      "toggleable-health-band-attack-damage-stance": 1
+    },
     "damage_listener_coverage_rows": 20,
     "damage_listener_coverage_status_counts": {
       "e2e-only": 1,
-      "normalized-gameplay-semantics": 8,
-      "registered-perk-semantics-unmodeled": 8,
+      "normalized-gameplay-semantics": 16,
       "runtime-ai-subsystem-unmodeled": 2,
       "telemetry-only": 1
     },

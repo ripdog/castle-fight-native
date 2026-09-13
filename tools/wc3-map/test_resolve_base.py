@@ -170,8 +170,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             dict(sorted(Counter(row["coverage_status"] for row in listeners.values()).items())),
             {
                 "e2e-only": 1,
-                "normalized-gameplay-semantics": 8,
-                "registered-perk-semantics-unmodeled": 8,
+                "normalized-gameplay-semantics": 16,
                 "runtime-ai-subsystem-unmodeled": 2,
                 "telemetry-only": 1,
             },
@@ -188,7 +187,65 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(breaching["factory_value_evidence"], "factory-result-via-local")
         summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
+        self.assertEqual(summary["perk_mechanics"], 8)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
+
+    def test_damage_driven_perk_mechanics_are_importer_ready(self) -> None:
+        with (self.resolved / "perk-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["perk_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(set(rows), {"perk_06", "perk_07", "perk_08", "perk_09", "perk_10", "perk_16", "perk_18", "perk_19"})
+
+        transcendent = json.loads(rows["perk_06"]["parameters_json"])
+        self.assertEqual(transcendent["base_damage_delta_on_non_structure_index"], -15)
+        self.assertEqual(transcendent["flat_triggering_damage_bonus"], 45)
+        self.assertEqual(transcendent["bonus_target_defense_types"], ["none", "hero", "divine"])
+
+        ground_control = json.loads(rows["perk_07"]["parameters_json"])
+        self.assertEqual(ground_control["flying_damage_factor"], 1.18)
+        self.assertEqual(ground_control["structure_damage_factor"], 0.85)
+        self.assertTrue(ground_control["factors_multiply_when_target_matches_both"])
+
+        caged = json.loads(rows["perk_08"]["parameters_json"])
+        self.assertEqual(caged["spell_damage_factor_while_currently_caged"], 0.75)
+        self.assertEqual(caged["base_damage_delta_on_qualifying_index"], -50)
+
+        stance = json.loads(rows["perk_09"]["parameters_json"])
+        self.assertEqual(stance["low_hp_threshold_exclusive"], 0.35)
+        self.assertEqual(stance["high_hp_threshold_exclusive"], 0.70)
+        self.assertEqual(stance["modes"]["execute"]["target_hp_ratio_below_0_35_factor"], 1.25)
+        self.assertEqual(stance["modes"]["open-fire"]["target_hp_ratio_above_0_70_factor"], 1.18)
+        self.assertEqual(stance["toggle_cooldown_seconds"], 10.0)
+        self.assertEqual(
+            [(ability["rawcode"], ability["name"], ability["cooldown"]) for ability in stance["toggle_abilities"]],
+            [
+                ("AM06", "Combat Stance: Execute", 10.0),
+                ("AM07", "Combat Stance: Open Fire", 10.0),
+            ],
+        )
+
+        breaching = json.loads(rows["perk_10"]["parameters_json"])
+        self.assertEqual(breaching["structure_damage_factor"], 1.2)
+        self.assertEqual(breaching["flying_damage_factor"], 0.75)
+        self.assertTrue(breaching["factors_multiply_when_target_matches_both"])
+
+        mana = json.loads(rows["perk_16"]["parameters_json"])
+        self.assertEqual(mana["damage_per_mana"], 3.0)
+        self.assertTrue(mana["applies_to_attack_and_non_attack_damage"])
+        self.assertTrue(mana["eligible_excludes_peon"])
+
+        spells_edge = json.loads(rows["perk_18"]["parameters_json"])
+        self.assertEqual(spells_edge["per_owned_source_factor"], 1.15)
+        self.assertEqual(spells_edge["per_owned_target_factor"], 1.15)
+        self.assertEqual(spells_edge["owned_source_and_owned_target_factor"], 1.3225)
+        self.assertTrue(spells_edge["enemy_relationship_not_required"])
+
+        containment = json.loads(rows["perk_19"]["parameters_json"])
+        self.assertEqual(containment["caged_target_damage_factor"], 1.2)
+        self.assertEqual(containment["uncaged_target_damage_factor"], 0.9)
+        self.assertEqual(containment["cage_test_owner"], "damage-target-owner")
+
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["perk_mechanic_rows"], 8)
 
     def test_wurst_generated_object_marker_is_classified_as_compiler_provenance(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))

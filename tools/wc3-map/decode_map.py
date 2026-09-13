@@ -771,6 +771,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     function_value_arguments = analysis["function_value_arguments"]
     protected_filter_bindings = analysis["protected_filter_bindings"]
     protected_perk_registry_audit = analysis["protected_perk_registry_audit"]
+    perk_mechanics = analysis["perk_mechanics"]
     damage_listener_coverage = analysis["damage_listener_coverage"]
     production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
     building_improvement_spawn_mechanics = analysis["building_improvement_spawn_mechanics"]
@@ -1053,6 +1054,36 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 ",".join(str(value) for value in row["normal_draft_initializer_callers"]),
                 row["runtime_registry_path_status"], row["individual_factory_registration_status"],
                 int(bool(row["individual_factory_registration_proven"])), row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "perk-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "perk_id", "perk_name", "protected_registry_slot", "mechanic_kind", "trigger",
+            "related_objects_json", "parameters_json", "source_functions", "evidence_kind", "byte_offset",
+        ])
+        for row in perk_mechanics:
+            related_objects: list[dict[str, object]] = []
+            for related_id_value in row["related_rawcode_ids"]:
+                related_id = int(related_id_value)
+                related = {
+                    "rawcode": rawcode_text(related_id),
+                    "rawcode_integer": related_id,
+                    "categories": "",
+                    "names": "",
+                }
+                if related_id in object_metadata:
+                    rawcode, related_categories, _rtables, related_names, _rdefs = rawcode_metadata(related_id)
+                    related.update({
+                        "rawcode": rawcode,
+                        "categories": related_categories,
+                        "names": related_names,
+                    })
+                related_objects.append(related)
+            writer.writerow([
+                row["perk_id"], row["perk_name"], row["protected_registry_slot"], row["mechanic_kind"],
+                row["trigger"], script_json(related_objects), script_json(row["parameters"]),
+                ",".join(str(value) for value in row["source_functions"]), row["evidence_kind"], row["byte_offset"],
             ])
 
     with (script_dir / "damage-listener-coverage.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1844,6 +1875,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "protected_perk_registry_audit_rows": len(protected_perk_registry_audit),
         "protected_perk_registry_registration_status_counts": dict(sorted(Counter(
             str(row["individual_factory_registration_status"]) for row in protected_perk_registry_audit
+        ).items())),
+        "perk_mechanics": len(perk_mechanics),
+        "perk_mechanic_kinds": dict(sorted(Counter(
+            str(row["mechanic_kind"]) for row in perk_mechanics
         ).items())),
         "damage_listener_coverage_rows": len(damage_listener_coverage),
         "damage_listener_coverage_status_counts": dict(sorted(Counter(
