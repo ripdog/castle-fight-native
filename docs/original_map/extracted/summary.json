@@ -136,15 +136,16 @@
     },
     "building_improvement_spawn_mechanics": 1,
     "building_improvement_spawn_mechanic_kinds": {
-      "improved-building-per-spawn-emergency-life-trait": 1
+      "unreachable-production-spawn-branch-keyed-by-A0EL": 1
     },
-    "runtime_system_mechanics": 13,
+    "runtime_system_mechanics": 16,
     "runtime_system_mechanic_kinds": {
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
       "body-replacement-plus-independent-random-trait-groups": 1,
       "builder-point-cast-team-coordinated-area-execution": 1,
       "builder-point-teleport-clamped-to-own-castle": 1,
       "building-random-enemy-base-attack-ground-controller": 1,
+      "enchantment-marker-driven-half-damage-cleave": 1,
       "per-player-building-count-income-multiplier": 1,
       "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
       "periodic-idle-combat-unit-attack-order-recovery": 1,
@@ -152,7 +153,9 @@
       "team-constructed-building-count-to-spell-level": 1,
       "team-presence-gated-owner-scaled-elemental-death-heal": 1,
       "team-shrine-independent-clone-rolls-and-train-transformations": 1,
-      "team-stacked-one-time-delayed-unit-revival": 1
+      "team-stacked-one-time-delayed-unit-revival": 1,
+      "tower-damage-impact-batched-temporary-vision": 1,
+      "unit-type-structure-target-current-damage-halving": 1
     },
     "building_spell_mechanics": 43,
     "building_spell_mechanics_with_unresolved_target_filter": 0,

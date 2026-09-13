@@ -2497,6 +2497,50 @@ def main() -> None:
                     parameters["effect_ability_name"] = effect["name"]
                     parameters["marker_unit_rawcode"] = "h04X"
                     parameters["marker_unit_name"] = marker["name"]
+                elif system_id == "elemental-forge-weapon-cleave":
+                    obelisk = static_units.get("h060")
+                    if obelisk is None:
+                        raise ValueError("Forge Weapon runtime system is missing Obelisk of Elements h060")
+                    forge_marker = ability_level_one("A0F1")
+                    dispatcher = ability_level_one("A03Q")
+                    parameters["source_building_rawcode"] = "h060"
+                    parameters["source_building_name"] = obelisk["name"]
+                    parameters["source_building_tooltip"] = obelisk["ubertip"]
+                    parameters["forge_weapon_marker_rawcode"] = "A0F1"
+                    parameters["forge_weapon_marker_name"] = forge_marker["name"]
+                    parameters["forge_weapon_marker_object_data"] = json.loads(forge_marker["data_fields_labeled_json"])
+                    parameters["source_damage_dispatch_marker_rawcode"] = "A03Q"
+                    parameters["source_damage_dispatch_marker_name"] = dispatcher["name"]
+                elif system_id == "locust-harpy-structure-damage-penalty":
+                    locust = static_units.get("u00G")
+                    protected = protected_unit_applied.get("u00G")
+                    if locust is None or protected is None:
+                        raise ValueError("Locust Harpy runtime system is missing u00G protected data")
+                    if numeric(protected["attack1_min"]) != 142 or numeric(protected["attack1_max"]) != 146:
+                        raise ValueError(f"Locust Harpy protected attack changed: {protected}")
+                    parameters["unit_rawcode"] = "u00G"
+                    parameters["unit_name"] = locust["name"]
+                    parameters["runtime_attack_min"] = numeric(protected["attack1_min"])
+                    parameters["runtime_attack_max"] = numeric(protected["attack1_max"])
+                    parameters["runtime_attack_average"] = numeric(protected["attack1_avg"])
+                    parameters["runtime_attack_range"] = numeric(protected["attack1_range"])
+                    parameters["runtime_attack_type"] = locust["attack1_type"]
+                elif system_id == "celestial-chi-tower-impact-vision":
+                    tower = static_units.get("h07V")
+                    protected = protected_unit_applied.get("h07V")
+                    if tower is None or protected is None:
+                        raise ValueError("Celestial Chi Tower runtime system is missing h07V protected data")
+                    if numeric(protected["attack1_range"]) != 20000 or numeric(protected["attack1_cooldown"]) != 7.5:
+                        raise ValueError(f"Celestial Chi Tower protected weapon changed: {protected}")
+                    parameters["tower_rawcode"] = "h07V"
+                    parameters["tower_name"] = tower["name"]
+                    parameters["tower_tooltip"] = tower["ubertip"]
+                    parameters["runtime_hp"] = numeric(protected["hp"])
+                    parameters["runtime_armor"] = numeric(protected["armor"])
+                    parameters["runtime_attack_min"] = numeric(protected["attack1_min"])
+                    parameters["runtime_attack_max"] = numeric(protected["attack1_max"])
+                    parameters["runtime_attack_cooldown_seconds"] = numeric(protected["attack1_cooldown"])
+                    parameters["runtime_attack_range"] = numeric(protected["attack1_range"])
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 
@@ -3339,21 +3383,20 @@ def main() -> None:
             require_literals(mechanic, "improveSpecialBuilding", ("1.", "2"))
             cross_runtime = building_improvement_spawn_by_source.get("h062")
             if cross_runtime is None:
-                raise ValueError("Mana Generator semantic is missing A0EL cross-runtime spawn evidence")
-            if cross_runtime["mechanic_kind"] != "improved-building-per-spawn-emergency-life-trait":
-                raise ValueError(f"Mana Generator cross-runtime mechanic changed: {cross_runtime['mechanic_kind']}")
-            spawn_trait = json.loads(cross_runtime["parameters_json"])
+                raise ValueError("Mana Generator semantic is missing A0EL reachability audit evidence")
+            if cross_runtime["mechanic_kind"] != "unreachable-production-spawn-branch-keyed-by-A0EL":
+                raise ValueError(f"Mana Generator cross-runtime reachability classification changed: {cross_runtime['mechanic_kind']}")
+            unreachable_spawn_code = json.loads(cross_runtime["parameters_json"])
             if (
-                spawn_trait.get("improvement_ability_id") != 1093682508
-                or spawn_trait.get("spawn_trait_probability_percent") != 30
-                or spawn_trait.get("spawn_granted_emergency_ability_id") != 1093682522
-                or spawn_trait.get("spawn_granted_damage_dispatch_marker_id") != 1093681973
-                or spawn_trait.get("emergency_set_current_life_to") != 5000
+                unreachable_spawn_code.get("improvement_ability_id") != 1093682508
+                or unreachable_spawn_code.get("gameplay_reachable_from_legal_mana_generator_target") is not False
+                or unreachable_spawn_code.get("mana_generator_rejects_production_buildings") is not True
+                or unreachable_spawn_code.get("normal_unit_train_finish_uses_setup_unit") is not False
             ):
-                raise ValueError(f"Mana Generator cross-runtime spawn parameters changed: {spawn_trait}")
-            semantic_kind = "permanent-building-mana-regen-and-spawn-trait-improvement"
+                raise ValueError(f"Mana Generator cross-runtime reachability evidence changed: {unreachable_spawn_code}")
+            semantic_kind = "permanent-special-building-mana-regen-improvement"
             normalization_status = "script-native-ready"
-            effect_rawcodes = ["A0EL", "A0EZ", "A0C5"]
+            effect_rawcodes = ["A0EL"]
             parameters.update({
                 "improvement_ability_rawcode": "A0EL",
                 "normal_level": 1,
@@ -3364,12 +3407,14 @@ def main() -> None:
                 "one_generator_per_target": True,
                 "target_requires_mana": True,
                 "target_requires_special_building": True,
-                "spawn_trait": spawn_trait,
+                "target_rejects_production_buildings": True,
+                "unreachable_spawn_code_audit": {
+                    "mechanic_kind": cross_runtime["mechanic_kind"],
+                    "gameplay_reachable": False,
+                    "reason": "legal A0EL targets have no production spawn rawcode; setupUnit is only used by production companion-spawn paths",
+                },
             })
             source_functions.append("improveSpecialBuilding")
-            source_functions.extend(
-                function for function in cross_runtime["source_functions"].split(",") if function
-            )
 
         enriched_effects: list[dict[str, Any]] = []
         for rawcode in effect_rawcodes:
@@ -4282,7 +4327,7 @@ def main() -> None:
             "protected-filter-bindings.tsv resolves all 21 fixed generated W3P Filter wrappers from exact use-site/compiler structure; generic registerPlayerUnitEvent local SCr is correctly classified as a dynamic caller-supplied wrapper, leaving no unresolved fixed filter globals",
             "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
             "castle-shop-items.tsv recovers the exact 10-slot Castle shop mapping with stock/use flags and fully resolved attached abilities; item-mechanics.tsv separately normalizes script-only Gold scaling, Cheese legendary-slot/refund behavior, the four-Blast-Staff -> Multi Blast Staff inventory recipe, 29-second Double/Quad aura carriers, Orb of Lightning round-scaled dummy casts, and Scroll of Stone/Speed hidden dummy effects",
-            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate; Mana Generator also joins building-improvement-spawn-mechanics.tsv so A0EL's 30% per-spawn A0EZ+A0C5 emergency-life side effect is not lost",
+            "unit-spell-semantics.tsv is the stricter native-import normalization layer over that evidence: all 37 rows are implementation-ready; Master of Elements is fully normalized because its protected Frost target-filter symbol SX is statically resolved to the generated enemy-combat-sapper predicate; Mana Generator is normalized only to its reachable A0EL mana-regeneration improvement, while building-improvement-spawn-mechanics.tsv retains and explicitly marks the A0EL setupUnit/A0EZ+A0C5 branch unreachable because legal Mana Generator targets exclude production buildings and setupUnit is only called from production companion-spawn paths",
             "element-building-buckets.tsv resolves the exact Fire/Earth/Lightning/Water/Wind building-count groups consumed by Master of Elements formulas from generated vtb bucket assignments",
             "building-spells.tsv now covers both generated registration representations: 15 protected registry calls and 28 direct EVENT_PLAYER_UNIT_SPELL_EFFECT listeners. Forty-two use Castle Fight's mana-cost/building-regen cadence; Tidal Guardian is the explicit cooldown-driven exception at its protected 15-second WC3 cooldown",
             "building-spell-evidence.tsv gives all 43 scripted building spells the same bounded static handler/helper/callback/effect evidence used for unit spells, including direct and reachable rawcodes enriched with resolved WC3 object data",

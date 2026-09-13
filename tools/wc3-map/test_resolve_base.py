@@ -478,16 +478,19 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 13)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 16)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
             "builder-point-teleport-clamped-to-own-castle": 1,
             "builder-point-cast-team-coordinated-area-execution": 1,
+            "tower-damage-impact-batched-temporary-vision": 1,
             "building-random-enemy-base-attack-ground-controller": 1,
             "per-player-building-count-income-multiplier": 1,
             "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
             "periodic-idle-combat-unit-attack-order-recovery": 1,
+            "enchantment-marker-driven-half-damage-cleave": 1,
+            "unit-type-structure-target-current-damage-halving": 1,
             "summoned-carrier-random-unit-replacement": 1,
             "team-constructed-building-count-to-spell-level": 1,
             "team-presence-gated-owner-scaled-elemental-death-heal": 1,
@@ -496,7 +499,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 13)
+        self.assertEqual(len(rows), 16)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -659,6 +662,28 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual([packet["amount"] for packet in rescue["damage_packets"]], [4444, 4444])
         self.assertTrue(rescue["zero_kill_refunds_ability_and_effect"])
         self.assertTrue(rescue["nonzero_kill_does_not_refund_in_finish_handler"])
+
+        forge = json.loads(rows["elemental-forge-weapon-cleave"]["parameters_json"])
+        self.assertEqual(forge["forge_weapon_marker_rawcode"], "A0F1")
+        self.assertEqual(forge["source_damage_dispatch_marker_rawcode"], "A03Q")
+        self.assertEqual(forge["damage_multiplier_of_triggering_damage"], 0.5)
+        self.assertEqual(forge["radius"], 250)
+        self.assertTrue(forge["source_attack_capability_controls_ground_and_flying_hits"])
+        self.assertTrue(forge["later_compaction_can_move_forge_weapon_to_another_index"])
+        self.assertTrue(forge["forge_weapon_can_therefore_exist_without_dispatcher_marker"])
+
+        harpy = json.loads(rows["locust-harpy-structure-damage-penalty"]["parameters_json"])
+        self.assertEqual(harpy["unit_rawcode"], "u00G")
+        self.assertEqual(harpy["damage_multiplier"], 0.5)
+        self.assertTrue(harpy["target_requires_structure"])
+        self.assertEqual((harpy["runtime_attack_min"], harpy["runtime_attack_max"]), (142, 146))
+
+        chi = json.loads(rows["celestial-chi-tower-impact-vision"]["parameters_json"])
+        self.assertEqual(chi["tower_rawcode"], "h07V")
+        self.assertEqual(chi["batch_window_seconds"], 0.03)
+        self.assertEqual(chi["vision_radius"], 512)
+        self.assertEqual(chi["vision_duration_seconds"], 8)
+        self.assertEqual(chi["batch_position"], "arithmetic-mean-of-damaged-target-positions")
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
@@ -1050,18 +1075,15 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
         self.assertEqual(
             rows["h062"]["semantic_kind"],
-            "permanent-building-mana-regen-and-spawn-trait-improvement",
+            "permanent-special-building-mana-regen-improvement",
         )
         mana_generator = json.loads(rows["h062"]["parameters_json"])
         self.assertEqual(mana_generator["normal_mana_regen_bonus"], 0.15)
         self.assertEqual(mana_generator["elemental_mana_regen_bonus"], 0.30)
-        spawn_trait = mana_generator["spawn_trait"]
-        self.assertEqual(spawn_trait["spawn_trait_probability_percent"], 30)
-        self.assertEqual(spawn_trait["spawn_granted_emergency_ability_id"], 1093682522)
-        self.assertEqual(spawn_trait["spawn_granted_damage_dispatch_marker_id"], 1093681973)
-        self.assertEqual(spawn_trait["emergency_trigger_current_life_below"], 128)
-        self.assertEqual(spawn_trait["emergency_set_current_life_to"], 5000)
-        self.assertTrue(spawn_trait["emergency_removes_ability_after_trigger"])
+        self.assertTrue(mana_generator["target_rejects_production_buildings"])
+        self.assertNotIn("spawn_trait", mana_generator)
+        reachability = mana_generator["unreachable_spawn_code_audit"]
+        self.assertFalse(reachability["gameplay_reachable"])
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["building_improvement_spawn_mechanic_rows"], 1)
         cross_path = self.root / "docs" / "original_map" / "extracted" / "script" / "building-improvement-spawn-mechanics.tsv"
@@ -1069,7 +1091,15 @@ class ResolvedEvidenceTests(unittest.TestCase):
             cross_rows = list(csv.DictReader(handle, delimiter="\t"))
         self.assertEqual(len(cross_rows), 1)
         self.assertEqual(cross_rows[0]["source_unit_rawcode"], "h062")
-        self.assertEqual(cross_rows[0]["mechanic_kind"], "improved-building-per-spawn-emergency-life-trait")
+        self.assertEqual(cross_rows[0]["mechanic_kind"], "unreachable-production-spawn-branch-keyed-by-A0EL")
+        cross_params = json.loads(cross_rows[0]["parameters_json"])
+        self.assertFalse(cross_params["gameplay_reachable_from_legal_mana_generator_target"])
+        self.assertTrue(cross_params["mana_generator_rejects_production_buildings"])
+        self.assertFalse(cross_params["normal_unit_train_finish_uses_setup_unit"])
+        self.assertEqual(
+            cross_params["setup_unit_callers"],
+            ["spawnSyncedCompanions", "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning"],
+        )
 
         ogre = json.loads(rows["n02Y"]["parameters_json"])
         self.assertEqual(ogre["berserk_ability_rawcode"], "A0GR")

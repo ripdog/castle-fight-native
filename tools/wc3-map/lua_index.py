@@ -5333,15 +5333,22 @@ def _extract_building_improvement_spawn_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Recover cross-runtime effects caused by permanent building improvements.
+    """Recover and classify cross-runtime code keyed off building improvements.
 
-    Mana Generator's A0EL target improvement is registered as a unit spell, but
-    its per-spawn side effect is implemented later in setupUnit and therefore is
-    not reachable through the ordinary unit-spell call graph. Keep that bridge
-    explicit so importers do not reproduce only the mana-regeneration half.
+    Mana Generator's A0EL target improvement is registered as a unit spell. A
+    later setupUnit branch also checks A0EL and can grant a one-shot trait, but
+    legal Mana Generator targets explicitly exclude production buildings while
+    setupUnit is only called for units cloned from production-building spawn
+    paths. Preserve that code as unreachable evidence so importers do not treat
+    it as live Mana Generator gameplay.
     """
     available = {str(function["name"]) for function in functions}
-    required = {"improveSpecialBuilding", "setupUnit", "handleTargetDamageEffects", "deathPactEmergency"}
+    required = {
+        "CFBuilding_CFBuilding_setup", "improveSpecialBuilding", "setupUnit",
+        "spawnSyncedCompanions", "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning",
+        "handleTargetDamageEffects", "deathPactEmergency", "ML", "NL",
+        "CallbackSingle_doAfter_SpecialAttackRuntime_call_doAfter_SpecialAttackRuntime",
+    }
     if not required.issubset(available):
         return []
 
@@ -5354,10 +5361,20 @@ def _extract_building_improvement_spawn_mechanics(
         raw = data[int(function["start"]):int(function["end"])]
         return start, raw, {token.text for token in tokens}
 
+    catalog_start, catalog_source, catalog_tokens = source("CFBuilding_CFBuilding_setup")
     improve_start, improve_source, improve_tokens = source("improveSpecialBuilding")
     setup_start, setup_source, setup_tokens = source("setupUnit")
+    companion_group_start, companion_group_source, companion_group_tokens = source("spawnSyncedCompanions")
+    companion_listener_start, companion_listener_source, companion_listener_tokens = source(
+        "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning"
+    )
     target_start, target_source, target_tokens = source("handleTargetDamageEffects")
     emergency_start, emergency_source, emergency_tokens = source("deathPactEmergency")
+    attack_init_start, attack_init_source, attack_init_tokens = source("ML")
+    attack_trigger_start, attack_trigger_source, attack_trigger_tokens = source("NL")
+    attack_order_start, attack_order_source, attack_order_tokens = source(
+        "CallbackSingle_doAfter_SpecialAttackRuntime_call_doAfter_SpecialAttackRuntime"
+    )
 
     required_improve = {
         "1093682508", "1093682259", "2", "addProtectedAbility",
@@ -5369,6 +5386,10 @@ def _extract_building_improvement_spawn_mechanics(
         raise ValueError("Mana Generator no longer grants A0EL to improved building")
     if b"__wurst_safe_UnitMakeAbilityPermanent(bpr,true,1093682508)" not in improve_source:
         raise ValueError("Mana Generator A0EL permanence changed")
+    if b"(__wurst_ensureInt(hIb[buildingTypeIndexOfUnit(bpr)])>0)" not in improve_source:
+        raise ValueError("Mana Generator production-building rejection changed")
+    if b"hIb[buildingTypeIndex(aTk)]=bTk" not in catalog_source:
+        raise ValueError("CFBuilding production-spawn rawcode mapping changed")
 
     required_setup = {"1093682508", "1093682522", "1093681973", "GetRandomInt", "30", "addProtectedAbility"}
     if not required_setup.issubset(setup_tokens):
@@ -5377,6 +5398,12 @@ def _extract_building_improvement_spawn_mechanics(
         raise ValueError("A0EL per-spawn trait probability changed")
     if b"addProtectedAbility(Tfs,1093682522)" not in setup_source or b"addProtectedAbility(Ufs,1093681973)" not in setup_source:
         raise ValueError("A0EL per-spawn granted abilities changed")
+    if companion_group_source.count(b"setupUnit(") != 2:
+        raise ValueError("synchronized-companion setupUnit call count changed")
+    if companion_listener_source.count(b"setupUnit(") != 3:
+        raise ValueError("direct-companion setupUnit call count changed")
+    if data.count(b"setupUnit(") != 6:
+        raise ValueError("setupUnit acquired an unexpected caller")
 
     if not {"1093681973", "1093682522", "deathPactEmergency"}.issubset(target_tokens):
         raise ValueError("A0EL spawn trait target-damage dispatch changed")
@@ -5392,13 +5419,33 @@ def _extract_building_improvement_spawn_mechanics(
     if b"__wurst_safe_SetWidgetLife(Apq,5000.)" not in emergency_source:
         raise ValueError("A0EL spawn trait emergency life reset changed")
 
+    if "EVENT_PLAYER_UNIT_ATTACKED" not in attack_init_tokens or "lV" not in attack_init_tokens:
+        raise ValueError("A0EL spawn trait attacked-event registration changed")
+    if b"unit_getAbilityLevel(oRr,1093682522)<=0" not in attack_trigger_source:
+        raise ValueError("A0EL attacked-event A0EZ gate changed")
+    if b"unit_removeAbility(oRr,1093682522)" not in attack_trigger_source:
+        raise ValueError("A0EL attacked-event A0EZ consumption changed")
+    if not {"852601", "issueCodeTargetOrder", "orderCodeAttack"}.issubset(attack_order_tokens):
+        raise ValueError("A0EL attacked-event special order changed")
+    if b"if(not issueCodeTargetOrder(wOn.attacker,852601,wOn.target))then orderCodeAttack(wOn.attacker)end" not in attack_order_source:
+        raise ValueError("A0EL attacked-event target-order fallback changed")
+
     return [{
         "source_unit_id": 1747990066,
-        "mechanic_kind": "improved-building-per-spawn-emergency-life-trait",
-        "trigger": "spawn-from-improved-building",
+        "mechanic_kind": "unreachable-production-spawn-branch-keyed-by-A0EL",
+        "trigger": "setupUnit-companion-spawn-path-only",
         "parameters": {
             "improvement_ability_id": 1093682508,
             "elemental_building_marker_ability_id": 1093682259,
+            "gameplay_reachable_from_legal_mana_generator_target": False,
+            "mana_generator_rejects_production_buildings": True,
+            "production_building_detection": "hIb[buildingTypeIndexOfUnit(target)] > 0",
+            "production_building_mapping_semantics": "hIb[buildingTypeIndex(buildingRawcode)] = spawnedUnitRawcode",
+            "setup_unit_callers": [
+                "spawnSyncedCompanions",
+                "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning",
+            ],
+            "normal_unit_train_finish_uses_setup_unit": False,
             "normal_improvement_level": 1,
             "elemental_improvement_level": 2,
             "spawn_trait_roll_min": 0,
@@ -5411,11 +5458,25 @@ def _extract_building_improvement_spawn_mechanics(
             "emergency_trigger_current_life_above": 0.405,
             "emergency_set_current_life_to": 5000,
             "emergency_removes_ability_after_trigger": True,
+            "attacked_event_consumes_same_ability": True,
+            "attacked_event_attempted_target_order_id": 852601,
+            "attacked_event_attempted_target_order_name": "parasite",
+            "attacked_event_target": "attacking-event-target",
+            "attacked_event_fallback_if_order_fails": "orderCodeAttack",
+            "attacked_and_emergency_branches_are_mutually_exclusive_after_first_A0EZ_consumption": True,
         },
         "related_rawcode_ids": [1093682508, 1093682259, 1093682522, 1093681973],
-        "source_functions": ["improveSpecialBuilding", "setupUnit", "handleTargetDamageEffects", "deathPactEmergency"],
-        "evidence_kind": "exact-cross-runtime-building-improvement-and-spawn-handler",
-        "byte_offset": min(improve_start, setup_start, target_start, emergency_start),
+        "source_functions": [
+            "CFBuilding_CFBuilding_setup", "improveSpecialBuilding", "setupUnit",
+            "spawnSyncedCompanions", "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning",
+            "handleTargetDamageEffects", "deathPactEmergency", "ML", "NL",
+            "CallbackSingle_doAfter_SpecialAttackRuntime_call_doAfter_SpecialAttackRuntime",
+        ],
+        "evidence_kind": "exact-unreachable-cross-runtime-branch-with-production-target-exclusion-and-complete-setupUnit-caller-proof",
+        "byte_offset": min(
+            catalog_start, improve_start, setup_start, companion_group_start, companion_listener_start,
+            target_start, emergency_start, attack_init_start, attack_trigger_start, attack_order_start,
+        ),
     }]
 
 
@@ -5455,7 +5516,12 @@ def _extract_runtime_system_mechanics(
         "gL", "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
         "CallbackSingle_doAfter_RescueStrikeRuntime_call_doAfter_RescueStrikeRuntime1",
         "applyRescueStrike", "startRescueStrikeCooldown", "startTeamRescueStrikeCooldown", "finishRescueStrike",
-        "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+        "holyShrineSpell", "handleSourceDamageEffects", "cleaveHitsTarget",
+        "ForGroupCallback_forUnitsInRange_DamageRuntime_callback_forUnitsInRange_DamageRuntime",
+        "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+        "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire2",
+        "CallbackSingle_doAfter_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_doAfter_addListener_doAfter_ThunderpawSpire",
+        "createVision", "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
     }
     if not required.issubset(available):
         return []
@@ -6362,6 +6428,151 @@ def _extract_runtime_system_mechanics(
             rescue_register_start, rescue_cast_start, rescue_delay_start, rescue_apply_start,
             rescue_cd_start, rescue_team_cd_start, rescue_finish_start,
         ),
+    })
+
+    # Obelisk of Elements / Forge Weapon. A0F1 is only a marker; the actual
+    # 50% cleave is implemented in DamageRuntime and requires the generic A03Q
+    # source-damage dispatcher marker as well. Preserve the generated compacted
+    # choice-index quirk: holyShrineSpell adds A03Q only when the selected array
+    # index is 2, which is guaranteed to mean A0F1 only while all three options
+    # are still absent.
+    holy_start, holy_source, holy_tokens = source("holyShrineSpell")
+    source_damage_start, source_damage_source, source_damage_tokens = source("handleSourceDamageEffects")
+    cleave_pred_start, cleave_pred_source, cleave_pred_tokens = source("cleaveHitsTarget")
+    cleave_cb_start, cleave_cb_source, cleave_cb_tokens = source(
+        "ForGroupCallback_forUnitsInRange_DamageRuntime_callback_forUnitsInRange_DamageRuntime"
+    )
+    if b"Qpr[0]=1093682231 Qpr[1]=1093682739 Qpr[2]=1093682737" not in holy_source:
+        raise ValueError("Obelisk of Elements enchant candidate table changed")
+    if b"if(Spr==2)then Xpr=Opr addProtectedAbility(Xpr,1093677905)end" not in holy_source:
+        raise ValueError("Forge Weapon A03Q dispatcher-marker grant condition changed")
+    if b"unit_getAbilityLevel(Qpq,1093677905)<=0" not in source_damage_source:
+        raise ValueError("DamageRuntime source dispatcher gate changed")
+    if b"if(unit_getAbilityLevel(Qpq,1093682737)>0)then Tpq=(.5*GetEventDamage())" not in source_damage_source:
+        raise ValueError("Forge Weapon cleave marker/damage multiplier changed")
+    if b"forUnitsInRange(bqq,250.,false,cqq)" not in source_damage_source:
+        raise ValueError("Forge Weapon cleave radius changed")
+    for fragment in (
+        b"unit_isEnemyOf(kpq,unit_getOwner(jpq))",
+        b"isCombatSapper(kpq)",
+        b"isVulnerable(kpq)",
+        b"lpq and unit_isType(kpq,UNIT_TYPE_GROUND)",
+        b"mpq and unit_isType(kpq,UNIT_TYPE_FLYING)",
+    ):
+        if fragment not in cleave_pred_source:
+            raise ValueError("Forge Weapon cleave target predicate changed")
+    if b"__wurst_safe_UnitDamageTarget(W9l.dummy,X9l,W9l.damage,true,false,ATTACK_TYPE_CHAOS,DAMAGE_TYPE_UNKNOWN,WEAPON_TYPE_WHOKNOWS)" not in cleave_cb_source:
+        raise ValueError("Forge Weapon cleave damage packet changed")
+    rows.append({
+        "system_id": "elemental-forge-weapon-cleave",
+        "mechanic_kind": "enchantment-marker-driven-half-damage-cleave",
+        "trigger": "source-damage-event-with-A03Q-and-A0F1",
+        "parameters": {
+            "source_damage_dispatch_marker_ability_id": 1093677905,
+            "forge_weapon_marker_ability_id": 1093682737,
+            "enchantment_candidate_ability_ids": [1093682231, 1093682739, 1093682737],
+            "dispatcher_marker_grant_condition": "compacted-selected-index-equals-2",
+            "first_full_candidate_set_index_2_is_forge_weapon": True,
+            "later_compaction_can_move_forge_weapon_to_another_index": True,
+            "forge_weapon_can_therefore_exist_without_dispatcher_marker": True,
+            "damage_multiplier_of_triggering_damage": 0.5,
+            "radius": 250,
+            "source_attack_capability_controls_ground_and_flying_hits": True,
+            "target_predicate": "alive;enemy-of-source-owner;combat-sapper;vulnerable;matches-source-ground-or-flying-attack-capability",
+            "dummy_unit_id": 1697656888,
+            "dummy_timed_life_seconds": 1,
+            "damage_is_attack": True,
+            "damage_is_ranged": False,
+            "attack_type": "chaos",
+            "damage_type": "unknown",
+        },
+        "related_rawcode_ids": [1093677905, 1093682737, 1093682231, 1093682739, 1697656888],
+        "source_functions": [
+            "holyShrineSpell", "handleSourceDamageEffects", "cleaveHitsTarget",
+            "ForGroupCallback_forUnitsInRange_DamageRuntime_callback_forUnitsInRange_DamageRuntime",
+        ],
+        "evidence_kind": "exact-enchantment-grant-condition-and-damage-runtime-cleave",
+        "byte_offset": min(holy_start, source_damage_start, cleave_pred_start, cleave_cb_start),
+    })
+
+    # Locust Harpy. This summoned/non-production helper has a protected 142-146
+    # spell attack, but DamageRuntime halves the final current damage instance
+    # whenever its target is a structure.
+    shared_damage_start, shared_damage_source, shared_damage_tokens = source(
+        "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire"
+    )
+    if b"if((unit_getTypeId(w6n)==1966092359)and unit_isType(x6n,UNIT_TYPE_STRUCTURE))then E7n=(DamageEvent_getAmount()*0.5)DamageInstance_DamageInstance_setAmount(khb,E7n)end" not in shared_damage_source:
+        raise ValueError("Locust Harpy structure-damage penalty changed")
+    rows.append({
+        "system_id": "locust-harpy-structure-damage-penalty",
+        "mechanic_kind": "unit-type-structure-target-current-damage-halving",
+        "trigger": "damage-event-source-u00G-target-structure",
+        "parameters": {
+            "unit_id": 1966092359,
+            "target_requires_structure": True,
+            "damage_multiplier": 0.5,
+            "modifies_current_damage_instance": True,
+        },
+        "related_rawcode_ids": [1966092359],
+        "source_functions": ["DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire"],
+        "evidence_kind": "exact-shared-damage-listener-current-damage-rewrite",
+        "byte_offset": shared_damage_start,
+    })
+
+    # Celestial Chi Tower. Damage impacts are collected for 0.03 seconds per
+    # owner, averaged, and converted into an 8-second 512-radius visible fog
+    # modifier. This is a passive attack side effect, not an ordinary spell row.
+    chi_batch_start, chi_batch_source, chi_batch_tokens = source(
+        "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire2"
+    )
+    chi_cleanup_start, chi_cleanup_source, chi_cleanup_tokens = source(
+        "CallbackSingle_doAfter_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_doAfter_addListener_doAfter_ThunderpawSpire"
+    )
+    vision_start, vision_source, vision_tokens = source("createVision")
+    if b"if(unit_getTypeId(w6n)==1747990358)then" not in shared_damage_source:
+        raise ValueError("Celestial Chi Tower damage-source branch changed")
+    for fragment in (
+        b"PS[O6n]=(__wurst_ensureReal(PS[O6n])+P6n[1])",
+        b"OS[O6n]=(__wurst_ensureReal(OS[O6n])+P6n[2])",
+        b"NS[O6n]=(__wurst_ensureInt(NS[O6n])+1)",
+        b"doAfter(0.03,Q6n)",
+    ):
+        if fragment not in shared_damage_source:
+            raise ValueError("Celestial Chi Tower impact batching changed")
+    if b"U7n={(__wurst_ensureReal(PS[T7n.index])/__wurst_ensureInt(NS[T7n.index]));(__wurst_ensureReal(OS[T7n.index])/__wurst_ensureInt(NS[T7n.index]))}" not in chi_batch_source:
+        raise ValueError("Celestial Chi Tower averaged impact position changed")
+    if b"V7n=createVision(T7n.owner,U7n,512.,true)" not in chi_batch_source or b"doAfter(8.,W7n)" not in chi_batch_source:
+        raise ValueError("Celestial Chi Tower vision radius/duration changed")
+    if b"PS[T7n.index]=0. OS[T7n.index]=0. NS[T7n.index]=0" not in chi_batch_source:
+        raise ValueError("Celestial Chi Tower impact accumulator reset changed")
+    if b"__wurst_safe_FogModifierStop(a8n)" not in chi_cleanup_source or b"__wurst_safe_DestroyFogModifier(b8n)" not in chi_cleanup_source:
+        raise ValueError("Celestial Chi Tower vision cleanup changed")
+    if b"CreateFogModifierRadius(fzq,FOG_OF_WAR_VISIBLE" not in vision_source:
+        raise ValueError("Celestial Chi Tower createVision semantics changed")
+    rows.append({
+        "system_id": "celestial-chi-tower-impact-vision",
+        "mechanic_kind": "tower-damage-impact-batched-temporary-vision",
+        "trigger": "damage-event-source-h07V",
+        "parameters": {
+            "tower_unit_id": 1747990358,
+            "batch_window_seconds": 0.03,
+            "batch_scope": "source-owner-player-id",
+            "batch_position": "arithmetic-mean-of-damaged-target-positions",
+            "vision_radius": 512,
+            "vision_duration_seconds": 8,
+            "fog_state": "visible",
+            "fog_modifier_shared_vision_flag": True,
+            "accumulators_reset_after_batch": True,
+        },
+        "related_rawcode_ids": [1747990358],
+        "source_functions": [
+            "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+            "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire2",
+            "createVision",
+            "CallbackSingle_doAfter_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_doAfter_addListener_doAfter_ThunderpawSpire",
+        ],
+        "evidence_kind": "exact-damage-impact-accumulator-delayed-average-vision-and-cleanup",
+        "byte_offset": min(shared_damage_start, chi_batch_start, vision_start, chi_cleanup_start),
     })
 
     # Blood Fiend procedural generation. The trained n00L carrier is first
