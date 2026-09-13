@@ -6,6 +6,7 @@
 - Always commit completed work automatically in logical, reviewable chunks with clear commit messages.
 - Keep commits narrowly scoped; do not mix unrelated refactors, formatting, and behavior changes unless they are inseparable.
 - Preserve and update the specifications under `docs/spec` when implementation decisions change normative behavior.
+- Devspace worktrees are large: after merging a worktree's completed changes, remove that worktree instead of leaving it on disk.
 
 ## Rust expectations
 
@@ -29,4 +30,6 @@
 
 - Add or update focused tests for behavior changes, especially determinism-sensitive code.
 - Run relevant formatting, linting, tests, and build checks before committing.
+- Run compile-heavy Cargo commands (`cargo build`, `cargo check`, `cargo test`, `cargo clippy`, benchmarks, and similar verification) through Devspace as asynchronous tasks (`async=true`), then inspect their output with the task APIs. Do not run these naively in the foreground and then rely on a short command timeout.
+- Respect the repository's six-job Cargo build cap; do not override it with `-j`/`--jobs` or `CARGO_BUILD_JOBS` unless the user explicitly asks.
 - For performance-sensitive changes, benchmark/profile where practical rather than assuming an optimization is beneficial.
