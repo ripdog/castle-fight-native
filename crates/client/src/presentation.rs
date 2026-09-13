@@ -89,6 +89,16 @@ impl WorldMetrics {
         Vec3::new(center.x, 0.0, center.y)
     }
 
+    fn clamp_focus(&self, focus: Vec3) -> Vec3 {
+        let min = self.world_min();
+        let max = self.world_max();
+        Vec3::new(
+            focus.x.clamp(min.x, max.x),
+            focus.y,
+            focus.z.clamp(min.y, max.y),
+        )
+    }
+
     pub(crate) fn footprint_center_size(&self, footprint: BuildingFootprint) -> (Vec3, Vec2) {
         let cell = self.navigation_cell_world();
         let width = f32::from(footprint.width) * cell;
@@ -609,7 +619,7 @@ fn setup_scene(
         neutral_corpse_material,
     });
 
-    let world_size = terrain.world_size();
+    let world_size = metrics.world_size();
     let mut world_center = metrics.world_center();
     world_center.y = terrain.height_at_world(world_center.xz());
     let ground_mesh = meshes.add(terrain.mesh());
@@ -2125,6 +2135,11 @@ fn update_camera(
     if mouse_buttons.just_released(MouseButton::Middle) {
         rig.grab_anchor = None;
     }
+
+    // Match the W3I playable/camera rectangle rather than allowing the native free camera to
+    // wander onto the hidden terrain padding outside it.
+    rig.focus = metrics.clamp_focus(rig.focus);
+    rig.focus.y = terrain.height_at_world(rig.focus.xz());
 
     **transform = camera_transform(rig);
 }
