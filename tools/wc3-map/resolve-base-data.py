@@ -2371,6 +2371,84 @@ def main() -> None:
                     parameters["gjallarhorn_name"] = gjallar["name"]
                     parameters["gjallarhorn_tooltip"] = gjallar["ubertip"]
                     parameters["resolved_effect_levels"] = levels
+                elif system_id == "support-order-controller":
+                    assassin = static_units.get("n01Z")
+                    royal = static_units.get("n020")
+                    gobbo = static_units.get("n01U")
+                    if None in (assassin, royal, gobbo):
+                        raise ValueError("Support-order controller is missing Assassin/Royal/Gobbo unit data")
+                    normal_feedback = ability_level_one("A076")
+                    royal_feedback = ability_level_one("A075")
+                    normal_windwalk = ability_level_one("A077")
+                    royal_windwalk = ability_level_one("A078")
+                    normal_evasion = ability_level_one("A00U")
+                    royal_evasion = ability_level_one("A03P")
+                    gobbo_repair = ability_level_one("A09K")
+                    normal_feedback_fields = json.loads(normal_feedback["data_fields_labeled_json"])
+                    royal_feedback_fields = json.loads(royal_feedback["data_fields_labeled_json"])
+                    normal_windwalk_fields = json.loads(normal_windwalk["data_fields_labeled_json"])
+                    royal_windwalk_fields = json.loads(royal_windwalk["data_fields_labeled_json"])
+                    normal_evasion_fields = json.loads(normal_evasion["data_fields_labeled_json"])
+                    royal_evasion_fields = json.loads(royal_evasion["data_fields_labeled_json"])
+                    gobbo_repair_fields = json.loads(gobbo_repair["data_fields_labeled_json"])
+                    if (
+                        numeric(normal_feedback_fields.get("Max Mana Drained - Units")) != 40
+                        or numeric(normal_feedback_fields.get("Damage Ratio - Units (%)")) != 1.7
+                        or numeric(royal_feedback_fields.get("Max Mana Drained - Units")) != 60
+                        or numeric(royal_feedback_fields.get("Damage Ratio - Units (%)")) != 2.2
+                    ):
+                        raise ValueError("Assassin Feedback object data changed")
+                    if (
+                        numeric(normal_windwalk_fields.get("Backstab Damage")) != 150
+                        or numeric(normal_windwalk_fields.get("Movement Speed Increase (%)")) != 0.3
+                        or numeric(royal_windwalk_fields.get("Backstab Damage")) != 300
+                        or numeric(royal_windwalk_fields.get("Movement Speed Increase (%)")) != 0.45
+                    ):
+                        raise ValueError("Assassin Wind Walk object data changed")
+                    if numeric(normal_evasion_fields.get("Chance to Evade")) != 0.15 or numeric(royal_evasion_fields.get("Chance to Evade")) != 0.25:
+                        raise ValueError("Assassin Evasion object data changed")
+                    if numeric(gobbo_repair_fields.get("Repair Time Ratio")) != 0.45 or numeric(gobbo_repair_fields.get("Repair Cost Ratio")) != 0:
+                        raise ValueError("Gobbo repair object data changed")
+                    parameters["actors"] = [
+                        {
+                            "unit_rawcode": "n01Z",
+                            "unit_name": assassin["name"],
+                            "production_building_rawcode": production_source_by_unit["n01Z"]["building_rawcode"],
+                            "production_building_names": production_source_by_unit["n01Z"]["building_names"],
+                            "feedback_ability_rawcode": "A076",
+                            "feedback_object_data": normal_feedback_fields,
+                            "windwalk_ability_rawcode": "A077",
+                            "windwalk_object_data": normal_windwalk_fields,
+                            "evasion_ability_rawcode": "A00U",
+                            "evasion_object_data": normal_evasion_fields,
+                            "low_hp_priority_threshold": 150,
+                        },
+                        {
+                            "unit_rawcode": "n020",
+                            "unit_name": royal["name"],
+                            "production_building_rawcode": production_source_by_unit["n020"]["building_rawcode"],
+                            "production_building_names": production_source_by_unit["n020"]["building_names"],
+                            "feedback_ability_rawcode": "A075",
+                            "feedback_object_data": royal_feedback_fields,
+                            "windwalk_ability_rawcode": "A078",
+                            "windwalk_object_data": royal_windwalk_fields,
+                            "evasion_ability_rawcode": "A03P",
+                            "evasion_object_data": royal_evasion_fields,
+                            "low_hp_priority_threshold": 300,
+                        },
+                        {
+                            "unit_rawcode": "n01U",
+                            "unit_name": gobbo["name"],
+                            "production_building_rawcode": production_source_by_unit["n01U"]["building_rawcode"],
+                            "production_building_names": production_source_by_unit["n01U"]["building_names"],
+                            "repair_ability_rawcode": "A09K",
+                            "repair_object_data": gobbo_repair_fields,
+                            "timed_life_seconds": parameters["gobbo_timed_life_seconds"],
+                        },
+                    ]
+                    parameters["assassin_tooltip"] = assassin["ubertip"]
+                    parameters["royal_assassin_tooltip"] = royal["ubertip"]
+                    parameters["gobbo_tooltip"] = gobbo["ubertip"]
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 

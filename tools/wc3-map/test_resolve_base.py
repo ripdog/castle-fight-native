@@ -478,12 +478,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 9)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 10)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
             "building-random-enemy-base-attack-ground-controller": 1,
             "per-player-building-count-income-multiplier": 1,
+            "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
             "summoned-carrier-random-unit-replacement": 1,
             "team-constructed-building-count-to-spell-level": 1,
             "team-presence-gated-owner-scaled-elemental-death-heal": 1,
@@ -492,7 +493,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 9)
+        self.assertEqual(len(rows), 10)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -609,6 +610,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
             [0.4, 0.45, 0.5, 0.55],
         )
         self.assertTrue(all(level["duration_seconds"] == 60 for level in gjallar["resolved_effect_levels"]))
+
+        support = json.loads(rows["support-order-controller"]["parameters_json"])
+        self.assertEqual(support["queue_interval_seconds"], 0.2)
+        self.assertEqual(support["queue_tasks_per_tick"], 12)
+        self.assertEqual(support["assassin_retarget_min_interval_seconds"], 3.5)
+        self.assertEqual(support["target_group_refresh_min_interval_seconds"], 0.1)
+        self.assertEqual(support["assassin_search_rect_player_id_lt_6"], [-6016, -4096, 1920, 4096])
+        self.assertEqual(support["assassin_search_rect_player_id_gte_6"], [-1888, -4096, 6048, 4096])
+        self.assertEqual(support["fallback_battlefield_rect"], [-6176, -3584, 6176, 3584])
+        self.assertEqual(support["assassin_attack_order_id"], 851983)
+        self.assertEqual(support["assassin_move_order_id"], 851986)
+        self.assertEqual(support["assassin_windwalk_order_id"], 852129)
+        actors = {actor["unit_rawcode"]: actor for actor in support["actors"]}
+        self.assertEqual(actors["n01Z"]["low_hp_priority_threshold"], 150)
+        self.assertEqual(actors["n01Z"]["windwalk_object_data"]["Backstab Damage"], 150)
+        self.assertEqual(actors["n020"]["low_hp_priority_threshold"], 300)
+        self.assertEqual(actors["n020"]["windwalk_object_data"]["Backstab Damage"], 300)
+        self.assertEqual(actors["n01U"]["timed_life_seconds"], 45)
+        self.assertEqual(actors["n01U"]["repair_object_data"]["Repair Time Ratio"], 0.45)
+        self.assertFalse(support["gobbo_one_per_target_claim_proven_by_script"])
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

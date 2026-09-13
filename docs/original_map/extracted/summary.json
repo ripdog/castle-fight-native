@@ -138,12 +138,13 @@
     "building_improvement_spawn_mechanic_kinds": {
       "improved-building-per-spawn-emergency-life-trait": 1
     },
-    "runtime_system_mechanics": 9,
+    "runtime_system_mechanics": 10,
     "runtime_system_mechanic_kinds": {
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
       "body-replacement-plus-independent-random-trait-groups": 1,
       "building-random-enemy-base-attack-ground-controller": 1,
       "per-player-building-count-income-multiplier": 1,
+      "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
       "summoned-carrier-random-unit-replacement": 1,
       "team-constructed-building-count-to-spell-level": 1,
       "team-presence-gated-owner-scaled-elemental-death-heal": 1,

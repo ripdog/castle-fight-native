@@ -5444,6 +5444,11 @@ def _extract_runtime_system_mechanics(
         "mH", "EventListener_add_GjallarHorn_onEvent_add_GjallarHorn",
         "Action_watch_GjallarHorn_run_watch_GjallarHorn",
         "BuildingSpellClosure_registerBuildingSpell_GjallarHorn_cast_registerBuildingSpell_GjallarHorn",
+        "lE", "nH", "isSupportOrderUnit", "orderAssassinOrGoboW", "shouldRunPeriodicSupportOrderForState",
+        "prepareAssassinTargets", "isValidAssassinTarget", "orderAssassinW", "restoreAssassinTargetOrderW",
+        "prepareGobboTargets", "isGobboRepairableTarget", "isGobboRallyTarget", "orderGoboW",
+        "setGobboSpawner", "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
+        "sH", "applyGobboTimedLife", "onSummonedUnit",
         "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
     }
     if not required.issubset(available):
@@ -6003,6 +6008,152 @@ def _extract_runtime_system_mechanics(
         ],
         "evidence_kind": "exact-construct-counter-round-reset-and-spell-level-consumer",
         "byte_offset": min(gjallar_init_start, gjallar_construct_start, gjallar_reset_start, gjallar_cast_start),
+    })
+
+    # Shared support-order controller for Assassin, Royal Assassin and Gobbo.
+    assassin_init_start, assassin_init_source, assassin_init_tokens = source("lE")
+    support_init_start, support_init_source, support_init_tokens = source("nH")
+    support_gate_start, support_gate_source, support_gate_tokens = source("isSupportOrderUnit")
+    support_dispatch_start, support_dispatch_source, support_dispatch_tokens = source("orderAssassinOrGoboW")
+    support_state_start, support_state_source, support_state_tokens = source("shouldRunPeriodicSupportOrderForState")
+    assassin_targets_start, assassin_targets_source, assassin_targets_tokens = source("prepareAssassinTargets")
+    assassin_valid_start, assassin_valid_source, assassin_valid_tokens = source("isValidAssassinTarget")
+    assassin_order_start, assassin_order_source, assassin_order_tokens = source("orderAssassinW")
+    assassin_restore_start, assassin_restore_source, assassin_restore_tokens = source("restoreAssassinTargetOrderW")
+    gobbo_targets_start, gobbo_targets_source, gobbo_targets_tokens = source("prepareGobboTargets")
+    gobbo_repair_start, gobbo_repair_source, gobbo_repair_tokens = source("isGobboRepairableTarget")
+    gobbo_rally_start, gobbo_rally_source, gobbo_rally_tokens = source("isGobboRallyTarget")
+    gobbo_order_start, gobbo_order_source, gobbo_order_tokens = source("orderGoboW")
+    gobbo_spawner_start, gobbo_spawner_source, gobbo_spawner_tokens = source("setGobboSpawner")
+    task_run_start, task_run_source, task_run_tokens = source("SupportOrderTask_SupportOrderTask_run")
+    ensure_task_start, ensure_task_source, ensure_task_tokens = source("ensureSupportOrderTask")
+    gobbo_life_init_start, gobbo_life_init_source, gobbo_life_init_tokens = source("sH")
+    gobbo_life_start, gobbo_life_source, gobbo_life_tokens = source("applyGobboTimedLife")
+    train_start, train_source, train_tokens = source("onUnitTrained")
+    summon_start, summon_source, summon_tokens = source("onSummonedUnit")
+
+    if b"YAb=1848652122 XAb=1848652336 WAb=0.10 OAb=851983" not in assassin_init_source:
+        raise ValueError("Assassin support-order constants changed")
+    if b"KAb=" not in assassin_init_source or b"(-6016.),(-4096.),1920.,4096." not in assassin_init_source:
+        raise ValueError("Assassin left-team search rectangle changed")
+    if b"JAb=" not in assassin_init_source or b"(-1888.),(-4096.),6048.,4096." not in assassin_init_source:
+        raise ValueError("Assassin right-team search rectangle changed")
+    if b"Gcb=0.20 Fcb=12 Ecb=0.10 Dcb=1848652117" not in support_init_source or b"wcb=3.5" not in support_init_source:
+        raise ValueError("Support-order queue constants changed")
+    if b"TaskQueue_TaskQueue_executePeriodic(Hcb,Gcb)" not in support_init_source:
+        raise ValueError("Support-order queue periodic scheduling changed")
+    if not {"YAb", "XAb", "Dcb", "1093678925", "isCombatSapper"}.issubset(support_gate_tokens):
+        raise ValueError("Support-order actor gate changed")
+    if b"if(sBq==0)then return true" not in support_state_source or b"if uBq then return false" not in support_state_source or b"return(tBq>=wcb)" not in support_state_source:
+        raise ValueError("Assassin support-order retry-state logic changed")
+    if b"if((mBq==YAb)or(mBq==XAb))" not in support_dispatch_source or b"elseif(mBq==Dcb)then orderGoboW(lBq)" not in support_dispatch_source:
+        raise ValueError("Support-order actor dispatch changed")
+    if b"if(K7o<6)then N7o=KAb else N7o=JAb end" not in assassin_targets_source:
+        raise ValueError("Assassin primary search-rect team selection changed")
+    for symbol in (b"R7o=NAb", b"V7o=MAb", b"Z7o=LAb", b"d8o=NAb", b"h8o=MAb", b"l8o=LAb"):
+        if symbol not in assassin_targets_source:
+            raise ValueError("Assassin priority target-group wiring changed")
+    if not {"UNIT_TYPE_FLYING", "1110454578", "1112040046", "isNotTentacle", "isNotBanished", "isVulnerable"}.issubset(assassin_valid_tokens):
+        raise ValueError("Assassin base target predicate changed")
+    if not {"851986", "852129", "OAb", "15", "group_getRandom"}.issubset(assassin_order_tokens):
+        raise ValueError("Assassin order state machine changed")
+    if b"__wurst_ensureInt(OX[n8o])>15" not in assassin_order_source:
+        raise ValueError("Assassin target retry count changed")
+    if b"isCloaked(m8o)or issueAssassinImmediateOrder(m8o,852129)" not in assassin_order_source:
+        raise ValueError("Assassin Wind Walk/retarget gate changed")
+    if b"issueAssassinTargetOrder(v8o,OAb,PX[w8o])" not in assassin_restore_source:
+        raise ValueError("Assassin target-order restoration changed")
+    if b"(UBq-__wurst_ensureReal(zcb[TBq]))<Ecb" not in gobbo_targets_source:
+        raise ValueError("Gobbo target-group cache interval changed")
+    if b"YBq=ycb" not in gobbo_targets_source or b"bCq=xcb" not in gobbo_targets_source:
+        raise ValueError("Gobbo structure/mechanical priority filters changed")
+    if not {"UNIT_TYPE_MECHANICAL", "UNIT_TYPE_STRUCTURE", "unit_getMaxHP", "unit_isInConstruction"}.issubset(gobbo_repair_tokens):
+        raise ValueError("Gobbo repairable-target predicate changed")
+    if b"(unit_getMaxHP(vBq)-unit_getHP(vBq))<=1." not in gobbo_repair_source:
+        raise ValueError("Gobbo damaged-target threshold changed")
+    if b"unit_isInConstruction(xBq)" not in gobbo_rally_source:
+        raise ValueError("Gobbo rally-target construction exclusion changed")
+    if b"group_getRandom(Acb[NBq])" not in gobbo_order_source:
+        raise ValueError("Gobbo random repair-target selection changed")
+    if b"unit_getRallyUnit(PBq)" not in gobbo_order_source:
+        raise ValueError("Gobbo spawner rally fallback changed")
+    if b"unit_issueTargetOrder(KBq,\"repair\",QBq)" not in gobbo_order_source or b"unit_issueTargetOrder(KBq,\"smart\",QBq)" not in gobbo_order_source:
+        raise ValueError("Gobbo repair/smart rally orders changed")
+    if not {"Ccb", "doAfter"}.issubset(gobbo_spawner_tokens):
+        raise ValueError("Gobbo production-building association changed")
+    if not {"orderAssassinOrGoboW", "TaskQueue_TaskQueue_add"}.issubset(task_run_tokens):
+        raise ValueError("Support-order task loop changed")
+    if not {"Bcb", "TaskQueue_TaskQueue_add"}.issubset(ensure_task_tokens):
+        raise ValueError("Support-order task registration changed")
+    if b"ucb=45. tcb=1848652117" not in gobbo_life_init_source:
+        raise ValueError("Gobbo timed-life constants changed")
+    if b"__wurst_safe_UnitApplyTimedLife(pCq,1112820806,ucb)" not in gobbo_life_source:
+        raise ValueError("Gobbo one-shot timed-life application changed")
+    if b"unit_getAbilityLevel(sXr,1093679435)>0" not in summon_source or b"__wurst_safe_UnitApplyTimedLife(sXr,1112820806,45.)" not in summon_source:
+        raise ValueError("Gobbo summon timed-life path changed")
+    if b"unit_getAbilityLevel(cgs,1093679435)>0" not in train_source or b"__wurst_safe_UnitApplyTimedLife(cgs,1112820806,45.)" not in train_source:
+        raise ValueError("Gobbo train timed-life path changed")
+
+    rows.append({
+        "system_id": "support-order-controller",
+        "mechanic_kind": "periodic-assassin-ambush-and-gobbo-repair-order-controller",
+        "trigger": "indexed-support-unit-periodic-task-plus-train-summon-association",
+        "parameters": {
+            "actor_unit_ids": [1848652122, 1848652336, 1848652117],
+            "support_marker_ability_id": 1093678925,
+            "queue_interval_seconds": 0.20,
+            "queue_tasks_per_tick": 12,
+            "queue_maximum_interval_seconds": 0.75,
+            "assassin_retarget_min_interval_seconds": 3.5,
+            "target_group_refresh_min_interval_seconds": 0.10,
+            "assassin_attack_order_id": 851983,
+            "assassin_attack_order_name": "attack",
+            "assassin_move_order_id": 851986,
+            "assassin_move_order_name": "move",
+            "assassin_windwalk_order_id": 852129,
+            "assassin_windwalk_order_name": "windwalk",
+            "assassin_existing_target_retry_limit": 15,
+            "assassin_search_rect_player_id_lt_6": [-6016, -4096, 1920, 4096],
+            "assassin_search_rect_player_id_gte_6": [-1888, -4096, 6048, 4096],
+            "fallback_battlefield_rect": [-6176, -3584, 6176, 3584],
+            "assassin_base_target_predicate": "alive-combat-sapper;enemy;vulnerable;not-tentacle;not-banished;not-flying;lacks-1110454578;lacks-1112040046",
+            "assassin_priority_filters": [
+                {"priority": 1, "scope": "team-selected-primary-rect", "predicate": "valid-target;max-mana>10"},
+                {"priority": 2, "scope": "team-selected-primary-rect", "normal_predicate": "valid-target;life<150", "royal_predicate": "valid-target;life<300"},
+                {"priority": 3, "scope": "fallback-battlefield-rect", "predicate": "valid-target;max-mana>10"},
+                {"priority": 4, "scope": "fallback-battlefield-rect", "normal_predicate": "valid-target;life<150", "royal_predicate": "valid-target;life<300"},
+            ],
+            "assassin_random_choice_within_priority_group": True,
+            "assassin_does_not_retarget_while_attacking_valid_assigned_target": True,
+            "assassin_attempts_windwalk_before_new_target_selection": True,
+            "gobbo_target_predicate": "alive;ally;damaged-by-more-than-1-hp;not-in-construction;structure-or-mechanical",
+            "gobbo_priority_1": "damaged-allied-structures",
+            "gobbo_priority_2_if_no_structures": "damaged-allied-mechanical-units",
+            "gobbo_random_choice_within_priority_group": True,
+            "gobbo_fallback": "production-building-rally-unit-if-allied-and-not-in-construction",
+            "gobbo_fallback_order": "repair-if-damaged-structure-or-mechanical-else-smart",
+            "gobbo_timed_life_seconds": 45,
+            "gobbo_timed_life_buff_id": 1112820806,
+            "gobbo_timed_life_applied_once_per_indexed_gobbo": True,
+            "gobbo_one_per_target_claim_proven_by_script": False,
+        },
+        "related_rawcode_ids": [
+            1848652122, 1848652336, 1848652117, 1093678925, 1093679435,
+            1110454578, 1112040046, 1112820806,
+        ],
+        "source_functions": [
+            "lE", "nH", "isSupportOrderUnit", "orderAssassinOrGoboW", "shouldRunPeriodicSupportOrderForState",
+            "prepareAssassinTargets", "isValidAssassinTarget", "orderAssassinW", "restoreAssassinTargetOrderW",
+            "prepareGobboTargets", "isGobboRepairableTarget", "isGobboRallyTarget", "orderGoboW",
+            "setGobboSpawner", "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
+            "sH", "applyGobboTimedLife", "onUnitTrained", "onSummonedUnit",
+        ],
+        "evidence_kind": "exact-shared-task-queue-target-filters-order-state-machine-and-timed-life",
+        "byte_offset": min(
+            assassin_init_start, support_init_start, support_gate_start, support_dispatch_start,
+            assassin_targets_start, assassin_valid_start, assassin_order_start, gobbo_targets_start,
+            gobbo_order_start, task_run_start, gobbo_life_init_start, gobbo_life_start,
+        ),
     })
 
     # Blood Fiend procedural generation. The trained n00L carrier is first
