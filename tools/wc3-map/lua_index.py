@@ -4428,6 +4428,10 @@ def _extract_production_unit_special_mechanics(
         "startBearSleep",
         "CallbackSingle_doAfter_DamageRuntime_call_doAfter_DamageRuntime",
         "finishBearHibernate",
+        "handleFanOfKnives",
+        "vampireCharge",
+        "randomN02YOrder",
+        "tornadoStackProc",
     }
     if not required_map_functions.issubset(available_functions):
         return []
@@ -4716,6 +4720,130 @@ def _extract_production_unit_special_mechanics(
             "evidence_kind": "exact-target-damage-and-delayed-callback-state-machine",
             "byte_offset": target_damage_start,
         })
+
+    # Desert Razormane: damage events auto-cast its native Fan of Knives only
+    # for normal damage while the protected mana/cooldown gates are satisfied.
+    razormane_start, _ = require_tokens(
+        "handleFanOfKnives",
+        {
+            "1848652373", "1093683020", "DAMAGE_TYPE_NORMAL", "BlzGetEventDamageType",
+            "__wurst_safe_BlzGetUnitAbilityCooldownRemaining", "__wurst_safe_BlzGetUnitAbilityManaCost",
+            "UNIT_STATE_MANA", "__wurst_safe_IssueImmediateOrder", "orderCodeAttack",
+        },
+    )
+    razormane_function = next(function for function in functions if function["name"] == "handleFanOfKnives")
+    razormane_source = data[int(razormane_function["start"]):int(razormane_function["end"])]
+    if b'__wurst_safe_IssueImmediateOrder(iqq,"fanofknives")' not in razormane_source:
+        raise ValueError("Razormane Fan of Knives order changed")
+    rows.append({
+        "unit_id": 1848652373,
+        "mechanic_kind": "damage-triggered-auto-fan-of-knives",
+        "trigger": "damage-event",
+        "parameters": {
+            "ability_id": 1093683020,
+            "required_event_damage_type": "normal",
+            "requires_ability_level_positive": True,
+            "requires_cooldown_ready": True,
+            "requires_current_mana_at_least_native_cost": True,
+            "issued_order": "fanofknives",
+            "resume_attack_immediately": True,
+        },
+        "related_rawcode_ids": [1093683020],
+        "source_functions": ["handleFanOfKnives"],
+        "evidence_kind": "exact-damage-handler-plus-native-ability",
+        "byte_offset": razormane_start,
+    })
+
+    # Greater Elemental of Wind: every damage amount is accumulated into mana.
+    # At 680 the target stops accumulating, gains native Kaboom and is ordered
+    # to self-destruct; linked native explosion fields are joined downstream.
+    require_tokens(
+        "handleTargetDamageEffects",
+        {"1865429061", "vampireCharge", "GetEventDamage"},
+    )
+    wind_start, _ = require_tokens(
+        "vampireCharge",
+        {
+            "UNIT_STATE_MANA", "680.", "1093681973", "450.", "1093682510", "852041",
+            "unit_removeAbility", "__wurst_safe_SetUnitMoveSpeed", "addProtectedAbility",
+            "unit_issueImmediateOrderById", "__wurst_safe_SetUnitState",
+        },
+    )
+    rows.append({
+        "unit_id": 1865429061,
+        "mechanic_kind": "damage-to-mana-kaboom-charge",
+        "trigger": "target-damage-event",
+        "parameters": {
+            "runtime_damage_marker_ability_id": 1093681973,
+            "charge_resource": "mana",
+            "charge_delta": "event-damage-amount",
+            "detonation_threshold": 680,
+            "remove_damage_marker_on_threshold": True,
+            "detonation_move_speed": 450,
+            "kaboom_ability_id": 1093682510,
+            "kaboom_order_id": 852041,
+        },
+        "related_rawcode_ids": [1093681973, 1093682510],
+        "source_functions": ["handleTargetDamageEffects", "vampireCharge"],
+        "evidence_kind": "exact-target-damage-handler-plus-native-explosion",
+        "byte_offset": min(target_damage_start, wind_start),
+    })
+
+    # Emerald Dragon: every qualifying source-damage event adds/increments A0C9
+    # on the attacked target, capped at level 3. The Spell Book levels encode
+    # the actual -2/-4/-6 armor states and are resolved downstream.
+    require_tokens(
+        "handleSourceDamageEffects",
+        {"1848652353", "tornadoStackProc"},
+    )
+    emerald_start, _ = require_tokens(
+        "tornadoStackProc",
+        {"1093681977", "3", "addProtectedAbility", "__wurst_safe_SetUnitAbilityLevel"},
+    )
+    rows.append({
+        "unit_id": 1848652353,
+        "mechanic_kind": "attack-stacking-corrosion",
+        "trigger": "source-damage-event",
+        "parameters": {
+            "source_damage_marker_ability_id": 1093677905,
+            "target_stack_ability_id": 1093681977,
+            "initial_stack_level": 1,
+            "maximum_stack_level": 3,
+            "stack_increment_per_hit": 1,
+        },
+        "related_rawcode_ids": [1093677905, 1093681977],
+        "source_functions": ["handleSourceDamageEffects", "tornadoStackProc"],
+        "evidence_kind": "exact-source-damage-handler-plus-levelled-object-state",
+        "byte_offset": min(source_damage_start, emerald_start),
+    })
+
+    # Greater Elemental of Water: source damage has a 20% chance to issue the
+    # native Mirror Image order directly. A0CU contains the one-image 60/200%
+    # damage-dealt/taken configuration and duration.
+    require_tokens(
+        "handleSourceDamageEffects",
+        {"1747989081", "randomN02YOrder"},
+    )
+    water_start, _ = require_tokens(
+        "randomN02YOrder",
+        {"GetRandomInt", "20", "852123", "jY", "unit_issueImmediateOrderById"},
+    )
+    rows.append({
+        "unit_id": 1747989081,
+        "mechanic_kind": "attack-proc-native-mirror-image",
+        "trigger": "source-damage-event",
+        "parameters": {
+            "source_damage_marker_ability_id": 1093677905,
+            "proc_chance_percent": 20,
+            "mirror_image_ability_id": 1093682005,
+            "mirror_image_order_id": 852123,
+            "bypasses_wrong_order_guard": True,
+        },
+        "related_rawcode_ids": [1093677905, 1093682005],
+        "source_functions": ["handleSourceDamageEffects", "randomN02YOrder"],
+        "evidence_kind": "exact-source-damage-handler-plus-native-ability",
+        "byte_offset": min(source_damage_start, water_start),
+    })
 
     # Human Defender: Defend is automatically enabled shortly after spawn, then
     # normal attack movement resumes. If the unit receives the native undefend

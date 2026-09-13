@@ -230,11 +230,15 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 19)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 23)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "attack-proc-dispel-positive-buffs": 3,
+            "attack-proc-native-mirror-image": 1,
+            "attack-stacking-corrosion": 1,
             "automatic-defend-state-maintenance": 1,
+            "damage-to-mana-kaboom-charge": 1,
+            "damage-triggered-auto-fan-of-knives": 1,
             "damage-triggered-echo-step-and-remnant": 1,
             "damage-triggered-feral-rage-and-hibernation": 2,
             "death-retaliation-damage-to-killer": 1,
@@ -247,7 +251,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
             row_list = list(csv.DictReader(handle, delimiter="\t"))
         rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
-        self.assertEqual(len(rows), 19)
+        self.assertEqual(len(rows), 23)
 
         giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
         giant = json.loads(giant_row["parameters_json"])
@@ -356,6 +360,33 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(ancient_bear["hibernate_trigger_life_below"], 326)
         self.assertEqual(ancient_bear["hibernate_regen_object_data"]["Hit Points Regenerated Per Second"], 40)
         self.assertEqual(ancient_bear["hibernate_extra_sleep_object_data"]["Attack Bonus"], 115)
+
+        razormane = json.loads(rows[("n02U", "damage-triggered-auto-fan-of-knives")]["parameters_json"])
+        self.assertEqual(razormane["effective_mana_cost"], 40)
+        self.assertEqual(razormane["effective_cooldown_seconds"], 1.0)
+        self.assertEqual(razormane["area"], 400)
+        self.assertEqual(razormane["ability_object_data"]["Damage Per Target"], 45)
+
+        wind = json.loads(rows[("o00E", "damage-to-mana-kaboom-charge")]["parameters_json"])
+        self.assertEqual(wind["detonation_threshold"], 680)
+        self.assertEqual(wind["charge_delta"], "event-damage-amount")
+        self.assertEqual(wind["kaboom_object_data"]["Full Damage Amount"], 375)
+        self.assertEqual(wind["kaboom_object_data"]["Full Damage Radius"], 250)
+        self.assertEqual(wind["kaboom_object_data"]["Partial Damage Amount"], 225)
+        self.assertEqual(wind["kaboom_object_data"]["Partial Damage Radius"], 350)
+
+        emerald = json.loads(rows[("n02A", "attack-stacking-corrosion")]["parameters_json"])
+        self.assertEqual(emerald["maximum_stack_level"], 3)
+        self.assertEqual([entry["defense_bonus"] for entry in emerald["stack_levels"]], [-2, -4, -6])
+
+        water = json.loads(rows[("h02Y", "attack-proc-native-mirror-image")]["parameters_json"])
+        self.assertEqual(water["proc_chance_percent"], 20)
+        self.assertEqual(water["mirror_image_order_id"], 852123)
+        self.assertEqual(water["mirror_image_object_data"]["Number of Images"], 1)
+        self.assertEqual(water["mirror_image_object_data"]["Damage Dealt (%)"], 0.6)
+        self.assertEqual(water["mirror_image_object_data"]["Damage Taken (%)"], 2)
+        self.assertEqual(water["mirror_image_duration_seconds"], 60)
+        self.assertEqual(water["mirror_image_effective_mana_cost"], 0)
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

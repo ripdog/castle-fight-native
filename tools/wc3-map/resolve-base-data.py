@@ -1836,6 +1836,62 @@ def main() -> None:
                         parameters["hibernate_extra_sleep_object_data"] = json.loads(
                             extra_ability["data_fields_labeled_json"]
                         )
+                elif mechanic["mechanic_kind"] == "damage-triggered-auto-fan-of-knives":
+                    razor = next((row for row in ability_levels.get("A0GL", []) if row["level"] == "1"), None)
+                    if razor is None:
+                        raise ValueError("Razormane special mechanic is missing A0GL object data")
+                    parameters["ability_object_data"] = json.loads(razor["data_fields_labeled_json"])
+                    parameters["effective_mana_cost"] = numeric(
+                        protected_ability_values.get(("A0GL", 1, "mana_cost"), razor["mana_cost"])
+                    )
+                    parameters["effective_cooldown_seconds"] = numeric(
+                        protected_ability_values.get(("A0GL", 1, "cooldown"), razor["cooldown"])
+                    )
+                    parameters["area"] = numeric(razor["area"])
+                    parameters["targets"] = razor["targets"]
+                elif mechanic["mechanic_kind"] == "damage-to-mana-kaboom-charge":
+                    kaboom = next((row for row in ability_levels.get("A0EN", []) if row["level"] == "1"), None)
+                    if kaboom is None:
+                        raise ValueError("Greater Wind special mechanic is missing A0EN object data")
+                    parameters["kaboom_object_data"] = json.loads(kaboom["data_fields_labeled_json"])
+                    parameters["kaboom_targets"] = kaboom["targets"]
+                elif mechanic["mechanic_kind"] == "attack-stacking-corrosion":
+                    stack_levels = []
+                    for level in (1, 2, 3):
+                        stack = next((row for row in ability_levels.get("A0C9", []) if row["level"] == str(level)), None)
+                        if stack is None:
+                            raise ValueError(f"Emerald Dragon corrosion stack level missing: {level}")
+                        stack_fields = json.loads(stack["data_fields_labeled_json"])
+                        spell_list = [part.strip() for part in str(stack_fields.get("Spell List", "")).split(",") if part.strip()]
+                        if len(spell_list) != 2:
+                            raise ValueError(f"Emerald Dragon corrosion spell list changed at level {level}: {stack_fields}")
+                        armor = next((row for row in ability_levels.get(spell_list[0], []) if row["level"] == "1"), None)
+                        if armor is None:
+                            raise ValueError(f"Emerald Dragon armor state missing: {spell_list[0]}")
+                        armor_fields = json.loads(armor["data_fields_labeled_json"])
+                        stack_levels.append({
+                            "level": level,
+                            "spell_list": spell_list,
+                            "armor_ability_rawcode": spell_list[0],
+                            "defense_bonus": numeric(armor_fields.get("Defense Bonus")),
+                        })
+                    if [row["defense_bonus"] for row in stack_levels] != [-2, -4, -6]:
+                        raise ValueError(f"Emerald Dragon corrosion armor states changed: {stack_levels}")
+                    parameters["stack_levels"] = stack_levels
+                elif mechanic["mechanic_kind"] == "attack-proc-native-mirror-image":
+                    mirror = next((row for row in ability_levels.get("A0CU", []) if row["level"] == "1"), None)
+                    if mirror is None:
+                        raise ValueError("Greater Water special mechanic is missing A0CU object data")
+                    parameters["mirror_image_object_data"] = json.loads(mirror["data_fields_labeled_json"])
+                    parameters["mirror_image_duration_seconds"] = numeric(
+                        field_lookup(rows_by_object, "abilities", "A0CU", "adur", 1, 0)
+                    )
+                    parameters["mirror_image_effective_mana_cost"] = numeric(
+                        protected_ability_values.get(("A0CU", 1, "mana_cost"), mirror["mana_cost"])
+                    )
+                    parameters["mirror_image_cooldown_seconds"] = numeric(
+                        protected_ability_values.get(("A0CU", 1, "cooldown"), mirror["cooldown"])
+                    )
                 elif mechanic["mechanic_kind"] == "kill-triggered-native-berserk":
                     berserk = next((row for row in ability_levels.get("A02I", []) if row["level"] == "1"), None)
                     if berserk is None:
@@ -3502,7 +3558,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature attack-proc dispels, and Bear/Ancient Bear Feral Rage plus scripted hibernation",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, and Greater Wind Kaboom charge",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
