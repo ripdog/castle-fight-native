@@ -1,9 +1,10 @@
 use castle_fight_sim::{
-    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingPlacementError, BuildingSpawn, CombatRules,
-    CorpseDefinitionId, CorpseProfile, ManaProfile, MovementProfile, NavCell, ProductionProfile,
-    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, SpellcastingProfile,
-    Team, TerrainElevationMap, UnitSpawn, UnitTemplate,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingGameplayProperties, BuildingPlacementError,
+    BuildingSpawn, CollisionRadius, CombatRules, CorpseDefinitionId, CorpseProfile, ManaProfile,
+    MovementClass, MovementProfile, NavCell, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId,
+    SimPoint, Simulation, SimulationConfig, SpellcastingProfile, Team, TerrainElevationMap,
+    UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 
 use crate::presentation::WorldMetrics;
@@ -16,13 +17,15 @@ const MIDDLE_MAX_X: i32 = 127;
 const LANE_MIN_Y: i32 = -24;
 const LANE_MAX_Y: i32 = 23;
 const CASTLE_HEALTH: i32 = 20_000;
-const PRODUCTION_HEALTH: i32 = 1_000;
-const PRODUCTION_INTERVAL_TICKS: u16 = 120;
-const ATTACK_COOLDOWN_TICKS: u16 = 30;
+const FOOTMAN_COLLISION_WORLD: i32 = 16;
+const RANGER_COLLISION_WORLD: i32 = 16;
+const CATAPULT_COLLISION_WORLD: i32 = 16;
+const ICE_TROLL_PRIEST_COLLISION_WORLD: i32 = 16;
+const GRYPHON_COLLISION_WORLD: i32 = 16;
+const TICKS_PER_SECOND: u16 = SIMULATION_HZ_I32 as u16;
+const ATTACK_COOLDOWN_TICKS: u16 = TICKS_PER_SECOND;
 const PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
-const ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 90;
 const TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 110;
-const DEMO_CORPSE_LIFETIME_TICKS: u32 = 300;
 // Visual-verification value only; the exact original Castle Fight uphill miss chance is still
 // compatibility data to recover.
 const DEMO_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
@@ -53,26 +56,20 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
     if let Some(unit_count) = stress_units {
         populate_render_stress_units(&mut simulation, unit_count);
     } else {
-        for (team, melee, ranged) in [
-            (
-                Team(0),
-                BuildingFootprint::new(-152, -24, 4, 4),
-                BuildingFootprint::new(-152, 20, 4, 4),
-            ),
-            (
-                Team(1),
-                BuildingFootprint::new(148, -24, 4, 4),
-                BuildingFootprint::new(148, 20, 4, 4),
-            ),
-        ] {
-            simulation.spawn_building_with_production_corpse(
-                production_structure(team, melee, ProductionKind::Melee),
-                demo_corpse_profile(),
-            );
-            simulation.spawn_building_with_production_corpse(
-                production_structure(team, ranged, ProductionKind::Ranged),
-                demo_corpse_profile(),
-            );
+        for team in [Team(0), Team(1)] {
+            let x = if team.0 == 0 { -152 } else { 148 };
+            for (y, kind) in [
+                (-24, ProductionKind::Footman),
+                (-14, ProductionKind::Ranger),
+                (-4, ProductionKind::Catapult),
+                (6, ProductionKind::IceTrollPriest),
+                (16, ProductionKind::GryphonRider),
+            ] {
+                simulation.spawn_building_with_properties(
+                    production_structure(team, BuildingFootprint::new(x, y, 4, 4), kind),
+                    production_building_properties(kind),
+                );
+            }
         }
     }
 
@@ -155,7 +152,9 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
 
     SimulationConfig {
         match_seed: 0x4341_5354_4c45,
-        spatial_cell_size: 40 * SUBUNITS_PER_WORLD_UNIT,
+        // Real Castle Fight acquisition ranges reach 1,200 world units; use a broad-phase cell
+        // sized for imported content rather than the tiny placeholder ranges used previously.
+        spatial_cell_size: 256 * SUBUNITS_PER_WORLD_UNIT,
         navigation_cell_size: NAV_CELL_SUBUNITS,
         navigation_min,
         navigation_max,
@@ -194,19 +193,49 @@ fn passive_structure(team: Team, footprint: BuildingFootprint, health: i32) -> B
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProductionKind {
-    Melee,
-    Ranged,
-    Artillery,
-    Spellcaster,
+    Footman,
+    Ranger,
+    Catapult,
+    IceTrollPriest,
+    GryphonRider,
 }
 
 impl ProductionKind {
     const fn label(self) -> &'static str {
         match self {
-            Self::Melee => "Melee Hall",
-            Self::Ranged => "Ranged Hall",
-            Self::Artillery => "Artillery Foundry",
-            Self::Spellcaster => "Spellcaster Hall",
+            Self::Footman => "Barracks",
+            Self::Ranger => "Ranger's Hall",
+            Self::Catapult => "Orcish Siege Factory",
+            Self::IceTrollPriest => "Ice Troll Hut",
+            Self::GryphonRider => "Gryphon Rock",
+        }
+    }
+
+    const fn gold_cost(self) -> u16 {
+        match self {
+            Self::Footman => 100,
+            Self::Ranger => 200,
+            Self::Catapult => 380,
+            Self::IceTrollPriest => 175,
+            Self::GryphonRider => 250,
+        }
+    }
+
+    const fn building_health(self) -> i32 {
+        match self {
+            Self::Footman | Self::IceTrollPriest => 1_200,
+            Self::Ranger | Self::Catapult => 1_400,
+            Self::GryphonRider => 1_300,
+        }
+    }
+
+    const fn spawn_seconds(self) -> u16 {
+        match self {
+            Self::Footman => 20,
+            Self::Ranger => 32,
+            Self::Catapult => 34,
+            Self::IceTrollPriest => 23,
+            Self::GryphonRider => 27,
         }
     }
 }
@@ -235,12 +264,63 @@ impl BuildKind {
             Self::Production(_) | Self::GlobalAreaSpell => 4,
         }
     }
+
+    pub(crate) const fn gold_cost(self) -> Option<u16> {
+        match self {
+            Self::Production(kind) => Some(kind.gold_cost()),
+            Self::GuaranteedTower | Self::ProjectileTower | Self::GlobalAreaSpell => None,
+        }
+    }
 }
 
-pub(crate) const fn demo_corpse_profile() -> CorpseProfile {
+fn biological_corpse_profile(definition: u32) -> CorpseProfile {
     CorpseProfile {
-        definition: CorpseDefinitionId(1),
-        lifetime_ticks: Some(DEMO_CORPSE_LIFETIME_TICKS),
+        definition: CorpseDefinitionId(definition),
+        // Extracted biological corpses persist for about 30 seconds including death/flesh/bone
+        // phases. The sim currently models this as one authoritative corpse lifetime.
+        lifetime_ticks: Some(u32::from(TICKS_PER_SECOND) * 30),
+    }
+}
+
+fn production_building_properties(kind: ProductionKind) -> BuildingGameplayProperties {
+    let (movement_class, attack_targets, corpse) = match kind {
+        ProductionKind::Footman => (
+            MovementClass::Ground,
+            AttackTargetMask::GROUND_AND_BUILDINGS,
+            Some(biological_corpse_profile(u32::from_be_bytes(*b"hfoo"))),
+        ),
+        ProductionKind::Ranger => (
+            MovementClass::Ground,
+            AttackTargetMask::ALL,
+            Some(biological_corpse_profile(u32::from_be_bytes(*b"e003"))),
+        ),
+        ProductionKind::Catapult => (
+            MovementClass::Ground,
+            AttackTargetMask::GROUND_AND_BUILDINGS,
+            None,
+        ),
+        ProductionKind::IceTrollPriest => (
+            MovementClass::Ground,
+            AttackTargetMask::ALL,
+            Some(biological_corpse_profile(u32::from_be_bytes(*b"n015"))),
+        ),
+        ProductionKind::GryphonRider => (MovementClass::Air, AttackTargetMask::ALL, None),
+    };
+    let collision_world = match kind {
+        ProductionKind::Footman => FOOTMAN_COLLISION_WORLD,
+        ProductionKind::Ranger => RANGER_COLLISION_WORLD,
+        ProductionKind::Catapult => CATAPULT_COLLISION_WORLD,
+        ProductionKind::IceTrollPriest => ICE_TROLL_PRIEST_COLLISION_WORLD,
+        ProductionKind::GryphonRider => GRYPHON_COLLISION_WORLD,
+    };
+    BuildingGameplayProperties {
+        production_unit: UnitGameplayProperties {
+            corpse,
+            collision_radius: Some(CollisionRadius(collision_world * SUBUNITS_PER_WORLD_UNIT)),
+            movement_class,
+            attack_targets,
+        },
+        ..BuildingGameplayProperties::default()
     }
 }
 
@@ -251,14 +331,9 @@ pub(crate) fn try_spawn_demo_building(
     kind: BuildKind,
 ) -> Result<SimId, BuildingPlacementError> {
     match kind {
-        BuildKind::Production(ProductionKind::Spellcaster) => simulation
-            .try_spawn_building_with_production_spellcasting(
-                production_structure(team, footprint, ProductionKind::Spellcaster),
-                short_range_spellcaster_profile(),
-            ),
-        BuildKind::Production(kind) => simulation.try_spawn_building_with_production_corpse(
+        BuildKind::Production(kind) => simulation.try_spawn_building_with_properties(
             production_structure(team, footprint, kind),
-            demo_corpse_profile(),
+            production_building_properties(kind),
         ),
         BuildKind::GuaranteedTower => simulation.try_spawn_building(attack_structure(
             team,
@@ -283,13 +358,14 @@ pub(crate) fn production_structure(
     footprint: BuildingFootprint,
     kind: ProductionKind,
 ) -> BuildingSpawn {
+    let spawn_ticks = kind.spawn_seconds() * TICKS_PER_SECOND;
     BuildingSpawn {
         team,
         footprint,
-        health: PRODUCTION_HEALTH,
+        health: kind.building_health(),
         production: Some(ProductionProfile {
-            initial_delay_ticks: 15,
-            interval_ticks: PRODUCTION_INTERVAL_TICKS,
+            initial_delay_ticks: spawn_ticks,
+            interval_ticks: spawn_ticks,
             search_radius_cells: 12,
             unit: unit_template(kind),
         }),
@@ -329,63 +405,88 @@ fn spell_structure(
 }
 
 fn unit_template(kind: ProductionKind) -> UnitTemplate {
-    let movement = MovementProfile {
-        speed_per_tick: 40 * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32,
-    };
     match kind {
-        ProductionKind::Melee => UnitTemplate {
-            health: 100,
+        ProductionKind::Footman => UnitTemplate {
+            health: 250,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
-                damage: 12,
-                range: 14 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 80 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+                // Extracted damage is 25-26 (25.5 average). The current sim has integer fixed
+                // damage, so use the nearest integer while preserving the extracted cadence.
+                damage: 26,
+                range: 90 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 41, // 1.35 s at 30 Hz, rounded to nearest tick.
             },
-            movement,
+            movement: movement_profile(270),
         },
-        ProductionKind::Ranged => UnitTemplate {
-            health: 80,
+        ProductionKind::Ranger => UnitTemplate {
+            health: 500,
             attack: AttackProfile {
                 delivery: AttackDelivery::RangedGuaranteedHit {
-                    speed_per_tick: PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
-                        / SIMULATION_HZ_I32,
+                    speed_per_tick: projectile_speed_per_tick(1_000),
                 },
-                damage: 9,
-                range: 120 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 180 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+                damage: 65,
+                range: 425 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 31, // 1.04 s at 30 Hz.
             },
-            movement,
+            movement: movement_profile(300),
         },
-        ProductionKind::Artillery => UnitTemplate {
-            health: 70,
+        ProductionKind::Catapult => UnitTemplate {
+            health: 475,
             attack: AttackProfile {
                 delivery: AttackDelivery::RangedBallistic {
-                    speed_per_tick: ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND
-                        * SUBUNITS_PER_WORLD_UNIT
-                        / SIMULATION_HZ_I32,
-                    impact_radius: 35 * SUBUNITS_PER_WORLD_UNIT,
+                    speed_per_tick: projectile_speed_per_tick(900),
+                    // Warcraft uses 60/110/160 radii with 100%/70%/35% falloff. The current
+                    // ballistic primitive has one radius, so preserve the extracted outer area;
+                    // tiered falloff remains a separate combat-model extension.
+                    impact_radius: 160 * SUBUNITS_PER_WORLD_UNIT,
                 },
-                damage: 18,
-                range: 260 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 340 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: 2 * ATTACK_COOLDOWN_TICKS,
+                damage: 135,
+                range: 1_000 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 1_200 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 150, // 5.0 s.
             },
-            movement,
+            movement: movement_profile(220),
         },
-        ProductionKind::Spellcaster => UnitTemplate {
-            health: 80,
+        ProductionKind::IceTrollPriest => UnitTemplate {
+            health: 350,
             attack: AttackProfile {
-                delivery: AttackDelivery::Melee,
-                damage: 9,
-                range: 14 * SUBUNITS_PER_WORLD_UNIT,
-                acquisition_range: 80 * SUBUNITS_PER_WORLD_UNIT,
-                cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: projectile_speed_per_tick(1_200),
+                },
+                damage: 50,
+                range: 350 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 54, // 1.8 s.
             },
-            movement,
+            movement: movement_profile(270),
+        },
+        ProductionKind::GryphonRider => UnitTemplate {
+            health: 500,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: projectile_speed_per_tick(1_100),
+                },
+                // Extracted damage is 45-50 (47.5 average).
+                damage: 48,
+                range: 450 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 800 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 60, // 2.0 s.
+            },
+            movement: movement_profile(320),
         },
     }
+}
+
+fn movement_profile(world_units_per_second: i32) -> MovementProfile {
+    MovementProfile {
+        speed_per_tick: world_units_per_second * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32,
+    }
+}
+
+fn projectile_speed_per_tick(world_units_per_second: i32) -> i32 {
+    world_units_per_second * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32
 }
 
 fn guaranteed_tower_attack() -> AttackProfile {
@@ -436,27 +537,6 @@ fn global_area_spell_profile() -> SpellcastingProfile {
     }
 }
 
-fn short_range_spellcaster_profile() -> SpellcastingProfile {
-    SpellcastingProfile {
-        mana: ManaProfile {
-            maximum: 120,
-            starting: 0,
-            regen_per_tick: 1,
-        },
-        ability: AutomaticAbilityProfile {
-            id: AbilityId(1_002),
-            mana_cost: 120,
-            cooldown_ticks: 1,
-            range: 90 * SUBUNITS_PER_WORLD_UNIT,
-            target_policy: AbilityTargetPolicy::RandomEnemyUnit,
-            effect: AbilityEffect::AreaDamage {
-                amount: 18,
-                radius: 30 * SUBUNITS_PER_WORLD_UNIT,
-            },
-        },
-    }
-}
-
 fn original_terrain() -> TerrainElevationMap {
     TerrainElevationMap::from_wc3_terrain_json(include_str!(
         "../../../docs/original_map/extracted/terrain.json"
@@ -476,10 +556,11 @@ mod tests {
     fn demo_exposes_every_verification_build_kind() {
         let DemoWorld { mut simulation, .. } = create_demo_world(1, None);
         let kinds = [
-            BuildKind::Production(ProductionKind::Melee),
-            BuildKind::Production(ProductionKind::Ranged),
-            BuildKind::Production(ProductionKind::Artillery),
-            BuildKind::Production(ProductionKind::Spellcaster),
+            BuildKind::Production(ProductionKind::Footman),
+            BuildKind::Production(ProductionKind::Ranger),
+            BuildKind::Production(ProductionKind::Catapult),
+            BuildKind::Production(ProductionKind::IceTrollPriest),
+            BuildKind::Production(ProductionKind::GryphonRider),
             BuildKind::GuaranteedTower,
             BuildKind::ProjectileTower,
             BuildKind::GlobalAreaSpell,
@@ -496,6 +577,124 @@ mod tests {
                 try_spawn_demo_building(&mut simulation, Team(0), footprint, kind).is_ok(),
                 "failed to spawn {}",
                 kind.label()
+            );
+        }
+    }
+
+    #[test]
+    fn production_roster_uses_extracted_castle_fight_values() {
+        let cases = [
+            (
+                ProductionKind::Footman,
+                100,
+                1_200,
+                20,
+                250,
+                270,
+                90,
+                800,
+                41,
+                MovementClass::Ground,
+                AttackTargetMask::GROUND_AND_BUILDINGS,
+            ),
+            (
+                ProductionKind::Ranger,
+                200,
+                1_400,
+                32,
+                500,
+                300,
+                425,
+                800,
+                31,
+                MovementClass::Ground,
+                AttackTargetMask::ALL,
+            ),
+            (
+                ProductionKind::Catapult,
+                380,
+                1_400,
+                34,
+                475,
+                220,
+                1_000,
+                1_200,
+                150,
+                MovementClass::Ground,
+                AttackTargetMask::GROUND_AND_BUILDINGS,
+            ),
+            (
+                ProductionKind::IceTrollPriest,
+                175,
+                1_200,
+                23,
+                350,
+                270,
+                350,
+                800,
+                54,
+                MovementClass::Ground,
+                AttackTargetMask::ALL,
+            ),
+            (
+                ProductionKind::GryphonRider,
+                250,
+                1_300,
+                27,
+                500,
+                320,
+                450,
+                800,
+                60,
+                MovementClass::Air,
+                AttackTargetMask::ALL,
+            ),
+        ];
+
+        for (
+            kind,
+            gold,
+            building_health,
+            spawn_seconds,
+            unit_health,
+            move_speed,
+            range,
+            acquisition,
+            cooldown,
+            movement_class,
+            attack_targets,
+        ) in cases
+        {
+            let building =
+                production_structure(Team(0), BuildingFootprint::new(-220, 0, 4, 4), kind);
+            let production = building.production.expect("production profile missing");
+            let properties = production_building_properties(kind).production_unit;
+            assert_eq!(kind.gold_cost(), gold);
+            assert_eq!(building.health, building_health);
+            assert_eq!(
+                production.initial_delay_ticks,
+                spawn_seconds * TICKS_PER_SECOND
+            );
+            assert_eq!(production.interval_ticks, spawn_seconds * TICKS_PER_SECOND);
+            assert_eq!(production.unit.health, unit_health);
+            assert_eq!(
+                production.unit.movement.speed_per_tick,
+                move_speed * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32
+            );
+            assert_eq!(
+                production.unit.attack.range,
+                range * SUBUNITS_PER_WORLD_UNIT
+            );
+            assert_eq!(
+                production.unit.attack.acquisition_range,
+                acquisition * SUBUNITS_PER_WORLD_UNIT
+            );
+            assert_eq!(production.unit.attack.cooldown_ticks, cooldown);
+            assert_eq!(properties.movement_class, movement_class);
+            assert_eq!(properties.attack_targets, attack_targets);
+            assert_eq!(
+                properties.collision_radius,
+                Some(CollisionRadius(16 * SUBUNITS_PER_WORLD_UNIT))
             );
         }
     }

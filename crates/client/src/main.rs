@@ -159,11 +159,15 @@ fn advance_authoritative_simulation(
             request.kind,
         ) {
             Ok(_) => {
-                build_selection.status = format!(
-                    "Placed {} {}.",
-                    if request.team.0 == 0 { "Blue" } else { "Red" },
-                    request.kind.label()
-                );
+                let side = if request.team.0 == 0 { "Blue" } else { "Red" };
+                build_selection.status = if let Some(gold_cost) = request.kind.gold_cost() {
+                    format!(
+                        "Placed {side} {} (map cost: {gold_cost} gold).",
+                        request.kind.label()
+                    )
+                } else {
+                    format!("Placed {side} {}.", request.kind.label())
+                };
             }
             Err(error) => {
                 build_selection.status = format!("Placement rejected by simulation: {error:?}.");

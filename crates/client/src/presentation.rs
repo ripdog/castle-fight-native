@@ -20,8 +20,9 @@ use crate::{
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
 const UNIT_RANGED_HEIGHT: f32 = 8.0;
-const AIR_UNIT_ALTITUDE: f32 = 24.0;
-const BUILDING_HEIGHT: f32 = 18.0;
+const UNIT_BASE_COLLISION_RADIUS_WORLD: f32 = 4.0;
+const AIR_UNIT_ALTITUDE: f32 = 48.0;
+const BUILDING_HEIGHT: f32 = 96.0;
 const STATIC_BLOCKER_HEIGHT: f32 = 5.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
 const BALLISTIC_ARC_HEIGHT: f32 = 34.0;
@@ -1140,7 +1141,11 @@ fn sync_render_entities(
             .spawn((
                 Mesh3d(assets.unit_mesh(unit.visual_kind)),
                 MeshMaterial3d(assets.unit_material(unit.team)),
-                Transform::from_translation(position),
+                Transform {
+                    translation: position,
+                    scale: Vec3::splat(unit_render_scale(unit)),
+                    ..default()
+                },
             ))
             .id();
         let weapon = spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
@@ -1889,14 +1894,20 @@ pub(crate) const fn unit_visual_altitude(movement_class: MovementClass) -> f32 {
     }
 }
 
+fn unit_render_scale(unit: &UnitSample) -> f32 {
+    let collision_world = unit.collision_radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32;
+    (collision_world / UNIT_BASE_COLLISION_RADIUS_WORLD).max(1.0)
+}
+
 fn unit_height(unit: &UnitSample) -> f32 {
-    match unit.visual_kind.weapon_kind() {
+    let base = match unit.visual_kind.weapon_kind() {
         UnitVisualKind::Melee => UNIT_MELEE_HEIGHT,
         UnitVisualKind::Ranged | UnitVisualKind::Ballistic | UnitVisualKind::Bounce => {
             UNIT_RANGED_HEIGHT
         }
         _ => unreachable!("caster kind must map to a base delivery kind"),
-    }
+    };
+    base * unit_render_scale(unit)
 }
 
 fn building_height(building: &BuildingSample) -> f32 {

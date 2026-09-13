@@ -23,6 +23,7 @@ Implemented:
 - authoritative `RangedBallistic` projectiles with fixed captured destinations, integer travel time, post-movement hostile splash queries, and canonical projectile/target effect ordering;
 - authoritative `Bounce` projectiles with persistent chain identity, bounded hit history, integer travel/falloff, and keyed deterministic subsequent-target selection;
 - authoritative terrain combat elevation loaded from the extracted WC3 W3E terrain grid, with discrete cliff-level uphill detection, configurable per-10k miss probability, canonical attack-attempt sequencing, and keyed worker-independent miss rolls;
+- authoritative ground/air movement classes with separate collision layers, air movement that ignores ground topology while remaining map-bounded, explicit ground/air/building ordinary-attack target masks, and target-filter preservation through ballistic splash/bounce effects;
 - attack-capable buildings with independent target/cooldown state, footprint-based static acquisition, shared canonical unit/building combat ordering, and ordinary projectile delivery;
 - automatic spellcasting buildings with authoritative integer mana, cooldown/cast-sequence state, keyed deterministic random enemy-unit targeting, canonical map-wide enemy-unit targeting, atomic cast commitment, immediate non-retaliatory damage, and timed stun effects;
 - authoritative timed stun state with exclusive absolute expiry, max-expiry refresh, and exact suppression of fresh targeting, ordinary attacks, and intentional movement while active;
@@ -38,7 +39,7 @@ Implemented:
 - pursuit diagnostics for total pursuit steps, deterministic A* fallback frequency, fallback-cache hits, and expanded A* nodes;
 - open-lane, dense-cage, crossing-crowd, mixed-radius collision, adversarial pursuit, repeated-topology-mutation, production-churn, guaranteed-hit projectile-density, ballistic splash-density, bounce-chain-density, long-range attack-building, automatic-spellcasting, global-stun/status-density, and long mixed-combat release benchmarks;
 - Bevy debug viewer using procedural placeholder units, building footprints, and target-link gizmos;
-- the 3D Bevy client with interactive placement, procedural placeholder combat visuals, and render-stress controls.
+- the 3D Bevy client with interactive placement, procedural combat visuals, render-stress controls, visible flight altitude, and extracted-scale production verification using Barracks/Footman, Ranger's Hall/Ranger, Orcish Siege Factory/Catapult, Ice Troll Hut/Ice Troll Shadow Priest, plus Gryphon Rock/Gryphon Rider for air verification.
 
 Not implemented yet:
 
@@ -46,7 +47,6 @@ Not implemented yet:
 - builder control/items;
 - broader imported buff/debuff/aura semantics beyond the narrow movement-speed verification primitive, manual/legendary ability activation, and multi-ability buildings;
 - corpse-query/consume effects such as raise dead and corpse explosion, plus imported per-unit corpse-profile assignment;
-- air/ground movement and attack classes;
 - invisibility/invulnerability/status effects;
 - snapshots/networking;
 - production art/assets.

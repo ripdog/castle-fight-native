@@ -132,13 +132,18 @@ fn setup_build_ui(mut commands: Commands) {
             ));
             spawn_building_button_row(
                 panel,
-                BuildKind::Production(ProductionKind::Melee),
-                Some(BuildKind::Production(ProductionKind::Ranged)),
+                BuildKind::Production(ProductionKind::Footman),
+                Some(BuildKind::Production(ProductionKind::Ranger)),
             );
             spawn_building_button_row(
                 panel,
-                BuildKind::Production(ProductionKind::Artillery),
-                Some(BuildKind::Production(ProductionKind::Spellcaster)),
+                BuildKind::Production(ProductionKind::Catapult),
+                Some(BuildKind::Production(ProductionKind::IceTrollPriest)),
+            );
+            spawn_building_button_row(
+                panel,
+                BuildKind::Production(ProductionKind::GryphonRider),
+                None,
             );
             spawn_building_button_row(
                 panel,
@@ -423,7 +428,7 @@ mod tests {
         let footprint = placement_footprint(
             &metrics,
             Vec3::new(105.0, 0.0, 75.0),
-            BuildKind::Production(ProductionKind::Melee),
+            BuildKind::Production(ProductionKind::Footman),
         );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
 
