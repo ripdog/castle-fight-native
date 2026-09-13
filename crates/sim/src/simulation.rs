@@ -4112,7 +4112,24 @@ impl Simulation {
         ) {
             candidate
         } else {
-            current
+            // A unit can be legally positioned off-center inside its nav cell while the straight
+            // segment toward the next cell clips an expanded building corner. Repeating the same
+            // rejected endpoint forever creates a local corner lock. Move back toward the current
+            // cell center first; this gives the radius-aware cell route a legal portal to leave
+            // through without adding sticky per-unit path state.
+            let recenter_target = self.topology.center_of_cell(source_cell);
+            let recenter = current.step_towards(recenter_target, movement_speed);
+            if recenter != current
+                && self.position_is_traversable_from(
+                    source_cell,
+                    recenter,
+                    unit.collision_radius_override,
+                )
+            {
+                recenter
+            } else {
+                current
+            }
         };
         MovementDecision {
             position,

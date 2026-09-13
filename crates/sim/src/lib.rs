@@ -4455,6 +4455,72 @@ mod tests {
     }
 
     #[test]
+    fn imported_ranger_does_not_corner_lock_beside_adjacent_towers() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut config = SimulationConfig {
+            spatial_cell_size: 256 * world,
+            navigation_cell_size: 32 * world,
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(40, 30),
+            target_pursuit_extra_range: 30 * world,
+            unit_separation_distance: 8 * world,
+            max_separation_per_tick: world,
+            team_objective: [
+                SimPoint::new(1_100 * world, 315 * world),
+                SimPoint::new(100 * world, 315 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        config.static_blockers.clear();
+        let mut sim = Simulation::new(config, 1);
+        let tower = CastleFightTowerKind::WatchTower.definition();
+        for footprint in [
+            BuildingFootprint::new(10, 10, 4, 4),
+            BuildingFootprint::new(14, 10, 4, 4),
+        ] {
+            sim.spawn_building_with_properties(
+                tower.spawn(Team(0), footprint),
+                tower.gameplay_properties(),
+            );
+        }
+        let ranger = CastleFightUnitKind::Ranger.definition();
+        let unit = sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(294 * world, 315 * world),
+                ranger.template(),
+            ),
+            ranger.gameplay_properties(),
+        );
+
+        let mut blocked_ticks = 0usize;
+        let mut previous = sim.unit(unit).unwrap().position;
+        for _ in 0..80 {
+            sim.step();
+            let current = sim.unit(unit).unwrap().position;
+            blocked_ticks += usize::from(current == previous);
+            previous = current;
+            if current.x > 600 * world {
+                break;
+            }
+        }
+
+        let final_position = sim.unit(unit).unwrap().position;
+        assert!(
+            final_position.x > 600 * world,
+            "ranger remained corner-locked beside towers at {final_position:?}"
+        );
+        assert!(
+            final_position.y <= 304 * world,
+            "ranger did not leave the snagged horizontal line at the tower corner: {final_position:?}"
+        );
+        assert!(
+            blocked_ticks <= 4,
+            "ranger remained stationary for {blocked_ticks} ticks while an open detour existed"
+        );
+    }
+
+    #[test]
     fn horizontal_march_can_bypass_enemy_mass_outside_acquisition_range() {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
