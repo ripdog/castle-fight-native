@@ -5596,6 +5596,80 @@ mod tests {
     }
 
     #[test]
+    fn targetless_topology_detour_does_not_retarget_rows_and_oscillate() {
+        fn run(workers: usize) -> (u64, SimPoint, usize) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let config = SimulationConfig {
+                spatial_cell_size: 64 * world,
+                navigation_cell_size: 32 * world,
+                navigation_min: NavCell::new(0, -20),
+                navigation_max: NavCell::new(40, 20),
+                target_pursuit_extra_range: 30 * world,
+                unit_separation_distance: 8 * world,
+                max_separation_per_tick: world,
+                team_objective: [SimPoint::new(1_000 * world, 0), SimPoint::new(0, 0)],
+                static_blockers: vec![
+                    BuildingFootprint::new(7, -6, 4, 4),
+                    BuildingFootprint::new(12, -3, 4, 4),
+                ],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            let definition = CastleFightUnitKind::Footman.definition();
+            let mover = sim.spawn_unit_with_properties(
+                UnitSpawn::from_template(
+                    Team(0),
+                    SimPoint::new(176 * world, -112 * world),
+                    definition.template(),
+                ),
+                definition.gameplay_properties(),
+            );
+
+            let mut previous = sim.unit(mover).unwrap().position;
+            let mut previous_dx = 0_i32;
+            let mut previous_dy = 0_i32;
+            let mut heading_reversals = 0usize;
+            for _ in 0..60 {
+                sim.step();
+                let current = sim.unit(mover).unwrap().position;
+                let dx = current.x - previous.x;
+                let dy = current.y - previous.y;
+                if dx != 0 && previous_dx != 0 && dx.signum() != previous_dx.signum() {
+                    heading_reversals += 1;
+                }
+                if dy != 0 && previous_dy != 0 && dy.signum() != previous_dy.signum() {
+                    heading_reversals += 1;
+                }
+                if dx != 0 {
+                    previous_dx = dx;
+                }
+                if dy != 0 {
+                    previous_dy = dy;
+                }
+                previous = current;
+            }
+            (
+                sim.checksum(),
+                sim.unit(mover).unwrap().position,
+                heading_reversals,
+            )
+        }
+
+        let expected = run(1);
+        assert_eq!(run(8), expected, "worker count changed objective detour");
+        assert!(
+            expected.1.x > 560 * SUBUNITS_PER_WORLD_UNIT,
+            "footman failed to make steady objective progress: {:?}",
+            expected.1
+        );
+        assert!(
+            expected.2 <= 2,
+            "footman repeatedly reversed heading during a targetless detour: {} reversals",
+            expected.2
+        );
+    }
+
+    #[test]
     fn worker_count_does_not_change_battle_checksum() {
         let mut expected = None;
         for workers in [1, 2, 4] {

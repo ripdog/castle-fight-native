@@ -4433,7 +4433,7 @@ impl Simulation {
                 let objective_cell = self
                     .topology
                     .cell_of_point(self.config.team_objective[usize::from(unit.team.0)]);
-                let fallback_objective_step = if let Some(radius) = unit.collision_radius_override {
+                let objective_detour_step = if let Some(radius) = unit.collision_radius_override {
                     let field = self
                         .radius_objective_fields
                         .get(&(unit.team.0, radius))
@@ -4456,11 +4456,24 @@ impl Simulation {
                         unit.collision_radius_override,
                     ) {
                         Some(direct_cell)
+                    } else if objective_detour_step.is_some() {
+                        // While the unit's preferred horizontal step is topologically blocked,
+                        // follow the stable shared objective field instead of repeatedly A*-routing
+                        // to a same-row goal that changes as the detour changes rows. Retargeting
+                        // that row every tick can make a targetless unit bounce between two equally
+                        // plausible obstacle sides until another unit physically displaces it.
+                        // Once horizontal progress is clear again, the normal stateless lane rule
+                        // resumes from the unit's new y coordinate.
+                        navigation_route_step = true;
+                        objective_detour_step
                     } else if let Some(cell) = self.horizontal_objective_goal_cell(
                         source_cell,
                         objective_cell.x,
                         unit.collision_radius_override,
                     ) {
+                        // Disconnected/caged components have no objective-field descent. Keep the
+                        // horizontal best-effort A* fallback so those units still press toward the
+                        // objective-side wall without inventing a route through blockers.
                         navigation_route_step = true;
                         let route_bias_key =
                             i8::try_from(route_bias).expect("route bias must fit signed byte");
@@ -4504,7 +4517,7 @@ impl Simulation {
                         }
                         result.next_cell
                     } else {
-                        fallback_objective_step
+                        None
                     }
                 }
             }
