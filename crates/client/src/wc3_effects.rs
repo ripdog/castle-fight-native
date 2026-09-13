@@ -10,6 +10,7 @@ use bevy::{
     gltf::GltfMaterialExtras,
     mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
     prelude::*,
+    render::render_resource::TextureFormat,
 };
 use serde::Deserialize;
 
@@ -21,8 +22,6 @@ const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__tea
 const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
 const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
 const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
-const BUILDING_TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 16.0;
-const BUILDING_TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -8.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
@@ -382,6 +381,7 @@ fn wc3_material_alpha_mode(filter_mode: &str, fallback: AlphaMode) -> AlphaMode 
 }
 
 type TeamMaterialCache = HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>;
+type TeamImageCache = HashMap<(AssetId<Image>, u8), Handle<Image>>;
 
 type Wc3MaterialWorld<'w, 's> = (
     Res<'w, AssetServer>,
@@ -391,8 +391,10 @@ type Wc3MaterialWorld<'w, 's> = (
 
 type Wc3MaterialAssets<'w, 's> = (
     ResMut<'w, Assets<StandardMaterial>>,
+    ResMut<'w, Assets<Image>>,
     Local<'s, TeamMaterialCache>,
     Local<'s, TeamMaterialCache>,
+    Local<'s, TeamImageCache>,
 );
 
 type Wc3MaterialMeshQuery<'w, 's> = Query<
@@ -415,8 +417,9 @@ pub fn fix_wc3_scene_materials(
     mut meshes: Wc3MaterialMeshQuery<'_, '_>,
 ) {
     let (asset_server, parents, team_roots) = world;
-    let (mut materials, mut team_materials, mut team_glow_materials) = material_assets;
-    for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
+    let (mut materials, mut images, mut team_materials, mut team_glow_materials, mut team_images) =
+        material_assets;
+    'mesh: for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
             commands.entity(entity).insert(Wc3MaterialProcessed);
             continue;
@@ -428,7 +431,12 @@ pub fn fix_wc3_scene_materials(
 
         let source_material_id = material_handle.0.id();
         let team = wc3_team_tint(entity, &parents, &team_roots);
-        let (overlay_depth_bias, underlay_depth_bias) = team_color_depth_bias_offsets(team);
+        let building_team_color = team.is_some_and(|team| team.asset_prefix == "wc3/buildings");
+        let overlay_depth_bias = if building_team_color {
+            0.0
+        } else {
+            TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET
+        };
         let material_template = {
             let Some(mut material) = materials.get_mut(&material_handle.0) else {
                 continue;
@@ -469,47 +477,75 @@ pub fn fix_wc3_scene_materials(
             && let Some(team) = team
         {
             let key = (source_material_id, team.index);
-            let underlay_handle = if let Some(handle) = team_materials.get(&key) {
-                handle.clone()
+            if building_team_color {
+                let flattened_handle = if let Some(handle) = team_materials.get(&key) {
+                    handle.clone()
+                } else {
+                    let Some(source_texture) = material_template.base_color_texture.clone() else {
+                        warn!("WC3 building team-color material has no textured overlay");
+                        commands.entity(entity).insert(Wc3MaterialProcessed);
+                        continue;
+                    };
+                    let image_key = (source_texture.id(), team.index);
+                    let flattened_texture = if let Some(handle) = team_images.get(&image_key) {
+                        handle.clone()
+                    } else {
+                        let Some(source_image) = images.get(&source_texture) else {
+                            continue 'mesh;
+                        };
+                        let Some(flattened_image) =
+                            flatten_team_color_image(source_image, team.color)
+                        else {
+                            warn!(
+                                "WC3 building team-color texture uses unsupported image format {:?}",
+                                source_image.texture_descriptor.format
+                            );
+                            commands.entity(entity).insert(Wc3MaterialProcessed);
+                            continue;
+                        };
+                        let handle = images.add(flattened_image);
+                        team_images.insert(image_key, handle.clone());
+                        handle
+                    };
+                    let mut flattened_material = material_template.clone();
+                    flattened_material.base_color = Color::WHITE;
+                    flattened_material.base_color_texture = Some(flattened_texture);
+                    flattened_material.alpha_mode = AlphaMode::Opaque;
+                    flattened_material.depth_bias = extras.priority_plane as f32;
+                    let handle = materials.add(flattened_material);
+                    team_materials.insert(key, handle.clone());
+                    handle
+                };
+                material_handle.0 = flattened_handle;
             } else {
-                let underlay = team_color_underlay_material(
-                    material_template,
-                    team.color,
-                    underlay_depth_bias,
-                );
-                let handle = materials.add(underlay);
-                team_materials.insert(key, handle.clone());
-                handle
-            };
-            let mut underlay_entity = commands.spawn((
-                Mesh3d(mesh.0.clone()),
-                MeshMaterial3d(underlay_handle),
-                Transform::IDENTITY,
-                Visibility::default(),
-                NoFrustumCulling,
-            ));
-            if let Some(skin) = skin {
-                underlay_entity.insert(skin.clone());
+                let underlay_handle = if let Some(handle) = team_materials.get(&key) {
+                    handle.clone()
+                } else {
+                    let underlay = team_color_underlay_material(
+                        material_template,
+                        team.color,
+                        TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET,
+                    );
+                    let handle = materials.add(underlay);
+                    team_materials.insert(key, handle.clone());
+                    handle
+                };
+                let mut underlay_entity = commands.spawn((
+                    Mesh3d(mesh.0.clone()),
+                    MeshMaterial3d(underlay_handle),
+                    Transform::IDENTITY,
+                    Visibility::default(),
+                    NoFrustumCulling,
+                ));
+                if let Some(skin) = skin {
+                    underlay_entity.insert(skin.clone());
+                }
+                let underlay_entity = underlay_entity.id();
+                commands.entity(entity).add_child(underlay_entity);
             }
-            let underlay_entity = underlay_entity.id();
-            commands.entity(entity).add_child(underlay_entity);
         }
 
         commands.entity(entity).insert(Wc3MaterialProcessed);
-    }
-}
-
-fn team_color_depth_bias_offsets(team: Option<Wc3TeamTint>) -> (f32, f32) {
-    if team.is_some_and(|team| team.asset_prefix == "wc3/buildings") {
-        (
-            BUILDING_TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET,
-            BUILDING_TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET,
-        )
-    } else {
-        (
-            TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET,
-            TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET,
-        )
     }
 }
 
@@ -537,6 +573,66 @@ fn team_color_underlay_material(
     material.alpha_mode = AlphaMode::Opaque;
     material.depth_bias += underlay_depth_bias;
     material
+}
+
+fn flatten_team_color_image(source: &Image, team_color: Color) -> Option<Image> {
+    let format = source.texture_descriptor.format;
+    let (red_index, green_index, blue_index) = match format {
+        TextureFormat::Rgba8Unorm | TextureFormat::Rgba8UnormSrgb => (0, 1, 2),
+        TextureFormat::Bgra8Unorm | TextureFormat::Bgra8UnormSrgb => (2, 1, 0),
+        _ => return None,
+    };
+    let is_srgb = matches!(
+        format,
+        TextureFormat::Rgba8UnormSrgb | TextureFormat::Bgra8UnormSrgb
+    );
+    let team = team_color.to_linear();
+    let mut flattened = source.clone();
+    let data = flattened.data.as_mut()?;
+    for pixel in data.as_chunks_mut::<4>().0 {
+        let alpha = f32::from(pixel[3]) / 255.0;
+        let source_channel = |index: usize| {
+            let encoded = f32::from(pixel[index]) / 255.0;
+            if is_srgb {
+                srgb_channel_to_linear(encoded)
+            } else {
+                encoded
+            }
+        };
+        let red = source_channel(red_index) * alpha + team.red * (1.0 - alpha);
+        let green = source_channel(green_index) * alpha + team.green * (1.0 - alpha);
+        let blue = source_channel(blue_index) * alpha + team.blue * (1.0 - alpha);
+        let encode = |linear: f32| {
+            let value = if is_srgb {
+                linear_channel_to_srgb(linear)
+            } else {
+                linear.clamp(0.0, 1.0)
+            };
+            (value * 255.0).round() as u8
+        };
+        pixel[red_index] = encode(red);
+        pixel[green_index] = encode(green);
+        pixel[blue_index] = encode(blue);
+        pixel[3] = 255;
+    }
+    Some(flattened)
+}
+
+fn srgb_channel_to_linear(channel: f32) -> f32 {
+    if channel <= 0.04045 {
+        channel / 12.92
+    } else {
+        ((channel + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_channel_to_srgb(channel: f32) -> f32 {
+    let channel = channel.clamp(0.0, 1.0);
+    if channel <= 0.003_130_8 {
+        channel * 12.92
+    } else {
+        1.055 * channel.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 fn team_glow_texture_path(team: Wc3TeamTint) -> String {
@@ -976,25 +1072,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn building_team_color_layers_use_wider_stable_depth_ordering() {
-        let unit = Wc3TeamTint::new(0, Color::WHITE, "wc3/units");
-        let building = Wc3TeamTint::new(0, Color::WHITE, "wc3/buildings");
-        assert_eq!(team_color_depth_bias_offsets(Some(unit)), (2.0, -1.0));
-        assert_eq!(team_color_depth_bias_offsets(Some(building)), (16.0, -8.0));
+    fn building_team_color_flattens_overlay_and_underlay_into_one_opaque_texture() {
+        let source = Image::new(
+            bevy::render::render_resource::Extent3d {
+                width: 2,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            vec![0, 255, 0, 255, 12, 34, 56, 0],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        );
+        let flattened = flatten_team_color_image(&source, Color::srgb(1.0, 0.0, 0.0))
+            .expect("rgba8 building texture must flatten");
+        let data = flattened
+            .data
+            .expect("flattened image keeps CPU pixel data");
+        assert_eq!(&data[0..4], &[0, 255, 0, 255]);
+        assert_eq!(&data[4..8], &[255, 0, 0, 255]);
+    }
 
-        let (overlay_bias, underlay_bias) = team_color_depth_bias_offsets(Some(building));
-        assert_eq!(wc3_material_depth_bias(0, false, overlay_bias), 0.0);
-        assert_eq!(wc3_material_depth_bias(0, true, overlay_bias), 16.0);
-        assert_eq!(wc3_material_depth_bias(3, true, overlay_bias), 19.0);
-
+    #[test]
+    fn non_building_team_color_keeps_coplanar_underlay_depth_ordering() {
+        assert_eq!(wc3_material_depth_bias(0, false, 2.0), 0.0);
+        assert_eq!(wc3_material_depth_bias(0, true, 2.0), 2.0);
         let source = StandardMaterial {
-            depth_bias: wc3_material_depth_bias(3, true, overlay_bias),
+            depth_bias: wc3_material_depth_bias(3, true, 2.0),
             ..default()
         };
-        let material =
-            team_color_underlay_material(source, Color::srgb(1.0, 0.0, 0.0), underlay_bias);
-        assert_eq!(material.depth_bias, 11.0);
-        assert!(material.depth_bias < wc3_material_depth_bias(3, true, overlay_bias));
+        let material = team_color_underlay_material(source, Color::srgb(1.0, 0.0, 0.0), -1.0);
+        assert_eq!(material.depth_bias, 4.0);
         assert!(material.base_color_texture.is_none());
         assert_eq!(material.alpha_mode, AlphaMode::Opaque);
     }
