@@ -367,6 +367,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["scripted_unit_spell_rows"], 37)
         self.assertEqual(summary["scripted_unit_spell_production_rows"], 35)
+        self.assertEqual(summary["scripted_unit_spell_resolved_order_ids"], 37)
+        self.assertEqual(summary["scripted_unit_spell_order_id_sources"], {
+            "script-integer": 1,
+            "wc3-canonical-base-order": 36,
+        })
         self.assertEqual(summary["scripted_unit_spell_target_modes"], {
             "ally-any": 2,
             "ally-ground": 10,
@@ -386,6 +391,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(giant["ability_rawcode"], "A0BJ")
         self.assertEqual(giant["target_mode_label"], "enemy-ground-combat-sapper")
         self.assertEqual(giant["base_order"], "parasite")
+        self.assertEqual(giant["resolved_order_id"], "852601")
+        self.assertEqual(giant["resolved_order_id_source"], "wc3-canonical-base-order")
         self.assertEqual(giant["effective_cooldown"], "15.0")
         self.assertEqual(giant["cooldown_source"], "protected-runtime")
 
@@ -398,11 +405,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
         monk = rows["n03E"]
         self.assertEqual(monk["target_mode_label"], "ally-any")
         self.assertEqual(monk["base_order"], "heal")
+        self.assertEqual(monk["resolved_order_id"], "852063")
         self.assertEqual(monk["production_building_names"], "Bamboo Dojo")
 
         mana_generator = rows["h062"]
         self.assertEqual(mana_generator["target_mode_label"], "ally-structure")
         self.assertEqual(mana_generator["base_order"], "absorb")
+        self.assertEqual(mana_generator["resolved_order_id"], "852529")
         self.assertEqual(mana_generator["production_building_rawcode"], "")
 
         twins = rows["n02L"]

@@ -51,6 +51,15 @@ SLK_ALIASES = {
 PATH_CELL_WORLD_UNITS = 32
 WURST_GENERATED_FIELD_ID = "wurs"
 WURST_GENERATED_MARKER = 42
+# Canonical Warcraft order IDs for the three base-order strings used by every
+# scripted unit-spell ability in this map. These are engine constants (also
+# exposed by Wurst Stdlib Orders.wurst), so they remain stable independently of
+# W3P's encrypted registry expression.
+CANONICAL_ORDER_IDS = {
+    "absorb": 852529,
+    "heal": 852063,
+    "parasite": 852601,
+}
 
 
 @dataclass(frozen=True)
@@ -1741,6 +1750,14 @@ def main() -> None:
                     expected = static_units.get(expected_rawcode)
                     expected_name = expected["name"] if expected is not None else registration["expected_immediate_unit_names"]
                 base_order = value_as_text(field_lookup(rows_by_object, "abilities", ability_rawcode, "aord", 0, 0))
+                registered_order_id = registration["order_id"]
+                if registered_order_id:
+                    resolved_order_id = registered_order_id
+                    resolved_order_source = "script-integer"
+                else:
+                    canonical_order_id = CANONICAL_ORDER_IDS.get(base_order)
+                    resolved_order_id = str(canonical_order_id) if canonical_order_id is not None else ""
+                    resolved_order_source = "wc3-canonical-base-order" if canonical_order_id is not None else "unresolved"
                 unit_spell_by_pair[(unit_rawcode, ability_rawcode)] = {
                     "unit_name": unit["name"],
                     "production_building_rawcode": production["building_rawcode"] if production is not None else "",
@@ -1764,7 +1781,7 @@ def main() -> None:
                     base_order, definition["range"], definition["area"], definition["targets"], definition["buffs"],
                     definition["data_fields_json"], definition["data_fields_labeled_json"],
                     registration["target_mode"], registration["target_mode_label"], registration["order_id"], registration["order_expression_kind"],
-                    expected_rawcode, expected_name,
+                    resolved_order_id, resolved_order_source, expected_rawcode, expected_name,
                     registration["handler_function"], registration["registration_function"], registration["evidence_kind"], registration["byte_offset"],
                 ])
     write_tsv(
@@ -1776,7 +1793,7 @@ def main() -> None:
             "static_cooldown", "effective_cooldown", "cooldown_source",
             "base_order", "range", "area", "targets", "buffs", "data_fields_json", "data_fields_labeled_json",
             "target_mode", "target_mode_label", "registered_order_id", "order_expression_kind",
-            "expected_immediate_unit_rawcode", "expected_immediate_unit_name",
+            "resolved_order_id", "resolved_order_id_source", "expected_immediate_unit_rawcode", "expected_immediate_unit_name",
             "handler_function", "registration_function", "evidence_kind", "byte_offset",
         ],
         unit_spell_rows,
@@ -3164,6 +3181,8 @@ def main() -> None:
         "production_unit_ability_links_with_protected_runtime_fields": production_ability_runtime_field_links,
         "scripted_unit_spell_rows": len(unit_spell_rows),
         "scripted_unit_spell_production_rows": unit_spell_production_rows,
+        "scripted_unit_spell_resolved_order_ids": sum(bool(row[27]) for row in unit_spell_rows),
+        "scripted_unit_spell_order_id_sources": dict(sorted(Counter(row[28] for row in unit_spell_rows).items())),
         "scripted_unit_spell_target_modes": dict(sorted(Counter(row[24] for row in unit_spell_rows).items())),
         "scripted_unit_spell_mechanic_rows": len(unit_spell_mechanic_rows),
         "scripted_unit_spell_mechanic_kinds": dict(sorted(Counter(row[13] for row in unit_spell_mechanic_rows).items())),
@@ -3214,7 +3233,7 @@ def main() -> None:
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
-            "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; protected order expressions remain explicitly unresolved where their encrypted order string cannot be recovered statically",
+            "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
             "protected-filter-bindings.tsv resolves the W3P Filter wrapper SX to generated predicate vL using static Wurst emission order; its predicate is alive combat sapper and enemy of the subsystem owner, so Master of Elements and Snowveil no longer depend on an opaque target-filter symbol",
             "items.tsv normalizes every authored map item, including helper/result items such as Gold and Multi Blast Staff; repeated attached abilities are preserved because Multi Blast Staff implements four simultaneous Blast effects with four A02D entries",
