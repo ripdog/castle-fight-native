@@ -13,7 +13,7 @@ use whiteout::{
         InterpolationType, LayerFilterMode, LayerShadingFlag, MDLXFormat, Model, Node, NodeFlag,
         Parser as MdxParser, SequenceFlag, TrackQuaternion, TrackVector3f,
     },
-    textures::{BlpParser, DdsParser, PngWriter, Texture, TgaParser},
+    textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
 };
 
 use crate::catalog::{CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec};
@@ -121,6 +121,7 @@ pub struct TextureManifest {
     pub source_casc_path: Option<String>,
     pub png: Option<String>,
     pub replaceable_id: u32,
+    pub has_transparency: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -644,6 +645,7 @@ impl Exporter {
                     source_casc_path: None,
                     png: None,
                     replaceable_id,
+                    has_transparency: false,
                 });
                 gltf_indices.push(None);
                 continue;
@@ -668,44 +670,55 @@ impl Exporter {
     fn export_texture(&self, logical_path: &str) -> Result<TextureManifest, Box<dyn Error>> {
         let (source_casc_path, source_bytes, source_ext) = self.read_texture(logical_path)?;
         let png_name = format!("textures/{}.png", flat_asset_name(logical_path));
-        let png_bytes = match source_ext.as_str() {
+        let decoded = match source_ext.as_str() {
             "blp" => {
                 let mut parser = BlpParser::new();
-                let texture = parser.parse(&source_bytes).ok_or_else(|| {
+                parser.parse(&source_bytes).ok_or_else(|| {
                     io::Error::other(format!(
                         "failed to decode BLP {source_casc_path}: {:?}",
                         parser.issues()
                     ))
-                })?;
-                texture_to_png(&texture)?
+                })?
             }
             "dds" => {
                 let mut parser = DdsParser::new();
-                let texture = parser.parse(&source_bytes).ok_or_else(|| {
+                parser.parse(&source_bytes).ok_or_else(|| {
                     io::Error::other(format!(
                         "failed to decode DDS {source_casc_path}: {:?}",
                         parser.issues()
                     ))
-                })?;
-                texture_to_png(&texture)?
+                })?
             }
             "tga" => {
                 let mut parser = TgaParser::new();
-                let texture = parser.parse(&source_bytes).ok_or_else(|| {
+                parser.parse(&source_bytes).ok_or_else(|| {
                     io::Error::other(format!(
                         "failed to decode TGA {source_casc_path}: {:?}",
                         parser.issues()
                     ))
-                })?;
-                texture_to_png(&texture)?
+                })?
             }
-            "png" => source_bytes.to_vec(),
+            "png" => {
+                let mut parser = PngParser::new();
+                parser.parse(&source_bytes).ok_or_else(|| {
+                    io::Error::other(format!(
+                        "failed to decode PNG {source_casc_path}: {:?}",
+                        parser.issues()
+                    ))
+                })?
+            }
             other => {
                 return Err(io::Error::other(format!(
                     "unsupported WC3 texture format .{other}: {source_casc_path}"
                 ))
                 .into());
             }
+        };
+        let has_transparency = texture_has_transparency(&decoded);
+        let png_bytes = if source_ext == "png" {
+            source_bytes.to_vec()
+        } else {
+            texture_to_png(&decoded)?
         };
         fs::write(self.output.join(&png_name), png_bytes)?;
 
@@ -722,6 +735,7 @@ impl Exporter {
             source_casc_path: Some(source_casc_path),
             png: Some(png_name),
             replaceable_id: 0,
+            has_transparency,
         })
     }
 
@@ -760,6 +774,18 @@ impl Exporter {
         )
         .into())
     }
+}
+
+fn texture_has_transparency(texture: &Texture) -> bool {
+    let Some(rgba) = texture.copy_as_format(PixelFormat::RGBA8, None) else {
+        return false;
+    };
+    rgba.mip_data(0, 0)
+        .as_ref()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|pixel| pixel[3] < u8::MAX)
 }
 
 fn texture_to_png(texture: &Texture) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -854,7 +880,8 @@ fn build_gltf(
     }
 
     let animations = build_animations(model, &skeleton, &mut binary, &mut warnings)?;
-    let (materials, material_warnings, uses_unlit) = build_materials(model, texture_indices);
+    let (materials, material_warnings, uses_unlit) =
+        build_materials(model, texture_indices, texture_manifests);
     warnings.extend(material_warnings);
     let images: Vec<Value> = texture_manifests
         .iter()
@@ -2140,6 +2167,7 @@ fn sqlerp_quat(a: [f32; 4], b: [f32; 4], c: [f32; 4], d: [f32; 4], t: f32) -> [f
 fn build_materials(
     model: &Model,
     texture_indices: &[Option<usize>],
+    texture_manifests: &[TextureManifest],
 ) -> (Vec<Value>, Vec<String>, bool) {
     let mut result = Vec::with_capacity(model.materials_len());
     let mut warnings = Vec::new();
@@ -2186,17 +2214,11 @@ fn build_materials(
                 );
             }
 
-            alpha_mode = match layer.filter_mode() {
-                LayerFilterMode::None => {
-                    if layer.alpha() < 0.999 {
-                        "BLEND"
-                    } else {
-                        "OPAQUE"
-                    }
-                }
-                LayerFilterMode::Transparent => "MASK",
-                _ => "BLEND",
-            };
+            let texture_has_transparency = texture_manifests
+                .get(texture_id)
+                .is_some_and(|texture| texture.has_transparency);
+            alpha_mode =
+                gltf_alpha_mode(layer.filter_mode(), layer.alpha(), texture_has_transparency);
             double_sided = layer.shading_flags().contains(LayerShadingFlag::TWO_SIDED);
             let unlit = layer.shading_flags().contains(LayerShadingFlag::UNSHADED)
                 || layer.shading_flags().contains(LayerShadingFlag::UNLIT);
@@ -2234,6 +2256,20 @@ fn build_materials(
     }
 
     (result, warnings, uses_unlit)
+}
+
+fn gltf_alpha_mode(
+    filter_mode: LayerFilterMode,
+    layer_alpha: f32,
+    texture_has_transparency: bool,
+) -> &'static str {
+    match filter_mode {
+        LayerFilterMode::None if layer_alpha < 0.999 => "BLEND",
+        LayerFilterMode::None if texture_has_transparency => "MASK",
+        LayerFilterMode::None => "OPAQUE",
+        LayerFilterMode::Transparent => "MASK",
+        _ => "BLEND",
+    }
 }
 
 #[derive(Default)]
@@ -2634,6 +2670,28 @@ mod tests {
                 [0],
             r"Doodads\Ruins\Terrain\RuinsWall90\RuinsWall900.mdx"
         );
+    }
+
+    #[test]
+    fn opaque_wc3_layers_use_texture_alpha_as_a_cutout_mask() {
+        assert_eq!(gltf_alpha_mode(LayerFilterMode::None, 1.0, false), "OPAQUE");
+        assert_eq!(gltf_alpha_mode(LayerFilterMode::None, 1.0, true), "MASK");
+        assert_eq!(gltf_alpha_mode(LayerFilterMode::None, 0.5, true), "BLEND");
+        assert_eq!(
+            gltf_alpha_mode(LayerFilterMode::Transparent, 1.0, false),
+            "MASK"
+        );
+    }
+
+    #[test]
+    fn detects_transparent_pixels_in_decoded_textures() {
+        let mut opaque = Texture::create_2d(PixelFormat::RGBA8, 1, 1, 1).unwrap();
+        opaque.set_data(&[1, 2, 3, 255]);
+        assert!(!texture_has_transparency(&opaque));
+
+        let mut transparent = Texture::create_2d(PixelFormat::RGBA8, 1, 1, 1).unwrap();
+        transparent.set_data(&[1, 2, 3, 0]);
+        assert!(texture_has_transparency(&transparent));
     }
 
     #[test]
