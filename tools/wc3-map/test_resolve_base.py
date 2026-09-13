@@ -476,6 +476,73 @@ class ResolvedEvidenceTests(unittest.TestCase):
             self.assertEqual(rows[rawcode]["marker_runtime_hooks"], "ability-marker:A0DX")
             self.assertIn("target-damage-melee-thunderbolt-retaliation", rows[rawcode]["special_mechanic_kinds"])
 
+    def test_runtime_system_mechanics_are_importer_ready(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 4)
+        self.assertEqual(summary["runtime_system_mechanic_kinds"], {
+            "area-building-buffs-cleanse-and-spawn-augmentation": 1,
+            "body-replacement-plus-independent-random-trait-groups": 1,
+            "team-shrine-independent-clone-rolls-and-train-transformations": 1,
+            "team-stacked-one-time-delayed-unit-revival": 1,
+        })
+        with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 4)
+
+        power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
+        self.assertEqual(power["building_armor_bonus"], 2)
+        self.assertEqual(power["mana_regen_bonus_per_second"], 0.2)
+        self.assertEqual(power["tower_attack_damage_bonus_fraction"], 0.25)
+        self.assertEqual(power["disable_cleanse_sweep_interval_seconds"], 4)
+        self.assertEqual(power["disable_cleanse_radius"], 252)
+        self.assertEqual(power["cleaned_buff_ids"], [1114010234, 1110454349])
+        self.assertEqual(power["spawn_permanent_max_hp_bonus"], 150)
+        self.assertEqual(power["spawn_armor_bonus"], 4)
+        self.assertEqual(power["spawn_attack_damage_bonus_fraction"], 0.2)
+        self.assertEqual(power["spawn_spell_damage_reduction"], 0.15)
+        self.assertEqual(power["spawn_hp_stack_object_data_at_level4"]["Max Life Gained"], -150)
+        self.assertEqual(len(power["spell_resist_exclusion_ability_ids"]), 17)
+
+        heroic = json.loads(rows["heroic-shrine-companion-spawning"]["parameters_json"])
+        self.assertEqual(heroic["tooltip_probability_percent_per_shrine"], 16)
+        self.assertEqual(heroic["per_shrine_actual_probability_percent"], 17)
+        self.assertTrue(heroic["tooltip_disagrees_with_runtime"])
+        self.assertEqual(heroic["maximum_shrines_checked"], 2)
+        self.assertEqual(heroic["type_murloc_unconditional_local_extra_copy"], 1)
+        self.assertEqual(
+            [unit["rawcode"] for unit in heroic["twins_replacement_units"]],
+            ["n02K", "n02L"],
+        )
+
+        golden = json.loads(rows["golden-shrine-revival"]["parameters_json"])
+        self.assertEqual(golden["chance_percent_per_shrine"], 20)
+        self.assertEqual(golden["maximum_effective_chance_percent"], 40)
+        self.assertEqual(golden["revive_delay_seconds"], 2)
+        self.assertTrue(golden["exclude_wc3_summoned_unit_type"])
+        self.assertTrue(golden["revived_unit_cannot_trigger_golden_shrine_again"])
+        self.assertTrue(golden["revive_requires_same_death_generation"])
+
+        fiend = json.loads(rows["blood-fiend-randomization"]["parameters_json"])
+        bodies = fiend["resolved_body_distribution"]
+        self.assertEqual(sum(body["probability_percent"] for body in bodies), 100)
+        self.assertEqual(
+            [(body["rawcode"], body["probability_percent"], body["armor_type"]) for body in bodies],
+            [
+                ("n00M", 5.0, "divine"),
+                ("n00R", 9.0, "hero"),
+                ("n00Q", 21.5, "none"),
+                ("n00N", 21.5, "small"),
+                ("n00O", 21.5, "medium"),
+                ("n00P", 21.5, "large"),
+            ],
+        )
+        self.assertTrue(all(body["hp"] == 640 for body in bodies))
+        self.assertTrue(all(body["attack1_min"] == 45 for body in bodies))
+        self.assertTrue(all(body["attack1_max"] == 65 for body in bodies))
+        self.assertEqual(len(fiend["resolved_trait_groups"]), 6)
+        for group in fiend["resolved_trait_groups"]:
+            self.assertEqual(sum(outcome["probability_percent"] for outcome in group["outcomes"]), 100)
+
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:
             units = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}

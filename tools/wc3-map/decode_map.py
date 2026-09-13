@@ -772,6 +772,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     protected_filter_bindings = analysis["protected_filter_bindings"]
     production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
     building_improvement_spawn_mechanics = analysis["building_improvement_spawn_mechanics"]
+    runtime_system_mechanics = analysis["runtime_system_mechanics"]
     castle_item_mechanics = analysis["castle_item_mechanics"]
     building_spell_registrations = analysis["building_spell_registrations"]
     building_spell_evidence = analysis["building_spell_evidence"]
@@ -1097,6 +1098,37 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 related_objects.append(related)
             writer.writerow([
                 source_rawcode, source_unit_id, source_names, row["mechanic_kind"], row["trigger"],
+                script_json(related_objects), script_json(row["parameters"]),
+                ",".join(str(value) for value in row["source_functions"]),
+                row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "runtime-system-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "system_id", "mechanic_kind", "trigger", "related_objects_json", "parameters_json",
+            "source_functions", "evidence_kind", "byte_offset",
+        ])
+        for row in runtime_system_mechanics:
+            related_objects: list[dict[str, object]] = []
+            for related_id_value in row["related_rawcode_ids"]:
+                related_id = int(related_id_value)
+                related = {
+                    "rawcode": rawcode_text(related_id),
+                    "rawcode_integer": related_id,
+                    "categories": "",
+                    "names": "",
+                }
+                if related_id in object_metadata:
+                    rawcode, related_categories, _rtables, related_names, _rdefs = rawcode_metadata(related_id)
+                    related.update({
+                        "rawcode": rawcode,
+                        "categories": related_categories,
+                        "names": related_names,
+                    })
+                related_objects.append(related)
+            writer.writerow([
+                row["system_id"], row["mechanic_kind"], row["trigger"],
                 script_json(related_objects), script_json(row["parameters"]),
                 ",".join(str(value) for value in row["source_functions"]),
                 row["evidence_kind"], row["byte_offset"],
@@ -1780,6 +1812,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "building_improvement_spawn_mechanics": len(building_improvement_spawn_mechanics),
         "building_improvement_spawn_mechanic_kinds": dict(sorted(Counter(
             str(row["mechanic_kind"]) for row in building_improvement_spawn_mechanics
+        ).items())),
+        "runtime_system_mechanics": len(runtime_system_mechanics),
+        "runtime_system_mechanic_kinds": dict(sorted(Counter(
+            str(row["mechanic_kind"]) for row in runtime_system_mechanics
         ).items())),
         "building_spell_mechanics": len(building_spell_mechanics),
         "building_spell_mechanics_with_unresolved_target_filter": sum(

@@ -5419,6 +5419,359 @@ def _extract_building_improvement_spawn_mechanics(
     }]
 
 
+def _extract_runtime_system_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover gameplay systems whose effects cut across unit/building rows."""
+    available = {str(function["name"]) for function in functions}
+    required = {
+        "dK", "registerPowerPlant",
+        "ForGroupCallback_forEachIn_PowerPlantRuntime_callback_forEachIn_PowerPlantRuntime",
+        "ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime",
+        "applyPowerArmor", "hasNoPowerArmorExclusion", "setupUnit",
+        "kP", "acquireHeroicShrine", "spawnSyncedCompanions",
+        "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning",
+        "ME", "acquireElvenShrine", "elvenShrineEffectiveReviveChance", "fJ",
+        "CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler",
+        "markShrineReviveBlocked", "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+    }
+    if not required.issubset(available):
+        return []
+
+    def source(name: str) -> tuple[int, bytes, set[str]]:
+        body = _function_body_tokens(data, functions, name)
+        if body is None:
+            raise ValueError(f"runtime-system source function missing: {name}")
+        start, tokens = body
+        function = next(function for function in functions if function["name"] == name)
+        raw = data[int(function["start"]):int(function["end"])]
+        return start, raw, {token.text for token in tokens}
+
+    rows: list[dict[str, object]] = []
+
+    # Power Plant / Power Surge. The native auras supply building armor, mana
+    # regeneration and tower damage. A four-second scripted sweep removes the
+    # two freeze buffs in a wider 252 radius, and B01K on a production building
+    # causes spawned units to receive the hidden HP/armor/damage package plus a
+    # 15% spell-resistance ability unless they already own one of the exclusions.
+    init_start, init_source, init_tokens = source("dK")
+    register_start, register_source, register_tokens = source("registerPowerPlant")
+    sweep_start, sweep_source, sweep_tokens = source(
+        "ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime"
+    )
+    apply_start, apply_source, apply_tokens = source("applyPowerArmor")
+    exclusion_start, exclusion_source, exclusion_tokens = source("hasNoPowerArmorExclusion")
+    setup_start, setup_source, setup_tokens = source("setupUnit")
+    if not {"1747990868", "252.", "4.", "__wurst_safe_TimerStart"}.issubset(init_tokens):
+        raise ValueError("Power Plant runtime initialization changed")
+    if b"O1=1747990868 N1=252." not in init_source or b"TimerStart(qir,4.,true" not in init_source:
+        raise ValueError("Power Plant radius/timer constants changed")
+    if not {"1093679443", "1093679440", "1093679446", "addProtectedAbility"}.issubset(register_tokens):
+        raise ValueError("Power Plant aura registration changed")
+    for fragment in (
+        b"addProtectedAbility(uir,1093679443)",
+        b"addProtectedAbility(vir,1093679440)",
+        b"addProtectedAbility(wir,1093679446)",
+    ):
+        if fragment not in register_source:
+            raise ValueError("Power Plant granted aura set changed")
+    if not {"1114010234", "1110454349", "UNIT_TYPE_STRUCTURE", "unit_removeAbility"}.issubset(sweep_tokens):
+        raise ValueError("Power Plant disable-cleanse sweep changed")
+    if b"unit_removeAbility(Ajn,1114010234)" not in sweep_source or b"unit_removeAbility(Ajn,1110454349)" not in sweep_source:
+        raise ValueError("Power Plant freeze-buff cleanup changed")
+    if not {"1093679437", "4", "1093679441", "1093679442", "1093683286"}.issubset(apply_tokens):
+        raise ValueError("Power Armor spawn package changed")
+    required_apply = (
+        b"addProtectedAbility(Ifs,1093679437)",
+        b"SetUnitAbilityLevel(Jfs,1093679437,4)",
+        b"unit_removeAbility(Hfs,1093679437)",
+        b"addProtectedAbility(Kfs,1093679441)",
+        b"addProtectedAbility(Lfs,1093679442)",
+        b"addProtectedAbility(Mfs,1093683286)",
+    )
+    if any(fragment not in apply_source for fragment in required_apply):
+        raise ValueError("Power Armor spawn package sequence changed")
+    exclusion_ids = [
+        1093679179, 1093679183, 1093679411, 1093681480, 1093681481, 1093681484,
+        1093681486, 1093681497, 1093681498, 1093681750, 1093681990, 1093682760,
+        1093682761, 1093682762, 1093682766, 1093683030, 1093683248,
+    ]
+    if not {str(value) for value in exclusion_ids}.issubset(exclusion_tokens):
+        raise ValueError("Power Armor spell-resistance exclusion set changed")
+    if b"unit_getAbilityLevel(Ofs,1110454603)>0" not in setup_source:
+        raise ValueError("Power Armor production-building buff gate changed")
+    rows.append({
+        "system_id": "power-plant-power-surge",
+        "mechanic_kind": "area-building-buffs-cleanse-and-spawn-augmentation",
+        "trigger": "construction-plus-periodic-sweep-plus-unit-spawn",
+        "parameters": {
+            "power_plant_unit_id": 1747990868,
+            "building_armor_aura_ability_id": 1093679443,
+            "building_armor_buff_id": 1110454603,
+            "building_armor_bonus": 2,
+            "building_aura_radius": 180,
+            "mana_regen_aura_ability_id": 1093679440,
+            "mana_regen_bonus_per_second": 0.20,
+            "tower_damage_aura_ability_id": 1093679446,
+            "tower_attack_damage_bonus_fraction": 0.25,
+            "disable_cleanse_sweep_interval_seconds": 4,
+            "disable_cleanse_radius": 252,
+            "disable_cleanse_requires_structure": True,
+            "disable_cleanse_excludes_power_plant_itself": True,
+            "disable_cleanse_requires_allied_structure": False,
+            "cleaned_buff_ids": [1114010234, 1110454349],
+            "spawn_requires_building_power_armor_buff_id": 1110454603,
+            "spawn_hp_stack_ability_id": 1093679437,
+            "spawn_hp_stack_temporary_level": 4,
+            "spawn_permanent_max_hp_bonus": 150,
+            "spawn_armor_bonus_ability_id": 1093679441,
+            "spawn_armor_bonus": 4,
+            "spawn_damage_bonus_ability_id": 1093679442,
+            "spawn_attack_damage_bonus_fraction": 0.20,
+            "spawn_spell_resist_ability_id": 1093683286,
+            "spawn_spell_damage_reduction": 0.15,
+            "spell_resist_exclusion_ability_ids": exclusion_ids,
+        },
+        "related_rawcode_ids": [
+            1747990868, 1093679443, 1110454603, 1093679440, 1093679446,
+            1114010234, 1110454349, 1093679437, 1093679441, 1093679442, 1093683286,
+            *exclusion_ids,
+        ],
+        "source_functions": [
+            "dK", "registerPowerPlant",
+            "ForGroupCallback_forEachIn_PowerPlantRuntime_callback_forEachIn_PowerPlantRuntime",
+            "ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime",
+            "setupUnit", "applyPowerArmor", "hasNoPowerArmorExclusion",
+        ],
+        "evidence_kind": "exact-native-aura-object-data-and-cross-runtime-script",
+        "byte_offset": min(init_start, register_start, sweep_start, apply_start, exclusion_start, setup_start),
+    })
+
+    # Heroic Shrine / Companion Spawning. The real runtime is 17% per shrine,
+    # not the 16% shown in the 9.27 tooltip. Up to two team shrines roll
+    # independently. TypeMurloc doubles each successful shrine clone and also
+    # receives one unconditional same-owner copy on the original train event;
+    # the hidden Twins carrier instead becomes n02K+n02L.
+    companion_init_start, companion_init_source, companion_init_tokens = source("kP")
+    shrine_start, shrine_source, shrine_tokens = source("acquireHeroicShrine")
+    synced_start, synced_source, synced_tokens = source("spawnSyncedCompanions")
+    train_companion_start, train_companion_source, train_companion_tokens = source(
+        "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning"
+    )
+    if not {"2", "17", "EVENT_PLAYER_UNIT_TRAIN_FINISH"}.issubset(companion_init_tokens):
+        raise ValueError("Heroic Shrine companion constants changed")
+    if b"fR=2 eR=17" not in companion_init_source:
+        raise ValueError("Heroic Shrine max-count/chance constants changed")
+    if not {"vGb", "unit_getIndex", "unit_getOwner", "__wurst_safe_GroupAddUnit"}.issubset(shrine_tokens):
+        raise ValueError("Heroic Shrine team registration changed")
+    if not {"GetRandomInt", "1093679432", "setupUnit", "__wurst_safe_CreateUnit"}.issubset(synced_tokens):
+        raise ValueError("Heroic Shrine synced companion spawning changed")
+    if b"min(group_size(vGb[Xfs]),fR)" not in synced_source or b"GetRandomInt(0,99)<eR" not in synced_source:
+        raise ValueError("Heroic Shrine roll loop changed")
+    if b"unit_getAbilityLevel(Vfs,1093679432)>0" not in synced_source:
+        raise ValueError("Heroic Shrine TypeMurloc double-clone rule changed")
+    if not {"1093679432", "1093682767", "1848652363", "1848652364", "setupUnit"}.issubset(train_companion_tokens):
+        raise ValueError("Companion train-event transformations changed")
+    if b"unit_getAbilityLevel(eYl,1093679432)>0" not in train_companion_source:
+        raise ValueError("TypeMurloc unconditional companion branch changed")
+    if b"unit_getAbilityLevel(eYl,1093682767)>0" not in train_companion_source:
+        raise ValueError("Twins conversion branch changed")
+    rows.append({
+        "system_id": "heroic-shrine-companion-spawning",
+        "mechanic_kind": "team-shrine-independent-clone-rolls-and-train-transformations",
+        "trigger": "unit-train-finish",
+        "parameters": {
+            "heroic_shrine_unit_id": 1747989831,
+            "maximum_shrines_checked": 2,
+            "per_shrine_roll_min": 0,
+            "per_shrine_roll_max": 99,
+            "per_shrine_success_threshold_exclusive": 17,
+            "per_shrine_actual_probability_percent": 17,
+            "tooltip_probability_percent_per_shrine": 16,
+            "tooltip_disagrees_with_runtime": True,
+            "successful_clone_unit_type": "same-as-original-trained-unit",
+            "successful_clone_spawn_position": "original-trained-unit-position",
+            "successful_clone_owner": "heroic-shrine-owner",
+            "successful_clone_runs_setup_unit": True,
+            "type_murloc_marker_ability_id": 1093679432,
+            "type_murloc_extra_clone_per_successful_shrine_roll": 1,
+            "type_murloc_unconditional_local_extra_copy": 1,
+            "twins_marker_ability_id": 1093682767,
+            "twins_carrier_unit_id": 1697656901,
+            "twins_replacement_unit_ids": [1848652363, 1848652364],
+            "twins_replacements_run_setup_unit": True,
+        },
+        "related_rawcode_ids": [
+            1747989831, 1093679432, 1093682767, 1697656901, 1848652363, 1848652364,
+        ],
+        "source_functions": [
+            "kP", "acquireHeroicShrine", "spawnSyncedCompanions",
+            "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning", "setupUnit",
+        ],
+        "evidence_kind": "exact-team-registration-roll-loop-and-train-event-transformations",
+        "byte_offset": min(companion_init_start, shrine_start, synced_start, train_companion_start),
+    })
+
+    # Golden Shrine of Justice. Each team shrine contributes 20 percentage
+    # points, capped at 40. Eligible non-legendary/non-summoned deaths roll once;
+    # success is delayed two seconds and recreates the same type at the death
+    # position only if the death-generation token has not changed. The new unit
+    # is permanently blocked from receiving the shrine revive a second time.
+    lifecycle_start, lifecycle_source, lifecycle_tokens = source("ME")
+    elven_start, elven_source, elven_tokens = source("acquireElvenShrine")
+    revive_chance_start, revive_chance_source, revive_chance_tokens = source("elvenShrineEffectiveReviveChance")
+    death_start, death_source, death_tokens = source("fJ")
+    revive_start, revive_source, revive_tokens = source(
+        "CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler"
+    )
+    block_start, block_source, block_tokens = source("markShrineReviveBlocked")
+    if not {"20", "40"}.issubset(lifecycle_tokens) or b"Ctb=20 Btb=40" not in lifecycle_source:
+        raise ValueError("Golden Shrine revive chance constants changed")
+    if not {"utb", "Ctb"}.issubset(elven_tokens) or b"utb[gDp]=(__wurst_ensureInt(utb[gDp])+Ctb)" not in elven_source:
+        raise ValueError("Golden Shrine team chance accumulation changed")
+    if b"min(__wurst_ensureInt(utb[SBp]),Btb)" not in revive_chance_source:
+        raise ValueError("Golden Shrine chance cap changed")
+    required_death_tokens = {
+        "1093678919", "1093678920", "UNIT_TYPE_SUMMONED", "2.", "_Ir",
+        "elvenShrineEffectiveReviveChance", "doAfter",
+    }
+    if not required_death_tokens.issubset(death_tokens):
+        raise ValueError("Golden Shrine death eligibility/roll branch changed")
+    if b"unit_getAbilityLevel(M2q,1093678919)<=0" not in death_source or b"unit_getAbilityLevel(M2q,1093678920)<=0" not in death_source:
+        raise ValueError("Golden Shrine summoned/legendary exclusions changed")
+    if b"doAfter(2.,f3q)" not in death_source:
+        raise ValueError("Golden Shrine revive delay changed")
+    if not {"__wurst_safe_CreateUnit", "__wurst_safe_RemoveUnit", "markShrineReviveBlocked"}.issubset(revive_tokens):
+        raise ValueError("Golden Shrine delayed revive callback changed")
+    if b"if(E8m.deathIndex==A7)then" not in revive_source:
+        raise ValueError("Golden Shrine death-generation guard changed")
+    if not {"z7", "true"}.issubset(block_tokens):
+        raise ValueError("Golden Shrine one-revive block changed")
+    rows.append({
+        "system_id": "golden-shrine-revival",
+        "mechanic_kind": "team-stacked-one-time-delayed-unit-revival",
+        "trigger": "combat-sapper-death",
+        "parameters": {
+            "golden_shrine_unit_id": 1747989817,
+            "chance_percent_per_shrine": 20,
+            "maximum_effective_chance_percent": 40,
+            "chance_roll_min": 0,
+            "chance_roll_max": 99,
+            "exclude_summoned_unit_marker_ability_id": 1093678919,
+            "exclude_legendary_marker_ability_id": 1093678920,
+            "exclude_wc3_summoned_unit_type": True,
+            "exclude_already_revived_units": True,
+            "scripted_death_suppression_is_one_shot": True,
+            "requires_unit_actually_dead": True,
+            "revive_delay_seconds": 2,
+            "revive_requires_same_death_generation": True,
+            "revived_unit_type": "same-as-dead-unit",
+            "revived_unit_owner": "original-owner",
+            "revived_unit_position": "exact-death-position",
+            "remove_original_dead_unit_on_success": True,
+            "revived_unit_cannot_trigger_golden_shrine_again": True,
+        },
+        "related_rawcode_ids": [1747989817, 1093678919, 1093678920],
+        "source_functions": [
+            "ME", "acquireElvenShrine", "elvenShrineEffectiveReviveChance", "fJ",
+            "CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler",
+            "markShrineReviveBlocked",
+        ],
+        "evidence_kind": "exact-team-counter-death-branch-and-delayed-replacement-callback",
+        "byte_offset": min(lifecycle_start, elven_start, revive_chance_start, death_start, revive_start, block_start),
+    })
+
+    # Blood Fiend procedural generation. The trained n00L carrier is first
+    # replaced by one of six statistically equivalent body rawcodes, then six
+    # independent random trait groups add abilities. Preserve the branch
+    # probabilities explicitly so a native implementation need not emulate Lua
+    # control flow just to reproduce the distribution.
+    body_init_start, body_init_source, body_init_tokens = source("EE")
+    body_start, body_source, body_tokens = source("rollBody")
+    fiend_start, fiend_source, fiend_tokens = source("randomizeBloodFiend")
+    train_start, train_source, train_tokens = source("onUnitTrained")
+    body_ids = [1848651853, 1848651858, 1848651857, 1848651854, 1848651855, 1848651856]
+    if not {str(value) for value in body_ids}.issubset(body_init_tokens):
+        raise ValueError("Blood Fiend body rawcode table changed")
+    if b"qAb=1848651853 pAb=1848651858" not in body_init_source:
+        raise ValueError("Blood Fiend rare body assignments changed")
+    if not {"5", "14", "GetRandomInt", "replaceUnitWithType"}.issubset(body_tokens):
+        raise ValueError("Blood Fiend body roll changed")
+    if b"GetRandomInt(0,3)" not in body_source:
+        raise ValueError("Blood Fiend common body selection changed")
+    trait_ids = [
+        1093677113, 1093677382, 1093677634, 1093677378, 1093677146, 1093678924,
+        1093677141, 1093677140, 1093678410, 1093677377, 1093677142, 1093677124,
+        1093677397, 1093677360, 1093677392, 1093677110, 1093677394, 1093677362,
+    ]
+    if not {str(value) for value in trait_ids}.issubset(fiend_tokens):
+        raise ValueError("Blood Fiend trait ability table changed")
+    if b"unit_getAbilityLevel(cgs,1093678922)>0" not in train_source or b"randomizeBloodFiend(cgs)" not in train_source:
+        raise ValueError("Blood Fiend train-time randomization marker changed")
+    rows.append({
+        "system_id": "blood-fiend-randomization",
+        "mechanic_kind": "body-replacement-plus-independent-random-trait-groups",
+        "trigger": "unit-train-finish-with-A07J-marker",
+        "parameters": {
+            "production_carrier_unit_id": 1848651852,
+            "randomization_marker_ability_id": 1093678922,
+            "body_distribution": [
+                {"unit_id": 1848651853, "probability_percent": 5.0},
+                {"unit_id": 1848651858, "probability_percent": 9.0},
+                {"unit_id": 1848651857, "probability_percent": 21.5},
+                {"unit_id": 1848651854, "probability_percent": 21.5},
+                {"unit_id": 1848651855, "probability_percent": 21.5},
+                {"unit_id": 1848651856, "probability_percent": 21.5},
+            ],
+            "trait_groups": [
+                {"group": 1, "outcomes": [
+                    {"ability_id": 1093677113, "probability_percent": 20},
+                    {"ability_id": 1093677382, "probability_percent": 35},
+                    {"ability_id": None, "probability_percent": 45},
+                ]},
+                {"group": 2, "outcomes": [
+                    {"ability_id": 1093677634, "probability_percent": 18},
+                    {"ability_id": 1093677378, "probability_percent": 12},
+                    {"ability_id": 1093677146, "probability_percent": 3},
+                    {"ability_id": 1093678924, "probability_percent": 10},
+                    {"ability_id": None, "probability_percent": 57},
+                ]},
+                {"group": 3, "outcomes": [
+                    {"ability_id": 1093677141, "probability_percent": 10},
+                    {"ability_id": 1093677140, "probability_percent": 22},
+                    {"ability_id": 1093678410, "probability_percent": 3},
+                    {"ability_id": None, "probability_percent": 65},
+                ]},
+                {"group": 4, "outcomes": [
+                    {"ability_id": 1093677377, "probability_percent": 25},
+                    {"ability_id": None, "probability_percent": 75},
+                ]},
+                {"group": 5, "outcomes": [
+                    {"ability_id": 1093677142, "probability_percent": 15},
+                    {"ability_id": 1093677124, "probability_percent": 25},
+                    {"ability_id": None, "probability_percent": 60},
+                ]},
+                {"group": 6, "outcomes": [
+                    {"ability_id": 1093677397, "probability_percent": 8},
+                    {"ability_id": 1093677360, "probability_percent": 8},
+                    {"ability_id": 1093677392, "probability_percent": 8},
+                    {"ability_id": 1093677110, "probability_percent": 10},
+                    {"ability_id": 1093677394, "probability_percent": 10},
+                    {"ability_id": 1093677362, "probability_percent": 3},
+                    {"ability_id": None, "probability_percent": 53},
+                ]},
+            ],
+        },
+        "related_rawcode_ids": [1848651852, 1093678922, *body_ids, *trait_ids],
+        "source_functions": ["EE", "rollBody", "randomizeBloodFiend", "onUnitTrained"],
+        "evidence_kind": "exact-body-table-roll-thresholds-and-independent-trait-branches",
+        "byte_offset": min(body_init_start, body_start, fiend_start, train_start),
+    })
+
+    return rows
+
+
 def _enclosing_named_function(
     functions: list[dict[str, object]],
     byte_offset: int,
@@ -5605,6 +5958,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         data, functions, protected_filter_bindings
     )
     building_improvement_spawn_mechanics = _extract_building_improvement_spawn_mechanics(data, functions)
+    runtime_system_mechanics = _extract_runtime_system_mechanics(data, functions)
     castle_item_mechanics = _extract_castle_item_mechanics(data, functions, function_aliases)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
@@ -5659,6 +6013,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "protected_filter_bindings": protected_filter_bindings,
         "production_unit_special_mechanics": production_unit_special_mechanics,
         "building_improvement_spawn_mechanics": building_improvement_spawn_mechanics,
+        "runtime_system_mechanics": runtime_system_mechanics,
         "castle_item_mechanics": castle_item_mechanics,
         "building_spell_registrations": building_spell_registrations,
         "building_spell_evidence": building_spell_evidence,

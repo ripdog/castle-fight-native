@@ -1332,6 +1332,16 @@ def main() -> None:
     protected_unit_applied: dict[str, dict[str, Any]] = {}
     protected_unit_path = map_root / "script" / "protected-unit-stats.tsv"
     protected_unit_override_counts: Counter[str] = Counter()
+    defense_type_names = {
+        0: "small",
+        1: "medium",
+        2: "large",
+        3: "fort",
+        4: "normal",
+        5: "hero",
+        6: "divine",
+        7: "none",
+    }
 
     def protected_unit_overlay(row: dict[str, str], override_field: str, static_field: str) -> tuple[str, str]:
         override = row.get(override_field, "")
@@ -1389,7 +1399,20 @@ def main() -> None:
                 protected_unit_applied[row["rawcode"]] = {
                     "hp": applied["hp"],
                     "armor": applied["armor"],
+                    "armor_type": (
+                        defense_type_names[int(row["defense_type"])]
+                        if row.get("defense_type", "") != ""
+                        else static["armor_type"]
+                    ),
                     "move_speed": applied["move_speed"],
+                    "attack1_base_damage": applied["attack1_base_damage"],
+                    "attack1_dice_number": applied["attack1_dice_number"],
+                    "attack1_dice_sides": applied["attack1_dice_sides"],
+                    "attack1_cooldown": applied["attack1_cooldown"],
+                    "attack1_range": applied["attack1_range"],
+                    "attack1_min": value_as_text(attack1_min),
+                    "attack1_max": value_as_text(attack1_max),
+                    "attack1_avg": value_as_text(attack1_avg),
                     "attack_range": applied["attack1_range"],
                     "dps": value_as_text(attack1_dps),
                 }
@@ -2059,6 +2082,184 @@ def main() -> None:
             "source_functions", "evidence_kind", "byte_offset",
         ],
         production_special_rows,
+    )
+
+    runtime_system_rows: list[list[Any]] = []
+    runtime_system_path = map_root / "script" / "runtime-system-mechanics.tsv"
+    if runtime_system_path.exists():
+        with runtime_system_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                system_id = mechanic["system_id"]
+                parameters = json.loads(mechanic["parameters_json"])
+
+                def ability_level_one(rawcode: str) -> dict[str, str]:
+                    row = next((entry for entry in ability_levels.get(rawcode, []) if entry["level"] == "1"), None)
+                    if row is None:
+                        raise ValueError(f"runtime system {system_id} is missing ability level 1: {rawcode}")
+                    return row
+
+                if system_id == "power-plant-power-surge":
+                    power_plant = static_units.get("h09T")
+                    if power_plant is None:
+                        raise ValueError("Power Plant runtime system is missing h09T")
+                    armor_aura = ability_level_one("A09S")
+                    mana_aura = ability_level_one("A09P")
+                    damage_aura = ability_level_one("A09V")
+                    hp_stack = next((row for row in ability_levels.get("A09M", []) if row["level"] == "4"), None)
+                    armor_bonus = ability_level_one("A09Q")
+                    damage_bonus = ability_level_one("A09R")
+                    spell_resist = ability_level_one("A0HV")
+                    if hp_stack is None:
+                        raise ValueError("Power Armor HP stacking is missing A09M level 4")
+                    armor_fields = json.loads(armor_aura["data_fields_labeled_json"])
+                    mana_fields = json.loads(mana_aura["data_fields_labeled_json"])
+                    tower_fields = json.loads(damage_aura["data_fields_labeled_json"])
+                    hp_fields = json.loads(hp_stack["data_fields_labeled_json"])
+                    spawn_armor_fields = json.loads(armor_bonus["data_fields_labeled_json"])
+                    spawn_damage_fields = json.loads(damage_bonus["data_fields_labeled_json"])
+                    spell_fields = json.loads(spell_resist["data_fields_labeled_json"])
+                    if numeric(armor_fields.get("Armor Bonus")) != 2 or numeric(armor_aura["area"]) != 180:
+                        raise ValueError(f"Power Plant armor aura changed: {armor_aura}")
+                    if numeric(mana_fields.get("Mana Regeneration Increase")) != 0.2 or numeric(mana_aura["area"]) != 180:
+                        raise ValueError(f"Power Plant mana aura changed: {mana_aura}")
+                    if numeric(tower_fields.get("Attack Damage Increase")) != 0.25 or numeric(damage_aura["area"]) != 180:
+                        raise ValueError(f"Power Plant tower aura changed: {damage_aura}")
+                    if numeric(hp_fields.get("Max Life Gained")) != -150:
+                        raise ValueError(f"Power Armor A09M level-4 HP trick changed: {hp_fields}")
+                    if numeric(spawn_armor_fields.get("Defense Bonus")) != 4:
+                        raise ValueError(f"Power Armor spawn armor bonus changed: {spawn_armor_fields}")
+                    if numeric(spawn_damage_fields.get("Attack Damage Increase")) != 0.2:
+                        raise ValueError(f"Power Armor spawn damage bonus changed: {spawn_damage_fields}")
+                    if numeric(spell_fields.get("Damage Reduction")) != 0.15:
+                        raise ValueError(f"Power Armor spawn spell resistance changed: {spell_fields}")
+                    parameters["power_plant_name"] = power_plant["name"]
+                    parameters["power_plant_tooltip"] = power_plant["ubertip"]
+                    parameters["building_armor_aura_object_data"] = armor_fields
+                    parameters["mana_regen_aura_object_data"] = mana_fields
+                    parameters["tower_damage_aura_object_data"] = tower_fields
+                    parameters["spawn_hp_stack_object_data_at_level4"] = hp_fields
+                    parameters["spawn_hp_bonus_technique"] = "add-A09M,set-level-4(-150-max-life),remove-A09M"
+                    parameters["spawn_armor_bonus_object_data"] = spawn_armor_fields
+                    parameters["spawn_damage_bonus_object_data"] = spawn_damage_fields
+                    parameters["spawn_spell_resist_object_data"] = spell_fields
+                elif system_id == "heroic-shrine-companion-spawning":
+                    shrine = static_units.get("h05G")
+                    carrier = static_units.get("e00E")
+                    weeper = static_units.get("n02K")
+                    smiley = static_units.get("n02L")
+                    if None in (shrine, carrier, weeper, smiley):
+                        raise ValueError("Heroic Shrine runtime system is missing shrine/twins object data")
+                    tooltip = str(shrine["ubertip"])
+                    if "16" not in tooltip or "32" not in tooltip:
+                        raise ValueError(f"Heroic Shrine tooltip no longer advertises 16-32%: {tooltip}")
+                    if int(parameters["per_shrine_actual_probability_percent"]) != 17:
+                        raise ValueError("Heroic Shrine runtime probability changed")
+                    parameters["heroic_shrine_name"] = shrine["name"]
+                    parameters["heroic_shrine_tooltip"] = tooltip
+                    parameters["twins_carrier_name"] = carrier["name"]
+                    parameters["twins_replacement_units"] = [
+                        {"rawcode": "n02K", "name": weeper["name"]},
+                        {"rawcode": "n02L", "name": smiley["name"]},
+                    ]
+                elif system_id == "golden-shrine-revival":
+                    shrine = static_units.get("h059")
+                    if shrine is None:
+                        raise ValueError("Golden Shrine runtime system is missing h059")
+                    tooltip = str(shrine["ubertip"])
+                    if "20" not in tooltip or "40" not in tooltip:
+                        raise ValueError(f"Golden Shrine tooltip no longer advertises 20-40%: {tooltip}")
+                    parameters["golden_shrine_name"] = shrine["name"]
+                    parameters["golden_shrine_tooltip"] = tooltip
+                elif system_id == "blood-fiend-randomization":
+                    carrier = static_units.get("n00L")
+                    production = production_source_by_unit.get("n00L")
+                    if carrier is None or production is None:
+                        raise ValueError("Blood Fiend runtime system is missing production carrier/building")
+                    if "A07J" not in rawcode_list(carrier["abilities"]):
+                        raise ValueError("Blood Fiend carrier no longer has A07J randomization marker")
+                    body_rows: list[dict[str, Any]] = []
+                    body_signature: tuple[Any, ...] | None = None
+                    for body in parameters["body_distribution"]:
+                        rawcode = integer_rawcode(int(body["unit_id"]))
+                        unit = static_units.get(rawcode)
+                        protected = protected_unit_applied.get(rawcode)
+                        if unit is None or protected is None:
+                            raise ValueError(f"Blood Fiend body is missing protected runtime unit data: {rawcode}")
+                        signature = (
+                            numeric(protected["hp"]), numeric(protected["armor"]), numeric(protected["move_speed"]),
+                            numeric(protected["attack1_base_damage"]), numeric(protected["attack1_dice_number"]),
+                            numeric(protected["attack1_dice_sides"]), numeric(protected["attack1_cooldown"]),
+                            numeric(protected["attack1_range"]),
+                        )
+                        if body_signature is None:
+                            body_signature = signature
+                        elif signature != body_signature:
+                            raise ValueError(f"Blood Fiend body core combat stats diverged: {rawcode} {signature} != {body_signature}")
+                        body_rows.append({
+                            "rawcode": rawcode,
+                            "name": unit["name"],
+                            "probability_percent": body["probability_percent"],
+                            "hp": numeric(protected["hp"]),
+                            "armor": numeric(protected["armor"]),
+                            "armor_type": protected["armor_type"],
+                            "move_speed": numeric(protected["move_speed"]),
+                            "attack1_base_damage": numeric(protected["attack1_base_damage"]),
+                            "attack1_dice_number": numeric(protected["attack1_dice_number"]),
+                            "attack1_dice_sides": numeric(protected["attack1_dice_sides"]),
+                            "attack1_min": numeric(protected["attack1_min"]),
+                            "attack1_max": numeric(protected["attack1_max"]),
+                            "attack1_avg": numeric(protected["attack1_avg"]),
+                            "attack1_cooldown": numeric(protected["attack1_cooldown"]),
+                            "attack1_range": numeric(protected["attack1_range"]),
+                            "attack1_dps": numeric(protected["dps"]),
+                        })
+                    resolved_groups: list[dict[str, Any]] = []
+                    for group in parameters["trait_groups"]:
+                        outcomes: list[dict[str, Any]] = []
+                        for outcome in group["outcomes"]:
+                            ability_id = outcome["ability_id"]
+                            if ability_id is None:
+                                outcomes.append({
+                                    "ability_rawcode": None,
+                                    "ability_name": None,
+                                    "probability_percent": outcome["probability_percent"],
+                                })
+                                continue
+                            ability_rawcode = integer_rawcode(int(ability_id))
+                            ability = ability_level_one(ability_rawcode)
+                            outcomes.append({
+                                "ability_rawcode": ability_rawcode,
+                                "ability_name": ability["name"],
+                                "base_rawcode": ability["base_rawcode"],
+                                "probability_percent": outcome["probability_percent"],
+                                "object_data": json.loads(ability["data_fields_labeled_json"]),
+                            })
+                        if sum(float(outcome["probability_percent"]) for outcome in outcomes) != 100:
+                            raise ValueError(f"Blood Fiend trait group probabilities no longer sum to 100: {group['group']}")
+                        resolved_groups.append({"group": group["group"], "outcomes": outcomes})
+                    if sum(float(row["probability_percent"]) for row in body_rows) != 100:
+                        raise ValueError("Blood Fiend body probabilities no longer sum to 100")
+                    parameters["production_building_rawcode"] = production["building_rawcode"]
+                    parameters["production_building_names"] = production["building_names"]
+                    parameters["production_carrier_rawcode"] = "n00L"
+                    parameters["production_carrier_name"] = carrier["name"]
+                    parameters["resolved_body_distribution"] = body_rows
+                    parameters["resolved_trait_groups"] = resolved_groups
+                else:
+                    raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
+
+                runtime_system_rows.append([
+                    system_id, mechanic["mechanic_kind"], mechanic["trigger"],
+                    mechanic["related_objects_json"], stable_json(parameters),
+                    mechanic["source_functions"], mechanic["evidence_kind"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "runtime-system-mechanics.tsv",
+        [
+            "system_id", "mechanic_kind", "trigger", "related_objects_json", "parameters_json",
+            "source_functions", "evidence_kind", "byte_offset",
+        ],
+        runtime_system_rows,
     )
 
     # Closure audit for production-unit-specific branches in core runtime event
@@ -3751,6 +3952,10 @@ def main() -> None:
             row[8] for row in runtime_coverage_rows
         ).items())),
         "building_improvement_spawn_mechanic_rows": len(building_improvement_spawn_by_source),
+        "runtime_system_mechanic_rows": len(runtime_system_rows),
+        "runtime_system_mechanic_kinds": dict(sorted(Counter(
+            row[1] for row in runtime_system_rows
+        ).items())),
         "production_unit_ability_links": len(production_ability_rows),
         "production_unit_unique_abilities": len(production_ability_unique),
         "production_unit_inherited_ability_links": production_ability_inherited_links,
@@ -3818,6 +4023,7 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus marker-driven Earth/Lightning hooks; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
+            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows: Power Plant spawn augmentation and freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, and Blood Fiend procedural bodies/traits. Runtime probabilities are preserved even when tooltips disagree, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
