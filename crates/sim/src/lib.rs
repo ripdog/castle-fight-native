@@ -159,6 +159,7 @@ mod tests {
             unit_separation_distance: 2 * SUBUNITS_PER_WORLD_UNIT,
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
             static_blockers: Vec::new(),
+            team_build_regions: [Vec::new(), Vec::new()],
             team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
         }
     }
@@ -2516,6 +2517,36 @@ mod tests {
         let result =
             sim.try_spawn_building(passive_building(0, BuildingFootprint::new(21, 1, 1, 1)));
         assert_eq!(result, Err(BuildingPlacementError::StaticObstacle));
+    }
+
+    #[test]
+    fn team_build_regions_reject_middle_and_enemy_territory() {
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(29, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 10, 10)],
+                vec![BuildingFootprint::new(20, 0, 10, 10)],
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let own = BuildingFootprint::new(2, 2, 2, 2);
+        let middle = BuildingFootprint::new(12, 2, 2, 2);
+        let enemy = BuildingFootprint::new(22, 2, 2, 2);
+
+        assert!(sim.can_place_building_for_team(Team(0), own));
+        assert!(!sim.can_place_building_for_team(Team(0), middle));
+        assert!(!sim.can_place_building_for_team(Team(0), enemy));
+        assert_eq!(
+            sim.try_spawn_building(passive_building(0, middle)),
+            Err(BuildingPlacementError::OutsideBuildRegion)
+        );
+        assert_eq!(
+            sim.try_spawn_building(passive_building(0, enemy)),
+            Err(BuildingPlacementError::OutsideBuildRegion)
+        );
+        assert!(sim.try_spawn_building(passive_building(0, own)).is_ok());
     }
 
     #[test]

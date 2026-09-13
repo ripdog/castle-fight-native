@@ -42,6 +42,9 @@ pub struct SimulationConfig {
     pub unit_separation_distance: i32,
     pub max_separation_per_tick: i32,
     pub static_blockers: Vec<BuildingFootprint>,
+    /// Canonical buildable regions for each team. An empty region list leaves that team
+    /// unrestricted for generic/test maps that do not author build regions.
+    pub team_build_regions: [Vec<BuildingFootprint>; 2],
     pub team_objective: [SimPoint; 2],
 }
 
@@ -63,6 +66,7 @@ impl Default for SimulationConfig {
             unit_separation_distance: 3 * SUBUNITS_PER_WORLD_UNIT / 4,
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT / 16,
             static_blockers: Vec::new(),
+            team_build_regions: [Vec::new(), Vec::new()],
             team_objective: [
                 SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
                 SimPoint::new(0, 0),
@@ -232,6 +236,7 @@ pub struct BuildingView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildingPlacementError {
     OutsideNavigation,
+    OutsideBuildRegion,
     StaticObstacle,
     BuildingOverlap,
     UnitOccupied,
@@ -517,6 +522,9 @@ impl Simulation {
         if !self.footprint_inside_navigation(building.footprint) {
             return Err(BuildingPlacementError::OutsideNavigation);
         }
+        if !self.footprint_inside_team_build_region(building.team, building.footprint) {
+            return Err(BuildingPlacementError::OutsideBuildRegion);
+        }
         if self
             .config
             .static_blockers
@@ -621,6 +629,23 @@ impl Simulation {
                 .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
                 .any(|existing| footprints_overlap(existing, footprint))
             && !self.footprint_contains_live_unit(footprint)
+    }
+
+    #[must_use]
+    pub fn can_place_building_for_team(&self, team: Team, footprint: BuildingFootprint) -> bool {
+        self.can_place_building(footprint)
+            && self.footprint_inside_team_build_region(team, footprint)
+    }
+
+    fn footprint_inside_team_build_region(&self, team: Team, footprint: BuildingFootprint) -> bool {
+        let Some(regions) = self.config.team_build_regions.get(usize::from(team.0)) else {
+            return false;
+        };
+        regions.is_empty()
+            || regions
+                .iter()
+                .copied()
+                .any(|region| footprint_contains_footprint(region, footprint))
     }
 
     fn footprint_contains_live_unit(&self, footprint: BuildingFootprint) -> bool {
@@ -5481,6 +5506,16 @@ fn pursuit_arc_step(
 
 fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
     a.min_x <= b.max_x() && a.max_x() >= b.min_x && a.min_y <= b.max_y() && a.max_y() >= b.min_y
+}
+
+fn footprint_contains_footprint(
+    container: BuildingFootprint,
+    footprint: BuildingFootprint,
+) -> bool {
+    footprint.min_x >= container.min_x
+        && footprint.max_x() <= container.max_x()
+        && footprint.min_y >= container.min_y
+        && footprint.max_y() <= container.max_y()
 }
 
 fn footprint_contains_cell(footprint: BuildingFootprint, cell: NavCell) -> bool {

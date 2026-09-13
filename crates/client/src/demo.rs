@@ -1,8 +1,9 @@
 use castle_fight_sim::{
-    AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, CombatRules,
-    CorpseDefinitionId, CorpseProfile, MovementProfile, NavCell, ProductionProfile,
-    SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig, Team, TerrainElevationMap,
-    UnitSpawn, UnitTemplate,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingPlacementError, BuildingSpawn, CombatRules,
+    CorpseDefinitionId, CorpseProfile, ManaProfile, MovementProfile, NavCell, ProductionProfile,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, SpellcastingProfile,
+    Team, TerrainElevationMap, UnitSpawn, UnitTemplate,
 };
 
 use crate::presentation::WorldMetrics;
@@ -19,6 +20,8 @@ const PRODUCTION_HEALTH: i32 = 1_000;
 const PRODUCTION_INTERVAL_TICKS: u16 = 120;
 const ATTACK_COOLDOWN_TICKS: u16 = 30;
 const PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 300;
+const ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 90;
+const TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND: i32 = 110;
 const DEMO_CORPSE_LIFETIME_TICKS: u32 = 300;
 // Visual-verification value only; the exact original Castle Fight uphill miss chance is still
 // compatibility data to recover.
@@ -63,11 +66,11 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
             ),
         ] {
             simulation.spawn_building_with_production_corpse(
-                production_structure(team, melee, BuildKind::Melee),
+                production_structure(team, melee, ProductionKind::Melee),
                 demo_corpse_profile(),
             );
             simulation.spawn_building_with_production_corpse(
-                production_structure(team, ranged, BuildKind::Ranged),
+                production_structure(team, ranged, ProductionKind::Ranged),
                 demo_corpse_profile(),
             );
         }
@@ -133,6 +136,23 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         maximum.y.div_euclid(NAV_CELL_SUBUNITS) - 1,
     );
 
+    let navigation_width = navigation_max.x - navigation_min.x + 1;
+    assert_eq!(navigation_width % 3, 0);
+    let build_region_width = navigation_width / 3;
+    let navigation_height = navigation_max.y - navigation_min.y + 1;
+    let left_build_region = BuildingFootprint::new(
+        navigation_min.x,
+        navigation_min.y,
+        build_region_width as u16,
+        navigation_height as u16,
+    );
+    let right_build_region = BuildingFootprint::new(
+        navigation_max.x - build_region_width + 1,
+        navigation_min.y,
+        build_region_width as u16,
+        navigation_height as u16,
+    );
+
     SimulationConfig {
         match_seed: 0x4341_5354_4c45,
         spatial_cell_size: 40 * SUBUNITS_PER_WORLD_UNIT,
@@ -156,6 +176,7 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
                 (navigation_max.y - LANE_MAX_Y) as u16,
             ),
         ],
+        team_build_regions: [vec![left_build_region], vec![right_build_region]],
         team_objective: [world_point(6_000, 0), world_point(-6_000, 0)],
     }
 }
@@ -172,16 +193,46 @@ fn passive_structure(team: Team, footprint: BuildingFootprint, health: i32) -> B
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BuildKind {
+pub(crate) enum ProductionKind {
     Melee,
     Ranged,
+    Artillery,
+    Spellcaster,
+}
+
+impl ProductionKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Melee => "Melee Hall",
+            Self::Ranged => "Ranged Hall",
+            Self::Artillery => "Artillery Foundry",
+            Self::Spellcaster => "Spellcaster Hall",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BuildKind {
+    Production(ProductionKind),
+    GuaranteedTower,
+    ProjectileTower,
+    GlobalAreaSpell,
 }
 
 impl BuildKind {
     pub(crate) const fn label(self) -> &'static str {
         match self {
-            Self::Melee => "Melee Hall",
-            Self::Ranged => "Ranged Hall",
+            Self::Production(kind) => kind.label(),
+            Self::GuaranteedTower => "Hit Tower",
+            Self::ProjectileTower => "Splash Tower",
+            Self::GlobalAreaSpell => "Global AOE Shrine",
+        }
+    }
+
+    pub(crate) const fn footprint_size(self) -> u16 {
+        match self {
+            Self::GuaranteedTower | Self::ProjectileTower => 3,
+            Self::Production(_) | Self::GlobalAreaSpell => 4,
         }
     }
 }
@@ -193,10 +244,44 @@ pub(crate) const fn demo_corpse_profile() -> CorpseProfile {
     }
 }
 
-pub(crate) fn production_structure(
+pub(crate) fn try_spawn_demo_building(
+    simulation: &mut Simulation,
     team: Team,
     footprint: BuildingFootprint,
     kind: BuildKind,
+) -> Result<SimId, BuildingPlacementError> {
+    match kind {
+        BuildKind::Production(ProductionKind::Spellcaster) => simulation
+            .try_spawn_building_with_production_spellcasting(
+                production_structure(team, footprint, ProductionKind::Spellcaster),
+                short_range_spellcaster_profile(),
+            ),
+        BuildKind::Production(kind) => simulation.try_spawn_building_with_production_corpse(
+            production_structure(team, footprint, kind),
+            demo_corpse_profile(),
+        ),
+        BuildKind::GuaranteedTower => simulation.try_spawn_building(attack_structure(
+            team,
+            footprint,
+            guaranteed_tower_attack(),
+        )),
+        BuildKind::ProjectileTower => simulation.try_spawn_building(attack_structure(
+            team,
+            footprint,
+            projectile_tower_attack(),
+        )),
+        BuildKind::GlobalAreaSpell => simulation.try_spawn_building(spell_structure(
+            team,
+            footprint,
+            global_area_spell_profile(),
+        )),
+    }
+}
+
+pub(crate) fn production_structure(
+    team: Team,
+    footprint: BuildingFootprint,
+    kind: ProductionKind,
 ) -> BuildingSpawn {
     BuildingSpawn {
         team,
@@ -213,12 +298,42 @@ pub(crate) fn production_structure(
     }
 }
 
-fn unit_template(kind: BuildKind) -> UnitTemplate {
+fn attack_structure(
+    team: Team,
+    footprint: BuildingFootprint,
+    attack: AttackProfile,
+) -> BuildingSpawn {
+    BuildingSpawn {
+        team,
+        footprint,
+        health: 1_600,
+        production: None,
+        attack: Some(attack),
+        spellcasting: None,
+    }
+}
+
+fn spell_structure(
+    team: Team,
+    footprint: BuildingFootprint,
+    spellcasting: SpellcastingProfile,
+) -> BuildingSpawn {
+    BuildingSpawn {
+        team,
+        footprint,
+        health: 1_400,
+        production: None,
+        attack: None,
+        spellcasting: Some(spellcasting),
+    }
+}
+
+fn unit_template(kind: ProductionKind) -> UnitTemplate {
     let movement = MovementProfile {
         speed_per_tick: 40 * SUBUNITS_PER_WORLD_UNIT / SIMULATION_HZ_I32,
     };
     match kind {
-        BuildKind::Melee => UnitTemplate {
+        ProductionKind::Melee => UnitTemplate {
             health: 100,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -229,7 +344,7 @@ fn unit_template(kind: BuildKind) -> UnitTemplate {
             },
             movement,
         },
-        BuildKind::Ranged => UnitTemplate {
+        ProductionKind::Ranged => UnitTemplate {
             health: 80,
             attack: AttackProfile {
                 delivery: AttackDelivery::RangedGuaranteedHit {
@@ -243,6 +358,102 @@ fn unit_template(kind: BuildKind) -> UnitTemplate {
             },
             movement,
         },
+        ProductionKind::Artillery => UnitTemplate {
+            health: 70,
+            attack: AttackProfile {
+                delivery: AttackDelivery::RangedBallistic {
+                    speed_per_tick: ARTILLERY_PROJECTILE_SPEED_WORLD_PER_SECOND
+                        * SUBUNITS_PER_WORLD_UNIT
+                        / SIMULATION_HZ_I32,
+                    impact_radius: 35 * SUBUNITS_PER_WORLD_UNIT,
+                },
+                damage: 18,
+                range: 260 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 340 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 2 * ATTACK_COOLDOWN_TICKS,
+            },
+            movement,
+        },
+        ProductionKind::Spellcaster => UnitTemplate {
+            health: 80,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 9,
+                range: 14 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 80 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+            },
+            movement,
+        },
+    }
+}
+
+fn guaranteed_tower_attack() -> AttackProfile {
+    AttackProfile {
+        delivery: AttackDelivery::RangedGuaranteedHit {
+            speed_per_tick: PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                / SIMULATION_HZ_I32,
+        },
+        damage: 18,
+        range: 300 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 300 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: ATTACK_COOLDOWN_TICKS,
+    }
+}
+
+fn projectile_tower_attack() -> AttackProfile {
+    AttackProfile {
+        delivery: AttackDelivery::RangedBallistic {
+            speed_per_tick: TOWER_PROJECTILE_SPEED_WORLD_PER_SECOND * SUBUNITS_PER_WORLD_UNIT
+                / SIMULATION_HZ_I32,
+            impact_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+        },
+        damage: 30,
+        range: 340 * SUBUNITS_PER_WORLD_UNIT,
+        acquisition_range: 340 * SUBUNITS_PER_WORLD_UNIT,
+        cooldown_ticks: 2 * ATTACK_COOLDOWN_TICKS,
+    }
+}
+
+fn global_area_spell_profile() -> SpellcastingProfile {
+    SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 180,
+            starting: 0,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(1_001),
+            mana_cost: 180,
+            cooldown_ticks: 1,
+            range: 0,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
+            effect: AbilityEffect::AreaDamage {
+                amount: 30,
+                radius: 50 * SUBUNITS_PER_WORLD_UNIT,
+            },
+        },
+    }
+}
+
+fn short_range_spellcaster_profile() -> SpellcastingProfile {
+    SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 120,
+            starting: 0,
+            regen_per_tick: 1,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(1_002),
+            mana_cost: 120,
+            cooldown_ticks: 1,
+            range: 90 * SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+            effect: AbilityEffect::AreaDamage {
+                amount: 18,
+                radius: 30 * SUBUNITS_PER_WORLD_UNIT,
+            },
+        },
     }
 }
 
@@ -255,4 +466,50 @@ fn original_terrain() -> TerrainElevationMap {
 
 fn world_point(x: i32, y: i32) -> SimPoint {
     SimPoint::new(x * SUBUNITS_PER_WORLD_UNIT, y * SUBUNITS_PER_WORLD_UNIT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn demo_exposes_every_verification_build_kind() {
+        let DemoWorld { mut simulation, .. } = create_demo_world(1, None);
+        let kinds = [
+            BuildKind::Production(ProductionKind::Melee),
+            BuildKind::Production(ProductionKind::Ranged),
+            BuildKind::Production(ProductionKind::Artillery),
+            BuildKind::Production(ProductionKind::Spellcaster),
+            BuildKind::GuaranteedTower,
+            BuildKind::ProjectileTower,
+            BuildKind::GlobalAreaSpell,
+        ];
+
+        for (index, kind) in kinds.into_iter().enumerate() {
+            let footprint = BuildingFootprint::new(
+                -240 + index as i32 * 6,
+                -100,
+                kind.footprint_size(),
+                kind.footprint_size(),
+            );
+            assert!(
+                try_spawn_demo_building(&mut simulation, Team(0), footprint, kind).is_ok(),
+                "failed to spawn {}",
+                kind.label()
+            );
+        }
+    }
+
+    #[test]
+    fn original_map_middle_third_is_not_buildable() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, None);
+        let middle = BuildingFootprint::new(0, 0, 4, 4);
+        let left = BuildingFootprint::new(-220, 0, 4, 4);
+        let right = BuildingFootprint::new(200, 0, 4, 4);
+
+        assert!(!simulation.can_place_building_for_team(Team(0), middle));
+        assert!(!simulation.can_place_building_for_team(Team(1), middle));
+        assert!(simulation.can_place_building_for_team(Team(0), left));
+        assert!(simulation.can_place_building_for_team(Team(1), right));
+    }
 }

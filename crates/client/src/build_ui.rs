@@ -3,16 +3,15 @@ use castle_fight_sim::{BuildingFootprint, Team};
 
 use crate::{
     AuthoritativeSimulation,
-    demo::BuildKind,
+    demo::{BuildKind, ProductionKind},
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
     terrain::TerrainSurface,
 };
 
-const BUILDING_FOOTPRINT_SIZE: u16 = 4;
 const PANEL_LEFT: f32 = 16.0;
 const PANEL_TOP: f32 = 16.0;
 const PANEL_WIDTH: f32 = 360.0;
-const PANEL_HEIGHT: f32 = 350.0;
+const PANEL_HEIGHT: f32 = 500.0;
 
 const PANEL_BACKGROUND: Color = Color::srgba(0.035, 0.045, 0.060, 0.94);
 const BUTTON_NORMAL: Color = Color::srgb(0.10, 0.12, 0.15);
@@ -131,24 +130,22 @@ fn setup_build_ui(mut commands: Commands) {
                 TextFont::from_font_size(15.0),
                 TextColor(Color::srgb(0.72, 0.76, 0.82)),
             ));
-            panel
-                .spawn((Node {
-                    width: percent(100.0),
-                    column_gap: px(8.0),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    spawn_button(
-                        row,
-                        BuildKind::Melee.label(),
-                        BuildUiAction::Building(BuildKind::Melee),
-                    );
-                    spawn_button(
-                        row,
-                        BuildKind::Ranged.label(),
-                        BuildUiAction::Building(BuildKind::Ranged),
-                    );
-                });
+            spawn_building_button_row(
+                panel,
+                BuildKind::Production(ProductionKind::Melee),
+                Some(BuildKind::Production(ProductionKind::Ranged)),
+            );
+            spawn_building_button_row(
+                panel,
+                BuildKind::Production(ProductionKind::Artillery),
+                Some(BuildKind::Production(ProductionKind::Spellcaster)),
+            );
+            spawn_building_button_row(
+                panel,
+                BuildKind::GuaranteedTower,
+                Some(BuildKind::ProjectileTower),
+            );
+            spawn_building_button_row(panel, BuildKind::GlobalAreaSpell, None);
             spawn_button(panel, "Cancel placement (Esc)", BuildUiAction::Cancel);
             panel.spawn((
                 Text::new("No building selected"),
@@ -162,6 +159,25 @@ fn setup_build_ui(mut commands: Commands) {
                 TextColor(Color::srgb(0.70, 0.78, 0.86)),
                 BuildStatusText,
             ));
+        });
+}
+
+fn spawn_building_button_row(
+    parent: &mut ChildSpawnerCommands,
+    first: BuildKind,
+    second: Option<BuildKind>,
+) {
+    parent
+        .spawn((Node {
+            width: percent(100.0),
+            column_gap: px(8.0),
+            ..default()
+        },))
+        .with_children(|row| {
+            spawn_button(row, first.label(), BuildUiAction::Building(first));
+            if let Some(second) = second {
+                spawn_button(row, second.label(), BuildUiAction::Building(second));
+            }
         });
 }
 
@@ -308,9 +324,13 @@ fn queue_world_placement(
         selection.status = "Placement rejected: cursor does not intersect the battlefield.".into();
         return;
     };
-    let footprint = placement_footprint(&metrics, world);
-    if !authoritative.simulation.can_place_building(footprint) {
-        selection.status = "Placement rejected: that footprint is blocked or occupied.".into();
+    let footprint = placement_footprint(&metrics, world, kind);
+    if !authoritative
+        .simulation
+        .can_place_building_for_team(selection.team, footprint)
+    {
+        selection.status =
+            "Placement rejected: outside this side's build region, blocked, or occupied.".into();
         return;
     }
 
@@ -344,8 +364,11 @@ fn draw_build_preview(
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         return;
     };
-    let footprint = placement_footprint(&metrics, world);
-    let valid = authoritative.simulation.can_place_building(footprint);
+    let kind = selection.kind.expect("checked selected build kind");
+    let footprint = placement_footprint(&metrics, world, kind);
+    let valid = authoritative
+        .simulation
+        .can_place_building_for_team(selection.team, footprint);
     let color = if valid {
         team_ui_color(selection.team)
     } else {
@@ -354,8 +377,9 @@ fn draw_build_preview(
     draw_footprint_outline(&mut gizmos, &metrics, &terrain, footprint, color);
 }
 
-fn placement_footprint(metrics: &WorldMetrics, world: Vec3) -> BuildingFootprint {
-    metrics.footprint_at_world(world, BUILDING_FOOTPRINT_SIZE, BUILDING_FOOTPRINT_SIZE)
+fn placement_footprint(metrics: &WorldMetrics, world: Vec3, kind: BuildKind) -> BuildingFootprint {
+    let size = kind.footprint_size();
+    metrics.footprint_at_world(world, size, size)
 }
 
 pub(crate) fn cursor_over_build_panel(cursor: Vec2) -> bool {
@@ -396,15 +420,26 @@ mod tests {
             ..SimulationConfig::default()
         };
         let metrics = WorldMetrics::from_simulation_config(&config);
-        let footprint = placement_footprint(&metrics, Vec3::new(105.0, 0.0, 75.0));
+        let footprint = placement_footprint(
+            &metrics,
+            Vec3::new(105.0, 0.0, 75.0),
+            BuildKind::Production(ProductionKind::Melee),
+        );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
+
+        let tower = placement_footprint(
+            &metrics,
+            Vec3::new(105.0, 0.0, 75.0),
+            BuildKind::GuaranteedTower,
+        );
+        assert_eq!(tower, BuildingFootprint::new(9, 6, 3, 3));
     }
 
     #[test]
     fn panel_capture_matches_visible_panel_bounds() {
         assert!(cursor_over_build_panel(Vec2::new(16.0, 16.0)));
-        assert!(cursor_over_build_panel(Vec2::new(376.0, 366.0)));
+        assert!(cursor_over_build_panel(Vec2::new(376.0, 516.0)));
         assert!(!cursor_over_build_panel(Vec2::new(377.0, 200.0)));
-        assert!(!cursor_over_build_panel(Vec2::new(200.0, 367.0)));
+        assert!(!cursor_over_build_panel(Vec2::new(200.0, 517.0)));
     }
 }

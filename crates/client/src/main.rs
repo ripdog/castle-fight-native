@@ -15,7 +15,7 @@ use castle_fight_sim::Simulation;
 
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
-use demo::{create_demo_world, demo_corpse_profile, production_structure};
+use demo::{create_demo_world, try_spawn_demo_building};
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
 use terrain::TerrainSurface;
@@ -152,12 +152,12 @@ fn advance_authoritative_simulation(
     mut build_selection: ResMut<BuildSelection>,
 ) {
     for request in pending_builds.0.drain(..) {
-        match authoritative
-            .simulation
-            .try_spawn_building_with_production_corpse(
-                production_structure(request.team, request.footprint, request.kind),
-                demo_corpse_profile(),
-            ) {
+        match try_spawn_demo_building(
+            &mut authoritative.simulation,
+            request.team,
+            request.footprint,
+            request.kind,
+        ) {
             Ok(_) => {
                 build_selection.status = format!(
                     "Placed {} {}.",
