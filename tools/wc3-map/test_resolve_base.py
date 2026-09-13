@@ -230,20 +230,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_production_unit_special_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["production_unit_special_mechanic_rows"], 6)
+        self.assertEqual(summary["production_unit_special_mechanic_rows"], 14)
         self.assertEqual(summary["production_unit_special_mechanic_kinds"], {
             "auto-spawn-tree-and-grab-war-club": 1,
             "automatic-defend-state-maintenance": 1,
             "damage-triggered-echo-step-and-remnant": 1,
+            "death-retaliation-damage-to-killer": 1,
+            "kill-heal-percent-max-hp": 2,
+            "kill-triggered-native-berserk": 3,
             "native-lava-spawn-split-with-child-conversion": 1,
+            "organic-kill-eternal-servitude": 2,
             "retarget-flying-damage-source": 2,
         })
         with (self.resolved / "production-unit-special-mechanics.tsv").open(encoding="utf-8") as handle:
-            rows = {row["unit_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(set(rows), {"e00F", "h03A", "n02S", "n02T", "n03I", "u00F"})
+            row_list = list(csv.DictReader(handle, delimiter="\t"))
+        rows = {(row["unit_rawcode"], row["mechanic_kind"]): row for row in row_list}
+        self.assertEqual(len(rows), 14)
 
-        giant = json.loads(rows["e00F"]["parameters_json"])
-        self.assertEqual(rows["e00F"]["building_rawcode"], "h028")
+        giant_row = rows[("e00F", "auto-spawn-tree-and-grab-war-club")]
+        giant = json.loads(giant_row["parameters_json"])
+        self.assertEqual(giant_row["building_rawcode"], "h028")
         self.assertEqual(giant["tree_forward_offset"], 32)
         self.assertEqual(giant["grab_tree_order_id"], 852511)
         self.assertEqual(giant["resume_attack_delay_seconds"], 1.6)
@@ -251,8 +257,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(giant["war_club_object_data"]["Maximum Attacks"], 10)
         self.assertEqual(giant["war_club_object_data"]["Enabled Attack Index"], 1)
 
-        echo = json.loads(rows["n03I"]["parameters_json"])
-        self.assertEqual(rows["n03I"]["building_rawcode"], "n03H")
+        echo_row = rows[("n03I", "damage-triggered-echo-step-and-remnant")]
+        echo = json.loads(echo_row["parameters_json"])
+        self.assertEqual(echo_row["building_rawcode"], "n03H")
         self.assertEqual(echo["trigger_range"], 250)
         self.assertEqual(echo["runtime_cooldown_seconds"], 15)
         self.assertEqual(echo["protected_ability_cooldown_seconds"], 20.0)
@@ -268,13 +275,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(echo["remnant_activation_object_data"]["Activation Delay"], 0.75)
 
         for rawcode in ("n02S", "n02T"):
-            retaliation = json.loads(rows[rawcode]["parameters_json"])
+            retaliation = json.loads(rows[(rawcode, "retarget-flying-damage-source")]["parameters_json"])
             self.assertTrue(retaliation["trigger_source_requires_flying"])
             self.assertEqual(retaliation["retaliation_target"], "damage-source")
             self.assertEqual(retaliation["issued_order"], "attack")
             self.assertEqual(retaliation["per_unit_retarget_throttle_seconds"], 2.5)
 
-        defender = json.loads(rows["h03A"]["parameters_json"])
+        defender = json.loads(rows[("h03A", "automatic-defend-state-maintenance")]["parameters_json"])
         self.assertEqual(defender["defend_order_id"], 852055)
         self.assertEqual(defender["undefend_order_id"], 852056)
         self.assertEqual(defender["initial_defend_delay_seconds"], 0.7)
@@ -282,8 +289,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(defender["defend_object_data"]["Damage Taken (%)"], 0.4)
         self.assertEqual(defender["defend_object_data"]["Chance to Deflect"], 50)
 
-        fire = json.loads(rows["u00F"]["parameters_json"])
-        self.assertEqual(rows["u00F"]["building_rawcode"], "h046")
+        fire_row = rows[("u00F", "native-lava-spawn-split-with-child-conversion")]
+        fire = json.loads(fire_row["parameters_json"])
+        self.assertEqual(fire_row["building_rawcode"], "h046")
         self.assertEqual(fire["native_split_base_ability_rawcode"], "ANlm")
         self.assertEqual(fire["native_split_summoned_unit_rawcode"], "h030")
         self.assertEqual(fire["native_split_object_data"]["Split Attack Count"], 15)
@@ -295,6 +303,33 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(fire["nested_h030_child_replacement_unit_id"], 1747989082)
         self.assertTrue(fire["remove_summoned_type_from_h030_child"])
         self.assertEqual(fire["post_child_attack_order_delay_seconds"], 0.2)
+
+        avatar_death = json.loads(rows[("e00A", "death-retaliation-damage-to-killer")]["parameters_json"])
+        self.assertEqual(avatar_death["damage"], 350)
+        self.assertEqual(avatar_death["attack_type"], "chaos")
+        self.assertEqual(avatar_death["damage_target"], "killer")
+
+        avenging_heal = json.loads(rows[("e00B", "kill-heal-percent-max-hp")]["parameters_json"])
+        avatar_heal = json.loads(rows[("e00A", "kill-heal-percent-max-hp")]["parameters_json"])
+        self.assertEqual(avenging_heal["heal_percent_of_max_hp"], 14)
+        self.assertEqual(avatar_heal["heal_percent_of_max_hp"], 20)
+
+        vampire = json.loads(rows[("h01U", "organic-kill-eternal-servitude")]["parameters_json"])
+        lord = json.loads(rows[("h05H", "organic-kill-eternal-servitude")]["parameters_json"])
+        self.assertEqual(vampire["spawned_unit_id"], 1747988822)
+        self.assertEqual(lord["spawned_unit_id"], 1747988821)
+        self.assertTrue(vampire["remove_original_dead_unit"])
+        self.assertTrue(lord["victim_requires_not_undead"])
+
+        for rawcode in ("n00V", "n01O", "n02G"):
+            berserk = json.loads(rows[(rawcode, "kill-triggered-native-berserk")]["parameters_json"])
+            self.assertEqual(berserk["berserk_order_id"], 852100)
+            self.assertEqual(berserk["berserk_base_order"], "berserk")
+            self.assertEqual(berserk["berserk_duration_seconds"], 6)
+            self.assertEqual(berserk["berserk_effective_cooldown_seconds"], 0.0)
+            self.assertEqual(berserk["berserk_object_data"]["Attack Speed Increase"], 2)
+            self.assertEqual(berserk["berserk_object_data"]["Movement Speed Increase"], 0.25)
+            self.assertEqual(berserk["berserk_object_data"]["Damage Taken Increase"], 0.1)
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

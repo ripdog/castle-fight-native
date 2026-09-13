@@ -1797,6 +1797,27 @@ def main() -> None:
                     if defend is None:
                         raise ValueError("Defender special mechanic is missing A03G object data")
                     parameters["defend_object_data"] = json.loads(defend["data_fields_labeled_json"])
+                elif mechanic["mechanic_kind"] == "kill-triggered-native-berserk":
+                    berserk = next((row for row in ability_levels.get("A02I", []) if row["level"] == "1"), None)
+                    if berserk is None:
+                        raise ValueError("Troll-family kill mechanic is missing A02I object data")
+                    berserk_fields = json.loads(berserk["data_fields_labeled_json"])
+                    if (
+                        numeric(berserk_fields.get("Attack Speed Increase")) != 2
+                        or numeric(berserk_fields.get("Movement Speed Increase")) != 0.25
+                        or numeric(berserk_fields.get("Damage Taken Increase")) != 0.1
+                    ):
+                        raise ValueError(f"Troll-family Berserk parameters changed: {berserk_fields}")
+                    parameters["berserk_object_data"] = berserk_fields
+                    parameters["berserk_duration_seconds"] = numeric(
+                        field_lookup(rows_by_object, "abilities", "A02I", "adur", 1, 0)
+                    )
+                    parameters["berserk_effective_cooldown_seconds"] = numeric(
+                        protected_ability_values.get(("A02I", 1, "cooldown"), berserk["cooldown"])
+                    )
+                    parameters["berserk_base_order"] = value_as_text(
+                        field_lookup(rows_by_object, "abilities", "A02I", "aord", 0, 0)
+                    )
                 elif unit_rawcode == "u00F":
                     split = next((row for row in ability_levels.get("A0DY", []) if row["level"] == "1"), None)
                     if split is None:
@@ -3442,7 +3463,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant's automatic temporary-tree War Club setup, Echofoot Mystic's damage-triggered Echo Step/remnant lifecycle and explosion, Gnoll/Fire Gnoll flying-attacker retargeting, Defender native Defend-state maintenance, and Greater Fire Elemental native ANlm split fields plus scripted nested-child conversion",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club setup, Echofoot Mystic Echo Step/remnant, Gnoll anti-air retaliation, Defender native Defend maintenance, Greater Fire Elemental ANlm splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, and Troll-family kill-triggered Berserk",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

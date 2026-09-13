@@ -4396,6 +4396,30 @@ def _extract_production_unit_special_mechanics(
             )
         return start, texts
 
+    # analyze_lua is also exercised on intentionally tiny synthetic snippets.
+    # This pass is map-specific and should simply be absent for those fixtures;
+    # once the complete Castle Fight handler set is present, all assertions
+    # below remain strict and extraction fails on any structural drift.
+    available_functions = {str(function["name"]) for function in functions}
+    required_map_functions = {
+        "onUnitEnteredMap",
+        "castNatureAttackTree",
+        "CallbackSingle_doAfter_UnitEnterRuntime_call_doAfter_UnitEnterRuntime",
+        "CallbackSingle_doAfter_doAfter_UnitEnterRuntime_call_doAfter_doAfter_UnitEnterRuntime",
+        "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+        "fJ",
+        "onSummonedUnit",
+        "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1",
+        "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime1",
+        "EventListener_add_doAfter_FixDefend_onEvent_add_doAfter_FixDefend",
+        "CallbackSingle_doAfter_add_doAfter_FixDefend_call_doAfter_add_doAfter_FixDefend",
+        "EventListener_add_FireElemental_onEvent_add_FireElemental",
+        "setupFireSummon",
+        "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
+    }
+    if not required_map_functions.issubset(available_functions):
+        return []
+
     rows: list[dict[str, object]] = []
 
     # Mountain Giant: every newly-entered e00F automatically gets a temporary
@@ -4611,6 +4635,121 @@ def _extract_production_unit_special_mechanics(
         "evidence_kind": "exact-summon-order-and-delayed-callback-chain",
         "byte_offset": min(defender_spawn_start, defender_order_start),
     })
+
+    # Shared death/kill handler: normalize the exact production-unit branches
+    # that are otherwise invisible to both object data and the scripted spell
+    # registries. M2q is the dying combat sapper and N2q is its killer.
+    death_function = next(function for function in functions if function["name"] == "fJ")
+    death_source = data[int(death_function["start"]):int(death_function["end"])]
+    require_tokens(
+        "fJ",
+        {
+            "1697656897", "1697656898", "1747988821", "1747988822", "1747989832",
+            "1848651862", "1848652111", "1848652359", "350.", "14.", "20.", "852100",
+            "ATTACK_TYPE_CHAOS", "DAMAGE_TYPE_NORMAL", "UNIT_TYPE_STRUCTURE", "UNIT_TYPE_MECHANICAL",
+            "UNIT_TYPE_UNDEAD", "isNotTentacle", "createUnit", "__wurst_safe_RemoveUnit",
+            "unit_issueImmediateOrderById", "orderCodeAttack", "__wurst_safe_UnitDamageTarget",
+        },
+    )
+    required_death_fragments = {
+        b"if(unit_getTypeId(M2q)==1697656897)then": "Avatar death retaliation branch",
+        b"__wurst_safe_UnitDamageTarget(M2q,N2q,350.,true,false,ATTACK_TYPE_CHAOS,DAMAGE_TYPE_NORMAL": "Avatar death retaliation damage",
+        b"R2q==1697656898": "Avenging Spirit kill-heal branch",
+        b"GetUnitLifePercent(N2q)+14.": "Avenging Spirit kill-heal amount",
+        b"R2q==1697656897": "Avatar kill-heal branch",
+        b"GetUnitLifePercent(N2q)+20.": "Avatar kill-heal amount",
+        b"R2q==1747988821": "Vampire servitude branch",
+        b"createUnit(unit_getOwner(N2q),1747988822": "Vampire lesser-vampire spawn",
+        b"R2q==1747989832": "Vampire Lord servitude branch",
+        b"createUnit(unit_getOwner(N2q),1747988821": "Vampire Lord vampire spawn",
+        b"R2q==1848651862": "Troll Berserker kill branch",
+        b"R2q==1848652111": "Troll Trapper kill branch",
+        b"R2q==1848652359": "Forest Troll Trapper kill branch",
+        b"unit_issueImmediateOrderById(N2q,852100)": "Troll-family Berserk order",
+    }
+    for fragment, label in required_death_fragments.items():
+        if fragment not in death_source:
+            raise ValueError(f"{label} changed")
+
+    rows.append({
+        "unit_id": 1697656897,
+        "mechanic_kind": "death-retaliation-damage-to-killer",
+        "trigger": "death-event",
+        "parameters": {
+            "dying_unit_requires_combat_sapper": True,
+            "killer_required": True,
+            "killer_must_not_be_structure": True,
+            "damage": 350,
+            "attack_type": "chaos",
+            "damage_type": "normal",
+            "is_attack": True,
+            "is_ranged": False,
+            "damage_source": "dying-unit",
+            "damage_target": "killer",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": ["fJ"],
+        "evidence_kind": "exact-shared-death-handler",
+        "byte_offset": death_start,
+    })
+
+    for unit_id, heal_percent in ((1697656898, 14), (1697656897, 20)):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "kill-heal-percent-max-hp",
+            "trigger": "kill-event",
+            "parameters": {
+                "victim_requires_combat_sapper": True,
+                "killer_must_not_be_structure": True,
+                "heal_percent_of_max_hp": heal_percent,
+                "implementation": "set-life-percent-current-plus-delta",
+            },
+            "related_rawcode_ids": [],
+            "source_functions": ["fJ"],
+            "evidence_kind": "exact-shared-death-handler",
+            "byte_offset": death_start,
+        })
+
+    for unit_id, summoned_unit_id in ((1747988821, 1747988822), (1747989832, 1747988821)):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "organic-kill-eternal-servitude",
+            "trigger": "kill-event",
+            "parameters": {
+                "victim_requires_combat_sapper": True,
+                "killer_must_not_be_structure": True,
+                "victim_requires_not_tentacle": True,
+                "victim_requires_not_mechanical": True,
+                "victim_requires_not_undead": True,
+                "spawn_owner": "killer-owner",
+                "spawn_position": "victim-position",
+                "spawn_facing": 0,
+                "spawned_unit_id": summoned_unit_id,
+                "remove_original_dead_unit": True,
+            },
+            "related_rawcode_ids": [summoned_unit_id],
+            "source_functions": ["fJ"],
+            "evidence_kind": "exact-shared-death-handler",
+            "byte_offset": death_start,
+        })
+
+    for unit_id in (1848651862, 1848652111, 1848652359):
+        rows.append({
+            "unit_id": unit_id,
+            "mechanic_kind": "kill-triggered-native-berserk",
+            "trigger": "kill-event",
+            "parameters": {
+                "victim_requires_combat_sapper": True,
+                "killer_must_not_be_structure": True,
+                "berserk_ability_id": 1093677641,
+                "berserk_order_id": 852100,
+                "resume_attack_immediately": True,
+            },
+            "related_rawcode_ids": [1093677641],
+            "source_functions": ["fJ"],
+            "evidence_kind": "exact-death-handler-plus-native-ability",
+            "byte_offset": death_start,
+        })
 
     # Greater Fire Elemental: WC3's native ANlm split engine owns the attack
     # counter/generation mechanics. Castle Fight adds a summon listener that
