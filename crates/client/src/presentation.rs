@@ -358,7 +358,9 @@ struct AbilityAreaImpacts(Vec<AbilityAreaImpact>);
 struct TimedWc3Effect {
     entity: Entity,
     remaining: f32,
+    lifetime: f32,
     mesh: Option<Handle<Mesh>>,
+    fade_material: Option<Handle<StandardMaterial>>,
 }
 
 #[derive(Resource, Default)]
@@ -1718,6 +1720,7 @@ type SyncRenderEffects<'w> = (
     ResMut<'w, AbilityAreaImpacts>,
     ResMut<'w, TimedWc3Effects>,
     ResMut<'w, Assets<Mesh>>,
+    ResMut<'w, Assets<StandardMaterial>>,
 );
 
 fn sync_render_entities(
@@ -1728,8 +1731,14 @@ fn sync_render_entities(
     effects: SyncRenderEffects<'_>,
 ) {
     let (metrics, terrain, assets, unit_models, building_models, wc3_visuals) = world;
-    let (mut remnants, mut projectile_impacts, mut ability_impacts, mut timed_effects, mut meshes) =
-        effects;
+    let (
+        mut remnants,
+        mut projectile_impacts,
+        mut ability_impacts,
+        mut timed_effects,
+        mut meshes,
+        mut materials,
+    ) = effects;
     if !samples.is_changed() {
         return;
     }
@@ -1847,17 +1856,24 @@ fn sync_render_entities(
                 ^ samples.current.tick as u32
                 ^ lightning_segment_seed(segment_index as u32, 0x9e37_79b9);
             let mesh = meshes.add(build_wc3_chain_lightning_mesh(start, end, seed, width));
+            let lightning_material = materials
+                .get(&assets.lightning_material)
+                .cloned()
+                .expect("WC3 Chain Lightning material must exist while presentation is running");
+            let lightning_material = materials.add(lightning_material);
             let entity = commands
                 .spawn((
                     Mesh3d(mesh.clone()),
-                    MeshMaterial3d(assets.lightning_material.clone()),
+                    MeshMaterial3d(lightning_material.clone()),
                     Transform::IDENTITY,
                 ))
                 .id();
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: LIGHTNING_EFFECT_SECONDS,
+                lifetime: LIGHTNING_EFFECT_SECONDS,
                 mesh: Some(mesh),
+                fade_material: Some(lightning_material),
             });
         }
     }
@@ -1894,7 +1910,9 @@ fn sync_render_entities(
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: ABILITY_MODEL_EFFECT_SECONDS,
+                lifetime: ABILITY_MODEL_EFFECT_SECONDS,
                 mesh: None,
+                fade_material: None,
             });
         }
 
@@ -2511,18 +2529,41 @@ fn age_timed_wc3_effects(
     time: Res<Time>,
     mut effects: ResMut<TimedWc3Effects>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let delta = time.delta_secs();
     for effect in &mut effects.0 {
         effect.remaining -= delta;
+        if let Some(material_handle) = effect.fade_material.as_ref()
+            && let Some(mut material) = materials.get_mut(material_handle)
+        {
+            material.base_color = material.base_color.with_alpha(wc3_lightning_fade_strength(
+                effect.remaining,
+                effect.lifetime,
+            ));
+        }
         if effect.remaining <= 0.0 {
             commands.entity(effect.entity).despawn();
             if let Some(mesh) = effect.mesh.take() {
                 meshes.remove(mesh.id());
             }
+            if let Some(material) = effect.fade_material.take() {
+                materials.remove(material.id());
+            }
         }
     }
     effects.0.retain(|effect| effect.remaining > 0.0);
+}
+
+fn wc3_lightning_fade_strength(remaining: f32, lifetime: f32) -> f32 {
+    if lifetime <= f32::EPSILON {
+        return 0.0;
+    }
+    // Keep the initial strike crisp, then smoothly decay the additive contribution instead of
+    // popping the bolt off at the end of its short WC3 lifetime.
+    let normalized = (remaining / lifetime).clamp(0.0, 1.0);
+    let fade = (normalized / 0.75).clamp(0.0, 1.0);
+    fade * fade * (3.0 - 2.0 * fade)
 }
 
 fn wc3_chain_lightning_width(bounce_index: u8) -> f32 {
@@ -3184,6 +3225,25 @@ mod tests {
         assert_eq!(wc3_chain_lightning_width(0), 50.0);
         assert_eq!(wc3_chain_lightning_width(1), 30.0);
         assert_eq!(wc3_chain_lightning_width(7), 30.0);
+    }
+
+    #[test]
+    fn wc3_chain_lightning_fades_smoothly_after_the_initial_flash() {
+        assert_eq!(
+            wc3_lightning_fade_strength(LIGHTNING_EFFECT_SECONDS, LIGHTNING_EFFECT_SECONDS),
+            1.0
+        );
+        assert_eq!(
+            wc3_lightning_fade_strength(LIGHTNING_EFFECT_SECONDS * 0.75, LIGHTNING_EFFECT_SECONDS),
+            1.0
+        );
+        let halfway =
+            wc3_lightning_fade_strength(LIGHTNING_EFFECT_SECONDS * 0.5, LIGHTNING_EFFECT_SECONDS);
+        assert!(halfway > 0.0 && halfway < 1.0);
+        assert_eq!(
+            wc3_lightning_fade_strength(0.0, LIGHTNING_EFFECT_SECONDS),
+            0.0
+        );
     }
 
     #[test]
