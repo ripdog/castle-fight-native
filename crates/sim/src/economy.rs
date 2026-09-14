@@ -7,6 +7,8 @@ pub struct EconomyRules {
     pub starting_gold: u32,
     pub starting_lumber: u32,
     pub starting_legendary_points: u16,
+    /// Raw gold paid every income interval before progressive tax, in 1/10,000 gold units.
+    pub base_income_per_10k: u64,
     pub income_interval_ticks: u32,
     /// Size of one progressive-income-tax bracket, in 1/10,000 gold units.
     pub income_tax_bracket_per_10k: u64,
@@ -18,6 +20,7 @@ impl Default for EconomyRules {
             starting_gold: 0,
             starting_lumber: 0,
             starting_legendary_points: 0,
+            base_income_per_10k: 0,
             income_interval_ticks: 0,
             income_tax_bracket_per_10k: 0,
         }

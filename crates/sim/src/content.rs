@@ -32,6 +32,7 @@ const CASTLE_FIGHT_COLLISION_WORLD_UNITS: i32 = 16;
 const CASTLE_FIGHT_STARTING_GOLD: u32 = 250;
 const CASTLE_FIGHT_STARTING_LUMBER: u32 = 125;
 const CASTLE_FIGHT_STARTING_LEGENDARY_POINTS: u16 = 1;
+const CASTLE_FIGHT_BASE_INCOME_GOLD: u64 = 5;
 const CASTLE_FIGHT_INCOME_INTERVAL_SECONDS: u32 = 10;
 const CASTLE_FIGHT_INCOME_TAX_BRACKET_GOLD: u64 = 25;
 const PRODUCTION_SPAWN_SEARCH_RADIUS_CELLS: u16 = 12;
@@ -972,6 +973,7 @@ pub fn castle_fight_economy_rules_for_version(
         starting_gold: CASTLE_FIGHT_STARTING_GOLD,
         starting_lumber: CASTLE_FIGHT_STARTING_LUMBER,
         starting_legendary_points: CASTLE_FIGHT_STARTING_LEGENDARY_POINTS,
+        base_income_per_10k: CASTLE_FIGHT_BASE_INCOME_GOLD * RESOURCE_FIXED_SCALE,
         income_interval_ticks: CASTLE_FIGHT_INCOME_INTERVAL_SECONDS
             * CASTLE_FIGHT_SIMULATION_HZ as u32,
         income_tax_bracket_per_10k: CASTLE_FIGHT_INCOME_TAX_BRACKET_GOLD * RESOURCE_FIXED_SCALE,
@@ -1146,6 +1148,7 @@ mod tests {
                 starting_gold: 250,
                 starting_lumber: 125,
                 starting_legendary_points: 1,
+                base_income_per_10k: 5 * RESOURCE_FIXED_SCALE,
                 income_interval_ticks: 300,
                 income_tax_bracket_per_10k: 25 * RESOURCE_FIXED_SCALE,
             }

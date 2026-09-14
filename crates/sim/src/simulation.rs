@@ -508,7 +508,7 @@ impl Simulation {
             .iter_entities()
             .filter(|entity| entity.get::<Team>() == Some(&team))
             .filter_map(|entity| entity.get::<BuildingEconomyProfile>())
-            .fold(0u64, |total, economy| {
+            .fold(self.config.economy.base_income_per_10k, |total, economy| {
                 total
                     .checked_add(economy.income_per_10k)
                     .expect("player income overflow")

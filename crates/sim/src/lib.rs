@@ -4079,7 +4079,7 @@ mod tests {
         assert_eq!(initial.resources.lumber, 125);
         assert_eq!(initial.resources.legendary_points_used, 0);
         assert_eq!(initial.resources.legendary_points_cap, 1);
-        assert_eq!(initial.income, 0);
+        assert_eq!(initial.income, 5);
         assert_eq!(initial.ticks_until_income, 300);
 
         sim.try_builder_purchase_building_with_properties(
@@ -4091,7 +4091,7 @@ mod tests {
         let after_barracks = sim.player_economy(Team(0)).unwrap();
         assert_eq!(after_barracks.resources.gold, 150);
         assert_eq!(after_barracks.resources.lumber, 225);
-        assert_eq!(after_barracks.income, 2);
+        assert_eq!(after_barracks.income, 7);
 
         assert_eq!(
             sim.try_builder_purchase_building_with_properties(
@@ -4121,7 +4121,7 @@ mod tests {
             9_966
         );
         sim.step();
-        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 152);
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 157);
         assert_eq!(
             sim.player_economy(Team(0)).unwrap().income_progress_per_10k,
             0

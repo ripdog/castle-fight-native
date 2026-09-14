@@ -524,7 +524,7 @@ mod tests {
             assert_eq!(economy.resources.lumber, 125);
             assert_eq!(economy.resources.legendary_points_used, 0);
             assert_eq!(economy.resources.legendary_points_cap, 1);
-            assert_eq!(economy.income, 0);
+            assert_eq!(economy.income, 5);
         }
         assert_eq!(
             simulation.building_count(),
