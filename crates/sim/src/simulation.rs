@@ -21,15 +21,16 @@ use crate::{
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder,
         BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn,
-        BuilderState, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, BurningOilZone,
-        ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
-        CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
-        MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
-        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit, ModifierId, MovementClass,
-        MovementProfile, NavigationGoal, NavigationState, PassiveUnitEffect, PassiveUnitEffects,
-        PendingAttackEffects, Position, ProductionArmorProfile, ProductionAttackTargets,
-        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
-        ProductionDamageType, ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
+        BuilderState, BuildingConstruction, BuildingFootprint, BuildingGameplayProperties,
+        BuildingSpawn, BurningOilZone, ChainLightningState, CollisionRadius, ContentIdentity,
+        Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
+        MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS,
+        MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit,
+        ModifierId, MovementClass, MovementProfile, NavigationGoal, NavigationState,
+        PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
+        ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
+        ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
+        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
         ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
         RepairTimeTicks, RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState,
         TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime,
@@ -304,6 +305,8 @@ pub struct BuildingView {
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
+    pub construction_started_tick: Option<u64>,
+    pub construction_complete_tick: Option<u64>,
     pub production: Option<ProductionProfile>,
     pub production_movement_class: Option<MovementClass>,
     pub production_attack_targets: Option<AttackTargetMask>,
@@ -354,6 +357,12 @@ pub enum BuilderBuildError {
     BuildingNotInCatalog,
     Resources(ResourcePurchaseError),
     Placement(BuildingPlacementError),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingConstructionCancelError {
+    ConstructionNotFound,
+    NotOwner,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1350,9 +1359,58 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuildingPlacementError> {
+        self.validate_building_definition(building, properties);
+        self.validate_building_placement(building.team, building.footprint)?;
+        let (id, entity) = self.spawn_building_shell(building, properties);
+        self.activate_building_entity(entity, building, properties);
+        self.topology_dirty = true;
+        Ok(id)
+    }
+
+    fn try_start_building_construction(
+        &mut self,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<SimId, BuildingPlacementError> {
+        let duration_ticks = properties
+            .construction_time_ticks
+            .expect("construction start requires authored construction duration");
+        assert!(
+            duration_ticks > 0,
+            "building construction time must be positive"
+        );
+        self.validate_building_definition(building, properties);
+        self.validate_building_placement(building.team, building.footprint)?;
+
+        let complete_tick = self
+            .next_tick
+            .checked_add(u64::from(duration_ticks))
+            .expect("building construction tick overflow");
+        let (id, entity) = self.spawn_building_shell(building, properties);
+        self.world.entity_mut(entity).insert(BuildingConstruction {
+            started_tick: self.next_tick,
+            complete_tick,
+            building,
+            properties,
+        });
+        self.topology_dirty = true;
+        Ok(id)
+    }
+
+    fn validate_building_definition(
+        &self,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) {
         assert!(building.health > 0);
         assert!(building.team.0 < 2, "verification slice supports two teams");
         assert!(building.footprint.width > 0 && building.footprint.height > 0);
+        if let Some(construction_time_ticks) = properties.construction_time_ticks {
+            assert!(
+                construction_time_ticks > 0,
+                "building construction time must be positive"
+            );
+        }
         if let Some(production) = building.production {
             assert!(production.interval_ticks > 0);
             validate_unit_template(production.unit);
@@ -1387,9 +1445,13 @@ impl Simulation {
                 "building repair time must be positive"
             );
         }
+    }
 
-        self.validate_building_placement(building.team, building.footprint)?;
-
+    fn spawn_building_shell(
+        &mut self,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> (SimId, Entity) {
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
             id,
@@ -1399,10 +1461,23 @@ impl Simulation {
                 current: building.health,
                 max: building.health,
             },
+            properties.damage_type,
+            properties.armor,
         ));
         if let Some(content) = properties.content {
             entity.insert(content);
         }
+        let entity_id = entity.id();
+        (id, entity_id)
+    }
+
+    fn activate_building_entity(
+        &mut self,
+        entity: Entity,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) {
+        let mut entity = self.world.entity_mut(entity);
         if let Some(economy) = properties.economy {
             entity.insert(economy);
         }
@@ -1443,7 +1518,6 @@ impl Simulation {
                 entity.insert(ProductionSpellcastingProfile(spellcasting));
             }
         }
-        entity.insert((properties.damage_type, properties.armor));
         if let Some(attack) = building.attack {
             entity.insert((
                 attack,
@@ -1469,8 +1543,6 @@ impl Simulation {
         if building.attack.is_some() || building.spellcasting.is_some() {
             entity.insert(StatusState::default());
         }
-        self.topology_dirty = true;
-        Ok(id)
     }
 
     #[must_use]
@@ -1486,6 +1558,73 @@ impl Simulation {
         self.world.despawn(entity);
         self.topology_dirty = true;
         true
+    }
+
+    pub fn cancel_building_construction(
+        &mut self,
+        team: Team,
+        id: SimId,
+    ) -> Result<(), BuildingConstructionCancelError> {
+        let Some((entity, owner, construction)) = self.world.iter_entities().find_map(|entity| {
+            (entity.get::<SimId>().copied() == Some(id)).then(|| {
+                Some((
+                    entity.id(),
+                    *entity.get::<Team>()?,
+                    *entity.get::<BuildingConstruction>()?,
+                ))
+            })?
+        }) else {
+            return Err(BuildingConstructionCancelError::ConstructionNotFound);
+        };
+        if owner != team {
+            return Err(BuildingConstructionCancelError::NotOwner);
+        }
+
+        if let Some(economy) = construction.properties.economy {
+            let resources = &mut self.player_resources[usize::from(team.0)];
+            resources.gold = resources
+                .gold
+                .checked_add(economy.gold_cost)
+                .expect("player gold refund overflow");
+            resources.lumber = resources
+                .lumber
+                .checked_add(economy.lumber_cost)
+                .expect("player lumber refund overflow");
+        }
+        self.world.despawn(entity);
+        self.topology_dirty = true;
+        Ok(())
+    }
+
+    fn advance_building_construction(&mut self) {
+        let mut completing: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(|entity| {
+                let construction = *entity.get::<BuildingConstruction>()?;
+                (construction.complete_tick <= self.next_tick).then_some((
+                    *entity.get::<SimId>()?,
+                    entity.id(),
+                    construction,
+                ))
+            })
+            .collect();
+        completing.sort_unstable_by_key(|(id, ..)| *id);
+
+        for (_, entity, construction) in completing {
+            self.world
+                .entity_mut(entity)
+                .remove::<BuildingConstruction>();
+            self.activate_building_entity(entity, construction.building, construction.properties);
+            if let Some(economy) = construction.properties.economy {
+                let resources =
+                    &mut self.player_resources[usize::from(construction.building.team.0)];
+                resources.lumber = resources
+                    .lumber
+                    .checked_add(economy.lumber_refund)
+                    .expect("player lumber reward overflow");
+            }
+        }
     }
 
     fn validate_building_placement(
@@ -1648,14 +1787,21 @@ impl Simulation {
         let completed_tick = self.next_tick;
 
         let phase_start = Instant::now();
-        let topology_rebuilt = self.refresh_topology_if_dirty();
-        let topology = phase_start.elapsed();
+        let mut topology_rebuilt = self.refresh_topology_if_dirty();
+        let mut topology = phase_start.elapsed();
 
         let phase_start = Instant::now();
         self.advance_cooldowns();
         let corpses_expired = self.expire_corpses();
         self.advance_builders();
+        self.advance_building_construction();
         let timers = phase_start.elapsed();
+
+        // Builder construction can add an occupied footprint during this tick. Rebuild before
+        // target selection/movement so the site blocks ground navigation on its first live tick.
+        let phase_start = Instant::now();
+        topology_rebuilt |= self.refresh_topology_if_dirty();
+        topology += phase_start.elapsed();
 
         let phase_start = Instant::now();
         let (units_spawned, spawn_failures) = self.advance_production();
@@ -3130,13 +3276,19 @@ impl Simulation {
                     .is_some()
                     && distance_sq <= square_i32(profile.build_range)
                 {
-                    match self.try_spawn_building_with_properties(order.building, order.properties)
-                    {
+                    let starts_construction = order.properties.construction_time_ticks.is_some();
+                    let result = if starts_construction {
+                        self.try_start_building_construction(order.building, order.properties)
+                    } else {
+                        self.try_spawn_building_with_properties(order.building, order.properties)
+                    };
+                    match result {
                         Ok(_) => {
                             self.world
                                 .entity_mut(builder_entity)
                                 .remove::<BuilderBuildOrder>();
-                            if let Some(economy) = order.properties.economy {
+                            if !starts_construction && let Some(economy) = order.properties.economy
+                            {
                                 let resources =
                                     &mut self.player_resources[usize::from(order.building.team.0)];
                                 resources.lumber = resources
@@ -7651,12 +7803,15 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
     let attack = entity.get::<AttackProfile>().copied();
     let spellcasting = entity.get::<SpellcastingProfile>().copied();
     let ability_state = entity.get::<AutomaticAbilityState>().copied();
+    let construction = entity.get::<BuildingConstruction>().copied();
     Some(BuildingView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
         team: *entity.get::<Team>()?,
         footprint: *entity.get::<BuildingFootprint>()?,
         health: entity.get::<Health>()?.current,
+        construction_started_tick: construction.map(|state| state.started_tick),
+        construction_complete_tick: construction.map(|state| state.complete_tick),
         production,
         production_movement_class: entity.get::<ProductionMovementClass>().map(|class| class.0),
         production_attack_targets: entity
@@ -8818,6 +8973,21 @@ fn canonical_checksum(
                     team,
                     footprint: *entity.get::<BuildingFootprint>()?,
                     health,
+                    construction: entity.get::<BuildingConstruction>().copied().map(
+                        |construction| {
+                            let mut definition_hash = Fnv64::new();
+                            hash_building_definition(
+                                &mut definition_hash,
+                                construction.building,
+                                construction.properties,
+                            );
+                            CanonicalBuildingConstruction {
+                                started_tick: construction.started_tick,
+                                complete_tick: construction.complete_tick,
+                                definition_hash: definition_hash.finish(),
+                            }
+                        },
+                    ),
                     economy: entity.get::<BuildingEconomyProfile>().copied(),
                     repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
                     production: entity.get::<ProductionProfile>().copied(),
@@ -8955,6 +9125,14 @@ fn canonical_checksum(
                 hash.write_u16(building.footprint.height);
                 hash.write_i32(building.health.current);
                 hash.write_i32(building.health.max);
+                if let Some(construction) = building.construction {
+                    hash.write_u8(1);
+                    hash.write_u64(construction.started_tick);
+                    hash.write_u64(construction.complete_tick);
+                    hash.write_u64(construction.definition_hash);
+                } else {
+                    hash.write_u8(0);
+                }
                 if let Some(economy) = building.economy {
                     hash.write_u8(1);
                     hash.write_u64(u64::from(economy.gold_cost));
@@ -9243,29 +9421,7 @@ fn canonical_checksum(
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
                 if let Some(order) = builder.build_order {
                     hash.write_u8(1);
-                    hash.write_u8(order.building.team.0);
-                    hash.write_i32(order.building.footprint.min_x);
-                    hash.write_i32(order.building.footprint.min_y);
-                    hash.write_u16(order.building.footprint.width);
-                    hash.write_u16(order.building.footprint.height);
-                    hash.write_i32(order.building.health);
-                    hash.write_u64(u64::from(
-                        order
-                            .properties
-                            .content
-                            .map_or(0, |content| content.rawcode),
-                    ));
-                    if let Some(economy) = order.properties.economy {
-                        hash.write_u64(u64::from(economy.gold_cost));
-                        hash.write_u64(u64::from(economy.lumber_cost));
-                        hash.write_u64(u64::from(economy.lumber_refund));
-                        hash.write_u64(economy.income_per_10k);
-                    } else {
-                        hash.write_u64(0);
-                        hash.write_u64(0);
-                        hash.write_u64(0);
-                        hash.write_u64(0);
-                    }
+                    hash_building_definition(&mut hash, order.building, order.properties);
                 } else {
                     hash.write_u8(0);
                 }
@@ -9367,11 +9523,19 @@ struct CanonicalUnit {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct CanonicalBuildingConstruction {
+    started_tick: u64,
+    complete_tick: u64,
+    definition_hash: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct CanonicalBuilding {
     id: SimId,
     team: Team,
     footprint: BuildingFootprint,
     health: Health,
+    construction: Option<CanonicalBuildingConstruction>,
     economy: Option<BuildingEconomyProfile>,
     repair_time_ticks: Option<u32>,
     production: Option<ProductionProfile>,
@@ -9474,6 +9638,108 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(effect.next_pulse_tick);
         hash.write_u64(effect.expires_tick);
     }
+}
+
+fn hash_building_definition(
+    hash: &mut Fnv64,
+    building: BuildingSpawn,
+    properties: BuildingGameplayProperties,
+) {
+    hash.write_u8(building.team.0);
+    hash.write_i32(building.footprint.min_x);
+    hash.write_i32(building.footprint.min_y);
+    hash.write_u16(building.footprint.width);
+    hash.write_u16(building.footprint.height);
+    hash.write_i32(building.health);
+    hash.write_u64(u64::from(
+        properties.content.map_or(0, |content| content.rawcode),
+    ));
+    hash.write_u64(properties.construction_time_ticks.map_or(0, u64::from));
+    hash.write_u64(properties.repair_time_ticks.map_or(0, u64::from));
+    hash.write_u8(properties.attack_targets.bits());
+    hash.write_u8(properties.damage_type.stable_tag());
+    hash.write_u8(properties.armor.armor_type.stable_tag());
+    hash.write_i32(i32::from(properties.armor.armor_points));
+    if let Some(economy) = properties.economy {
+        hash.write_u8(1);
+        hash.write_u64(u64::from(economy.gold_cost));
+        hash.write_u64(u64::from(economy.lumber_cost));
+        hash.write_u64(u64::from(economy.lumber_refund));
+        hash.write_u64(economy.income_per_10k);
+    } else {
+        hash.write_u8(0);
+    }
+    if let Some(production) = building.production {
+        hash.write_u8(1);
+        hash.write_u16(production.initial_delay_ticks);
+        hash.write_u16(production.interval_ticks);
+        hash.write_u16(production.search_radius_cells);
+        hash.write_i32(production.unit.health);
+        hash_attack_delivery(hash, production.unit.attack.delivery);
+        hash.write_i32(production.unit.attack.damage);
+        hash.write_i32(production.unit.attack.range);
+        hash.write_i32(production.unit.attack.acquisition_range);
+        hash.write_u16(production.unit.attack.cooldown_ticks);
+        hash.write_i32(production.unit.movement.speed_per_tick);
+        let unit = properties.production_unit;
+        hash.write_u64(u64::from(unit.content.map_or(0, |content| content.rawcode)));
+        hash.write_u8(match unit.movement_class {
+            MovementClass::Ground => 0,
+            MovementClass::Air => 1,
+        });
+        hash.write_u8(u8::from(unit.mechanical));
+        hash.write_u64(unit.build_time_ticks.map_or(0, u64::from));
+        hash.write_u64(unit.repair_time_ticks.map_or(0, u64::from));
+        hash.write_u8(unit.attack_targets.bits());
+        hash.write_u8(unit.damage_type.stable_tag());
+        hash.write_u8(unit.armor.armor_type.stable_tag());
+        hash.write_i32(i32::from(unit.armor.armor_points));
+        hash_passive_unit_effects(hash, unit.passive_effects);
+        if let Some(corpse) = unit.corpse {
+            hash.write_u8(1);
+            hash.write_u64(u64::from(corpse.definition.0));
+            hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+        } else {
+            hash.write_u8(0);
+        }
+        if let Some(radius) = unit.collision_radius {
+            hash.write_u8(1);
+            hash.write_i32(radius.0);
+        } else {
+            hash.write_u8(0);
+        }
+        if let Some(spellcasting) = properties.production_spellcasting {
+            hash.write_u8(1);
+            hash_spellcasting_profile(hash, spellcasting);
+        } else {
+            hash.write_u8(0);
+        }
+    } else {
+        hash.write_u8(0);
+    }
+    if let Some(attack) = building.attack {
+        hash.write_u8(1);
+        hash_attack_delivery(hash, attack.delivery);
+        hash.write_i32(attack.damage);
+        hash.write_i32(attack.range);
+        hash.write_i32(attack.acquisition_range);
+        hash.write_u16(attack.cooldown_ticks);
+    } else {
+        hash.write_u8(0);
+    }
+    if let Some(spellcasting) = building.spellcasting {
+        hash.write_u8(1);
+        hash_spellcasting_profile(hash, spellcasting);
+    } else {
+        hash.write_u8(0);
+    }
+}
+
+fn hash_spellcasting_profile(hash: &mut Fnv64, spellcasting: SpellcastingProfile) {
+    hash.write_i32(spellcasting.mana.maximum);
+    hash.write_i32(spellcasting.mana.starting);
+    hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
+    hash_automatic_ability(hash, spellcasting.ability);
 }
 
 fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {

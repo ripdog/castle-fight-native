@@ -43,9 +43,10 @@ pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use native_effects::{NativeEffectImplementationId, native_effect_implementation_for};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
-    BuilderSpawnError, BuilderView, BuildingCommandError, BuildingPlacementError, BuildingView,
-    ChainLightningEvent, CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation,
-    SimulationConfig, TargetlessLane, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    BuilderSpawnError, BuilderView, BuildingCommandError, BuildingConstructionCancelError,
+    BuildingPlacementError, BuildingView, ChainLightningEvent, CombatRules, CorpseView,
+    ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TargetlessLane, TickResult,
+    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -4290,11 +4291,36 @@ mod tests {
         assert_eq!(
             sim.building_count(),
             1,
-            "builder should construct after entering range"
+            "builder should start construction after entering range"
         );
-        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 225);
+        let site = sim.buildings()[0];
+        assert_eq!(site.construction_started_tick, Some(1));
+        assert_eq!(site.construction_complete_tick, Some(61));
+        assert!(
+            site.production.is_none(),
+            "unfinished building must not produce"
+        );
+        assert_eq!(
+            sim.player_resources(Team(0)).unwrap().lumber,
+            125,
+            "construction lumber reward belongs to completion, not construction start"
+        );
         assert!(sim.builder(builder).unwrap().position.x > 2 * cell);
         assert_eq!(sim.builder(builder).unwrap().build_footprint, None);
+
+        for _ in 0..59 {
+            sim.step();
+        }
+        let site = sim.buildings()[0];
+        assert_eq!(site.construction_complete_tick, Some(61));
+        assert!(site.production.is_none());
+        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 125);
+        sim.step();
+        let completed = sim.buildings()[0];
+        assert_eq!(completed.construction_started_tick, None);
+        assert_eq!(completed.construction_complete_tick, None);
+        assert!(completed.production.is_some());
+        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 225);
 
         let second_footprint = BuildingFootprint::new(110, 2, 4, 4);
         sim.order_builder_purchase_building_with_properties(
@@ -4315,6 +4341,60 @@ mod tests {
             sim.step();
         }
         assert_eq!(sim.building_count(), 1, "cancelled build must never appear");
+    }
+
+    #[test]
+    fn in_progress_building_can_be_cancelled_for_full_committed_cost() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(39, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 20, 10)],
+                vec![BuildingFootprint::new(20, 0, 20, 10)],
+            ],
+            economy: castle_fight_economy_rules(),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(2 * cell, 2 * cell),
+            profile: BuilderProfile {
+                speed_per_tick: 0,
+                build_range: 20 * cell,
+                ..castle_fight_builder_profile()
+            },
+            configuration: test_builder_configuration(vec![barracks.rawcode]),
+            repair_autocast_enabled: false,
+        });
+
+        sim.order_builder_purchase_building_with_properties(
+            builder,
+            barracks.spawn(Team(0), BuildingFootprint::new(4, 2, 4, 4)),
+            barracks.gameplay_properties(),
+        )
+        .unwrap();
+        sim.step();
+        let site = sim.buildings()[0];
+        assert!(site.construction_complete_tick.is_some());
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 150);
+        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 125);
+        assert_eq!(sim.player_economy(Team(0)).unwrap().income, 5);
+
+        assert_eq!(
+            sim.cancel_building_construction(Team(1), site.id),
+            Err(BuildingConstructionCancelError::NotOwner)
+        );
+        sim.cancel_building_construction(Team(0), site.id).unwrap();
+        assert_eq!(sim.building_count(), 0);
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 250);
+        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 125);
+        assert_eq!(sim.player_economy(Team(0)).unwrap().income, 5);
+        for _ in 0..barracks.construction_time_ticks + 1 {
+            assert_eq!(sim.step().units_spawned, 0);
+        }
     }
 
     #[test]

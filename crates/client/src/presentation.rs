@@ -418,9 +418,9 @@ struct ImportedUnitModelRoot {
 
 #[derive(Component, Debug, Clone, Copy)]
 struct ImportedBuildingModelRoot {
+    sim_id: SimId,
     rawcode: u32,
     presentation_root: Entity,
-    start_with_birth: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -432,6 +432,7 @@ enum ImportedBuildingAnimationState {
 
 #[derive(Component, Debug, Clone)]
 struct ImportedBuildingAnimationController {
+    sim_id: SimId,
     rawcode: u32,
     presentation_root: Entity,
     model_root: Entity,
@@ -1070,6 +1071,7 @@ fn setup_imported_unit_animation_players(
 fn setup_imported_building_animation_players(
     mut commands: Commands,
     building_models: Res<BuildingModelSet>,
+    samples: Res<PresentationSamples>,
     parents: Query<&ChildOf>,
     roots: Query<&ImportedBuildingModelRoot>,
     dying_roots: Query<(), With<ImportedBuildingDeathRemnant>>,
@@ -1088,14 +1090,15 @@ fn setup_imported_building_animation_players(
         };
 
         let dying = dying_roots.get(root.presentation_root).is_ok();
+        let building = samples.current.buildings.get(&root.sim_id);
+        let constructing =
+            building.is_some_and(|building| building.construction_complete_tick.is_some());
         let (state, initial) = if dying {
             (
                 ImportedBuildingAnimationState::Death,
                 animations.death.clone(),
             )
-        } else if root.start_with_birth
-            && let Some(birth) = animations.birth.clone()
-        {
+        } else if constructing && let Some(birth) = animations.birth.clone() {
             (ImportedBuildingAnimationState::Birth, Some(birth))
         } else {
             (
@@ -1116,6 +1119,13 @@ fn setup_imported_building_animation_players(
             active
                 .repeat()
                 .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+        } else if state == ImportedBuildingAnimationState::Birth
+            && let Some(building) = building
+            && let Some(phase) = building_construction_phase(samples.current.tick, building)
+        {
+            active
+                .set_seek_time(initial.duration_seconds * phase)
+                .pause();
         }
         set_building_emitter_sequence(
             &mut commands,
@@ -1128,6 +1138,7 @@ fn setup_imported_building_animation_players(
             AnimationGraphHandle(animations.graph.clone()),
             transitions,
             ImportedBuildingAnimationController {
+                sim_id: root.sim_id,
                 rawcode: root.rawcode,
                 presentation_root: root.presentation_root,
                 model_root,
@@ -1184,6 +1195,7 @@ fn set_building_emitter_sequence(
 fn update_imported_building_animations(
     mut commands: Commands,
     building_models: Res<BuildingModelSet>,
+    samples: Res<PresentationSamples>,
     dying_roots: Query<(), With<ImportedBuildingDeathRemnant>>,
     mut players: Query<(
         &mut AnimationPlayer,
@@ -1220,15 +1232,38 @@ fn update_imported_building_animations(
             continue;
         }
 
-        if controller.state != ImportedBuildingAnimationState::Birth {
+        let construction = samples
+            .current
+            .buildings
+            .get(&controller.sim_id)
+            .and_then(|building| {
+                building_construction_phase(samples.current.tick, building)
+                    .map(|phase| (building, phase))
+            });
+        if let Some((_, phase)) = construction {
+            let Some(birth) = controller.birth.clone() else {
+                continue;
+            };
+            if controller.state != ImportedBuildingAnimationState::Birth {
+                transitions.play(&mut player, birth.node, Duration::ZERO);
+                set_building_emitter_sequence(
+                    &mut commands,
+                    &building_models,
+                    controller.model_root,
+                    controller.rawcode,
+                    Some(&birth.name),
+                );
+                controller.state = ImportedBuildingAnimationState::Birth;
+            }
+            if let Some(animation) = player.animation_mut(birth.node) {
+                animation
+                    .set_seek_time(birth.duration_seconds * phase)
+                    .pause();
+            }
             continue;
         }
-        let birth_finished = controller
-            .birth
-            .as_ref()
-            .and_then(|birth| player.animation(birth.node))
-            .is_some_and(|animation| animation.is_finished());
-        if !birth_finished {
+
+        if controller.state != ImportedBuildingAnimationState::Birth {
             continue;
         }
         if let Some(stand) = controller.stand.clone() {
@@ -1255,6 +1290,16 @@ fn update_imported_building_animations(
             controller.state = ImportedBuildingAnimationState::Stand;
         }
     }
+}
+
+fn building_construction_phase(current_tick: u64, building: &BuildingSample) -> Option<f32> {
+    let started_tick = building.construction_started_tick?;
+    let complete_tick = building.construction_complete_tick?;
+    let duration_ticks = complete_tick.saturating_sub(started_tick).max(1);
+    let elapsed_ticks = current_tick
+        .saturating_sub(started_tick)
+        .min(duration_ticks);
+    Some(elapsed_ticks as f32 / duration_ticks as f32)
 }
 
 fn imported_model_root(
@@ -2034,6 +2079,17 @@ fn sync_render_entities(
             .buildings
             .remove(&id)
             .expect("stale building entry disappeared during presentation sync");
+        if samples
+            .previous
+            .buildings
+            .get(&id)
+            .is_some_and(|building| building.construction_complete_tick.is_some())
+        {
+            // Cancelled construction disappears instead of playing a completed building's death
+            // sequence. This also keeps an unfinished shell from leaving a fake corpse/remnant.
+            commands.entity(entry.entity).despawn();
+            continue;
+        }
         if let Some(rawcode) = entry.imported_rawcode
             && building_models
                 .get(rawcode)
@@ -2355,9 +2411,8 @@ fn sync_render_entities(
                 .map(|model| (content.rawcode, model))
         });
         let imported_rawcode = if let Some((rawcode, model)) = imported_model {
-            let start_with_birth = !samples.previous.buildings.contains_key(&building.id)
-                && model.lifecycle_animations.birth.is_some();
-            let lifecycle_sequence = if start_with_birth {
+            let constructing = building.construction_complete_tick.is_some();
+            let lifecycle_sequence = if constructing && model.lifecycle_animations.birth.is_some() {
                 model.lifecycle_animations.birth.as_deref()
             } else {
                 model.lifecycle_animations.stand.as_deref()
@@ -2366,9 +2421,9 @@ fn sync_render_entities(
                 .spawn((
                     WorldAssetRoot(model.scene.clone()),
                     ImportedBuildingModelRoot {
+                        sim_id: building.id,
                         rawcode,
                         presentation_root: entity,
-                        start_with_birth,
                     },
                     Wc3TeamTint::new(building.team.0, team_color(building.team), "wc3/buildings"),
                     Transform {

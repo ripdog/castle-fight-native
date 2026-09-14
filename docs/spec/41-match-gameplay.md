@@ -72,7 +72,7 @@ Resource mutations occur through explicit deterministic operations such as:
 
 A normal zero-lumber-cost building awards lumber equal to its gold cost when it finishes. A Siege building instead awards **75%** of its gold cost. Buildings that themselves cost lumber do not grant this construction lumber. These rules are extracted from the original map's resource help/runtime logic rather than inferred from object costs.
 
-Resource arithmetic MUST define overflow/clamp behavior and MUST NOT use presentation-side balances as authority. Failed or rejected building placement MUST NOT spend resources or grant lumber. In the current immediate-construction lifecycle, successful placement, payment, the corresponding construction-lumber award, and activation of the building's income contribution are one authoritative transaction.
+Resource arithmetic MUST define overflow/clamp behavior and MUST NOT use presentation-side balances as authority. Failed or rejected building placement MUST NOT spend resources or grant lumber. An accepted builder order commits its gold/lumber cost before the worker reaches the site. Once construction starts, the footprint is authoritative but the construction-lumber award and building income contribution remain inactive. Cancelling before completion uses the map's construction refund rate and grants no completion reward. Completion atomically grants construction lumber, activates income, and activates the building's functional gameplay components.
 
 ## 6. Periodic income
 
@@ -91,23 +91,23 @@ A building instance has an explicit deterministic lifecycle.
 Possible states include:
 
 ```text
-pending command (not yet authoritative)
+pending builder command (cost committed, no site yet)
+constructing (authoritative occupied footprint, functionality inactive)
 constructed/active
-constructing (if build time exists)
 disabled/stunned (if supported)
 dying/destroy-pending
 removed
 ```
 
-The first playable version MAY treat accepted placement as immediately constructed if that matches desired gameplay.
+Castle Fight construction duration is authoritative versioned content. The native 9.27 profile reads the resolved object `Build Time`; the currently exposed production buildings are 2 seconds / 60 simulation ticks, while Watch Tower and Poof Tower are 20 seconds / 600 ticks in the extracted object data.
 
-The state in which a building begins blocking navigation, producing units, attacking, or granting upgrades MUST be explicitly defined.
+A constructing building begins blocking navigation and building placement as soon as its site is created. It MUST NOT produce units, attack, cast automatic spells, contribute income, or grant its completion lumber before the completion tick. Production and combat timers begin from completion rather than construction start. The owning player may cancel before completion; 9.27's `ConstructionRefundRate=1.0` fully refunds the committed gold/lumber cost, and cancellation does not grant construction lumber.
 
 ## 8. Placement and ownership
 
 Building placement MUST be inside the owning team's canonical build region. In the standard map this corresponds to that team's third of the battlefield.
 
-Accepted placement creates an authoritative building with:
+Construction start creates an authoritative building site with:
 
 - deterministic `SimId`;
 - owner `PlayerId`;
@@ -115,9 +115,10 @@ Accepted placement creates an authoritative building with:
 - building content ID;
 - canonical grid position/rotation;
 - footprint/occupancy;
-- initial health/state;
-- production/attack timers as applicable;
-- mana/ability state where applicable.
+- construction start/completion ticks;
+- initial health/state.
+
+Production/attack timers and mana/ability state are attached only when construction finishes.
 
 Placement cost is charged according to one explicit atomic rule. Recommended: server validation verifies resources and occupancy against the command's canonical execution state, then construction and cost deduction commit together.
 

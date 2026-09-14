@@ -5,7 +5,7 @@ use castle_fight_sim::{
 
 use crate::{
     AuthoritativeSimulation,
-    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
+    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
     demo::{BuildKind, ProductionKind},
     inspection::InspectionSelection,
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
@@ -108,6 +108,7 @@ impl ActionPanelState {
 enum PanelAction {
     Target(TargetingAction),
     OpenBuildMenu,
+    CancelConstruction,
     Cancel,
 }
 
@@ -225,7 +226,9 @@ fn sync_action_panel_to_selection(
             return Some((id, builder.team));
         }
         samples.current.buildings.get(&id).and_then(|building| {
-            building_is_controllable_tower(building).then_some((id, building.team))
+            (building.construction_complete_tick.is_some()
+                || building_is_controllable_tower(building))
+            .then_some((id, building.team))
         })
     });
 
@@ -249,9 +252,34 @@ fn sync_action_panel_to_selection(
     }
 }
 
-fn handle_escape(keys: Res<ButtonInput<KeyCode>>, mut state: ResMut<ActionPanelState>) {
-    if keys.just_pressed(KeyCode::Escape) && state.mode != ActionPanelMode::Actions {
+fn handle_escape(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut samples: ResMut<PresentationSamples>,
+    mut state: ResMut<ActionPanelState>,
+) {
+    if !keys.just_pressed(KeyCode::Escape) {
+        return;
+    }
+    if state.mode != ActionPanelMode::Actions {
         state.cancel_modal();
+        return;
+    }
+    let Some(actor) = state.actor else {
+        return;
+    };
+    if authoritative
+        .simulation
+        .building(actor)
+        .is_some_and(|building| building.construction_complete_tick.is_some())
+        && authoritative
+            .simulation
+            .cancel_building_construction(state.team, actor)
+            .is_ok()
+    {
+        samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
+        state.actor = None;
+        state.status = "Construction cancelled and resources refunded.".into();
     }
 }
 
@@ -301,6 +329,12 @@ fn action_layout(
             } else if authoritative
                 .simulation
                 .building(actor)
+                .is_some_and(|building| building.construction_complete_tick.is_some())
+            {
+                slots[cancel_slot] = Some(PanelAction::CancelConstruction);
+            } else if authoritative
+                .simulation
+                .building(actor)
                 .is_some_and(|building| {
                     building.attack_delivery.is_some()
                         && building.content.is_some_and(|content| {
@@ -347,7 +381,8 @@ fn action_layout(
 }
 
 fn handle_action_panel_buttons(
-    authoritative: Res<AuthoritativeSimulation>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut samples: ResMut<PresentationSamples>,
     mut state: ResMut<ActionPanelState>,
     actions: ActionInteractions,
 ) {
@@ -392,6 +427,24 @@ fn handle_action_panel_buttons(
                     }
                     TargetingAction::Build(_) => unreachable!(),
                 };
+            }
+            PanelAction::CancelConstruction => {
+                let Some(actor) = state.actor else {
+                    continue;
+                };
+                match authoritative
+                    .simulation
+                    .cancel_building_construction(state.team, actor)
+                {
+                    Ok(()) => {
+                        samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
+                        state.actor = None;
+                        state.status = "Construction cancelled and resources refunded.".into();
+                    }
+                    Err(error) => {
+                        state.status = format!("Unable to cancel construction: {error:?}.");
+                    }
+                }
             }
             PanelAction::Cancel => state.cancel_modal(),
         }
@@ -520,7 +573,7 @@ fn insufficient_resources_status(
 fn action_label(action: PanelAction) -> String {
     match action {
         PanelAction::OpenBuildMenu => "Build".into(),
-        PanelAction::Cancel => "Cancel\nEsc".into(),
+        PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
         PanelAction::Target(TargetingAction::Blink) => "Blink".into(),

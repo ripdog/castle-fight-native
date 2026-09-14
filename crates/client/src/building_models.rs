@@ -33,6 +33,7 @@ pub struct BuildingModelAsset {
 pub struct BuildingAnimationClip {
     pub node: AnimationNodeIndex,
     pub name: String,
+    pub duration_seconds: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +193,15 @@ impl BuildingModelSet {
                 model.animations_prepared = true;
                 continue;
             }
+            let durations: Vec<f32> = clips
+                .iter()
+                .map(|clip| {
+                    animation_clips
+                        .get(clip)
+                        .expect("selected glTF animation clip must be loaded")
+                        .duration()
+                })
+                .collect();
             let (graph, nodes) = AnimationGraph::from_clips(clips);
             let graph = graphs.add(graph);
             model.animations = Some(BuildingAnimationSet {
@@ -203,6 +213,7 @@ impl BuildingModelSet {
                         .birth
                         .clone()
                         .expect("birth slot requires a manifest sequence name"),
+                    duration_seconds: durations[slot],
                 }),
                 stand: stand_slot.map(|slot| BuildingAnimationClip {
                     node: nodes[slot],
@@ -211,6 +222,7 @@ impl BuildingModelSet {
                         .stand
                         .clone()
                         .expect("stand slot requires a manifest sequence name"),
+                    duration_seconds: durations[slot],
                 }),
                 death: death_slot.map(|slot| BuildingAnimationClip {
                     node: nodes[slot],
@@ -219,6 +231,7 @@ impl BuildingModelSet {
                         .death
                         .clone()
                         .expect("death slot requires a manifest sequence name"),
+                    duration_seconds: durations[slot],
                 }),
             });
             model.animations_prepared = true;

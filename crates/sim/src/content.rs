@@ -713,6 +713,7 @@ pub struct CastleFightProductionDefinition {
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
     pub building_health: i32,
+    pub construction_time_ticks: u32,
     pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
     pub spawn_interval_ticks: u16,
@@ -751,6 +752,7 @@ impl CastleFightProductionDefinition {
                 rawcode: self.rawcode,
                 name: self.name,
             }),
+            construction_time_ticks: Some(self.construction_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
@@ -824,6 +826,9 @@ impl CastleFightTowerKind {
                 lumber_cost: 300,
                 economy: verified_building_economy_927(u32::from_be_bytes(*b"h006"), 150, 300),
                 health: 1_500,
+                construction_time_ticks: extracted_building_construction_time_ticks_927(
+                    u32::from_be_bytes(*b"h006"),
+                ),
                 repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Pierce,
@@ -848,6 +853,9 @@ impl CastleFightTowerKind {
                 lumber_cost: 300,
                 economy: verified_building_economy_927(u32::from_be_bytes(*b"h07P"), 230, 300),
                 health: 1_250,
+                construction_time_ticks: extracted_building_construction_time_ticks_927(
+                    u32::from_be_bytes(*b"h07P"),
+                ),
                 repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Magic,
@@ -879,6 +887,7 @@ pub struct CastleFightTowerDefinition {
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
     pub health: i32,
+    pub construction_time_ticks: u32,
     pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
     pub damage_type: DamageType,
@@ -909,6 +918,7 @@ impl CastleFightTowerDefinition {
                 rawcode: self.rawcode,
                 name: self.name,
             }),
+            construction_time_ticks: Some(self.construction_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
@@ -1169,6 +1179,25 @@ fn extracted_building_costs_927(rawcode: u32) -> (u16, u16) {
     panic!("building {rawcode:#010x} missing from extracted 9.27 building table")
 }
 
+fn extracted_building_construction_time_ticks_927(rawcode: u32) -> u32 {
+    for line in include_str!("../../../docs/original_map/extracted/resolved/buildings.tsv")
+        .lines()
+        .skip(1)
+    {
+        let columns = line.split('\t').collect::<Vec<_>>();
+        if columns.get(1).copied().map(parse_rawcode) != Some(rawcode) {
+            continue;
+        }
+        let seconds = columns[13]
+            .parse::<u32>()
+            .expect("building construction time must be an integer");
+        return seconds
+            .checked_mul(CASTLE_FIGHT_SIMULATION_HZ as u32)
+            .expect("building construction time tick overflow");
+    }
+    panic!("building {rawcode:#010x} missing from extracted 9.27 building table")
+}
+
 fn extracted_building_income_per_10k_927(rawcode: u32) -> u64 {
     let (factor_per_1000, _, precursor) = extracted_building_income_semantics_927(rawcode);
     let (gold_cost, _) = extracted_building_costs_927(rawcode);
@@ -1238,6 +1267,7 @@ fn production_definition(
         lumber_cost: 0,
         economy,
         building_health,
+        construction_time_ticks: extracted_building_construction_time_ticks_927(rawcode),
         repair_time_ticks: 70 * CASTLE_FIGHT_SIMULATION_HZ as u32,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         spawn_interval_ticks: spawn_seconds * CASTLE_FIGHT_SIMULATION_HZ as u16,
@@ -1381,6 +1411,29 @@ mod tests {
         for (actual, expected) in cases {
             assert_eq!(actual, expected);
         }
+    }
+
+    #[test]
+    fn exposed_buildings_use_extracted_927_construction_times() {
+        for kind in CastleFightProductionKind::ALL {
+            assert_eq!(
+                kind.definition().construction_time_ticks,
+                2 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                "current production building {kind:?} must preserve extracted 2-second build time"
+            );
+        }
+        assert_eq!(
+            CastleFightTowerKind::WatchTower
+                .definition()
+                .construction_time_ticks,
+            20 * CASTLE_FIGHT_SIMULATION_HZ as u32
+        );
+        assert_eq!(
+            CastleFightTowerKind::PoofTower
+                .definition()
+                .construction_time_ticks,
+            20 * CASTLE_FIGHT_SIMULATION_HZ as u32
+        );
     }
 
     #[test]

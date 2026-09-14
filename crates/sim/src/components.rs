@@ -361,6 +361,9 @@ pub struct UnitGameplayProperties {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BuildingGameplayProperties {
     pub content: Option<ContentIdentity>,
+    /// Authoritative construction duration. `None` keeps generic/synthetic building spawns
+    /// immediate; Castle Fight content supplies this from the versioned map object data.
+    pub construction_time_ticks: Option<u32>,
     pub repair_time_ticks: Option<u32>,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
@@ -506,6 +509,14 @@ pub(crate) struct BuilderState {
 
 #[derive(Component, Debug, Clone, Copy)]
 pub(crate) struct BuilderBuildOrder {
+    pub building: BuildingSpawn,
+    pub properties: BuildingGameplayProperties,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct BuildingConstruction {
+    pub started_tick: u64,
+    pub complete_tick: u64,
     pub building: BuildingSpawn,
     pub properties: BuildingGameplayProperties,
 }

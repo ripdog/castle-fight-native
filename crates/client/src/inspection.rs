@@ -518,6 +518,18 @@ fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
         ),
         format!("Target: {}", target_label(building.target)),
     ];
+    if let (Some(started_tick), Some(complete_tick)) = (
+        building.construction_started_tick,
+        building.construction_complete_tick,
+    ) {
+        let duration = complete_tick.saturating_sub(started_tick).max(1);
+        let elapsed = tick.saturating_sub(started_tick).min(duration);
+        lines.push(format!(
+            "Construction: {}% ({} ticks remaining)",
+            elapsed.saturating_mul(100) / duration,
+            complete_tick.saturating_sub(tick)
+        ));
+    }
     if let Some(next_spawn_tick) = building.next_spawn_tick {
         lines.push(format!(
             "Next spawn: {} ticks",
@@ -784,6 +796,8 @@ mod tests {
                 team: Team(1),
                 footprint: BuildingFootprint::new(10, 20, 4, 4),
                 health: 1_000,
+                construction_started_tick: None,
+                construction_complete_tick: None,
                 target: None,
                 next_spawn_tick: Some(20),
                 cooldown_remaining: None,
