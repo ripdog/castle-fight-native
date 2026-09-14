@@ -8,9 +8,7 @@ use crate::{
         placement_footprint,
     },
     demo::order_demo_building,
-    inspection::{
-        InspectionSelection, cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray,
-    },
+    inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
     terrain::TerrainSurface,
 };
@@ -30,7 +28,6 @@ struct SelectionCommandResources<'w> {
     fixed_time: Res<'w, Time<Fixed>>,
     terrain: Res<'w, TerrainSurface>,
     metrics: Res<'w, WorldMetrics>,
-    selection: Res<'w, InspectionSelection>,
     playback: Res<'w, SimulationPlayback>,
     action_panel: ResMut<'w, ActionPanelState>,
     authoritative: ResMut<'w, AuthoritativeSimulation>,
@@ -101,7 +98,7 @@ fn handle_selection_commands(
     }
 
     if resources.mouse_buttons.just_pressed(MouseButton::Right) {
-        handle_builder_move_right_click(*window, *camera, &mut resources);
+        handle_smart_right_click(*window, *camera, &mut resources);
     }
 }
 
@@ -327,22 +324,51 @@ fn handle_modal_left_click(
     }
 }
 
-fn handle_builder_move_right_click(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SmartTarget {
+    Unit(castle_fight_sim::SimId),
+    Building(castle_fight_sim::SimId),
+}
+
+impl SmartTarget {
+    const fn id(self) -> castle_fight_sim::SimId {
+        match self {
+            Self::Unit(id) | Self::Building(id) => id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SmartActor {
+    Builder { team: castle_fight_sim::Team },
+    Tower { team: castle_fight_sim::Team },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SmartTargetInfo {
+    target: SmartTarget,
+    team: castle_fight_sim::Team,
+    repairable: bool,
+    damaged: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SmartRightClickAction {
+    BuilderMove(castle_fight_sim::SimPoint),
+    BuilderFollow(castle_fight_sim::SimId),
+    BuilderRepair(castle_fight_sim::SimId),
+    TowerAttack(castle_fight_sim::SimId),
+    None,
+}
+
+fn handle_smart_right_click(
     window: &Window,
     camera: (&Camera, &GlobalTransform),
     resources: &mut SelectionCommandResources<'_>,
 ) {
-    let Some(builder_id) = resources.selection.selected else {
+    let Some(actor) = resources.action_panel.actor else {
         return;
     };
-    if !resources
-        .presentation
-        .current
-        .builders
-        .contains_key(&builder_id)
-    {
-        return;
-    }
     let Some(cursor) = window.cursor_position() else {
         return;
     };
@@ -351,35 +377,136 @@ fn handle_builder_move_right_click(
     {
         return;
     }
+
     let (camera, camera_transform) = camera;
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &resources.terrain)
     else {
         return;
     };
-    let destination = world_to_sim_point(world);
+    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
+        return;
+    };
+    let alpha = resources
+        .playback
+        .interpolation_alpha(&resources.fixed_time);
+    let target = pick_unit_on_ray(
+        ray.origin,
+        *ray.direction,
+        &resources.presentation,
+        &resources.terrain,
+        alpha,
+    )
+    .map(SmartTarget::Unit)
+    .or_else(|| {
+        pick_building_at_ground(world, &resources.presentation, &resources.metrics)
+            .map(SmartTarget::Building)
+    });
 
-    // Warcraft right-click movement takes precedence over any open command submenu or targeting
-    // mode. Cancelling the UI mode first also makes a rejected move behave like an ordinary
-    // right-click cancel rather than leaving the old targeting cursor armed.
-    dismiss_action_mode_for_move(&mut resources.action_panel);
-    let result = resources
-        .authoritative
-        .simulation
-        .order_builder_move(builder_id, destination)
-        .map(|()| "Builder move ordered.".to_owned());
+    dismiss_action_mode_for_smart_order(&mut resources.action_panel);
+    let actor_kind = smart_actor(actor, &resources.presentation.current);
+    let target_info =
+        target.and_then(|target| smart_target_info(target, &resources.presentation.current));
+    let action = resolve_smart_right_click(actor_kind, world_to_sim_point(world), target_info);
+    let result = match action {
+        SmartRightClickAction::BuilderMove(destination) => resources
+            .authoritative
+            .simulation
+            .order_builder_move(actor, destination)
+            .map(|()| "Builder move ordered.".to_owned())
+            .map_err(|error| format!("Builder move rejected: {error:?}.")),
+        SmartRightClickAction::BuilderFollow(target) => resources
+            .authoritative
+            .simulation
+            .order_builder_follow(actor, target)
+            .map(|()| format!("Builder following #{}.", target.0))
+            .map_err(|error| format!("Builder follow rejected: {error:?}.")),
+        SmartRightClickAction::BuilderRepair(target) => resources
+            .authoritative
+            .simulation
+            .order_builder_repair(actor, target)
+            .map(|()| format!("Builder repairing #{}.", target.0))
+            .map_err(|error| format!("Builder repair rejected: {error:?}.")),
+        SmartRightClickAction::TowerAttack(target) => resources
+            .authoritative
+            .simulation
+            .order_building_attack_target(actor, target)
+            .map(|()| format!("Tower attacking #{}.", target.0))
+            .map_err(|error| format!("Tower attack rejected: {error:?}.")),
+        SmartRightClickAction::None => return,
+    };
+
     match result {
         Ok(status) => {
             resources.action_panel.status = status;
             publish_snapshot(&resources.authoritative, &mut resources.presentation);
         }
-        Err(error) => {
-            resources.action_panel.status = format!("Builder command rejected: {error:?}.");
-        }
+        Err(status) => resources.action_panel.status = status,
     }
 }
 
-fn dismiss_action_mode_for_move(action_panel: &mut ActionPanelState) {
+fn smart_actor(
+    actor: castle_fight_sim::SimId,
+    snapshot: &PresentationSnapshot,
+) -> Option<SmartActor> {
+    if let Some(builder) = snapshot.builders.get(&actor) {
+        return Some(SmartActor::Builder { team: builder.team });
+    }
+    snapshot.buildings.get(&actor).and_then(|building| {
+        building
+            .cooldown_remaining
+            .is_some()
+            .then_some(SmartActor::Tower {
+                team: building.team,
+            })
+    })
+}
+
+fn smart_target_info(
+    target: SmartTarget,
+    snapshot: &PresentationSnapshot,
+) -> Option<SmartTargetInfo> {
+    match target {
+        SmartTarget::Unit(id) => snapshot.units.get(&id).map(|unit| SmartTargetInfo {
+            target,
+            team: unit.team,
+            repairable: unit.mechanical,
+            damaged: unit.health > 0 && unit.health < unit.health_max,
+        }),
+        SmartTarget::Building(id) => snapshot.buildings.get(&id).map(|building| SmartTargetInfo {
+            target,
+            team: building.team,
+            repairable: true,
+            damaged: building.health > 0 && building.health < building.health_max,
+        }),
+    }
+}
+
+fn resolve_smart_right_click(
+    actor: Option<SmartActor>,
+    destination: castle_fight_sim::SimPoint,
+    target: Option<SmartTargetInfo>,
+) -> SmartRightClickAction {
+    match actor {
+        Some(SmartActor::Builder { team }) => match target {
+            Some(target) if target.team == team && target.repairable && target.damaged => {
+                SmartRightClickAction::BuilderRepair(target.target.id())
+            }
+            Some(target) => SmartRightClickAction::BuilderFollow(target.target.id()),
+            None => SmartRightClickAction::BuilderMove(destination),
+        },
+        Some(SmartActor::Tower { team }) => match target {
+            Some(target) if target.team != team => {
+                SmartRightClickAction::TowerAttack(target.target.id())
+            }
+            _ => SmartRightClickAction::None,
+        },
+        None => SmartRightClickAction::None,
+    }
+}
+
+fn dismiss_action_mode_for_smart_order(action_panel: &mut ActionPanelState) {
     action_panel.mode = ActionPanelMode::Actions;
+    action_panel.status = "Choose an action.".into();
 }
 
 fn try_open_build_menu_hotkey(
@@ -476,18 +603,79 @@ mod tests {
     }
 
     #[test]
-    fn right_click_move_dismisses_submenus_and_targeting() {
+    fn right_click_smart_order_dismisses_submenus_and_targeting() {
         let mut state = ActionPanelState {
             mode: ActionPanelMode::BuildMenu,
             ..ActionPanelState::default()
         };
-        dismiss_action_mode_for_move(&mut state);
+        dismiss_action_mode_for_smart_order(&mut state);
         assert_eq!(state.mode, ActionPanelMode::Actions);
 
         state.mode = ActionPanelMode::Targeting(TargetingAction::Build(
             crate::demo::BuildKind::Production(crate::demo::ProductionKind::Barracks),
         ));
-        dismiss_action_mode_for_move(&mut state);
+        dismiss_action_mode_for_smart_order(&mut state);
         assert_eq!(state.mode, ActionPanelMode::Actions);
+    }
+
+    #[test]
+    fn smart_right_click_matches_wc3_context_for_supported_castle_fight_actions() {
+        use castle_fight_sim::{SimId, SimPoint, Team};
+
+        let destination = SimPoint::new(123, 456);
+        let damaged_mech = SmartTargetInfo {
+            target: SmartTarget::Unit(SimId(10)),
+            team: Team(0),
+            repairable: true,
+            damaged: true,
+        };
+        assert_eq!(
+            resolve_smart_right_click(
+                Some(SmartActor::Builder { team: Team(0) }),
+                destination,
+                Some(damaged_mech),
+            ),
+            SmartRightClickAction::BuilderRepair(SimId(10))
+        );
+
+        let healthy_mech = SmartTargetInfo {
+            damaged: false,
+            ..damaged_mech
+        };
+        assert_eq!(
+            resolve_smart_right_click(
+                Some(SmartActor::Builder { team: Team(0) }),
+                destination,
+                Some(healthy_mech),
+            ),
+            SmartRightClickAction::BuilderFollow(SimId(10))
+        );
+        assert_eq!(
+            resolve_smart_right_click(
+                Some(SmartActor::Builder { team: Team(0) }),
+                destination,
+                None,
+            ),
+            SmartRightClickAction::BuilderMove(destination)
+        );
+
+        let enemy = SmartTargetInfo {
+            target: SmartTarget::Building(SimId(20)),
+            team: Team(1),
+            repairable: true,
+            damaged: true,
+        };
+        assert_eq!(
+            resolve_smart_right_click(
+                Some(SmartActor::Tower { team: Team(0) }),
+                destination,
+                Some(enemy),
+            ),
+            SmartRightClickAction::TowerAttack(SimId(20))
+        );
+        assert_eq!(
+            resolve_smart_right_click(Some(SmartActor::Tower { team: Team(0) }), destination, None,),
+            SmartRightClickAction::None
+        );
     }
 }

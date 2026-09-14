@@ -502,6 +502,7 @@ pub(crate) struct Builder;
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct BuilderState {
     pub destination: Option<SimPoint>,
+    pub follow_target: Option<SimId>,
     pub repair_target: Option<SimId>,
     pub repair_progress_remainder: u32,
     pub repair_autocast_enabled: bool,

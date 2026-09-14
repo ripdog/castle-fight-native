@@ -29,6 +29,7 @@ const PANEL_HEIGHT: f32 =
 const PANEL_BACKGROUND: Color = Color::srgba(0.105, 0.070, 0.040, 0.97);
 const PANEL_BORDER: Color = Color::srgb(0.28, 0.25, 0.20);
 const SLOT_BORDER: Color = Color::srgb(0.34, 0.34, 0.32);
+const AUTOCAST_BORDER: Color = Color::srgb(0.78, 0.70, 0.24);
 const BUTTON_NORMAL: Color = Color::srgb(0.095, 0.075, 0.055);
 const BUTTON_HOVERED: Color = Color::srgb(0.18, 0.14, 0.095);
 const BUTTON_DISABLED: Color = Color::srgb(0.045, 0.043, 0.040);
@@ -144,6 +145,7 @@ impl Plugin for BuildUiPlugin {
                     handle_escape,
                     populate_action_panel,
                     handle_action_panel_buttons,
+                    handle_action_panel_right_click,
                     style_action_panel_buttons,
                     draw_build_preview,
                 )
@@ -381,11 +383,15 @@ fn action_layout(
 }
 
 fn handle_action_panel_buttons(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut samples: ResMut<PresentationSamples>,
     mut state: ResMut<ActionPanelState>,
     actions: ActionInteractions,
 ) {
+    if !mouse_buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
     for (interaction, action) in &actions {
         if *interaction != Interaction::Pressed {
             continue;
@@ -451,6 +457,54 @@ fn handle_action_panel_buttons(
     }
 }
 
+fn handle_action_panel_right_click(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut state: ResMut<ActionPanelState>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut presentation: ResMut<PresentationSamples>,
+    buttons: Query<(&Interaction, &SlotAction), With<Button>>,
+) {
+    if !mouse_buttons.just_pressed(MouseButton::Right) || state.mode != ActionPanelMode::Actions {
+        return;
+    }
+    let Some(actor) = state.actor else {
+        return;
+    };
+    let repair_hovered = buttons
+        .iter()
+        .any(|(interaction, action)| repair_autocast_button_hovered(*interaction, action.0));
+    if !repair_hovered {
+        return;
+    }
+    let Some(builder) = presentation.current.builders.get(&actor).copied() else {
+        return;
+    };
+
+    let enabled = !builder.repair_autocast_enabled;
+    match authoritative
+        .simulation
+        .set_builder_repair_autocast(actor, enabled)
+    {
+        Ok(()) => {
+            state.status = format!(
+                "Repair autocast {}.",
+                if enabled { "enabled" } else { "disabled" }
+            );
+            presentation.publish(crate::bridge::PresentationSnapshot::capture(
+                &authoritative.simulation,
+            ));
+        }
+        Err(error) => {
+            state.status = format!("Repair autocast command rejected: {error:?}.");
+        }
+    }
+}
+
+fn repair_autocast_button_hovered(interaction: Interaction, action: Option<PanelAction>) -> bool {
+    matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+        && action == Some(PanelAction::Target(TargetingAction::Repair))
+}
+
 fn style_action_panel_buttons(
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
@@ -477,8 +531,17 @@ fn style_action_panel_buttons(
         } else {
             BUTTON_NORMAL
         });
+        let autocast_active = action.0 == Some(PanelAction::Target(TargetingAction::Repair))
+            && state.actor.is_some_and(|actor| {
+                authoritative
+                    .simulation
+                    .builder(actor)
+                    .is_some_and(|builder| builder.repair_autocast_enabled)
+            });
         *border = BorderColor::all(if disabled {
             BUTTON_DISABLED_BORDER
+        } else if autocast_active {
+            AUTOCAST_BORDER
         } else {
             SLOT_BORDER
         });
@@ -773,6 +836,22 @@ mod tests {
             .filter(|action| matches!(action, Some(PanelAction::Target(TargetingAction::Build(_)))))
             .count();
         assert_eq!(build_count, ALL_BUILD_KINDS.len());
+    }
+
+    #[test]
+    fn repair_button_is_the_only_right_click_autocast_action() {
+        assert!(repair_autocast_button_hovered(
+            Interaction::Hovered,
+            Some(PanelAction::Target(TargetingAction::Repair)),
+        ));
+        assert!(!repair_autocast_button_hovered(
+            Interaction::Hovered,
+            Some(PanelAction::Target(TargetingAction::Move)),
+        ));
+        assert!(!repair_autocast_button_hovered(
+            Interaction::None,
+            Some(PanelAction::Target(TargetingAction::Repair)),
+        ));
     }
 
     #[test]

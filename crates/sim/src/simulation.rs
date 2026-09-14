@@ -270,6 +270,7 @@ pub struct UnitView {
     pub movement_class: MovementClass,
     pub mechanical: bool,
     pub health: i32,
+    pub health_max: i32,
     pub attack_delivery: AttackDelivery,
     pub attack_targets: AttackTargetMask,
     pub target: Option<SimId>,
@@ -293,6 +294,7 @@ pub struct BuilderView {
     pub profile: BuilderProfile,
     pub configuration: BuilderConfiguration,
     pub destination: Option<SimPoint>,
+    pub follow_target: Option<SimId>,
     pub repair_target: Option<SimId>,
     pub build_footprint: Option<BuildingFootprint>,
     pub repair_autocast_enabled: bool,
@@ -305,6 +307,7 @@ pub struct BuildingView {
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
+    pub health_max: i32,
     pub construction_started_tick: Option<u64>,
     pub construction_complete_tick: Option<u64>,
     pub production: Option<ProductionProfile>,
@@ -343,6 +346,7 @@ pub enum BuilderCommandError {
     BuilderNotFound,
     OutsideBuildRegion,
     BlinkOutOfRange,
+    FollowTargetNotFound,
     RepairTargetNotFound,
     NotFriendlyRepairTarget,
     RepairTargetNotRepairable,
@@ -760,6 +764,37 @@ impl Simulation {
             .get_mut::<BuilderState>()
             .expect("builder missing command state");
         state.destination = Some(destination);
+        state.follow_target = None;
+        state.repair_target = None;
+        state.repair_progress_remainder = 0;
+        Ok(())
+    }
+
+    pub fn order_builder_follow(
+        &mut self,
+        builder: SimId,
+        target: SimId,
+    ) -> Result<(), BuilderCommandError> {
+        let builder_entity = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then_some(entity.id())
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        if target == builder || self.builder_follow_target(target).is_none() {
+            return Err(BuilderCommandError::FollowTargetNotFound);
+        }
+
+        self.cancel_builder_build_order_internal(builder_entity);
+        let mut entity = self.world.entity_mut(builder_entity);
+        let mut state = entity
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state");
+        state.destination = None;
+        state.follow_target = Some(target);
         state.repair_target = None;
         state.repair_progress_remainder = 0;
         Ok(())
@@ -864,6 +899,7 @@ impl Simulation {
             .get_mut::<BuilderState>()
             .expect("builder missing command state");
         state.destination = None;
+        state.follow_target = None;
         state.repair_target = Some(target);
         state.repair_progress_remainder = 0;
         Ok(())
@@ -1027,6 +1063,7 @@ impl Simulation {
             .get_mut::<BuilderState>()
             .expect("builder missing command state");
         builder_state.destination = None;
+        builder_state.follow_target = None;
         builder_state.repair_target = None;
         builder_state.repair_progress_remainder = 0;
         Ok(())
@@ -3185,6 +3222,14 @@ impl Simulation {
         }
     }
 
+    fn builder_follow_target(&self, target_id: SimId) -> Option<BuilderFollowTargetSnapshot> {
+        let default_collision_radius = self.default_collision_radius();
+        self.world
+            .iter_entities()
+            .find(|entity| entity.get::<SimId>().copied() == Some(target_id))
+            .and_then(|entity| builder_follow_target_from_entity(entity, default_collision_radius))
+    }
+
     fn builder_repair_target(&self, target_id: SimId) -> Option<BuilderRepairTargetSnapshot> {
         self.world
             .iter_entities()
@@ -3309,6 +3354,7 @@ impl Simulation {
             }
 
             if state.repair_target.is_none()
+                && state.follow_target.is_none()
                 && state.destination.is_none()
                 && state.repair_autocast_enabled
             {
@@ -3378,6 +3424,22 @@ impl Simulation {
                             state.repair_target = None;
                             state.repair_progress_remainder = 0;
                         }
+                    }
+                }
+            } else if let Some(target_id) = state.follow_target {
+                let Some(target) = self.builder_follow_target(target_id) else {
+                    state.follow_target = None;
+                    self.apply_builder_state(builder_entity, next_position, state);
+                    continue;
+                };
+                if !target.reached(next_position, self.config.navigation_cell_size) {
+                    let approach =
+                        target.approach_position(next_position, self.config.navigation_cell_size);
+                    let candidate = next_position.step_towards(approach, profile.speed_per_tick);
+                    if self.point_inside_team_build_region(team, candidate) {
+                        next_position = candidate;
+                    } else {
+                        state.follow_target = None;
                     }
                 }
             } else if let Some(destination) = state.destination {
@@ -7096,6 +7158,43 @@ struct ProductionAttempt {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum BuilderFollowGeometry {
+    Building(BuildingFootprint),
+    Point { position: SimPoint, stop_range: i32 },
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BuilderFollowTargetSnapshot {
+    geometry: BuilderFollowGeometry,
+}
+
+impl BuilderFollowTargetSnapshot {
+    fn reached(self, position: SimPoint, navigation_cell_size: i32) -> bool {
+        match self.geometry {
+            BuilderFollowGeometry::Building(footprint) => {
+                point_to_footprint_distance_sq(position, footprint, navigation_cell_size) == 0
+            }
+            BuilderFollowGeometry::Point {
+                position: target,
+                stop_range,
+            } => position.distance_sq(target) <= square_i32(stop_range),
+        }
+    }
+
+    fn approach_position(self, source: SimPoint, navigation_cell_size: i32) -> SimPoint {
+        match self.geometry {
+            BuilderFollowGeometry::Building(footprint) => {
+                closest_point_on_footprint(source, footprint, navigation_cell_size)
+            }
+            BuilderFollowGeometry::Point {
+                position: target,
+                stop_range,
+            } => point_attack_envelope_goal(source, target, stop_range),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 enum BuilderRepairGeometry {
     Building(BuildingFootprint),
     Unit(SimPoint),
@@ -7754,6 +7853,7 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
         profile: *entity.get::<BuilderProfile>()?,
         configuration: entity.get::<BuilderConfiguration>()?.clone(),
         destination: state.destination,
+        follow_target: state.follow_target,
         repair_target: state.repair_target,
         build_footprint: entity
             .get::<BuilderBuildOrder>()
@@ -7782,6 +7882,7 @@ fn unit_view_from_entity(
         movement_class: *entity.get::<MovementClass>()?,
         mechanical: entity.get::<MechanicalUnit>().is_some(),
         health: entity.get::<Health>()?.current,
+        health_max: entity.get::<Health>()?.max,
         attack_delivery: entity.get::<AttackProfile>()?.delivery,
         attack_targets: *entity.get::<AttackTargetMask>()?,
         target: entity.get::<TargetState>()?.current,
@@ -7810,6 +7911,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
         team: *entity.get::<Team>()?,
         footprint: *entity.get::<BuildingFootprint>()?,
         health: entity.get::<Health>()?.current,
+        health_max: entity.get::<Health>()?.max,
         construction_started_tick: construction.map(|state| state.started_tick),
         construction_complete_tick: construction.map(|state| state.complete_tick),
         production,
@@ -8594,6 +8696,33 @@ fn find_building_index(buildings: &[BuildingSnapshot], id: SimId) -> Option<usiz
     buildings
         .binary_search_by_key(&id, |building| building.id)
         .ok()
+}
+
+fn builder_follow_target_from_entity(
+    entity: bevy_ecs::world::EntityRef<'_>,
+    default_collision_radius: i32,
+) -> Option<BuilderFollowTargetSnapshot> {
+    if entity
+        .get::<Health>()
+        .is_some_and(|health| health.current <= 0)
+    {
+        return None;
+    }
+    if let Some(footprint) = entity.get::<BuildingFootprint>().copied() {
+        return Some(BuilderFollowTargetSnapshot {
+            geometry: BuilderFollowGeometry::Building(footprint),
+        });
+    }
+    let position = entity.get::<Position>()?.0;
+    let stop_range = entity
+        .get::<CollisionRadius>()
+        .map_or(default_collision_radius, |radius| radius.0);
+    Some(BuilderFollowTargetSnapshot {
+        geometry: BuilderFollowGeometry::Point {
+            position,
+            stop_range,
+        },
+    })
 }
 
 fn builder_repair_target_from_entity(
@@ -9416,6 +9545,7 @@ fn canonical_checksum(
                     }
                     None => hash.write_u8(0),
                 }
+                hash.write_u64(builder.state.follow_target.map_or(0, |target| target.0));
                 hash.write_u64(builder.state.repair_target.map_or(0, |target| target.0));
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));

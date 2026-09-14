@@ -104,7 +104,11 @@ Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, 
 
 The round-start runtime replaces the stale object-data Blink (`A001`) with the scripted builder Blink `A0-1`. Native gameplay MUST follow the runtime behavior, not the removed object-data ability.
 
-For 9.27, Blink is a zero-mana, zero-cooldown point command with **10,000 world units** cast range. On a successful cast, the requested point is clamped independently on X and Y to the owning castle/base rectangle with a **64 world-unit inset**, the builder is teleported immediately to that resolved point, and its current order is stopped. Native Blink therefore cancels any active move or repair order while preserving the Repair autocast toggle state. Because the builder is non-colliding and ignores terrain/blockers, Blink does not perform ordinary pathability or occupancy checks inside the owning base rectangle.
+For 9.27, Blink is a zero-mana, zero-cooldown point command with **10,000 world units** cast range. On a successful cast, the requested point is clamped independently on X and Y to the owning castle/base rectangle with a **64 world-unit inset**, the builder is teleported immediately to that resolved point, and its current order is stopped. Native Blink therefore cancels any active move, follow, repair, or pending build order while preserving the Repair autocast toggle state. Because the builder is non-colliding and ignores terrain/blockers, Blink does not perform ordinary pathability or occupancy checks inside the owning base rectangle.
+
+### 7.2 Smart follow
+
+Warcraft Smart right-click on a unit/building that does not resolve to a higher-priority contextual action issues a target-following movement order. Native builders therefore retain the target `SimId` rather than reducing Smart to a one-time point move. The builder tracks the live target deterministically, stopping at a building footprint edge or the target unit's collision envelope and resuming movement if the target moves away. Follow uses the same builder-only obstacle immunity and owning-build-region boundary as ordinary Move; if the target disappears or following it would require leaving the owning build region, the follow order ends. Repair takes precedence over Follow for damaged friendly repairable targets.
 
 ## 8. Building construction relationship
 
@@ -124,7 +128,7 @@ Repair is a targeted builder order against a living friendly **building or mecha
 
 For the 9.27 compatibility profile, the builder moves at **550 world units/second**, Repair has **50 world units** cast range, and the extracted Warcraft Repair time ratio is **1.5×**. Repair duration comes from the target object's extracted **Repair Time** field (`urtm` / base-table `reptm`), not from construction/build time. The native sim multiplies that target-specific value by Repair's 1.5× ratio and distributes the target's full HP across the resulting deterministic tick count. Important 9.27 examples are: Main Castle `urtm=700` → **1050 seconds** full repair-equivalent time for one builder; Barracks `urtm=70` → **105 seconds**; Watch Tower `urtm=110` → **165 seconds**; Catapult `urtm=36` → **54 seconds**. Integer remainder accumulation keeps partial repair deterministic. Repair cost/resource charging is deferred until player resources are authoritative; the extracted 0.35 Repair Cost Ratio must be applied when that system lands rather than silently discarded.
 
-Repair autocast is authoritative and toggleable. For all 14 standard 9.27 race builders it is **enabled by default**: their extracted WC3 `Default Active Ability` is Repair (`Ahrp`, or a race-specific Repair derivative such as `A071`/`A08G`). The campaign-only Critter Builder still has Repair but leaves `Default Active Ability` blank, so its native default is autocast off. Repair exposes the canonical `repairon` / `repairoff` toggle orders and auto-repair tooltips. When autocast is enabled and the builder has no explicit movement or repair order, it may acquire a damaged friendly repairable target within the builder's extracted **500 world-unit acquisition range** and move to repair it. Disabling autocast prevents new automatic acquisitions but does not cancel an explicit or already-active repair order.
+Repair autocast is authoritative and toggleable. For all 14 standard 9.27 race builders it is **enabled by default**: their extracted WC3 `Default Active Ability` is Repair (`Ahrp`, or a race-specific Repair derivative such as `A071`/`A08G`). The campaign-only Critter Builder still has Repair but leaves `Default Active Ability` blank, so its native default is autocast off. Repair exposes the canonical `repairon` / `repairoff` toggle orders and auto-repair tooltips. When autocast is enabled and the builder has no explicit move, follow, repair, or build order, it may acquire a damaged friendly repairable target within the builder's extracted **500 world-unit acquisition range** and move to repair it. Disabling autocast prevents new automatic acquisitions but does not cancel an explicit or already-active repair order.
 
 Until exact Warcraft built-in Repair autocast target-priority behavior is separately recovered, native automatic acquisition is normalized deterministically: choose the nearest eligible damaged target, breaking equal-distance ties by `SimId`. Explicit player orders always take precedence over autocast acquisition.
 
@@ -267,6 +271,7 @@ The protocol SHOULD define specific commands rather than a generic unit-order en
 
 ```text
 MoveBuilder
+FollowBuilder
 BlinkBuilder
 RepairBuilder
 SetBuilderRepairAutocast
@@ -283,7 +288,7 @@ A command that attempts to direct an ordinary combat unit MUST be structurally i
 
 Snapshots MUST preserve all future-relevant builder/item state, including:
 
-- builder position/movement state;
+- builder position/movement/follow target state;
 - inventory contents and stable item instance IDs;
 - charges;
 - cooldown/ready ticks;

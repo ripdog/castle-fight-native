@@ -424,15 +424,15 @@ fn format_builder_inspector(builder: &BuilderSample) -> String {
             "Build footprint {},{} {}x{}",
             footprint.min_x, footprint.min_y, footprint.width, footprint.height
         )
+    } else if let Some(destination) = builder.destination {
+        let destination = sim_point_to_world(destination);
+        format!("Move to {:.1}, {:.1}", destination.x, destination.z)
+    } else if let Some(target) = builder.repair_target {
+        format!("Repair #{}", target.0)
+    } else if let Some(target) = builder.follow_target {
+        format!("Follow #{}", target.0)
     } else {
-        match (builder.destination, builder.repair_target) {
-            (Some(destination), _) => {
-                let destination = sim_point_to_world(destination);
-                format!("Move to {:.1}, {:.1}", destination.x, destination.z)
-            }
-            (_, Some(target)) => format!("Repair #{}", target.0),
-            (None, None) => "Idle".into(),
-        }
+        "Idle".into()
     };
     [
         format!("BUILDER #{}", builder.id.0),
@@ -709,6 +709,7 @@ mod tests {
                 },
                 locomotion: BuilderLocomotion::Foot,
                 destination: None,
+                follow_target: None,
                 repair_target: None,
                 build_footprint: None,
                 repair_autocast_enabled: true,
@@ -760,6 +761,7 @@ mod tests {
                 movement_class: castle_fight_sim::MovementClass::Ground,
                 mechanical: false,
                 health: 50,
+                health_max: 100,
                 target: None,
                 direct_retaliation_lock: false,
                 ally_defense_lock: false,
@@ -796,6 +798,7 @@ mod tests {
                 team: Team(1),
                 footprint: BuildingFootprint::new(10, 20, 4, 4),
                 health: 1_000,
+                health_max: 1_000,
                 construction_started_tick: None,
                 construction_complete_tick: None,
                 target: None,
@@ -842,6 +845,7 @@ mod tests {
                 movement_class: MovementClass::Air,
                 mechanical: false,
                 health: 50,
+                health_max: 100,
                 target: None,
                 direct_retaliation_lock: false,
                 ally_defense_lock: false,

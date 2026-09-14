@@ -1392,9 +1392,11 @@ fn update_live_imported_builder_animation(
         .get(&controller.sim_id)
         .unwrap_or(current);
     let continuous_motion = previous.destination.is_some()
+        || previous.follow_target.is_some()
         || previous.repair_target.is_some()
         || previous.build_footprint.is_some()
         || current.destination.is_some()
+        || current.follow_target.is_some()
         || current.repair_target.is_some()
         || current.build_footprint.is_some();
     let desired = if continuous_motion
@@ -2572,9 +2574,11 @@ fn interpolate_render_transforms(
         };
         let previous = samples.previous.builders.get(id).unwrap_or(current);
         let continuous_motion = previous.destination.is_some()
+            || previous.follow_target.is_some()
             || previous.repair_target.is_some()
             || previous.build_footprint.is_some()
             || current.destination.is_some()
+            || current.follow_target.is_some()
             || current.repair_target.is_some()
             || current.build_footprint.is_some();
         let ground_position = if continuous_motion {

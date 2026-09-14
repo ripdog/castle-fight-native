@@ -4028,6 +4028,54 @@ mod tests {
     }
 
     #[test]
+    fn builder_follow_stops_at_target_envelope_and_is_replaced_by_move() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(19, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 10, 10)],
+                vec![BuildingFootprint::new(10, 0, 10, 10)],
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(cell, 5 * cell),
+            profile: BuilderProfile {
+                speed_per_tick: cell,
+                build_range: cell,
+                repair_range: cell,
+                repair_autocast_range: cell,
+                repair_time_ratio_numerator: 1,
+                repair_time_ratio_denominator: 1,
+                full_repair_duration_ticks: 10,
+                blink_range: 20 * cell,
+                blink_boundary_inset: 0,
+            },
+            configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: false,
+        });
+        let target = sim.spawn_building(passive_building(0, BuildingFootprint::new(6, 4, 2, 2)));
+
+        sim.order_builder_follow(builder, target).unwrap();
+        for _ in 0..8 {
+            sim.step();
+        }
+        let following = sim.builder(builder).unwrap();
+        assert_eq!(following.follow_target, Some(target));
+        assert_eq!(following.position.x, 6 * cell);
+        assert!(following.position.y >= 4 * cell && following.position.y <= 6 * cell);
+
+        sim.order_builder_move(builder, SimPoint::new(2 * cell, 5 * cell))
+            .unwrap();
+        let moving = sim.builder(builder).unwrap();
+        assert_eq!(moving.follow_target, None);
+        assert_eq!(moving.destination, Some(SimPoint::new(2 * cell, 5 * cell)));
+    }
+
+    #[test]
     fn builder_blink_clamps_to_inset_base_rect_and_stops_current_order() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {

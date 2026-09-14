@@ -88,6 +88,7 @@ pub struct UnitSample {
     pub movement_class: MovementClass,
     pub mechanical: bool,
     pub health: i32,
+    pub health_max: i32,
     pub target: Option<SimId>,
     pub direct_retaliation_lock: bool,
     pub ally_defense_lock: bool,
@@ -108,6 +109,7 @@ pub struct BuilderSample {
     pub appearance: ContentIdentity,
     pub locomotion: BuilderLocomotion,
     pub destination: Option<SimPoint>,
+    pub follow_target: Option<SimId>,
     pub repair_target: Option<SimId>,
     pub build_footprint: Option<BuildingFootprint>,
     pub repair_autocast_enabled: bool,
@@ -122,6 +124,7 @@ pub struct BuildingSample {
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
+    pub health_max: i32,
     pub construction_started_tick: Option<u64>,
     pub construction_complete_tick: Option<u64>,
     pub target: Option<SimId>,
@@ -166,6 +169,7 @@ impl PresentationSnapshot {
                         movement_class: unit.movement_class,
                         mechanical: unit.mechanical,
                         health: unit.health,
+                        health_max: unit.health_max,
                         target: unit.target,
                         direct_retaliation_lock: unit.direct_retaliation_lock,
                         ally_defense_lock: unit.ally_defense_lock,
@@ -196,6 +200,7 @@ impl PresentationSnapshot {
                         appearance: builder.configuration.appearance,
                         locomotion: builder.configuration.locomotion,
                         destination: builder.destination,
+                        follow_target: builder.follow_target,
                         repair_target: builder.repair_target,
                         build_footprint: builder.build_footprint,
                         repair_autocast_enabled: builder.repair_autocast_enabled,
@@ -222,6 +227,7 @@ impl PresentationSnapshot {
                         team: building.team,
                         footprint: building.footprint,
                         health: building.health,
+                        health_max: building.health_max,
                         construction_started_tick: building.construction_started_tick,
                         construction_complete_tick: building.construction_complete_tick,
                         target: building.target,
@@ -367,6 +373,7 @@ mod tests {
             sample.destination,
             Some(SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0))
         );
+        assert_eq!(sample.follow_target, None);
         assert_eq!(sample.repair_target, None);
         assert!(sample.repair_autocast_enabled);
         assert_eq!(sample.blink_range, human.profile.blink_range);
