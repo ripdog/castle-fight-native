@@ -4869,6 +4869,12 @@ def _extract_perk_mechanics(
                 b"TriggerRegisterEnterRectSimple(rbr,NFb)", b"TriggerRegisterLeaveRectSimple(sbr,NFb)",
                 b"TriggerRegisterEnterRectSimple(tbr,MFb)", b"TriggerRegisterLeaveRectSimple(ubr,MFb)",
             )),
+            ("EventListener_perkListen_setCleanup_PerkLastWallProtocol_onEvent_perkListen_setCleanup_PerkLastWallProtocol", (
+                b"GetTriggerUnit()", b"unit_getOwner(Tfn)==Sfn.plr", b"untrackLastWallUnit(Tfn)",
+            )),
+            ("untrackLastWallUnit", (
+                b"group_remove", b"removeLastWallArmorAbilities(dbr)", b"E3[ebr]=false", b"D3[ebr]=(-1)",
+            )),
             ("PerkCleanupFunc_setCleanup_PerkLastWallProtocol_call_setCleanup_PerkLastWallProtocol", (
                 b"removeLastWallArmorAbilities(Zfn)", b"E3[agn]=false", b"D3[agn]=(-1)", b"GroupClear(cgn)",
             )),
@@ -4986,6 +4992,13 @@ def _extract_perk_mechanics(
             ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment", (
                 b"GetSpellAbilityId()==m6", b"setProductionEnchantedBuilding(Xbn.plr,Zbn)",
             )),
+            ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment1", (
+                b"GetTriggerUnit()", b"ProductionEnchantmentState_target", b"clearProductionEnchantedBuildingFor(bcn.plr)",
+            )),
+            ("clearProductionEnchantedBuildingFor", (
+                b"removeAbilityIfPresent(e6q.ProductionEnchantmentState_target,k6)", b"ProductionEnchantmentState_target=nil",
+                b"destroyEnchantmentEffect", b"ProductionEnchantmentState_fx=nil",
+            )),
             ("Action_watch_PerkBuildingEnchantment_run_watch_PerkBuildingEnchantment", (
                 b"ensureProductionBuilderAbility(V1[wbn])", b"clearProductionEnchantedBuildingFor(V1[wbn])",
             )),
@@ -5069,6 +5082,13 @@ def _extract_perk_mechanics(
             )),
             ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment3", (
                 b"GetSpellAbilityId()==Q5", b"setSpellEnchantedBuilding(zcn.plr,Bcn)",
+            )),
+            ("EventListener_perkListen_setCleanup_PerkBuildingEnchantment_onEvent_perkListen_setCleanup_PerkBuildingEnchantment4", (
+                b"GetTriggerUnit()", b"SpellEnchantmentState_target", b"clearSpellEnchantedBuildingFor(Dcn.plr)",
+            )),
+            ("clearSpellEnchantedBuildingFor", (
+                b"removeAbilityIfPresent(R6q.SpellEnchantmentState_target,P5)", b"setSpellBuildingManaDelta(R6q.SpellEnchantmentState_target,0.)",
+                b"SpellEnchantmentState_target=nil", b"refreshSpellBuildingEnchantments(Q6q)",
             )),
             ("Action_watch_PerkBuildingEnchantment_run_watch_PerkBuildingEnchantment1", (
                 b"ensureSpellBuilderAbility(V1[Fbn])", b"clearSpellEnchantedBuildingFor(V1[Fbn])",
@@ -5203,6 +5223,48 @@ def _extract_runtime_ai_mechanics(
             ("getEngagementDominance", (b"getEngagementAxisPos()", b"(iTo-0.5)*2.0", b"kTo=(-jTo)")),
             ("getStructurePushDominance", (b"jDb[lTo]", b"jDb[oTo]", b"(mTo-nTo)/pTo", b"real_clamp")),
         ],
+    )
+
+    add(
+        "ai-strategic-aura-purchase-observer",
+        "team-strategic-aura-purchase-state-and-buyer-coordination",
+        "player-unit-sell-item-event",
+        {
+            "rewrites_gameplay_event": False,
+            "observed_event": "EVENT_PLAYER_UNIT_SELL_ITEM",
+            "buyer_source": "owner of GetBuyingUnit()",
+            "item_source": "GetSoldItem() type id",
+            "tracked_items": [
+                {"item_id": 1227894849, "rawcode": "I00A", "strategic_index": 0},
+                {"item_id": 1227894835, "rawcode": "I003", "strategic_index": 1},
+            ],
+            "team_index_range": [0, 1],
+            "state_effect": "mark strategic aura bought for buyer team, clear that team's pending/reserved strategic aura slots, and record buyer player id",
+            "human_and_ai_purchases_are_observed": True,
+            "already_bought_item_is_removed_from_future_strategic_candidates": True,
+            "state_resets_with_ai_round_state": True,
+        },
+        [
+            ("UD", (b"EVENT_PLAYER_UNIT_SELL_ITEM", b"EventListener_add(aWo,ZVo)")),
+            ("EventListener_add_AiItemBuying_onEvent_add_AiItemBuying", (
+                b"GetBuyingUnit()", b"GetSoldItem()", b"noteStrategicItemBoughtByPlayer(unit_getOwner(Nyk),item_getTypeId(Oyk))",
+            )),
+            ("getStrategicAuraItemIndex", (b"rWo==1227894849", b"return 0", b"rWo==1227894835", b"return 1")),
+            ("markStrategicItemBoughtForTeam", (
+                b"getStrategicAuraItemIndex(mXo)", b"uCb[((lXo*16)+nXo)]=true", b"pCb[lXo]=(-1)", b"oCb[lXo]=(-1)",
+            )),
+            ("noteStrategicItemBoughtByPlayer", (
+                b"markStrategicItemBoughtForTeam(__wurst_ensureInt(lGb[qXo]),pXo)",
+                b"qCb[__wurst_ensureInt(lGb[qXo])]=qXo",
+            )),
+            ("hasTeamBoughtStrategicItem", (b"getStrategicAuraItemIndex(eXo.CFItem_itemId)", b"uCb[((dXo*16)+fXo)]")),
+            ("isStrategicAuraCandidateForTeam", (
+                b"rXo.CFItem_isStrategicAura", b"rXo.CFItem_requiresTarget", b"not hasTeamBoughtStrategicItem(sXo,rXo)",
+            )),
+            ("Action_batch_AiRoundState_run_batch_AiRoundState", (b"resetStrategicItemBuyingState()",)),
+            ("resetStrategicItemBuyingState", (b"uCb[((eWo*16)+fWo)]=false", b"qCb[eWo]=(-1)", b"pCb[eWo]=(-1)", b"oCb[eWo]=(-1)")),
+        ],
+        related_rawcode_ids=(1227894849, 1227894835),
     )
 
     add(
@@ -5381,6 +5443,196 @@ def _extract_damage_listener_coverage(
             "evidence_note": note,
             "byte_offset": function_offsets[listener_name],
         })
+    return rows
+
+
+def _extract_event_listener_coverage(
+    functions: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+    production_unit_special_mechanics: list[dict[str, object]],
+    runtime_system_mechanics: list[dict[str, object]],
+    building_spell_mechanics: list[dict[str, object]],
+    perk_mechanics: list[dict[str, object]],
+    runtime_ai_mechanics: list[dict[str, object]],
+    protected_perk_registry_audit: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Strict closure audit over generated EventListener callbacks.
+
+    A listener is importer-covered either when it is direct semantic evidence or
+    when a short, exact named-call path reaches already-normalized semantics.
+    Remaining callbacks are classified by subsystem so presentation, E2E,
+    campaign/session, command/mode, telemetry and generic dispatch code cannot
+    be mistaken for silently omitted unit/spell gameplay.
+    """
+    # This is deliberately a full-map closure audit. Tiny parser fixtures used
+    # throughout the unit tests do not contain the protected perk registry and
+    # must remain valid inputs to analyze_lua without synthesizing 70 listeners.
+    if not protected_perk_registry_audit:
+        return []
+
+    function_offsets = {str(row["name"]): int(row["start"]) for row in functions}
+    listener_names = sorted(
+        name for name in function_offsets
+        if name.startswith("EventListener_") and "_onEvent_" in name
+    )
+    if len(listener_names) != 70:
+        raise ValueError(f"event-listener callback inventory changed: {len(listener_names)}")
+
+    normalized_sources: dict[str, set[str]] = defaultdict(set)
+
+    def add_sources(domain: str, rows: list[dict[str, object]], identity_key: str) -> None:
+        for row in rows:
+            identity = str(row[identity_key])
+            for function_name in row.get("source_functions", []):
+                normalized_sources[str(function_name)].add(f"{domain}:{identity}")
+
+    add_sources("production-unit-special-mechanics", production_unit_special_mechanics, "mechanic_kind")
+    add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
+    add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
+    add_sources("perk-mechanics", perk_mechanics, "perk_id")
+    add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
+
+    callees_by_caller: dict[str, set[str]] = defaultdict(set)
+    for (caller, callee), count in call_edges.items():
+        if count > 0:
+            callees_by_caller[str(caller)].add(str(callee))
+
+    def path_to_normalized(listener_name: str) -> tuple[list[str], list[str]]:
+        frontier: list[tuple[str, list[str]]] = [(listener_name, [listener_name])]
+        seen = {listener_name}
+        for _depth in range(3):
+            next_frontier: list[tuple[str, list[str]]] = []
+            for current, path in sorted(frontier):
+                for callee in sorted(callees_by_caller.get(current, ())):
+                    candidate_path = [*path, callee]
+                    if callee in normalized_sources:
+                        return candidate_path, sorted(normalized_sources[callee])
+                    if callee not in seen:
+                        seen.add(callee)
+                        next_frontier.append((callee, candidate_path))
+            frontier = next_frontier
+        return [], []
+
+    building_e2e_base = "EventListener_add_BuildingCatalogE2E_onEvent_add_BuildingCatalogE2E"
+    e2e_only = {
+        building_e2e_base,
+        *(f"{building_e2e_base}{index}" for index in range(1, 12)),
+        "EventListener_add_CampaignSmokeTest_onEvent_add_CampaignSmokeTest",
+    }
+    presentation_only = {
+        "EventListener_add_AttachedEffects_onEvent_add_AttachedEffects",
+        "EventListener_add_BuildingAttachments_onEvent_add_BuildingAttachments",
+        "EventListener_add_BuildingAttachments_onEvent_add_BuildingAttachments1",
+        "EventListener_add_BuildingAttachments_onEvent_add_BuildingAttachments2",
+        "EventListener_add_BuildingAttachments_onEvent_add_BuildingAttachments3",
+        "EventListener_add_DraftUIScreen_DraftUI_onEvent_add_DraftUIScreen_DraftUI",
+        "EventListener_add_MultiboardEventHooks_onEvent_add_MultiboardEventHooks",
+        "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements1",
+        "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements2",
+        "EventListener_add_TrainProgressRuntime_onEvent_add_TrainProgressRuntime",
+        "EventListener_add_UnitTrainingRuntime_onEvent_add_UnitTrainingRuntime1",
+    }
+    gameplay_framework = {
+        "EventListener_add_BuildingSpells_onEvent_add_BuildingSpells",
+        "EventListener_add_DamageEvent_onEvent_add_DamageEvent",
+        "EventListener_add_DamageEvent_onEvent_add_DamageEvent1",
+    }
+    campaign_runtime = {
+        "EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges",
+        "EventListener_add_Campaign_onEvent_add_Campaign",
+        "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements",
+    }
+    player_session_runtime = {
+        "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime",
+        "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime1",
+        "EventListener_add_doAfter_MMDData_onEvent_add_doAfter_MMDData",
+        "EventListener_add_PlayerLeave_onEvent_add_PlayerLeave",
+    }
+    command_runtime = {
+        "EventListener_add_Commands_onEvent_add_Commands",
+        "EventListener_add_WurstCommand_onEvent_add_WurstCommand",
+    }
+    mode_runtime = {
+        "EventListener_add_ModeParser_onEvent_add_ModeParser",
+    }
+    telemetry_only = {
+        "EventListener_add_RoundStatsTracking_onEvent_add_RoundStatsTracking",
+    }
+
+    rows: list[dict[str, object]] = []
+    for listener_name in listener_names:
+        direct = sorted(normalized_sources.get(listener_name, ()))
+        dispatch_path: list[str] = []
+        normalized = direct
+        if direct:
+            if all(source.startswith("runtime-ai-mechanics:") for source in direct):
+                status = "normalized-ai-runtime-semantics"
+                note = "listener is direct evidence for normalized AI-runtime semantics"
+            else:
+                status = "normalized-gameplay-semantics"
+                note = "listener is direct evidence for importer-facing normalized gameplay semantics"
+        else:
+            dispatch_path, normalized = path_to_normalized(listener_name)
+            if dispatch_path:
+                if all(source.startswith("runtime-ai-mechanics:") for source in normalized):
+                    status = "normalized-ai-runtime-dispatch"
+                    note = "listener reaches normalized AI-runtime semantics through an exact named-call path of at most three edges"
+                else:
+                    status = "normalized-gameplay-dispatch"
+                    note = "listener reaches normalized gameplay semantics through an exact named-call path of at most three edges"
+            elif listener_name in e2e_only:
+                status = "e2e-only"
+                note = "generated end-to-end/smoke-test listener; not production gameplay semantics"
+            elif listener_name in presentation_only:
+                status = "presentation-only"
+                note = "visual/UI presentation lifecycle only; does not define authoritative gameplay state"
+            elif listener_name in gameplay_framework:
+                status = "gameplay-framework-infrastructure"
+                note = "generic event-dispatch infrastructure; concrete gameplay semantics are normalized at registered handlers/listeners"
+            elif listener_name in campaign_runtime:
+                status = "campaign-runtime-unmodeled"
+                note = "live campaign/challenge control path; explicitly outside current importer-facing mechanics coverage"
+            elif listener_name in player_session_runtime:
+                status = "player-session-runtime-unmodeled"
+                note = "live AFK/leave/autobalance/session control path; explicitly tracked outside unit/spell mechanics"
+            elif listener_name in command_runtime:
+                status = "command-runtime-unmodeled"
+                note = "live command/chat control path; command semantics are not yet normalized"
+            elif listener_name in mode_runtime:
+                status = "mode-selection-runtime-unmodeled"
+                note = "live map-mode parser/control path; mode semantics are not yet normalized"
+            elif listener_name in telemetry_only:
+                status = "telemetry-only"
+                note = "round-stat observer used for statistics/telemetry rather than authoritative mechanic mutation"
+            else:
+                raise ValueError(f"unclassified event-listener callback: {listener_name}")
+        rows.append({
+            "listener_function": listener_name,
+            "coverage_status": status,
+            "normalized_sources": normalized,
+            "dispatch_path": dispatch_path,
+            "evidence_note": note,
+            "byte_offset": function_offsets[listener_name],
+        })
+
+    status_counts = Counter(str(row["coverage_status"]) for row in rows)
+    expected_status_counts = Counter({
+        "normalized-gameplay-semantics": 21,
+        "normalized-ai-runtime-semantics": 1,
+        "normalized-gameplay-dispatch": 10,
+        "presentation-only": 11,
+        "e2e-only": 13,
+        "gameplay-framework-infrastructure": 3,
+        "campaign-runtime-unmodeled": 3,
+        "player-session-runtime-unmodeled": 4,
+        "command-runtime-unmodeled": 2,
+        "mode-selection-runtime-unmodeled": 1,
+        "telemetry-only": 1,
+    })
+    if status_counts != expected_status_counts:
+        raise ValueError(
+            f"event-listener coverage classification changed: {dict(sorted(status_counts.items()))}"
+        )
     return rows
 
 
@@ -7051,6 +7303,14 @@ def _extract_production_unit_special_mechanics(
         "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
         {"orderCodeAttackIfAllowed"},
     )
+    require_tokens(
+        "EventListener_add_PerkUtils_onEvent_add_PerkUtils",
+        {"GetSummonedUnit", "GetSummoningUnit", "1747989296", "1966092358", "unit_getIndex", "J2"},
+    )
+    require_tokens(
+        "setSpawnBuilding",
+        {"unit_getIndex", "K2", "J2"},
+    )
     listener_function = next(
         function for function in functions
         if function["name"] == "EventListener_add_FireElemental_onEvent_add_FireElemental"
@@ -7075,6 +7335,10 @@ def _extract_production_unit_special_mechanics(
             "post_child_setup_tracks_pathing": True,
             "post_child_setup_orders_attack": True,
             "post_child_attack_order_delay_seconds": 0.2,
+            "split_child_inherits_spawn_building_provenance": True,
+            "split_child_provenance_parent_unit_id": 1966092358,
+            "split_child_provenance_child_unit_id": 1747989296,
+            "split_child_provenance_flow": "summon listener caches h030 by u00F parent index; setSpawnBuilding propagates the parent's production building to the cached child and clears the cache",
             "native_split_state_machine": "Warcraft-ANlm",
         },
         "related_rawcode_ids": [1093682265, 1747989296, 1747989082],
@@ -7082,6 +7346,8 @@ def _extract_production_unit_special_mechanics(
             "EventListener_add_FireElemental_onEvent_add_FireElemental",
             "setupFireSummon",
             "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
+            "EventListener_add_PerkUtils_onEvent_add_PerkUtils",
+            "setSpawnBuilding",
         ],
         "evidence_kind": "native-ANlm-object-data-plus-exact-summon-listener",
         "byte_offset": fire_listener_start,
@@ -7271,6 +7537,14 @@ def _extract_runtime_system_mechanics(
         "prepareGobboTargets", "isGobboRepairableTarget", "isGobboRallyTarget", "orderGoboW",
         "setGobboSpawner", "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
         "sH", "applyGobboTimedLife", "onSummonedUnit",
+        "IL", "CallbackSingle_doAfter_SpamPrevention_call_doAfter_SpamPrevention",
+        "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention",
+        "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention1",
+        "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention2",
+        "getOrderSpamTimeoutSeconds", "nextOrderSpamTimeout", "shouldStartOrderSpamPenalty",
+        "disabledUntilForNewOrderSpamPenalty", "startOrderSpamPenalty",
+        "punishSelectedLocalControllers", "isAssassinSupportUnit", "shouldRestoreSupportOrderAfterExternalOrder",
+        "restoreExpectedOrderAfterExternalOrder", "KL", "kJ",
         "completeRoundStart", "startIdleAttackTimer", "isIdleAttackUnit", "code__TimerStart_IdleAttackRuntime",
         "ForGroupCallback_forUnitsInRect_IdleAttackRuntime_callback_forUnitsInRect_IdleAttackRuntime",
         "uL", "CE", "EventListener_add_Blink_onEvent_add_Blink",
@@ -7996,6 +8270,180 @@ def _extract_runtime_system_mechanics(
             assassin_init_start, support_init_start, support_gate_start, support_dispatch_start,
             assassin_targets_start, assassin_valid_start, assassin_order_start, gobbo_targets_start,
             gobbo_order_start, task_run_start, gobbo_life_init_start, gobbo_life_start,
+        ),
+    })
+
+    # External/player order suppression. Castle Fight units are autonomous;
+    # three unit-order event listeners reject player stop/move/attack orders
+    # unless they match narrow scripted exceptions, restore the unit's expected
+    # autonomous/support order, and penalize allied players who had the unit
+    # selected. The escalating control lock is tracked separately from the
+    # order restoration itself.
+    spam_init_start, spam_init_source, spam_init_tokens = source("IL")
+    spam_register_start, spam_register_source, spam_register_tokens = source(
+        "CallbackSingle_doAfter_SpamPrevention_call_doAfter_SpamPrevention"
+    )
+    spam_point_start, spam_point_source, spam_point_tokens = source(
+        "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention"
+    )
+    spam_target_start, spam_target_source, spam_target_tokens = source(
+        "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention1"
+    )
+    spam_immediate_start, spam_immediate_source, spam_immediate_tokens = source(
+        "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention2"
+    )
+    spam_check_start, spam_check_source, spam_check_tokens = source("checkForWrongOrder")
+    spam_timeout_start, spam_timeout_source, spam_timeout_tokens = source("getOrderSpamTimeoutSeconds")
+    spam_next_start, spam_next_source, spam_next_tokens = source("nextOrderSpamTimeout")
+    spam_should_start_start, spam_should_start_source, spam_should_start_tokens = source("shouldStartOrderSpamPenalty")
+    spam_disabled_until_start, spam_disabled_until_source, spam_disabled_until_tokens = source(
+        "disabledUntilForNewOrderSpamPenalty"
+    )
+    spam_start_start, spam_start_source, spam_start_tokens = source("startOrderSpamPenalty")
+    spam_punish_start, spam_punish_source, spam_punish_tokens = source("punishSelectedLocalControllers")
+    spam_assassin_start, spam_assassin_source, spam_assassin_tokens = source("isAssassinSupportUnit")
+    spam_restore_gate_start, spam_restore_gate_source, spam_restore_gate_tokens = source(
+        "shouldRestoreSupportOrderAfterExternalOrder"
+    )
+    spam_restore_start, spam_restore_source, spam_restore_tokens = source("restoreExpectedOrderAfterExternalOrder")
+    spam_release_start, spam_release_source, spam_release_tokens = source("KL")
+    spam_order_init_start, spam_order_init_source, spam_order_init_tokens = source("kJ")
+
+    if b"oV=600. nV=300. mV=0.25" not in spam_init_source or b"doAfter(.1,oQr)" not in spam_init_source:
+        raise ValueError("Order-suppression timing constants changed")
+    for event_name in (
+        b"EVENT_PLAYER_UNIT_ISSUED_POINT_ORDER",
+        b"EVENT_PLAYER_UNIT_ISSUED_TARGET_ORDER",
+        b"EVENT_PLAYER_UNIT_ISSUED_ORDER",
+    ):
+        if event_name not in spam_register_source:
+            raise ValueError("Order-suppression event registration changed")
+    for listener_source in (spam_point_source, spam_target_source, spam_immediate_source):
+        if b"checkForWrongOrder()" not in listener_source:
+            raise ValueError("Order-suppression event adapter changed")
+    if b"L6=851971" not in spam_order_init_source or b"O6=851972" not in spam_order_init_source or b"X6=851983" not in spam_order_init_source:
+        raise ValueError("Order-suppression stop/move/attack ids changed")
+    for fragment in (
+        b"if(jY or(not isCombatSapper(cRr)))then jY=false return end",
+        b"if(eRr==L6)then dRr=true",
+        b"elseif(eRr==O6)then",
+        b"unit_getAbilityLevel(cRr,1093678925)>=1",
+        b"elseif(eRr==X6)then",
+        b"unit_getTypeId(fRr)==1697656902",
+        b"unit_getTypeId(cRr)==1848652371",
+        b"unit_getTypeId(cRr)==1848652372",
+        b"unit_isType(fRr,UNIT_TYPE_FLYING)",
+        b"hRr=real_abs(GetOrderPointX())",
+        b"iRr=GetOrderPointY()",
+        b"hRr>=2047.99",
+        b"hRr<=2048.01",
+        b"hRr>=4991.99",
+        b"hRr<=4992.01",
+        b"kRr=(iRr==0.0)",
+        b"punishSelectedLocalControllers(cRr,lRr)",
+        b"restoreExpectedOrderAfterExternalOrder(cRr)",
+    ):
+        if fragment not in spam_check_source:
+            raise ValueError("Order-suppression predicate/restoration changed")
+    if b"if(tQr<=1)then return 5." not in spam_timeout_source or b"if(tQr==2)then return 15." not in spam_timeout_source:
+        raise ValueError("Order-spam first/second penalty durations changed")
+    if b"uQr=(uQr*2.)" not in spam_timeout_source or b"if(uQr>nV)then return nV" not in spam_timeout_source:
+        raise ValueError("Order-spam exponential penalty/cap changed")
+    if b"(FQr-__wurst_ensureReal(qV[EQr]))>=oV" not in spam_next_source or b"rV[EQr]=0" not in spam_next_source:
+        raise ValueError("Order-spam offense reset window changed")
+    if b"rV[EQr]=(__wurst_ensureInt(rV[EQr])+1)" not in spam_next_source or b"qV[EQr]=FQr" not in spam_next_source:
+        raise ValueError("Order-spam offense counter changed")
+    if b"return(not xQr)" not in spam_should_start_source:
+        raise ValueError("Order-spam active-penalty gate changed")
+    if b"if yQr then CQr=AQr else CQr=(zQr+BQr)end" not in spam_disabled_until_source:
+        raise ValueError("Order-spam disabled-until computation changed")
+    if b"if(not shouldStartOrderSpamPenalty(__wurst_ensureBool(vV[KQr])))then return false" not in spam_start_source:
+        raise ValueError("Order-spam duplicate-penalty suppression changed")
+    if b"vV[KQr]=true return true" not in spam_start_source:
+        raise ValueError("Order-spam activation state changed")
+    for fragment in (
+        b"player_isAllyOf(UQr,RQr)",
+        b"__wurst_safe_IsUnitSelected(QQr,UQr)",
+        b"VQr=startOrderSpamPenalty(UQr)",
+        b"player_clearSelection(UQr)",
+        b"player_setUserControl(WQr,false)",
+        b"DisplayTimedTextToPlayer",
+        b"player_unselect(UQr,QQr)",
+    ):
+        if fragment not in spam_punish_source:
+            raise ValueError("Order-spam selected-controller punishment changed")
+    if b"1093678925" not in spam_assassin_source or b"YAb" not in spam_assassin_source or b"XAb" not in spam_assassin_source:
+        raise ValueError("Order-suppression Assassin support-unit exception changed")
+    if b"aRr and(((ZQr==YAb)or(ZQr==XAb))or(ZQr==Dcb)" not in spam_restore_gate_source:
+        raise ValueError("Order-suppression support-order restoration gate changed")
+    if b"restoreSupportOrderW(bRr)" not in spam_restore_source or b"orderCodeAttack(bRr)" not in spam_restore_source:
+        raise ValueError("Order-suppression restoration action changed")
+    if b"player_setUserControl(PQr,true)" not in spam_release_source or b"vV[NQr]=false pV[NQr]=0." not in spam_release_source:
+        raise ValueError("Order-spam control-release handler changed")
+
+    rows.append({
+        "system_id": "external-unit-order-suppression",
+        "mechanic_kind": "player-order-rejection-autonomous-order-restoration-and-escalating-control-penalty",
+        "trigger": "player-issued-point-target-or-immediate-unit-order",
+        "parameters": {
+            "listener_install_delay_seconds": 0.1,
+            "listened_event_types": [
+                "EVENT_PLAYER_UNIT_ISSUED_POINT_ORDER",
+                "EVENT_PLAYER_UNIT_ISSUED_TARGET_ORDER",
+                "EVENT_PLAYER_UNIT_ISSUED_ORDER",
+            ],
+            "unit_scope": "combat-sapper",
+            "script_issued_order_bypass_flag": "jY",
+            "script_issued_order_bypass_consumes_next_listener_event": True,
+            "rejected_order_ids": {
+                "stop": 851971,
+                "move": 851972,
+                "attack": 851983,
+            },
+            "move_order_allowed_if": "unit has A07M and is not Assassin/Royal-Assassin support unit",
+            "attack_target_order_allowed_if": [
+                "unit has A07M and is not Assassin/Royal-Assassin support unit",
+                "target is Mountain Giant e00F",
+                "source is Gnoll n02S or Fire Gnoll n02T and target is flying",
+            ],
+            "attack_point_order_allowed_if": "order-point Y equals 0, or abs(X) is within 0.01 of 2048 or 4992",
+            "assassin_support_attack_point_order_is_rejected": True,
+            "rejected_order_restoration": "restore Assassin/Royal-Assassin/Gobbo support order when A07M support state applies; otherwise issue ordinary Castle Fight attack order",
+            "penalty_applies_to": "allied players currently selecting the rejected-order unit",
+            "first_violation_control_lock_seconds": 5,
+            "second_violation_control_lock_seconds": 15,
+            "later_control_lock_formula": "15 * 2^(offense_count-2), capped at 300 seconds",
+            "control_lock_sequence_seconds": [5, 15, 30, 60, 120, 240, 300],
+            "control_lock_cap_seconds": 300,
+            "offense_count_reset_gap_seconds": 600,
+            "already_locked_repeat_does_not_extend_lock": True,
+            "new_lock_clears_player_selection": True,
+            "already_locked_repeat_only_unselects_this_unit": True,
+            "new_lock_disables_user_control": True,
+            "warning_text_duration_seconds": 5,
+            "protected_release_timer_period_seconds": 0.25,
+            "control_release_handler_reenables_user_control": True,
+            "protected_release_timer_to_KL_binding_proven": False,
+        },
+        "related_rawcode_ids": [
+            1093678925, 1848652371, 1848652372, 1697656902,
+            1848652122, 1848652336, 1848652117,
+        ],
+        "source_functions": [
+            "IL", "CallbackSingle_doAfter_SpamPrevention_call_doAfter_SpamPrevention",
+            "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention",
+            "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention1",
+            "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention2",
+            "checkForWrongOrder", "getOrderSpamTimeoutSeconds", "nextOrderSpamTimeout",
+            "shouldStartOrderSpamPenalty", "disabledUntilForNewOrderSpamPenalty", "startOrderSpamPenalty",
+            "punishSelectedLocalControllers", "isAssassinSupportUnit", "shouldRestoreSupportOrderAfterExternalOrder",
+            "restoreExpectedOrderAfterExternalOrder", "KL", "kJ",
+        ],
+        "evidence_kind": "exact-order-listeners-exceptions-restoration-and-escalating-player-control-penalty-with-protected-release-binding-left-unclaimed",
+        "byte_offset": min(
+            spam_init_start, spam_register_start, spam_point_start, spam_target_start, spam_immediate_start,
+            spam_check_start, spam_timeout_start, spam_next_start, spam_start_start, spam_punish_start,
+            spam_restore_start, spam_release_start, spam_order_init_start,
         ),
     })
 
@@ -8850,6 +9298,16 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_ai_mechanics,
         protected_perk_registry_audit,
     )
+    event_listener_coverage = _extract_event_listener_coverage(
+        functions,
+        call_edges,
+        production_unit_special_mechanics,
+        runtime_system_mechanics,
+        building_spell_mechanics,
+        perk_mechanics,
+        runtime_ai_mechanics,
+        protected_perk_registry_audit,
+    )
     for reference in function_value_arguments:
         reference["function"] = _enclosing_named_function(
             functions,
@@ -8893,4 +9351,5 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "perk_mechanics": perk_mechanics,
         "runtime_ai_mechanics": runtime_ai_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
+        "event_listener_coverage": event_listener_coverage,
     }

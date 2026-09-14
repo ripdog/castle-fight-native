@@ -2241,7 +2241,34 @@ def main() -> None:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
                 parameters = json.loads(mechanic["parameters_json"])
-                if system_id == "ai-rescue-strike-controller":
+                if system_id == "ai-strategic-aura-purchase-observer":
+                    strategic_items: list[dict[str, Any]] = []
+                    expected_items = {
+                        "I00A": "Drum'n'Bass Bassline Generator",
+                        "I003": "Drum'n'Bass Bass Drums",
+                    }
+                    for rawcode, expected_name in expected_items.items():
+                        item = items_by_rawcode.get(rawcode)
+                        if item is None:
+                            raise ValueError(f"AI strategic aura observer is missing item {rawcode}")
+                        if item["name"] != expected_name:
+                            raise ValueError(
+                                f"AI strategic aura item name changed for {rawcode}: {item['name']!r}"
+                            )
+                        strategic_items.append({
+                            "rawcode": rawcode,
+                            "name": item["name"],
+                            "description": item["description"],
+                            "tip": item["tip"],
+                            "ubertip": item["ubertip"],
+                            "gold_cost": numeric(item["gold_cost"]),
+                            "lumber_cost": numeric(item["lumber_cost"]),
+                            "abilities": item["abilities"],
+                            "usable": numeric(item["usable"]),
+                            "perishable": numeric(item["perishable"]),
+                        })
+                    parameters["strategic_aura_items"] = strategic_items
+                elif system_id == "ai-rescue-strike-controller":
                     ability = next((row for row in ability_levels.get("A005", []) if row["level"] == "1"), None)
                     if ability is None:
                         raise ValueError("AI Rescue Strike runtime mechanic is missing A005 level 1")
@@ -2655,6 +2682,37 @@ def main() -> None:
                     parameters["assassin_tooltip"] = assassin["ubertip"]
                     parameters["royal_assassin_tooltip"] = royal["ubertip"]
                     parameters["gobbo_tooltip"] = gobbo["ubertip"]
+                elif system_id == "external-unit-order-suppression":
+                    channel = ability_level_one("A07M")
+                    if channel["name"] != "Channel":
+                        raise ValueError(f"Order-suppression support marker A07M changed: {channel}")
+                    unit_roles = [
+                        ("n02S", "flying-target attack-order exception source"),
+                        ("n02T", "flying-target attack-order exception source"),
+                        ("e00F", "attack-target exception target"),
+                        ("n01Z", "support-order restoration actor"),
+                        ("n020", "support-order restoration actor"),
+                        ("n01U", "support-order restoration actor"),
+                    ]
+                    resolved_units: list[dict[str, Any]] = []
+                    for rawcode, role in unit_roles:
+                        unit = static_units.get(rawcode)
+                        if unit is None:
+                            raise ValueError(f"Order-suppression runtime is missing unit {rawcode}")
+                        resolved_units.append({
+                            "rawcode": rawcode,
+                            "name": unit["name"],
+                            "role": role,
+                        })
+                    parameters["support_marker_ability"] = {
+                        "rawcode": "A07M",
+                        "name": channel["name"],
+                        "tip": channel["tip"],
+                        "ubertip": channel["ubertip"],
+                        "base_rawcode": channel["base_rawcode"],
+                        "object_data": json.loads(channel["data_fields_labeled_json"]),
+                    }
+                    parameters["resolved_exception_and_support_units"] = resolved_units
                 elif system_id == "global-idle-attack-reengage":
                     excluded: list[dict[str, Any]] = []
                     for rawcode in ("A07I", "A07M"):
@@ -4608,10 +4666,9 @@ def main() -> None:
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
-            "perk-mechanics.tsv currently normalizes all eight proven-live damage-listener draft perks, including target-type damage tradeoffs, cage-conditioned damage/base-damage changes, Combat Stance HP bands and toggle abilities, Mana Shielding, Spell's Edge and Containment Focus; remaining live perks stay separate until their non-damage runtime paths are normalized",
             "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
-            "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals plus the damage-triggered Rescue Strike controller, including its HP/count threshold curve, 700/900 target geometry, siege-vs-tower -4 score, 28/75-second repeat throttles, 3-second coordination lock and protected A005 runtime fields (0 mana, 60-second cooldown)",
-            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
+            "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
+            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

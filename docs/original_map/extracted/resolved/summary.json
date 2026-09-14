@@ -173,12 +173,13 @@
     "spell-building-mana-regeneration-enchantment": 1,
     "toggleable-health-band-attack-damage-stance": 1
   },
-  "runtime_ai_mechanic_rows": 2,
+  "runtime_ai_mechanic_rows": 3,
   "runtime_ai_mechanic_kinds": {
     "damage-triggered-ai-rescue-strike-targeting-and-throttling": 1,
-    "decayed-damage-weighted-engagement-and-structure-pressure-signals": 1
+    "decayed-damage-weighted-engagement-and-structure-pressure-signals": 1,
+    "team-strategic-aura-purchase-state-and-buyer-coordination": 1
   },
-  "runtime_system_mechanic_rows": 19,
+  "runtime_system_mechanic_rows": 20,
   "runtime_system_mechanic_kinds": {
     "area-building-buffs-cleanse-and-spawn-augmentation": 1,
     "body-replacement-plus-independent-random-trait-groups": 1,
@@ -192,6 +193,7 @@
     "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
     "periodic-idle-combat-unit-attack-order-recovery": 1,
     "persistent-carrier-auto-attack-damage-triggered-full-cleanse": 1,
+    "player-order-rejection-autonomous-order-restoration-and-escalating-control-penalty": 1,
     "summoned-carrier-random-unit-replacement": 1,
     "team-constructed-building-count-to-spell-level": 1,
     "team-presence-gated-owner-scaled-elemental-death-heal": 1,
@@ -323,10 +325,9 @@
     "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
     "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
     "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
-    "perk-mechanics.tsv currently normalizes all eight proven-live damage-listener draft perks, including target-type damage tradeoffs, cage-conditioned damage/base-damage changes, Combat Stance HP bands and toggle abilities, Mana Shielding, Spell's Edge and Containment Focus; remaining live perks stay separate until their non-damage runtime paths are normalized",
     "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
-    "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals plus the damage-triggered Rescue Strike controller, including its HP/count threshold curve, 700/900 target geometry, siege-vs-tower -4 score, 28/75-second repeat throttles, 3-second coordination lock and protected A005 runtime fields (0 mana, 60-second cooldown)",
-    "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
+    "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
+    "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
     "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
     "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
     "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",

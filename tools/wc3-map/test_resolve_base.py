@@ -188,8 +188,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
         self.assertEqual(summary["perk_mechanics"], 19)
-        self.assertEqual(summary["runtime_ai_mechanics"], 2)
+        self.assertEqual(summary["runtime_ai_mechanics"], 3)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
+        self.assertEqual(summary["event_listener_coverage_rows"], 70)
         self.assertEqual(
             listeners["DamageListener_addListener_AiEngagement_onEvent_addListener_AiEngagement"]["coverage_status"],
             "normalized-ai-runtime-semantics",
@@ -199,10 +200,82 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "normalized-ai-runtime-semantics",
         )
 
-    def test_runtime_ai_damage_signals_and_rescue_strike_controller_are_normalized(self) -> None:
+    def test_event_listener_coverage_is_explicit_and_fail_loud(self) -> None:
+        with (self.script / "event-listener-coverage.tsv").open(encoding="utf-8") as handle:
+            rows = {row["listener_function"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 70)
+        self.assertEqual(
+            dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
+            {
+                "campaign-runtime-unmodeled": 3,
+                "command-runtime-unmodeled": 2,
+                "e2e-only": 13,
+                "gameplay-framework-infrastructure": 3,
+                "mode-selection-runtime-unmodeled": 1,
+                "normalized-ai-runtime-semantics": 1,
+                "normalized-gameplay-dispatch": 10,
+                "normalized-gameplay-semantics": 21,
+                "player-session-runtime-unmodeled": 4,
+                "presentation-only": 11,
+                "telemetry-only": 1,
+            },
+        )
+        self.assertEqual(
+            rows["EventListener_add_PerkUtils_onEvent_add_PerkUtils"]["coverage_status"],
+            "normalized-gameplay-semantics",
+        )
+        self.assertIn(
+            "native-lava-spawn-split-with-child-conversion",
+            rows["EventListener_add_PerkUtils_onEvent_add_PerkUtils"]["normalized_sources"],
+        )
+        self.assertEqual(
+            rows["EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention"]["coverage_status"],
+            "normalized-gameplay-semantics",
+        )
+        self.assertEqual(
+            rows["EventListener_add_AiItemBuying_onEvent_add_AiItemBuying"]["coverage_status"],
+            "normalized-ai-runtime-semantics",
+        )
+        lifecycle = rows["EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle"]
+        self.assertEqual(lifecycle["coverage_status"], "normalized-gameplay-dispatch")
+        self.assertEqual(
+            lifecycle["dispatch_path"],
+            "EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle -> onBuildingFinished -> acquireEleBuilding",
+        )
+        self.assertEqual(
+            rows["EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges"]["coverage_status"],
+            "campaign-runtime-unmodeled",
+        )
+        self.assertEqual(
+            rows["EventListener_add_PlayerLeave_onEvent_add_PlayerLeave"]["coverage_status"],
+            "player-session-runtime-unmodeled",
+        )
+        self.assertEqual(
+            rows["EventListener_add_ModeParser_onEvent_add_ModeParser"]["coverage_status"],
+            "mode-selection-runtime-unmodeled",
+        )
+        self.assertEqual(
+            rows["EventListener_add_BuildingAttachments_onEvent_add_BuildingAttachments"]["coverage_status"],
+            "presentation-only",
+        )
+        self.assertEqual(
+            rows["EventListener_add_BuildingCatalogE2E_onEvent_add_BuildingCatalogE2E"]["coverage_status"],
+            "e2e-only",
+        )
+        summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
+        self.assertEqual(summary["event_listener_coverage_rows"], 70)
+        self.assertEqual(
+            summary["event_listener_coverage_status_counts"],
+            dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
+        )
+
+    def test_runtime_ai_damage_signals_rescue_strike_and_strategic_aura_observer_are_normalized(self) -> None:
         with (self.resolved / "runtime-ai-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(set(rows), {"ai-engagement-damage-signals", "ai-rescue-strike-controller"})
+        self.assertEqual(
+            set(rows),
+            {"ai-engagement-damage-signals", "ai-rescue-strike-controller", "ai-strategic-aura-purchase-observer"},
+        )
 
         engagement = json.loads(rows["ai-engagement-damage-signals"]["parameters_json"])
         self.assertFalse(engagement["rewrites_damage"])
@@ -246,8 +319,21 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(ability["range"], 1000.0)
         self.assertEqual(ability["area"], 700.0)
 
+        strategic = json.loads(rows["ai-strategic-aura-purchase-observer"]["parameters_json"])
+        self.assertFalse(strategic["rewrites_gameplay_event"])
+        self.assertTrue(strategic["human_and_ai_purchases_are_observed"])
+        self.assertTrue(strategic["already_bought_item_is_removed_from_future_strategic_candidates"])
+        self.assertTrue(strategic["state_resets_with_ai_round_state"])
+        self.assertEqual(
+            [(item["rawcode"], item["name"], item["gold_cost"]) for item in strategic["strategic_aura_items"]],
+            [
+                ("I00A", "Drum'n'Bass Bassline Generator", 600.0),
+                ("I003", "Drum'n'Bass Bass Drums", 650.0),
+            ],
+        )
+
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_ai_mechanic_rows"], 2)
+        self.assertEqual(summary["runtime_ai_mechanic_rows"], 3)
 
     def test_all_proven_live_perk_mechanics_are_importer_ready(self) -> None:
         with (self.resolved / "perk-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -573,6 +659,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(fire["nested_h030_child_replacement_unit_id"], 1747989082)
         self.assertTrue(fire["remove_summoned_type_from_h030_child"])
         self.assertEqual(fire["post_child_attack_order_delay_seconds"], 0.2)
+        self.assertTrue(fire["split_child_inherits_spawn_building_provenance"])
+        self.assertEqual(fire["split_child_provenance_parent_unit_id"], 1966092358)
+        self.assertEqual(fire["split_child_provenance_child_unit_id"], 1747989296)
+        self.assertIn("EventListener_add_PerkUtils_onEvent_add_PerkUtils", fire_row["source_functions"])
+        self.assertIn("setSpawnBuilding", fire_row["source_functions"])
 
         avatar_death = json.loads(rows[("e00A", "death-retaliation-damage-to-killer")]["parameters_json"])
         self.assertEqual(avatar_death["damage"], 350)
@@ -766,7 +857,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 19)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 20)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "buff-marker-non-attack-current-damage-multiplier": 1,
@@ -777,6 +868,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "building-random-enemy-base-attack-ground-controller": 1,
             "per-player-building-count-income-multiplier": 1,
             "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
+            "player-order-rejection-autonomous-order-restoration-and-escalating-control-penalty": 1,
             "periodic-idle-combat-unit-attack-order-recovery": 1,
             "enchantment-marker-driven-half-damage-cleave": 1,
             "first-fifteen-seconds-castle-damage-immunity": 1,
@@ -790,7 +882,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 19)
+        self.assertEqual(len(rows), 20)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -927,6 +1019,23 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(actors["n01U"]["timed_life_seconds"], 45)
         self.assertEqual(actors["n01U"]["repair_object_data"]["Repair Time Ratio"], 0.45)
         self.assertFalse(support["gobbo_one_per_target_claim_proven_by_script"])
+
+        order_suppression = json.loads(rows["external-unit-order-suppression"]["parameters_json"])
+        self.assertEqual(order_suppression["listener_install_delay_seconds"], 0.1)
+        self.assertEqual(order_suppression["rejected_order_ids"], {"attack": 851983, "move": 851972, "stop": 851971})
+        self.assertEqual(order_suppression["control_lock_sequence_seconds"], [5, 15, 30, 60, 120, 240, 300])
+        self.assertEqual(order_suppression["control_lock_cap_seconds"], 300)
+        self.assertEqual(order_suppression["offense_count_reset_gap_seconds"], 600)
+        self.assertTrue(order_suppression["already_locked_repeat_does_not_extend_lock"])
+        self.assertTrue(order_suppression["new_lock_disables_user_control"])
+        self.assertEqual(order_suppression["protected_release_timer_period_seconds"], 0.25)
+        self.assertFalse(order_suppression["protected_release_timer_to_KL_binding_proven"])
+        self.assertEqual(order_suppression["support_marker_ability"]["rawcode"], "A07M")
+        roles = {unit["rawcode"]: unit["role"] for unit in order_suppression["resolved_exception_and_support_units"]}
+        self.assertEqual(roles["e00F"], "attack-target exception target")
+        self.assertEqual(roles["n01Z"], "support-order restoration actor")
+        self.assertEqual(roles["n020"], "support-order restoration actor")
+        self.assertEqual(roles["n01U"], "support-order restoration actor")
 
         idle = json.loads(rows["global-idle-attack-reengage"]["parameters_json"])
         self.assertEqual(idle["interval_seconds"], 4)
