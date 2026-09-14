@@ -28,7 +28,7 @@ use crate::{
         BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
         UnitVisualKind,
     },
-    building_models::BuildingModelSet,
+    building_models::{BuildingAnimationClip, BuildingModelSet},
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
@@ -419,13 +419,33 @@ struct ImportedUnitModelRoot {
 #[derive(Component, Debug, Clone, Copy)]
 struct ImportedBuildingModelRoot {
     rawcode: u32,
+    presentation_root: Entity,
+    start_with_birth: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImportedBuildingAnimationState {
+    Birth,
+    Stand,
+    Death,
+}
+
+#[derive(Component, Debug, Clone)]
+struct ImportedBuildingAnimationController {
+    rawcode: u32,
+    presentation_root: Entity,
+    model_root: Entity,
+    birth: Option<BuildingAnimationClip>,
+    stand: Option<BuildingAnimationClip>,
+    death: Option<BuildingAnimationClip>,
+    state: ImportedBuildingAnimationState,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
-struct ImportedBuildingAnimationController;
+struct ImportedDeathRemnant;
 
 #[derive(Component, Debug, Clone, Copy)]
-struct ImportedDeathRemnant;
+struct ImportedBuildingDeathRemnant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ImportedUnitAnimationState {
@@ -537,6 +557,7 @@ impl Plugin for CastlePresentationPlugin {
                     fix_wc3_scene_materials,
                     setup_imported_unit_animation_players,
                     setup_imported_building_animation_players,
+                    update_imported_building_animations,
                     trigger_attack_animations,
                     update_imported_unit_animations,
                     spawn_miss_indicators,
@@ -1051,27 +1072,70 @@ fn setup_imported_building_animation_players(
     building_models: Res<BuildingModelSet>,
     parents: Query<&ChildOf>,
     roots: Query<&ImportedBuildingModelRoot>,
+    dying_roots: Query<(), With<ImportedBuildingDeathRemnant>>,
     mut players: Query<
         (Entity, &mut AnimationPlayer),
         Without<ImportedBuildingAnimationController>,
     >,
 ) {
     for (entity, mut player) in &mut players {
-        let Some(root) = imported_building_model_root(entity, &parents, &roots) else {
+        let Some((model_root, root)) = imported_building_model_root(entity, &parents, &roots)
+        else {
             continue;
         };
-        let Some(animation) = building_models.animation(root.rawcode) else {
+        let Some(animations) = building_models.animations(root.rawcode) else {
             continue;
         };
+
+        let dying = dying_roots.get(root.presentation_root).is_ok();
+        let (state, initial) = if dying {
+            (
+                ImportedBuildingAnimationState::Death,
+                animations.death.clone(),
+            )
+        } else if root.start_with_birth
+            && let Some(birth) = animations.birth.clone()
+        {
+            (ImportedBuildingAnimationState::Birth, Some(birth))
+        } else {
+            (
+                ImportedBuildingAnimationState::Stand,
+                animations.stand.clone(),
+            )
+        };
+        let Some(initial) = initial else {
+            if dying {
+                commands.entity(root.presentation_root).despawn();
+            }
+            continue;
+        };
+
         let mut transitions = AnimationTransitions::new();
-        transitions
-            .play(&mut player, animation.stand, Duration::ZERO)
-            .repeat()
-            .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+        let active = transitions.play(&mut player, initial.node, Duration::ZERO);
+        if state == ImportedBuildingAnimationState::Stand {
+            active
+                .repeat()
+                .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+        }
+        set_building_emitter_sequence(
+            &mut commands,
+            &building_models,
+            model_root,
+            root.rawcode,
+            Some(&initial.name),
+        );
         commands.entity(entity).insert((
-            AnimationGraphHandle(animation.graph.clone()),
+            AnimationGraphHandle(animations.graph.clone()),
             transitions,
-            ImportedBuildingAnimationController,
+            ImportedBuildingAnimationController {
+                rawcode: root.rawcode,
+                presentation_root: root.presentation_root,
+                model_root,
+                birth: animations.birth.clone(),
+                stand: animations.stand.clone(),
+                death: animations.death.clone(),
+                state,
+            },
         ));
     }
 }
@@ -1080,11 +1144,11 @@ fn imported_building_model_root(
     entity: Entity,
     parents: &Query<&ChildOf>,
     roots: &Query<&ImportedBuildingModelRoot>,
-) -> Option<ImportedBuildingModelRoot> {
+) -> Option<(Entity, ImportedBuildingModelRoot)> {
     let mut current = entity;
     for _ in 0..128 {
         if let Ok(root) = roots.get(current) {
-            return Some(*root);
+            return Some((current, *root));
         }
         let Ok(parent) = parents.get(current) else {
             return None;
@@ -1092,6 +1156,105 @@ fn imported_building_model_root(
         current = parent.parent();
     }
     None
+}
+
+fn set_building_emitter_sequence(
+    commands: &mut Commands,
+    building_models: &BuildingModelSet,
+    model_root: Entity,
+    rawcode: u32,
+    sequence: Option<&str>,
+) {
+    let Some(model) = building_models.get(rawcode) else {
+        return;
+    };
+    let Some(sequence) = sequence else {
+        commands.entity(model_root).remove::<Wc3EmitterSource>();
+        return;
+    };
+    commands
+        .entity(model_root)
+        .insert(Wc3EmitterSource::with_asset_prefix_for_sequence(
+            &model.emitters,
+            "wc3/buildings",
+            sequence,
+        ));
+}
+
+fn update_imported_building_animations(
+    mut commands: Commands,
+    building_models: Res<BuildingModelSet>,
+    dying_roots: Query<(), With<ImportedBuildingDeathRemnant>>,
+    mut players: Query<(
+        &mut AnimationPlayer,
+        &mut AnimationTransitions,
+        &mut ImportedBuildingAnimationController,
+    )>,
+) {
+    for (mut player, mut transitions, mut controller) in &mut players {
+        if dying_roots.get(controller.presentation_root).is_ok() {
+            if controller.state != ImportedBuildingAnimationState::Death {
+                let Some(death) = controller.death.clone() else {
+                    commands.entity(controller.presentation_root).despawn();
+                    continue;
+                };
+                transitions.play(&mut player, death.node, Duration::from_millis(50));
+                set_building_emitter_sequence(
+                    &mut commands,
+                    &building_models,
+                    controller.model_root,
+                    controller.rawcode,
+                    Some(&death.name),
+                );
+                controller.state = ImportedBuildingAnimationState::Death;
+                continue;
+            }
+            let finished = controller
+                .death
+                .as_ref()
+                .and_then(|death| player.animation(death.node))
+                .is_some_and(|animation| animation.is_finished());
+            if finished {
+                commands.entity(controller.presentation_root).despawn();
+            }
+            continue;
+        }
+
+        if controller.state != ImportedBuildingAnimationState::Birth {
+            continue;
+        }
+        let birth_finished = controller
+            .birth
+            .as_ref()
+            .and_then(|birth| player.animation(birth.node))
+            .is_some_and(|animation| animation.is_finished());
+        if !birth_finished {
+            continue;
+        }
+        if let Some(stand) = controller.stand.clone() {
+            transitions
+                .play(&mut player, stand.node, Duration::from_millis(50))
+                .repeat()
+                .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+            set_building_emitter_sequence(
+                &mut commands,
+                &building_models,
+                controller.model_root,
+                controller.rawcode,
+                Some(&stand.name),
+            );
+            controller.state = ImportedBuildingAnimationState::Stand;
+        } else {
+            set_building_emitter_sequence(
+                &mut commands,
+                &building_models,
+                controller.model_root,
+                controller.rawcode,
+                None,
+            );
+            controller.state = ImportedBuildingAnimationState::Stand;
+        }
+    }
 }
 
 fn imported_model_root(
@@ -1871,6 +2034,17 @@ fn sync_render_entities(
             .buildings
             .remove(&id)
             .expect("stale building entry disappeared during presentation sync");
+        if let Some(rawcode) = entry.imported_rawcode
+            && building_models
+                .get(rawcode)
+                .is_some_and(|model| model.lifecycle_animations.death.is_some())
+        {
+            commands
+                .entity(entry.entity)
+                .insert(ImportedBuildingDeathRemnant);
+            continue;
+        }
+
         commands.entity(entry.entity).despawn();
         if let Some(building) = samples.previous.buildings.get(&id) {
             let (mut center, _) = metrics.footprint_center_size(building.footprint);
@@ -2181,16 +2355,39 @@ fn sync_render_entities(
                 .map(|model| (content.rawcode, model))
         });
         let imported_rawcode = if let Some((rawcode, model)) = imported_model {
-            commands.entity(entity).with_child((
-                WorldAssetRoot(model.scene.clone()),
-                ImportedBuildingModelRoot { rawcode },
-                Wc3TeamTint::new(building.team.0, team_color(building.team), "wc3/buildings"),
-                Transform {
-                    translation: Vec3::NEG_Y * visual_height * 0.5,
-                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                    scale: Vec3::splat(model.scale),
-                },
-            ));
+            let start_with_birth = !samples.previous.buildings.contains_key(&building.id)
+                && model.lifecycle_animations.birth.is_some();
+            let lifecycle_sequence = if start_with_birth {
+                model.lifecycle_animations.birth.as_deref()
+            } else {
+                model.lifecycle_animations.stand.as_deref()
+            };
+            let model_root = commands
+                .spawn((
+                    WorldAssetRoot(model.scene.clone()),
+                    ImportedBuildingModelRoot {
+                        rawcode,
+                        presentation_root: entity,
+                        start_with_birth,
+                    },
+                    Wc3TeamTint::new(building.team.0, team_color(building.team), "wc3/buildings"),
+                    Transform {
+                        translation: Vec3::NEG_Y * visual_height * 0.5,
+                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                        scale: Vec3::splat(model.scale),
+                    },
+                ))
+                .id();
+            if let Some(sequence) = lifecycle_sequence {
+                commands.entity(model_root).insert(
+                    Wc3EmitterSource::with_asset_prefix_for_sequence(
+                        &model.emitters,
+                        "wc3/buildings",
+                        sequence,
+                    ),
+                );
+            }
+            commands.entity(entity).add_child(model_root);
             Some(rawcode)
         } else {
             spawn_building_visual(

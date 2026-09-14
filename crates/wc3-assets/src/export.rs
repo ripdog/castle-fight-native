@@ -32,12 +32,16 @@ const GL_UNSIGNED_SHORT: u32 = 5_123;
 const NO_PARENT: u32 = u32::MAX;
 const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
 const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 4;
+const BUILDING_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const DOODAD_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const WHITEOUT_STABLE_MAX_MDX_VERSION: u32 = 1200;
 const WC3_3_MDX_VERSION: u32 = 1800;
 const MAX_MDX_INPUT_BYTES: usize = 64 * 1024 * 1024;
 const TEAM_GLOW_RED_TEXTURE: &str = r"ReplaceableTextures\TeamGlow\TeamGlow00.blp";
 const TEAM_GLOW_BLUE_TEXTURE: &str = r"ReplaceableTextures\TeamGlow\TeamGlow01.blp";
+const STOCK_BUILDING_ART_CATEGORIES: [&str; 7] = [
+    "human", "orc", "undead", "nightelf", "naga", "other", "demon",
+];
 
 type TextureExport = (Vec<TextureManifest>, Vec<Option<usize>>);
 type GltfBuildOutput = (Value, Vec<u8>, Vec<String>);
@@ -88,10 +92,18 @@ pub struct BuildingManifest {
     pub name: String,
     pub scale: f32,
     pub animation_properties: Vec<String>,
+    pub lifecycle_animations: BuildingLifecycleAnimationManifest,
     pub requested_model: Option<String>,
     pub source_model: String,
     pub fallback_to_base_art: bool,
     pub gltf: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct BuildingLifecycleAnimationManifest {
+    pub birth: Option<String>,
+    pub stand: Option<String>,
+    pub death: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -188,6 +200,10 @@ pub struct ParticleEmitter2Manifest {
     /// Whether this emitter is active during the model's ambient Stand sequence. Doodads use this
     /// to avoid replaying death/decay-only debris emitters while still rendering fires/torches.
     pub ambient_enabled: bool,
+    /// Exact exported animation sequence names during which this emitter can become visible and
+    /// emit. Building presentation uses this to switch birth/stand/death particle sets alongside
+    /// the selected lifecycle clip without hardcoding model-specific emitter indices.
+    pub active_sequences: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -496,12 +512,13 @@ impl Exporter {
 
         let mut models = Vec::new();
         let mut failures = Vec::new();
-        let mut model_outputs = BTreeMap::<String, String>::new();
+        let mut model_outputs = BTreeMap::<String, (String, Vec<AnimationManifest>)>::new();
         for (key, group) in &grouped {
             let source = group[0].source_model.clone();
             match self.export_building_model(&source) {
                 Ok(model) => {
-                    model_outputs.insert(key.clone(), model.gltf.clone());
+                    model_outputs
+                        .insert(key.clone(), (model.gltf.clone(), model.animations.clone()));
                     models.push(model);
                 }
                 Err(error) => failures.push(BuildingFailureManifest {
@@ -517,22 +534,33 @@ impl Exporter {
 
         let buildings = resolved
             .iter()
-            .map(|building| BuildingManifest {
-                rawcode: building.rawcode.clone(),
-                name: building.name.clone(),
-                scale: building.scale,
-                animation_properties: building.animation_properties.clone(),
-                requested_model: building.requested_model.clone(),
-                gltf: model_outputs
-                    .get(&building.source_model.to_ascii_lowercase())
-                    .cloned(),
-                source_model: building.source_model.clone(),
-                fallback_to_base_art: building.fallback_to_base_art,
+            .map(|building| {
+                let model_output = model_outputs.get(&building.source_model.to_ascii_lowercase());
+                let lifecycle_animations = model_output.map_or_else(
+                    BuildingLifecycleAnimationManifest::default,
+                    |(_, animations)| {
+                        select_building_lifecycle_animations(
+                            animations,
+                            &building.animation_properties,
+                        )
+                    },
+                );
+                BuildingManifest {
+                    rawcode: building.rawcode.clone(),
+                    name: building.name.clone(),
+                    scale: building.scale,
+                    animation_properties: building.animation_properties.clone(),
+                    lifecycle_animations,
+                    requested_model: building.requested_model.clone(),
+                    gltf: model_output.map(|(gltf, _)| gltf.clone()),
+                    source_model: building.source_model.clone(),
+                    fallback_to_base_art: building.fallback_to_base_art,
+                }
             })
             .collect();
 
         Ok(BuildingAssetManifest {
-            schema_version: 4,
+            schema_version: BUILDING_ASSET_MANIFEST_SCHEMA_VERSION,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -898,19 +926,16 @@ impl Exporter {
         let base_model = profile
             .and_then(|profile| profile.file_sd.as_deref().or(profile.file.as_deref()))
             .map(normalize_model_path);
-        let requested_available = requested_model
+        let requested_resolved = requested_model
             .as_deref()
-            .is_some_and(|path| self.model_exists(path));
-        let base_available = base_model
+            .and_then(|path| self.resolve_building_model_path(path));
+        let base_resolved = base_model
             .as_deref()
-            .is_some_and(|path| self.model_exists(path));
-        let (source_model, fallback_to_base_art) = if requested_available {
-            (requested_model.clone().expect("checked above"), false)
-        } else if base_available {
-            (
-                base_model.clone().expect("checked above"),
-                requested_model.is_some(),
-            )
+            .and_then(|path| self.resolve_building_model_path(path));
+        let (source_model, fallback_to_base_art) = if let Some(resolved) = requested_resolved {
+            (resolved, false)
+        } else if let Some(resolved) = base_resolved {
+            (resolved, requested_model.is_some())
         } else {
             let requested = requested_model.as_deref().unwrap_or("<none>");
             let base = base_model.as_deref().unwrap_or("<none>");
@@ -934,6 +959,21 @@ impl Exporter {
             scale,
             animation_properties: building.animation_properties.clone(),
         })
+    }
+
+    fn resolve_building_model_path(&self, logical_path: &str) -> Option<String> {
+        if self.model_exists(logical_path) {
+            return Some(logical_path.to_owned());
+        }
+
+        let mut relocated = stock_building_model_relocation_candidates(logical_path)
+            .into_iter()
+            .filter(|candidate| self.model_exists(candidate));
+        let resolved = relocated.next()?;
+        if relocated.next().is_some() {
+            return None;
+        }
+        Some(resolved)
     }
 
     fn model_exists(&self, logical_path: &str) -> bool {
@@ -1652,6 +1692,16 @@ fn particle_emitter_2_manifests(
                 let color = emitter.segment_color(index);
                 [color.x, color.y, color.z]
             });
+            let active_sequences = particle_emitter_active_sequences(model, &emitter)?;
+            let ambient_enabled = active_sequences
+                .iter()
+                .any(|sequence| sequence.eq_ignore_ascii_case("stand"))
+                || (!model
+                    .sequences_iter()
+                    .any(|sequence| sequence.name().trim().eq_ignore_ascii_case("stand"))
+                    && emitter.emission_rate() > 0.0
+                    && !emitter.emission_rate_tracks().is_used()
+                    && !emitter.visibility_tracks().is_used());
             Ok(ParticleEmitter2Manifest {
                 object_id: node.object_id(),
                 name: node.name(),
@@ -1677,42 +1727,37 @@ fn particle_emitter_2_manifests(
                     .and_then(|texture| texture.png.clone()),
                 squirt: emitter.squirt() != 0,
                 replaceable_id: emitter.replaceable_id(),
-                ambient_enabled: particle_emitter_ambient_enabled(model, &emitter)?,
+                ambient_enabled,
+                active_sequences,
             })
         })
         .collect()
 }
 
-fn particle_emitter_ambient_enabled(
+fn particle_emitter_active_sequences(
     model: &Model,
     emitter: &ParticleEmitter2,
-) -> Result<bool, Box<dyn Error>> {
-    let stand = model
-        .sequences_iter()
-        .find(|sequence| sequence.name().trim().eq_ignore_ascii_case("stand"));
-    let Some(stand) = stand else {
-        // A model with no Stand sequence can still be a static ambient effect (for example an
-        // always-burning prop). Be conservative when animation tracks exist: without a Stand
-        // interval we cannot prove that a tracked emitter is meant to run continuously.
-        return Ok(emitter.emission_rate() > 0.0
-            && !emitter.emission_rate_tracks().is_used()
-            && !emitter.visibility_tracks().is_used());
-    };
-    let start = stand.interval_start();
-    let end = stand.interval_end();
-    if end <= start {
-        return Ok(false);
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut active = Vec::new();
+    for sequence in model.sequences_iter() {
+        let start = sequence.interval_start();
+        let end = sequence.interval_end();
+        if end <= start {
+            continue;
+        }
+        let visibility = max_f32_track_value(model, &emitter.visibility_tracks(), start, end, 1.0)?;
+        let emission_rate = max_f32_track_value(
+            model,
+            &emitter.emission_rate_tracks(),
+            start,
+            end,
+            emitter.emission_rate(),
+        )?;
+        if visibility > 0.001 && emission_rate > 0.0 {
+            active.push(sequence.name());
+        }
     }
-
-    let visibility = max_f32_track_value(model, &emitter.visibility_tracks(), start, end, 1.0)?;
-    let emission_rate = max_f32_track_value(
-        model,
-        &emitter.emission_rate_tracks(),
-        start,
-        end,
-        emitter.emission_rate(),
-    )?;
-    Ok(visibility > 0.001 && emission_rate > 0.0)
+    Ok(active)
 }
 
 fn max_f32_track_value(
@@ -2406,6 +2451,118 @@ struct QuatSamples {
     times: Vec<f32>,
     values: Vec<[f32; 4]>,
     interpolation: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BuildingLifecycleAnimationRole {
+    Birth,
+    Stand,
+    Death,
+}
+
+fn select_building_lifecycle_animations(
+    animations: &[AnimationManifest],
+    animation_properties: &[String],
+) -> BuildingLifecycleAnimationManifest {
+    BuildingLifecycleAnimationManifest {
+        birth: select_building_lifecycle_animation(
+            animations,
+            animation_properties,
+            BuildingLifecycleAnimationRole::Birth,
+        ),
+        stand: select_building_lifecycle_animation(
+            animations,
+            animation_properties,
+            BuildingLifecycleAnimationRole::Stand,
+        ),
+        death: select_building_lifecycle_animation(
+            animations,
+            animation_properties,
+            BuildingLifecycleAnimationRole::Death,
+        ),
+    }
+}
+
+fn select_building_lifecycle_animation(
+    animations: &[AnimationManifest],
+    animation_properties: &[String],
+    role: BuildingLifecycleAnimationRole,
+) -> Option<String> {
+    let required = animation_properties
+        .iter()
+        .flat_map(|property| animation_words(property))
+        .collect::<BTreeSet<_>>();
+
+    animations
+        .iter()
+        .filter_map(|animation| {
+            let words = animation_words(&animation.name);
+            if !building_animation_matches_role(&words, role) {
+                return None;
+            }
+            let words_set = words.iter().map(String::as_str).collect::<BTreeSet<_>>();
+            let missing_required = required
+                .iter()
+                .filter(|property| !words_set.contains(property.as_str()))
+                .count();
+            let extra_words = words
+                .iter()
+                .filter(|word| {
+                    !required.contains(*word)
+                        && word.as_str() != building_animation_role_word(role)
+                        && !word.chars().all(|character| character.is_ascii_digit())
+                })
+                .count();
+            let looping_penalty = usize::from(
+                !animation.non_looping && !matches!(role, BuildingLifecycleAnimationRole::Stand),
+            );
+            Some((
+                missing_required,
+                looping_penalty,
+                extra_words,
+                animation.name.to_ascii_lowercase(),
+                animation.name.clone(),
+            ))
+        })
+        .min()
+        .map(|(_, _, _, _, name)| name)
+}
+
+fn animation_words(value: &str) -> Vec<String> {
+    value
+        .to_ascii_lowercase()
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn building_animation_role_word(role: BuildingLifecycleAnimationRole) -> &'static str {
+    match role {
+        BuildingLifecycleAnimationRole::Birth => "birth",
+        BuildingLifecycleAnimationRole::Stand => "stand",
+        BuildingLifecycleAnimationRole::Death => "death",
+    }
+}
+
+fn building_animation_matches_role(words: &[String], role: BuildingLifecycleAnimationRole) -> bool {
+    let contains = |word: &str| words.iter().any(|candidate| candidate == word);
+    match role {
+        BuildingLifecycleAnimationRole::Birth => {
+            contains("birth") && !contains("death") && !contains("decay") && !contains("portrait")
+        }
+        BuildingLifecycleAnimationRole::Stand => {
+            words.first().is_some_and(|word| word == "stand")
+                && !contains("work")
+                && !contains("birth")
+                && !contains("death")
+                && !contains("decay")
+                && !contains("portrait")
+        }
+        BuildingLifecycleAnimationRole::Death => {
+            contains("death") && !contains("decay") && !contains("portrait")
+        }
+    }
 }
 
 fn animation_manifests_from_gltf(gltf: &Value) -> Result<Vec<AnimationManifest>, Box<dyn Error>> {
@@ -4014,6 +4171,31 @@ pub fn normalize_model_path(path: &str) -> String {
     path
 }
 
+fn stock_building_model_relocation_candidates(logical_path: &str) -> Vec<String> {
+    let normalized = normalize_model_path(logical_path);
+    let mut parts = normalized.split('\\');
+    let Some(root) = parts.next() else {
+        return Vec::new();
+    };
+    let Some(category) = parts.next() else {
+        return Vec::new();
+    };
+    if !root.eq_ignore_ascii_case("buildings") {
+        return Vec::new();
+    }
+    let tail = parts.collect::<Vec<_>>().join("\\");
+    if tail.is_empty() {
+        return Vec::new();
+    }
+
+    STOCK_BUILDING_ART_CATEGORIES
+        .iter()
+        .copied()
+        .filter(|candidate| !candidate.eq_ignore_ascii_case(category))
+        .map(|candidate| format!("buildings\\{candidate}\\{tail}"))
+        .collect()
+}
+
 fn normalize_texture_path(path: &str) -> String {
     path.trim()
         .replace('/', "\\")
@@ -4178,6 +4360,19 @@ mod tests {
         assert_eq!(
             normalize_model_path("units/human/Footman/Footman"),
             r"units\human\Footman\Footman.mdx"
+        );
+    }
+
+    #[test]
+    fn stock_building_relocation_candidates_preserve_model_tail() {
+        let candidates = stock_building_model_relocation_candidates(
+            r"buildings\other\TombofRelics\TombofRelics.mdl",
+        );
+        assert!(candidates.contains(&r"buildings\undead\TombofRelics\TombofRelics.mdx".to_owned()));
+        assert!(!candidates.contains(&r"buildings\other\TombofRelics\TombofRelics.mdx".to_owned()));
+        assert!(
+            stock_building_model_relocation_candidates(r"units\human\Footman\Footman.mdl")
+                .is_empty()
         );
     }
 
@@ -4506,6 +4701,102 @@ mod tests {
         assert_eq!(animations[0].start_ms, 1000);
         assert_eq!(animations[0].end_ms, 2500);
         assert!(animations[0].non_looping);
+    }
+
+    #[test]
+    fn building_lifecycle_selector_honors_required_animation_properties() {
+        let animation = |name: &str, non_looping: bool| AnimationManifest {
+            name: name.to_owned(),
+            start_ms: 0,
+            end_ms: 1000,
+            move_speed: 0.0,
+            non_looping,
+        };
+        let animations = vec![
+            animation("Birth", true),
+            animation("Stand", false),
+            animation("Stand Work", false),
+            animation("Birth Upgrade First", true),
+            animation("Stand Upgrade First", false),
+            animation("Birth Upgrade Second", true),
+            animation("Stand Upgrade Second", false),
+            animation("Death", true),
+        ];
+
+        assert_eq!(
+            select_building_lifecycle_animations(
+                &animations,
+                &["upgrade".to_owned(), "second".to_owned()],
+            ),
+            BuildingLifecycleAnimationManifest {
+                birth: Some("Birth Upgrade Second".to_owned()),
+                stand: Some("Stand Upgrade Second".to_owned()),
+                death: Some("Death".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn building_lifecycle_selector_supports_combined_wc3_sequence_tags() {
+        let animation = |name: &str, non_looping: bool| AnimationManifest {
+            name: name.to_owned(),
+            start_ms: 0,
+            end_ms: 1000,
+            move_speed: 0.0,
+            non_looping,
+        };
+        let animations = vec![
+            animation("Birth Alternate", true),
+            animation("stand birth alternate work upgrade first second", true),
+            animation("Stand Alternate Upgrade First Second", false),
+            animation("Death Alternate", true),
+            animation("Death", true),
+        ];
+        let properties = [
+            "Stand".to_owned(),
+            "Alternate".to_owned(),
+            "Upgrade".to_owned(),
+            "First".to_owned(),
+        ];
+
+        assert_eq!(
+            select_building_lifecycle_animations(&animations, &properties),
+            BuildingLifecycleAnimationManifest {
+                birth: Some("stand birth alternate work upgrade first second".to_owned()),
+                stand: Some("Stand Alternate Upgrade First Second".to_owned()),
+                death: Some("Death Alternate".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn building_lifecycle_selector_prefers_non_looping_birth_and_death() {
+        let animations = vec![
+            AnimationManifest {
+                name: "Birth".to_owned(),
+                start_ms: 0,
+                end_ms: 1000,
+                move_speed: 0.0,
+                non_looping: false,
+            },
+            AnimationManifest {
+                name: "Birth Alternate".to_owned(),
+                start_ms: 0,
+                end_ms: 1000,
+                move_speed: 0.0,
+                non_looping: true,
+            },
+            AnimationManifest {
+                name: "Death".to_owned(),
+                start_ms: 0,
+                end_ms: 1000,
+                move_speed: 0.0,
+                non_looping: true,
+            },
+        ];
+        let selected = select_building_lifecycle_animations(&animations, &[]);
+        assert_eq!(selected.birth.as_deref(), Some("Birth Alternate"));
+        assert_eq!(selected.death.as_deref(), Some("Death"));
     }
 
     #[test]

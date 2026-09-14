@@ -7,11 +7,11 @@ use std::{
 use bevy::{gltf::Gltf, prelude::*};
 use serde::Deserialize;
 
-use crate::terrain::client_asset_root;
+use crate::{terrain::client_asset_root, wc3_effects::Wc3ParticleEmitter};
 
 const BUILDING_MODEL_MANIFEST: &str = "wc3/buildings/manifest.json";
 const BUILDING_MODEL_ASSET_PREFIX: &str = "wc3/buildings";
-const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
+const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Resource, Default)]
 pub struct BuildingModelSet {
@@ -23,20 +23,38 @@ pub struct BuildingModelAsset {
     pub scene: Handle<WorldAsset>,
     gltf: Handle<Gltf>,
     pub scale: f32,
-    animation_properties: Vec<String>,
-    animation: Option<BuildingAnimationSet>,
+    pub lifecycle_animations: BuildingLifecycleAnimationNames,
+    pub emitters: Vec<Wc3ParticleEmitter>,
+    animations_prepared: bool,
+    animations: Option<BuildingAnimationSet>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BuildingAnimationClip {
+    pub node: AnimationNodeIndex,
+    pub name: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct BuildingAnimationSet {
     pub graph: Handle<AnimationGraph>,
-    pub stand: AnimationNodeIndex,
+    pub birth: Option<BuildingAnimationClip>,
+    pub stand: Option<BuildingAnimationClip>,
+    pub death: Option<BuildingAnimationClip>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct BuildingLifecycleAnimationNames {
+    pub birth: Option<String>,
+    pub stand: Option<String>,
+    pub death: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct BuildingAssetManifest {
     schema_version: u32,
     buildings: Vec<BuildingAssetManifestEntry>,
+    models: Vec<BuildingModelManifestEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,17 +62,25 @@ struct BuildingAssetManifestEntry {
     rawcode: String,
     scale: f32,
     #[serde(default)]
-    animation_properties: Vec<String>,
+    lifecycle_animations: BuildingLifecycleAnimationNames,
     #[serde(default)]
     fallback_to_base_art: bool,
     gltf: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Deserialize)]
+struct BuildingModelManifestEntry {
+    gltf: String,
+    #[serde(default)]
+    particle_emitters: Vec<Wc3ParticleEmitter>,
+}
+
+#[derive(Debug, Clone)]
 struct ResolvedBuildingAsset {
     rawcode: u32,
     scale: f32,
-    animation_properties: Vec<String>,
+    lifecycle_animations: BuildingLifecycleAnimationNames,
+    emitters: Vec<Wc3ParticleEmitter>,
     asset_path: String,
 }
 
@@ -87,8 +113,10 @@ impl BuildingModelSet {
                             scene,
                             gltf,
                             scale: entry.scale,
-                            animation_properties: entry.animation_properties,
-                            animation: None,
+                            lifecycle_animations: entry.lifecycle_animations,
+                            emitters: entry.emitters,
+                            animations_prepared: false,
+                            animations: None,
                         },
                     );
                 }
@@ -110,25 +138,90 @@ impl BuildingModelSet {
         animation_clips: &Assets<AnimationClip>,
         graphs: &mut Assets<AnimationGraph>,
     ) {
-        for model in self
+        for (rawcode, model) in self
             .models
-            .values_mut()
-            .filter(|model| model.animation.is_none())
+            .iter_mut()
+            .filter(|(_, model)| !model.animations_prepared)
         {
             let Some(gltf) = gltfs.get(&model.gltf) else {
                 continue;
             };
-            let Some(stand) = find_stand_animation(gltf, &model.animation_properties) else {
-                continue;
-            };
-            if animation_clips.get(&stand).is_none() {
+            let birth = named_animation(gltf, model.lifecycle_animations.birth.as_deref());
+            let stand = named_animation(gltf, model.lifecycle_animations.stand.as_deref());
+            let death = named_animation(gltf, model.lifecycle_animations.death.as_deref());
+            for (role, requested, resolved) in [
+                (
+                    "Birth",
+                    model.lifecycle_animations.birth.as_deref(),
+                    birth.as_ref(),
+                ),
+                (
+                    "Stand",
+                    model.lifecycle_animations.stand.as_deref(),
+                    stand.as_ref(),
+                ),
+                (
+                    "Death",
+                    model.lifecycle_animations.death.as_deref(),
+                    death.as_ref(),
+                ),
+            ] {
+                if let Some(requested) = requested
+                    && resolved.is_none()
+                {
+                    eprintln!(
+                        "warning: WC3 building {} manifest selected {role} animation {requested:?}, but the generated glTF does not expose it",
+                        String::from_utf8_lossy(&rawcode.to_be_bytes())
+                    );
+                }
+            }
+            let selected = [birth.as_ref(), stand.as_ref(), death.as_ref()];
+            if selected
+                .into_iter()
+                .flatten()
+                .any(|clip| animation_clips.get(clip).is_none())
+            {
                 continue;
             }
-            let (graph, nodes) = AnimationGraph::from_clips([stand]);
-            model.animation = Some(BuildingAnimationSet {
-                graph: graphs.add(graph),
-                stand: nodes[0],
+
+            let mut clips = Vec::new();
+            let birth_slot = append_optional_clip(&mut clips, birth);
+            let stand_slot = append_optional_clip(&mut clips, stand);
+            let death_slot = append_optional_clip(&mut clips, death);
+            if clips.is_empty() {
+                model.animations_prepared = true;
+                continue;
+            }
+            let (graph, nodes) = AnimationGraph::from_clips(clips);
+            let graph = graphs.add(graph);
+            model.animations = Some(BuildingAnimationSet {
+                graph,
+                birth: birth_slot.map(|slot| BuildingAnimationClip {
+                    node: nodes[slot],
+                    name: model
+                        .lifecycle_animations
+                        .birth
+                        .clone()
+                        .expect("birth slot requires a manifest sequence name"),
+                }),
+                stand: stand_slot.map(|slot| BuildingAnimationClip {
+                    node: nodes[slot],
+                    name: model
+                        .lifecycle_animations
+                        .stand
+                        .clone()
+                        .expect("stand slot requires a manifest sequence name"),
+                }),
+                death: death_slot.map(|slot| BuildingAnimationClip {
+                    node: nodes[slot],
+                    name: model
+                        .lifecycle_animations
+                        .death
+                        .clone()
+                        .expect("death slot requires a manifest sequence name"),
+                }),
             });
+            model.animations_prepared = true;
         }
     }
 
@@ -138,60 +231,24 @@ impl BuildingModelSet {
     }
 
     #[must_use]
-    pub fn animation(&self, rawcode: u32) -> Option<&BuildingAnimationSet> {
-        self.models.get(&rawcode)?.animation.as_ref()
+    pub fn animations(&self, rawcode: u32) -> Option<&BuildingAnimationSet> {
+        self.models.get(&rawcode)?.animations.as_ref()
     }
 }
 
-fn find_stand_animation(
-    gltf: &Gltf,
-    animation_properties: &[String],
-) -> Option<Handle<AnimationClip>> {
-    gltf.named_animations
-        .iter()
-        .filter_map(|(name, clip)| {
-            stand_animation_score(name, animation_properties).map(|score| (score, name, clip))
-        })
-        .min_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(right.1)))
-        .map(|(_, _, clip)| clip.clone())
+fn named_animation(gltf: &Gltf, name: Option<&str>) -> Option<Handle<AnimationClip>> {
+    gltf.named_animations.get(name?).cloned()
 }
 
-fn stand_animation_score(name: &str, animation_properties: &[String]) -> Option<u8> {
-    let name = name.to_ascii_lowercase();
-    let words: Vec<_> = name
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .collect();
-    if words.first().copied() != Some("stand") || words.contains(&"work") {
-        return None;
-    }
-
-    let required: Vec<_> = animation_properties
-        .iter()
-        .map(|property| property.to_ascii_lowercase())
-        .collect();
-    if !required
-        .iter()
-        .all(|property| words.contains(&property.as_str()))
-    {
-        return None;
-    }
-    if required.is_empty() && words.contains(&"upgrade") {
-        return None;
-    }
-
-    let canonical = if required.is_empty() {
-        "stand".to_owned()
-    } else {
-        format!("stand {}", required.join(" "))
-    };
-    if name == canonical {
-        Some(0)
-    } else if required.is_empty() && matches!(name.as_str(), "stand - 1" | "stand 1") {
-        Some(1)
-    } else {
-        Some(2)
-    }
+fn append_optional_clip(
+    clips: &mut Vec<Handle<AnimationClip>>,
+    clip: Option<Handle<AnimationClip>>,
+) -> Option<usize> {
+    clip.map(|clip| {
+        let slot = clips.len();
+        clips.push(clip);
+        slot
+    })
 }
 
 fn load_manifest_entries(
@@ -216,6 +273,18 @@ fn resolve_manifest_entries(
         ));
     }
 
+    let mut model_emitters = BTreeMap::new();
+    for model in manifest.models {
+        let gltf = model.gltf.replace('\\', "/");
+        validate_relative_asset_path(&gltf)?;
+        if model_emitters
+            .insert(gltf.clone(), model.particle_emitters)
+            .is_some()
+        {
+            return Err(format!("duplicate building model manifest path {gltf}"));
+        }
+    }
+
     let mut resolved = BTreeMap::new();
     for entry in manifest.buildings {
         if entry.fallback_to_base_art {
@@ -233,6 +302,12 @@ fn resolve_manifest_entries(
         }
         let gltf = gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
+        let emitters = model_emitters.get(&gltf).cloned().ok_or_else(|| {
+            format!(
+                "building {} references missing model manifest {gltf}",
+                entry.rawcode
+            )
+        })?;
         let asset_path = format!("{}/{}", asset_prefix.trim_end_matches('/'), gltf);
         if resolved
             .insert(
@@ -240,7 +315,8 @@ fn resolve_manifest_entries(
                 ResolvedBuildingAsset {
                     rawcode,
                     scale: entry.scale,
-                    animation_properties: entry.animation_properties,
+                    lifecycle_animations: entry.lifecycle_animations,
+                    emitters,
                     asset_path,
                 },
             )
@@ -280,68 +356,53 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolves_building_manifest_paths_scales_and_animation_properties() {
+    fn resolves_building_manifest_lifecycle_and_model_metadata() {
         let json = r#"{
-            "schema_version": 4,
+            "schema_version": 5,
             "buildings": [
-                {"rawcode": "h000", "scale": 0.5, "animation_properties": [], "fallback_to_base_art": false, "gltf": "models/humanbarracks.gltf"},
-                {"rawcode": "h006", "scale": 0.8, "animation_properties": ["upgrade", "first"], "fallback_to_base_art": false, "gltf": "models/tower.gltf"},
+                {"rawcode": "h000", "scale": 0.5, "animation_properties": [], "lifecycle_animations": {"birth":"Birth","stand":"Stand","death":"Death"}, "fallback_to_base_art": false, "gltf": "models/humanbarracks.gltf"},
+                {"rawcode": "h006", "scale": 0.8, "animation_properties": ["upgrade", "first"], "lifecycle_animations": {"birth":"Birth Upgrade First","stand":"Stand Upgrade First","death":"Death"}, "fallback_to_base_art": false, "gltf": "models/tower.gltf"},
                 {"rawcode": "h07P", "scale": 0.8, "animation_properties": ["upgrade", "second"], "fallback_to_base_art": true, "gltf": "models/tower.gltf"},
                 {"rawcode": "xxxx", "scale": 1.0, "animation_properties": [], "fallback_to_base_art": false, "gltf": null}
+            ],
+            "models": [
+                {"gltf":"models/humanbarracks.gltf","particle_emitters":[]},
+                {"gltf":"models/tower.gltf","particle_emitters":[]}
             ]
         }"#;
         let entries = resolve_manifest_entries(json, "wc3/buildings").expect("manifest resolves");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].rawcode, u32::from_be_bytes(*b"h000"));
         assert_eq!(entries[0].scale, 0.5);
-        assert!(entries[0].animation_properties.is_empty());
+        assert_eq!(
+            entries[0].lifecycle_animations.birth.as_deref(),
+            Some("Birth")
+        );
+        assert_eq!(
+            entries[0].lifecycle_animations.stand.as_deref(),
+            Some("Stand")
+        );
+        assert_eq!(
+            entries[0].lifecycle_animations.death.as_deref(),
+            Some("Death")
+        );
         assert_eq!(
             entries[0].asset_path,
             "wc3/buildings/models/humanbarracks.gltf"
         );
         assert_eq!(entries[1].rawcode, u32::from_be_bytes(*b"h006"));
         assert_eq!(
-            entries[1].animation_properties,
-            vec!["upgrade".to_owned(), "first".to_owned()]
+            entries[1].lifecycle_animations.birth.as_deref(),
+            Some("Birth Upgrade First")
         );
-    }
-
-    #[test]
-    fn building_stand_selector_honors_required_animation_properties() {
-        let none: &[String] = &[];
-        let guard_tower = ["upgrade".to_owned(), "first".to_owned()];
-        let castle = ["upgrade".to_owned(), "second".to_owned()];
-
-        assert_eq!(stand_animation_score("Stand", none), Some(0));
-        assert_eq!(stand_animation_score("Stand - 1", none), Some(1));
-        assert_eq!(stand_animation_score("Stand Ready Attack", none), Some(2));
-        assert_eq!(stand_animation_score("Stand Work", none), None);
-        assert_eq!(stand_animation_score("Stand Upgrade First", none), None);
-        assert_eq!(
-            stand_animation_score("Stand Upgrade First Ready Attack", &guard_tower),
-            Some(2)
-        );
-        assert_eq!(
-            stand_animation_score("Stand Upgrade Second", &castle),
-            Some(0)
-        );
-        assert_eq!(
-            stand_animation_score("Stand Upgrade Second", &guard_tower),
-            None
-        );
-        assert_eq!(
-            stand_animation_score("Stand Work Upgrade First", &guard_tower),
-            None
-        );
-        assert_eq!(stand_animation_score("Birth", none), None);
-        assert_eq!(stand_animation_score("Death", none), None);
     }
 
     #[test]
     fn rejects_invalid_building_manifest_entries() {
         let stale_schema = r#"{
-            "schema_version": 3,
-            "buildings": []
+            "schema_version": 4,
+            "buildings": [],
+            "models": []
         }"#;
         assert!(
             resolve_manifest_entries(stale_schema, "wc3/buildings")
@@ -350,8 +411,9 @@ mod tests {
         );
 
         let bad_scale = r#"{
-            "schema_version": 4,
-            "buildings": [{"rawcode": "h000", "scale": 0.0, "gltf": "models/foo.gltf"}]
+            "schema_version": 5,
+            "buildings": [{"rawcode": "h000", "scale": 0.0, "gltf": "models/foo.gltf"}],
+            "models": [{"gltf":"models/foo.gltf"}]
         }"#;
         assert!(
             resolve_manifest_entries(bad_scale, "wc3/buildings")
@@ -360,8 +422,9 @@ mod tests {
         );
 
         let bad_path = r#"{
-            "schema_version": 4,
-            "buildings": [{"rawcode": "h000", "scale": 1.0, "gltf": "../escape.gltf"}]
+            "schema_version": 5,
+            "buildings": [{"rawcode": "h000", "scale": 1.0, "gltf": "../escape.gltf"}],
+            "models": [{"gltf":"../escape.gltf"}]
         }"#;
         assert!(
             resolve_manifest_entries(bad_path, "wc3/buildings")

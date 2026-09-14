@@ -78,6 +78,8 @@ pub struct Wc3ParticleEmitter {
     pub squirt: bool,
     #[serde(default)]
     pub ambient_enabled: bool,
+    #[serde(default)]
+    pub active_sequences: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -255,10 +257,36 @@ impl Wc3EmitterSource {
 
     #[must_use]
     pub fn with_asset_prefix(emitters: &[Wc3ParticleEmitter], asset_prefix: &'static str) -> Self {
+        Self::from_filtered(emitters.iter().cloned(), asset_prefix)
+    }
+
+    #[must_use]
+    pub fn with_asset_prefix_for_sequence(
+        emitters: &[Wc3ParticleEmitter],
+        asset_prefix: &'static str,
+        sequence: &str,
+    ) -> Self {
+        Self::from_filtered(
+            emitters
+                .iter()
+                .filter(|emitter| {
+                    emitter
+                        .active_sequences
+                        .iter()
+                        .any(|active| active.eq_ignore_ascii_case(sequence))
+                })
+                .cloned(),
+            asset_prefix,
+        )
+    }
+
+    fn from_filtered(
+        emitters: impl IntoIterator<Item = Wc3ParticleEmitter>,
+        asset_prefix: &'static str,
+    ) -> Self {
         Self {
             emitters: emitters
-                .iter()
-                .cloned()
+                .into_iter()
                 .map(|spec| EmitterRuntime {
                     burst_pending: spec.squirt,
                     spec,
