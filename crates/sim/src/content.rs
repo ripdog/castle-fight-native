@@ -20,6 +20,7 @@ pub const CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS: u16 = 4;
 const CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 550;
 const CASTLE_FIGHT_CRITTER_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 190;
 const CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS: i32 = 50;
+const CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS: i32 = 500;
 const CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS: u16 = 2;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR: u16 = 2;
@@ -119,6 +120,9 @@ impl CastleFightBuilderRace {
             name: metadata.name,
             campaign_only: metadata.campaign_only,
             locomotion: metadata.locomotion,
+            // 9.27 `udaa` resolves to Repair for every standard race builder. Campaign-only
+            // Critter Builder still has Repair in its ability list but leaves `udaa` blank.
+            repair_autocast_enabled_by_default: !matches!(self, Self::Critter),
             profile: builder_profile(metadata.move_speed_world_units_per_second),
             build_catalog: extracted_builder_catalog(
                 race_index,
@@ -139,6 +143,7 @@ pub struct CastleFightBuilderDefinition {
     pub name: &'static str,
     pub campaign_only: bool,
     pub locomotion: BuilderLocomotion,
+    pub repair_autocast_enabled_by_default: bool,
     pub profile: BuilderProfile,
     pub build_catalog: Vec<u32>,
     pub map_version: MapVersion,
@@ -169,6 +174,7 @@ impl CastleFightBuilderDefinition {
             position,
             profile: self.profile,
             configuration: self.configuration(),
+            repair_autocast_enabled: self.repair_autocast_enabled_by_default,
         }
     }
 }
@@ -351,12 +357,14 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"hfoo"),
                 name: "Footman",
                 health: 250,
+                build_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Large, 4),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
                 damage_type: DamageType::Normal,
                 attack_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
                 movement_class: MovementClass::Ground,
+                mechanical: false,
                 collision_radius: collision_radius(),
                 corpse: Some(CorpseProfile {
                     definition: CorpseDefinitionId(u32::from_be_bytes(*b"hfoo")),
@@ -377,12 +385,14 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"e003"),
                 name: "Ranger",
                 health: 500,
+                build_time_ticks: 32 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Small, 3),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
                 damage_type: DamageType::Pierce,
                 attack_targets: AttackTargetMask::ALL,
                 movement_class: MovementClass::Ground,
+                mechanical: false,
                 collision_radius: collision_radius(),
                 corpse: Some(CorpseProfile {
                     definition: CorpseDefinitionId(u32::from_be_bytes(*b"e003")),
@@ -403,12 +413,14 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"o001"),
                 name: "Catapult",
                 health: 475,
+                build_time_ticks: 34 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Medium, 5),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
                 damage_type: DamageType::Siege,
                 attack_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
                 movement_class: MovementClass::Ground,
+                mechanical: true,
                 collision_radius: collision_radius(),
                 corpse: None,
                 attack: AttackProfile {
@@ -430,12 +442,14 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"n015"),
                 name: "Ice Troll Shadow Priest",
                 health: 350,
+                build_time_ticks: 23 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Small, 1),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
                 damage_type: DamageType::Magic,
                 attack_targets: AttackTargetMask::ALL,
                 movement_class: MovementClass::Ground,
+                mechanical: false,
                 collision_radius: collision_radius(),
                 corpse: Some(CorpseProfile {
                     definition: CorpseDefinitionId(u32::from_be_bytes(*b"n015")),
@@ -456,12 +470,14 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"h016"),
                 name: "Gryphon Rider",
                 health: 500,
+                build_time_ticks: 27 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Medium, 2),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
                 damage_type: DamageType::Magic,
                 attack_targets: AttackTargetMask::ALL,
                 movement_class: MovementClass::Air,
+                mechanical: false,
                 collision_radius: CollisionRadius(world(8)),
                 corpse: None,
                 attack: AttackProfile {
@@ -487,12 +503,14 @@ pub struct CastleFightUnitDefinition {
     pub rawcode: u32,
     pub name: &'static str,
     pub health: i32,
+    pub build_time_ticks: u32,
     pub armor: ArmorProfile,
     pub passive_effects: PassiveUnitEffects,
     pub spellcasting: Option<SpellcastingProfile>,
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
     pub movement_class: MovementClass,
+    pub mechanical: bool,
     pub collision_radius: CollisionRadius,
     pub corpse: Option<CorpseProfile>,
     pub attack: AttackProfile,
@@ -519,6 +537,8 @@ impl CastleFightUnitDefinition {
             corpse: self.corpse,
             collision_radius: Some(self.collision_radius),
             movement_class: self.movement_class,
+            mechanical: self.mechanical,
+            build_time_ticks: Some(self.build_time_ticks),
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
@@ -763,6 +783,8 @@ impl CastleFightTowerDefinition {
                 corpse: None,
                 collision_radius: None,
                 movement_class: MovementClass::Ground,
+                mechanical: false,
+                build_time_ticks: None,
                 attack_targets: AttackTargetMask::ALL,
                 damage_type: DamageType::Normal,
                 armor: ArmorProfile::UNARMORED,
@@ -795,6 +817,9 @@ fn builder_profile(move_speed_world_units_per_second: i32) -> BuilderProfile {
         speed_per_tick: move_speed_world_units_per_second * SUBUNITS_PER_WORLD_UNIT
             / CASTLE_FIGHT_SIMULATION_HZ,
         repair_range: world(CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS),
+        repair_autocast_range: world(CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS),
+        repair_time_ratio_numerator: CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR,
+        repair_time_ratio_denominator: CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR,
         full_repair_duration_ticks: CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS
             * CASTLE_FIGHT_SIMULATION_HZ as u16
             * CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR
@@ -945,6 +970,9 @@ mod tests {
             BuilderProfile {
                 speed_per_tick: 550 * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ,
                 repair_range: 50 * SUBUNITS_PER_WORLD_UNIT,
+                repair_autocast_range: 500 * SUBUNITS_PER_WORLD_UNIT,
+                repair_time_ratio_numerator: 3,
+                repair_time_ratio_denominator: 2,
                 full_repair_duration_ticks: 90,
             }
         );
@@ -1003,6 +1031,18 @@ mod tests {
         }
         assert!(!CastleFightBuilderRace::STANDARD.contains(&CastleFightBuilderRace::Critter));
         assert!(CastleFightBuilderRace::Critter.definition().campaign_only);
+        for race in CastleFightBuilderRace::STANDARD {
+            assert!(
+                race.definition().repair_autocast_enabled_by_default,
+                "standard 9.27 builder {race:?} must preserve extracted default-active Repair"
+            );
+        }
+        assert!(
+            !CastleFightBuilderRace::Critter
+                .definition()
+                .repair_autocast_enabled_by_default,
+            "campaign Critter Builder has Repair but no extracted Default Active Ability"
+        );
     }
 
     #[test]
@@ -1052,6 +1092,51 @@ mod tests {
             let definition = kind.definition();
             assert_eq!(definition.damage_type, damage_type);
             assert_eq!(definition.armor, armor);
+        }
+    }
+
+    #[test]
+    fn imported_roster_keeps_extracted_build_times_and_mechanical_classification() {
+        let units = include_str!("../../../docs/original_map/extracted/resolved/units.tsv");
+        let mut lines = units.lines();
+        let columns = lines
+            .next()
+            .expect("units.tsv header missing")
+            .split('\t')
+            .collect::<Vec<_>>();
+        let rawcode_column = columns
+            .iter()
+            .position(|column| *column == "rawcode")
+            .unwrap();
+        let build_time_column = columns
+            .iter()
+            .position(|column| *column == "build_time")
+            .unwrap();
+        let classifications_column = columns
+            .iter()
+            .position(|column| *column == "classifications")
+            .unwrap();
+        let rows = lines
+            .map(|line| line.split('\t').collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        for kind in CastleFightUnitKind::ALL {
+            let definition = kind.definition();
+            let row = rows
+                .iter()
+                .find(|row| parse_rawcode(row[rawcode_column]) == definition.rawcode)
+                .expect("imported unit rawcode must exist in resolved units");
+            let build_time_seconds = row[build_time_column]
+                .parse::<u32>()
+                .expect("imported unit build time must be integral seconds");
+            assert_eq!(
+                definition.build_time_ticks,
+                build_time_seconds * CASTLE_FIGHT_SIMULATION_HZ as u32
+            );
+            let extracted_mechanical = row[classifications_column]
+                .split(',')
+                .any(|classification| classification == "mechanical");
+            assert_eq!(definition.mechanical, extracted_mechanical);
         }
     }
 

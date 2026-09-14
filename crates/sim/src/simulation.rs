@@ -19,20 +19,20 @@ use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
-        AutomaticAbilityState, BallisticProjectile, BounceProjectile, Builder,
+        AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder,
         BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuilderState,
         BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, BurningOilZone,
         ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
         CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
         MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
-        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass, MovementProfile,
-        NavigationGoal, NavigationState, PassiveUnitEffect, PassiveUnitEffects,
+        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit, ModifierId, MovementClass,
+        MovementProfile, NavigationGoal, NavigationState, PassiveUnitEffect, PassiveUnitEffects,
         PendingAttackEffects, Position, ProductionArmorProfile, ProductionAttackTargets,
         ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
         ProductionDamageType, ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
-        ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
-        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
+        ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
+        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
+        TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
         UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
@@ -262,6 +262,7 @@ pub struct UnitView {
     pub position: SimPoint,
     pub collision_radius: i32,
     pub movement_class: MovementClass,
+    pub mechanical: bool,
     pub health: i32,
     pub attack_delivery: AttackDelivery,
     pub attack_targets: AttackTargetMask,
@@ -287,6 +288,7 @@ pub struct BuilderView {
     pub configuration: BuilderConfiguration,
     pub destination: Option<SimPoint>,
     pub repair_target: Option<SimId>,
+    pub repair_autocast_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -331,8 +333,9 @@ pub enum BuilderSpawnError {
 pub enum BuilderCommandError {
     BuilderNotFound,
     OutsideBuildRegion,
-    BuildingNotFound,
-    NotFriendlyBuilding,
+    RepairTargetNotFound,
+    NotFriendlyRepairTarget,
+    RepairTargetNotRepairable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -444,6 +447,9 @@ impl Simulation {
         }
         assert!(builder.profile.speed_per_tick >= 0);
         assert!(builder.profile.repair_range >= 0);
+        assert!(builder.profile.repair_autocast_range >= builder.profile.repair_range);
+        assert!(builder.profile.repair_time_ratio_numerator > 0);
+        assert!(builder.profile.repair_time_ratio_denominator > 0);
         assert!(builder.profile.full_repair_duration_ticks > 0);
         if self.world.iter_entities().any(|entity| {
             entity.get::<Builder>().is_some() && entity.get::<Team>() == Some(&builder.team)
@@ -462,7 +468,10 @@ impl Simulation {
             Builder,
             builder.profile,
             builder.configuration,
-            BuilderState::default(),
+            BuilderState {
+                repair_autocast_enabled: builder.repair_autocast_enabled,
+                ..BuilderState::default()
+            },
         ));
         Ok(id)
     }
@@ -475,6 +484,9 @@ impl Simulation {
     ) -> Result<(), BuilderCommandError> {
         assert!(profile.speed_per_tick >= 0);
         assert!(profile.repair_range >= 0);
+        assert!(profile.repair_autocast_range >= profile.repair_range);
+        assert!(profile.repair_time_ratio_numerator > 0);
+        assert!(profile.repair_time_ratio_denominator > 0);
         assert!(profile.full_repair_duration_ticks > 0);
         let entity = self
             .world
@@ -531,7 +543,7 @@ impl Simulation {
     pub fn order_builder_repair(
         &mut self,
         builder: SimId,
-        building: SimId,
+        target: SimId,
     ) -> Result<(), BuilderCommandError> {
         let (builder_entity, builder_team) = self
             .world
@@ -547,20 +559,28 @@ impl Simulation {
                 })
             })
             .ok_or(BuilderCommandError::BuilderNotFound)?;
-        let building_team = self
+        let (target_team, repairable) = self
             .world
             .iter_entities()
             .find_map(|entity| {
-                (entity.get::<SimId>().copied() == Some(building)
-                    && entity.get::<BuildingFootprint>().is_some()
+                (entity.get::<SimId>().copied() == Some(target)
                     && entity
                         .get::<Health>()
                         .is_some_and(|health| health.current > 0))
-                .then(|| *entity.get::<Team>().expect("building missing team"))
+                .then(|| {
+                    (
+                        *entity.get::<Team>().expect("repair target missing team"),
+                        entity.get::<BuildingFootprint>().is_some()
+                            || entity.get::<MechanicalUnit>().is_some(),
+                    )
+                })
             })
-            .ok_or(BuilderCommandError::BuildingNotFound)?;
-        if builder_team != building_team {
-            return Err(BuilderCommandError::NotFriendlyBuilding);
+            .ok_or(BuilderCommandError::RepairTargetNotFound)?;
+        if builder_team != target_team {
+            return Err(BuilderCommandError::NotFriendlyRepairTarget);
+        }
+        if !repairable {
+            return Err(BuilderCommandError::RepairTargetNotRepairable);
         }
 
         let mut entity = self.world.entity_mut(builder_entity);
@@ -568,8 +588,30 @@ impl Simulation {
             .get_mut::<BuilderState>()
             .expect("builder missing command state");
         state.destination = None;
-        state.repair_target = Some(building);
+        state.repair_target = Some(target);
         state.repair_progress_remainder = 0;
+        Ok(())
+    }
+
+    pub fn set_builder_repair_autocast(
+        &mut self,
+        builder: SimId,
+        enabled: bool,
+    ) -> Result<(), BuilderCommandError> {
+        let entity = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then_some(entity.id())
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        self.world
+            .entity_mut(entity)
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state")
+            .repair_autocast_enabled = enabled;
         Ok(())
     }
 
@@ -583,11 +625,15 @@ impl Simulation {
                 .then_some(entity.id())
             })
             .ok_or(BuilderCommandError::BuilderNotFound)?;
-        *self
-            .world
-            .entity_mut(entity)
+        let mut builder = self.world.entity_mut(entity);
+        let mut state = builder
             .get_mut::<BuilderState>()
-            .expect("builder missing command state") = BuilderState::default();
+            .expect("builder missing command state");
+        let repair_autocast_enabled = state.repair_autocast_enabled;
+        *state = BuilderState {
+            repair_autocast_enabled,
+            ..BuilderState::default()
+        };
         Ok(())
     }
 
@@ -705,6 +751,12 @@ impl Simulation {
         }
         if let Some(collision_radius) = properties.collision_radius {
             validate_collision_radius(collision_radius);
+        }
+        if properties.mechanical {
+            assert!(
+                properties.build_time_ticks.is_some_and(|ticks| ticks > 0),
+                "mechanical units require positive build-time metadata for repair"
+            );
         }
         let collision_radius = properties
             .collision_radius
@@ -898,6 +950,15 @@ impl Simulation {
             if let Some(collision_radius) = properties.production_unit.collision_radius {
                 validate_collision_radius(collision_radius);
             }
+            if properties.production_unit.mechanical {
+                assert!(
+                    properties
+                        .production_unit
+                        .build_time_ticks
+                        .is_some_and(|ticks| ticks > 0),
+                    "mechanical production units require positive build-time metadata for repair"
+                );
+            }
             if let Some(spellcasting) = properties.production_spellcasting {
                 validate_spellcasting_profile(spellcasting);
             }
@@ -958,6 +1019,10 @@ impl Simulation {
                 production,
                 ProductionState { next_spawn_tick },
                 ProductionMovementClass(properties.production_unit.movement_class),
+                ProductionUnitRepairMetadata {
+                    mechanical: properties.production_unit.mechanical,
+                    build_time_ticks: properties.production_unit.build_time_ticks,
+                },
                 ProductionAttackTargets(properties.production_unit.attack_targets),
             ));
             if let Some(content) = properties.production_unit.content {
@@ -2377,6 +2442,12 @@ impl Simulation {
         if let Some(collision_radius) = properties.collision_radius {
             entity.insert(collision_radius);
         }
+        if properties.mechanical {
+            entity.insert(MechanicalUnit);
+        }
+        if let Some(build_time_ticks) = properties.build_time_ticks {
+            entity.insert(BuildTimeTicks(build_time_ticks));
+        }
         entity.insert((
             properties.damage_type,
             properties.armor,
@@ -2459,6 +2530,42 @@ impl Simulation {
         }
     }
 
+    fn builder_repair_target(&self, target_id: SimId) -> Option<BuilderRepairTargetSnapshot> {
+        self.world
+            .iter_entities()
+            .find(|entity| entity.get::<SimId>().copied() == Some(target_id))
+            .and_then(builder_repair_target_from_entity)
+    }
+
+    fn select_builder_autocast_repair_target(
+        &self,
+        team: Team,
+        position: SimPoint,
+        acquisition_range: i32,
+    ) -> Option<SimId> {
+        let max_distance_sq = square_i32(acquisition_range);
+        self.world
+            .iter_entities()
+            .filter_map(builder_repair_target_from_entity)
+            .filter(|target| {
+                target.team == team
+                    && target.health.current > 0
+                    && target.health.current < target.health.max
+                    && match target.geometry {
+                        BuilderRepairGeometry::Building(_) => true,
+                        BuilderRepairGeometry::Unit(target_position) => {
+                            self.point_inside_team_build_region(team, target_position)
+                        }
+                    }
+            })
+            .filter_map(|target| {
+                let distance_sq = target.distance_sq(position, self.config.navigation_cell_size);
+                (distance_sq <= max_distance_sq).then_some((distance_sq, target.id))
+            })
+            .min_by_key(|(distance_sq, id)| (*distance_sq, *id))
+            .map(|(_, id)| id)
+    }
+
     fn advance_builders(&mut self) {
         let mut builders: Vec<_> = self
             .world
@@ -2480,52 +2587,46 @@ impl Simulation {
         for (_, builder_entity, team, position, profile, mut state) in builders {
             let mut next_position = position;
 
-            if let Some(target_id) = state.repair_target {
-                let target = self.world.iter_entities().find_map(|entity| {
-                    (entity.get::<SimId>().copied() == Some(target_id)
-                        && entity.get::<BuildingFootprint>().is_some())
-                    .then(|| {
-                        (
-                            entity.id(),
-                            *entity.get::<Team>().expect("building missing team"),
-                            *entity
-                                .get::<BuildingFootprint>()
-                                .expect("building missing footprint"),
-                            *entity.get::<Health>().expect("building missing health"),
-                        )
-                    })
-                });
+            if state.repair_target.is_none()
+                && state.destination.is_none()
+                && state.repair_autocast_enabled
+            {
+                state.repair_target = self.select_builder_autocast_repair_target(
+                    team,
+                    next_position,
+                    profile.repair_autocast_range,
+                );
+                state.repair_progress_remainder = 0;
+            }
 
-                let Some((target_entity, target_team, footprint, health)) = target else {
+            if let Some(target_id) = state.repair_target {
+                let Some(target) = self.builder_repair_target(target_id) else {
                     state.repair_target = None;
                     state.repair_progress_remainder = 0;
                     self.apply_builder_state(builder_entity, next_position, state);
                     continue;
                 };
-                if target_team != team || health.current <= 0 || health.current >= health.max {
+                if target.team != team
+                    || target.health.current <= 0
+                    || target.health.current >= target.health.max
+                {
                     state.repair_target = None;
                     state.repair_progress_remainder = 0;
                     self.apply_builder_state(builder_entity, next_position, state);
                     continue;
                 }
 
-                let mut distance_sq = point_to_footprint_distance_sq(
-                    next_position,
-                    footprint,
-                    self.config.navigation_cell_size,
-                );
+                let mut distance_sq =
+                    target.distance_sq(next_position, self.config.navigation_cell_size);
                 if distance_sq > square_i32(profile.repair_range) {
-                    let target_position =
-                        footprint_center_point(footprint, self.config.navigation_cell_size);
-                    let candidate =
-                        next_position.step_towards(target_position, profile.speed_per_tick);
+                    let candidate = next_position.step_towards(
+                        target.approach_position(self.config.navigation_cell_size),
+                        profile.speed_per_tick,
+                    );
                     if self.point_inside_team_build_region(team, candidate) {
                         next_position = candidate;
-                        distance_sq = point_to_footprint_distance_sq(
-                            next_position,
-                            footprint,
-                            self.config.navigation_cell_size,
-                        );
+                        distance_sq =
+                            target.distance_sq(next_position, self.config.navigation_cell_size);
                     } else {
                         state.repair_target = None;
                         state.repair_progress_remainder = 0;
@@ -2534,16 +2635,17 @@ impl Simulation {
 
                 if state.repair_target.is_some() && distance_sq <= square_i32(profile.repair_range)
                 {
-                    let duration = u64::from(profile.full_repair_duration_ticks);
+                    let duration = builder_repair_duration_ticks(profile, target);
                     let accumulated = u64::from(state.repair_progress_remainder)
-                        + u64::try_from(health.max).expect("building max health must be positive");
+                        + u64::try_from(target.health.max)
+                            .expect("repair target max health must be positive");
                     let repaired = accumulated / duration;
                     state.repair_progress_remainder = u32::try_from(accumulated % duration)
                         .expect("repair remainder fits builder state");
 
                     if repaired > 0 {
-                        let mut target = self.world.entity_mut(target_entity);
-                        let mut target_health = target
+                        let mut target_entity = self.world.entity_mut(target.entity);
+                        let mut target_health = target_entity
                             .get_mut::<Health>()
                             .expect("repair target lost health component");
                         let repaired = i32::try_from(repaired).unwrap_or(i32::MAX);
@@ -2741,6 +2843,12 @@ impl Simulation {
                     passive_effects,
                     spellcasting,
                 )| {
+                    let repair_metadata = self
+                        .world
+                        .entity(entity)
+                        .get::<ProductionUnitRepairMetadata>()
+                        .copied()
+                        .expect("production building missing repair metadata");
                     ProductionAttempt {
                         entity,
                         id: *id,
@@ -2751,6 +2859,8 @@ impl Simulation {
                         corpse: corpse.map(|corpse| corpse.0),
                         collision_radius: collision_radius.map(|radius| radius.0),
                         movement_class: movement_class.0,
+                        mechanical: repair_metadata.mechanical,
+                        build_time_ticks: repair_metadata.build_time_ticks,
                         attack_targets: attack_targets.0,
                         damage_type: damage_type.0,
                         armor: armor.0,
@@ -2863,6 +2973,8 @@ impl Simulation {
                         corpse: attempt.corpse,
                         collision_radius: attempt.collision_radius,
                         movement_class: attempt.movement_class,
+                        mechanical: attempt.mechanical,
+                        build_time_ticks: attempt.build_time_ticks,
                         attack_targets: attempt.attack_targets,
                         damage_type: attempt.damage_type,
                         armor: attempt.armor,
@@ -6169,12 +6281,50 @@ struct ProductionAttempt {
     corpse: Option<CorpseProfile>,
     collision_radius: Option<CollisionRadius>,
     movement_class: MovementClass,
+    mechanical: bool,
+    build_time_ticks: Option<u32>,
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
     armor: ArmorProfile,
     passive_effects: PassiveUnitEffects,
     spellcasting: Option<SpellcastingProfile>,
     next_spawn_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BuilderRepairGeometry {
+    Building(BuildingFootprint),
+    Unit(SimPoint),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BuilderRepairTargetSnapshot {
+    entity: Entity,
+    id: SimId,
+    team: Team,
+    health: Health,
+    geometry: BuilderRepairGeometry,
+    build_time_ticks: Option<u32>,
+}
+
+impl BuilderRepairTargetSnapshot {
+    fn distance_sq(self, position: SimPoint, navigation_cell_size: i32) -> u64 {
+        match self.geometry {
+            BuilderRepairGeometry::Building(footprint) => {
+                point_to_footprint_distance_sq(position, footprint, navigation_cell_size)
+            }
+            BuilderRepairGeometry::Unit(target) => position.distance_sq(target),
+        }
+    }
+
+    fn approach_position(self, navigation_cell_size: i32) -> SimPoint {
+        match self.geometry {
+            BuilderRepairGeometry::Building(footprint) => {
+                footprint_center_point(footprint, navigation_cell_size)
+            }
+            BuilderRepairGeometry::Unit(position) => position,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -6801,6 +6951,7 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
         configuration: entity.get::<BuilderConfiguration>()?.clone(),
         destination: state.destination,
         repair_target: state.repair_target,
+        repair_autocast_enabled: state.repair_autocast_enabled,
     })
 }
 
@@ -6822,6 +6973,7 @@ fn unit_view_from_entity(
             .get::<CollisionRadius>()
             .map_or(default_collision_radius, |radius| radius.0),
         movement_class: *entity.get::<MovementClass>()?,
+        mechanical: entity.get::<MechanicalUnit>().is_some(),
         health: entity.get::<Health>()?.current,
         attack_delivery: entity.get::<AttackProfile>()?.delivery,
         attack_targets: *entity.get::<AttackTargetMask>()?,
@@ -7634,6 +7786,49 @@ fn find_building_index(buildings: &[BuildingSnapshot], id: SimId) -> Option<usiz
         .ok()
 }
 
+fn builder_repair_target_from_entity(
+    entity: bevy_ecs::world::EntityRef<'_>,
+) -> Option<BuilderRepairTargetSnapshot> {
+    let id = *entity.get::<SimId>()?;
+    let team = *entity.get::<Team>()?;
+    let health = *entity.get::<Health>()?;
+    if let Some(footprint) = entity.get::<BuildingFootprint>().copied() {
+        return Some(BuilderRepairTargetSnapshot {
+            entity: entity.id(),
+            id,
+            team,
+            health,
+            geometry: BuilderRepairGeometry::Building(footprint),
+            build_time_ticks: None,
+        });
+    }
+    entity.get::<MechanicalUnit>()?;
+    let position = entity.get::<Position>()?.0;
+    let build_time_ticks = entity.get::<BuildTimeTicks>()?.0;
+    Some(BuilderRepairTargetSnapshot {
+        entity: entity.id(),
+        id,
+        team,
+        health,
+        geometry: BuilderRepairGeometry::Unit(position),
+        build_time_ticks: Some(build_time_ticks),
+    })
+}
+
+fn builder_repair_duration_ticks(
+    profile: BuilderProfile,
+    target: BuilderRepairTargetSnapshot,
+) -> u64 {
+    let Some(build_time_ticks) = target.build_time_ticks else {
+        return u64::from(profile.full_repair_duration_ticks);
+    };
+    let scaled = u64::from(build_time_ticks)
+        .checked_mul(u64::from(profile.repair_time_ratio_numerator))
+        .expect("mechanical-unit repair duration overflow");
+    let denominator = u64::from(profile.repair_time_ratio_denominator);
+    scaled.div_ceil(denominator).max(1)
+}
+
 fn square_i32(value: i32) -> u64 {
     let value = i64::from(value);
     (value * value) as u64
@@ -7907,6 +8102,8 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     armor: *entity.get::<ArmorProfile>()?,
                     passive_effects: *entity.get::<PassiveUnitEffects>()?,
                     movement_class: *entity.get::<MovementClass>()?,
+                    mechanical: entity.get::<MechanicalUnit>().is_some(),
+                    build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
                     movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
                     attack_sequence: *entity.get::<AttackSequence>()?,
@@ -7938,6 +8135,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     production_movement_class: entity
                         .get::<ProductionMovementClass>()
                         .map(|class| class.0),
+                    production_repair_metadata: entity
+                        .get::<ProductionUnitRepairMetadata>()
+                        .copied(),
                     production_attack_targets: entity
                         .get::<ProductionAttackTargets>()
                         .map(|targets| targets.0),
@@ -7991,6 +8191,8 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     MovementClass::Ground => 0,
                     MovementClass::Air => 1,
                 });
+                hash.write_u8(u8::from(unit.mechanical));
+                hash.write_u64(unit.build_time_ticks.map_or(0, u64::from));
                 hash.write_i32(unit.attack.damage);
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
@@ -8089,6 +8291,11 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                             MovementClass::Air => 1,
                         },
                     );
+                    let repair_metadata = building
+                        .production_repair_metadata
+                        .expect("production building missing repair metadata");
+                    hash.write_u8(u8::from(repair_metadata.mechanical));
+                    hash.write_u64(repair_metadata.build_time_ticks.map_or(0, u64::from));
                     hash.write_u8(
                         building
                             .production_attack_targets
@@ -8293,6 +8500,9 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_i32(builder.position.y);
                 hash.write_i32(builder.profile.speed_per_tick);
                 hash.write_i32(builder.profile.repair_range);
+                hash.write_i32(builder.profile.repair_autocast_range);
+                hash.write_u16(builder.profile.repair_time_ratio_numerator);
+                hash.write_u16(builder.profile.repair_time_ratio_denominator);
                 hash.write_u16(builder.profile.full_repair_duration_ticks);
                 hash.write_u64(u64::from(builder.configuration.appearance.rawcode));
                 hash.write_u8(match builder.configuration.locomotion {
@@ -8313,6 +8523,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 }
                 hash.write_u64(builder.state.repair_target.map_or(0, |target| target.0));
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
+                hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
             }
         }
     }
@@ -8391,6 +8602,8 @@ struct CanonicalUnit {
     armor: ArmorProfile,
     passive_effects: PassiveUnitEffects,
     movement_class: MovementClass,
+    mechanical: bool,
+    build_time_ticks: Option<u32>,
     movement: MovementProfile,
     cooldown: AttackCooldown,
     attack_sequence: AttackSequence,
@@ -8417,6 +8630,7 @@ struct CanonicalBuilding {
     production_corpse: Option<CorpseProfile>,
     production_collision_radius: Option<CollisionRadius>,
     production_movement_class: Option<MovementClass>,
+    production_repair_metadata: Option<ProductionUnitRepairMetadata>,
     production_attack_targets: Option<AttackTargetMask>,
     production_damage_type: Option<DamageType>,
     production_armor: Option<ArmorProfile>,

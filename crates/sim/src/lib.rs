@@ -3864,9 +3864,13 @@ mod tests {
             profile: BuilderProfile {
                 speed_per_tick: cell,
                 repair_range: cell,
+                repair_autocast_range: cell,
+                repair_time_ratio_numerator: 1,
+                repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 10,
             },
             configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: false,
         });
 
         assert_eq!(sim.unit_count(), 0, "builder must not be a combat unit");
@@ -3877,6 +3881,7 @@ mod tests {
                 position: SimPoint::new(3 * cell, 5 * cell),
                 profile: existing_builder.profile,
                 configuration: existing_builder.configuration,
+                repair_autocast_enabled: existing_builder.repair_autocast_enabled,
             }),
             Err(BuilderSpawnError::TeamAlreadyHasBuilder)
         );
@@ -3924,9 +3929,13 @@ mod tests {
             profile: BuilderProfile {
                 speed_per_tick: cell,
                 repair_range: cell,
+                repair_autocast_range: cell,
+                repair_time_ratio_numerator: 1,
+                repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 10,
             },
             configuration: test_builder_configuration(vec![allowed_rawcode]),
+            repair_autocast_enabled: false,
         });
 
         assert!(
@@ -4001,9 +4010,13 @@ mod tests {
             profile: BuilderProfile {
                 speed_per_tick: 2 * cell,
                 repair_range: 2 * cell,
+                repair_autocast_range: 2 * cell,
+                repair_time_ratio_numerator: 1,
+                repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 9,
             },
             configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: false,
         });
         let mut target_spawn = passive_building(0, BuildingFootprint::new(10, 4, 1, 1));
         target_spawn.health = 900;
@@ -4032,7 +4045,7 @@ mod tests {
         assert!(damaged < 900, "test attacker must damage repair target");
         assert_eq!(
             sim.order_builder_repair(builder, SimId(u64::MAX)),
-            Err(BuilderCommandError::BuildingNotFound)
+            Err(BuilderCommandError::RepairTargetNotFound)
         );
         sim.order_builder_repair(builder, target).unwrap();
 
@@ -4056,6 +4069,160 @@ mod tests {
             sim.builder(builder).unwrap().position.x > 5 * cell,
             "builder must cross the static blocker while moving to repair"
         );
+    }
+
+    #[test]
+    fn builder_repair_autocast_is_toggleable_and_repairs_mechanical_units() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(29, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 20, 10)],
+                vec![BuildingFootprint::new(20, 0, 10, 10)],
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(cell, 4 * cell),
+            profile: BuilderProfile {
+                speed_per_tick: 0,
+                repair_range: 10 * cell,
+                repair_autocast_range: 20 * cell,
+                repair_time_ratio_numerator: 3,
+                repair_time_ratio_denominator: 2,
+                full_repair_duration_ticks: 3,
+            },
+            configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: true,
+        });
+        assert!(sim.builder(builder).unwrap().repair_autocast_enabled);
+        sim.set_builder_repair_autocast(builder, false).unwrap();
+        assert!(!sim.builder(builder).unwrap().repair_autocast_enabled);
+
+        let mechanical = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(3 * cell, 4 * cell),
+                health: 600,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: cell,
+                    acquisition_range: cell,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                mechanical: true,
+                // Four ticks of build time at a 1.5x Repair Time Ratio gives a six-tick full
+                // repair duration: 100 HP/tick for this 600-HP test unit.
+                build_time_ticks: Some(4),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        assert!(sim.unit(mechanical).unwrap().mechanical);
+
+        let organic = sim.spawn_unit(passive_unit(0, 5 * cell));
+        assert_eq!(
+            sim.order_builder_repair(builder, organic),
+            Err(BuilderCommandError::RepairTargetNotRepairable)
+        );
+
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(4 * cell, 4 * cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 300,
+                range: 4 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1_000,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        for _ in 0..4 {
+            sim.step();
+            if sim.unit(mechanical).unwrap().health < 600 {
+                break;
+            }
+        }
+        assert_eq!(sim.unit(mechanical).unwrap().health, 300);
+        assert_eq!(sim.builder(builder).unwrap().repair_target, None);
+
+        sim.set_builder_repair_autocast(builder, true).unwrap();
+        sim.step();
+        assert_eq!(
+            sim.builder(builder).unwrap().repair_target,
+            Some(mechanical)
+        );
+        assert_eq!(sim.unit(mechanical).unwrap().health, 400);
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(mechanical).unwrap().health, 600);
+        assert_eq!(sim.builder(builder).unwrap().repair_target, None);
+    }
+
+    #[test]
+    fn builder_repair_autocast_does_not_override_explicit_move() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(29, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 20, 10)],
+                vec![BuildingFootprint::new(20, 0, 10, 10)],
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(cell, 4 * cell),
+            profile: BuilderProfile {
+                speed_per_tick: cell,
+                repair_range: 2 * cell,
+                repair_autocast_range: 10 * cell,
+                repair_time_ratio_numerator: 1,
+                repair_time_ratio_denominator: 1,
+                full_repair_duration_ticks: 10,
+            },
+            configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: true,
+        });
+        let target = sim.spawn_building(passive_building(0, BuildingFootprint::new(3, 4, 1, 1)));
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(6 * cell, 4 * cell),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 100,
+                range: 4 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1_000,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        for _ in 0..4 {
+            sim.step();
+            if sim.building(target).unwrap().health < 10_000 {
+                break;
+            }
+        }
+        assert!(sim.building(target).unwrap().health < 10_000);
+
+        let destination = SimPoint::new(8 * cell, 4 * cell);
+        sim.order_builder_move(builder, destination).unwrap();
+        sim.step();
+        let view = sim.builder(builder).unwrap();
+        assert_eq!(view.repair_target, None);
+        assert_eq!(view.destination, Some(destination));
+        assert_eq!(view.position, SimPoint::new(2 * cell, 4 * cell));
     }
 
     #[test]

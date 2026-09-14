@@ -104,6 +104,7 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
             // buildings. Model that as a draft-style variable menu while keeping one builder type.
             configuration: builder_definition
                 .configuration_with_catalog(demo_build_catalog.clone()),
+            repair_autocast_enabled: builder_definition.repair_autocast_enabled_by_default,
         });
     }
 
@@ -529,6 +530,7 @@ mod tests {
         assert_eq!(builders[0].configuration.appearance.rawcode, human.rawcode);
         assert_eq!(builders[0].configuration.locomotion, human.locomotion);
         assert_eq!(builders[0].configuration.build_catalog.len(), 7);
+        assert!(builders[0].repair_autocast_enabled);
         assert_eq!(builders[1].team, Team(1));
         assert_eq!(builders[1].position, world_point(CASTLE_CENTER_X_WORLD, 0));
         assert_eq!(builders[1].profile, human.profile);

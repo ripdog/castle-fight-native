@@ -348,6 +348,8 @@ pub struct UnitGameplayProperties {
     pub corpse: Option<CorpseProfile>,
     pub collision_radius: Option<CollisionRadius>,
     pub movement_class: MovementClass,
+    pub mechanical: bool,
+    pub build_time_ticks: Option<u32>,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
@@ -372,6 +374,12 @@ pub(crate) struct ProductionCollisionRadius(pub CollisionRadius);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionMovementClass(pub MovementClass);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionUnitRepairMetadata {
+    pub mechanical: bool,
+    pub build_time_ticks: Option<u32>,
+}
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionAttackTargets(pub AttackTargetMask);
@@ -442,6 +450,9 @@ pub struct MovementProfile {
 pub struct BuilderProfile {
     pub speed_per_tick: i32,
     pub repair_range: i32,
+    pub repair_autocast_range: i32,
+    pub repair_time_ratio_numerator: u16,
+    pub repair_time_ratio_denominator: u16,
     pub full_repair_duration_ticks: u16,
 }
 
@@ -471,6 +482,7 @@ pub struct BuilderSpawn {
     pub position: SimPoint,
     pub profile: BuilderProfile,
     pub configuration: BuilderConfiguration,
+    pub repair_autocast_enabled: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -481,7 +493,14 @@ pub(crate) struct BuilderState {
     pub destination: Option<SimPoint>,
     pub repair_target: Option<SimId>,
     pub repair_progress_remainder: u32,
+    pub repair_autocast_enabled: bool,
 }
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MechanicalUnit;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BuildTimeTicks(pub u32);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpawnTick(pub u64);
