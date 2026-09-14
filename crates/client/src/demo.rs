@@ -1,10 +1,10 @@
 use castle_fight_sim::{
     ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingEconomyProfile,
-    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace,
-    CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind, CombatRules,
-    ContentIdentity, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
-    SimulationConfig, TargetlessLane, Team, TerrainElevationMap, UnitSpawn,
-    castle_fight_damage_rules, castle_fight_economy_rules,
+    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+    CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS, CastleFightBuilderRace, CastleFightProductionKind,
+    CastleFightTowerKind, CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, TargetlessLane, Team,
+    TerrainElevationMap, UnitSpawn, castle_fight_damage_rules, castle_fight_economy_rules,
 };
 
 use crate::presentation::WorldMetrics;
@@ -118,6 +118,7 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
             rawcode: u32::from_be_bytes(*b"hcas"),
             name: "Main Castle",
         }),
+        repair_time_ticks: Some(CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS),
         damage_type: DamageType::Normal,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         ..BuildingGameplayProperties::default()

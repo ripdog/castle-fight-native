@@ -24,7 +24,8 @@ const CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS: i32 = 50;
 const CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS: i32 = 500;
 const CASTLE_FIGHT_BUILDER_BLINK_RANGE_WORLD_UNITS: i32 = 10_000;
 const CASTLE_FIGHT_BUILDER_BLINK_BOUNDARY_INSET_WORLD_UNITS: i32 = 64;
-const CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS: u16 = 2;
+const CASTLE_FIGHT_STANDARD_REPAIR_TIME_SECONDS: u16 = 70;
+pub const CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS: u32 = 700 * CASTLE_FIGHT_SIMULATION_HZ as u32;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR: u16 = 2;
 const CASTLE_FIGHT_COLLISION_WORLD_UNITS: i32 = 16;
@@ -366,6 +367,7 @@ impl CastleFightUnitKind {
                 name: "Footman",
                 health: 250,
                 build_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                repair_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Large, 4),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
@@ -394,6 +396,7 @@ impl CastleFightUnitKind {
                 name: "Ranger",
                 health: 500,
                 build_time_ticks: 32 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                repair_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Small, 3),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
@@ -422,6 +425,7 @@ impl CastleFightUnitKind {
                 name: "Catapult",
                 health: 475,
                 build_time_ticks: 34 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                repair_time_ticks: 36 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Medium, 5),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
@@ -451,6 +455,7 @@ impl CastleFightUnitKind {
                 name: "Ice Troll Shadow Priest",
                 health: 350,
                 build_time_ticks: 23 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                repair_time_ticks: 25 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Small, 1),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
@@ -479,6 +484,7 @@ impl CastleFightUnitKind {
                 name: "Gryphon Rider",
                 health: 500,
                 build_time_ticks: 27 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                repair_time_ticks: 45 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Medium, 2),
                 passive_effects: PassiveUnitEffects::EMPTY,
                 spellcasting: None,
@@ -512,6 +518,7 @@ pub struct CastleFightUnitDefinition {
     pub name: &'static str,
     pub health: i32,
     pub build_time_ticks: u32,
+    pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
     pub passive_effects: PassiveUnitEffects,
     pub spellcasting: Option<SpellcastingProfile>,
@@ -547,6 +554,7 @@ impl CastleFightUnitDefinition {
             movement_class: self.movement_class,
             mechanical: self.mechanical,
             build_time_ticks: Some(self.build_time_ticks),
+            repair_time_ticks: Some(self.repair_time_ticks),
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
@@ -643,6 +651,7 @@ pub struct CastleFightProductionDefinition {
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
     pub building_health: i32,
+    pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
     pub spawn_interval_ticks: u16,
     pub footprint_size_cells: u16,
@@ -679,6 +688,7 @@ impl CastleFightProductionDefinition {
                 rawcode: self.rawcode,
                 name: self.name,
             }),
+            repair_time_ticks: Some(self.repair_time_ticks),
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
             armor: self.armor,
@@ -716,6 +726,7 @@ impl CastleFightTowerKind {
                 lumber_cost: 300,
                 economy: verified_building_economy_927(u32::from_be_bytes(*b"h006"), 150, 300),
                 health: 1_500,
+                repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Pierce,
                 attack_targets: AttackTargetMask::AIR_AND_GROUND,
@@ -737,6 +748,7 @@ impl CastleFightTowerKind {
                 lumber_cost: 300,
                 economy: verified_building_economy_927(u32::from_be_bytes(*b"h07P"), 230, 300),
                 health: 1_250,
+                repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Magic,
                 attack_targets: AttackTargetMask::ALL,
@@ -765,6 +777,7 @@ pub struct CastleFightTowerDefinition {
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
     pub health: i32,
+    pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
@@ -792,6 +805,7 @@ impl CastleFightTowerDefinition {
                 rawcode: self.rawcode,
                 name: self.name,
             }),
+            repair_time_ticks: Some(self.repair_time_ticks),
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
@@ -803,6 +817,7 @@ impl CastleFightTowerDefinition {
                 movement_class: MovementClass::Ground,
                 mechanical: false,
                 build_time_ticks: None,
+                repair_time_ticks: None,
                 attack_targets: AttackTargetMask::ALL,
                 damage_type: DamageType::Normal,
                 armor: ArmorProfile::UNARMORED,
@@ -838,7 +853,9 @@ fn builder_profile(move_speed_world_units_per_second: i32) -> BuilderProfile {
         repair_autocast_range: world(CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS),
         repair_time_ratio_numerator: CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR,
         repair_time_ratio_denominator: CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR,
-        full_repair_duration_ticks: CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS
+        // Real Castle Fight content supplies target-specific `urtm`; this fallback only covers
+        // synthetic/native test buildings without object metadata.
+        full_repair_duration_ticks: CASTLE_FIGHT_STANDARD_REPAIR_TIME_SECONDS
             * CASTLE_FIGHT_SIMULATION_HZ as u16
             * CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR
             / CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR,
@@ -1089,6 +1106,7 @@ fn production_definition(
         lumber_cost: 0,
         economy,
         building_health,
+        repair_time_ticks: 70 * CASTLE_FIGHT_SIMULATION_HZ as u32,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         spawn_interval_ticks: spawn_seconds * CASTLE_FIGHT_SIMULATION_HZ as u16,
         footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS,
@@ -1220,7 +1238,7 @@ mod tests {
                 repair_autocast_range: 500 * SUBUNITS_PER_WORLD_UNIT,
                 repair_time_ratio_numerator: 3,
                 repair_time_ratio_denominator: 2,
-                full_repair_duration_ticks: 90,
+                full_repair_duration_ticks: 3_150,
                 blink_range: 10_000 * SUBUNITS_PER_WORLD_UNIT,
                 blink_boundary_inset: 64 * SUBUNITS_PER_WORLD_UNIT,
             }
@@ -1387,6 +1405,78 @@ mod tests {
                 .any(|classification| classification == "mechanical");
             assert_eq!(definition.mechanical, extracted_mechanical);
         }
+    }
+
+    #[test]
+    fn native_repair_times_match_extracted_urtm_values() {
+        let object_fields =
+            include_str!("../../../docs/original_map/extracted/resolved/object-fields.tsv");
+        let mut lines = object_fields.lines();
+        let columns = lines
+            .next()
+            .expect("object-fields.tsv header missing")
+            .split('\t')
+            .collect::<Vec<_>>();
+        let category_column = columns
+            .iter()
+            .position(|column| *column == "category")
+            .unwrap();
+        let rawcode_column = columns
+            .iter()
+            .position(|column| *column == "rawcode")
+            .unwrap();
+        let field_id_column = columns
+            .iter()
+            .position(|column| *column == "field_id")
+            .unwrap();
+        let recovered_column = columns
+            .iter()
+            .position(|column| *column == "recovered_value_json")
+            .unwrap();
+        let rows = lines
+            .map(|line| line.split('\t').collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let repair_ticks = |rawcode: u32| {
+            let rawcode = rawcode.to_be_bytes();
+            let rawcode = std::str::from_utf8(&rawcode).expect("rawcode must be ASCII");
+            let row = rows
+                .iter()
+                .find(|row| {
+                    row[category_column] == "units"
+                        && row[rawcode_column] == rawcode
+                        && row[field_id_column] == "urtm"
+                })
+                .unwrap_or_else(|| panic!("missing extracted urtm for {rawcode}"));
+            let seconds = serde_json::from_str::<u32>(row[recovered_column])
+                .expect("urtm recovered value must be integral seconds");
+            seconds * CASTLE_FIGHT_SIMULATION_HZ as u32
+        };
+
+        for kind in CastleFightUnitKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                definition.repair_time_ticks,
+                repair_ticks(definition.rawcode)
+            );
+        }
+        for kind in CastleFightProductionKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                definition.repair_time_ticks,
+                repair_ticks(definition.rawcode)
+            );
+        }
+        for kind in CastleFightTowerKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                definition.repair_time_ticks,
+                repair_ticks(definition.rawcode)
+            );
+        }
+        assert_eq!(
+            CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS,
+            repair_ticks(u32::from_be_bytes(*b"hcas"))
+        );
     }
 
     #[test]

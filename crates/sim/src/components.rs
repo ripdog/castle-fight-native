@@ -351,6 +351,7 @@ pub struct UnitGameplayProperties {
     pub movement_class: MovementClass,
     pub mechanical: bool,
     pub build_time_ticks: Option<u32>,
+    pub repair_time_ticks: Option<u32>,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
@@ -360,6 +361,7 @@ pub struct UnitGameplayProperties {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BuildingGameplayProperties {
     pub content: Option<ContentIdentity>,
+    pub repair_time_ticks: Option<u32>,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
@@ -381,6 +383,7 @@ pub(crate) struct ProductionMovementClass(pub MovementClass);
 pub(crate) struct ProductionUnitRepairMetadata {
     pub mechanical: bool,
     pub build_time_ticks: Option<u32>,
+    pub repair_time_ticks: Option<u32>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -505,6 +508,9 @@ pub(crate) struct MechanicalUnit;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BuildTimeTicks(pub u32);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RepairTimeTicks(pub u32);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpawnTick(pub u64);

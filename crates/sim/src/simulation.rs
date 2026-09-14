@@ -31,9 +31,9 @@ use crate::{
         ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
         ProductionDamageType, ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
         ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
-        RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team,
-        TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
-        UnitGameplayProperties, UnitSpawn,
+        RepairTimeTicks, RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState,
+        TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime,
+        TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, DamageRules, DamageType},
@@ -1137,9 +1137,9 @@ impl Simulation {
                 assert!(
                     properties
                         .production_unit
-                        .build_time_ticks
+                        .repair_time_ticks
                         .is_some_and(|ticks| ticks > 0),
-                    "mechanical production units require positive build-time metadata for repair"
+                    "mechanical production units require positive repair-time metadata"
                 );
             }
             if let Some(spellcasting) = properties.production_spellcasting {
@@ -1151,6 +1151,12 @@ impl Simulation {
         }
         if let Some(spellcasting) = building.spellcasting {
             validate_spellcasting_profile(spellcasting);
+        }
+        if let Some(repair_time_ticks) = properties.repair_time_ticks {
+            assert!(
+                repair_time_ticks > 0,
+                "building repair time must be positive"
+            );
         }
 
         if !self.footprint_inside_navigation(building.footprint) {
@@ -1196,6 +1202,9 @@ impl Simulation {
         if let Some(economy) = properties.economy {
             entity.insert(economy);
         }
+        if let Some(repair_time_ticks) = properties.repair_time_ticks {
+            entity.insert(RepairTimeTicks(repair_time_ticks));
+        }
         if let Some(production) = building.production {
             let next_spawn_tick = self
                 .next_tick
@@ -1208,6 +1217,7 @@ impl Simulation {
                 ProductionUnitRepairMetadata {
                     mechanical: properties.production_unit.mechanical,
                     build_time_ticks: properties.production_unit.build_time_ticks,
+                    repair_time_ticks: properties.production_unit.repair_time_ticks,
                 },
                 ProductionAttackTargets(properties.production_unit.attack_targets),
             ));
@@ -2678,6 +2688,9 @@ impl Simulation {
         if let Some(build_time_ticks) = properties.build_time_ticks {
             entity.insert(BuildTimeTicks(build_time_ticks));
         }
+        if let Some(repair_time_ticks) = properties.repair_time_ticks {
+            entity.insert(RepairTimeTicks(repair_time_ticks));
+        }
         entity.insert((
             properties.damage_type,
             properties.armor,
@@ -3117,6 +3130,7 @@ impl Simulation {
                         movement_class: movement_class.0,
                         mechanical: repair_metadata.mechanical,
                         build_time_ticks: repair_metadata.build_time_ticks,
+                        repair_time_ticks: repair_metadata.repair_time_ticks,
                         attack_targets: attack_targets.0,
                         damage_type: damage_type.0,
                         armor: armor.0,
@@ -3231,6 +3245,7 @@ impl Simulation {
                         movement_class: attempt.movement_class,
                         mechanical: attempt.mechanical,
                         build_time_ticks: attempt.build_time_ticks,
+                        repair_time_ticks: attempt.repair_time_ticks,
                         attack_targets: attempt.attack_targets,
                         damage_type: attempt.damage_type,
                         armor: attempt.armor,
@@ -6539,6 +6554,7 @@ struct ProductionAttempt {
     movement_class: MovementClass,
     mechanical: bool,
     build_time_ticks: Option<u32>,
+    repair_time_ticks: Option<u32>,
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
     armor: ArmorProfile,
@@ -6560,7 +6576,7 @@ struct BuilderRepairTargetSnapshot {
     team: Team,
     health: Health,
     geometry: BuilderRepairGeometry,
-    build_time_ticks: Option<u32>,
+    repair_time_ticks: Option<u32>,
 }
 
 impl BuilderRepairTargetSnapshot {
@@ -8055,19 +8071,19 @@ fn builder_repair_target_from_entity(
             team,
             health,
             geometry: BuilderRepairGeometry::Building(footprint),
-            build_time_ticks: None,
+            repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
         });
     }
     entity.get::<MechanicalUnit>()?;
     let position = entity.get::<Position>()?.0;
-    let build_time_ticks = entity.get::<BuildTimeTicks>()?.0;
+    let repair_time_ticks = entity.get::<RepairTimeTicks>()?.0;
     Some(BuilderRepairTargetSnapshot {
         entity: entity.id(),
         id,
         team,
         health,
         geometry: BuilderRepairGeometry::Unit(position),
-        build_time_ticks: Some(build_time_ticks),
+        repair_time_ticks: Some(repair_time_ticks),
     })
 }
 
@@ -8075,10 +8091,10 @@ fn builder_repair_duration_ticks(
     profile: BuilderProfile,
     target: BuilderRepairTargetSnapshot,
 ) -> u64 {
-    let Some(build_time_ticks) = target.build_time_ticks else {
+    let Some(repair_time_ticks) = target.repair_time_ticks else {
         return u64::from(profile.full_repair_duration_ticks);
     };
-    let scaled = u64::from(build_time_ticks)
+    let scaled = u64::from(repair_time_ticks)
         .checked_mul(u64::from(profile.repair_time_ratio_numerator))
         .expect("mechanical-unit repair duration overflow");
     let denominator = u64::from(profile.repair_time_ratio_denominator);
@@ -8397,6 +8413,7 @@ fn canonical_checksum(
                     movement_class: *entity.get::<MovementClass>()?,
                     mechanical: entity.get::<MechanicalUnit>().is_some(),
                     build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
+                    repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
                     movement: *entity.get::<MovementProfile>()?,
                     cooldown: *entity.get::<AttackCooldown>()?,
                     attack_sequence: *entity.get::<AttackSequence>()?,
@@ -8418,6 +8435,7 @@ fn canonical_checksum(
                     footprint: *entity.get::<BuildingFootprint>()?,
                     health,
                     economy: entity.get::<BuildingEconomyProfile>().copied(),
+                    repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
                     production: entity.get::<ProductionProfile>().copied(),
                     production_state: entity.get::<ProductionState>().copied(),
                     production_corpse: entity
@@ -8493,6 +8511,7 @@ fn canonical_checksum(
                 });
                 hash.write_u8(u8::from(unit.mechanical));
                 hash.write_u64(unit.build_time_ticks.map_or(0, u64::from));
+                hash.write_u64(unit.repair_time_ticks.map_or(0, u64::from));
                 hash.write_i32(unit.attack.damage);
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
@@ -8561,6 +8580,7 @@ fn canonical_checksum(
                 } else {
                     hash.write_u8(0);
                 }
+                hash.write_u64(building.repair_time_ticks.map_or(0, u64::from));
                 hash.write_u8(building.damage_type.stable_tag());
                 hash.write_u8(building.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(building.armor.armor_points));
@@ -8605,6 +8625,7 @@ fn canonical_checksum(
                         .expect("production building missing repair metadata");
                     hash.write_u8(u8::from(repair_metadata.mechanical));
                     hash.write_u64(repair_metadata.build_time_ticks.map_or(0, u64::from));
+                    hash.write_u64(repair_metadata.repair_time_ticks.map_or(0, u64::from));
                     hash.write_u8(
                         building
                             .production_attack_targets
@@ -8915,6 +8936,7 @@ struct CanonicalUnit {
     movement_class: MovementClass,
     mechanical: bool,
     build_time_ticks: Option<u32>,
+    repair_time_ticks: Option<u32>,
     movement: MovementProfile,
     cooldown: AttackCooldown,
     attack_sequence: AttackSequence,
@@ -8937,6 +8959,7 @@ struct CanonicalBuilding {
     footprint: BuildingFootprint,
     health: Health,
     economy: Option<BuildingEconomyProfile>,
+    repair_time_ticks: Option<u32>,
     production: Option<ProductionProfile>,
     production_state: Option<ProductionState>,
     production_corpse: Option<CorpseProfile>,

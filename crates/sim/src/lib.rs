@@ -22,12 +22,12 @@ pub use components::{
 };
 pub use content::{
     CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_DEFAULT_MAP_VERSION,
-    CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuilderDefinition, CastleFightBuilderRace,
-    CastleFightProductionDefinition, CastleFightProductionKind, CastleFightTowerDefinition,
-    CastleFightTowerKind, CastleFightUnitDefinition, CastleFightUnitKind,
-    UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
-    castle_fight_builder_profile_for_version, castle_fight_damage_rules,
-    castle_fight_economy_rules, castle_fight_economy_rules_for_version,
+    CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS, CASTLE_FIGHT_SIMULATION_HZ,
+    CastleFightBuilderDefinition, CastleFightBuilderRace, CastleFightProductionDefinition,
+    CastleFightProductionKind, CastleFightTowerDefinition, CastleFightTowerKind,
+    CastleFightUnitDefinition, CastleFightUnitKind, UnsupportedCastleFightMapVersion,
+    castle_fight_builder_profile, castle_fight_builder_profile_for_version,
+    castle_fight_damage_rules, castle_fight_economy_rules, castle_fight_economy_rules_for_version,
 };
 pub use damage::{
     ArmorProfile, ArmorType, DAMAGE_MULTIPLIER_SCALE, DamageRules, DamageRulesLoadError, DamageType,
@@ -4151,7 +4151,7 @@ mod tests {
                 repair_autocast_range: 2 * cell,
                 repair_time_ratio_numerator: 1,
                 repair_time_ratio_denominator: 1,
-                full_repair_duration_ticks: 9,
+                full_repair_duration_ticks: 99,
                 blink_range: 20 * cell,
                 blink_boundary_inset: 0,
             },
@@ -4160,7 +4160,13 @@ mod tests {
         });
         let mut target_spawn = passive_building(0, BuildingFootprint::new(10, 4, 1, 1));
         target_spawn.health = 900;
-        let target = sim.spawn_building(target_spawn);
+        let target = sim.spawn_building_with_properties(
+            target_spawn,
+            BuildingGameplayProperties {
+                repair_time_ticks: Some(9),
+                ..BuildingGameplayProperties::default()
+            },
+        );
         sim.spawn_unit(UnitSpawn {
             team: Team(1),
             position: SimPoint::new(13 * cell, 4 * cell),
@@ -4260,9 +4266,10 @@ mod tests {
             },
             UnitGameplayProperties {
                 mechanical: true,
-                // Four ticks of build time at a 1.5x Repair Time Ratio gives a six-tick full
-                // repair duration: 100 HP/tick for this 600-HP test unit.
+                // Four ticks of target Repair Time at a 1.5x Repair Time Ratio gives a six-tick
+                // full repair duration: 100 HP/tick for this 600-HP test unit.
                 build_time_ticks: Some(4),
+                repair_time_ticks: Some(4),
                 ..UnitGameplayProperties::default()
             },
         );
