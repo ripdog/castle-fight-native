@@ -175,6 +175,8 @@ Presentation MUST reflect the authoritative attack delivery mode rather than inf
 
 The vertical shape of a ballistic arc MAY be cosmetic when only its fixed destination and impact tick matter to gameplay.
 
+Authoritative staged Chain Lightning events SHOULD retain the bounce index needed for presentation to distinguish Warcraft's primary and secondary lightning primitives. When the original lightning texture/data is available, the client SHOULD render that textured primitive instead of substituting an unrelated solid-color line.
+
 For any already-resolved attack, presentation MAY create cosmetic travel/effects only when doing so cannot imply a contradictory gameplay result.
 
 Presentation must distinguish authoritative and cosmetic projectile state so a visual effect cannot accidentally become a hidden gameplay timer.

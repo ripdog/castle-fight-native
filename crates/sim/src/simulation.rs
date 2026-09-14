@@ -178,6 +178,7 @@ pub struct AbilityCastEvent {
 pub struct ChainLightningEvent {
     pub source: SimId,
     pub ability: AbilityId,
+    pub bounce_index: u8,
     points: [SimPoint; MAX_BOUNCE_HITS + 1],
     point_count: u8,
 }
@@ -1271,6 +1272,7 @@ impl Simulation {
             self.last_chain_lightnings.push(ChainLightningEvent {
                 source: state.source,
                 ability: state.profile.ability,
+                bounce_index: state.next_jump_index,
                 points,
                 point_count: 2,
             });
@@ -6898,6 +6900,7 @@ fn apply_pending_attack_effects(
                     result.chain_event = Some(ChainLightningEvent {
                         source: source.id,
                         ability: profile.ability,
+                        bounce_index: 0,
                         points,
                         point_count: 2,
                     });

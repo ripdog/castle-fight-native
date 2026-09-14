@@ -696,6 +696,7 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].source, source);
         assert_eq!(events[0].ability, AbilityId(u32::from_be_bytes(*b"CHLN")));
+        assert_eq!(events[0].bounce_index, 0);
         assert_eq!(
             events[0].points(),
             &[SimPoint::new(40 * world, 0), SimPoint::new(41 * world, 0)]
@@ -708,6 +709,7 @@ mod tests {
         sim.step();
         assert_eq!(sim.unit(second).unwrap().health, 950);
         assert_eq!(sim.unit(third).unwrap().health, 1_000);
+        assert_eq!(sim.chain_lightnings_last_tick()[0].bounce_index, 1);
         assert_eq!(
             sim.chain_lightnings_last_tick()[0].points(),
             &[SimPoint::new(41 * world, 0), SimPoint::new(43 * world, 0)]
@@ -719,6 +721,7 @@ mod tests {
         assert_eq!(sim.unit(third).unwrap().health, 1_000);
         sim.step();
         assert_eq!(sim.unit(third).unwrap().health, 975);
+        assert_eq!(sim.chain_lightnings_last_tick()[0].bounce_index, 2);
         assert_eq!(
             sim.chain_lightnings_last_tick()[0].points(),
             &[SimPoint::new(43 * world, 0), SimPoint::new(45 * world, 0)]

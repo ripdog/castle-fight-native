@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use bevy::{
+    asset::RenderAssetUsages,
     camera::{
         Exposure,
         primitives::{Frustum, Sphere},
@@ -8,6 +9,7 @@ use bevy::{
     gltf::Gltf,
     input::mouse::MouseWheel,
     light::AmbientLight,
+    mesh::{Indices, PrimitiveTopology},
     prelude::*,
     render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
     time::Fixed,
@@ -59,6 +61,12 @@ const PROJECTILE_IMPACT_RADIUS: f32 = 8.0;
 const ABILITY_AREA_EFFECT_SECONDS: f32 = 0.65;
 const ABILITY_MODEL_EFFECT_SECONDS: f32 = 0.9;
 const LIGHTNING_EFFECT_SECONDS: f32 = 0.22;
+const WC3_CHAIN_LIGHTNING_TEXTURE: &str =
+    "wc3/effects/textures/replaceabletextures__weather__lightning.png";
+const WC3_CHAIN_LIGHTNING_AVG_SEGMENT_LENGTH: f32 = 100.0;
+const WC3_CHAIN_LIGHTNING_PRIMARY_WIDTH: f32 = 50.0;
+const WC3_CHAIN_LIGHTNING_SECONDARY_WIDTH: f32 = 30.0;
+const WC3_CHAIN_LIGHTNING_NOISE_SCALE: f32 = 0.05;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const FLESH_DECAY_TICKS: u64 = 2 * CASTLE_FIGHT_SIMULATION_HZ as u64;
 const BONE_DECAY_TICKS: u64 = 25 * CASTLE_FIGHT_SIMULATION_HZ as u64;
@@ -221,6 +229,7 @@ struct PresentationAssets {
     neutral_building_accent_material: Handle<StandardMaterial>,
     neutral_unit_accent_material: Handle<StandardMaterial>,
     neutral_corpse_material: Handle<StandardMaterial>,
+    lightning_material: Handle<StandardMaterial>,
 }
 
 impl PresentationAssets {
@@ -345,21 +354,11 @@ struct AbilityAreaImpact {
 #[derive(Resource, Default)]
 struct AbilityAreaImpacts(Vec<AbilityAreaImpact>);
 
-#[derive(Debug, Clone, Copy)]
-struct LightningImpact {
-    start: Vec3,
-    end: Vec3,
-    seed: u32,
-    remaining: f32,
-}
-
-#[derive(Resource, Default)]
-struct LightningImpacts(Vec<LightningImpact>);
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct TimedWc3Effect {
     entity: Entity,
     remaining: f32,
+    mesh: Option<Handle<Mesh>>,
 }
 
 #[derive(Resource, Default)]
@@ -466,9 +465,6 @@ struct HealthBarGizmos;
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct ProjectileEffectGizmos;
 
-#[derive(Default, Reflect, GizmoConfigGroup)]
-struct LightningEffectGizmos;
-
 #[derive(Resource, Debug, Default)]
 struct FpsDisplay {
     elapsed_seconds: f32,
@@ -509,11 +505,9 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
-            .init_resource::<LightningImpacts>()
             .init_resource::<TimedWc3Effects>()
             .init_gizmo_group::<HealthBarGizmos>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
-            .init_gizmo_group::<LightningEffectGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -546,14 +540,12 @@ impl Plugin for CastlePresentationPlugin {
                     age_death_remnants,
                     age_projectile_impacts,
                     age_ability_area_impacts,
-                    age_lightning_impacts,
                     age_timed_wc3_effects,
                     spawn_wc3_ribbon_trails,
                     update_wc3_ribbon_trails,
                     update_wc3_particles,
                     emit_wc3_particles,
                     draw_projectile_effects,
-                    draw_lightning_effects,
                     draw_health_bars,
                     draw_presentation_gizmos,
                     sample_display_fps,
@@ -593,9 +585,6 @@ fn setup_scene(
     health_bar_config.line.perspective = false;
     let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
     projectile_effect_config.line.width = 3.0;
-    let (lightning_effect_config, _) = gizmo_configs.config_mut::<LightningEffectGizmos>();
-    lightning_effect_config.line.width = 9.0;
-    lightning_effect_config.line.perspective = false;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
     let ranged_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
     let ballistic_unit_mesh = meshes.add(Cuboid::new(7.0, UNIT_RANGED_HEIGHT, 7.0));
@@ -717,6 +706,14 @@ fn setup_scene(
         unlit: true,
         ..default()
     });
+    let lightning_material = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        base_color_texture: Some(asset_server.load(WC3_CHAIN_LIGHTNING_TEXTURE)),
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        double_sided: true,
+        ..default()
+    });
 
     commands.insert_resource(PresentationAssets {
         melee_mesh,
@@ -752,6 +749,7 @@ fn setup_scene(
         neutral_building_accent_material,
         neutral_unit_accent_material,
         neutral_corpse_material,
+        lightning_material,
     });
 
     let world_size = metrics.world_size();
@@ -1718,8 +1716,8 @@ type SyncRenderEffects<'w> = (
     ResMut<'w, DeathRemnants>,
     ResMut<'w, ProjectileImpacts>,
     ResMut<'w, AbilityAreaImpacts>,
-    ResMut<'w, LightningImpacts>,
     ResMut<'w, TimedWc3Effects>,
+    ResMut<'w, Assets<Mesh>>,
 );
 
 fn sync_render_entities(
@@ -1730,13 +1728,8 @@ fn sync_render_entities(
     effects: SyncRenderEffects<'_>,
 ) {
     let (metrics, terrain, assets, unit_models, building_models, wc3_visuals) = world;
-    let (
-        mut remnants,
-        mut projectile_impacts,
-        mut ability_impacts,
-        mut lightning_impacts,
-        mut timed_effects,
-    ) = effects;
+    let (mut remnants, mut projectile_impacts, mut ability_impacts, mut timed_effects, mut meshes) =
+        effects;
     if !samples.is_changed() {
         return;
     }
@@ -1846,14 +1839,25 @@ fn sync_render_entities(
             continue;
         }
         for (segment_index, points) in chain.points().windows(2).enumerate() {
-            lightning_impacts.0.push(LightningImpact {
-                start: sim_point_to_terrain_world(points[0], &terrain) + Vec3::Y * 8.0,
-                end: sim_point_to_terrain_world(points[1], &terrain) + Vec3::Y * 8.0,
-                seed: chain.ability.0
-                    ^ chain.source.0 as u32
-                    ^ samples.current.tick as u32
-                    ^ lightning_segment_seed(segment_index as u32, 0x9e37_79b9),
+            let start = sim_point_to_terrain_world(points[0], &terrain) + Vec3::Y * 8.0;
+            let end = sim_point_to_terrain_world(points[1], &terrain) + Vec3::Y * 8.0;
+            let width = wc3_chain_lightning_width(chain.bounce_index);
+            let seed = chain.ability.0
+                ^ chain.source.0 as u32
+                ^ samples.current.tick as u32
+                ^ lightning_segment_seed(segment_index as u32, 0x9e37_79b9);
+            let mesh = meshes.add(build_wc3_chain_lightning_mesh(start, end, seed, width));
+            let entity = commands
+                .spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(assets.lightning_material.clone()),
+                    Transform::IDENTITY,
+                ))
+                .id();
+            timed_effects.0.push(TimedWc3Effect {
+                entity,
                 remaining: LIGHTNING_EFFECT_SECONDS,
+                mesh: Some(mesh),
             });
         }
     }
@@ -1890,6 +1894,7 @@ fn sync_render_entities(
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: ABILITY_MODEL_EFFECT_SECONDS,
+                mesh: None,
             });
         }
 
@@ -2501,68 +2506,97 @@ fn age_ability_area_impacts(time: Res<Time>, mut impacts: ResMut<AbilityAreaImpa
     impacts.0.retain(|impact| impact.remaining > 0.0);
 }
 
-fn age_lightning_impacts(time: Res<Time>, mut impacts: ResMut<LightningImpacts>) {
-    let delta = time.delta_secs();
-    for impact in &mut impacts.0 {
-        impact.remaining -= delta;
-    }
-    impacts.0.retain(|impact| impact.remaining > 0.0);
-}
-
 fn age_timed_wc3_effects(
     mut commands: Commands,
     time: Res<Time>,
     mut effects: ResMut<TimedWc3Effects>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let delta = time.delta_secs();
     for effect in &mut effects.0 {
         effect.remaining -= delta;
         if effect.remaining <= 0.0 {
             commands.entity(effect.entity).despawn();
+            if let Some(mesh) = effect.mesh.take() {
+                meshes.remove(mesh.id());
+            }
         }
     }
     effects.0.retain(|effect| effect.remaining > 0.0);
 }
 
-fn draw_lightning_effects(
-    impacts: Res<LightningImpacts>,
-    mut gizmos: Gizmos<LightningEffectGizmos>,
-) {
-    const SEGMENTS: usize = 10;
-    for impact in &impacts.0 {
-        let life = (impact.remaining / LIGHTNING_EFFECT_SECONDS).clamp(0.0, 1.0);
-        let delta = impact.end - impact.start;
-        let lateral = delta
-            .normalize_or_zero()
-            .cross(Vec3::Y)
-            .normalize_or(Vec3::X);
-        let vertical = delta
-            .normalize_or_zero()
-            .cross(lateral)
-            .normalize_or(Vec3::Y);
-        let mut previous = impact.start;
-        for segment in 1..=SEGMENTS {
-            let t = segment as f32 / SEGMENTS as f32;
-            let mut point = impact.start.lerp(impact.end, t);
-            if segment != SEGMENTS {
-                let hash_a = lightning_hash(
-                    impact.seed ^ lightning_segment_seed(segment as u32, 0x9e37_79b9),
-                );
-                let hash_b = lightning_hash(
-                    impact.seed ^ lightning_segment_seed(segment as u32, 0x85eb_ca6b),
-                );
-                let envelope = (std::f32::consts::PI * t).sin();
-                point += lateral * ((hash_a * 2.0 - 1.0) * 8.0 * envelope);
-                point += vertical * ((hash_b * 2.0 - 1.0) * 5.0 * envelope);
-            }
-            gizmos.line(
-                previous,
-                point,
-                Color::srgb(0.52, 0.82, 1.0).with_alpha(life),
-            );
-            previous = point;
-        }
+fn wc3_chain_lightning_width(bounce_index: u8) -> f32 {
+    if bounce_index == 0 {
+        WC3_CHAIN_LIGHTNING_PRIMARY_WIDTH
+    } else {
+        WC3_CHAIN_LIGHTNING_SECONDARY_WIDTH
     }
+}
+
+fn build_wc3_chain_lightning_mesh(start: Vec3, end: Vec3, seed: u32, width: f32) -> Mesh {
+    let delta = end - start;
+    let length = delta.length().max(1.0);
+    let segment_count = (length / WC3_CHAIN_LIGHTNING_AVG_SEGMENT_LENGTH)
+        .ceil()
+        .clamp(1.0, 64.0) as usize;
+    let direction = delta.normalize_or(Vec3::X);
+    let lateral = Vec3::Y.cross(direction).normalize_or(Vec3::X);
+    let noise_amplitude = (length * WC3_CHAIN_LIGHTNING_NOISE_SCALE)
+        .min(WC3_CHAIN_LIGHTNING_AVG_SEGMENT_LENGTH * 0.75);
+
+    let mut centers = Vec::with_capacity(segment_count + 1);
+    for point_index in 0..=segment_count {
+        let t = point_index as f32 / segment_count as f32;
+        let mut point = start.lerp(end, t);
+        if point_index != 0 && point_index != segment_count {
+            let envelope = (std::f32::consts::PI * t).sin();
+            let side_noise =
+                lightning_hash(seed ^ lightning_segment_seed(point_index as u32, 0x9e37_79b9))
+                    * 2.0
+                    - 1.0;
+            let height_noise =
+                lightning_hash(seed ^ lightning_segment_seed(point_index as u32, 0x85eb_ca6b))
+                    * 2.0
+                    - 1.0;
+            point += lateral * side_noise * noise_amplitude * envelope;
+            point += Vec3::Y * height_noise * noise_amplitude * 0.5 * envelope;
+        }
+        centers.push(point);
+    }
+
+    let mut positions = Vec::with_capacity(segment_count * 4);
+    let mut normals = Vec::with_capacity(segment_count * 4);
+    let mut uvs = Vec::with_capacity(segment_count * 4);
+    let mut indices = Vec::with_capacity(segment_count * 6);
+    let half_width = width * 0.5;
+
+    for segment in 0..segment_count {
+        let from = centers[segment];
+        let to = centers[segment + 1];
+        let segment_direction = (to - from).normalize_or(direction);
+        let segment_lateral = Vec3::Y.cross(segment_direction).normalize_or(lateral) * half_width;
+        let base = u32::try_from(positions.len()).expect("lightning mesh vertex count fits u32");
+        positions.extend_from_slice(&[
+            (from - segment_lateral).to_array(),
+            (from + segment_lateral).to_array(),
+            (to - segment_lateral).to_array(),
+            (to + segment_lateral).to_array(),
+        ]);
+        normals.extend_from_slice(&[[0.0, 1.0, 0.0]; 4]);
+        // AvgSegLen in LightningData controls the texture segment length, so each generated
+        // segment receives one complete copy of the stock 256x64 lightning texture.
+        uvs.extend_from_slice(&[[0.0, 1.0], [0.0, 0.0], [1.0, 1.0], [1.0, 0.0]]);
+        indices.extend_from_slice(&[base, base + 2, base + 1, base + 1, base + 2, base + 3]);
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices))
 }
 
 const fn lightning_segment_seed(segment: u32, salt: u32) -> u32 {
@@ -3143,6 +3177,34 @@ mod tests {
         let new_sunlit = (WC3_SCENE_DIRECTIONAL_ILLUMINANCE + WC3_SCENE_AMBIENT_BRIGHTNESS)
             * calibrated_exposure;
         assert!(new_sunlit < old_sunlit * 0.25);
+    }
+
+    #[test]
+    fn wc3_chain_lightning_uses_primary_width_only_for_first_jump() {
+        assert_eq!(wc3_chain_lightning_width(0), 50.0);
+        assert_eq!(wc3_chain_lightning_width(1), 30.0);
+        assert_eq!(wc3_chain_lightning_width(7), 30.0);
+    }
+
+    #[test]
+    fn wc3_chain_lightning_mesh_uses_stock_segment_length_and_width() {
+        let mesh = build_wc3_chain_lightning_mesh(
+            Vec3::ZERO,
+            Vec3::new(250.0, 0.0, 0.0),
+            0x1234_5678,
+            WC3_CHAIN_LIGHTNING_PRIMARY_WIDTH,
+        );
+        let positions = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+
+        // ceil(250 / 100) = three stock-length textured segments, four vertices each.
+        assert_eq!(positions.len(), 12);
+        let first_left = Vec3::from_array(positions[0]);
+        let first_right = Vec3::from_array(positions[1]);
+        assert!((first_left.distance(first_right) - 50.0).abs() < 1.0e-4);
     }
 
     #[test]
