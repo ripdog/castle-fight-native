@@ -1,8 +1,9 @@
 use castle_fight_sim::{
-    ArmorProfile, ArmorType, BuildingFootprint, BuildingGameplayProperties, BuildingPlacementError,
-    BuildingSpawn, CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind,
-    CombatRules, ContentIdentity, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
-    Simulation, SimulationConfig, Team, TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
+    ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingFootprint,
+    BuildingGameplayProperties, BuildingSpawn, CastleFightProductionKind, CastleFightTowerKind,
+    CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, Team,
+    TerrainElevationMap, UnitSpawn, castle_fight_builder_profile, castle_fight_damage_rules,
 };
 
 use crate::presentation::WorldMetrics;
@@ -57,6 +58,17 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
         damage_rules: castle_fight_damage_rules(),
     };
     let mut simulation = Simulation::new_with_combat_rules(config, workers, combat_rules);
+
+    for (team, x) in [
+        (Team(0), -CASTLE_CENTER_X_WORLD),
+        (Team(1), CASTLE_CENTER_X_WORLD),
+    ] {
+        simulation.spawn_builder(BuilderSpawn {
+            team,
+            position: world_point(x, 0),
+            profile: castle_fight_builder_profile(),
+        });
+    }
 
     let castle_properties = BuildingGameplayProperties {
         content: Some(ContentIdentity {
@@ -263,18 +275,25 @@ pub(crate) fn try_spawn_demo_building(
     team: Team,
     footprint: BuildingFootprint,
     kind: BuildKind,
-) -> Result<SimId, BuildingPlacementError> {
+) -> Result<SimId, BuilderBuildError> {
+    let builder = simulation
+        .builder_for_team(team)
+        .ok_or(BuilderBuildError::Builder(
+            castle_fight_sim::BuilderCommandError::BuilderNotFound,
+        ))?;
     match kind {
         BuildKind::Production(kind) => {
             let definition = kind.definition();
-            simulation.try_spawn_building_with_properties(
+            simulation.try_builder_summon_building_with_properties(
+                builder.id,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
             )
         }
         BuildKind::Tower(kind) => {
             let definition = kind.definition();
-            simulation.try_spawn_building_with_properties(
+            simulation.try_builder_summon_building_with_properties(
+                builder.id,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
             )
@@ -436,6 +455,19 @@ mod tests {
         assert_eq!(watch.label(), "Watch Tower");
         assert_eq!(watch.gold_cost(), Some(150));
         assert_eq!(watch.footprint_size(), 4);
+    }
+
+    #[test]
+    fn demo_bootstraps_one_builder_per_side_at_the_castles() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
+        let builders = simulation.builders();
+        assert_eq!(builders.len(), 2);
+        assert_eq!(builders[0].team, Team(0));
+        assert_eq!(builders[0].position, world_point(-CASTLE_CENTER_X_WORLD, 0));
+        assert_eq!(builders[0].profile, castle_fight_builder_profile());
+        assert_eq!(builders[1].team, Team(1));
+        assert_eq!(builders[1].position, world_point(CASTLE_CENTER_X_WORLD, 0));
+        assert_eq!(builders[1].profile, castle_fight_builder_profile());
     }
 
     #[test]

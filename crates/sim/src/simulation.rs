@@ -19,20 +19,20 @@ use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
-        AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, BurningOilZone, ChainLightningState,
-        CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer,
-        CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
-        MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
-        ManaState, ModifierId, MovementClass, MovementProfile, NavigationGoal, NavigationState,
-        PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
-        ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
-        ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
-        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
-        ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
-        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
-        UnitGameplayProperties, UnitSpawn,
+        AutomaticAbilityState, BallisticProjectile, BounceProjectile, Builder, BuilderProfile,
+        BuilderSpawn, BuilderState, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+        BurningOilZone, ChainLightningState, CollisionRadius, ContentIdentity, Corpse,
+        CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
+        MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS,
+        MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId,
+        MovementClass, MovementProfile, NavigationGoal, NavigationState, PassiveUnitEffect,
+        PassiveUnitEffects, PendingAttackEffects, Position, ProductionArmorProfile,
+        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
+        ProductionCorpseProfile, ProductionDamageType, ProductionMovementClass,
+        ProductionPassiveEffects, ProductionProfile, ProductionSpellcastingProfile,
+        ProductionState, RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState,
+        TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime,
+        TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, DamageRules, DamageType},
@@ -250,6 +250,16 @@ pub struct UnitView {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuilderView {
+    pub id: SimId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub profile: BuilderProfile,
+    pub destination: Option<SimPoint>,
+    pub repair_target: Option<SimId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildingView {
     pub id: SimId,
     pub content: Option<ContentIdentity>,
@@ -278,6 +288,28 @@ pub enum BuildingPlacementError {
     StaticObstacle,
     BuildingOverlap,
     UnitOccupied,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuilderSpawnError {
+    UnsupportedTeam,
+    TeamAlreadyHasBuilder,
+    OutsideBuildRegion,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuilderCommandError {
+    BuilderNotFound,
+    OutsideBuildRegion,
+    BuildingNotFound,
+    NotFriendlyBuilding,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuilderBuildError {
+    Builder(BuilderCommandError),
+    TeamMismatch,
+    Placement(BuildingPlacementError),
 }
 
 const PURSUIT_CACHE_CAPACITY: usize = 65_536;
@@ -361,6 +393,171 @@ impl Simulation {
     #[must_use]
     pub fn worker_count(&self) -> usize {
         self.pool.current_num_threads()
+    }
+
+    pub fn spawn_builder(&mut self, builder: BuilderSpawn) -> SimId {
+        self.try_spawn_builder(builder)
+            .expect("invalid authored builder spawn")
+    }
+
+    pub fn try_spawn_builder(&mut self, builder: BuilderSpawn) -> Result<SimId, BuilderSpawnError> {
+        if builder.team.0 >= 2 {
+            return Err(BuilderSpawnError::UnsupportedTeam);
+        }
+        assert!(builder.profile.speed_per_tick >= 0);
+        assert!(builder.profile.repair_range >= 0);
+        assert!(builder.profile.full_repair_duration_ticks > 0);
+        if self.world.iter_entities().any(|entity| {
+            entity.get::<Builder>().is_some() && entity.get::<Team>() == Some(&builder.team)
+        }) {
+            return Err(BuilderSpawnError::TeamAlreadyHasBuilder);
+        }
+        if !self.point_inside_team_build_region(builder.team, builder.position) {
+            return Err(BuilderSpawnError::OutsideBuildRegion);
+        }
+
+        let id = self.allocate_id();
+        self.world.spawn((
+            id,
+            builder.team,
+            Position(builder.position),
+            Builder,
+            builder.profile,
+            BuilderState::default(),
+        ));
+        Ok(id)
+    }
+
+    pub fn order_builder_move(
+        &mut self,
+        builder: SimId,
+        destination: SimPoint,
+    ) -> Result<(), BuilderCommandError> {
+        let (entity, team) = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then(|| {
+                    (
+                        entity.id(),
+                        *entity.get::<Team>().expect("builder missing team"),
+                    )
+                })
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        if !self.point_inside_team_build_region(team, destination) {
+            return Err(BuilderCommandError::OutsideBuildRegion);
+        }
+
+        let mut entity = self.world.entity_mut(entity);
+        let mut state = entity
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state");
+        state.destination = Some(destination);
+        state.repair_target = None;
+        state.repair_progress_remainder = 0;
+        Ok(())
+    }
+
+    pub fn order_builder_repair(
+        &mut self,
+        builder: SimId,
+        building: SimId,
+    ) -> Result<(), BuilderCommandError> {
+        let (builder_entity, builder_team) = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then(|| {
+                    (
+                        entity.id(),
+                        *entity.get::<Team>().expect("builder missing team"),
+                    )
+                })
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        let building_team = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(building)
+                    && entity.get::<BuildingFootprint>().is_some()
+                    && entity
+                        .get::<Health>()
+                        .is_some_and(|health| health.current > 0))
+                .then(|| *entity.get::<Team>().expect("building missing team"))
+            })
+            .ok_or(BuilderCommandError::BuildingNotFound)?;
+        if builder_team != building_team {
+            return Err(BuilderCommandError::NotFriendlyBuilding);
+        }
+
+        let mut entity = self.world.entity_mut(builder_entity);
+        let mut state = entity
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state");
+        state.destination = None;
+        state.repair_target = Some(building);
+        state.repair_progress_remainder = 0;
+        Ok(())
+    }
+
+    pub fn stop_builder(&mut self, builder: SimId) -> Result<(), BuilderCommandError> {
+        let entity = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then_some(entity.id())
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        *self
+            .world
+            .entity_mut(entity)
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state") = BuilderState::default();
+        Ok(())
+    }
+
+    pub fn try_builder_summon_building(
+        &mut self,
+        builder: SimId,
+        building: BuildingSpawn,
+    ) -> Result<SimId, BuilderBuildError> {
+        self.try_builder_summon_building_with_properties(
+            builder,
+            building,
+            BuildingGameplayProperties::default(),
+        )
+    }
+
+    pub fn try_builder_summon_building_with_properties(
+        &mut self,
+        builder: SimId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<SimId, BuilderBuildError> {
+        let builder_team = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then(|| *entity.get::<Team>().expect("builder missing team"))
+            })
+            .ok_or(BuilderBuildError::Builder(
+                BuilderCommandError::BuilderNotFound,
+            ))?;
+        if builder_team != building.team {
+            return Err(BuilderBuildError::TeamMismatch);
+        }
+        self.try_spawn_building_with_properties(building, properties)
+            .map_err(BuilderBuildError::Placement)
     }
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
@@ -787,6 +984,21 @@ impl Simulation {
                 .any(|region| footprint_contains_footprint(region, footprint))
     }
 
+    fn point_inside_team_build_region(&self, team: Team, point: SimPoint) -> bool {
+        let Some(regions) = self.config.team_build_regions.get(usize::from(team.0)) else {
+            return false;
+        };
+        let cell = self.topology.cell_of_point(point);
+        if regions.is_empty() {
+            self.topology.contains(cell)
+        } else {
+            regions
+                .iter()
+                .copied()
+                .any(|region| footprint_contains_cell(region, cell))
+        }
+    }
+
     fn footprint_contains_live_unit(&self, footprint: BuildingFootprint) -> bool {
         self.world.iter_entities().any(|entity| {
             let Some(position) = entity.get::<Position>() else {
@@ -835,6 +1047,7 @@ impl Simulation {
         let phase_start = Instant::now();
         self.advance_cooldowns();
         let corpses_expired = self.expire_corpses();
+        self.advance_builders();
         let timers = phase_start.elapsed();
 
         let phase_start = Instant::now();
@@ -1978,6 +2191,33 @@ impl Simulation {
     }
 
     #[must_use]
+    pub fn builders(&self) -> Vec<BuilderView> {
+        let mut builders: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(builder_view_from_entity)
+            .collect();
+        builders.sort_unstable_by_key(|builder| builder.id);
+        builders
+    }
+
+    #[must_use]
+    pub fn builder(&self, id: SimId) -> Option<BuilderView> {
+        self.world
+            .iter_entities()
+            .filter_map(builder_view_from_entity)
+            .find(|builder| builder.id == id)
+    }
+
+    #[must_use]
+    pub fn builder_for_team(&self, team: Team) -> Option<BuilderView> {
+        self.world
+            .iter_entities()
+            .filter_map(builder_view_from_entity)
+            .find(|builder| builder.team == team)
+    }
+
+    #[must_use]
     pub fn units(&self) -> Vec<UnitView> {
         let default_collision_radius = self.default_collision_radius();
         let mut units: Vec<_> = self
@@ -2143,6 +2383,131 @@ impl Simulation {
         for mut status in status_query.iter_mut(&mut self.world) {
             purge_expired_status_modifiers(&mut status, self.next_tick);
         }
+    }
+
+    fn advance_builders(&mut self) {
+        let mut builders: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(|entity| {
+                entity.get::<Builder>()?;
+                Some((
+                    *entity.get::<SimId>()?,
+                    entity.id(),
+                    *entity.get::<Team>()?,
+                    entity.get::<Position>()?.0,
+                    *entity.get::<BuilderProfile>()?,
+                    *entity.get::<BuilderState>()?,
+                ))
+            })
+            .collect();
+        builders.sort_unstable_by_key(|(id, ..)| *id);
+
+        for (_, builder_entity, team, position, profile, mut state) in builders {
+            let mut next_position = position;
+
+            if let Some(target_id) = state.repair_target {
+                let target = self.world.iter_entities().find_map(|entity| {
+                    (entity.get::<SimId>().copied() == Some(target_id)
+                        && entity.get::<BuildingFootprint>().is_some())
+                    .then(|| {
+                        (
+                            entity.id(),
+                            *entity.get::<Team>().expect("building missing team"),
+                            *entity
+                                .get::<BuildingFootprint>()
+                                .expect("building missing footprint"),
+                            *entity.get::<Health>().expect("building missing health"),
+                        )
+                    })
+                });
+
+                let Some((target_entity, target_team, footprint, health)) = target else {
+                    state.repair_target = None;
+                    state.repair_progress_remainder = 0;
+                    self.apply_builder_state(builder_entity, next_position, state);
+                    continue;
+                };
+                if target_team != team || health.current <= 0 || health.current >= health.max {
+                    state.repair_target = None;
+                    state.repair_progress_remainder = 0;
+                    self.apply_builder_state(builder_entity, next_position, state);
+                    continue;
+                }
+
+                let mut distance_sq = point_to_footprint_distance_sq(
+                    next_position,
+                    footprint,
+                    self.config.navigation_cell_size,
+                );
+                if distance_sq > square_i32(profile.repair_range) {
+                    let target_position =
+                        footprint_center_point(footprint, self.config.navigation_cell_size);
+                    let candidate =
+                        next_position.step_towards(target_position, profile.speed_per_tick);
+                    if self.point_inside_team_build_region(team, candidate) {
+                        next_position = candidate;
+                        distance_sq = point_to_footprint_distance_sq(
+                            next_position,
+                            footprint,
+                            self.config.navigation_cell_size,
+                        );
+                    } else {
+                        state.repair_target = None;
+                        state.repair_progress_remainder = 0;
+                    }
+                }
+
+                if state.repair_target.is_some() && distance_sq <= square_i32(profile.repair_range)
+                {
+                    let duration = u64::from(profile.full_repair_duration_ticks);
+                    let accumulated = u64::from(state.repair_progress_remainder)
+                        + u64::try_from(health.max).expect("building max health must be positive");
+                    let repaired = accumulated / duration;
+                    state.repair_progress_remainder = u32::try_from(accumulated % duration)
+                        .expect("repair remainder fits builder state");
+
+                    if repaired > 0 {
+                        let mut target = self.world.entity_mut(target_entity);
+                        let mut target_health = target
+                            .get_mut::<Health>()
+                            .expect("repair target lost health component");
+                        let repaired = i32::try_from(repaired).unwrap_or(i32::MAX);
+                        target_health.current = target_health
+                            .current
+                            .saturating_add(repaired)
+                            .min(target_health.max);
+                        if target_health.current >= target_health.max {
+                            state.repair_target = None;
+                            state.repair_progress_remainder = 0;
+                        }
+                    }
+                }
+            } else if let Some(destination) = state.destination {
+                let candidate = next_position.step_towards(destination, profile.speed_per_tick);
+                if self.point_inside_team_build_region(team, candidate) {
+                    next_position = candidate;
+                    if next_position == destination {
+                        state.destination = None;
+                    }
+                } else {
+                    state.destination = None;
+                }
+            }
+
+            self.apply_builder_state(builder_entity, next_position, state);
+        }
+    }
+
+    fn apply_builder_state(&mut self, entity: Entity, position: SimPoint, state: BuilderState) {
+        let mut builder = self.world.entity_mut(entity);
+        builder
+            .get_mut::<Position>()
+            .expect("builder missing position")
+            .0 = position;
+        *builder
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state") = state;
     }
 
     fn expire_corpses(&mut self) -> usize {
@@ -6252,6 +6617,19 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
     })
 }
 
+fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<BuilderView> {
+    entity.get::<Builder>()?;
+    let state = *entity.get::<BuilderState>()?;
+    Some(BuilderView {
+        id: *entity.get::<SimId>()?,
+        team: *entity.get::<Team>()?,
+        position: entity.get::<Position>()?.0,
+        profile: *entity.get::<BuilderProfile>()?,
+        destination: state.destination,
+        repair_target: state.repair_target,
+    })
+}
+
 fn unit_view_from_entity(
     entity: bevy_ecs::world::EntityRef<'_>,
     default_collision_radius: i32,
@@ -7330,6 +7708,15 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     corpse: *corpse,
                 }));
             }
+            if entity.get::<Builder>().is_some() {
+                return Some(CanonicalEntity::Builder(CanonicalBuilder {
+                    id,
+                    team: *entity.get::<Team>()?,
+                    position: entity.get::<Position>()?.0,
+                    profile: *entity.get::<BuilderProfile>()?,
+                    state: *entity.get::<BuilderState>()?,
+                }));
+            }
             let team = *entity.get::<Team>()?;
             let health = *entity.get::<Health>()?;
             if let Some(position) = entity.get::<Position>() {
@@ -7722,6 +8109,26 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     hash.write_u64(target.0);
                 }
             }
+            CanonicalEntity::Builder(builder) => {
+                hash.write_u8(8);
+                hash.write_u64(builder.id.0);
+                hash.write_u8(builder.team.0);
+                hash.write_i32(builder.position.x);
+                hash.write_i32(builder.position.y);
+                hash.write_i32(builder.profile.speed_per_tick);
+                hash.write_i32(builder.profile.repair_range);
+                hash.write_u16(builder.profile.full_repair_duration_ticks);
+                match builder.state.destination {
+                    Some(destination) => {
+                        hash.write_u8(1);
+                        hash.write_i32(destination.x);
+                        hash.write_i32(destination.y);
+                    }
+                    None => hash.write_u8(0),
+                }
+                hash.write_u64(builder.state.repair_target.map_or(0, |target| target.0));
+                hash.write_u64(u64::from(builder.state.repair_progress_remainder));
+            }
         }
     }
 
@@ -7758,6 +8165,7 @@ enum CanonicalEntity {
     Corpse(CanonicalCorpse),
     BurningOil(CanonicalBurningOil),
     ChainLightning(CanonicalChainLightning),
+    Builder(CanonicalBuilder),
 }
 
 impl CanonicalEntity {
@@ -7771,8 +8179,18 @@ impl CanonicalEntity {
             Self::Corpse(corpse) => corpse.id,
             Self::BurningOil(zone) => zone.id,
             Self::ChainLightning(chain) => chain.id,
+            Self::Builder(builder) => builder.id,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CanonicalBuilder {
+    id: SimId,
+    team: Team,
+    position: SimPoint,
+    profile: BuilderProfile,
+    state: BuilderState,
 }
 
 #[derive(Debug, Clone, Copy)]

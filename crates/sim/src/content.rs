@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::{
     components::{
-        AttackDelivery, AttackProfile, AttackTargetMask, BuildingFootprint,
+        AttackDelivery, AttackProfile, AttackTargetMask, BuilderProfile, BuildingFootprint,
         BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity,
         CorpseDefinitionId, CorpseProfile, MovementClass, MovementProfile, PassiveUnitEffects,
         ProductionProfile, SpellcastingProfile, Team, UnitGameplayProperties, UnitTemplate,
@@ -16,6 +16,11 @@ use crate::{
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
 pub const CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS: u16 = 4;
+const CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 550;
+const CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS: i32 = 50;
+const CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS: u16 = 2;
+const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
+const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR: u16 = 2;
 const CASTLE_FIGHT_COLLISION_WORLD_UNITS: i32 = 16;
 const PRODUCTION_SPAWN_SEARCH_RADIUS_CELLS: u16 = 12;
 
@@ -502,6 +507,30 @@ impl CastleFightTowerDefinition {
 }
 
 #[must_use]
+pub fn castle_fight_builder_profile() -> BuilderProfile {
+    castle_fight_builder_profile_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        .expect("default Castle Fight map version must remain available")
+}
+
+pub fn castle_fight_builder_profile_for_version(
+    version: MapVersion,
+) -> Result<BuilderProfile, UnsupportedCastleFightMapVersion> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return Err(UnsupportedCastleFightMapVersion(version));
+    }
+    Ok(BuilderProfile {
+        speed_per_tick: CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND
+            * SUBUNITS_PER_WORLD_UNIT
+            / CASTLE_FIGHT_SIMULATION_HZ,
+        repair_range: world(CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS),
+        full_repair_duration_ticks: CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS
+            * CASTLE_FIGHT_SIMULATION_HZ as u16
+            * CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR
+            / CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR,
+    })
+}
+
+#[must_use]
 pub fn castle_fight_damage_rules() -> DamageRules {
     DamageRules::from_wc3_misc_text(include_str!(
         "../../../docs/original_map/extracted/war3mapMisc.txt"
@@ -552,6 +581,18 @@ const fn world(world_units: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builder_profile_uses_extracted_927_movement_and_repair_timing() {
+        assert_eq!(
+            castle_fight_builder_profile(),
+            BuilderProfile {
+                speed_per_tick: 550 * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ,
+                repair_range: 50 * SUBUNITS_PER_WORLD_UNIT,
+                full_repair_duration_ticks: 90,
+            }
+        );
+    }
 
     #[test]
     fn imported_roster_has_extracted_damage_and_armor_classes() {

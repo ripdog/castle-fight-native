@@ -439,6 +439,30 @@ pub struct MovementProfile {
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuilderProfile {
+    pub speed_per_tick: i32,
+    pub repair_range: i32,
+    pub full_repair_duration_ticks: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuilderSpawn {
+    pub team: Team,
+    pub position: SimPoint,
+    pub profile: BuilderProfile,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Builder;
+
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct BuilderState {
+    pub destination: Option<SimPoint>,
+    pub repair_target: Option<SimId>,
+    pub repair_progress_remainder: u32,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpawnTick(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

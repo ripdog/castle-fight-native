@@ -10,7 +10,7 @@ The builder is intentionally outside ordinary combat. Items may influence combat
 
 ## 2. Exactly one commandable unit
 
-Each active player has exactly one builder under normal rules.
+Each active player has exactly one builder under normal rules. Until player entities are implemented, the native match bootstrap creates exactly one builder for each side/team as the temporary ownership model.
 
 Ordinary combat units MUST NOT accept player-authored orders. The builder is the only unit with direct movement commands.
 
@@ -18,10 +18,11 @@ The builder may be selected and moved by its owner. Ownership validation occurs 
 
 ## 3. Builder purposes
 
-The builder has exactly two core gameplay responsibilities:
+The builder has exactly three core gameplay responsibilities:
 
-1. construct buildings in the owning team's build region;
-2. hold and use items.
+1. summon/construct buildings in the owning team's build region;
+2. repair friendly buildings;
+3. hold and use items.
 
 Additional convenience UI or cosmetic behavior MUST NOT accidentally make the builder a combat participant.
 
@@ -41,7 +42,7 @@ The builder MUST:
 
 The standard rules SHOULD model the builder as invulnerable to ordinary battle damage.
 
-The builder may still need collision/pathing rules for its own movement relative to static terrain/buildings. Those rules are independent of whether combat units collide with the builder.
+The builder uses non-colliding flight for movement. Terrain height, terrain pathing, static blockers, buildings, and units do not obstruct or redirect it. Its owning build-region boundary is the only movement boundary.
 
 ## 5. Authoritative builder state
 
@@ -53,6 +54,7 @@ OwnerPlayer
 Team
 SimPosition
 movement state/destination
+repair target/progress
 inventory
 item cooldown/charge state
 ```
@@ -81,19 +83,23 @@ MoveBuilder {
 }
 ```
 
-The server validates control rights/admission, team-area bounds, and destination legality, assigns the movement command a canonical tick/order, and all simulations execute or reject it identically from canonical state at that tick.
+The server validates control rights/admission and team-area bounds, assigns the movement command a canonical tick/order, and all simulations execute or reject it identically from canonical state at that tick.
 
-Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, separate, or reroute combat units.
-
-The exact builder movement/navigation algorithm inside that area is open: it may navigate around static buildings/terrain or use another deterministic rule, provided this does not affect combat-unit pathing.
+Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, separate, or reroute combat units. It travels directly toward its authoritative destination at its configured movement rate and ignores terrain/pathing, static blockers, buildings, and units.
 
 ## 8. Building construction relationship
 
 Building placement commands are player commands associated with the builder/player.
 
-The standard rules require placement inside the owning team's build region. Whether the builder must physically approach the site, has a construction range, or construction is effectively remote/instant is a compatibility/game-feel rule to verify separately.
+The standard rules require placement inside the owning team's build region. Building placement is summon-style: the builder does not need to path to or stand near the requested footprint. Placement legality remains authoritative and still checks the map's placement restrictions, static obstacles, existing buildings, and ordinary ground-unit occupancy.
 
-No implementation should assume builder proximity unless content/rules explicitly require it.
+The first native simulation slice treats an accepted placement as immediately constructed, matching the existing placement pipeline. A later construction/cancellation phase may model the map's short construction window without changing the builder's remote summon relationship.
+
+### 8.1 Repair
+
+Repair is a targeted builder order against a living friendly building. An active repair order replaces the builder's movement destination; if the target is outside repair range, the builder flies directly toward it while continuing to ignore all terrain and blockers. The order ends when the building reaches full health, becomes invalid, or another builder command replaces it.
+
+For the 9.27 compatibility profile, the builder moves at **550 world units/second**, Repair has **50 world units** range, and the extracted Warcraft Repair time ratio is **1.5×**. Current imported Castle Fight buildings use a two-second construction time, so the native repair rate is one full maximum-health equivalent per **3 seconds / 90 simulation ticks**, with integer remainder accumulation to keep the result deterministic. Repair cost/resource charging is deferred until player resources are authoritative; the extracted cost ratio must be applied when that system lands rather than silently discarded.
 
 ## 9. Inventory
 
