@@ -1,9 +1,10 @@
 use castle_fight_sim::{
-    ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingFootprint,
-    BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace, CastleFightProductionKind,
-    CastleFightTowerKind, CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
-    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, TargetlessLane, Team,
-    TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
+    ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingEconomyProfile,
+    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace,
+    CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind, CombatRules,
+    ContentIdentity, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation,
+    SimulationConfig, TargetlessLane, Team, TerrainElevationMap, UnitSpawn,
+    castle_fight_damage_rules, castle_fight_economy_rules,
 };
 
 use crate::presentation::WorldMetrics;
@@ -132,25 +133,6 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
 
     if let Some(unit_count) = stress_units {
         populate_render_stress_units(&mut simulation, unit_count);
-    } else {
-        for team in [Team(0), Team(1)] {
-            // Keep the verification producers on the lane-facing side of the now-exact castle
-            // footprint rather than overlapping the original 16x16 castle pathing map.
-            let x = if team.0 == 0 { -144 } else { 140 };
-            for (y, kind) in [
-                (-24, ProductionKind::Barracks),
-                (-14, ProductionKind::RangersHall),
-                (-4, ProductionKind::OrcishSiegeFactory),
-                (6, ProductionKind::IceTrollHut),
-                (16, ProductionKind::GryphonRock),
-            ] {
-                let definition = kind.definition();
-                simulation.spawn_building_with_properties(
-                    definition.spawn(team, BuildingFootprint::new(x, y, 4, 4)),
-                    definition.gameplay_properties(),
-                );
-            }
-        }
     }
 
     DemoWorld {
@@ -266,6 +248,7 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         // Distance-field objectives must stay outside the castle's blocked 16x16 footprint. These
         // are the lane-facing cells immediately beyond each original castle pathing envelope.
         team_objective: [world_point(4_720, 0), world_point(-4_720, 0)],
+        economy: castle_fight_economy_rules(),
     }
 }
 
@@ -303,11 +286,19 @@ impl BuildKind {
         }
     }
 
-    pub(crate) fn gold_cost(self) -> Option<u16> {
-        Some(match self {
-            Self::Production(kind) => kind.definition().gold_cost,
-            Self::Tower(kind) => kind.definition().gold_cost,
-        })
+    pub(crate) fn economy(self) -> BuildingEconomyProfile {
+        match self {
+            Self::Production(kind) => kind.definition().economy,
+            Self::Tower(kind) => kind.definition().economy,
+        }
+    }
+
+    pub(crate) fn gold_cost(self) -> u32 {
+        self.economy().gold_cost
+    }
+
+    pub(crate) fn lumber_cost(self) -> u32 {
+        self.economy().lumber_cost
     }
 }
 
@@ -325,7 +316,7 @@ pub(crate) fn try_spawn_demo_building(
     match kind {
         BuildKind::Production(kind) => {
             let definition = kind.definition();
-            simulation.try_builder_summon_building_with_properties(
+            simulation.try_builder_purchase_building_with_properties(
                 builder.id,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
@@ -333,7 +324,7 @@ pub(crate) fn try_spawn_demo_building(
         }
         BuildKind::Tower(kind) => {
             let definition = kind.definition();
-            simulation.try_builder_summon_building_with_properties(
+            simulation.try_builder_purchase_building_with_properties(
                 builder.id,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
@@ -482,8 +473,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn demo_exposes_every_imported_build_kind() {
-        let DemoWorld { mut simulation, .. } = create_demo_world(1, None);
+    fn demo_builder_catalog_exposes_every_imported_build_kind() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, None);
+        let builder = simulation.builder_for_team(Team(0)).expect("blue builder");
         let kinds = [
             BuildKind::Production(ProductionKind::Barracks),
             BuildKind::Production(ProductionKind::RangersHall),
@@ -494,16 +486,14 @@ mod tests {
             BuildKind::Tower(CastleFightTowerKind::PoofTower),
         ];
 
-        for (index, kind) in kinds.into_iter().enumerate() {
-            let footprint = BuildingFootprint::new(
-                -176 + index as i32 * 6,
-                40,
-                kind.footprint_size(),
-                kind.footprint_size(),
-            );
+        for kind in kinds {
+            let rawcode = match kind {
+                BuildKind::Production(kind) => kind.definition().rawcode,
+                BuildKind::Tower(kind) => kind.definition().rawcode,
+            };
             assert!(
-                try_spawn_demo_building(&mut simulation, Team(0), footprint, kind).is_ok(),
-                "failed to spawn {}",
+                builder.configuration.allows_building(rawcode),
+                "builder catalog missing {}",
                 kind.label()
             );
         }
@@ -513,13 +503,33 @@ mod tests {
     fn build_selectors_read_names_and_costs_from_imported_content() {
         let barracks = BuildKind::Production(ProductionKind::Barracks);
         assert_eq!(barracks.label(), "Barracks");
-        assert_eq!(barracks.gold_cost(), Some(100));
+        assert_eq!(barracks.gold_cost(), 100);
+        assert_eq!(barracks.lumber_cost(), 0);
         assert_eq!(barracks.footprint_size(), 4);
 
         let watch = BuildKind::Tower(CastleFightTowerKind::WatchTower);
         assert_eq!(watch.label(), "Watch Tower");
-        assert_eq!(watch.gold_cost(), Some(150));
+        assert_eq!(watch.gold_cost(), 150);
+        assert_eq!(watch.lumber_cost(), 300);
         assert_eq!(watch.footprint_size(), 4);
+    }
+
+    #[test]
+    fn normal_demo_starts_with_original_resources_and_no_free_production_buildings() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, None);
+        for team in [Team(0), Team(1)] {
+            let economy = simulation.player_economy(team).expect("player economy");
+            assert_eq!(economy.resources.gold, 250);
+            assert_eq!(economy.resources.lumber, 125);
+            assert_eq!(economy.resources.legendary_points_used, 0);
+            assert_eq!(economy.resources.legendary_points_cap, 1);
+            assert_eq!(economy.income, 0);
+        }
+        assert_eq!(
+            simulation.building_count(),
+            2,
+            "only the two castles should be preplaced"
+        );
     }
 
     #[test]

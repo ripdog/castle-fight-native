@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use bevy::prelude::Resource;
 use castle_fight_sim::{
     AbilityCastEvent, AttackDelivery, AttackEvent, BuilderLocomotion, BuildingFootprint,
-    ChainLightningEvent, ContentIdentity, CorpseView, MovementClass, ProjectileView, SimId,
-    SimPoint, Simulation, Team,
+    ChainLightningEvent, ContentIdentity, CorpseView, MovementClass, PlayerEconomyView,
+    ProjectileView, SimId, SimPoint, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +134,7 @@ pub struct BuildingSample {
 #[derive(Debug, Clone)]
 pub struct PresentationSnapshot {
     pub tick: u64,
+    pub player_economy: [PlayerEconomyView; 2],
     pub units: BTreeMap<SimId, UnitSample>,
     pub builders: BTreeMap<SimId, BuilderSample>,
     pub buildings: BTreeMap<SimId, BuildingSample>,
@@ -242,6 +243,11 @@ impl PresentationSnapshot {
 
         Self {
             tick: simulation.tick(),
+            player_economy: std::array::from_fn(|team| {
+                simulation
+                    .player_economy(Team(u8::try_from(team).expect("player index fits u8")))
+                    .expect("presentation supports the two authoritative Castle Fight players")
+            }),
             units,
             builders,
             buildings,

@@ -6,6 +6,7 @@ mod demo;
 mod doodads;
 mod inspection;
 mod presentation;
+mod resource_ui;
 mod terrain;
 mod unit_models;
 mod wc3_effects;
@@ -27,6 +28,7 @@ use demo::{create_demo_world, try_spawn_demo_building};
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
+use resource_ui::ResourceUiPlugin;
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 
 const SIMULATION_HZ: f64 = 30.0;
@@ -105,6 +107,7 @@ fn main() {
             CastlePresentationPlugin::new(options.health_bars),
             DoodadPresentationPlugin,
             BuildUiPlugin,
+            ResourceUiPlugin,
             InspectionPlugin,
             BuilderControlPlugin,
         ))
@@ -276,13 +279,18 @@ fn advance_authoritative_simulation(
         ) {
             Ok(_) => {
                 let side = if request.team.0 == 0 { "Blue" } else { "Red" };
-                build_selection.status = if let Some(gold_cost) = request.kind.gold_cost() {
+                let gold_cost = request.kind.gold_cost();
+                let lumber_cost = request.kind.lumber_cost();
+                build_selection.status = if lumber_cost == 0 {
                     format!(
-                        "Placed {side} {} (map cost: {gold_cost} gold).",
+                        "Placed {side} {} ({gold_cost} gold; lumber awarded on completion).",
                         request.kind.label()
                     )
                 } else {
-                    format!("Placed {side} {}.", request.kind.label())
+                    format!(
+                        "Placed {side} {} ({gold_cost} gold, {lumber_cost} lumber).",
+                        request.kind.label()
+                    )
                 };
             }
             Err(error) => {

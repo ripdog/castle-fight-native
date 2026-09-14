@@ -5,11 +5,12 @@ use crate::{
     AuthoritativeSimulation,
     demo::{BuildKind, ProductionKind},
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
+    resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
 };
 
 const PANEL_LEFT: f32 = 16.0;
-const PANEL_TOP: f32 = 16.0;
+const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
 const PANEL_WIDTH: f32 = 360.0;
 const PANEL_HEIGHT: f32 = 500.0;
 
@@ -234,9 +235,11 @@ fn handle_build_ui_actions(
             BuildUiAction::Building(kind) => {
                 selection.kind = Some(kind);
                 selection.status = format!(
-                    "{} {} selected — left-click the battlefield to place.",
+                    "{} {} selected — cost {} gold / {} lumber. Left-click to place.",
                     team_label(selection.team),
-                    kind.label()
+                    kind.label(),
+                    kind.gold_cost(),
+                    kind.lumber_cost(),
                 );
             }
             BuildUiAction::Cancel => {
@@ -339,6 +342,24 @@ fn queue_world_placement(
             "Placement rejected: outside this side's build region, blocked, or occupied.".into();
         return;
     }
+    if !authoritative
+        .simulation
+        .can_afford_building(selection.team, kind.economy())
+    {
+        let resources = authoritative
+            .simulation
+            .player_resources(selection.team)
+            .expect("build UI supports the two Castle Fight players");
+        selection.status = format!(
+            "Cannot afford {}: need {} gold / {} lumber; have {} / {}.",
+            kind.label(),
+            kind.gold_cost(),
+            kind.lumber_cost(),
+            resources.gold,
+            resources.lumber,
+        );
+        return;
+    }
 
     pending.0.push(BuildRequest {
         team: selection.team,
@@ -374,7 +395,10 @@ fn draw_build_preview(
     let footprint = placement_footprint(&metrics, world, kind);
     let valid = authoritative
         .simulation
-        .can_place_building_for_team(selection.team, footprint);
+        .can_place_building_for_team(selection.team, footprint)
+        && authoritative
+            .simulation
+            .can_afford_building(selection.team, kind.economy());
     let color = if valid {
         team_ui_color(selection.team)
     } else {
@@ -389,10 +413,11 @@ fn placement_footprint(metrics: &WorldMetrics, world: Vec3, kind: BuildKind) -> 
 }
 
 pub(crate) fn cursor_over_build_panel(cursor: Vec2) -> bool {
-    cursor.x >= PANEL_LEFT
-        && cursor.x <= PANEL_LEFT + PANEL_WIDTH
-        && cursor.y >= PANEL_TOP
-        && cursor.y <= PANEL_TOP + PANEL_HEIGHT
+    cursor.y <= TOP_BAR_HEIGHT
+        || (cursor.x >= PANEL_LEFT
+            && cursor.x <= PANEL_LEFT + PANEL_WIDTH
+            && cursor.y >= PANEL_TOP
+            && cursor.y <= PANEL_TOP + PANEL_HEIGHT)
 }
 
 fn team_label(team: Team) -> &'static str {
@@ -442,10 +467,17 @@ mod tests {
     }
 
     #[test]
-    fn panel_capture_matches_visible_panel_bounds() {
-        assert!(cursor_over_build_panel(Vec2::new(16.0, 16.0)));
-        assert!(cursor_over_build_panel(Vec2::new(376.0, 516.0)));
+    fn panel_capture_matches_visible_panel_and_top_bar_bounds() {
+        assert!(cursor_over_build_panel(Vec2::new(1_000.0, 16.0)));
+        assert!(cursor_over_build_panel(Vec2::new(16.0, PANEL_TOP)));
+        assert!(cursor_over_build_panel(Vec2::new(
+            PANEL_LEFT + PANEL_WIDTH,
+            PANEL_TOP + PANEL_HEIGHT,
+        )));
         assert!(!cursor_over_build_panel(Vec2::new(377.0, 200.0)));
-        assert!(!cursor_over_build_panel(Vec2::new(200.0, 517.0)));
+        assert!(!cursor_over_build_panel(Vec2::new(
+            200.0,
+            PANEL_TOP + PANEL_HEIGHT + 1.0,
+        )));
     }
 }

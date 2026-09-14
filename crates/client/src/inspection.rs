@@ -611,8 +611,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use castle_fight_sim::{
-        BuilderLocomotion, BuildingFootprint, ContentIdentity, MovementClass, NavCell, SimPoint,
-        SimulationConfig, TerrainElevationMap,
+        BuilderLocomotion, BuildingFootprint, ContentIdentity, MovementClass, NavCell,
+        PlayerEconomyView, PlayerResources, SimPoint, SimulationConfig, TerrainElevationMap,
     };
 
     use super::*;
@@ -644,6 +644,13 @@ mod tests {
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
             tick: 10,
+            player_economy: [PlayerEconomyView {
+                resources: PlayerResources::default(),
+                income: 0,
+                income_interval_ticks: 0,
+                income_progress_per_10k: 0,
+                ticks_until_income: 0,
+            }; 2],
             units: BTreeMap::new(),
             builders: BTreeMap::new(),
             buildings: BTreeMap::new(),

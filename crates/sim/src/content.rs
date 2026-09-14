@@ -9,6 +9,7 @@ use crate::{
         UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
+    economy::{BuildingEconomyProfile, EconomyRules, RESOURCE_FIXED_SCALE},
     math::SUBUNITS_PER_WORLD_UNIT,
     native_effects::native_unit_mechanics_for,
     version::MapVersion,
@@ -27,6 +28,11 @@ const CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS: u16 = 2;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR: u16 = 2;
 const CASTLE_FIGHT_COLLISION_WORLD_UNITS: i32 = 16;
+const CASTLE_FIGHT_STARTING_GOLD: u32 = 250;
+const CASTLE_FIGHT_STARTING_LUMBER: u32 = 125;
+const CASTLE_FIGHT_STARTING_LEGENDARY_POINTS: u16 = 1;
+const CASTLE_FIGHT_INCOME_INTERVAL_SECONDS: u32 = 10;
+const CASTLE_FIGHT_INCOME_TAX_BRACKET_GOLD: u64 = 25;
 const PRODUCTION_SPAWN_SEARCH_RADIUS_CELLS: u16 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -583,7 +589,7 @@ impl CastleFightProductionKind {
         Ok(self.definition_9_27())
     }
 
-    const fn definition_9_27(self) -> CastleFightProductionDefinition {
+    fn definition_9_27(self) -> CastleFightProductionDefinition {
         match self {
             Self::Barracks => production_definition(
                 u32::from_be_bytes(*b"h000"),
@@ -634,6 +640,8 @@ pub struct CastleFightProductionDefinition {
     pub rawcode: u32,
     pub name: &'static str,
     pub gold_cost: u16,
+    pub lumber_cost: u16,
+    pub economy: BuildingEconomyProfile,
     pub building_health: i32,
     pub armor: ArmorProfile,
     pub spawn_interval_ticks: u16,
@@ -674,6 +682,7 @@ impl CastleFightProductionDefinition {
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
             armor: self.armor,
+            economy: Some(self.economy),
             production_unit: self
                 .unit
                 .definition_for_version(self.map_version)
@@ -698,12 +707,14 @@ impl CastleFightTowerKind {
     pub const ALL: [Self; 2] = [Self::WatchTower, Self::PoofTower];
 
     #[must_use]
-    pub const fn definition(self) -> CastleFightTowerDefinition {
+    pub fn definition(self) -> CastleFightTowerDefinition {
         match self {
             Self::WatchTower => CastleFightTowerDefinition {
                 rawcode: u32::from_be_bytes(*b"h006"),
                 name: "Watch Tower",
                 gold_cost: 150,
+                lumber_cost: 300,
+                economy: verified_building_economy_927(u32::from_be_bytes(*b"h006"), 150, 300),
                 health: 1_500,
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Pierce,
@@ -723,6 +734,8 @@ impl CastleFightTowerKind {
                 rawcode: u32::from_be_bytes(*b"h07P"),
                 name: "Poof Tower",
                 gold_cost: 230,
+                lumber_cost: 300,
+                economy: verified_building_economy_927(u32::from_be_bytes(*b"h07P"), 230, 300),
                 health: 1_250,
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Magic,
@@ -749,6 +762,8 @@ pub struct CastleFightTowerDefinition {
     pub rawcode: u32,
     pub name: &'static str,
     pub gold_cost: u16,
+    pub lumber_cost: u16,
+    pub economy: BuildingEconomyProfile,
     pub health: i32,
     pub armor: ArmorProfile,
     pub damage_type: DamageType,
@@ -780,6 +795,7 @@ impl CastleFightTowerDefinition {
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
+            economy: Some(self.economy),
             production_unit: UnitGameplayProperties {
                 content: None,
                 corpse: None,
@@ -923,7 +939,141 @@ pub fn castle_fight_damage_rules() -> DamageRules {
     .expect("committed Castle Fight war3mapMisc.txt damage table must remain valid")
 }
 
-const fn production_definition(
+#[must_use]
+pub fn castle_fight_economy_rules() -> EconomyRules {
+    castle_fight_economy_rules_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        .expect("default Castle Fight map version must remain available")
+}
+
+pub fn castle_fight_economy_rules_for_version(
+    version: MapVersion,
+) -> Result<EconomyRules, UnsupportedCastleFightMapVersion> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return Err(UnsupportedCastleFightMapVersion(version));
+    }
+    Ok(EconomyRules {
+        starting_gold: CASTLE_FIGHT_STARTING_GOLD,
+        starting_lumber: CASTLE_FIGHT_STARTING_LUMBER,
+        starting_legendary_points: CASTLE_FIGHT_STARTING_LEGENDARY_POINTS,
+        income_interval_ticks: CASTLE_FIGHT_INCOME_INTERVAL_SECONDS
+            * CASTLE_FIGHT_SIMULATION_HZ as u32,
+        income_tax_bracket_per_10k: CASTLE_FIGHT_INCOME_TAX_BRACKET_GOLD * RESOURCE_FIXED_SCALE,
+    })
+}
+
+fn verified_building_economy_927(
+    rawcode: u32,
+    expected_gold_cost: u16,
+    expected_lumber_cost: u16,
+) -> BuildingEconomyProfile {
+    let economy = extracted_building_economy_927(rawcode);
+    assert_eq!(
+        economy.gold_cost,
+        u32::from(expected_gold_cost),
+        "building gold cost changed in extracted 9.27 data"
+    );
+    assert_eq!(
+        economy.lumber_cost,
+        u32::from(expected_lumber_cost),
+        "building lumber cost changed in extracted 9.27 data"
+    );
+    economy
+}
+
+fn extracted_building_economy_927(rawcode: u32) -> BuildingEconomyProfile {
+    let (gold_cost, lumber_cost) = extracted_building_costs_927(rawcode);
+    let (_, is_siege, _) = extracted_building_income_semantics_927(rawcode);
+    let lumber_refund = if lumber_cost == 0 {
+        if is_siege {
+            u32::from(gold_cost) * 3 / 4
+        } else {
+            u32::from(gold_cost)
+        }
+    } else {
+        0
+    };
+    BuildingEconomyProfile {
+        gold_cost: u32::from(gold_cost),
+        lumber_cost: u32::from(lumber_cost),
+        lumber_refund,
+        income_per_10k: extracted_building_income_per_10k_927(rawcode),
+    }
+}
+
+fn extracted_building_costs_927(rawcode: u32) -> (u16, u16) {
+    for line in include_str!("../../../docs/original_map/extracted/resolved/buildings.tsv")
+        .lines()
+        .skip(1)
+    {
+        let columns = line.split('\t').collect::<Vec<_>>();
+        if columns.get(1).copied().map(parse_rawcode) != Some(rawcode) {
+            continue;
+        }
+        return (
+            columns[11]
+                .parse::<u16>()
+                .expect("building gold cost must be an integer"),
+            columns[12]
+                .parse::<u16>()
+                .expect("building lumber cost must be an integer"),
+        );
+    }
+    panic!("building {rawcode:#010x} missing from extracted 9.27 building table")
+}
+
+fn extracted_building_income_per_10k_927(rawcode: u32) -> u64 {
+    let (factor_per_1000, _, precursor) = extracted_building_income_semantics_927(rawcode);
+    let (gold_cost, _) = extracted_building_costs_927(rawcode);
+    let own_income = u64::from(gold_cost) * u64::from(factor_per_1000);
+    own_income
+        + precursor.map_or(0, |precursor| {
+            extracted_building_income_per_10k_927(precursor)
+        })
+}
+
+fn extracted_building_income_semantics_927(rawcode: u32) -> (u16, bool, Option<u32>) {
+    for line in
+        include_str!("../../../docs/original_map/extracted/script/race-building-semantics.tsv")
+            .lines()
+            .skip(1)
+    {
+        let columns = line.split('\t').collect::<Vec<_>>();
+        if columns.first().copied().map(parse_rawcode) != Some(rawcode) {
+            continue;
+        }
+        let precursor = columns
+            .get(5)
+            .copied()
+            .filter(|value| !value.is_empty())
+            .map(parse_rawcode);
+        return (
+            parse_decimal_per_1000(columns[4]),
+            columns[11] == "1",
+            precursor,
+        );
+    }
+    panic!("building {rawcode:#010x} missing from extracted 9.27 income semantics")
+}
+
+fn parse_decimal_per_1000(value: &str) -> u16 {
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
+    let whole = whole
+        .parse::<u16>()
+        .expect("income factor whole part must be numeric");
+    let mut fractional = 0u16;
+    let mut place = 100u16;
+    for byte in fraction.bytes().take(3) {
+        assert!(
+            byte.is_ascii_digit(),
+            "income factor fraction must be numeric"
+        );
+        fractional += u16::from(byte - b'0') * place;
+        place /= 10;
+    }
+    whole * 1_000 + fractional
+}
+
+fn production_definition(
     rawcode: u32,
     name: &'static str,
     gold_cost: u16,
@@ -931,10 +1081,13 @@ const fn production_definition(
     spawn_seconds: u16,
     unit: CastleFightUnitKind,
 ) -> CastleFightProductionDefinition {
+    let economy = verified_building_economy_927(rawcode, gold_cost, 0);
     CastleFightProductionDefinition {
         rawcode,
         name,
         gold_cost,
+        lumber_cost: 0,
+        economy,
         building_health,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         spawn_interval_ticks: spawn_seconds * CASTLE_FIGHT_SIMULATION_HZ as u16,
@@ -966,6 +1119,96 @@ const fn world(world_units: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn economy_rules_match_extracted_927_defaults() {
+        assert_eq!(
+            castle_fight_economy_rules(),
+            EconomyRules {
+                starting_gold: 250,
+                starting_lumber: 125,
+                starting_legendary_points: 1,
+                income_interval_ticks: 300,
+                income_tax_bracket_per_10k: 25 * RESOURCE_FIXED_SCALE,
+            }
+        );
+    }
+
+    #[test]
+    fn exposed_buildings_use_extracted_cost_lumber_and_income_rules() {
+        let cases = [
+            (
+                CastleFightProductionKind::Barracks.definition().economy,
+                BuildingEconomyProfile {
+                    gold_cost: 100,
+                    lumber_cost: 0,
+                    lumber_refund: 100,
+                    income_per_10k: 20_000,
+                },
+            ),
+            (
+                CastleFightProductionKind::RangersHall.definition().economy,
+                BuildingEconomyProfile {
+                    gold_cost: 200,
+                    lumber_cost: 0,
+                    lumber_refund: 200,
+                    // Ranger's Hall inherits the 3 gold income from its 150g Hunter's Hall
+                    // precursor and adds another 4 from its own 200g upgrade cost.
+                    income_per_10k: 70_000,
+                },
+            ),
+            (
+                CastleFightProductionKind::OrcishSiegeFactory
+                    .definition()
+                    .economy,
+                BuildingEconomyProfile {
+                    gold_cost: 380,
+                    lumber_cost: 0,
+                    lumber_refund: 285,
+                    income_per_10k: 68_400,
+                },
+            ),
+            (
+                CastleFightProductionKind::IceTrollHut.definition().economy,
+                BuildingEconomyProfile {
+                    gold_cost: 175,
+                    lumber_cost: 0,
+                    lumber_refund: 175,
+                    income_per_10k: 35_000,
+                },
+            ),
+            (
+                CastleFightProductionKind::GryphonRock.definition().economy,
+                BuildingEconomyProfile {
+                    gold_cost: 250,
+                    lumber_cost: 0,
+                    lumber_refund: 250,
+                    income_per_10k: 50_000,
+                },
+            ),
+            (
+                CastleFightTowerKind::WatchTower.definition().economy,
+                BuildingEconomyProfile {
+                    gold_cost: 150,
+                    lumber_cost: 300,
+                    lumber_refund: 0,
+                    income_per_10k: 6_000,
+                },
+            ),
+            (
+                CastleFightTowerKind::PoofTower.definition().economy,
+                BuildingEconomyProfile {
+                    gold_cost: 230,
+                    lumber_cost: 300,
+                    lumber_refund: 0,
+                    income_per_10k: 9_200,
+                },
+            ),
+        ];
+        for (actual, expected) in cases {
+            assert_eq!(actual, expected);
+        }
+    }
 
     #[test]
     fn builder_profile_uses_extracted_927_movement_and_repair_timing() {

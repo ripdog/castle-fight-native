@@ -58,34 +58,31 @@ Any alliance change during a match is an authoritative command/rule event and mu
 
 ## 5. Player resources
 
-Resources are canonical integer/fixed-point values.
+Resources are canonical integer/fixed-point values. For Castle Fight 9.27, a normal player starts with **250 gold**, **125 lumber**, and a legendary-building allowance of **1** (`0 / 1` used/cap at match start). The legendary allowance maps to Warcraft III's food-used/food-cap state in the original map. Cheese increases that cap by one in the original game; Cheese purchasing is intentionally deferred until the Main Castle/shop mechanics are implemented.
 
 Resource mutations occur through explicit deterministic operations such as:
 
 - periodic income;
 - building purchase;
-- building sale/refund;
+- the lumber award from completing a zero-lumber-cost building;
+- building sale/refund if the selected Castle Fight mode supports one;
 - bounty/reward;
 - upgrade purchase;
 - game-mode grants.
 
-Resource arithmetic MUST define overflow/clamp behavior and MUST NOT use presentation-side balances as authority.
+A normal zero-lumber-cost building awards lumber equal to its gold cost when it finishes. A Siege building instead awards **75%** of its gold cost. Buildings that themselves cost lumber do not grant this construction lumber. These rules are extracted from the original map's resource help/runtime logic rather than inferred from object costs.
+
+Resource arithmetic MUST define overflow/clamp behavior and MUST NOT use presentation-side balances as authority. Failed or rejected building placement MUST NOT spend resources or grant lumber. In the current immediate-construction lifecycle, successful placement, payment, the corresponding construction-lumber award, and activation of the building's income contribution are one authoritative transaction.
 
 ## 6. Periodic income
 
-If the game uses periodic income, it MUST be scheduled by simulation tick.
+Castle Fight 9.27 pays income every **10 seconds**, which is **300 simulation ticks at 30 Hz**. The first payout occurs after the first complete 10-second interval. The displayed progress/countdown is presentation of that simulation-tick phase; pausing the simulation therefore also pauses income progress.
 
-Example semantic form:
+Each live finished building contributes a map-defined percentage of its gold cost to the player's raw income. The common extracted factors are 0.20 for normal production, 0.18 for Siege, 0.09 for utility, and 0.04 for towers. The map multiplies the summed contribution by ten at payout time, so these correspond to 2%, 1.8%, 0.9%, and 0.4% of gold cost per payout. Upgrade-line buildings include the contribution inherited from their precursor chain rather than discarding prior income.
 
-```text
-income event every K ticks
-for each player in canonical PlayerId order:
-    apply deterministic income formula
-```
+Normal income then uses the original progressive tax: **25-gold brackets**, starting at 100%, then 90%, 80%, and so on for up to eight full brackets; income above those brackets remains at the final 20% rate. The deterministic native simulation performs the equivalent calculation in fixed point and truncates only the final payout, matching the original map's `real_toInt` behavior. Treasure Box and team-domination income multipliers belong on top of the same raw-income pipeline when those mechanics are implemented.
 
-If income depends on buildings/upgrades, the formula must read canonical state from the defined phase.
-
-The displayed countdown may interpolate against wall clock, but the actual grant is tick-based.
+Income MUST read canonical live building state from the payout phase. Buildings destroyed earlier on the payout tick do not contribute. Player build commands are resolved before that tick's income event, so income granted on a tick cannot retroactively fund a purchase already rejected that same tick; conversely, a building successfully completed before the payout phase contributes immediately.
 
 ## 7. Building lifecycle
 

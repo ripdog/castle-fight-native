@@ -37,6 +37,10 @@ use crate::{
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, DamageRules, DamageType},
+    economy::{
+        BuildingEconomyProfile, EconomyRules, PlayerEconomyView, PlayerResources,
+        RESOURCE_FIXED_SCALE, ResourcePurchaseError, taxed_income_from_fixed,
+    },
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
     terrain::TerrainElevationMap,
@@ -84,6 +88,7 @@ pub struct SimulationConfig {
     /// Optional standard-lane ingress guidance for targetless units. Generic maps leave this unset.
     pub targetless_lane: Option<TargetlessLane>,
     pub team_objective: [SimPoint; 2],
+    pub economy: EconomyRules,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -111,6 +116,7 @@ impl Default for SimulationConfig {
                 SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
                 SimPoint::new(0, 0),
             ],
+            economy: EconomyRules::default(),
         }
     }
 }
@@ -344,7 +350,9 @@ pub enum BuilderBuildError {
     Builder(BuilderCommandError),
     TeamMismatch,
     MissingBuildingIdentity,
+    MissingEconomyProfile,
     BuildingNotInCatalog,
+    Resources(ResourcePurchaseError),
     Placement(BuildingPlacementError),
 }
 
@@ -363,6 +371,7 @@ pub struct Simulation {
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
     last_chain_lightnings: Vec<ChainLightningEvent>,
+    player_resources: [PlayerResources; 2],
     next_tick: u64,
     next_id: u64,
 }
@@ -395,6 +404,12 @@ impl Simulation {
             );
         }
         validate_combat_rules(&config, &combat_rules);
+        let starting_resources = PlayerResources {
+            gold: config.economy.starting_gold,
+            lumber: config.economy.starting_lumber,
+            legendary_points_used: 0,
+            legendary_points_cap: config.economy.starting_legendary_points,
+        };
 
         let pool = ThreadPoolBuilder::new()
             .num_threads(workers)
@@ -422,6 +437,7 @@ impl Simulation {
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
             last_chain_lightnings: Vec::new(),
+            player_resources: [starting_resources; 2],
             next_tick: 0,
             next_id: 1,
         }
@@ -435,6 +451,68 @@ impl Simulation {
     #[must_use]
     pub fn worker_count(&self) -> usize {
         self.pool.current_num_threads()
+    }
+
+    #[must_use]
+    pub fn player_resources(&self, team: Team) -> Option<PlayerResources> {
+        self.player_resources.get(usize::from(team.0)).copied()
+    }
+
+    #[must_use]
+    pub fn player_income(&self, team: Team) -> Option<u32> {
+        (team.0 < 2).then(|| {
+            taxed_income_from_fixed(
+                self.raw_player_income_per_10k(team),
+                self.config.economy.income_tax_bracket_per_10k,
+            )
+        })
+    }
+
+    #[must_use]
+    pub fn player_economy(&self, team: Team) -> Option<PlayerEconomyView> {
+        let resources = self.player_resources(team)?;
+        let interval = self.config.economy.income_interval_ticks;
+        let (progress, ticks_until_income) = if interval == 0 {
+            (0, 0)
+        } else {
+            let phase = u32::try_from(self.next_tick % u64::from(interval))
+                .expect("income phase fits interval width");
+            let progress =
+                u16::try_from(u64::from(phase) * RESOURCE_FIXED_SCALE / u64::from(interval))
+                    .expect("income progress is at most 10,000");
+            let remaining = if phase == 0 {
+                interval
+            } else {
+                interval - phase
+            };
+            (progress, remaining)
+        };
+        Some(PlayerEconomyView {
+            resources,
+            income: self.player_income(team).expect("validated player team"),
+            income_interval_ticks: interval,
+            income_progress_per_10k: progress,
+            ticks_until_income,
+        })
+    }
+
+    #[must_use]
+    pub fn can_afford_building(&self, team: Team, economy: BuildingEconomyProfile) -> bool {
+        self.player_resources(team).is_some_and(|resources| {
+            resources.gold >= economy.gold_cost && resources.lumber >= economy.lumber_cost
+        })
+    }
+
+    fn raw_player_income_per_10k(&self, team: Team) -> u64 {
+        self.world
+            .iter_entities()
+            .filter(|entity| entity.get::<Team>() == Some(&team))
+            .filter_map(|entity| entity.get::<BuildingEconomyProfile>())
+            .fold(0u64, |total, economy| {
+                total
+                    .checked_add(economy.income_per_10k)
+                    .expect("player income overflow")
+            })
     }
 
     pub fn spawn_builder(&mut self, builder: BuilderSpawn) -> SimId {
@@ -697,6 +775,58 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuilderBuildError> {
+        self.validate_builder_summon(builder, building, properties)?;
+        self.try_spawn_building_with_properties(building, properties)
+            .map_err(BuilderBuildError::Placement)
+    }
+
+    pub fn try_builder_purchase_building_with_properties(
+        &mut self,
+        builder: SimId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<SimId, BuilderBuildError> {
+        self.validate_builder_summon(builder, building, properties)?;
+        let economy = properties
+            .economy
+            .ok_or(BuilderBuildError::MissingEconomyProfile)?;
+        let resources = self.player_resources[usize::from(building.team.0)];
+        if resources.gold < economy.gold_cost {
+            return Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientGold {
+                    available: resources.gold,
+                    required: economy.gold_cost,
+                },
+            ));
+        }
+        if resources.lumber < economy.lumber_cost {
+            return Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientLumber {
+                    available: resources.lumber,
+                    required: economy.lumber_cost,
+                },
+            ));
+        }
+
+        let id = self
+            .try_spawn_building_with_properties(building, properties)
+            .map_err(BuilderBuildError::Placement)?;
+        let resources = &mut self.player_resources[usize::from(building.team.0)];
+        resources.gold -= economy.gold_cost;
+        resources.lumber -= economy.lumber_cost;
+        resources.lumber = resources
+            .lumber
+            .checked_add(economy.lumber_refund)
+            .expect("player lumber overflow");
+        Ok(id)
+    }
+
+    fn validate_builder_summon(
+        &self,
+        builder: SimId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<(), BuilderBuildError> {
         let (builder_entity, builder_team) = self
             .world
             .iter_entities()
@@ -729,8 +859,7 @@ impl Simulation {
         if !building_allowed {
             return Err(BuilderBuildError::BuildingNotInCatalog);
         }
-        self.try_spawn_building_with_properties(building, properties)
-            .map_err(BuilderBuildError::Placement)
+        Ok(())
     }
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
@@ -1063,6 +1192,9 @@ impl Simulation {
         ));
         if let Some(content) = properties.content {
             entity.insert(content);
+        }
+        if let Some(economy) = properties.economy {
+            entity.insert(economy);
         }
         if let Some(production) = building.production {
             let next_spawn_tick = self
@@ -2237,6 +2369,7 @@ impl Simulation {
             self.topology_dirty = true;
         }
 
+        self.advance_economy_income();
         self.defense_alerts = next_defense_alerts;
         let projectiles_alive = self.projectile_count();
         let corpses_alive = self.corpse_count();
@@ -2247,7 +2380,12 @@ impl Simulation {
         let structural_commit = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let checksum = canonical_checksum(&self.world, self.next_tick, &self.defense_alerts);
+        let checksum = canonical_checksum(
+            &self.world,
+            self.next_tick,
+            &self.defense_alerts,
+            &self.player_resources,
+        );
         let checksum_time = phase_start.elapsed();
         let timings = TickTimings {
             topology,
@@ -2328,7 +2466,12 @@ impl Simulation {
 
     #[must_use]
     pub fn checksum(&self) -> u64 {
-        canonical_checksum(&self.world, self.next_tick, &self.defense_alerts)
+        canonical_checksum(
+            &self.world,
+            self.next_tick,
+            &self.defense_alerts,
+            &self.player_resources,
+        )
     }
 
     #[must_use]
@@ -2579,6 +2722,32 @@ impl Simulation {
         self.pursuit_cache.clear();
         self.radius_objective_fields.clear();
         true
+    }
+
+    fn advance_economy_income(&mut self) {
+        let interval = self.config.economy.income_interval_ticks;
+        if interval == 0 {
+            return;
+        }
+        let elapsed_after_tick = self
+            .next_tick
+            .checked_add(1)
+            .expect("income tick counter overflow");
+        if !elapsed_after_tick.is_multiple_of(u64::from(interval)) {
+            return;
+        }
+
+        for team_index in 0..self.player_resources.len() {
+            let team = Team(u8::try_from(team_index).expect("two-player team index fits u8"));
+            let income = taxed_income_from_fixed(
+                self.raw_player_income_per_10k(team),
+                self.config.economy.income_tax_bracket_per_10k,
+            );
+            self.player_resources[team_index].gold = self.player_resources[team_index]
+                .gold
+                .checked_add(income)
+                .expect("player gold overflow");
+        }
     }
 
     fn advance_cooldowns(&mut self) {
@@ -8151,7 +8320,12 @@ fn building_source_query_radius(
         .expect("building acquisition query radius overflow")
 }
 
-fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAlert]) -> u64 {
+fn canonical_checksum(
+    world: &World,
+    next_tick: u64,
+    defense_alerts: &[DefenseAlert],
+    player_resources: &[PlayerResources; 2],
+) -> u64 {
     let mut entities: Vec<CanonicalEntity> = world
         .iter_entities()
         .filter_map(|entity| {
@@ -8243,6 +8417,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     team,
                     footprint: *entity.get::<BuildingFootprint>()?,
                     health,
+                    economy: entity.get::<BuildingEconomyProfile>().copied(),
                     production: entity.get::<ProductionProfile>().copied(),
                     production_state: entity.get::<ProductionState>().copied(),
                     production_corpse: entity
@@ -8289,6 +8464,12 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
 
     let mut hash = Fnv64::new();
     hash.write_u64(next_tick);
+    for resources in player_resources {
+        hash.write_u64(u64::from(resources.gold));
+        hash.write_u64(u64::from(resources.lumber));
+        hash.write_u16(resources.legendary_points_used);
+        hash.write_u16(resources.legendary_points_cap);
+    }
     hash.write_u64(entities.len() as u64);
     for entity in entities {
         match entity {
@@ -8371,6 +8552,15 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u16(building.footprint.height);
                 hash.write_i32(building.health.current);
                 hash.write_i32(building.health.max);
+                if let Some(economy) = building.economy {
+                    hash.write_u8(1);
+                    hash.write_u64(u64::from(economy.gold_cost));
+                    hash.write_u64(u64::from(economy.lumber_cost));
+                    hash.write_u64(u64::from(economy.lumber_refund));
+                    hash.write_u64(economy.income_per_10k);
+                } else {
+                    hash.write_u8(0);
+                }
                 hash.write_u8(building.damage_type.stable_tag());
                 hash.write_u8(building.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(building.armor.armor_points));
@@ -8746,6 +8936,7 @@ struct CanonicalBuilding {
     team: Team,
     footprint: BuildingFootprint,
     health: Health,
+    economy: Option<BuildingEconomyProfile>,
     production: Option<ProductionProfile>,
     production_state: Option<ProductionState>,
     production_corpse: Option<CorpseProfile>,

@@ -2,6 +2,7 @@ use bevy_ecs::prelude::Component;
 
 use crate::{
     damage::{ArmorProfile, DamageType},
+    economy::BuildingEconomyProfile,
     math::SimPoint,
 };
 
@@ -362,6 +363,7 @@ pub struct BuildingGameplayProperties {
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
+    pub economy: Option<BuildingEconomyProfile>,
     pub production_unit: UnitGameplayProperties,
     pub production_spellcasting: Option<SpellcastingProfile>,
 }

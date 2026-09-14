@@ -1,6 +1,7 @@
 mod components;
 mod content;
 mod damage;
+mod economy;
 mod math;
 mod native_effects;
 mod simulation;
@@ -26,9 +27,14 @@ pub use content::{
     CastleFightTowerKind, CastleFightUnitDefinition, CastleFightUnitKind,
     UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
     castle_fight_builder_profile_for_version, castle_fight_damage_rules,
+    castle_fight_economy_rules, castle_fight_economy_rules_for_version,
 };
 pub use damage::{
     ArmorProfile, ArmorType, DAMAGE_MULTIPLIER_SCALE, DamageRules, DamageRulesLoadError, DamageType,
+};
+pub use economy::{
+    BuildingEconomyProfile, EconomyRules, PlayerEconomyView, PlayerResources, RESOURCE_FIXED_SCALE,
+    ResourcePurchaseError,
 };
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use native_effects::{NativeEffectImplementationId, native_effect_implementation_for};
@@ -278,6 +284,7 @@ mod tests {
             team_build_regions: [Vec::new(), Vec::new()],
             targetless_lane: None,
             team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
+            economy: EconomyRules::default(),
         }
     }
 
@@ -4040,6 +4047,84 @@ mod tests {
             )
             .is_ok(),
             "draft-style catalog replacement should change build legality without replacing builder"
+        );
+    }
+
+    #[test]
+    fn purchased_buildings_spend_resources_award_lumber_and_pay_tick_income() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(29, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 15, 10)],
+                vec![BuildingFootprint::new(15, 0, 15, 10)],
+            ],
+            economy: castle_fight_economy_rules(),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        let watch_tower = CastleFightTowerKind::WatchTower.definition();
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(2 * cell, 2 * cell),
+            profile: castle_fight_builder_profile(),
+            configuration: test_builder_configuration(vec![barracks.rawcode, watch_tower.rawcode]),
+            repair_autocast_enabled: true,
+        });
+
+        let initial = sim.player_economy(Team(0)).unwrap();
+        assert_eq!(initial.resources.gold, 250);
+        assert_eq!(initial.resources.lumber, 125);
+        assert_eq!(initial.resources.legendary_points_used, 0);
+        assert_eq!(initial.resources.legendary_points_cap, 1);
+        assert_eq!(initial.income, 0);
+        assert_eq!(initial.ticks_until_income, 300);
+
+        sim.try_builder_purchase_building_with_properties(
+            builder,
+            barracks.spawn(Team(0), BuildingFootprint::new(4, 3, 4, 4)),
+            barracks.gameplay_properties(),
+        )
+        .unwrap();
+        let after_barracks = sim.player_economy(Team(0)).unwrap();
+        assert_eq!(after_barracks.resources.gold, 150);
+        assert_eq!(after_barracks.resources.lumber, 225);
+        assert_eq!(after_barracks.income, 2);
+
+        assert_eq!(
+            sim.try_builder_purchase_building_with_properties(
+                builder,
+                watch_tower.spawn(Team(0), BuildingFootprint::new(9, 3, 4, 4)),
+                watch_tower.gameplay_properties(),
+            ),
+            Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientLumber {
+                    available: 225,
+                    required: 300,
+                }
+            ))
+        );
+        assert_eq!(
+            sim.player_resources(Team(0)).unwrap(),
+            after_barracks.resources
+        );
+        assert_eq!(sim.building_count(), 1);
+
+        for _ in 0..299 {
+            sim.step();
+        }
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 150);
+        assert_eq!(
+            sim.player_economy(Team(0)).unwrap().income_progress_per_10k,
+            9_966
+        );
+        sim.step();
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 152);
+        assert_eq!(
+            sim.player_economy(Team(0)).unwrap().income_progress_per_10k,
+            0
         );
     }
 
