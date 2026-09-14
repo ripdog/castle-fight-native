@@ -21,8 +21,10 @@ const PANEL_TOP: f32 = 16.0;
 const PANEL_WIDTH: f32 = 340.0;
 const PANEL_HEIGHT: f32 = 410.0;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
-const BUILDER_PICK_RADIUS: f32 = 8.0;
-const BUILDER_VISUAL_HEIGHT: f32 = 10.0;
+// Human Builder X00C inherits the stock Peasant's 100x100 shadow footprint and selection scale 1.
+// Use that authored footprint for the native click target instead of the old tiny placeholder size.
+const BUILDER_PICK_RADIUS: f32 = 50.0;
+const BUILDER_PICK_HEIGHT: f32 = 100.0;
 const SELECTION_RING_PADDING: f32 = 2.5;
 const SELECTION_COLOR: Color = Color::srgb(1.0, 0.88, 0.22);
 const PANEL_BACKGROUND: Color = Color::srgba(0.035, 0.045, 0.060, 0.94);
@@ -280,12 +282,12 @@ pub(crate) fn pick_builder_on_ray(
             .unwrap_or(builder);
         let ground =
             sim_point_to_terrain_world_lerp(previous.position, builder.position, alpha, terrain);
-        let center = ground + Vec3::Y * (BUILDER_VISUAL_HEIGHT * 0.5);
+        let center = ground + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5);
         let Some(distance) = ray_sphere_hit_distance(
             ray_origin,
             ray_direction,
             center,
-            BUILDER_PICK_RADIUS.max(BUILDER_VISUAL_HEIGHT * 0.55),
+            BUILDER_PICK_RADIUS.max(BUILDER_PICK_HEIGHT * 0.55),
         ) else {
             continue;
         };
@@ -695,10 +697,12 @@ mod tests {
         let terrain = flat_terrain();
         let center =
             sim_point_to_terrain_world(samples.current.builders[&SimId(5)].position, &terrain)
-                + Vec3::Y * (BUILDER_VISUAL_HEIGHT * 0.5);
+                + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5);
         assert_eq!(
             pick_builder_on_ray(
-                Vec3::new(center.x, center.y, 0.0),
+                // A click 40 world units off the model center should still land inside the
+                // Peasant-sized selection footprint.
+                Vec3::new(center.x + 40.0, center.y, 0.0),
                 Vec3::Z,
                 &samples,
                 &terrain,

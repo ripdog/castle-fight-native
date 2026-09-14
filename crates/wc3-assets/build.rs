@@ -88,10 +88,12 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let original_map = manifest_dir.join("../../docs/original_map");
     let resolved = original_map.join("extracted/resolved");
     let production_path = resolved.join("production-buildings.tsv");
+    let race_buildings_path = original_map.join("extracted/script/race-buildings.tsv");
     let buildings_path = resolved.join("buildings.tsv");
     let object_fields_path = resolved.join("object-fields.tsv");
     let placed_doodads_path = resolved.join("placed-doodads.tsv");
     println!("cargo:rerun-if-changed={}", production_path.display());
+    println!("cargo:rerun-if-changed={}", race_buildings_path.display());
     println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
     println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
@@ -100,7 +102,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let catalog_version = parse_catalog_version(&fs::read_to_string(&map_readme)?)?;
     println!("cargo:rustc-env=CF_ASSET_CATALOG_VERSION={catalog_version}");
 
-    let units = load_production_units(&production_path, &object_fields_path)?;
+    let units = load_unit_assets(&production_path, &race_buildings_path, &object_fields_path)?;
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
     let visuals = load_visual_assets(&object_fields_path)?;
@@ -124,8 +126,9 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn load_production_units(
+fn load_unit_assets(
     production_path: &std::path::Path,
+    race_buildings_path: &std::path::Path,
     object_fields_path: &std::path::Path,
 ) -> Result<Vec<UnitAssetSpec>, Box<dyn Error>> {
     let mut production = csv::ReaderBuilder::new()
@@ -145,6 +148,23 @@ fn load_production_units(
         units
             .entry(rawcode.to_owned())
             .or_insert_with(|| row.get(unit_names).unwrap_or_default().trim().to_owned());
+    }
+
+    let mut race_buildings = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(race_buildings_path)?;
+    let race_headers = race_buildings.headers()?.clone();
+    let builder_rawcode = header_index(&race_headers, "builder_rawcode")?;
+    let builder_names = header_index(&race_headers, "builder_names")?;
+    for row in race_buildings.records() {
+        let row = row?;
+        let rawcode = row.get(builder_rawcode).unwrap_or_default().trim();
+        if rawcode.is_empty() {
+            continue;
+        }
+        units
+            .entry(rawcode.to_owned())
+            .or_insert_with(|| row.get(builder_names).unwrap_or_default().trim().to_owned());
     }
 
     let mut fields = csv::ReaderBuilder::new()
@@ -195,7 +215,7 @@ fn load_production_units(
     for (rawcode, name) in units {
         let base_rawcode = base_rawcodes
             .remove(&rawcode)
-            .ok_or_else(|| format!("production unit {rawcode} ({name}) has no base rawcode"))?;
+            .ok_or_else(|| format!("unit {rawcode} ({name}) has no base rawcode"))?;
         result.push(UnitAssetSpec {
             model_path: model_paths.remove(&rawcode),
             scale: scales.remove(&rawcode),

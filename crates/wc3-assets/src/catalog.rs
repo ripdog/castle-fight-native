@@ -203,6 +203,22 @@ mod tests {
     }
 
     #[test]
+    fn embedded_unit_catalog_includes_human_builder_art() {
+        let units = load_embedded_units().expect("embedded unit catalog loads");
+        let builder = units
+            .iter()
+            .find(|unit| unit.rawcode == "X00C")
+            .expect("Human Builder should be exportable as a unit asset");
+        assert_eq!(builder.base_rawcode, "hpea");
+        assert_eq!(builder.name, "Human Builder");
+        assert_eq!(
+            builder.model_path.as_deref(),
+            Some(r"units\human\Peasant\Peasant")
+        );
+        assert_eq!(builder.scale, Some(1.0));
+    }
+
+    #[test]
     fn embedded_building_catalog_contains_current_native_slice() {
         let buildings = load_embedded_buildings().expect("embedded building catalog loads");
         let building = |rawcode: &str| {

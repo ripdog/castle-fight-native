@@ -252,7 +252,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
-                    "requested unit rawcode(s) not in production catalog: {}",
+                    "requested unit rawcode(s) not in unit asset catalog: {}",
                     unknown.join(", ")
                 ),
             )
@@ -425,7 +425,7 @@ Options:
   --wc3 PATH            Warcraft III install root (or set WC3_INSTALL)
   --map PATH            Optional Warcraft III map archive for map-imported assets
   -o, --output PATH     Destination directory for converted assets
-  --unit RAWCODE        Export one production unit; repeat for more units
+  --unit RAWCODE        Export one combat unit or builder; repeat for more units
   --buildings           Export every resolved Castle Fight building model
   --building RAWCODE    Export one building; repeat for more buildings
   --doodads             Export every doodad/destructable placed by Castle Fight
@@ -437,7 +437,7 @@ Options:
   --object-fields PATH  Development override for resolved object-fields.tsv
   -h, --help            Show this help
 
-With no --unit filters, every production unit in the resolved Castle Fight
+With no --unit filters, every production unit and race builder in the resolved Castle Fight
 catalog is exported. Use --buildings (or --building RAWCODE) for structures and towers,
 --doodads (or --doodad RAWCODE) for map decoration assets and exact placements, and
 --effects for the visual-effects catalog. Models shared by multiple objects are converted
