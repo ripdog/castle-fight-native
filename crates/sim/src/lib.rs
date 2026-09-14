@@ -5895,7 +5895,7 @@ mod tests {
     fn targetless_lane_ingress_moves_diagonally_then_keeps_entry_line() {
         fn run(team: Team, start: SimPoint) {
             let world = SUBUNITS_PER_WORLD_UNIT;
-            let lane = TargetlessLane::new(-40 * world, 40 * world, [200 * world, 800 * world]);
+            let lane = TargetlessLane::new(-40 * world, 40 * world);
             let config = SimulationConfig {
                 navigation_cell_size: 10 * world,
                 navigation_min: NavCell::new(0, -20),
@@ -5939,10 +5939,11 @@ mod tests {
             }
             let entered = sim.unit(unit).unwrap().position;
             assert!(entered.y >= safe_min_y && entered.y <= safe_max_y);
-            let entry_x = lane.team_entry_x[usize::from(team.0)];
+            let forward_distance = (i64::from(entered.x) - i64::from(start.x)).abs();
+            let inward_distance = (i64::from(entered.y) - i64::from(start.y)).abs();
             assert!(
-                (i64::from(entered.x) - i64::from(entry_x)).abs() <= i64::from(20 * world),
-                "unit entered the lane far from its normal entrance: {entered:?}"
+                (forward_distance - inward_distance).abs() <= i64::from(20 * world),
+                "clear ingress did not follow the preferred diagonal: {start:?} -> {entered:?}"
             );
 
             sim.step();
@@ -6036,11 +6037,7 @@ mod tests {
             navigation_min: NavCell::new(0, -10),
             navigation_max: NavCell::new(30, 10),
             static_blockers: vec![BuildingFootprint::new(10, 0, 1, 1)],
-            targetless_lane: Some(TargetlessLane::new(
-                -80 * world,
-                80 * world,
-                [20 * world, 280 * world],
-            )),
+            targetless_lane: Some(TargetlessLane::new(-80 * world, 80 * world)),
             team_objective: [SimPoint::new(290 * world, 0), SimPoint::new(10 * world, 0)],
             ..SimulationConfig::default()
         };

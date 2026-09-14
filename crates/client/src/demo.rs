@@ -264,7 +264,6 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         targetless_lane: Some(TargetlessLane::new(
             LANE_MIN_Y * NAV_CELL_SUBUNITS,
             (LANE_MAX_Y + 1) * NAV_CELL_SUBUNITS,
-            [LEFT_BUILD_MAX_X_WORLD, RIGHT_BUILD_MIN_X_WORLD].map(|x| x * SUBUNITS_PER_WORLD_UNIT),
         )),
         // Distance-field objectives must stay outside the castle's blocked 16x16 footprint. These
         // are the lane-facing cells immediately beyond each original castle pathing envelope.
@@ -818,10 +817,6 @@ mod tests {
             Some(TargetlessLane::new(
                 -768 * SUBUNITS_PER_WORLD_UNIT,
                 768 * SUBUNITS_PER_WORLD_UNIT,
-                [
-                    -1_920 * SUBUNITS_PER_WORLD_UNIT,
-                    1_920 * SUBUNITS_PER_WORLD_UNIT,
-                ],
             ))
         );
 
@@ -830,6 +825,77 @@ mod tests {
         assert!(!simulation.can_place_building(BuildingFootprint::new(200, 0, 1, 1)));
         assert!(!simulation.can_place_building(BuildingFootprint::new(0, -113, 1, 1)));
         assert!(!simulation.can_place_building(BuildingFootprint::new(0, 112, 1, 1)));
+    }
+
+    #[test]
+    fn original_map_upper_base_units_enter_lane_near_their_castle() {
+        let terrain = original_terrain();
+        let config = demo_config(&terrain);
+        let lane = config.targetless_lane.expect("standard map lane guidance");
+        let mut simulation = Simulation::new(config, 1);
+        let footman = CastleFightUnitKind::Footman.definition();
+        let start = world_point(-5_600, 1_800);
+        let unit = simulation.spawn_unit_with_properties(
+            UnitSpawn::from_template(Team(0), start, footman.template()),
+            footman.gameplay_properties(),
+        );
+
+        simulation.step();
+        let first = simulation
+            .unit(unit)
+            .expect("footman after first step")
+            .position;
+        assert!(
+            first.x > start.x && first.y < start.y,
+            "upper-left base ingress must begin southeast, got {start:?} -> {first:?}"
+        );
+
+        let safe_max_y = lane.max_y - footman.collision_radius.0;
+        for _ in 0..240 {
+            if simulation
+                .unit(unit)
+                .expect("footman in transit")
+                .position
+                .y
+                <= safe_max_y
+            {
+                break;
+            }
+            simulation.step();
+        }
+        let entered = simulation
+            .unit(unit)
+            .expect("footman entered lane")
+            .position;
+        assert!(
+            entered.y <= safe_max_y,
+            "footman never reached the lane: {entered:?}"
+        );
+        assert!(
+            entered.x < -4_000 * SUBUNITS_PER_WORLD_UNIT,
+            "footman waited until the inner base wall before entering the lane: {entered:?}"
+        );
+
+        let forward_distance = i64::from(entered.x) - i64::from(start.x);
+        let inward_distance = i64::from(start.y) - i64::from(entered.y);
+        assert!(
+            (forward_distance - inward_distance).abs() <= i64::from(128 * SUBUNITS_PER_WORLD_UNIT),
+            "upper-base ingress should stay close to a diagonal until it reaches the path: {start:?} -> {entered:?}"
+        );
+
+        simulation.step();
+        let marching = simulation
+            .unit(unit)
+            .expect("footman marching in lane")
+            .position;
+        assert!(
+            marching.x > entered.x,
+            "footman did not turn east in the lane"
+        );
+        assert_eq!(
+            marching.y, entered.y,
+            "footman kept calibrating vertically after entering the lane"
+        );
     }
 
     #[test]

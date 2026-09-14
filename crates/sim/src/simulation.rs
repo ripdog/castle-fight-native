@@ -54,20 +54,12 @@ pub struct TargetlessLane {
     /// aligned and resumes the normal horizontal objective march from its current `y`.
     pub min_y: i32,
     pub max_y: i32,
-    /// World-space x coordinate of each team's normal lane entrance. Units outside the lane band
-    /// approach this x while moving toward the nearest lane edge, so remote base spawns enter the
-    /// cross-map corridor before attempting to march through it.
-    pub team_entry_x: [i32; 2],
 }
 
 impl TargetlessLane {
     #[must_use]
-    pub const fn new(min_y: i32, max_y: i32, team_entry_x: [i32; 2]) -> Self {
-        Self {
-            min_y,
-            max_y,
-            team_entry_x,
-        }
+    pub const fn new(min_y: i32, max_y: i32) -> Self {
+        Self { min_y, max_y }
     }
 }
 
@@ -5737,7 +5729,7 @@ impl Simulation {
             None => {
                 let route_bias = sidestep_sign(unit.id);
                 if let Some(goal) =
-                    self.targetless_lane_entry_goal(unit.team, current, unit.collision_radius)
+                    self.targetless_lane_ingress_goal(unit.team, current, unit.collision_radius)
                 {
                     let cell = self.topology.cell_of_point(goal);
                     let lane_route = if cell == source_cell {
@@ -5959,7 +5951,7 @@ impl Simulation {
         }
     }
 
-    fn targetless_lane_entry_goal(
+    fn targetless_lane_ingress_goal(
         &self,
         team: Team,
         current: SimPoint,
@@ -5972,20 +5964,21 @@ impl Simulation {
             return None;
         }
 
+        let goal_y = current.y.clamp(min_center_y, max_center_y);
+        let inward_distance = (i64::from(current.y) - i64::from(goal_y)).abs();
         let team_index = usize::from(team.0);
-        let entry_x = lane.team_entry_x[team_index];
-        let objective_x = self.config.team_objective[team_index].x;
-        let direction = (i64::from(objective_x) - i64::from(entry_x)).signum();
-        let progress_from_entry = (i64::from(current.x) - i64::from(entry_x)) * direction;
-        let goal_x = if direction != 0 && progress_from_entry < 0 {
-            entry_x
-        } else {
-            objective_x
+        let other_team_index = 1 - team_index;
+        let current_x = i64::from(current.x);
+        let objective_x = i64::from(self.config.team_objective[team_index].x);
+        let other_objective_x = i64::from(self.config.team_objective[other_team_index].x);
+        let forward = (objective_x - other_objective_x).signum();
+        let projected_x = current_x + forward * inward_distance;
+        let goal_x = match forward {
+            1 => projected_x.min(objective_x.max(current_x)),
+            -1 => projected_x.max(objective_x.min(current_x)),
+            _ => current_x,
         };
-        Some(SimPoint::new(
-            goal_x,
-            current.y.clamp(min_center_y, max_center_y),
-        ))
+        Some(SimPoint::new(i32::try_from(goal_x).ok()?, goal_y))
     }
 
     fn desired_air_position(
@@ -6045,7 +6038,7 @@ impl Simulation {
                 }
             })
             .unwrap_or_else(|| {
-                self.targetless_lane_entry_goal(unit.team, current, unit.collision_radius)
+                self.targetless_lane_ingress_goal(unit.team, current, unit.collision_radius)
                     .unwrap_or_else(|| {
                         SimPoint::new(
                             self.config.team_objective[usize::from(unit.team.0)].x,
