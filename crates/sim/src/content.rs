@@ -2,10 +2,11 @@ use std::fmt;
 
 use crate::{
     components::{
-        AttackDelivery, AttackProfile, AttackTargetMask, BuilderProfile, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity,
-        CorpseDefinitionId, CorpseProfile, MovementClass, MovementProfile, PassiveUnitEffects,
-        ProductionProfile, SpellcastingProfile, Team, UnitGameplayProperties, UnitTemplate,
+        AttackDelivery, AttackProfile, AttackTargetMask, BuilderConfiguration, BuilderLocomotion,
+        BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+        CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile, MovementClass,
+        MovementProfile, PassiveUnitEffects, ProductionProfile, SpellcastingProfile, Team,
+        UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -17,6 +18,7 @@ pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
 pub const CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS: u16 = 4;
 const CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 550;
+const CASTLE_FIGHT_CRITTER_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 190;
 const CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS: i32 = 50;
 const CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS: u16 = 2;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
@@ -38,6 +40,271 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 }
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CastleFightBuilderRace {
+    Chaos = 0,
+    Corrupted = 1,
+    Critter = 2,
+    Desert = 3,
+    Elemental = 4,
+    Elf = 5,
+    Human = 6,
+    Mechanical = 7,
+    Naga = 8,
+    Nature = 9,
+    NightElf = 10,
+    Northern = 11,
+    Orc = 12,
+    Pandaren = 13,
+    Undead = 14,
+}
+
+impl CastleFightBuilderRace {
+    pub const ALL: [Self; 15] = [
+        Self::Chaos,
+        Self::Corrupted,
+        Self::Critter,
+        Self::Desert,
+        Self::Elemental,
+        Self::Elf,
+        Self::Human,
+        Self::Mechanical,
+        Self::Naga,
+        Self::Nature,
+        Self::NightElf,
+        Self::Northern,
+        Self::Orc,
+        Self::Pandaren,
+        Self::Undead,
+    ];
+
+    pub const STANDARD: [Self; 14] = [
+        Self::Chaos,
+        Self::Corrupted,
+        Self::Desert,
+        Self::Elemental,
+        Self::Elf,
+        Self::Human,
+        Self::Mechanical,
+        Self::Naga,
+        Self::Nature,
+        Self::NightElf,
+        Self::Northern,
+        Self::Orc,
+        Self::Pandaren,
+        Self::Undead,
+    ];
+
+    #[must_use]
+    pub fn definition(self) -> CastleFightBuilderDefinition {
+        self.definition_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn definition_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<CastleFightBuilderDefinition, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        let race_index = self as u8;
+        let metadata = BUILDER_RACE_METADATA_927[usize::from(race_index)];
+        Ok(CastleFightBuilderDefinition {
+            race: self,
+            race_index,
+            rawcode: metadata.rawcode,
+            name: metadata.name,
+            campaign_only: metadata.campaign_only,
+            locomotion: metadata.locomotion,
+            profile: builder_profile(metadata.move_speed_world_units_per_second),
+            build_catalog: extracted_builder_catalog(
+                race_index,
+                metadata.rawcode,
+                metadata.name,
+                metadata.campaign_only,
+            ),
+            map_version: version,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CastleFightBuilderDefinition {
+    pub race: CastleFightBuilderRace,
+    pub race_index: u8,
+    pub rawcode: u32,
+    pub name: &'static str,
+    pub campaign_only: bool,
+    pub locomotion: BuilderLocomotion,
+    pub profile: BuilderProfile,
+    pub build_catalog: Vec<u32>,
+    pub map_version: MapVersion,
+}
+
+impl CastleFightBuilderDefinition {
+    #[must_use]
+    pub fn configuration(&self) -> BuilderConfiguration {
+        self.configuration_with_catalog(self.build_catalog.clone())
+    }
+
+    #[must_use]
+    pub fn configuration_with_catalog(&self, build_catalog: Vec<u32>) -> BuilderConfiguration {
+        BuilderConfiguration {
+            appearance: ContentIdentity {
+                rawcode: self.rawcode,
+                name: self.name,
+            },
+            locomotion: self.locomotion,
+            build_catalog,
+        }
+    }
+
+    #[must_use]
+    pub fn spawn(&self, team: Team, position: crate::math::SimPoint) -> BuilderSpawn {
+        BuilderSpawn {
+            team,
+            position,
+            profile: self.profile,
+            configuration: self.configuration(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BuilderRaceMetadata {
+    rawcode: u32,
+    name: &'static str,
+    campaign_only: bool,
+    locomotion: BuilderLocomotion,
+    move_speed_world_units_per_second: i32,
+}
+
+const BUILDER_RACE_METADATA_927: [BuilderRaceMetadata; 15] = [
+    builder_race_metadata(
+        *b"X00O",
+        "Chaos Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X006",
+        "Corrupted Builder",
+        false,
+        BuilderLocomotion::Hover,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X0Z0",
+        "Critter Builder",
+        true,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_CRITTER_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X078",
+        "Desert Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X051",
+        "Elemental Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X00P",
+        "Elf Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X00C",
+        "Human Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X06P",
+        "Mechanical Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X00E",
+        "Naga Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X01A",
+        "Nature Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X089",
+        "Night Elf Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X017",
+        "Northern Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X019",
+        "Orc Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X07P",
+        "Pandaren Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+    builder_race_metadata(
+        *b"X018",
+        "Undead Builder",
+        false,
+        BuilderLocomotion::Foot,
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ),
+];
+
+const fn builder_race_metadata(
+    rawcode: [u8; 4],
+    name: &'static str,
+    campaign_only: bool,
+    locomotion: BuilderLocomotion,
+    move_speed_world_units_per_second: i32,
+) -> BuilderRaceMetadata {
+    BuilderRaceMetadata {
+        rawcode: u32::from_be_bytes(rawcode),
+        name,
+        campaign_only,
+        locomotion,
+        move_speed_world_units_per_second,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CastleFightUnitKind {
@@ -518,16 +785,105 @@ pub fn castle_fight_builder_profile_for_version(
     if version != MapVersion::CASTLE_FIGHT_9_27 {
         return Err(UnsupportedCastleFightMapVersion(version));
     }
-    Ok(BuilderProfile {
-        speed_per_tick: CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND
-            * SUBUNITS_PER_WORLD_UNIT
+    Ok(builder_profile(
+        CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND,
+    ))
+}
+
+fn builder_profile(move_speed_world_units_per_second: i32) -> BuilderProfile {
+    BuilderProfile {
+        speed_per_tick: move_speed_world_units_per_second * SUBUNITS_PER_WORLD_UNIT
             / CASTLE_FIGHT_SIMULATION_HZ,
         repair_range: world(CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS),
         full_repair_duration_ticks: CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS
             * CASTLE_FIGHT_SIMULATION_HZ as u16
             * CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR
             / CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR,
-    })
+    }
+}
+
+fn extracted_builder_catalog(
+    race_index: u8,
+    builder_rawcode: u32,
+    builder_name: &str,
+    campaign_only: bool,
+) -> Vec<u32> {
+    let mut catalog = Vec::new();
+    let mut expected_order = 0usize;
+    for line in include_str!("../../../docs/original_map/extracted/script/race-buildings.tsv")
+        .lines()
+        .skip(1)
+    {
+        let mut columns = line.split('\t');
+        let row_race_index = columns
+            .next()
+            .expect("race-buildings row missing race index")
+            .parse::<u8>()
+            .expect("race-buildings race index must be numeric");
+        let _race_function = columns
+            .next()
+            .expect("race-buildings row missing race function");
+        let row_builder_rawcode = parse_rawcode(
+            columns
+                .next()
+                .expect("race-buildings row missing builder rawcode"),
+        );
+        let _builder_rawcode_integer = columns
+            .next()
+            .expect("race-buildings row missing builder rawcode integer");
+        let row_builder_name = columns
+            .next()
+            .expect("race-buildings row missing builder name");
+        let row_campaign_only = columns
+            .next()
+            .expect("race-buildings row missing campaign flag");
+        let building_order = columns
+            .next()
+            .expect("race-buildings row missing building order")
+            .parse::<usize>()
+            .expect("race-buildings building order must be numeric");
+        let building_rawcode = parse_rawcode(
+            columns
+                .next()
+                .expect("race-buildings row missing building rawcode"),
+        );
+
+        if row_race_index != race_index || row_builder_rawcode != builder_rawcode {
+            continue;
+        }
+        assert_eq!(
+            row_builder_name, builder_name,
+            "builder name changed in extraction"
+        );
+        assert_eq!(
+            row_campaign_only,
+            if campaign_only { "1" } else { "0" },
+            "builder campaign-only flag changed in extraction"
+        );
+        assert_eq!(
+            building_order, expected_order,
+            "builder catalog order changed for race {race_index}"
+        );
+        assert!(
+            !catalog.contains(&building_rawcode),
+            "builder race {race_index} repeats building rawcode {building_rawcode:#010x}"
+        );
+        expected_order += 1;
+        catalog.push(building_rawcode);
+    }
+    assert!(
+        !catalog.is_empty(),
+        "builder race {race_index} has no extracted buildings"
+    );
+    catalog
+}
+
+fn parse_rawcode(value: &str) -> u32 {
+    let bytes: [u8; 4] = value
+        .as_bytes()
+        .try_into()
+        .expect("rawcode must contain exactly four bytes");
+    u32::from_be_bytes(bytes)
 }
 
 #[must_use]
@@ -592,6 +948,75 @@ mod tests {
                 full_repair_duration_ticks: 90,
             }
         );
+    }
+
+    #[test]
+    fn builder_race_definitions_match_extracted_927_units_and_catalogs() {
+        let units = include_str!("../../../docs/original_map/extracted/resolved/units.tsv");
+        let mut unit_lines = units.lines();
+        let unit_header = unit_lines.next().expect("units.tsv header missing");
+        let unit_columns = unit_header.split('\t').collect::<Vec<_>>();
+        let rawcode_column = unit_columns
+            .iter()
+            .position(|column| *column == "rawcode")
+            .unwrap();
+        let name_column = unit_columns
+            .iter()
+            .position(|column| *column == "name")
+            .unwrap();
+        let move_type_column = unit_columns
+            .iter()
+            .position(|column| *column == "move_type")
+            .unwrap();
+        let move_speed_column = unit_columns
+            .iter()
+            .position(|column| *column == "move_speed")
+            .unwrap();
+        let unit_rows = unit_lines
+            .map(|line| line.split('\t').collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let expected_catalog_sizes = [15, 15, 7, 16, 21, 13, 18, 20, 15, 17, 15, 17, 22, 13, 16];
+
+        for (race, expected_catalog_size) in CastleFightBuilderRace::ALL
+            .into_iter()
+            .zip(expected_catalog_sizes)
+        {
+            let definition = race.definition();
+            let source = unit_rows
+                .iter()
+                .find(|row| parse_rawcode(row[rawcode_column]) == definition.rawcode)
+                .expect("builder rawcode must exist in resolved units");
+            assert_eq!(source[name_column], definition.name);
+            assert_eq!(
+                source[move_type_column],
+                match definition.locomotion {
+                    BuilderLocomotion::Foot => "foot",
+                    BuilderLocomotion::Hover => "hover",
+                }
+            );
+            let source_speed = source[move_speed_column].parse::<i32>().unwrap();
+            assert_eq!(
+                definition.profile.speed_per_tick,
+                source_speed * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ
+            );
+            assert_eq!(definition.build_catalog.len(), expected_catalog_size);
+        }
+        assert!(!CastleFightBuilderRace::STANDARD.contains(&CastleFightBuilderRace::Critter));
+        assert!(CastleFightBuilderRace::Critter.definition().campaign_only);
+    }
+
+    #[test]
+    fn draft_builder_configuration_changes_menu_without_changing_appearance() {
+        let human = CastleFightBuilderRace::Human.definition();
+        let drafted = human.configuration_with_catalog(vec![
+            u32::from_be_bytes(*b"h000"),
+            u32::from_be_bytes(*b"h02I"),
+        ]);
+        assert_eq!(drafted.appearance.rawcode, human.rawcode);
+        assert_eq!(drafted.locomotion, human.locomotion);
+        assert_eq!(drafted.build_catalog.len(), 2);
+        assert!(drafted.allows_building(u32::from_be_bytes(*b"h02I")));
+        assert!(!drafted.allows_building(u32::from_be_bytes(*b"h006")));
     }
 
     #[test]

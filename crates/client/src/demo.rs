@@ -1,9 +1,9 @@
 use castle_fight_sim::{
     ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingFootprint,
-    BuildingGameplayProperties, BuildingSpawn, CastleFightProductionKind, CastleFightTowerKind,
-    CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
+    BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace, CastleFightProductionKind,
+    CastleFightTowerKind, CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
     SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, Team,
-    TerrainElevationMap, UnitSpawn, castle_fight_builder_profile, castle_fight_damage_rules,
+    TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
 };
 
 use crate::presentation::WorldMetrics;
@@ -59,6 +59,16 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
     };
     let mut simulation = Simulation::new_with_combat_rules(config, workers, combat_rules);
 
+    let builder_definition = CastleFightBuilderRace::Human.definition();
+    let demo_build_catalog = CastleFightProductionKind::ALL
+        .into_iter()
+        .map(|kind| kind.definition().rawcode)
+        .chain(
+            CastleFightTowerKind::ALL
+                .into_iter()
+                .map(|kind| kind.definition().rawcode),
+        )
+        .collect::<Vec<_>>();
     for (team, x) in [
         (Team(0), -CASTLE_CENTER_X_WORLD),
         (Team(1), CASTLE_CENTER_X_WORLD),
@@ -66,7 +76,11 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
         simulation.spawn_builder(BuilderSpawn {
             team,
             position: world_point(x, 0),
-            profile: castle_fight_builder_profile(),
+            profile: builder_definition.profile,
+            // The verification client intentionally exposes a mixed-race slice of implemented
+            // buildings. Model that as a draft-style variable menu while keeping one builder type.
+            configuration: builder_definition
+                .configuration_with_catalog(demo_build_catalog.clone()),
         });
     }
 
@@ -462,12 +476,17 @@ mod tests {
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
         let builders = simulation.builders();
         assert_eq!(builders.len(), 2);
+        let human = CastleFightBuilderRace::Human.definition();
         assert_eq!(builders[0].team, Team(0));
         assert_eq!(builders[0].position, world_point(-CASTLE_CENTER_X_WORLD, 0));
-        assert_eq!(builders[0].profile, castle_fight_builder_profile());
+        assert_eq!(builders[0].profile, human.profile);
+        assert_eq!(builders[0].configuration.appearance.rawcode, human.rawcode);
+        assert_eq!(builders[0].configuration.locomotion, human.locomotion);
+        assert_eq!(builders[0].configuration.build_catalog.len(), 7);
         assert_eq!(builders[1].team, Team(1));
         assert_eq!(builders[1].position, world_point(CASTLE_CENTER_X_WORLD, 0));
-        assert_eq!(builders[1].profile, castle_fight_builder_profile());
+        assert_eq!(builders[1].profile, human.profile);
+        assert_eq!(builders[1].configuration, builders[0].configuration);
     }
 
     #[test]

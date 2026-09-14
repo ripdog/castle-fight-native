@@ -28,7 +28,7 @@ Network connection state itself is operational, but any gameplay consequence of 
 
 Each active player has exactly one directly controlled builder under the standard rules.
 
-The builder is not a combat unit. It exists to move for player interaction, summon buildings inside the owning team's build region, repair friendly buildings, and carry/use items. It is non-targetable by ordinary combat, invulnerable to ordinary battle damage, and non-blocking to combat-unit movement. Its own movement is non-colliding flight that ignores terrain/pathing and all blockers while remaining confined to the owning build region.
+The builder is not a combat unit. It exists to move for player interaction, summon buildings inside the owning team's build region, repair friendly buildings, and carry/use items. It is non-targetable by ordinary combat, invulnerable to ordinary battle damage, and non-blocking to combat-unit movement. It remains at terrain/ground height, can move freely through units and buildings inside the owning build region, and cannot leave that region.
 
 Ordinary combat units are never player-commandable. Their movement, target acquisition, attacks, and autonomous abilities remain simulation-driven.
 

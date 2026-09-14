@@ -19,20 +19,21 @@ use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
-        AutomaticAbilityState, BallisticProjectile, BounceProjectile, Builder, BuilderProfile,
-        BuilderSpawn, BuilderState, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
-        BurningOilZone, ChainLightningState, CollisionRadius, ContentIdentity, Corpse,
-        CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
-        MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS,
-        MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId,
-        MovementClass, MovementProfile, NavigationGoal, NavigationState, PassiveUnitEffect,
-        PassiveUnitEffects, PendingAttackEffects, Position, ProductionArmorProfile,
-        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
-        ProductionCorpseProfile, ProductionDamageType, ProductionMovementClass,
-        ProductionPassiveEffects, ProductionProfile, ProductionSpellcastingProfile,
-        ProductionState, RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState,
-        TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime,
-        TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
+        AutomaticAbilityState, BallisticProjectile, BounceProjectile, Builder,
+        BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuilderState,
+        BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, BurningOilZone,
+        ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
+        CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
+        MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
+        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, ModifierId, MovementClass, MovementProfile,
+        NavigationGoal, NavigationState, PassiveUnitEffect, PassiveUnitEffects,
+        PendingAttackEffects, Position, ProductionArmorProfile, ProductionAttackTargets,
+        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
+        ProductionDamageType, ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
+        ProductionSpellcastingProfile, ProductionState, RetaliationState, SimId, SpawnTick,
+        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
+        UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, DamageRules, DamageType},
@@ -249,12 +250,13 @@ pub struct UnitView {
     pub ability_cast_sequence: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuilderView {
     pub id: SimId,
     pub team: Team,
     pub position: SimPoint,
     pub profile: BuilderProfile,
+    pub configuration: BuilderConfiguration,
     pub destination: Option<SimPoint>,
     pub repair_target: Option<SimId>,
 }
@@ -309,6 +311,8 @@ pub enum BuilderCommandError {
 pub enum BuilderBuildError {
     Builder(BuilderCommandError),
     TeamMismatch,
+    MissingBuildingIdentity,
+    BuildingNotInCatalog,
     Placement(BuildingPlacementError),
 }
 
@@ -423,9 +427,38 @@ impl Simulation {
             Position(builder.position),
             Builder,
             builder.profile,
+            builder.configuration,
             BuilderState::default(),
         ));
         Ok(id)
+    }
+
+    pub fn configure_builder(
+        &mut self,
+        builder: SimId,
+        profile: BuilderProfile,
+        configuration: BuilderConfiguration,
+    ) -> Result<(), BuilderCommandError> {
+        assert!(profile.speed_per_tick >= 0);
+        assert!(profile.repair_range >= 0);
+        assert!(profile.full_repair_duration_ticks > 0);
+        let entity = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then_some(entity.id())
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        let mut builder_entity = self.world.entity_mut(entity);
+        *builder_entity
+            .get_mut::<BuilderProfile>()
+            .expect("builder missing profile") = profile;
+        *builder_entity
+            .get_mut::<BuilderConfiguration>()
+            .expect("builder missing configuration") = configuration;
+        Ok(())
     }
 
     pub fn order_builder_move(
@@ -524,37 +557,43 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn try_builder_summon_building(
-        &mut self,
-        builder: SimId,
-        building: BuildingSpawn,
-    ) -> Result<SimId, BuilderBuildError> {
-        self.try_builder_summon_building_with_properties(
-            builder,
-            building,
-            BuildingGameplayProperties::default(),
-        )
-    }
-
     pub fn try_builder_summon_building_with_properties(
         &mut self,
         builder: SimId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuilderBuildError> {
-        let builder_team = self
+        let (builder_entity, builder_team) = self
             .world
             .iter_entities()
             .find_map(|entity| {
                 (entity.get::<SimId>().copied() == Some(builder)
                     && entity.get::<Builder>().is_some())
-                .then(|| *entity.get::<Team>().expect("builder missing team"))
+                .then(|| {
+                    (
+                        entity.id(),
+                        *entity.get::<Team>().expect("builder missing team"),
+                    )
+                })
             })
             .ok_or(BuilderBuildError::Builder(
                 BuilderCommandError::BuilderNotFound,
             ))?;
         if builder_team != building.team {
             return Err(BuilderBuildError::TeamMismatch);
+        }
+        let building_rawcode = properties
+            .content
+            .ok_or(BuilderBuildError::MissingBuildingIdentity)?
+            .rawcode;
+        let building_allowed = self
+            .world
+            .entity(builder_entity)
+            .get::<BuilderConfiguration>()
+            .expect("builder missing configuration")
+            .allows_building(building_rawcode);
+        if !building_allowed {
+            return Err(BuilderBuildError::BuildingNotInCatalog);
         }
         self.try_spawn_building_with_properties(building, properties)
             .map_err(BuilderBuildError::Placement)
@@ -6625,6 +6664,7 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
         profile: *entity.get::<BuilderProfile>()?,
+        configuration: entity.get::<BuilderConfiguration>()?.clone(),
         destination: state.destination,
         repair_target: state.repair_target,
     })
@@ -7714,6 +7754,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                     team: *entity.get::<Team>()?,
                     position: entity.get::<Position>()?.0,
                     profile: *entity.get::<BuilderProfile>()?,
+                    configuration: entity.get::<BuilderConfiguration>()?.clone(),
                     state: *entity.get::<BuilderState>()?,
                 }));
             }
@@ -8118,6 +8159,15 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_i32(builder.profile.speed_per_tick);
                 hash.write_i32(builder.profile.repair_range);
                 hash.write_u16(builder.profile.full_repair_duration_ticks);
+                hash.write_u64(u64::from(builder.configuration.appearance.rawcode));
+                hash.write_u8(match builder.configuration.locomotion {
+                    BuilderLocomotion::Foot => 0,
+                    BuilderLocomotion::Hover => 1,
+                });
+                hash.write_u64(builder.configuration.build_catalog.len() as u64);
+                for rawcode in builder.configuration.build_catalog {
+                    hash.write_u64(u64::from(rawcode));
+                }
                 match builder.state.destination {
                     Some(destination) => {
                         hash.write_u8(1);
@@ -8155,7 +8205,7 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
     hash.finish()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum CanonicalEntity {
     Unit(CanonicalUnit),
     Building(CanonicalBuilding),
@@ -8184,12 +8234,13 @@ impl CanonicalEntity {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct CanonicalBuilder {
     id: SimId,
     team: Team,
     position: SimPoint,
     profile: BuilderProfile,
+    configuration: BuilderConfiguration,
     state: BuilderState,
 }
 

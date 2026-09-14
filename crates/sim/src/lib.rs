@@ -11,19 +11,20 @@ mod version;
 
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
-    AutomaticAbilityProfile, BashEffectProfile, BuilderProfile, BuilderSpawn, BuildingFootprint,
-    BuildingGameplayProperties, BuildingSpawn, BurningOilEffectProfile,
-    ChainLightningEffectProfile, CollisionRadius, ContentIdentity, CorpseDefinitionId,
-    CorpseProfile, EntanglingRootsEffectProfile, EvasionEffectProfile, ManaProfile, ModifierId,
-    MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects, ProductionProfile,
-    SimId, SpellcastingProfile, StatusState, Team, TriggeredAttackEffect,
+    AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
+    BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+    BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
+    CorpseDefinitionId, CorpseProfile, EntanglingRootsEffectProfile, EvasionEffectProfile,
+    ManaProfile, ModifierId, MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects,
+    ProductionProfile, SimId, SpellcastingProfile, StatusState, Team, TriggeredAttackEffect,
     TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_DEFAULT_MAP_VERSION,
-    CASTLE_FIGHT_SIMULATION_HZ, CastleFightProductionDefinition, CastleFightProductionKind,
-    CastleFightTowerDefinition, CastleFightTowerKind, CastleFightUnitDefinition,
-    CastleFightUnitKind, UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
+    CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuilderDefinition, CastleFightBuilderRace,
+    CastleFightProductionDefinition, CastleFightProductionKind, CastleFightTowerDefinition,
+    CastleFightTowerKind, CastleFightUnitDefinition, CastleFightUnitKind,
+    UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
     castle_fight_builder_profile_for_version, castle_fight_damage_rules,
 };
 pub use damage::{
@@ -162,6 +163,27 @@ mod tests {
             production: None,
             attack: None,
             spellcasting: None,
+        }
+    }
+
+    fn test_builder_configuration(build_catalog: Vec<u32>) -> BuilderConfiguration {
+        BuilderConfiguration {
+            appearance: ContentIdentity {
+                rawcode: u32::from_be_bytes(*b"TEST"),
+                name: "Test Builder",
+            },
+            locomotion: BuilderLocomotion::Foot,
+            build_catalog,
+        }
+    }
+
+    fn test_building_properties(rawcode: u32) -> BuildingGameplayProperties {
+        BuildingGameplayProperties {
+            content: Some(ContentIdentity {
+                rawcode,
+                name: "Test Building",
+            }),
+            ..BuildingGameplayProperties::default()
         }
     }
 
@@ -3801,7 +3823,25 @@ mod tests {
     }
 
     #[test]
-    fn builder_flies_through_blockers_does_not_occupy_space_and_stays_in_base() {
+    fn builder_race_configuration_changes_in_place_without_replacing_entity() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let human = CastleFightBuilderRace::Human.definition();
+        let builder = sim.spawn_builder(human.spawn(Team(0), SimPoint::new(0, 0)));
+        let corrupted = CastleFightBuilderRace::Corrupted.definition();
+
+        sim.configure_builder(builder, corrupted.profile, corrupted.configuration())
+            .unwrap();
+
+        let view = sim.builder(builder).unwrap();
+        assert_eq!(view.id, builder);
+        assert_eq!(view.profile, corrupted.profile);
+        assert_eq!(view.configuration.appearance.rawcode, corrupted.rawcode);
+        assert_eq!(view.configuration.locomotion, BuilderLocomotion::Hover);
+        assert_eq!(view.configuration.build_catalog, corrupted.build_catalog);
+    }
+
+    #[test]
+    fn builder_moves_through_blockers_does_not_occupy_space_and_stays_in_base() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
             navigation_min: NavCell::new(0, 0),
@@ -3822,14 +3862,17 @@ mod tests {
                 repair_range: cell,
                 full_repair_duration_ticks: 10,
             },
+            configuration: test_builder_configuration(vec![]),
         });
 
         assert_eq!(sim.unit_count(), 0, "builder must not be a combat unit");
+        let existing_builder = sim.builder(builder).unwrap();
         assert_eq!(
             sim.try_spawn_builder(BuilderSpawn {
                 team: Team(0),
                 position: SimPoint::new(3 * cell, 5 * cell),
-                profile: sim.builder(builder).unwrap().profile,
+                profile: existing_builder.profile,
+                configuration: existing_builder.configuration,
             }),
             Err(BuilderSpawnError::TeamAlreadyHasBuilder)
         );
@@ -3846,7 +3889,7 @@ mod tests {
         assert_eq!(
             sim.builder(builder).unwrap().position,
             SimPoint::new(8 * cell, 5 * cell),
-            "static blocker must not affect builder flight"
+            "static blocker must not affect builder movement"
         );
 
         let footprint = BuildingFootprint::new(8, 5, 1, 1);
@@ -3870,6 +3913,7 @@ mod tests {
             ..SimulationConfig::default()
         };
         let mut sim = Simulation::new(config, 1);
+        let allowed_rawcode = u32::from_be_bytes(*b"BLD1");
         let builder = sim.spawn_builder(BuilderSpawn {
             team: Team(0),
             position: SimPoint::new(2 * cell, 2 * cell),
@@ -3878,35 +3922,63 @@ mod tests {
                 repair_range: cell,
                 full_repair_duration_ticks: 10,
             },
+            configuration: test_builder_configuration(vec![allowed_rawcode]),
         });
 
         assert!(
-            sim.try_builder_summon_building(
+            sim.try_builder_summon_building_with_properties(
                 builder,
                 passive_building(0, BuildingFootprint::new(3, 3, 1, 1)),
+                test_building_properties(allowed_rawcode),
             )
             .is_ok()
         );
         assert_eq!(
-            sim.try_builder_summon_building(
+            sim.try_builder_summon_building_with_properties(
                 builder,
                 passive_building(1, BuildingFootprint::new(22, 3, 1, 1)),
+                test_building_properties(allowed_rawcode),
             ),
             Err(BuilderBuildError::TeamMismatch)
         );
         assert_eq!(
-            sim.try_builder_summon_building(
+            sim.try_builder_summon_building_with_properties(
                 builder,
                 passive_building(0, BuildingFootprint::new(12, 3, 1, 1)),
+                test_building_properties(allowed_rawcode),
             ),
             Err(BuilderBuildError::Placement(
                 BuildingPlacementError::OutsideBuildRegion
             ))
         );
+
+        let drafted_rawcode = u32::from_be_bytes(*b"DRF1");
+        assert_eq!(
+            sim.try_builder_summon_building_with_properties(
+                builder,
+                passive_building(0, BuildingFootprint::new(5, 3, 1, 1)),
+                test_building_properties(drafted_rawcode),
+            ),
+            Err(BuilderBuildError::BuildingNotInCatalog)
+        );
+        let current_builder = sim.builder(builder).unwrap();
+        let mut draft_configuration = current_builder.configuration;
+        draft_configuration.build_catalog = vec![drafted_rawcode];
+        sim.configure_builder(builder, current_builder.profile, draft_configuration)
+            .unwrap();
+        assert!(
+            sim.try_builder_summon_building_with_properties(
+                builder,
+                passive_building(0, BuildingFootprint::new(5, 3, 1, 1)),
+                test_building_properties(drafted_rawcode),
+            )
+            .is_ok(),
+            "draft-style catalog replacement should change build legality without replacing builder"
+        );
     }
 
     #[test]
-    fn builder_flies_to_friendly_building_and_repairs_at_tick_exact_rate() {
+    fn builder_moves_to_friendly_building_and_repairs_at_tick_exact_rate() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
             navigation_min: NavCell::new(0, 0),
@@ -3927,6 +3999,7 @@ mod tests {
                 repair_range: 2 * cell,
                 full_repair_duration_ticks: 9,
             },
+            configuration: test_builder_configuration(vec![]),
         });
         let mut target_spawn = passive_building(0, BuildingFootprint::new(10, 4, 1, 1));
         target_spawn.health = 900;
@@ -3971,13 +4044,13 @@ mod tests {
         }
         assert!(
             first_repair_tick.is_some_and(|tick| tick >= 3),
-            "builder must fly into repair range before healing"
+            "builder must move into repair range before healing"
         );
         assert_eq!(sim.building(target).unwrap().health, 900);
         assert_eq!(sim.builder(builder).unwrap().repair_target, None);
         assert!(
             sim.builder(builder).unwrap().position.x > 5 * cell,
-            "builder must cross the static blocker while flying to repair"
+            "builder must cross the static blocker while moving to repair"
         );
     }
 

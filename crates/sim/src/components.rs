@@ -445,11 +445,32 @@ pub struct BuilderProfile {
     pub full_repair_duration_ticks: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuilderLocomotion {
+    Foot,
+    Hover,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct BuilderConfiguration {
+    pub appearance: ContentIdentity,
+    pub locomotion: BuilderLocomotion,
+    pub build_catalog: Vec<u32>,
+}
+
+impl BuilderConfiguration {
+    #[must_use]
+    pub fn allows_building(&self, rawcode: u32) -> bool {
+        self.build_catalog.contains(&rawcode)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuilderSpawn {
     pub team: Team,
     pub position: SimPoint,
     pub profile: BuilderProfile,
+    pub configuration: BuilderConfiguration,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]

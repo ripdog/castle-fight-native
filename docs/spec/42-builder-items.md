@@ -42,7 +42,7 @@ The builder MUST:
 
 The standard rules SHOULD model the builder as invulnerable to ordinary battle damage.
 
-The builder uses non-colliding flight for movement. Terrain height, terrain pathing, static blockers, buildings, and units do not obstruct or redirect it. Its owning build-region boundary is the only movement boundary.
+The builder is a ground-height non-combat unit, not a flying unit. Its rendered height follows the terrain under it. Terrain pathing, static blockers, buildings, and units do not obstruct or redirect builder movement; its owning build-region boundary is the only movement boundary. This obstacle immunity is a builder-specific movement rule and MUST NOT be represented by treating the builder as an air combat unit.
 
 ## 5. Authoritative builder state
 
@@ -55,6 +55,9 @@ Team
 SimPosition
 movement state/destination
 repair target/progress
+appearance/source builder identity
+locomotion metadata
+build catalog/menu
 inventory
 item cooldown/charge state
 ```
@@ -62,6 +65,16 @@ item cooldown/charge state
 The builder's position is authoritative because local-range items and any proximity-based building interaction may depend on it.
 
 The builder need not exist in the same dynamic broad-phase buckets used for combat-unit collision/targeting. A dedicated/query-filtered index may be used where item range checks require its position.
+
+### 5.1 Race appearance and build catalog
+
+Native gameplay uses one configurable builder entity/type rather than a different simulation type for every WC3 builder rawcode. Configuration separates **appearance/locomotion identity** from the **authoritative build catalog**.
+
+In standard non-draft modes, choosing a race configures the builder with that race's extracted builder rawcode/name, locomotion metadata, movement profile, and ordered building catalog. The 9.27 extraction contains 15 race catalogs; Critter is campaign-only, leaving 14 standard race builders. Normal race builders move at 550 world units/second. Corrupted Builder is the extracted `hover` movement-type exception; this is locomotion/presentation metadata and does not make it an air unit. Campaign-only Critter Builder uses the extracted 190 movement speed.
+
+In draft modes, the same builder entity remains in place while its build catalog is replaced by the buildings granted by the draft. Drafting therefore does not require synthesizing a new unit class or overloading a WC3 race-builder rawcode. Appearance may remain fixed or be configured separately by the mode, but build legality always reads the current authoritative catalog.
+
+The WC3 builder rawcodes remain content provenance and presentation identities. They are not native simulation classes.
 
 ## 6. Owned build region
 
@@ -85,7 +98,7 @@ MoveBuilder {
 
 The server validates control rights/admission and team-area bounds, assigns the movement command a canonical tick/order, and all simulations execute or reject it identically from canonical state at that tick.
 
-Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, separate, or reroute combat units. It travels directly toward its authoritative destination at its configured movement rate and ignores terrain/pathing, static blockers, buildings, and units.
+Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, separate, or reroute combat units. It travels directly toward its authoritative destination at its configured movement rate, remains at ground/terrain height for presentation, and ignores terrain pathing, static blockers, buildings, and units.
 
 ## 8. Building construction relationship
 
@@ -97,7 +110,7 @@ The first native simulation slice treats an accepted placement as immediately co
 
 ### 8.1 Repair
 
-Repair is a targeted builder order against a living friendly building. An active repair order replaces the builder's movement destination; if the target is outside repair range, the builder flies directly toward it while continuing to ignore all terrain and blockers. The order ends when the building reaches full health, becomes invalid, or another builder command replaces it.
+Repair is a targeted builder order against a living friendly building. An active repair order replaces the builder's movement destination; if the target is outside repair range, the builder moves directly toward it while continuing to ignore pathing, units, buildings, and static blockers. The order ends when the building reaches full health, becomes invalid, or another builder command replaces it.
 
 For the 9.27 compatibility profile, the builder moves at **550 world units/second**, Repair has **50 world units** range, and the extracted Warcraft Repair time ratio is **1.5×**. Current imported Castle Fight buildings use a two-second construction time, so the native repair rate is one full maximum-health equivalent per **3 seconds / 90 simulation ticks**, with integer remainder accumulation to keep the result deterministic. Repair cost/resource charging is deferred until player resources are authoritative; the extracted cost ratio must be applied when that system lands rather than silently discarded.
 
