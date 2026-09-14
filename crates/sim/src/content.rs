@@ -73,9 +73,11 @@ pub struct CastleFightCommandCardLayout {
     pub move_command: CommandCardPosition,
     pub attack_command: CommandCardPosition,
     pub build_command: CommandCardPosition,
+    pub build_hotkey: char,
     pub cancel_command: CommandCardPosition,
     pub repair_ability: CommandCardPosition,
     pub blink_ability: CommandCardPosition,
+    pub blink_hotkey: char,
     pub map_version: MapVersion,
 }
 
@@ -96,10 +98,12 @@ pub fn castle_fight_command_card_layout_for_version(
         move_command: CommandCardPosition::new(0, 0),
         attack_command: CommandCardPosition::new(3, 0),
         build_command: CommandCardPosition::new(0, 2),
+        build_hotkey: 'B',
         cancel_command: CommandCardPosition::new(3, 2),
         // Castle Fight's 9.27 Repair and scripted live Blink object data.
         repair_ability: CommandCardPosition::new(1, 1),
         blink_ability: CommandCardPosition::new(1, 2),
+        blink_hotkey: 'D',
         map_version: version,
     })
 }
@@ -1267,6 +1271,17 @@ const fn world(world_units: i32) -> i32 {
 mod tests {
     use super::*;
 
+    fn parse_extracted_char(value: &str) -> char {
+        let value = value.trim_matches('"');
+        let mut chars = value.chars();
+        let value = chars.next().expect("extracted hotkey must not be empty");
+        assert!(
+            chars.next().is_none(),
+            "extracted hotkey must be one character"
+        );
+        value
+    }
+
     fn parse_extracted_u8(value: &str) -> u8 {
         // `object-fields.tsv` is written with CSV-style quote escaping even though it is
         // tab-delimited, so a JSON string like `"1"` appears in the raw file as `"""1"""`.
@@ -1687,6 +1702,7 @@ mod tests {
         let layout = castle_fight_command_card_layout_for_version(MapVersion::CASTLE_FIGHT_9_27)
             .expect("9.27 command card must be supported");
         assert_eq!(layout.map_version, MapVersion::CASTLE_FIGHT_9_27);
+        assert_eq!(layout.build_hotkey, 'B');
         assert!(castle_fight_command_card_layout_for_version(MapVersion::new(9, 28)).is_err());
         assert!(castle_fight_damage_rules_for_version(MapVersion::new(9, 28)).is_err());
         assert!(
@@ -1740,8 +1756,21 @@ mod tests {
             CommandCardPosition::new(coordinate("abpx"), coordinate("abpy"))
         };
 
+        let ability_hotkey = |rawcode: &str| {
+            let row = rows
+                .iter()
+                .find(|row| {
+                    row[category_column] == "abilities"
+                        && row[rawcode_column] == rawcode
+                        && row[field_id_column] == "ahky"
+                })
+                .unwrap_or_else(|| panic!("missing extracted ahky for {rawcode}"));
+            parse_extracted_char(row[recovered_column])
+        };
+
         assert_eq!(layout.repair_ability, ability_position("Ahrp"));
         assert_eq!(layout.blink_ability, ability_position("A0-1"));
+        assert_eq!(layout.blink_hotkey, ability_hotkey("A0-1"));
     }
 
     #[test]
