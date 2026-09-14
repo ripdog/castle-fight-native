@@ -7,10 +7,14 @@ use std::{
 use bevy::{gltf::GltfAssetLabel, prelude::*, world_serialization::WorldInstanceReady};
 use serde::Deserialize;
 
-use crate::terrain::client_asset_root;
+use crate::{
+    terrain::client_asset_root,
+    wc3_effects::{Wc3EmitterSource, Wc3ParticleEmitter, Wc3RibbonEmitter, Wc3RibbonSource},
+};
 
 const DOODAD_MANIFEST: &str = "wc3/doodads/manifest.json";
 const DOODAD_ASSET_PREFIX: &str = "wc3/doodads";
+const DOODAD_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const DOODAD_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
 
 pub struct DoodadPresentationPlugin;
@@ -43,6 +47,8 @@ struct DoodadScenePlacement {
     angle_degrees: f32,
     scale: [f32; 3],
     stand_animation_index: Option<usize>,
+    particle_emitters: Vec<Wc3ParticleEmitter>,
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +64,17 @@ struct DoodadModelManifest {
     gltf: String,
     #[serde(default)]
     animations: Vec<DoodadAnimationManifest>,
+    #[serde(default)]
+    particle_emitters: Vec<Wc3ParticleEmitter>,
+    #[serde(default)]
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct DoodadModelPresentation {
+    stand_animation_index: Option<usize>,
+    particle_emitters: Vec<Wc3ParticleEmitter>,
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,23 +120,34 @@ impl DoodadSceneCatalog {
     fn from_manifest_json(json: &str) -> Result<Self, String> {
         let manifest: DoodadManifest = serde_json::from_str(json)
             .map_err(|error| format!("invalid doodad manifest: {error}"))?;
-        if manifest.schema_version != 1 {
+        if manifest.schema_version != DOODAD_MANIFEST_SCHEMA_VERSION {
             return Err(format!(
-                "unsupported doodad manifest schema {}",
-                manifest.schema_version
+                "unsupported doodad manifest schema {}; expected {} (re-run the WC3 doodad extractor)",
+                manifest.schema_version, DOODAD_MANIFEST_SCHEMA_VERSION
             ));
         }
 
-        let stand_animation_indices: BTreeMap<_, _> = manifest
+        let model_presentation: BTreeMap<_, _> = manifest
             .models
             .into_iter()
             .filter_map(|model| {
                 let gltf = normalize_asset_path(&model.gltf).ok()?;
-                let index = model
+                let stand_animation_index = model
                     .animations
                     .iter()
-                    .position(|animation| animation.name.trim().eq_ignore_ascii_case("stand"))?;
-                Some((gltf, index))
+                    .position(|animation| animation.name.trim().eq_ignore_ascii_case("stand"));
+                Some((
+                    gltf,
+                    DoodadModelPresentation {
+                        stand_animation_index,
+                        particle_emitters: model
+                            .particle_emitters
+                            .into_iter()
+                            .filter(|emitter| emitter.ambient_enabled)
+                            .collect(),
+                        ribbon_emitters: model.ribbon_emitters,
+                    },
+                ))
             })
             .collect();
 
@@ -133,7 +161,7 @@ impl DoodadSceneCatalog {
                     continue;
                 };
                 let gltf = normalize_asset_path(&gltf)?;
-                let stand_animation_index = stand_animation_indices.get(&gltf).copied();
+                let model = model_presentation.get(&gltf).cloned().unwrap_or_default();
                 placements.push(DoodadScenePlacement {
                     rawcode: object.rawcode.clone(),
                     name: object.name.clone(),
@@ -142,7 +170,9 @@ impl DoodadSceneCatalog {
                     position: placement.position,
                     angle_degrees: placement.angle_degrees,
                     scale: placement.scale,
-                    stand_animation_index,
+                    stand_animation_index: model.stand_animation_index,
+                    particle_emitters: model.particle_emitters,
+                    ribbon_emitters: model.ribbon_emitters,
                 });
             }
         }
@@ -192,6 +222,18 @@ fn spawn_doodads(
                     index,
                 })
                 .observe(play_doodad_animation_when_ready);
+        }
+        if !placement.particle_emitters.is_empty() {
+            entity.insert(Wc3EmitterSource::with_asset_prefix(
+                &placement.particle_emitters,
+                DOODAD_ASSET_PREFIX,
+            ));
+        }
+        if !placement.ribbon_emitters.is_empty() {
+            entity.insert(Wc3RibbonSource::with_asset_prefix(
+                &placement.ribbon_emitters,
+                DOODAD_ASSET_PREFIX,
+            ));
         }
     }
     println!(
@@ -266,7 +308,7 @@ mod tests {
     #[test]
     fn manifest_loader_omits_invisible_or_unresolved_placements() {
         let json = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "objects": [{
                 "rawcode": "TEST",
                 "name": "Test",
@@ -291,7 +333,7 @@ mod tests {
     #[test]
     fn manifest_loader_does_not_autoplay_stand_variants() {
         let json = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "objects": [{
                 "rawcode": "WALL",
                 "name": "Wall",
@@ -310,9 +352,85 @@ mod tests {
     }
 
     #[test]
-    fn manifest_loader_rejects_unsafe_model_paths() {
+    fn manifest_loader_preserves_wc3_particle_emitters() {
+        let json = r#"{
+            "schema_version": 2,
+            "objects": [{
+                "rawcode": "FIRE",
+                "name": "Fire",
+                "placements": [
+                    {"editor_id":1,"position":[0,0,0],"angle_degrees":0,"scale":[1,1,1],"visible":true,"gltf":"models/fire.gltf"}
+                ]
+            }],
+            "models": [{
+                "gltf": "models/fire.gltf",
+                "animations": [{"name":"Stand"}],
+                "particle_emitters": [{
+                    "position":[1,2,3],
+                    "filter_mode":1,
+                    "speed":10,
+                    "variation":0,
+                    "latitude":5,
+                    "gravity":0,
+                    "lifespan":1,
+                    "emission_rate":20,
+                    "rows":8,
+                    "columns":8,
+                    "segment_colors":[[1,0.5,0],[1,0,0],[0,0,0]],
+                    "segment_alpha":[255,128,0],
+                    "segment_scaling":[2,1,0.5],
+                    "texture":"textures/flame.png",
+                    "squirt":false,
+                    "ambient_enabled":true
+                },{
+                    "position":[0,0,0],
+                    "filter_mode":0,
+                    "speed":0,
+                    "variation":0,
+                    "latitude":0,
+                    "gravity":0,
+                    "lifespan":1,
+                    "emission_rate":8,
+                    "rows":1,
+                    "columns":1,
+                    "segment_colors":[[1,1,1],[1,1,1],[1,1,1]],
+                    "segment_alpha":[255,255,0],
+                    "segment_scaling":[1,1,1],
+                    "texture":"textures/death-only.png",
+                    "squirt":false,
+                    "ambient_enabled":false
+                }]
+            }]
+        }"#;
+        let catalog = DoodadSceneCatalog::from_manifest_json(json).unwrap();
+        assert_eq!(catalog.placements.len(), 1);
+        let placement = &catalog.placements[0];
+        assert_eq!(placement.stand_animation_index, Some(0));
+        assert_eq!(placement.particle_emitters.len(), 1);
+        assert_eq!(placement.particle_emitters[0].rows, 8);
+        assert_eq!(placement.particle_emitters[0].columns, 8);
+        assert_eq!(
+            placement.particle_emitters[0].texture.as_deref(),
+            Some("textures/flame.png")
+        );
+    }
+
+    #[test]
+    fn manifest_loader_rejects_stale_doodad_schema() {
         let json = r#"{
             "schema_version": 1,
+            "objects": [],
+            "models": []
+        }"#;
+        let error = DoodadSceneCatalog::from_manifest_json(json)
+            .expect_err("stale doodad pack must require regeneration");
+        assert!(error.contains("re-run the WC3 doodad extractor"));
+    }
+
+    #[test]
+    fn manifest_loader_rejects_unsafe_model_paths() {
+        let json = r#"{
+            "schema_version": 2,
             "objects": [{
                 "rawcode": "TEST",
                 "name": "Test",

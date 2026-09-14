@@ -269,6 +269,8 @@ Presentation assets are referenced from gameplay content through stable logical 
 
 Missing presentation assets should produce a clear fallback/error but MUST NOT change authoritative content semantics.
 
+Imported Warcraft doodad presentation SHOULD preserve the source model's normal `Stand` visibility state and ambient ParticleEmitter2/ribbon metadata where the extractor can represent them. Particles/ribbons MUST resolve textures from the same generated asset pack as their owning model rather than assuming all emitters come from the transient-effects pack. Generated doodad packs are versioned presentation data; a client MAY reject an older schema when exporter changes are required to prevent stale geometry/visibility semantics from rendering incorrectly.
+
 Client cosmetic packs may eventually vary visuals while sharing the same gameplay content hash, provided gameplay-relevant geometry is not inferred from cosmetic assets.
 
 ## 18. Debug visualization

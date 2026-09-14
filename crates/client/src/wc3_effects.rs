@@ -76,6 +76,8 @@ pub struct Wc3ParticleEmitter {
     pub segment_scaling: [f32; 3],
     pub texture: Option<String>,
     pub squirt: bool,
+    #[serde(default)]
+    pub ambient_enabled: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -125,11 +127,13 @@ struct ModelManifest {
 #[derive(Component)]
 pub struct Wc3EmitterSource {
     emitters: Vec<EmitterRuntime>,
+    asset_prefix: &'static str,
 }
 
 #[derive(Component)]
 pub struct Wc3RibbonSource {
     ribbons: Vec<Wc3RibbonEmitter>,
+    asset_prefix: &'static str,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -246,6 +250,11 @@ impl Wc3VisualSet {
 impl Wc3EmitterSource {
     #[must_use]
     pub fn new(emitters: &[Wc3ParticleEmitter]) -> Self {
+        Self::with_asset_prefix(emitters, EFFECT_ASSET_PREFIX)
+    }
+
+    #[must_use]
+    pub fn with_asset_prefix(emitters: &[Wc3ParticleEmitter], asset_prefix: &'static str) -> Self {
         Self {
             emitters: emitters
                 .iter()
@@ -257,6 +266,7 @@ impl Wc3EmitterSource {
                     sequence: 0,
                 })
                 .collect(),
+            asset_prefix,
         }
     }
 }
@@ -264,8 +274,14 @@ impl Wc3EmitterSource {
 impl Wc3RibbonSource {
     #[must_use]
     pub fn new(ribbons: &[Wc3RibbonEmitter]) -> Self {
+        Self::with_asset_prefix(ribbons, EFFECT_ASSET_PREFIX)
+    }
+
+    #[must_use]
+    pub fn with_asset_prefix(ribbons: &[Wc3RibbonEmitter], asset_prefix: &'static str) -> Self {
         Self {
             ribbons: ribbons.to_vec(),
+            asset_prefix,
         }
     }
 }
@@ -316,6 +332,7 @@ impl Wc3ParticleAssets {
     fn material(
         &mut self,
         emitter: &Wc3ParticleEmitter,
+        asset_prefix: &str,
         asset_server: &AssetServer,
         materials: &mut Assets<StandardMaterial>,
     ) -> Handle<StandardMaterial> {
@@ -323,7 +340,7 @@ impl Wc3ParticleAssets {
         let alpha = f32::from(emitter.segment_alpha[0]) / 255.0;
         let texture_key = emitter.texture.as_deref().unwrap_or("<none>");
         let key = format!(
-            "{texture_key}|{}|{:.3}|{:.3}|{:.3}|{alpha:.3}",
+            "{asset_prefix}|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{alpha:.3}",
             emitter.filter_mode, color[0], color[1], color[2]
         );
         if let Some(handle) = self.materials.get(&key) {
@@ -333,7 +350,7 @@ impl Wc3ParticleAssets {
         let base_color_texture = emitter
             .texture
             .as_ref()
-            .map(|texture| asset_server.load(format!("{EFFECT_ASSET_PREFIX}/{texture}")));
+            .map(|texture| asset_server.load(format!("{asset_prefix}/{texture}")));
         let handle = materials.add(StandardMaterial {
             base_color,
             base_color_texture,
@@ -350,12 +367,13 @@ impl Wc3ParticleAssets {
     fn ribbon_material(
         &mut self,
         ribbon: &Wc3RibbonEmitter,
+        asset_prefix: &str,
         asset_server: &AssetServer,
         materials: &mut Assets<StandardMaterial>,
     ) -> Handle<StandardMaterial> {
         let texture_key = ribbon.texture.as_deref().unwrap_or("<none>");
         let key = format!(
-            "ribbon|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{:.3}",
+            "ribbon|{asset_prefix}|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{:.3}",
             ribbon.filter_mode, ribbon.color[0], ribbon.color[1], ribbon.color[2], ribbon.alpha
         );
         if let Some(handle) = self.materials.get(&key) {
@@ -364,7 +382,7 @@ impl Wc3ParticleAssets {
         let base_color_texture = ribbon
             .texture
             .as_ref()
-            .map(|texture| asset_server.load(format!("{EFFECT_ASSET_PREFIX}/{texture}")));
+            .map(|texture| asset_server.load(format!("{asset_prefix}/{texture}")));
         let handle = materials.add(StandardMaterial {
             base_color: Color::srgba(
                 ribbon.color[0],
@@ -744,7 +762,12 @@ pub fn spawn_wc3_ribbon_trails(
                 continue;
             }
             let mesh = meshes.add(build_wc3_ribbon_mesh(spec, &VecDeque::new()));
-            let material = ribbon_assets.ribbon_material(spec, &asset_server, &mut materials);
+            let material = ribbon_assets.ribbon_material(
+                spec,
+                source_ribbons.asset_prefix,
+                &asset_server,
+                &mut materials,
+            );
             commands.spawn((
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material),
@@ -889,6 +912,7 @@ pub fn emit_wc3_particles(
     let dt = time.delta_secs().min(0.1);
     for (entity, transform, mut source) in &mut sources {
         let root = transform.compute_transform();
+        let asset_prefix = source.asset_prefix;
         for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
             let mut count = if emitter.burst_pending {
                 emitter.burst_pending = false;
@@ -903,7 +927,12 @@ pub fn emit_wc3_particles(
             if count == 0 || emitter.spec.lifespan <= 0.0 {
                 continue;
             }
-            let material = particle_assets.material(&emitter.spec, &asset_server, &mut materials);
+            let material = particle_assets.material(
+                &emitter.spec,
+                asset_prefix,
+                &asset_server,
+                &mut materials,
+            );
             let particle_mesh = particle_assets.particle_mesh(
                 emitter.spec.rows,
                 emitter.spec.columns,

@@ -13,7 +13,8 @@ use whiteout::{
     casc::Storage as CascStorage,
     mdx::{
         InterpolationType, Layer, LayerFilterMode, LayerShadingFlag, LayerSlotType, Model, Node,
-        NodeFlag, Parser as MdxParser, SequenceFlag, TrackF32, TrackQuaternion, TrackVector3f,
+        NodeFlag, Parser as MdxParser, ParticleEmitter2, SequenceFlag, TrackF32, TrackQuaternion,
+        TrackVector3f,
     },
     mpq::Storage as MpqStorage,
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
@@ -31,6 +32,7 @@ const GL_UNSIGNED_SHORT: u32 = 5_123;
 const NO_PARENT: u32 = u32::MAX;
 const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
 const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 4;
+const DOODAD_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const WHITEOUT_STABLE_MAX_MDX_VERSION: u32 = 1200;
 const WC3_3_MDX_VERSION: u32 = 1800;
 const MAX_MDX_INPUT_BYTES: usize = 64 * 1024 * 1024;
@@ -183,6 +185,9 @@ pub struct ParticleEmitter2Manifest {
     pub texture: Option<String>,
     pub squirt: bool,
     pub replaceable_id: u32,
+    /// Whether this emitter is active during the model's ambient Stand sequence. Doodads use this
+    /// to avoid replaying death/decay-only debris emitters while still rendering fires/torches.
+    pub ambient_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -736,7 +741,7 @@ impl Exporter {
             .collect();
 
         Ok(DoodadAssetManifest {
-            schema_version: 1,
+            schema_version: DOODAD_MANIFEST_SCHEMA_VERSION,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
@@ -997,7 +1002,7 @@ impl Exporter {
         serde_json::to_writer_pretty(BufWriter::new(gltf_file), &gltf)?;
 
         let animations = animation_manifests_from_gltf(&gltf)?;
-        let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests);
+        let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
         let model_particle_emitters = model_particle_emitter_manifests(&model);
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests);
 
@@ -1638,7 +1643,7 @@ fn texture_to_png(texture: &Texture) -> Result<Bytes, Box<dyn Error>> {
 fn particle_emitter_2_manifests(
     model: &Model,
     textures: &[TextureManifest],
-) -> Vec<ParticleEmitter2Manifest> {
+) -> Result<Vec<ParticleEmitter2Manifest>, Box<dyn Error>> {
     model
         .particle_emitters_2_iter()
         .map(|emitter| {
@@ -1647,7 +1652,7 @@ fn particle_emitter_2_manifests(
                 let color = emitter.segment_color(index);
                 [color.x, color.y, color.z]
             });
-            ParticleEmitter2Manifest {
+            Ok(ParticleEmitter2Manifest {
                 object_id: node.object_id(),
                 name: node.name(),
                 position: model_node_position(model, &node),
@@ -1672,9 +1677,59 @@ fn particle_emitter_2_manifests(
                     .and_then(|texture| texture.png.clone()),
                 squirt: emitter.squirt() != 0,
                 replaceable_id: emitter.replaceable_id(),
-            }
+                ambient_enabled: particle_emitter_ambient_enabled(model, &emitter)?,
+            })
         })
         .collect()
+}
+
+fn particle_emitter_ambient_enabled(
+    model: &Model,
+    emitter: &ParticleEmitter2,
+) -> Result<bool, Box<dyn Error>> {
+    let stand = model
+        .sequences_iter()
+        .find(|sequence| sequence.name().trim().eq_ignore_ascii_case("stand"));
+    let Some(stand) = stand else {
+        // A model with no Stand sequence can still be a static ambient effect (for example an
+        // always-burning prop). Be conservative when animation tracks exist: without a Stand
+        // interval we cannot prove that a tracked emitter is meant to run continuously.
+        return Ok(emitter.emission_rate() > 0.0
+            && !emitter.emission_rate_tracks().is_used()
+            && !emitter.visibility_tracks().is_used());
+    };
+    let start = stand.interval_start();
+    let end = stand.interval_end();
+    if end <= start {
+        return Ok(false);
+    }
+
+    let visibility = max_f32_track_value(model, &emitter.visibility_tracks(), start, end, 1.0)?;
+    let emission_rate = max_f32_track_value(
+        model,
+        &emitter.emission_rate_tracks(),
+        start,
+        end,
+        emitter.emission_rate(),
+    )?;
+    Ok(visibility > 0.001 && emission_rate > 0.0)
+}
+
+fn max_f32_track_value(
+    model: &Model,
+    track: &TrackF32,
+    start: u32,
+    end: u32,
+    default: f32,
+) -> Result<f32, Box<dyn Error>> {
+    let Some(samples) = sample_f32_track(model, track, start, end)? else {
+        return Ok(default);
+    };
+    let mut values = samples.values.into_iter().filter(|value| value.is_finite());
+    let Some(first) = values.next() else {
+        return Ok(default);
+    };
+    Ok(values.fold(first, f32::max))
 }
 
 fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterManifest> {
