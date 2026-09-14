@@ -14,6 +14,7 @@ use bevy::{
     asset::AssetPlugin,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
+    tasks::{IoTaskPool, TaskPoolBuilder, available_parallelism},
     time::Fixed,
     window::PresentMode,
 };
@@ -29,6 +30,7 @@ use presentation::CastlePresentationPlugin;
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 
 const SIMULATION_HZ: f64 = 30.0;
+const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Resource)]
 pub(crate) struct AuthoritativeSimulation {
@@ -54,6 +56,7 @@ impl SimulationPlayback {
 struct SimulationPauseText;
 
 fn main() {
+    configure_asset_io_task_pool();
     let options = ClientOptions::parse();
     let demo = create_demo_world(default_worker_count(), options.stress_units);
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
@@ -292,6 +295,27 @@ fn advance_authoritative_simulation(
     presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
 }
 
+fn configure_asset_io_task_pool() {
+    // Warcraft's generated glTF set exercises Bevy's recursive glTF loader deeply enough that the
+    // platform-default worker stack can occasionally overflow during the startup asset burst. Keep
+    // Bevy's normal IO-thread count, but give only that pool a larger stack instead of inflating the
+    // simulation/compute pools (or requiring RUST_MIN_STACK globally).
+    let thread_count = default_io_thread_count(available_parallelism());
+    IoTaskPool::get_or_init(|| {
+        TaskPoolBuilder::new()
+            .num_threads(thread_count)
+            .stack_size(ASSET_IO_STACK_BYTES)
+            .thread_name("IO Task Pool".to_owned())
+            .build()
+    });
+}
+
+fn default_io_thread_count(total_threads: usize) -> usize {
+    // Match Bevy's default IO assignment policy: 25% of available threads, rounded to nearest
+    // integer (halves upward), with a floor of one thread and a ceiling of four.
+    total_threads.saturating_add(2).div_euclid(4).clamp(1, 4)
+}
+
 fn default_worker_count() -> usize {
     std::thread::available_parallelism()
         .map(usize::from)
@@ -302,6 +326,16 @@ fn default_worker_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asset_io_pool_keeps_bevys_default_thread_assignment() {
+        assert_eq!(default_io_thread_count(1), 1);
+        assert_eq!(default_io_thread_count(4), 1);
+        assert_eq!(default_io_thread_count(6), 2);
+        assert_eq!(default_io_thread_count(10), 3);
+        assert_eq!(default_io_thread_count(16), 4);
+        assert_eq!(default_io_thread_count(64), 4);
+    }
 
     #[test]
     fn paused_fixed_update_does_not_advance_authoritative_tick() {
