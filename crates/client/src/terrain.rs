@@ -897,6 +897,17 @@ mod tests {
     }
 
     #[test]
+    fn original_left_base_battle_road_starts_at_plus_minus_384_world_y() {
+        let layout = original_texture_layout();
+        // x tilepoint 20 is world x = -5632, through the open left base shown in gameplay.
+        // The authored road's outer continuous Vstp rows are +/-384; +/-512 is still grass.
+        for (y_from_bottom, expected) in [(36, "Agrs"), (35, "Vstp"), (29, "Vstp"), (28, "Agrs")] {
+            let palette = layout.texture_at(20, y_from_bottom).unwrap();
+            assert_eq!(layout.tile_palette[palette], expected);
+        }
+    }
+
+    #[test]
     fn textured_palette_meshes_share_one_camera_independent_sort_center() {
         let terrain = original_terrain();
         let layout = original_texture_layout();

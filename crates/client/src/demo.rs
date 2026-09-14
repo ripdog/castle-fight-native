@@ -40,6 +40,12 @@ const CENTRAL_GAP_MIN_X: i32 = LEFT_BUILD_MAX_X_WORLD / NAV_CELL_WORLD;
 const CENTRAL_GAP_MAX_X: i32 = RIGHT_BUILD_MIN_X_WORLD / NAV_CELL_WORLD - 1;
 const LANE_MIN_Y: i32 = -24;
 const LANE_MAX_Y: i32 = 23;
+// The no-man's-land opening above is wider than the visible battle road. In the extracted WC3
+// terrain, the outermost continuous Village Stone Path (`Vstp`) tilepoint rows are y = +/-384;
+// the next rows at +/-512 are grass. Targetless units should finish their diagonal ingress on
+// that authored road, not merely as soon as they enter the wider traversable opening.
+const STRATEGIC_LANE_MIN_Y_WORLD: i32 = -384;
+const STRATEGIC_LANE_MAX_Y_WORLD: i32 = 384;
 const CASTLE_HEALTH: i32 = 20_000;
 const CASTLE_CENTER_X_WORLD: i32 = 4_992;
 // The original W3I player start locations sit at x = +/-4352, with the middle slot on each team
@@ -262,8 +268,8 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         build_static_blockers: original_doodad_build_blockers(),
         team_build_regions: [vec![left_build_region], vec![right_build_region]],
         targetless_lane: Some(TargetlessLane::new(
-            LANE_MIN_Y * NAV_CELL_SUBUNITS,
-            (LANE_MAX_Y + 1) * NAV_CELL_SUBUNITS,
+            STRATEGIC_LANE_MIN_Y_WORLD * SUBUNITS_PER_WORLD_UNIT,
+            STRATEGIC_LANE_MAX_Y_WORLD * SUBUNITS_PER_WORLD_UNIT,
         )),
         // Distance-field objectives must stay outside the castle's blocked 16x16 footprint. These
         // are the lane-facing cells immediately beyond each original castle pathing envelope.
@@ -815,8 +821,8 @@ mod tests {
         assert_eq!(
             config.targetless_lane,
             Some(TargetlessLane::new(
-                -768 * SUBUNITS_PER_WORLD_UNIT,
-                768 * SUBUNITS_PER_WORLD_UNIT,
+                -384 * SUBUNITS_PER_WORLD_UNIT,
+                384 * SUBUNITS_PER_WORLD_UNIT,
             ))
         );
 
