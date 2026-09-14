@@ -12,12 +12,27 @@ use crate::terrain::client_asset_root;
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
 const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
-const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 5] = [
+const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 20] = [
     u32::from_be_bytes(*b"hfoo"),
     u32::from_be_bytes(*b"e003"),
     u32::from_be_bytes(*b"o001"),
     u32::from_be_bytes(*b"n015"),
     u32::from_be_bytes(*b"h016"),
+    u32::from_be_bytes(*b"X00O"),
+    u32::from_be_bytes(*b"X006"),
+    u32::from_be_bytes(*b"X0Z0"),
+    u32::from_be_bytes(*b"X078"),
+    u32::from_be_bytes(*b"X051"),
+    u32::from_be_bytes(*b"X00P"),
+    u32::from_be_bytes(*b"X00C"),
+    u32::from_be_bytes(*b"X06P"),
+    u32::from_be_bytes(*b"X00E"),
+    u32::from_be_bytes(*b"X01A"),
+    u32::from_be_bytes(*b"X089"),
+    u32::from_be_bytes(*b"X017"),
+    u32::from_be_bytes(*b"X019"),
+    u32::from_be_bytes(*b"X07P"),
+    u32::from_be_bytes(*b"X018"),
 ];
 
 #[derive(Resource, Default)]

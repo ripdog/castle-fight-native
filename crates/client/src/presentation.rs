@@ -6,6 +6,7 @@ use bevy::{
         Exposure,
         primitives::{Frustum, Sphere},
     },
+    ecs::system::SystemParam,
     gltf::Gltf,
     input::mouse::MouseWheel,
     light::AmbientLight,
@@ -23,7 +24,10 @@ use castle_fight_sim::{
 
 use crate::{
     SimulationPlayback,
-    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
+    bridge::{
+        BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
+        UnitVisualKind,
+    },
     building_models::BuildingModelSet,
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
@@ -35,6 +39,7 @@ use crate::{
 };
 
 const UNIT_MELEE_HEIGHT: f32 = 10.0;
+const BUILDER_HEIGHT: f32 = 10.0;
 const UNIT_RANGED_HEIGHT: f32 = 8.0;
 const UNIT_BASE_COLLISION_RADIUS_WORLD: f32 = 4.0;
 const AIR_UNIT_ALTITUDE: f32 = 64.0;
@@ -317,6 +322,7 @@ struct PresentedProjectile {
 #[derive(Resource, Default)]
 struct RenderMap {
     units: HashMap<SimId, PresentedEntry>,
+    builders: HashMap<SimId, PresentedEntry>,
     buildings: HashMap<SimId, PresentedEntry>,
     corpses: HashMap<SimId, Entity>,
     projectiles: HashMap<SimId, PresentedProjectile>,
@@ -1113,6 +1119,16 @@ fn update_imported_unit_animations(
     )>,
 ) {
     for (mut player, mut transitions, mut controller) in &mut players {
+        if let Some(current) = samples.current.builders.get(&controller.sim_id) {
+            update_live_imported_builder_animation(
+                &samples,
+                current,
+                &mut player,
+                &mut transitions,
+                &mut controller,
+            );
+            continue;
+        }
         if let Some(current) = samples.current.units.get(&controller.sim_id) {
             update_live_imported_unit_animation(
                 &samples,
@@ -1149,6 +1165,44 @@ fn update_imported_unit_animations(
             );
         }
     }
+}
+
+fn update_live_imported_builder_animation(
+    samples: &PresentationSamples,
+    current: &BuilderSample,
+    player: &mut AnimationPlayer,
+    transitions: &mut AnimationTransitions,
+    controller: &mut ImportedUnitAnimationController,
+) {
+    let previous = samples
+        .previous
+        .builders
+        .get(&controller.sim_id)
+        .unwrap_or(current);
+    let continuous_motion = previous.destination.is_some()
+        || previous.repair_target.is_some()
+        || current.destination.is_some()
+        || current.repair_target.is_some();
+    let desired = if continuous_motion
+        && previous.position != current.position
+        && controller.walk.is_some()
+    {
+        ImportedUnitAnimationState::Walk
+    } else {
+        ImportedUnitAnimationState::Stand
+    };
+    if controller.state == desired {
+        return;
+    }
+    let animation = match desired {
+        ImportedUnitAnimationState::Stand => controller.stand,
+        ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
+        _ => unreachable!("builder animation only uses stand/walk locomotion"),
+    };
+    transitions
+        .play(player, animation, Duration::from_millis(100))
+        .repeat();
+    controller.state = desired;
 }
 
 fn update_live_imported_unit_animation(
@@ -1743,6 +1797,18 @@ fn sync_render_entities(
         return;
     }
 
+    let stale_builders: Vec<_> = render_map
+        .builders
+        .keys()
+        .copied()
+        .filter(|id| !samples.current.builders.contains_key(id))
+        .collect();
+    for id in stale_builders {
+        if let Some(entry) = render_map.builders.remove(&id) {
+            commands.entity(entry.entity).despawn();
+        }
+    }
+
     let stale_units: Vec<_> = render_map
         .units
         .keys()
@@ -1925,6 +1991,57 @@ fn sync_render_entities(
                 remaining: ABILITY_AREA_EFFECT_SECONDS,
             });
         }
+    }
+
+    for builder in samples.current.builders.values() {
+        if render_map.builders.contains_key(&builder.id) {
+            continue;
+        }
+        let position = sim_point_to_terrain_world(builder.position, &terrain)
+            + Vec3::Y * (BUILDER_HEIGHT * 0.5);
+        let imported_model = unit_models.get(builder.appearance.rawcode);
+        let (entity, imported_rawcode) = if let Some(model) = imported_model {
+            let entity = commands
+                .spawn((Transform::from_translation(position), Visibility::default()))
+                .id();
+            commands.entity(entity).with_child((
+                WorldAssetRoot(model.scene.clone()),
+                ImportedUnitModelRoot {
+                    sim_id: builder.id,
+                    rawcode: builder.appearance.rawcode,
+                    presentation_root: entity,
+                },
+                Wc3TeamTint::new(builder.team.0, team_color(builder.team), "wc3/units"),
+                Transform {
+                    translation: Vec3::NEG_Y * BUILDER_HEIGHT * 0.5,
+                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                    scale: Vec3::splat(model.scale),
+                },
+            ));
+            (entity, Some(builder.appearance.rawcode))
+        } else {
+            let entity = commands
+                .spawn((
+                    Mesh3d(assets.melee_mesh.clone()),
+                    MeshMaterial3d(assets.unit_material(builder.team)),
+                    Transform {
+                        translation: position,
+                        scale: Vec3::splat(0.9),
+                        ..default()
+                    },
+                ))
+                .id();
+            (entity, None)
+        };
+        render_map.builders.insert(
+            builder.id,
+            PresentedEntry {
+                entity,
+                weapon: None,
+                max_health_seen: 1,
+                imported_rawcode,
+            },
+        );
     }
 
     for unit in samples.current.units.values() {
@@ -2190,6 +2307,34 @@ fn interpolate_render_transforms(
     let render_tick = samples.previous.tick as f32
         + (samples.current.tick.saturating_sub(samples.previous.tick) as f32) * alpha;
     let facing_blend = 1.0 - (-UNIT_FACING_RESPONSE * time.delta_secs()).exp();
+
+    for (id, current) in &samples.current.builders {
+        let Some(entry) = render_map.builders.get(id) else {
+            continue;
+        };
+        let previous = samples.previous.builders.get(id).unwrap_or(current);
+        let continuous_motion = previous.destination.is_some()
+            || previous.repair_target.is_some()
+            || current.destination.is_some()
+            || current.repair_target.is_some();
+        let ground_position = if continuous_motion {
+            sim_point_to_terrain_world_lerp(previous.position, current.position, alpha, &terrain)
+        } else {
+            sim_point_to_terrain_world(current.position, &terrain)
+        };
+        let position = ground_position + Vec3::Y * (BUILDER_HEIGHT * 0.5);
+        if let Ok(mut transform) = transforms.get_mut(entry.entity) {
+            transform.translation = position;
+            if previous.position != current.position {
+                let delta =
+                    sim_point_to_world(current.position) - sim_point_to_world(previous.position);
+                if delta.length_squared() > f32::EPSILON {
+                    let desired = Quat::from_rotation_y(delta.x.atan2(delta.z));
+                    transform.rotation = transform.rotation.slerp(desired, facing_blend);
+                }
+            }
+        }
+    }
 
     for (id, current) in &samples.current.units {
         let Some(entry) = render_map.units.get(id) else {
@@ -2912,89 +3057,107 @@ fn toggle_debug_controls(keys: Res<ButtonInput<KeyCode>>, mut debug: ResMut<Debu
     }
 }
 
+#[derive(SystemParam)]
+struct CameraControlResources<'w> {
+    time: Res<'w, Time>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
+    metrics: Res<'w, WorldMetrics>,
+    terrain: Res<'w, TerrainSurface>,
+    inspection: Option<Res<'w, crate::inspection::InspectionSelection>>,
+    samples: Res<'w, PresentationSamples>,
+}
+
 fn update_camera(
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     window: Single<&Window, With<PrimaryWindow>>,
-    world: (Res<WorldMetrics>, Res<TerrainSurface>),
     mut camera: Single<(&Camera, &mut RtsCamera, &mut Transform), With<Camera3d>>,
+    resources: CameraControlResources<'_>,
 ) {
-    let (metrics, terrain) = world;
+    let builder_selected = resources
+        .inspection
+        .as_ref()
+        .and_then(|inspection| inspection.selected)
+        .is_some_and(|id| resources.samples.current.builders.contains_key(&id));
     let (camera_component, rig, transform) = &mut *camera;
 
-    if mouse_buttons.just_pressed(MouseButton::Middle)
+    if resources.mouse_buttons.just_pressed(MouseButton::Middle)
         && let Some(cursor) = window.cursor_position()
     {
         let camera_global = GlobalTransform::from(**transform);
-        rig.grab_anchor = viewport_ground_point(camera_component, &camera_global, cursor, &terrain);
+        rig.grab_anchor =
+            viewport_ground_point(camera_component, &camera_global, cursor, &resources.terrain);
     }
 
-    let dt = time.delta_secs();
+    let dt = resources.time.delta_secs();
     let forward = Vec3::new(-rig.yaw.sin(), 0.0, -rig.yaw.cos());
     let right = Vec3::new(rig.yaw.cos(), 0.0, -rig.yaw.sin());
     let mut movement = Vec3::ZERO;
-    if keys.pressed(KeyCode::KeyW) {
+    if resources.keys.pressed(KeyCode::KeyW) || resources.keys.pressed(KeyCode::ArrowUp) {
         movement += forward;
     }
-    if keys.pressed(KeyCode::KeyS) {
+    if resources.keys.pressed(KeyCode::KeyS) || resources.keys.pressed(KeyCode::ArrowDown) {
         movement -= forward;
     }
-    if keys.pressed(KeyCode::KeyD) {
+    if (resources.keys.pressed(KeyCode::KeyD) && !builder_selected)
+        || resources.keys.pressed(KeyCode::ArrowRight)
+    {
         movement += right;
     }
-    if keys.pressed(KeyCode::KeyA) {
+    if resources.keys.pressed(KeyCode::KeyA) || resources.keys.pressed(KeyCode::ArrowLeft) {
         movement -= right;
     }
     if movement != Vec3::ZERO {
         let pan_speed = rig.distance * 0.65;
         rig.focus += movement.normalize() * pan_speed * dt;
     }
-    if keys.pressed(KeyCode::KeyQ) {
+    if resources.keys.pressed(KeyCode::KeyQ) {
         rig.yaw += 0.9 * dt;
     }
-    if keys.pressed(KeyCode::KeyE) {
+    if resources.keys.pressed(KeyCode::KeyE) {
         rig.yaw -= 0.9 * dt;
     }
     let scroll: f32 = mouse_wheel.read().map(|event| event.y).sum();
     if scroll != 0.0 {
         rig.distance *= (1.0 - scroll * 0.10).clamp(0.55, 1.45);
     }
-    let world_size = metrics.world_size();
+    let world_size = resources.metrics.world_size();
     rig.distance = rig.distance.clamp(
         world_size.min_element() * 0.28,
         world_size.max_element() * 1.7,
     );
-    if keys.just_pressed(KeyCode::Home) {
-        rig.focus = metrics.world_center();
-        rig.focus.y = terrain.height_at_world(rig.focus.xz());
+    if resources.keys.just_pressed(KeyCode::Home) {
+        rig.focus = resources.metrics.world_center();
+        rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
         rig.distance = world_size.max_element() * 0.72;
         rig.yaw = 0.0;
     }
 
-    if mouse_buttons.pressed(MouseButton::Middle)
+    if resources.mouse_buttons.pressed(MouseButton::Middle)
         && let Some(anchor) = rig.grab_anchor
         && let Some(cursor) = window.cursor_position()
     {
         let proposed = camera_transform(rig);
         let proposed_global = GlobalTransform::from(proposed);
-        if let Some(cursor_world) =
-            viewport_ground_point(camera_component, &proposed_global, cursor, &terrain)
-        {
+        if let Some(cursor_world) = viewport_ground_point(
+            camera_component,
+            &proposed_global,
+            cursor,
+            &resources.terrain,
+        ) {
             let correction = anchor - cursor_world;
             rig.focus += Vec3::new(correction.x, 0.0, correction.z);
         }
     }
 
-    if mouse_buttons.just_released(MouseButton::Middle) {
+    if resources.mouse_buttons.just_released(MouseButton::Middle) {
         rig.grab_anchor = None;
     }
 
     // Keep focus inside the authored camera rectangle even when simulation/navigation extends
     // farther into the playable map (for example the rear build cells behind each castle).
-    rig.focus = metrics.clamp_focus(rig.focus);
-    rig.focus.y = terrain.height_at_world(rig.focus.xz());
+    rig.focus = resources.metrics.clamp_focus(rig.focus);
+    rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
 
     **transform = camera_transform(rig);
 }
@@ -3053,9 +3216,10 @@ fn update_window_title(
         .fps
         .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
     window.title = format!(
-        "Castle Fight Native 3D | {} | {fps} FPS | tick {} | units {} | buildings {} | corpses {} | projectiles {} | Space/P pause | F1 debug {} | H health {} | WASD pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
+        "Castle Fight Native 3D | {} | {fps} FPS | tick {} | builders {} | units {} | buildings {} | corpses {} | projectiles {} | Space/P pause | F1 debug {} | H health {} | WASD/arrows pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
         if playback.paused { "PAUSED" } else { "RUNNING" },
         samples.current.tick,
+        samples.current.builders.len(),
         samples.current.units.len(),
         samples.current.buildings.len(),
         samples.current.corpses.len(),
@@ -3070,6 +3234,14 @@ pub(crate) fn sim_point_to_world(point: SimPoint) -> Vec3 {
         point.x as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
         0.0,
         point.y as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
+    )
+}
+
+pub(crate) fn world_to_sim_point(point: Vec3) -> SimPoint {
+    let scale = SUBUNITS_PER_WORLD_UNIT as f32;
+    SimPoint::new(
+        (point.x * scale).round() as i32,
+        (point.z * scale).round() as i32,
     )
 }
 

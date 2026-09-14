@@ -3,7 +3,10 @@ use castle_fight_sim::{SUBUNITS_PER_WORLD_UNIT, SimId, Team};
 
 use crate::{
     SimulationPlayback,
-    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample, UnitVisualKind},
+    bridge::{
+        BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
+        UnitVisualKind,
+    },
     build_ui::{BuildSelection, cursor_over_build_panel},
     presentation::{
         WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
@@ -18,6 +21,8 @@ const PANEL_TOP: f32 = 16.0;
 const PANEL_WIDTH: f32 = 340.0;
 const PANEL_HEIGHT: f32 = 410.0;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
+const BUILDER_PICK_RADIUS: f32 = 8.0;
+const BUILDER_VISUAL_HEIGHT: f32 = 10.0;
 const SELECTION_RING_PADDING: f32 = 2.5;
 const SELECTION_COLOR: Color = Color::srgb(1.0, 0.88, 0.22);
 const PANEL_BACKGROUND: Color = Color::srgba(0.035, 0.045, 0.060, 0.94);
@@ -73,7 +78,7 @@ fn setup_inspector_ui(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
             panel.spawn((
-                Text::new("Left-click a unit or building to inspect it."),
+                Text::new("Left-click a builder, unit, or building to inspect it."),
                 TextFont::from_font_size(15.0),
                 TextColor(Color::srgb(0.72, 0.76, 0.82)),
                 Node {
@@ -119,6 +124,12 @@ fn handle_world_selection(
         selection.selected = None;
         return;
     };
+    if let Some(builder) =
+        pick_builder_on_ray(ray.origin, *ray.direction, &samples, &terrain, alpha)
+    {
+        selection.selected = Some(builder);
+        return;
+    }
     if let Some(unit) = pick_unit_on_ray(ray.origin, *ray.direction, &samples, &terrain, alpha) {
         selection.selected = Some(unit);
         return;
@@ -137,7 +148,10 @@ fn clear_stale_selection(
     let Some(id) = selection.selected else {
         return;
     };
-    if !samples.current.units.contains_key(&id) && !samples.current.buildings.contains_key(&id) {
+    if !samples.current.builders.contains_key(&id)
+        && !samples.current.units.contains_key(&id)
+        && !samples.current.buildings.contains_key(&id)
+    {
         selection.selected = None;
     }
 }
@@ -148,7 +162,7 @@ fn update_inspector_text(
     mut text: Single<&mut Text, With<InspectionText>>,
 ) {
     let next = match selection.selected {
-        None => "Left-click a unit or building to inspect it.\n\nCombat-unit inspection is read-only; no direct orders are exposed.".into(),
+        None => "Left-click a builder, unit, or building to inspect it.\n\nBuilders are controllable; combat-unit inspection remains read-only.".into(),
         Some(id) => inspector_text(id, &samples),
     };
     if text.0 != next {
@@ -169,6 +183,31 @@ fn draw_selection_highlight(
         return;
     };
     let alpha = playback.interpolation_alpha(&fixed_time);
+
+    if let Some(builder) = samples.current.builders.get(&id) {
+        let previous = samples.previous.builders.get(&id).unwrap_or(builder);
+        let center =
+            sim_point_to_terrain_world_lerp(previous.position, builder.position, alpha, &terrain);
+        gizmos.circle(
+            Isometry3d::new(
+                center + Vec3::Y * 0.35,
+                Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
+            ),
+            BUILDER_PICK_RADIUS + SELECTION_RING_PADDING,
+            SELECTION_COLOR,
+        );
+        if let Some(target) = builder.repair_target
+            && let Some(target_position) =
+                current_entity_position(target, &samples, &metrics, &terrain)
+        {
+            gizmos.line(
+                center + Vec3::Y * 4.0,
+                target_position + Vec3::Y * 4.0,
+                SELECTION_COLOR.with_alpha(0.55),
+            );
+        }
+        return;
+    }
 
     if let Some(unit) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(unit);
@@ -220,7 +259,40 @@ fn draw_selection_highlight(
     }
 }
 
-fn pick_unit_on_ray(
+pub(crate) fn pick_builder_on_ray(
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+    samples: &PresentationSamples,
+    terrain: &TerrainSurface,
+    alpha: f32,
+) -> Option<SimId> {
+    let mut nearest: Option<(f32, SimId)> = None;
+    for builder in samples.current.builders.values() {
+        let previous = samples
+            .previous
+            .builders
+            .get(&builder.id)
+            .unwrap_or(builder);
+        let ground =
+            sim_point_to_terrain_world_lerp(previous.position, builder.position, alpha, terrain);
+        let center = ground + Vec3::Y * (BUILDER_VISUAL_HEIGHT * 0.5);
+        let Some(distance) = ray_sphere_hit_distance(
+            ray_origin,
+            ray_direction,
+            center,
+            BUILDER_PICK_RADIUS.max(BUILDER_VISUAL_HEIGHT * 0.55),
+        ) else {
+            continue;
+        };
+        match nearest {
+            Some((nearest_distance, _)) if nearest_distance <= distance => {}
+            _ => nearest = Some((distance, builder.id)),
+        }
+    }
+    nearest.map(|(_, id)| id)
+}
+
+pub(crate) fn pick_unit_on_ray(
     ray_origin: Vec3,
     ray_direction: Vec3,
     samples: &PresentationSamples,
@@ -245,7 +317,7 @@ fn pick_unit_on_ray(
     nearest.map(|(_, id)| id)
 }
 
-fn pick_building_at_ground(
+pub(crate) fn pick_building_at_ground(
     world: Vec3,
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
@@ -305,6 +377,9 @@ fn current_entity_position(
     metrics: &WorldMetrics,
     terrain: &TerrainSurface,
 ) -> Option<Vec3> {
+    if let Some(builder) = samples.current.builders.get(&id) {
+        return Some(sim_point_to_terrain_world(builder.position, terrain));
+    }
     if let Some(unit) = samples.current.units.get(&id) {
         return Some(
             sim_point_to_terrain_world(unit.position, terrain)
@@ -319,6 +394,9 @@ fn current_entity_position(
 }
 
 fn inspector_text(id: SimId, samples: &PresentationSamples) -> String {
+    if let Some(builder) = samples.current.builders.get(&id) {
+        return format_builder_inspector(builder);
+    }
     if let Some(unit) = samples.current.units.get(&id) {
         return format_unit_inspector(unit, samples.current.tick);
     }
@@ -326,6 +404,42 @@ fn inspector_text(id: SimId, samples: &PresentationSamples) -> String {
         return format_building_inspector(building, samples.current.tick);
     }
     format!("SimId {} is no longer present.", id.0)
+}
+
+fn format_builder_inspector(builder: &BuilderSample) -> String {
+    let position = sim_point_to_world(builder.position);
+    let order = match (builder.destination, builder.repair_target) {
+        (Some(destination), _) => {
+            let destination = sim_point_to_world(destination);
+            format!("Move to {:.1}, {:.1}", destination.x, destination.z)
+        }
+        (_, Some(target)) => format!("Repair #{}", target.0),
+        (None, None) => "Idle".into(),
+    };
+    [
+        format!("BUILDER #{}", builder.id.0),
+        format!("Name: {}", builder.appearance.name),
+        format!("Side: {}", team_label(builder.team)),
+        format!("Locomotion: {:?}", builder.locomotion),
+        format!("Position: {:.1}, {:.1}", position.x, position.z),
+        format!("Order: {order}"),
+        format!(
+            "Repair autocast: {}",
+            if builder.repair_autocast_enabled {
+                "On"
+            } else {
+                "Off"
+            }
+        ),
+        format!("Build menu: {} entries", builder.build_catalog_len),
+        format!(
+            "Blink range: {:.0}",
+            builder.blink_range as f32 / SUBUNITS_PER_WORLD_UNIT as f32
+        ),
+        "Controls: Right-click move/repair • D then right-click Blink • R toggle repair autocast"
+            .into(),
+    ]
+    .join("\n")
 }
 
 fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
@@ -484,7 +598,7 @@ fn team_label(team: Team) -> &'static str {
     }
 }
 
-fn cursor_over_inspector_panel(cursor: Vec2, window_width: f32) -> bool {
+pub(crate) fn cursor_over_inspector_panel(cursor: Vec2, window_width: f32) -> bool {
     let left = window_width - PANEL_RIGHT - PANEL_WIDTH;
     cursor.x >= left
         && cursor.x <= window_width - PANEL_RIGHT
@@ -497,8 +611,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use castle_fight_sim::{
-        BuildingFootprint, ContentIdentity, MovementClass, NavCell, SimPoint, SimulationConfig,
-        TerrainElevationMap,
+        BuilderLocomotion, BuildingFootprint, ContentIdentity, MovementClass, NavCell, SimPoint,
+        SimulationConfig, TerrainElevationMap,
     };
 
     use super::*;
@@ -531,6 +645,7 @@ mod tests {
         let snapshot = PresentationSnapshot {
             tick: 10,
             units: BTreeMap::new(),
+            builders: BTreeMap::new(),
             buildings: BTreeMap::new(),
             corpses: BTreeMap::new(),
             projectiles: BTreeMap::new(),
@@ -539,6 +654,50 @@ mod tests {
             chain_lightnings: Vec::new(),
         };
         PresentationSamples::new(snapshot)
+    }
+
+    #[test]
+    fn picking_and_inspection_include_builder() {
+        let mut samples = empty_samples();
+        samples.current.builders.insert(
+            SimId(5),
+            BuilderSample {
+                id: SimId(5),
+                team: Team(0),
+                position: SimPoint::new(
+                    100 * SUBUNITS_PER_WORLD_UNIT,
+                    100 * SUBUNITS_PER_WORLD_UNIT,
+                ),
+                appearance: ContentIdentity {
+                    rawcode: u32::from_be_bytes(*b"X00C"),
+                    name: "Human Builder",
+                },
+                locomotion: BuilderLocomotion::Foot,
+                destination: None,
+                repair_target: None,
+                repair_autocast_enabled: true,
+                blink_range: 10_000 * SUBUNITS_PER_WORLD_UNIT,
+                build_catalog_len: 7,
+            },
+        );
+        let terrain = flat_terrain();
+        let center =
+            sim_point_to_terrain_world(samples.current.builders[&SimId(5)].position, &terrain)
+                + Vec3::Y * (BUILDER_VISUAL_HEIGHT * 0.5);
+        assert_eq!(
+            pick_builder_on_ray(
+                Vec3::new(center.x, center.y, 0.0),
+                Vec3::Z,
+                &samples,
+                &terrain,
+                1.0,
+            ),
+            Some(SimId(5))
+        );
+        let text = inspector_text(SimId(5), &samples);
+        assert!(text.contains("Human Builder"));
+        assert!(text.contains("Repair autocast: On"));
+        assert!(text.contains("D then right-click Blink"));
     }
 
     #[test]
@@ -559,6 +718,7 @@ mod tests {
                 ),
                 collision_radius: 4 * SUBUNITS_PER_WORLD_UNIT,
                 movement_class: castle_fight_sim::MovementClass::Ground,
+                mechanical: false,
                 health: 50,
                 target: None,
                 direct_retaliation_lock: false,
@@ -638,6 +798,7 @@ mod tests {
                 ),
                 collision_radius: 4 * SUBUNITS_PER_WORLD_UNIT,
                 movement_class: MovementClass::Air,
+                mechanical: false,
                 health: 50,
                 target: None,
                 direct_retaliation_lock: false,

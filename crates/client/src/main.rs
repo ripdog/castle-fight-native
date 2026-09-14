@@ -1,5 +1,6 @@
 mod bridge;
 mod build_ui;
+mod builder_controls;
 mod building_models;
 mod demo;
 mod doodads;
@@ -20,6 +21,7 @@ use castle_fight_sim::Simulation;
 
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
+use builder_controls::BuilderControlPlugin;
 use demo::{create_demo_world, try_spawn_demo_building};
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
@@ -101,6 +103,7 @@ fn main() {
             DoodadPresentationPlugin,
             BuildUiPlugin,
             InspectionPlugin,
+            BuilderControlPlugin,
         ))
         .add_systems(Startup, setup_simulation_pause_ui)
         .add_systems(
@@ -139,9 +142,10 @@ fn print_perf_telemetry(
         .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
         .and_then(|diagnostic| diagnostic.smoothed());
     println!(
-        "client-perf fps={:.1} frame_ms={:.2} units={} buildings={} corpses={} projectiles={}",
+        "client-perf fps={:.1} frame_ms={:.2} builders={} units={} buildings={} corpses={} projectiles={}",
         fps.unwrap_or_default(),
         frame_ms.unwrap_or_default(),
+        presentation.current.builders.len(),
         presentation.current.units.len(),
         presentation.current.buildings.len(),
         presentation.current.corpses.len(),

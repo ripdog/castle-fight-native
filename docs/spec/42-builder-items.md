@@ -247,6 +247,8 @@ If player elimination removes/disables a builder or inventory, the transition mu
 The client should make the builder visually distinct from combat units and expose:
 
 - movement control;
+- explicit Repair targeting and Repair autocast state/toggle;
+- Blink point targeting;
 - building palette/placement;
 - inventory slots;
 - item cooldown/charges;
@@ -261,6 +263,9 @@ The protocol SHOULD define specific commands rather than a generic unit-order en
 
 ```text
 MoveBuilder
+BlinkBuilder
+RepairBuilder
+SetBuilderRepairAutocast
 PlaceBuilding
 SellBuilding
 PurchaseUpgrade

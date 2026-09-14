@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AbilityCastEvent, AttackDelivery, AttackEvent, BuildingFootprint, ChainLightningEvent,
-    ContentIdentity, CorpseView, MovementClass, ProjectileView, SimId, SimPoint, Simulation, Team,
+    AbilityCastEvent, AttackDelivery, AttackEvent, BuilderLocomotion, BuildingFootprint,
+    ChainLightningEvent, ContentIdentity, CorpseView, MovementClass, ProjectileView, SimId,
+    SimPoint, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +86,7 @@ pub struct UnitSample {
     pub position: SimPoint,
     pub collision_radius: i32,
     pub movement_class: MovementClass,
+    pub mechanical: bool,
     pub health: i32,
     pub target: Option<SimId>,
     pub direct_retaliation_lock: bool,
@@ -96,6 +98,20 @@ pub struct UnitSample {
     pub mana_current: Option<i32>,
     pub mana_maximum: Option<i32>,
     pub visual_kind: UnitVisualKind,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BuilderSample {
+    pub id: SimId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub appearance: ContentIdentity,
+    pub locomotion: BuilderLocomotion,
+    pub destination: Option<SimPoint>,
+    pub repair_target: Option<SimId>,
+    pub repair_autocast_enabled: bool,
+    pub blink_range: i32,
+    pub build_catalog_len: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -119,6 +135,7 @@ pub struct BuildingSample {
 pub struct PresentationSnapshot {
     pub tick: u64,
     pub units: BTreeMap<SimId, UnitSample>,
+    pub builders: BTreeMap<SimId, BuilderSample>,
     pub buildings: BTreeMap<SimId, BuildingSample>,
     pub corpses: BTreeMap<SimId, CorpseView>,
     pub projectiles: BTreeMap<SimId, ProjectileView>,
@@ -143,6 +160,7 @@ impl PresentationSnapshot {
                         position: unit.position,
                         collision_radius: unit.collision_radius,
                         movement_class: unit.movement_class,
+                        mechanical: unit.mechanical,
                         health: unit.health,
                         target: unit.target,
                         direct_retaliation_lock: unit.direct_retaliation_lock,
@@ -157,6 +175,27 @@ impl PresentationSnapshot {
                             unit.attack_delivery,
                             unit.mana_maximum.is_some(),
                         ),
+                    },
+                )
+            })
+            .collect();
+        let builders = simulation
+            .builders()
+            .into_iter()
+            .map(|builder| {
+                (
+                    builder.id,
+                    BuilderSample {
+                        id: builder.id,
+                        team: builder.team,
+                        position: builder.position,
+                        appearance: builder.configuration.appearance,
+                        locomotion: builder.configuration.locomotion,
+                        destination: builder.destination,
+                        repair_target: builder.repair_target,
+                        repair_autocast_enabled: builder.repair_autocast_enabled,
+                        blink_range: builder.profile.blink_range,
+                        build_catalog_len: builder.configuration.build_catalog.len(),
                     },
                 )
             })
@@ -204,6 +243,7 @@ impl PresentationSnapshot {
         Self {
             tick: simulation.tick(),
             units,
+            builders,
             buildings,
             corpses,
             projectiles,
@@ -237,9 +277,9 @@ impl PresentationSamples {
 #[cfg(test)]
 mod tests {
     use castle_fight_sim::{
-        AttackProfile, BuildingFootprint, CastleFightProductionKind, CastleFightUnitKind,
-        CorpseDefinitionId, CorpseProfile, MovementProfile, SUBUNITS_PER_WORLD_UNIT,
-        SimulationConfig, UnitSpawn,
+        AttackProfile, BuildingFootprint, CastleFightBuilderRace, CastleFightProductionKind,
+        CastleFightUnitKind, CorpseDefinitionId, CorpseProfile, MovementProfile,
+        SUBUNITS_PER_WORLD_UNIT, SimulationConfig, UnitSpawn,
     };
 
     use super::*;
@@ -295,6 +335,30 @@ mod tests {
                 .iter()
                 .any(|attack| attack.target == victim)
         );
+    }
+
+    #[test]
+    fn capture_includes_configured_builder_state() {
+        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        let human = CastleFightBuilderRace::Human.definition();
+        let builder = simulation
+            .spawn_builder(human.spawn(Team(0), SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0)));
+        simulation
+            .order_builder_move(builder, SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0))
+            .unwrap();
+
+        let snapshot = PresentationSnapshot::capture(&simulation);
+        let sample = snapshot.builders.get(&builder).unwrap();
+        assert_eq!(sample.appearance.rawcode, human.rawcode);
+        assert_eq!(sample.locomotion, human.locomotion);
+        assert_eq!(
+            sample.destination,
+            Some(SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0))
+        );
+        assert_eq!(sample.repair_target, None);
+        assert!(sample.repair_autocast_enabled);
+        assert_eq!(sample.blink_range, human.profile.blink_range);
+        assert_eq!(sample.build_catalog_len, human.build_catalog.len());
     }
 
     #[test]
