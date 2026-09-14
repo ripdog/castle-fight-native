@@ -191,19 +191,25 @@ fn spawn_resource_slot<M: Component>(
         });
 }
 
+type ResourceTextQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Text,
+        Option<&'static SelectedPlayerText>,
+        Option<&'static GoldText>,
+        Option<&'static GoldIncomeText>,
+        Option<&'static LumberText>,
+        Option<&'static LegendaryText>,
+        Option<&'static mut TextColor>,
+    ),
+>;
+
 fn update_resource_bar(
     selection: Res<ActionPanelState>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
-    mut resource_texts: Query<(
-        &mut Text,
-        Option<&SelectedPlayerText>,
-        Option<&GoldText>,
-        Option<&GoldIncomeText>,
-        Option<&LumberText>,
-        Option<&LegendaryText>,
-        Option<&mut TextColor>,
-    )>,
+    mut resource_texts: ResourceTextQuery<'_, '_>,
     mut progress: Single<&mut Node, With<GoldIncomeProgress>>,
 ) {
     let selected_team = inspection.selected.and_then(|selected| {
