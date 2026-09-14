@@ -5,7 +5,8 @@ use std::{
     collections::BTreeSet,
     env,
     error::Error,
-    fs, io,
+    fs::File,
+    io::{self, BufWriter},
     path::{Path, PathBuf},
 };
 
@@ -80,10 +81,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             args.keep_source,
         )?;
         let manifest = exporter.export_visuals(&visuals)?;
-        fs::write(
-            output.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest)?,
-        )?;
+        write_manifest(&output.join("manifest.json"), &manifest)?;
         println!(
             "Exported {} unique WC3 visual model(s) to {} ({} unresolved map/import reference(s))",
             manifest.models.len(),
@@ -138,10 +136,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             args.keep_source,
         )?;
         let manifest = exporter.export_buildings(&buildings)?;
-        fs::write(
-            output.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest)?,
-        )?;
+        write_manifest(&output.join("manifest.json"), &manifest)?;
         println!(
             "Exported {} unique model(s) for {} building(s) to {}",
             manifest.models.len(),
@@ -210,10 +205,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             args.keep_source,
         )?;
         let manifest = exporter.export_doodads(&doodads)?;
-        fs::write(
-            output.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest)?,
-        )?;
+        write_manifest(&output.join("manifest.json"), &manifest)?;
         println!(
             "Exported {} unique model(s) for {} doodad object(s) to {}",
             manifest.models.len(),
@@ -281,10 +273,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         args.keep_source,
     )?;
     let manifest = exporter.export_units(&units)?;
-    fs::write(
-        output.join("manifest.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
+    write_manifest(&output.join("manifest.json"), &manifest)?;
 
     println!(
         "Exported {} unique model(s) for {} unit(s) to {}",
@@ -310,6 +299,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         )
         .into());
     }
+    Ok(())
+}
+
+fn write_manifest<T: serde::Serialize>(path: &Path, manifest: &T) -> Result<(), Box<dyn Error>> {
+    let file = File::create(path)?;
+    serde_json::to_writer_pretty(BufWriter::new(file), manifest)?;
     Ok(())
 }
 
