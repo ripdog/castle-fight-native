@@ -21,6 +21,8 @@ const CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 550;
 const CASTLE_FIGHT_CRITTER_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 190;
 const CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS: i32 = 50;
 const CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS: i32 = 500;
+const CASTLE_FIGHT_BUILDER_BLINK_RANGE_WORLD_UNITS: i32 = 10_000;
+const CASTLE_FIGHT_BUILDER_BLINK_BOUNDARY_INSET_WORLD_UNITS: i32 = 64;
 const CASTLE_FIGHT_STANDARD_BUILD_TIME_SECONDS: u16 = 2;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR: u16 = 2;
@@ -824,6 +826,8 @@ fn builder_profile(move_speed_world_units_per_second: i32) -> BuilderProfile {
             * CASTLE_FIGHT_SIMULATION_HZ as u16
             * CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR
             / CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR,
+        blink_range: world(CASTLE_FIGHT_BUILDER_BLINK_RANGE_WORLD_UNITS),
+        blink_boundary_inset: world(CASTLE_FIGHT_BUILDER_BLINK_BOUNDARY_INSET_WORLD_UNITS),
     }
 }
 
@@ -974,6 +978,8 @@ mod tests {
                 repair_time_ratio_numerator: 3,
                 repair_time_ratio_denominator: 2,
                 full_repair_duration_ticks: 90,
+                blink_range: 10_000 * SUBUNITS_PER_WORLD_UNIT,
+                blink_boundary_inset: 64 * SUBUNITS_PER_WORLD_UNIT,
             }
         );
     }

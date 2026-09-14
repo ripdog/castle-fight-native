@@ -100,6 +100,12 @@ The server validates control rights/admission and team-area bounds, assigns the 
 
 Builder movement MUST NOT leave the owning team's area and MUST NOT push, stop, separate, or reroute combat units. It travels directly toward its authoritative destination at its configured movement rate, remains at ground/terrain height for presentation, and ignores terrain pathing, static blockers, buildings, and units.
 
+### 7.1 Blink
+
+The round-start runtime replaces the stale object-data Blink (`A001`) with the scripted builder Blink `A0-1`. Native gameplay MUST follow the runtime behavior, not the removed object-data ability.
+
+For 9.27, Blink is a zero-mana, zero-cooldown point command with **10,000 world units** cast range. On a successful cast, the requested point is clamped independently on X and Y to the owning castle/base rectangle with a **64 world-unit inset**, the builder is teleported immediately to that resolved point, and its current order is stopped. Native Blink therefore cancels any active move or repair order while preserving the Repair autocast toggle state. Because the builder is non-colliding and ignores terrain/blockers, Blink does not perform ordinary pathability or occupancy checks inside the owning base rectangle.
+
 ## 8. Building construction relationship
 
 Building placement commands are player commands associated with the builder/player.

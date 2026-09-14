@@ -3868,6 +3868,8 @@ mod tests {
                 repair_time_ratio_numerator: 1,
                 repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 10,
+                blink_range: 20 * cell,
+                blink_boundary_inset: 0,
             },
             configuration: test_builder_configuration(vec![]),
             repair_autocast_enabled: false,
@@ -3910,6 +3912,55 @@ mod tests {
     }
 
     #[test]
+    fn builder_blink_clamps_to_inset_base_rect_and_stops_current_order() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(29, 9),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 10, 10)],
+                vec![BuildingFootprint::new(20, 0, 10, 10)],
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(5 * cell, 5 * cell),
+            profile: BuilderProfile {
+                speed_per_tick: cell,
+                repair_range: cell,
+                repair_autocast_range: 10 * cell,
+                repair_time_ratio_numerator: 1,
+                repair_time_ratio_denominator: 1,
+                full_repair_duration_ticks: 10,
+                blink_range: 100 * cell,
+                blink_boundary_inset: 2 * cell,
+            },
+            configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: false,
+        });
+        sim.order_builder_move(builder, SimPoint::new(7 * cell, 5 * cell))
+            .unwrap();
+
+        let resolved = sim
+            .order_builder_blink(builder, SimPoint::new(-10 * cell, 9 * cell))
+            .unwrap();
+        assert_eq!(resolved.x, 2 * cell);
+        assert_eq!(resolved.y, 8 * cell - 1);
+        let view = sim.builder(builder).unwrap();
+        assert_eq!(view.position, resolved);
+        assert_eq!(view.destination, None);
+        assert_eq!(view.repair_target, None);
+
+        assert_eq!(
+            sim.order_builder_blink(builder, SimPoint::new(200 * cell, 5 * cell)),
+            Err(BuilderCommandError::BlinkOutOfRange)
+        );
+        assert_eq!(sim.builder(builder).unwrap().position, resolved);
+    }
+
+    #[test]
     fn builder_summon_uses_owning_team_placement_rules() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
@@ -3933,6 +3984,8 @@ mod tests {
                 repair_time_ratio_numerator: 1,
                 repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 10,
+                blink_range: 20 * cell,
+                blink_boundary_inset: 0,
             },
             configuration: test_builder_configuration(vec![allowed_rawcode]),
             repair_autocast_enabled: false,
@@ -4014,6 +4067,8 @@ mod tests {
                 repair_time_ratio_numerator: 1,
                 repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 9,
+                blink_range: 20 * cell,
+                blink_boundary_inset: 0,
             },
             configuration: test_builder_configuration(vec![]),
             repair_autocast_enabled: false,
@@ -4094,6 +4149,8 @@ mod tests {
                 repair_time_ratio_numerator: 3,
                 repair_time_ratio_denominator: 2,
                 full_repair_duration_ticks: 3,
+                blink_range: 20 * cell,
+                blink_boundary_inset: 0,
             },
             configuration: test_builder_configuration(vec![]),
             repair_autocast_enabled: true,
@@ -4190,6 +4247,8 @@ mod tests {
                 repair_time_ratio_numerator: 1,
                 repair_time_ratio_denominator: 1,
                 full_repair_duration_ticks: 10,
+                blink_range: 20 * cell,
+                blink_boundary_inset: 0,
             },
             configuration: test_builder_configuration(vec![]),
             repair_autocast_enabled: true,

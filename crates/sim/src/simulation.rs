@@ -333,6 +333,7 @@ pub enum BuilderSpawnError {
 pub enum BuilderCommandError {
     BuilderNotFound,
     OutsideBuildRegion,
+    BlinkOutOfRange,
     RepairTargetNotFound,
     NotFriendlyRepairTarget,
     RepairTargetNotRepairable,
@@ -451,6 +452,8 @@ impl Simulation {
         assert!(builder.profile.repair_time_ratio_numerator > 0);
         assert!(builder.profile.repair_time_ratio_denominator > 0);
         assert!(builder.profile.full_repair_duration_ticks > 0);
+        assert!(builder.profile.blink_range >= 0);
+        assert!(builder.profile.blink_boundary_inset >= 0);
         if self.world.iter_entities().any(|entity| {
             entity.get::<Builder>().is_some() && entity.get::<Team>() == Some(&builder.team)
         }) {
@@ -488,6 +491,8 @@ impl Simulation {
         assert!(profile.repair_time_ratio_numerator > 0);
         assert!(profile.repair_time_ratio_denominator > 0);
         assert!(profile.full_repair_duration_ticks > 0);
+        assert!(profile.blink_range >= 0);
+        assert!(profile.blink_boundary_inset >= 0);
         let entity = self
             .world
             .iter_entities()
@@ -538,6 +543,55 @@ impl Simulation {
         state.repair_target = None;
         state.repair_progress_remainder = 0;
         Ok(())
+    }
+
+    pub fn order_builder_blink(
+        &mut self,
+        builder: SimId,
+        destination: SimPoint,
+    ) -> Result<SimPoint, BuilderCommandError> {
+        let (entity, team, position, profile) = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(builder)
+                    && entity.get::<Builder>().is_some())
+                .then(|| {
+                    (
+                        entity.id(),
+                        *entity.get::<Team>().expect("builder missing team"),
+                        entity
+                            .get::<Position>()
+                            .expect("builder missing position")
+                            .0,
+                        *entity
+                            .get::<BuilderProfile>()
+                            .expect("builder missing profile"),
+                    )
+                })
+            })
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        if position.distance_sq(destination) > square_i32(profile.blink_range) {
+            return Err(BuilderCommandError::BlinkOutOfRange);
+        }
+        let destination = self
+            .clamp_builder_blink_destination(team, destination, profile.blink_boundary_inset)
+            .expect("spawned builder team must have a legal movement region");
+
+        let mut builder = self.world.entity_mut(entity);
+        builder
+            .get_mut::<Position>()
+            .expect("builder missing position")
+            .0 = destination;
+        let mut state = builder
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state");
+        let repair_autocast_enabled = state.repair_autocast_enabled;
+        *state = BuilderState {
+            repair_autocast_enabled,
+            ..BuilderState::default()
+        };
+        Ok(destination)
     }
 
     pub fn order_builder_repair(
@@ -1135,6 +1189,39 @@ impl Simulation {
                 .copied()
                 .any(|region| footprint_contains_cell(region, cell))
         }
+    }
+
+    fn clamp_builder_blink_destination(
+        &self,
+        team: Team,
+        destination: SimPoint,
+        inset: i32,
+    ) -> Option<SimPoint> {
+        let regions = self.config.team_build_regions.get(usize::from(team.0))?;
+        if regions.is_empty() {
+            return clamp_point_to_cell_rect(
+                destination,
+                self.config.navigation_min,
+                self.config.navigation_max,
+                self.config.navigation_cell_size,
+                inset,
+            );
+        }
+        regions
+            .iter()
+            .copied()
+            .filter_map(|region| {
+                let min = NavCell::new(region.min_x, region.min_y);
+                let max = NavCell::new(region.max_x(), region.max_y());
+                clamp_point_to_cell_rect(
+                    destination,
+                    min,
+                    max,
+                    self.config.navigation_cell_size,
+                    inset,
+                )
+            })
+            .min_by_key(|point| (destination.distance_sq(*point), point.x, point.y))
     }
 
     fn footprint_contains_live_unit(&self, footprint: BuildingFootprint) -> bool {
@@ -7834,6 +7921,38 @@ fn square_i32(value: i32) -> u64 {
     (value * value) as u64
 }
 
+fn clamp_point_to_cell_rect(
+    point: SimPoint,
+    min: NavCell,
+    max: NavCell,
+    cell_size: i32,
+    inset: i32,
+) -> Option<SimPoint> {
+    debug_assert!(cell_size > 0);
+    debug_assert!(inset >= 0);
+    let min_x = i64::from(min.x)
+        .checked_mul(i64::from(cell_size))?
+        .checked_add(i64::from(inset))?;
+    let min_y = i64::from(min.y)
+        .checked_mul(i64::from(cell_size))?
+        .checked_add(i64::from(inset))?;
+    let max_x = i64::from(max.x + 1)
+        .checked_mul(i64::from(cell_size))?
+        .checked_sub(i64::from(inset))?
+        .checked_sub(1)?;
+    let max_y = i64::from(max.y + 1)
+        .checked_mul(i64::from(cell_size))?
+        .checked_sub(i64::from(inset))?
+        .checked_sub(1)?;
+    if min_x > max_x || min_y > max_y {
+        return None;
+    }
+    Some(SimPoint::new(
+        i32::try_from(i64::from(point.x).clamp(min_x, max_x)).ok()?,
+        i32::try_from(i64::from(point.y).clamp(min_y, max_y)).ok()?,
+    ))
+}
+
 fn offset_point(point: SimPoint, x: i32, y: i32) -> Option<SimPoint> {
     Some(SimPoint::new(
         point.x.checked_add(x)?,
@@ -8504,6 +8623,8 @@ fn canonical_checksum(world: &World, next_tick: u64, defense_alerts: &[DefenseAl
                 hash.write_u16(builder.profile.repair_time_ratio_numerator);
                 hash.write_u16(builder.profile.repair_time_ratio_denominator);
                 hash.write_u16(builder.profile.full_repair_duration_ticks);
+                hash.write_i32(builder.profile.blink_range);
+                hash.write_i32(builder.profile.blink_boundary_inset);
                 hash.write_u64(u64::from(builder.configuration.appearance.rawcode));
                 hash.write_u8(match builder.configuration.locomotion {
                     BuilderLocomotion::Foot => 0,

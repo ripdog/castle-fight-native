@@ -454,6 +454,8 @@ pub struct BuilderProfile {
     pub repair_time_ratio_numerator: u16,
     pub repair_time_ratio_denominator: u16,
     pub full_repair_duration_ticks: u16,
+    pub blink_range: i32,
+    pub blink_boundary_inset: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
