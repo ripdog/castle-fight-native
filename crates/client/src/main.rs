@@ -55,6 +55,9 @@ impl SimulationPlayback {
 }
 
 #[derive(Component)]
+struct SimulationPausePanel;
+
+#[derive(Component)]
 struct SimulationPauseText;
 
 fn main() {
@@ -215,11 +218,13 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
                 ..default()
             },
             BackgroundColor(Color::srgba(0.035, 0.045, 0.060, 0.90)),
+            Visibility::Hidden,
+            SimulationPausePanel,
         ))
         .with_child((
-            Text::new("SIM RUNNING"),
+            Text::new("SIMULATION PAUSED"),
             TextFont::from_font_size(18.0),
-            TextColor(Color::srgb(0.78, 0.84, 0.90)),
+            TextColor(Color::srgb(1.0, 0.78, 0.20)),
             SimulationPauseText,
         ));
 }
@@ -235,21 +240,12 @@ fn toggle_simulation_pause(
 
 fn update_simulation_pause_ui(
     playback: Res<SimulationPlayback>,
-    text: Single<(&mut Text, &mut TextColor), With<SimulationPauseText>>,
+    mut visibility: Single<&mut Visibility, With<SimulationPausePanel>>,
 ) {
-    let (mut text, mut color) = text.into_inner();
-    let next = if playback.paused {
-        "SIMULATION PAUSED"
+    **visibility = if playback.paused {
+        Visibility::Visible
     } else {
-        "SIM RUNNING"
-    };
-    if text.0 != next {
-        text.0 = next.into();
-    }
-    color.0 = if playback.paused {
-        Color::srgb(1.0, 0.78, 0.20)
-    } else {
-        Color::srgb(0.78, 0.84, 0.90)
+        Visibility::Hidden
     };
 }
 
