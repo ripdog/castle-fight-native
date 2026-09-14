@@ -5562,6 +5562,117 @@ mod tests {
     }
 
     #[test]
+    fn imported_catapult_does_not_corner_lock_on_single_tower() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut config = SimulationConfig {
+            spatial_cell_size: 256 * world,
+            navigation_cell_size: 32 * world,
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(40, 30),
+            target_pursuit_extra_range: 30 * world,
+            unit_separation_distance: 8 * world,
+            max_separation_per_tick: world,
+            team_objective: [
+                SimPoint::new(1_100 * world, 315 * world),
+                SimPoint::new(100 * world, 315 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        config.static_blockers.clear();
+        let mut sim = Simulation::new(config, 1);
+        let tower = CastleFightTowerKind::WatchTower.definition();
+        sim.spawn_building_with_properties(
+            tower.spawn(Team(0), BuildingFootprint::new(10, 10, 4, 4)),
+            tower.gameplay_properties(),
+        );
+        let catapult = CastleFightUnitKind::Catapult.definition();
+        let unit = sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(304 * world, 316 * world),
+                catapult.template(),
+            ),
+            catapult.gameplay_properties(),
+        );
+
+        let mut stationary_run = 0usize;
+        let mut longest_stationary_run = 0usize;
+        let mut previous = sim.unit(unit).unwrap().position;
+        for _ in 0..100 {
+            sim.step();
+            let current = sim.unit(unit).unwrap().position;
+            if current == previous {
+                stationary_run += 1;
+                longest_stationary_run = longest_stationary_run.max(stationary_run);
+            } else {
+                stationary_run = 0;
+            }
+            previous = current;
+            if current.x > 520 * world {
+                break;
+            }
+        }
+
+        let final_position = sim.unit(unit).unwrap().position;
+        assert!(
+            final_position.x > 520 * world,
+            "catapult remained corner-locked beside the tower at {final_position:?}"
+        );
+        assert!(
+            longest_stationary_run <= 2,
+            "catapult stalled for {longest_stationary_run} consecutive ticks at the tower corner"
+        );
+    }
+
+    #[test]
+    fn imported_ground_pursuit_moves_diagonally_on_open_topology() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut config = SimulationConfig {
+            navigation_cell_size: 32 * world,
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(20, 20),
+            team_objective: [
+                SimPoint::new(19 * 32 * world, 10 * 32 * world),
+                SimPoint::new(32 * world, 10 * 32 * world),
+            ],
+            ..SimulationConfig::default()
+        };
+        config.static_blockers.clear();
+        let mut sim = Simulation::new(config, 1);
+        let footman = CastleFightUnitKind::Footman.definition();
+        let start = SimPoint::new(3 * 32 * world + 16 * world, 3 * 32 * world + 16 * world);
+        let attacker = sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(Team(0), start, footman.template()),
+            footman.gameplay_properties(),
+        );
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(10 * 32 * world + 16 * world, 10 * 32 * world + 16 * world),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        let position = sim.unit(attacker).unwrap().position;
+        assert!(
+            position.x > start.x && position.y > start.y,
+            "pursuit did not take a diagonal step: {start:?} -> {position:?}"
+        );
+        assert_eq!(
+            position.x - start.x,
+            position.y - start.y,
+            "open diagonal pursuit should not alternate cardinal headings"
+        );
+    }
+
+    #[test]
     fn horizontal_march_can_bypass_enemy_mass_outside_acquisition_range() {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {

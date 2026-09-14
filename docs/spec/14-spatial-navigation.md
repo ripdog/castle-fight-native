@@ -150,6 +150,8 @@ The navigation algorithm MUST define:
 - tie-break rules for equal integration cost, including any stable per-unit distribution rule;
 - treatment of footprint boundaries.
 
+The verifier keeps topology connectivity, shared integration fields, and exact A* fallback costs on four cardinal unit-cost edges. Route following may nevertheless take a one-cell diagonal shortcut when that diagonal strictly improves the chosen route. A diagonal is a local movement shortcut, not a new connectivity edge: both orthogonal side cells must be traversable, so units may not cut between touching blocked corners. Radius-aware movement additionally requires the unit's collision circle to fit at both orthogonal side-cell centers as well as the diagonal destination. This preserves caging/reachability semantics while avoiding visible north/east or south/east stair-stepping on otherwise open routes.
+
 Parallel field construction MUST not expose task completion order to final field values/directions.
 
 ## 11. Dynamic spatial index

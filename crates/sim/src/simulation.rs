@@ -5050,8 +5050,12 @@ impl Simulation {
                         .radius_objective_fields
                         .get(&(unit.team.0, radius))
                         .expect("radius-aware objective field was not prepared");
-                    self.topology
-                        .step_from_distance_field_with_bias(source_cell, field, route_bias)
+                    self.topology.step_from_distance_field_with_radius_bias(
+                        source_cell,
+                        field,
+                        radius,
+                        route_bias,
+                    )
                 } else {
                     self.topology
                         .objective_step_with_bias(unit.team.0, source_cell, route_bias)

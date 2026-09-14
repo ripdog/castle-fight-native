@@ -316,15 +316,39 @@ impl TopologyGrid {
         field: &[u32],
         bias: i32,
     ) -> Option<NavCell> {
+        self.step_from_distance_field_with_filter(from, field, bias, |_| true)
+    }
+
+    pub(crate) fn step_from_distance_field_with_radius_bias(
+        &self,
+        from: NavCell,
+        field: &[u32],
+        radius: i32,
+        bias: i32,
+    ) -> Option<NavCell> {
+        let component = self.component_id(from)?;
+        self.step_from_distance_field_with_filter(from, field, bias, |cell| {
+            self.radius_transition_is_traversable(from, cell, radius, component)
+        })
+    }
+
+    fn step_from_distance_field_with_filter(
+        &self,
+        from: NavCell,
+        field: &[u32],
+        bias: i32,
+        mut valid: impl FnMut(NavCell) -> bool,
+    ) -> Option<NavCell> {
         debug_assert!(bias == -1 || bias == 1);
         let from_index = self.index(from)?;
         let current = *field.get(from_index)?;
         if current == UNREACHABLE || current == 0 {
             return None;
         }
-        self.neighbors(from)
+        self.movement_neighbors(from)
             .into_iter()
             .flatten()
+            .filter(|cell| valid(*cell))
             .filter_map(|cell| self.index(cell).map(|index| (field[index], cell)))
             .filter(|(distance, _)| *distance < current)
             .min_by_key(|(distance, cell)| {
@@ -463,11 +487,7 @@ impl TopologyGrid {
         }
 
         if let Some(next_cell) = cached_fallback
-            && self.circle_is_traversable_in_component(
-                self.center_of_cell(next_cell),
-                radius,
-                component,
-            )
+            && self.radius_transition_is_traversable(from, next_cell, radius, component)
         {
             return PursuitStep {
                 next_cell: Some(next_cell),
@@ -499,7 +519,7 @@ impl TopologyGrid {
         while current != target {
             let current_distance = cell_distance_sq(current, target);
             let next = self
-                .neighbors(current)
+                .movement_neighbors(current)
                 .into_iter()
                 .flatten()
                 .filter(|cell| self.same_component(from, *cell))
@@ -531,15 +551,11 @@ impl TopologyGrid {
         while current != target {
             let current_distance = cell_distance_sq(current, target);
             let next = self
-                .neighbors(current)
+                .movement_neighbors(current)
                 .into_iter()
                 .flatten()
                 .filter(|cell| {
-                    self.circle_is_traversable_in_component(
-                        self.center_of_cell(*cell),
-                        radius,
-                        component,
-                    )
+                    self.radius_transition_is_traversable(current, *cell, radius, component)
                 })
                 .min_by_key(|cell| {
                     (
@@ -785,6 +801,54 @@ impl TopologyGrid {
         ]
     }
 
+    fn movement_neighbors(&self, cell: NavCell) -> [Option<NavCell>; 8] {
+        let east = NavCell::new(cell.x + 1, cell.y);
+        let north = NavCell::new(cell.x, cell.y + 1);
+        let west = NavCell::new(cell.x - 1, cell.y);
+        let south = NavCell::new(cell.x, cell.y - 1);
+        let east_open = !self.is_blocked(east);
+        let north_open = !self.is_blocked(north);
+        let west_open = !self.is_blocked(west);
+        let south_open = !self.is_blocked(south);
+        [
+            Some(east),
+            Some(north),
+            Some(west),
+            Some(south),
+            (east_open && north_open).then_some(NavCell::new(cell.x + 1, cell.y + 1)),
+            (west_open && north_open).then_some(NavCell::new(cell.x - 1, cell.y + 1)),
+            (west_open && south_open).then_some(NavCell::new(cell.x - 1, cell.y - 1)),
+            (east_open && south_open).then_some(NavCell::new(cell.x + 1, cell.y - 1)),
+        ]
+    }
+
+    fn radius_transition_is_traversable(
+        &self,
+        from: NavCell,
+        to: NavCell,
+        radius: i32,
+        component: u32,
+    ) -> bool {
+        if !self.circle_is_traversable_in_component(self.center_of_cell(to), radius, component) {
+            return false;
+        }
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+        if dx == 0 || dy == 0 {
+            return true;
+        }
+        debug_assert_eq!(dx.abs(), 1);
+        debug_assert_eq!(dy.abs(), 1);
+        [
+            NavCell::new(from.x + dx, from.y),
+            NavCell::new(from.x, from.y + dy),
+        ]
+        .into_iter()
+        .all(|side| {
+            self.circle_is_traversable_in_component(self.center_of_cell(side), radius, component)
+        })
+    }
+
     fn index(&self, cell: NavCell) -> Option<usize> {
         let local_x = cell.x - self.min.x;
         let local_y = cell.y - self.min.y;
@@ -838,7 +902,7 @@ mod tests {
     use crate::math::SUBUNITS_PER_WORLD_UNIT;
 
     #[test]
-    fn objective_ties_distribute_across_both_lateral_directions() {
+    fn objective_step_uses_diagonal_when_both_axes_reduce_distance() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let grid = TopologyGrid::build(
             cell,
@@ -851,24 +915,40 @@ mod tests {
             ],
         );
 
-        let north = NavCell::new(1, 1);
-        assert_eq!(
-            grid.objective_step_with_bias(0, north, -1),
-            Some(NavCell::new(2, 1))
-        );
-        assert_eq!(
-            grid.objective_step_with_bias(0, north, 1),
-            Some(NavCell::new(1, 2))
+        for bias in [-1, 1] {
+            assert_eq!(
+                grid.objective_step_with_bias(0, NavCell::new(1, 1), bias),
+                Some(NavCell::new(2, 2))
+            );
+            assert_eq!(
+                grid.objective_step_with_bias(0, NavCell::new(1, 3), bias),
+                Some(NavCell::new(2, 2))
+            );
+        }
+    }
+
+    #[test]
+    fn diagonal_movement_does_not_cut_blocked_corners() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let grid = TopologyGrid::build(
+            cell,
+            NavCell::new(0, 0),
+            NavCell::new(3, 3),
+            [
+                BuildingFootprint::new(2, 1, 1, 1),
+                BuildingFootprint::new(1, 2, 1, 1),
+            ],
+            [SimPoint::new(3 * cell, 3 * cell), SimPoint::new(0, 0)],
         );
 
-        let south = NavCell::new(1, 3);
-        assert_eq!(
-            grid.objective_step_with_bias(0, south, -1),
-            Some(NavCell::new(1, 2))
-        );
-        assert_eq!(
-            grid.objective_step_with_bias(0, south, 1),
-            Some(NavCell::new(2, 3))
+        let from = NavCell::new(1, 1);
+        assert!(
+            !grid
+                .movement_neighbors(from)
+                .into_iter()
+                .flatten()
+                .any(|cell| cell == NavCell::new(2, 2)),
+            "diagonal route cut between two blocked cardinal neighbors"
         );
     }
 
@@ -975,7 +1055,7 @@ mod tests {
 
         let field = grid.objective_distance_field_with_radius(0, radius);
         let first = grid
-            .step_from_distance_field_with_bias(from, &field, -1)
+            .step_from_distance_field_with_radius_bias(from, &field, radius, -1)
             .expect("radius-aware objective field should provide a detour");
         assert_ne!(first, NavCell::new(3, 3));
 
@@ -986,7 +1066,7 @@ mod tests {
                 break;
             }
             current = grid
-                .step_from_distance_field_with_bias(current, &field, -1)
+                .step_from_distance_field_with_radius_bias(current, &field, radius, -1)
                 .expect("radius-aware objective detour should remain reachable");
             path.push(current);
         }
@@ -1003,21 +1083,21 @@ mod tests {
             cell,
             NavCell::new(0, 0),
             NavCell::new(6, 6),
-            [],
+            [BuildingFootprint::new(3, 3, 1, 1)],
             [
                 SimPoint::new(6 * cell, 3 * cell),
                 SimPoint::new(0, 3 * cell),
             ],
         );
-        let from = NavCell::new(2, 2);
-        let target = NavCell::new(4, 4);
+        let from = NavCell::new(2, 3);
+        let target = NavCell::new(4, 3);
 
         let low_bias = grid.pursuit_step(from, target, None, -1);
         let high_bias = grid.pursuit_step(from, target, None, 1);
-        assert_eq!(low_bias.next_cell, Some(NavCell::new(3, 2)));
-        assert_eq!(high_bias.next_cell, Some(NavCell::new(2, 3)));
-        assert!(!low_bias.used_a_star);
-        assert!(!high_bias.used_a_star);
+        assert_eq!(low_bias.next_cell, Some(NavCell::new(2, 2)));
+        assert_eq!(high_bias.next_cell, Some(NavCell::new(2, 4)));
+        assert!(low_bias.used_a_star);
+        assert!(high_bias.used_a_star);
     }
 
     #[test]
