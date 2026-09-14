@@ -13,11 +13,12 @@ use crate::{
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
         unit_visual_center_lerp, viewport_ground_point,
     },
+    resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
 };
 
 const PANEL_RIGHT: f32 = 16.0;
-const PANEL_TOP: f32 = 16.0;
+const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
 const PANEL_WIDTH: f32 = 340.0;
 const PANEL_HEIGHT: f32 = 410.0;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
@@ -80,7 +81,7 @@ fn setup_inspector_ui(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
             panel.spawn((
-                Text::new("Left-click a builder, unit, or building to inspect it."),
+                Text::new("No selection."),
                 TextFont::from_font_size(15.0),
                 TextColor(Color::srgb(0.72, 0.76, 0.82)),
                 Node {
@@ -163,7 +164,7 @@ fn update_inspector_text(
     mut text: Single<&mut Text, With<InspectionText>>,
 ) {
     let next = match selection.selected {
-        None => "Left-click a builder, unit, or building to inspect it.\n\nBuilders are controllable; combat-unit inspection remains read-only.".into(),
+        None => "No selection.".into(),
         Some(id) => inspector_text(id, &samples),
     };
     if text.0 != next {
@@ -453,8 +454,6 @@ fn format_builder_inspector(builder: &BuilderSample) -> String {
             "Blink range: {:.0}",
             builder.blink_range as f32 / SUBUNITS_PER_WORLD_UNIT as f32
         ),
-        "Controls: action panel Move/Repair/Blink/Build • D Blink • right-click smart move/repair • R toggle repair autocast"
-            .into(),
     ]
     .join("\n")
 }
@@ -724,8 +723,9 @@ mod tests {
         let text = inspector_text(SimId(5), &samples);
         assert!(text.contains("Human Builder"));
         assert!(text.contains("Repair autocast: On"));
-        assert!(text.contains("action panel Move/Repair/Blink/Build"));
-        assert!(text.contains("D Blink"));
+        assert!(text.contains("Build menu: 7 entries"));
+        assert!(!text.contains("Controls:"));
+        assert!(!text.contains("D Blink"));
     }
 
     #[test]
@@ -872,14 +872,21 @@ mod tests {
     }
 
     #[test]
-    fn inspector_panel_capture_tracks_right_edge() {
-        assert!(cursor_over_inspector_panel(Vec2::new(1424.0, 16.0), 1440.0));
+    fn inspector_panel_capture_tracks_right_edge_below_resource_bar() {
+        assert!(!cursor_over_inspector_panel(
+            Vec2::new(1424.0, 16.0),
+            1440.0
+        ));
         assert!(cursor_over_inspector_panel(
-            Vec2::new(1084.0, 346.0),
+            Vec2::new(1424.0, PANEL_TOP),
+            1440.0
+        ));
+        assert!(cursor_over_inspector_panel(
+            Vec2::new(1084.0, PANEL_TOP + 330.0),
             1440.0
         ));
         assert!(!cursor_over_inspector_panel(
-            Vec2::new(1083.0, 200.0),
+            Vec2::new(1083.0, PANEL_TOP + 200.0),
             1440.0
         ));
     }

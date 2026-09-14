@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     bridge::PresentationSamples, build_ui::ActionPanelState, inspection::InspectionSelection,
+    presentation::FpsDisplay,
 };
 
 pub(crate) const TOP_BAR_HEIGHT: f32 = 58.0;
@@ -15,6 +16,9 @@ const GOLD_COLOR: Color = Color::srgb(0.96, 0.78, 0.16);
 const LUMBER_COLOR: Color = Color::srgb(0.26, 0.78, 0.34);
 const LEGENDARY_COLOR: Color = Color::srgb(0.72, 0.56, 0.96);
 const PROGRESS_TRACK: Color = Color::srgb(0.11, 0.09, 0.055);
+
+#[derive(Component)]
+struct PerformanceText;
 
 #[derive(Component)]
 struct SelectedPlayerText;
@@ -54,7 +58,7 @@ fn setup_resource_bar(mut commands: Commands) {
                 height: px(TOP_BAR_HEIGHT),
                 padding: UiRect::horizontal(px(10.0)),
                 align_items: AlignItems::Center,
-                justify_content: JustifyContent::FlexEnd,
+                justify_content: JustifyContent::FlexStart,
                 column_gap: px(8.0),
                 border: UiRect::bottom(px(2.0)),
                 ..default()
@@ -64,6 +68,31 @@ fn setup_resource_bar(mut commands: Commands) {
             ZIndex(1000),
         ))
         .with_children(|bar| {
+            bar.spawn((
+                Node {
+                    width: px(132.0),
+                    height: px(42.0),
+                    padding: UiRect::horizontal(px(10.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexStart,
+                    border: UiRect::all(px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(SLOT_BACKGROUND),
+                BorderColor::all(SLOT_BORDER),
+            ))
+            .with_child((
+                Text::new("FPS --\nTICK 0"),
+                TextFont::from_font_size(12.0),
+                TextColor(Color::srgb(0.72, 0.76, 0.82)),
+                PerformanceText,
+            ));
+
+            bar.spawn((Node {
+                flex_grow: 1.0,
+                ..default()
+            },));
+
             bar.spawn((
                 Node {
                     width: px(124.0),
@@ -196,6 +225,7 @@ type ResourceTextQuery<'w, 's> = Query<
     's,
     (
         &'static mut Text,
+        Option<&'static PerformanceText>,
         Option<&'static SelectedPlayerText>,
         Option<&'static GoldText>,
         Option<&'static GoldIncomeText>,
@@ -209,6 +239,7 @@ fn update_resource_bar(
     selection: Res<ActionPanelState>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
+    fps_display: Res<FpsDisplay>,
     mut resource_texts: ResourceTextQuery<'_, '_>,
     mut progress: Single<&mut Node, With<GoldIncomeProgress>>,
 ) {
@@ -244,10 +275,23 @@ fn update_resource_bar(
     } else {
         ("RED PLAYER", Color::srgb(1.0, 0.38, 0.31))
     };
-    for (mut text, selected_player, gold, gold_income, lumber, legendary, mut text_color) in
-        &mut resource_texts
+    for (
+        mut text,
+        performance,
+        selected_player,
+        gold,
+        gold_income,
+        lumber,
+        legendary,
+        mut text_color,
+    ) in &mut resource_texts
     {
-        if selected_player.is_some() {
+        if performance.is_some() {
+            let fps = fps_display
+                .fps()
+                .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
+            text.0 = format!("FPS {fps}\nTICK {}", presentation.current.tick);
+        } else if selected_player.is_some() {
             text.0 = player_label.into();
             if let Some(color) = text_color.as_mut() {
                 color.0 = player_color;
@@ -284,8 +328,15 @@ mod tests {
         app.insert_resource(ActionPanelState::default())
             .insert_resource(InspectionSelection::default())
             .insert_resource(PresentationSamples::new(snapshot))
+            .insert_resource(FpsDisplay::default())
             .add_plugins(ResourceUiPlugin);
 
         app.update();
+
+        let mut performance = app
+            .world_mut()
+            .query_filtered::<&Text, With<PerformanceText>>();
+        let text = performance.single(app.world()).expect("performance text");
+        assert_eq!(text.0, "FPS --\nTICK 0");
     }
 }

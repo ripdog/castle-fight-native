@@ -474,7 +474,7 @@ struct HealthBarGizmos;
 struct ProjectileEffectGizmos;
 
 #[derive(Resource, Debug, Default)]
-struct FpsDisplay {
+pub(crate) struct FpsDisplay {
     elapsed_seconds: f32,
     frames: u32,
     fps: Option<f32>,
@@ -489,6 +489,11 @@ impl FpsDisplay {
             self.elapsed_seconds = 0.0;
             self.frames = 0;
         }
+    }
+
+    #[must_use]
+    pub(crate) const fn fps(&self) -> Option<f32> {
+        self.fps
     }
 }
 
@@ -557,7 +562,6 @@ impl Plugin for CastlePresentationPlugin {
                     draw_health_bars,
                     draw_presentation_gizmos,
                     sample_display_fps,
-                    update_window_title,
                 )
                     .chain()
                     .after(interpolate_render_transforms),
@@ -3207,30 +3211,6 @@ fn corpse_render_position(position: SimPoint, terrain: &TerrainSurface) -> Vec3 
 
 fn sample_display_fps(time: Res<Time>, mut display: ResMut<FpsDisplay>) {
     display.record_frame(time.delta_secs());
-}
-
-fn update_window_title(
-    samples: Res<PresentationSamples>,
-    playback: Res<SimulationPlayback>,
-    debug: Res<DebugPresentation>,
-    display: Res<FpsDisplay>,
-    mut window: Single<&mut Window, With<PrimaryWindow>>,
-) {
-    let fps = display
-        .fps
-        .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
-    window.title = format!(
-        "Castle Fight Native 3D | {} | {fps} FPS | tick {} | builders {} | units {} | buildings {} | corpses {} | projectiles {} | Space/P pause | F1 debug {} | H health {} | WASD/arrows pan • MMB grab • Q/E rotate • wheel zoom • Home reset",
-        if playback.paused { "PAUSED" } else { "RUNNING" },
-        samples.current.tick,
-        samples.current.builders.len(),
-        samples.current.units.len(),
-        samples.current.buildings.len(),
-        samples.current.corpses.len(),
-        samples.current.projectiles.len(),
-        if debug.overlays { "on" } else { "off" },
-        if debug.health_bars { "on" } else { "off" },
-    );
 }
 
 pub(crate) fn sim_point_to_world(point: SimPoint) -> Vec3 {

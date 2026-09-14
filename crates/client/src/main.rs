@@ -28,7 +28,7 @@ use demo::create_demo_world;
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
-use resource_ui::ResourceUiPlugin;
+use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 
 const SIMULATION_HZ: f64 = 30.0;
@@ -206,9 +206,9 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: px(420.0),
-                top: px(16.0),
-                width: px(600.0),
+                left: px(580.0),
+                top: px(TOP_BAR_HEIGHT + 10.0),
+                width: px(280.0),
                 padding: UiRect::axes(px(14.0), px(8.0)),
                 justify_content: JustifyContent::Center,
                 border_radius: BorderRadius::all(px(7.0)),
@@ -217,7 +217,7 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
             BackgroundColor(Color::srgba(0.035, 0.045, 0.060, 0.90)),
         ))
         .with_child((
-            Text::new("SIM RUNNING • Space/P pause"),
+            Text::new("SIM RUNNING"),
             TextFont::from_font_size(18.0),
             TextColor(Color::srgb(0.78, 0.84, 0.90)),
             SimulationPauseText,
@@ -235,23 +235,16 @@ fn toggle_simulation_pause(
 
 fn update_simulation_pause_ui(
     playback: Res<SimulationPlayback>,
-    presentation: Res<PresentationSamples>,
     text: Single<(&mut Text, &mut TextColor), With<SimulationPauseText>>,
 ) {
     let (mut text, mut color) = text.into_inner();
     let next = if playback.paused {
-        format!(
-            "SIMULATION PAUSED — tick {} • Space/P resume",
-            presentation.current.tick
-        )
+        "SIMULATION PAUSED"
     } else {
-        format!(
-            "SIM RUNNING — tick {} • Space/P pause",
-            presentation.current.tick
-        )
+        "SIM RUNNING"
     };
     if text.0 != next {
-        text.0 = next;
+        text.0 = next.into();
     }
     color.0 = if playback.paused {
         Color::srgb(1.0, 0.78, 0.20)
