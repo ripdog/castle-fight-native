@@ -2374,6 +2374,33 @@ def main() -> None:
         runtime_mode_rows,
     )
 
+    runtime_campaign_rows: list[list[Any]] = []
+    runtime_campaign_path = map_root / "script" / "runtime-campaign-mechanics.tsv"
+    if runtime_campaign_path.exists():
+        with runtime_campaign_path.open(encoding="utf-8", newline="") as handle:
+            for mechanic in csv.DictReader(handle, delimiter="\t"):
+                system_id = mechanic["system_id"]
+                if system_id != "campaign-star-restriction-failure-hooks":
+                    raise ValueError(f"unrecognized runtime campaign mechanic: {system_id}")
+                parameters = json.loads(mechanic["parameters_json"])
+                if parameters.get("tracked_building_loss", {}).get("restriction_id") != "challenge_no_buildings_lost":
+                    raise ValueError(f"campaign building-loss restriction changed: {parameters}")
+                if parameters.get("challenge_bound_item_purchase", {}).get("restriction_id") != "challenge_no_items":
+                    raise ValueError(f"campaign no-items restriction changed: {parameters}")
+                runtime_campaign_rows.append([
+                    system_id, mechanic["mechanic_kind"], mechanic["trigger"],
+                    mechanic["related_objects_json"], stable_json(parameters),
+                    mechanic["source_functions"], mechanic["evidence_kind"], mechanic["byte_offset"],
+                ])
+    write_tsv(
+        output / "runtime-campaign-mechanics.tsv",
+        [
+            "system_id", "mechanic_kind", "trigger", "related_objects_json", "parameters_json",
+            "source_functions", "evidence_kind", "byte_offset",
+        ],
+        runtime_campaign_rows,
+    )
+
     runtime_system_rows: list[list[Any]] = []
     runtime_system_path = map_root / "script" / "runtime-system-mechanics.tsv"
     if runtime_system_path.exists():
@@ -4656,6 +4683,8 @@ def main() -> None:
         "runtime_session_mechanic_kinds": dict(sorted(Counter(row[1] for row in runtime_session_rows).items())),
         "runtime_mode_mechanic_rows": len(runtime_mode_rows),
         "runtime_mode_mechanic_kinds": dict(sorted(Counter(row[1] for row in runtime_mode_rows).items())),
+        "runtime_campaign_mechanic_rows": len(runtime_campaign_rows),
+        "runtime_campaign_mechanic_kinds": dict(sorted(Counter(row[1] for row in runtime_campaign_rows).items())),
         "runtime_system_mechanic_rows": len(runtime_system_rows),
         "runtime_system_mechanic_kinds": dict(sorted(Counter(
             row[1] for row in runtime_system_rows
@@ -4731,6 +4760,7 @@ def main() -> None:
             "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
             "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds, and the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution",
             "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence and the host-chat append parser gates/conflict handling",
+            "runtime-campaign-mechanics.tsv normalizes the two authoritative campaign star-restriction event hooks: tracked player-built building loss fails challenge_no_buildings_lost, while a challenge-bound player item purchase fails challenge_no_items; both protected restriction IDs are statically decoded rather than inferred from failure text",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",

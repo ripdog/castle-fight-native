@@ -149,6 +149,10 @@
     "runtime_mode_mechanic_kinds": {
       "host-chat-mode-parser-with-exact-registered-mode-catalog": 1
     },
+    "runtime_campaign_mechanics": 1,
+    "runtime_campaign_mechanic_kinds": {
+      "campaign-active-star-restriction-event-failure": 1
+    },
     "damage_listener_coverage_rows": 20,
     "damage_listener_coverage_status_counts": {
       "e2e-only": 1,
@@ -158,16 +162,16 @@
     },
     "event_listener_coverage_rows": 70,
     "event_listener_coverage_status_counts": {
-      "campaign-runtime-unmodeled": 3,
-      "command-runtime-unmodeled": 2,
+      "command-framework-infrastructure": 1,
       "e2e-only": 13,
       "gameplay-framework-infrastructure": 3,
       "normalized-ai-runtime-semantics": 1,
+      "normalized-campaign-runtime-semantics": 2,
       "normalized-gameplay-dispatch": 10,
       "normalized-gameplay-semantics": 21,
       "normalized-mode-runtime-semantics": 1,
       "normalized-session-runtime-semantics": 4,
-      "presentation-only": 11,
+      "presentation-only": 13,
       "telemetry-only": 1
     },
     "production_unit_special_mechanics": 35,

@@ -5650,6 +5650,102 @@ def _extract_runtime_session_mechanics(
     return rows
 
 
+def _extract_runtime_campaign_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize campaign challenge mutations reachable from authored event listeners."""
+    functions_by_name = {str(row["name"]): row for row in functions}
+    required = {
+        "EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges",
+        "recordCampaignTrackedBuildingLost",
+        "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements",
+        "recordCampaignOwnerItemPurchase__w3p_vmProtect",
+        "isActiveRestriction",
+        "failCampaignChallenge",
+    }
+    if not required.issubset(functions_by_name):
+        return []
+
+    def source(name: str, fragments: Iterable[bytes]) -> tuple[int, bytes]:
+        row = functions_by_name[name]
+        body = data[int(row["start"]):int(row["end"])]
+        for fragment in fragments:
+            if fragment not in body:
+                raise ValueError(f"runtime campaign mechanic source changed: {name}: missing {fragment!r}")
+        return int(row["start"]), body
+
+    def decode_restriction_global(symbol: bytes) -> str:
+        match = re.search(
+            rb"(?<![A-Za-z0-9_])" + symbol
+            + rb'=\(_d\[\d+\]or _y\(\d+,(_T\("(?:\\.|[^"\\])*"\))\)\)',
+            data,
+        )
+        if match is None:
+            raise ValueError(f"campaign restriction global assignment changed: {symbol.decode('ascii')}")
+        return _decode_w3p_global_name(match.group(1), 11351, 1106)
+
+    no_buildings_id = decode_restriction_global(b"arb")
+    no_items_id = decode_restriction_global(b"crb")
+    if no_buildings_id != "challenge_no_buildings_lost":
+        raise ValueError(f"campaign no-buildings restriction id changed: {no_buildings_id!r}")
+    if no_items_id != "challenge_no_items":
+        raise ValueError(f"campaign no-items restriction id changed: {no_items_id!r}")
+
+    tracked_listener = "EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges"
+    shop_listener = "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements"
+    sources = [
+        (tracked_listener, (
+            b"GetTriggerUnit()", b"IsUnitInGroup", b"GroupRemoveUnit", b"recordCampaignTrackedBuildingLost()",
+        )),
+        ("recordCampaignTrackedBuildingLost", (
+            b"isActiveRestriction(arb)", b"failCampaignChallenge(arb", b"a player-built building was destroyed.", b"true",
+        )),
+        (shop_listener, (
+            b"GetBuyingUnit()", b"GetSoldItem()", b"recordCampaignOwnerItemPurchase__w3p_vmProtect(qLn)",
+        )),
+        ("recordCampaignOwnerItemPurchase__w3p_vmProtect", (
+            b"isChallengeBoundPlayer(unit_getOwner(fNp))", b"isActiveRestriction(crb)",
+            b"failCampaignChallenge(crb", b"a player bought an item.", b"true",
+        )),
+        ("isActiveRestriction", (
+            b"CampaignMission_secondStar", b"CampaignMission_thirdStar", b"starRestrictionId",
+        )),
+        ("failCampaignChallenge", (
+            b"CampaignMission_secondStar", b"CampaignMission_thirdStar", b"Signal_Signal_set",
+        )),
+    ]
+    offsets = [source(name, fragments)[0] for name, fragments in sources]
+
+    return [{
+        "system_id": "campaign-star-restriction-failure-hooks",
+        "mechanic_kind": "campaign-active-star-restriction-event-failure",
+        "trigger": "tracked-building-death-or-challenge-bound-player-item-purchase",
+        "parameters": {
+            "active_restriction_scope": ["second-star", "third-star"],
+            "tracked_building_loss": {
+                "restriction_id": no_buildings_id,
+                "listener_function": tracked_listener,
+                "requires_unit_in_campaign_tracked_building_group": True,
+                "removes_lost_unit_from_tracking_group": True,
+                "failure_reason": "a player-built building was destroyed.",
+                "sets_hard_failure_flag": True,
+            },
+            "challenge_bound_item_purchase": {
+                "restriction_id": no_items_id,
+                "listener_function": shop_listener,
+                "requires_buying_unit_owner_is_challenge_bound_player": True,
+                "failure_reason": "a player bought an item.",
+                "sets_hard_failure_flag": True,
+            },
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in sources],
+        "evidence_kind": "exact-readable-campaign-listeners-plus-statically-decoded-protected-restriction-ids",
+        "byte_offset": min(offsets),
+    }]
+
+
 def _extract_damage_listener_coverage(
     functions: list[dict[str, object]],
     production_unit_special_mechanics: list[dict[str, object]],
@@ -5761,6 +5857,7 @@ def _extract_event_listener_coverage(
     runtime_ai_mechanics: list[dict[str, object]],
     runtime_session_mechanics: list[dict[str, object]],
     runtime_mode_mechanics: list[dict[str, object]],
+    runtime_campaign_mechanics: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Strict closure audit over generated EventListener callbacks.
@@ -5800,6 +5897,7 @@ def _extract_event_listener_coverage(
     add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
     add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
     add_sources("runtime-mode-mechanics", runtime_mode_mechanics, "system_id")
+    add_sources("runtime-campaign-mechanics", runtime_campaign_mechanics, "system_id")
 
     callees_by_caller: dict[str, set[str]] = defaultdict(set)
     for (caller, callee), count in call_edges.items():
@@ -5840,16 +5938,13 @@ def _extract_event_listener_coverage(
         "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements2",
         "EventListener_add_TrainProgressRuntime_onEvent_add_TrainProgressRuntime",
         "EventListener_add_UnitTrainingRuntime_onEvent_add_UnitTrainingRuntime1",
+        "EventListener_add_Campaign_onEvent_add_Campaign",
+        "EventListener_add_Commands_onEvent_add_Commands",
     }
     gameplay_framework = {
         "EventListener_add_BuildingSpells_onEvent_add_BuildingSpells",
         "EventListener_add_DamageEvent_onEvent_add_DamageEvent",
         "EventListener_add_DamageEvent_onEvent_add_DamageEvent1",
-    }
-    campaign_runtime = {
-        "EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges",
-        "EventListener_add_Campaign_onEvent_add_Campaign",
-        "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements",
     }
     player_session_runtime = {
         "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime",
@@ -5857,8 +5952,7 @@ def _extract_event_listener_coverage(
         "EventListener_add_doAfter_MMDData_onEvent_add_doAfter_MMDData",
         "EventListener_add_PlayerLeave_onEvent_add_PlayerLeave",
     }
-    command_runtime = {
-        "EventListener_add_Commands_onEvent_add_Commands",
+    command_framework = {
         "EventListener_add_WurstCommand_onEvent_add_WurstCommand",
     }
     mode_runtime = {
@@ -5883,6 +5977,9 @@ def _extract_event_listener_coverage(
             elif all(source.startswith("runtime-mode-mechanics:") for source in direct):
                 status = "normalized-mode-runtime-semantics"
                 note = "listener is direct evidence for normalized mode-selection runtime semantics"
+            elif all(source.startswith("runtime-campaign-mechanics:") for source in direct):
+                status = "normalized-campaign-runtime-semantics"
+                note = "listener is direct evidence for normalized campaign challenge runtime semantics"
             else:
                 status = "normalized-gameplay-semantics"
                 note = "listener is direct evidence for importer-facing normalized gameplay semantics"
@@ -5898,6 +5995,9 @@ def _extract_event_listener_coverage(
                 elif all(source.startswith("runtime-mode-mechanics:") for source in normalized):
                     status = "normalized-mode-runtime-dispatch"
                     note = "listener reaches normalized mode-selection runtime semantics through an exact named-call path of at most three edges"
+                elif all(source.startswith("runtime-campaign-mechanics:") for source in normalized):
+                    status = "normalized-campaign-runtime-dispatch"
+                    note = "listener reaches normalized campaign runtime semantics through an exact named-call path of at most three edges"
                 else:
                     status = "normalized-gameplay-dispatch"
                     note = "listener reaches normalized gameplay semantics through an exact named-call path of at most three edges"
@@ -5910,15 +6010,12 @@ def _extract_event_listener_coverage(
             elif listener_name in gameplay_framework:
                 status = "gameplay-framework-infrastructure"
                 note = "generic event-dispatch infrastructure; concrete gameplay semantics are normalized at registered handlers/listeners"
-            elif listener_name in campaign_runtime:
-                status = "campaign-runtime-unmodeled"
-                note = "live campaign/challenge control path; explicitly outside current importer-facing mechanics coverage"
             elif listener_name in player_session_runtime:
                 status = "player-session-runtime-unmodeled"
                 note = "live AFK/leave/autobalance/session control path; explicitly tracked outside unit/spell mechanics"
-            elif listener_name in command_runtime:
-                status = "command-runtime-unmodeled"
-                note = "live command/chat control path; command semantics are not yet normalized"
+            elif listener_name in command_framework:
+                status = "command-framework-infrastructure"
+                note = "generic chat-command tokenization/dispatch infrastructure; concrete command handlers own any gameplay semantics"
             elif listener_name in mode_runtime:
                 status = "mode-selection-runtime-unmodeled"
                 note = "live map-mode parser/control path; mode semantics are not yet normalized"
@@ -5943,11 +6040,11 @@ def _extract_event_listener_coverage(
         "normalized-session-runtime-semantics": 4,
         "normalized-mode-runtime-semantics": 1,
         "normalized-gameplay-dispatch": 10,
-        "presentation-only": 11,
+        "presentation-only": 13,
         "e2e-only": 13,
         "gameplay-framework-infrastructure": 3,
-        "campaign-runtime-unmodeled": 3,
-        "command-runtime-unmodeled": 2,
+        "normalized-campaign-runtime-semantics": 2,
+        "command-framework-infrastructure": 1,
         "telemetry-only": 1,
     })
     if status_counts != expected_status_counts:
@@ -9612,6 +9709,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     runtime_ai_mechanics = _extract_runtime_ai_mechanics(data, functions, protected_filter_bindings)
     runtime_session_mechanics = _extract_runtime_session_mechanics(data, functions)
     runtime_mode_mechanics = _extract_runtime_mode_mechanics(data, functions, function_aliases, call_edges)
+    runtime_campaign_mechanics = _extract_runtime_campaign_mechanics(data, functions)
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
@@ -9631,6 +9729,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_ai_mechanics,
         runtime_session_mechanics,
         runtime_mode_mechanics,
+        runtime_campaign_mechanics,
         protected_perk_registry_audit,
     )
     for reference in function_value_arguments:
@@ -9677,6 +9776,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "runtime_ai_mechanics": runtime_ai_mechanics,
         "runtime_session_mechanics": runtime_session_mechanics,
         "runtime_mode_mechanics": runtime_mode_mechanics,
+        "runtime_campaign_mechanics": runtime_campaign_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
         "event_listener_coverage": event_listener_coverage,
     }

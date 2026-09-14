@@ -191,6 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 3)
         self.assertEqual(summary["runtime_session_mechanics"], 2)
         self.assertEqual(summary["runtime_mode_mechanics"], 1)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 1)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["event_listener_coverage_rows"], 70)
         self.assertEqual(
@@ -209,16 +210,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
             {
-                "campaign-runtime-unmodeled": 3,
-                "command-runtime-unmodeled": 2,
+                "command-framework-infrastructure": 1,
                 "e2e-only": 13,
                 "gameplay-framework-infrastructure": 3,
                 "normalized-ai-runtime-semantics": 1,
+                "normalized-campaign-runtime-semantics": 2,
                 "normalized-mode-runtime-semantics": 1,
                 "normalized-session-runtime-semantics": 4,
                 "normalized-gameplay-dispatch": 10,
                 "normalized-gameplay-semantics": 21,
-                "presentation-only": 11,
+                "presentation-only": 13,
                 "telemetry-only": 1,
             },
         )
@@ -246,7 +247,23 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             rows["EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges"]["coverage_status"],
-            "campaign-runtime-unmodeled",
+            "normalized-campaign-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements"]["coverage_status"],
+            "normalized-campaign-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["EventListener_add_Campaign_onEvent_add_Campaign"]["coverage_status"],
+            "presentation-only",
+        )
+        self.assertEqual(
+            rows["EventListener_add_Commands_onEvent_add_Commands"]["coverage_status"],
+            "presentation-only",
+        )
+        self.assertEqual(
+            rows["EventListener_add_WurstCommand_onEvent_add_WurstCommand"]["coverage_status"],
+            "command-framework-infrastructure",
         )
         self.assertEqual(
             rows["EventListener_add_PlayerLeave_onEvent_add_PlayerLeave"]["coverage_status"],
@@ -274,6 +291,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
             summary["event_listener_coverage_status_counts"],
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
         )
+
+    def test_runtime_campaign_restriction_hooks_are_normalized(self) -> None:
+        with (self.resolved / "runtime-campaign-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["system_id"], "campaign-star-restriction-failure-hooks")
+        parameters = json.loads(row["parameters_json"])
+        self.assertEqual(parameters["active_restriction_scope"], ["second-star", "third-star"])
+        building_loss = parameters["tracked_building_loss"]
+        self.assertEqual(building_loss["restriction_id"], "challenge_no_buildings_lost")
+        self.assertTrue(building_loss["requires_unit_in_campaign_tracked_building_group"])
+        self.assertTrue(building_loss["removes_lost_unit_from_tracking_group"])
+        self.assertTrue(building_loss["sets_hard_failure_flag"])
+        item_purchase = parameters["challenge_bound_item_purchase"]
+        self.assertEqual(item_purchase["restriction_id"], "challenge_no_items")
+        self.assertTrue(item_purchase["requires_buying_unit_owner_is_challenge_bound_player"])
+        self.assertTrue(item_purchase["sets_hard_failure_flag"])
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 1)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
