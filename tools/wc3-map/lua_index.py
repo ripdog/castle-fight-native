@@ -5345,6 +5345,188 @@ def _extract_runtime_ai_mechanics(
     return rows
 
 
+def _extract_runtime_mode_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+    function_aliases: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+) -> list[dict[str, object]]:
+    """Recover the complete readable 9.27 mode registry and chat-entry controller."""
+    functions_by_name = {str(row["name"]): row for row in functions}
+    initializer_name = "ModeParser_initialize__w3p_vmProtect"
+    listener_name = "EventListener_add_ModeParser_onEvent_add_ModeParser"
+    parse_name = "ModeParser_parseModeAppend__w3p_vmProtect"
+    required = {
+        initializer_name, listener_name, parse_name,
+        "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
+        "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
+        "StartResourceMode_StartResourceMode_applyChoice",
+    }
+    if not required.issubset(functions_by_name):
+        return []
+
+    def body(name: str) -> tuple[int, bytes]:
+        row = functions_by_name[name]
+        return int(row["start"]), data[int(row["start"]):int(row["end"])]
+
+    initializer_start, initializer = body(initializer_name)
+    listener_start, listener = body(listener_name)
+    parse_start, parse_source = body(parse_name)
+    if b"EventData_getTriggerPlayer()==V1[0]" not in listener or b"string_startsWith(rVm,\"-\")" not in listener:
+        raise ValueError("mode parser host-player/chat-prefix gate changed")
+    if b"not Ocb" not in listener or b"ModeParser_parseModeAppend__w3p_vmProtect(rVm)" not in listener:
+        raise ValueError("mode parser selection-active/append dispatch changed")
+    if b"string_split(CUq,\"-\")" not in parse_source or b"ModeParser_parseSingleMode__w3p_vmProtect(GUq)" not in parse_source:
+        raise ValueError("mode parser append splitting/dispatch changed")
+    if b"ModeParser_rejectUltimateDraftConflict()" not in parse_source:
+        raise ValueError("mode parser Ultimate Draft conflict gate changed")
+
+    callback_var_to_class = {
+        match.group(1).decode("ascii"): match.group(2).decode("ascii")
+        for match in re.finditer(rb"([A-Za-z][A-Za-z0-9_]*)=([A-Za-z][A-Za-z0-9_]*):create\d+\(\)", initializer)
+    }
+    alias_targets = {str(row["alias"]): str(row["target_function"]) for row in function_aliases}
+    callees_by_caller: dict[str, set[str]] = defaultdict(set)
+    for (caller, callee), count in call_edges.items():
+        if count > 0:
+            callees_by_caller[str(caller)].add(str(callee))
+
+    records: list[tuple[int, dict[str, object]]] = []
+    patterns = [
+        (
+            "choice-value",
+            re.compile(rb'ChoiceValueMode_new_ChoiceValueMode\("([^\"]+)",\"([^\"]+)\",\"([^\"]+)\",([A-Za-z0-9_]+),(\d+),(\d+)\)'),
+        ),
+        (
+            "integer-value",
+            re.compile(rb'ValueMode_new_ValueMode\("([^\"]+)",\"([^\"]+)\",\"([^\"]+)\",([A-Za-z0-9_]+),(\d+),(\d+)\)'),
+        ),
+        (
+            "flag",
+            re.compile(rb'FlagMode_new_FlagMode\("([^\"]+)",\"([^\"]+)\",\"([^\"]+)\",([A-Za-z0-9_]+)\)'),
+        ),
+    ]
+    expected_counts = {"choice-value": 4, "integer-value": 15, "flag": 24}
+    actual_counts: Counter[str] = Counter()
+    callback_functions: list[str] = []
+    for kind, pattern in patterns:
+        for match in pattern.finditer(initializer):
+            actual_counts[kind] += 1
+            mode_id = match.group(1).decode("utf-8")
+            name = match.group(2).decode("utf-8")
+            description = match.group(3).decode("utf-8")
+            callback_var = match.group(4).decode("ascii")
+            class_symbol = callback_var_to_class.get(callback_var)
+            if class_symbol is None:
+                raise ValueError(f"mode callback variable has no generated closure class: {mode_id}: {callback_var}")
+            callback_function = alias_targets.get(f"{class_symbol}.call")
+            if callback_function is None or callback_function not in functions_by_name:
+                raise ValueError(f"mode callback class has no exact .call alias: {mode_id}: {class_symbol}")
+            callback_functions.append(callback_function)
+            callback_start, callback_source = body(callback_function)
+            simple_assignments = [
+                {"symbol": symbol.decode("ascii"), "value": value.decode("utf-8")}
+                for symbol, value in re.findall(
+                    rb'\b([A-Za-z][A-Za-z0-9_]*)=(true|false|\(-?\d+\)|-?\d+(?:\.\d+)?|"[^"\\]*")',
+                    callback_source,
+                )
+            ]
+            row: dict[str, object] = {
+                "mode_id": mode_id,
+                "name": name,
+                "description": description,
+                "kind": kind,
+                "callback_variable": callback_var,
+                "callback_class_symbol": class_symbol,
+                "callback_function": callback_function,
+                "callback_direct_calls": sorted(callees_by_caller.get(callback_function, ())),
+                "callback_simple_assignments": simple_assignments,
+                "callback_byte_offset": callback_start,
+            }
+            if kind != "flag":
+                row["minimum_value"] = int(match.group(5))
+                row["maximum_value"] = int(match.group(6))
+            if kind == "choice-value":
+                local_tail = initializer[match.end():match.end() + 32]
+                if b',"r"),"g")' not in local_tail:
+                    raise ValueError(f"choice-value mode choices changed: {mode_id}")
+                row["choices"] = ["r", "g"]
+            records.append((match.start(), row))
+    if actual_counts != Counter(expected_counts):
+        raise ValueError(f"mode registry constructor counts changed: {dict(sorted(actual_counts.items()))}")
+
+    start_resource_match = re.search(rb"([A-Za-z][A-Za-z0-9_]*)=StartResourceMode_new_StartResourceMode\(\)", initializer)
+    if start_resource_match is None:
+        raise ValueError("Start Resource mode registration missing")
+    start_resource_start, start_resource_source = body("StartResourceMode_new_StartResourceMode")
+    if b'GameMode_id="sr"' not in start_resource_source or b'GameMode_name="Set Start Resource"' not in start_resource_source:
+        raise ValueError("Start Resource mode id/name changed")
+    _execute_start, execute_source = body("StartResourceMode_StartResourceMode_execute")
+    if b"Valid: g, l, u" not in execute_source or b"HYm>100000" not in execute_source:
+        raise ValueError("Start Resource validation changed")
+    _choice_start, choice_source = body("StartResourceMode_StartResourceMode_isValidChoice")
+    _minimum_start, minimum_source = body("StartResourceMode_StartResourceMode_minForChoice")
+    _apply_start, apply_source = body("StartResourceMode_StartResourceMode_applyChoice")
+    if b'PYm=="g"' not in choice_source or b'PYm=="l"' not in choice_source or b'PYm=="u"' not in choice_source:
+        raise ValueError("Start Resource choices changed")
+    if b'if(RYm=="u")then return 0 end return 100' not in minimum_source:
+        raise ValueError("Start Resource choice minimums changed")
+    if b'if(TYm=="g")then MX=UYm' not in apply_source or b'elseif(TYm=="l")' not in apply_source or b'elseif(TYm=="u")then KX=UYm' not in apply_source:
+        raise ValueError("Start Resource apply semantics changed")
+    records.append((start_resource_match.start(), {
+        "mode_id": "sr",
+        "name": "Set Start Resource",
+        "description": "Set starting gold, lumber, or unit limit",
+        "kind": "resource-choice-value",
+        "choices": ["g", "l", "u"],
+        "choice_minimum_values": {"g": 100, "l": 100, "u": 0},
+        "maximum_value": 100000,
+        "callback_function": "StartResourceMode_StartResourceMode_applyChoice",
+        "callback_direct_calls": sorted(callees_by_caller.get("StartResourceMode_StartResourceMode_applyChoice", ())),
+        "callback_simple_assignments": [],
+        "callback_byte_offset": start_resource_start,
+    }))
+
+    records.sort(key=lambda item: item[0])
+    modes = [row for _offset, row in records]
+    if len(modes) != 44 or len({str(row["mode_id"]) for row in modes}) != 44:
+        raise ValueError(f"mode registry size/IDs changed: {len(modes)}")
+    expected_ids = [
+        "r", "p", "m", "d", "cr", "sr", "um", "ud", "na", "ntb", "nb", "ns", "ni", "la", "nrs",
+        "ur", "norb", "desync", "du", "nch", "co", "cc", "dom", "ult", "nca", "noai", "nfow", "it", "lt",
+        "glw", "gld", "mp", "emp", "ll", "ban", "rban", "bal", "fow", "fill", "nt", "ht", "mt", "skip", "w3c",
+    ]
+    if [str(row["mode_id"]) for row in modes] != expected_ids:
+        raise ValueError("mode registry order/IDs changed")
+
+    return [{
+        "system_id": "mode-selection-controller-and-registry",
+        "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
+        "trigger": "host-player-chat-message-during-mode-selection",
+        "parameters": {
+            "host_player_id": 0,
+            "requires_leading_dash": True,
+            "requires_selection_not_finalized": True,
+            "append_parser_strips_one_leading_dash": True,
+            "multiple_modes_separator": "-",
+            "ultimate_draft_conflict_is_rejected_before_application": True,
+            "skip_command_is_reserved_before_append_parser": True,
+            "e2e_prefix_is_reserved_before_append_parser": "-e2e ",
+            "registered_mode_count": 44,
+            "registered_modes": modes,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            listener_name, parse_name, initializer_name,
+            "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
+            "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
+            "StartResourceMode_StartResourceMode_applyChoice", *callback_functions,
+        ],
+        "evidence_kind": "exact-readable-mode-registry-generated-closure-aliases-and-chat-parser-control-flow",
+        "byte_offset": min(initializer_start, listener_start, parse_start),
+    }]
+
+
 def _extract_runtime_session_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
@@ -5578,6 +5760,7 @@ def _extract_event_listener_coverage(
     perk_mechanics: list[dict[str, object]],
     runtime_ai_mechanics: list[dict[str, object]],
     runtime_session_mechanics: list[dict[str, object]],
+    runtime_mode_mechanics: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Strict closure audit over generated EventListener callbacks.
@@ -5616,6 +5799,7 @@ def _extract_event_listener_coverage(
     add_sources("perk-mechanics", perk_mechanics, "perk_id")
     add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
     add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
+    add_sources("runtime-mode-mechanics", runtime_mode_mechanics, "system_id")
 
     callees_by_caller: dict[str, set[str]] = defaultdict(set)
     for (caller, callee), count in call_edges.items():
@@ -5696,6 +5880,9 @@ def _extract_event_listener_coverage(
             elif all(source.startswith("runtime-session-mechanics:") for source in direct):
                 status = "normalized-session-runtime-semantics"
                 note = "listener is direct evidence for normalized player-session runtime semantics"
+            elif all(source.startswith("runtime-mode-mechanics:") for source in direct):
+                status = "normalized-mode-runtime-semantics"
+                note = "listener is direct evidence for normalized mode-selection runtime semantics"
             else:
                 status = "normalized-gameplay-semantics"
                 note = "listener is direct evidence for importer-facing normalized gameplay semantics"
@@ -5708,6 +5895,9 @@ def _extract_event_listener_coverage(
                 elif all(source.startswith("runtime-session-mechanics:") for source in normalized):
                     status = "normalized-session-runtime-dispatch"
                     note = "listener reaches normalized player-session runtime semantics through an exact named-call path of at most three edges"
+                elif all(source.startswith("runtime-mode-mechanics:") for source in normalized):
+                    status = "normalized-mode-runtime-dispatch"
+                    note = "listener reaches normalized mode-selection runtime semantics through an exact named-call path of at most three edges"
                 else:
                     status = "normalized-gameplay-dispatch"
                     note = "listener reaches normalized gameplay semantics through an exact named-call path of at most three edges"
@@ -5751,13 +5941,13 @@ def _extract_event_listener_coverage(
         "normalized-gameplay-semantics": 21,
         "normalized-ai-runtime-semantics": 1,
         "normalized-session-runtime-semantics": 4,
+        "normalized-mode-runtime-semantics": 1,
         "normalized-gameplay-dispatch": 10,
         "presentation-only": 11,
         "e2e-only": 13,
         "gameplay-framework-infrastructure": 3,
         "campaign-runtime-unmodeled": 3,
         "command-runtime-unmodeled": 2,
-        "mode-selection-runtime-unmodeled": 1,
         "telemetry-only": 1,
     })
     if status_counts != expected_status_counts:
@@ -9421,6 +9611,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     perk_mechanics = _extract_perk_mechanics(data, functions, protected_perk_registry_audit)
     runtime_ai_mechanics = _extract_runtime_ai_mechanics(data, functions, protected_filter_bindings)
     runtime_session_mechanics = _extract_runtime_session_mechanics(data, functions)
+    runtime_mode_mechanics = _extract_runtime_mode_mechanics(data, functions, function_aliases, call_edges)
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
@@ -9439,6 +9630,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         perk_mechanics,
         runtime_ai_mechanics,
         runtime_session_mechanics,
+        runtime_mode_mechanics,
         protected_perk_registry_audit,
     )
     for reference in function_value_arguments:
@@ -9484,6 +9676,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "perk_mechanics": perk_mechanics,
         "runtime_ai_mechanics": runtime_ai_mechanics,
         "runtime_session_mechanics": runtime_session_mechanics,
+        "runtime_mode_mechanics": runtime_mode_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
         "event_listener_coverage": event_listener_coverage,
     }

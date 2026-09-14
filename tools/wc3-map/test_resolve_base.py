@@ -190,6 +190,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["perk_mechanics"], 19)
         self.assertEqual(summary["runtime_ai_mechanics"], 3)
         self.assertEqual(summary["runtime_session_mechanics"], 2)
+        self.assertEqual(summary["runtime_mode_mechanics"], 1)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["event_listener_coverage_rows"], 70)
         self.assertEqual(
@@ -212,8 +213,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "command-runtime-unmodeled": 2,
                 "e2e-only": 13,
                 "gameplay-framework-infrastructure": 3,
-                "mode-selection-runtime-unmodeled": 1,
                 "normalized-ai-runtime-semantics": 1,
+                "normalized-mode-runtime-semantics": 1,
                 "normalized-session-runtime-semantics": 4,
                 "normalized-gameplay-dispatch": 10,
                 "normalized-gameplay-semantics": 21,
@@ -257,7 +258,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             rows["EventListener_add_ModeParser_onEvent_add_ModeParser"]["coverage_status"],
-            "mode-selection-runtime-unmodeled",
+            "normalized-mode-runtime-semantics",
         )
         self.assertEqual(
             rows["EventListener_add_BuildingAttachments_onEvent_add_BuildingAttachments"]["coverage_status"],
@@ -273,6 +274,46 @@ class ResolvedEvidenceTests(unittest.TestCase):
             summary["event_listener_coverage_status_counts"],
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
         )
+
+    def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
+        with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["system_id"], "mode-selection-controller-and-registry")
+        parameters = json.loads(rows[0]["parameters_json"])
+        self.assertEqual(parameters["host_player_id"], 0)
+        self.assertTrue(parameters["requires_leading_dash"])
+        self.assertTrue(parameters["ultimate_draft_conflict_is_rejected_before_application"])
+        self.assertEqual(parameters["multiple_modes_separator"], "-")
+        self.assertEqual(parameters["registered_mode_count"], 44)
+        modes = parameters["registered_modes"]
+        self.assertEqual(
+            [mode["mode_id"] for mode in modes],
+            [
+                "r", "p", "m", "d", "cr", "sr", "um", "ud", "na", "ntb", "nb", "ns", "ni", "la", "nrs",
+                "ur", "norb", "desync", "du", "nch", "co", "cc", "dom", "ult", "nca", "noai", "nfow", "it", "lt",
+                "glw", "gld", "mp", "emp", "ll", "ban", "rban", "bal", "fow", "fill", "nt", "ht", "mt", "skip", "w3c",
+            ],
+        )
+        by_id = {mode["mode_id"]: mode for mode in modes}
+        self.assertEqual(by_id["r"]["choices"], ["r", "g"])
+        self.assertEqual((by_id["r"]["minimum_value"], by_id["r"]["maximum_value"]), (1, 6))
+        self.assertEqual(by_id["sr"]["choices"], ["g", "l", "u"])
+        self.assertEqual(by_id["sr"]["choice_minimum_values"], {"g": 100, "l": 100, "u": 0})
+        self.assertEqual(by_id["sr"]["maximum_value"], 100000)
+        self.assertIn("applyArtilleryModeEnabled", by_id["na"]["callback_direct_calls"])
+        self.assertIn("applyNoAfkMode", by_id["noai"]["callback_direct_calls"])
+        self.assertEqual((by_id["bal"]["minimum_value"], by_id["bal"]["maximum_value"]), (0, 2))
+        self.assertIn("applyAutobalanceMode", by_id["bal"]["callback_direct_calls"])
+        self.assertIn("ModeParser_applyModeString__w3p_vmProtect", by_id["w3c"]["callback_direct_calls"])
+        self.assertIn({"symbol": "qX", "value": "false"}, by_id["norb"]["callback_simple_assignments"])
+        self.assertIn({"symbol": "EGb", "value": "false"}, by_id["desync"]["callback_simple_assignments"])
+        self.assertIn({"symbol": "zGb", "value": "1"}, by_id["co"]["callback_simple_assignments"])
+        self.assertIn({"symbol": "zGb", "value": "10"}, by_id["cc"]["callback_simple_assignments"])
+        self.assertIn({"symbol": "tX", "value": "true"}, by_id["dom"]["callback_simple_assignments"])
+
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["runtime_mode_mechanic_rows"], 1)
 
     def test_runtime_session_away_control_and_leave_autobalance_are_normalized(self) -> None:
         with (self.resolved / "runtime-session-mechanics.tsv").open(encoding="utf-8") as handle:
