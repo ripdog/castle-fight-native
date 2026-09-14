@@ -113,7 +113,7 @@ fn handle_builder_controls(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    if cursor_over_build_panel(cursor)
+    if cursor_over_build_panel(cursor, window.height(), true)
         || cursor_over_inspector_panel(cursor, window.width())
         || resources.build_selection.kind.is_some()
     {

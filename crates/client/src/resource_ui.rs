@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use crate::{bridge::PresentationSamples, build_ui::BuildSelection};
+use crate::{
+    bridge::PresentationSamples, build_ui::BuildSelection, inspection::InspectionSelection,
+};
 
 pub(crate) const TOP_BAR_HEIGHT: f32 = 58.0;
 
@@ -191,6 +193,7 @@ fn spawn_resource_slot<M: Component>(
 
 fn update_resource_bar(
     selection: Res<BuildSelection>,
+    inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
     mut player_text: Single<(&mut Text, &mut TextColor), With<SelectedPlayerText>>,
     mut gold_text: Single<&mut Text, (With<GoldText>, Without<SelectedPlayerText>)>,
@@ -199,7 +202,28 @@ fn update_resource_bar(
     mut lumber_text: Single<&mut Text, (With<LumberText>, Without<GoldText>)>,
     mut legendary_text: Single<&mut Text, (With<LegendaryText>, Without<LumberText>)>,
 ) {
-    let team_index = usize::from(selection.team.0.min(1));
+    let selected_team = inspection.selected.and_then(|selected| {
+        presentation
+            .current
+            .builders
+            .get(&selected)
+            .map(|builder| builder.team)
+            .or_else(|| {
+                presentation
+                    .current
+                    .units
+                    .get(&selected)
+                    .map(|unit| unit.team)
+            })
+            .or_else(|| {
+                presentation
+                    .current
+                    .buildings
+                    .get(&selected)
+                    .map(|building| building.team)
+            })
+    });
+    let team_index = usize::from(selected_team.unwrap_or(selection.team).0.min(1));
     let economy = presentation.current.player_economy[team_index];
     let resources = economy.resources;
 

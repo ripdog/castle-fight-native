@@ -115,7 +115,12 @@ fn handle_world_selection(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    if cursor_over_build_panel(cursor) || cursor_over_inspector_panel(cursor, window.width()) {
+    let build_panel_visible = selection
+        .selected
+        .is_some_and(|selected| samples.current.builders.contains_key(&selected));
+    if cursor_over_build_panel(cursor, window.height(), build_panel_visible)
+        || cursor_over_inspector_panel(cursor, window.width())
+    {
         return;
     }
     let (camera, camera_transform) = *camera;

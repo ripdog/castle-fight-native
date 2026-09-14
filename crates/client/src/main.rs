@@ -279,19 +279,19 @@ fn advance_authoritative_simulation(
         ) {
             Ok(_) => {
                 let side = if request.team.0 == 0 { "Blue" } else { "Red" };
-                let gold_cost = request.kind.gold_cost();
-                let lumber_cost = request.kind.lumber_cost();
-                build_selection.status = if lumber_cost == 0 {
-                    format!(
-                        "Placed {side} {} ({gold_cost} gold; lumber awarded on completion).",
-                        request.kind.label()
-                    )
-                } else {
-                    format!(
-                        "Placed {side} {} ({gold_cost} gold, {lumber_cost} lumber).",
-                        request.kind.label()
-                    )
-                };
+                let economy = request.kind.economy();
+                let income = authoritative
+                    .simulation
+                    .player_income(request.team)
+                    .expect("placed building belongs to a supported player");
+                build_selection.status = format!(
+                    "Built {side} {}: -{} gold, -{} lumber, +{} lumber reward; income +{}.",
+                    request.kind.label(),
+                    economy.gold_cost,
+                    economy.lumber_cost,
+                    economy.lumber_refund,
+                    income,
+                );
             }
             Err(error) => {
                 build_selection.status = format!("Placement rejected by simulation: {error:?}.");

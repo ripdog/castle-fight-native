@@ -66,7 +66,7 @@ If buildings are grid-aligned, grid coordinates are strongly preferred because o
 
 ## 6. Placement preview
 
-The client SHOULD show building footprint and relevant constraints before confirmation.
+The client SHOULD show building footprint and relevant constraints before confirmation. Build-menu entries whose current known gold/lumber cost cannot be paid SHOULD be visibly disabled and MUST NOT enter placement mode. Locally queued placements MAY reserve their displayed cost for UI affordability until authoritative processing so rapid clicks do not misleadingly appear affordable.
 
 Preview may display:
 
