@@ -69,6 +69,8 @@ pub struct Wc3ParticleEmitter {
     pub gravity: f32,
     pub lifespan: f32,
     pub emission_rate: f32,
+    pub rows: u32,
+    pub columns: u32,
     pub segment_colors: [[f32; 3]; 3],
     pub segment_alpha: [u8; 3],
     pub segment_scaling: [f32; 3],
@@ -188,7 +190,7 @@ pub(crate) struct Wc3RibbonTrail {
 
 #[derive(Resource)]
 pub struct Wc3ParticleAssets {
-    quad: Handle<Mesh>,
+    particle_quads: HashMap<(u32, u32, u32), Handle<Mesh>>,
     materials: HashMap<String, Handle<StandardMaterial>>,
 }
 
@@ -282,11 +284,33 @@ struct Wc3MaterialExtras {
 
 impl Wc3ParticleAssets {
     pub fn new(meshes: &mut Assets<Mesh>) -> Self {
-        let quad = meshes.add(Rectangle::new(1.0, 1.0));
+        let default_quad = meshes.add(build_particle_quad_mesh(1, 1, 0));
+        let mut particle_quads = HashMap::new();
+        particle_quads.insert((1, 1, 0), default_quad);
         Self {
-            quad,
+            particle_quads,
             materials: HashMap::new(),
         }
+    }
+
+    fn particle_mesh(
+        &mut self,
+        rows: u32,
+        columns: u32,
+        frame: u32,
+        meshes: &mut Assets<Mesh>,
+    ) -> Handle<Mesh> {
+        let rows = rows.max(1);
+        let columns = columns.max(1);
+        let frame_count = rows.saturating_mul(columns).max(1);
+        let frame = frame.min(frame_count - 1);
+        let key = (rows, columns, frame);
+        if let Some(handle) = self.particle_quads.get(&key) {
+            return handle.clone();
+        }
+        let handle = meshes.add(build_particle_quad_mesh(rows, columns, frame));
+        self.particle_quads.insert(key, handle.clone());
+        handle
     }
 
     fn material(
@@ -367,6 +391,47 @@ fn particle_alpha_mode(filter_mode: u32) -> AlphaMode {
         4 => AlphaMode::Mask(0.5),
         _ => AlphaMode::Blend,
     }
+}
+
+fn particle_atlas_uv_rect(rows: u32, columns: u32, frame: u32) -> [f32; 4] {
+    let rows = rows.max(1);
+    let columns = columns.max(1);
+    let frame_count = rows.saturating_mul(columns).max(1);
+    let frame = frame.min(frame_count - 1);
+    let column = frame % columns;
+    let row = frame / columns;
+    let inv_columns = 1.0 / columns as f32;
+    let inv_rows = 1.0 / rows as f32;
+    [
+        column as f32 * inv_columns,
+        row as f32 * inv_rows,
+        (column + 1) as f32 * inv_columns,
+        (row + 1) as f32 * inv_rows,
+    ]
+}
+
+fn build_particle_quad_mesh(rows: u32, columns: u32, frame: u32) -> Mesh {
+    let [u0, v0, u1, v1] = particle_atlas_uv_rect(rows, columns, frame);
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        vec![
+            [-0.5, -0.5, 0.0],
+            [0.5, -0.5, 0.0],
+            [0.5, 0.5, 0.0],
+            [-0.5, 0.5, 0.0],
+        ],
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; 4])
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        vec![[u0, v1], [u1, v1], [u1, v0], [u0, v0]],
+    )
+    .with_inserted_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]))
 }
 
 fn wc3_material_alpha_mode(filter_mode: &str, fallback: AlphaMode) -> AlphaMode {
@@ -818,6 +883,7 @@ pub fn emit_wc3_particles(
     asset_server: Res<AssetServer>,
     mut particle_assets: ResMut<Wc3ParticleAssets>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource)>,
 ) {
     let dt = time.delta_secs().min(0.1);
@@ -838,6 +904,12 @@ pub fn emit_wc3_particles(
                 continue;
             }
             let material = particle_assets.material(&emitter.spec, &asset_server, &mut materials);
+            let particle_mesh = particle_assets.particle_mesh(
+                emitter.spec.rows,
+                emitter.spec.columns,
+                0,
+                &mut meshes,
+            );
             let origin = transform.transform_point(Vec3::from_array(emitter.spec.position));
             for _ in 0..count {
                 let sequence = emitter.sequence;
@@ -850,7 +922,7 @@ pub fn emit_wc3_particles(
                     &emitter.spec,
                 );
                 commands.spawn((
-                    Mesh3d(particle_assets.quad.clone()),
+                    Mesh3d(particle_mesh.clone()),
                     MeshMaterial3d(material.clone()),
                     Transform::from_translation(origin)
                         .with_scale(Vec3::splat(emitter.spec.segment_scaling[0].max(0.01))),
@@ -1138,6 +1210,12 @@ mod tests {
         assert_eq!(wc3_direction_to_bevy(Vec3::Z), Vec3::Y);
         assert_eq!(wc3_direction_to_bevy(Vec3::Y), Vec3::NEG_Z);
         assert_eq!(wc3_direction_to_bevy(Vec3::X), Vec3::X);
+    }
+
+    #[test]
+    fn particle_atlas_uses_one_sprite_cell_instead_of_the_full_sheet() {
+        assert_eq!(particle_atlas_uv_rect(8, 8, 0), [0.0, 0.0, 0.125, 0.125]);
+        assert_eq!(particle_atlas_uv_rect(8, 8, 63), [0.875, 0.875, 1.0, 1.0]);
     }
 
     #[test]
