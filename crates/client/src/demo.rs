@@ -22,12 +22,14 @@ const CAMERA_MIN_X_WORLD: i32 = -5_888;
 const CAMERA_MAX_X_WORLD: i32 = 5_888;
 const CAMERA_MIN_Y_WORLD: i32 = -3_328;
 const CAMERA_MAX_Y_WORLD: i32 = 3_328;
-// The protected map creates these two base rectangles as NFb/MFb. Their edges line up with the
-// outer wall pathing and are the actual standard build/movement regions, not the camera bounds.
-const LEFT_BUILD_MIN_X_WORLD: i32 = -6_144;
+// The protected map's NFb/MFb rectangles identify the two bases. WC3's snapped building grid
+// admits one additional 32-world-unit column at each rear/outside edge, visible in the original
+// placement grid, so native placement includes that final column as well. The lane-facing edges
+// remain the protected-map rect edges.
+const LEFT_BUILD_MIN_X_WORLD: i32 = -6_176;
 const LEFT_BUILD_MAX_X_WORLD: i32 = -1_920;
 const RIGHT_BUILD_MIN_X_WORLD: i32 = 1_920;
-const RIGHT_BUILD_MAX_X_WORLD: i32 = 6_144;
+const RIGHT_BUILD_MAX_X_WORLD: i32 = 6_176;
 const BUILD_MIN_Y_WORLD: i32 = -2_048;
 const BUILD_MAX_Y_WORLD: i32 = 2_048;
 // Outside the lane, only the central gap between the two protected-map base rectangles is
@@ -45,6 +47,9 @@ const CASTLE_CENTER_X_WORLD: i32 = 4_992;
 const BUILDER_START_X_WORLD: i32 = 4_352;
 const CASTLE_PATHING_SIZE_CELLS: u16 = 16;
 const WALL_DOODAD_RAWCODES: [&str; 6] = ["B002", "B003", "D000", "D001", "D002", "D003"];
+const ENTRANCE_ARCH_RAWCODE: &str = "ZSas";
+const PATHING_UNFLYABLE_BIT: u8 = 0x02;
+const PATHING_UNBUILDABLE_BIT: u8 = 0x04;
 // Visual-verification value only; the exact original Castle Fight uphill miss chance is still
 // compatibility data to recover.
 const DEMO_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
@@ -144,14 +149,18 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
 }
 
 fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) {
-    const COLUMNS: usize = 120;
+    // Keep the synthetic stress cloud inside the real centre lane. Stress mode deliberately packs
+    // large populations densely, but authored ground/no-fly topology must still consider every
+    // spawn point legal now that the verification map imports those masks.
+    const COLUMNS: usize = 90;
+    const ROWS: usize = 32;
     const SPACING_WORLD: i32 = 40;
-    const START_X_WORLD: i32 = -2_400;
-    const START_Y_WORLD: i32 = -1_200;
+    const START_X_WORLD: i32 = -1_800;
+    const START_Y_WORLD: i32 = -640;
 
     for index in 0..unit_count {
         let column = index % COLUMNS;
-        let row = index / COLUMNS;
+        let row = (index / COLUMNS) % ROWS;
         let position = SimPoint::new(
             (START_X_WORLD + column as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
             (START_Y_WORLD + row as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
@@ -212,7 +221,7 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         BUILD_MAX_Y_WORLD,
     );
 
-    let mut static_blockers = vec![
+    let no_mans_land_blockers = vec![
         BuildingFootprint::new(
             CENTRAL_GAP_MIN_X,
             navigation_min.y,
@@ -226,7 +235,15 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
             (navigation_max.y - LANE_MAX_Y) as u16,
         ),
     ];
+    let mut static_blockers = no_mans_land_blockers.clone();
     static_blockers.extend(original_wall_blockers());
+
+    // Flying combat units ignore ordinary walls/buildings, but not the authored no-fly map
+    // boundary or the same no-man's-land that keeps ground units in the centre lane. Keeping this
+    // as a separate topology preserves normal Warcraft air movement while still routing flyers
+    // through the lane opening instead of letting them disappear across invalid terrain.
+    let mut air_static_blockers = no_mans_land_blockers;
+    air_static_blockers.extend(original_air_pathing_blockers());
 
     SimulationConfig {
         match_seed: 0x4341_5354_4c45,
@@ -240,6 +257,8 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         unit_separation_distance: 8 * SUBUNITS_PER_WORLD_UNIT,
         max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
         static_blockers,
+        air_static_blockers,
+        build_static_blockers: original_doodad_build_blockers(),
         team_build_regions: [vec![left_build_region], vec![right_build_region]],
         targetless_lane: Some(TargetlessLane::new(
             LANE_MIN_Y * NAV_CELL_SUBUNITS,
@@ -348,8 +367,8 @@ fn original_wall_blockers() -> Vec<BuildingFootprint> {
                 return None;
             }
 
-            let x = parse_wall_integer(columns[5], "x");
-            let y = parse_wall_integer(columns[6], "y");
+            let x = parse_pathing_integer(columns[5], "x");
+            let y = parse_pathing_integer(columns[6], "y");
             let angle = columns[8]
                 .parse::<f64>()
                 .expect("wall angle must be a number");
@@ -378,32 +397,205 @@ fn original_wall_blockers() -> Vec<BuildingFootprint> {
             // WC3 pathing-texture rows/columns map to world Y/X respectively. A quarter-turn
             // doodad rotation then swaps those world extents. The destructable wall variants use
             // a nominal 270-degree angle with the small editor float error seen below.
-            let quarter_turns = (angle / 90.0).round() as i32;
-            let snapped_angle = f64::from(quarter_turns) * 90.0;
-            assert!(
-                (angle - snapped_angle).abs() < 0.1,
-                "wall {rawcode} has unsupported non-right-angle rotation {angle}"
-            );
-            let (mut width, mut height) = (texture_height, texture_width);
-            if quarter_turns.rem_euclid(2) == 1 {
-                (width, height) = (height, width);
-            }
+            let quarter_turns =
+                pathing_quarter_turns(rawcode, angle, texture_width, texture_height);
+            let (width, height) =
+                rotated_pathing_dimensions(texture_width, texture_height, quarter_turns);
 
             Some(centered_world_footprint(x, y, width, height))
         })
         .collect()
 }
 
-fn parse_wall_integer(value: &str, axis: &str) -> i32 {
+fn original_air_pathing_blockers() -> Vec<BuildingFootprint> {
+    original_doodad_pathing_blockers(PATHING_UNFLYABLE_BIT, 23, false)
+}
+
+fn original_doodad_build_blockers() -> Vec<BuildingFootprint> {
+    let mut blockers = original_doodad_pathing_blockers(PATHING_UNBUILDABLE_BIT, 24, true);
+    blockers.extend(original_entrance_arch_build_blockers());
+    blockers
+}
+
+fn original_doodad_pathing_blockers(
+    pathing_bit: u8,
+    count_column: usize,
+    exclude_walls: bool,
+) -> Vec<BuildingFootprint> {
+    let mut blockers = Vec::new();
+    for line in include_str!("../../../docs/original_map/extracted/resolved/placed-doodads.tsv")
+        .lines()
+        .skip(1)
+    {
+        let columns: Vec<_> = line.split('\t').collect();
+        let rawcode = columns
+            .get(2)
+            .copied()
+            .expect("placed doodad row must contain a rawcode");
+        if exclude_walls && WALL_DOODAD_RAWCODES.contains(&rawcode) {
+            continue;
+        }
+        let blocked_count = columns
+            .get(count_column)
+            .copied()
+            .unwrap_or_default()
+            .parse::<u32>()
+            .unwrap_or(0);
+        if blocked_count == 0 {
+            continue;
+        }
+
+        let x = parse_pathing_integer(columns[5], "x");
+        let y = parse_pathing_integer(columns[6], "y");
+        let angle = columns[8]
+            .parse::<f64>()
+            .expect("doodad angle must be a number");
+        let texture_width = columns[18]
+            .parse::<u16>()
+            .expect("pathing width must be present when pathing cells are blocked");
+        let texture_height = columns[19]
+            .parse::<u16>()
+            .expect("pathing height must be present when pathing cells are blocked");
+        let pathing_cells = u32::from(texture_width) * u32::from(texture_height);
+        let quarter_turns = pathing_quarter_turns(rawcode, angle, texture_width, texture_height);
+
+        if blocked_count == pathing_cells {
+            let (width, height) =
+                rotated_pathing_dimensions(texture_width, texture_height, quarter_turns);
+            blockers.push(centered_world_footprint(x, y, width, height));
+            continue;
+        }
+
+        let rows = columns
+            .get(25)
+            .copied()
+            .expect("partial pathing mask must contain hex rows");
+        blockers.extend(pathing_mask_cell_blockers(
+            x,
+            y,
+            texture_width,
+            texture_height,
+            quarter_turns,
+            rows,
+            pathing_bit,
+        ));
+    }
+    blockers
+}
+
+fn original_entrance_arch_build_blockers() -> Vec<BuildingFootprint> {
+    // ZSas is overridden to `pathTex=none` in the map object table so ground/air units may pass
+    // through the entrance, but WC3 still rejects building placement directly through the visible
+    // arch span. Reproduce that placement-only exclusion with the inherited CityArch footprint
+    // (28x6 pathing cells, whose texture axes map to world Y/X at zero rotation).
+    include_str!("../../../docs/original_map/extracted/resolved/placed-doodads.tsv")
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let columns: Vec<_> = line.split('\t').collect();
+            (columns.get(2).copied() == Some(ENTRANCE_ARCH_RAWCODE)).then(|| {
+                let x = snap_pathing_center(columns[5], "x");
+                let y = snap_pathing_center(columns[6], "y");
+                centered_world_footprint(x, y, 6, 28)
+            })
+        })
+        .collect()
+}
+
+fn pathing_mask_cell_blockers(
+    center_x: i32,
+    center_y: i32,
+    texture_width: u16,
+    texture_height: u16,
+    quarter_turns: i32,
+    hex_rows: &str,
+    pathing_bit: u8,
+) -> Vec<BuildingFootprint> {
+    let rows: Vec<_> = hex_rows.split('/').collect();
+    assert_eq!(rows.len(), usize::from(texture_height));
+    let mut blockers = Vec::new();
+    for (row, values) in rows.into_iter().enumerate() {
+        assert_eq!(values.chars().count(), usize::from(texture_width));
+        for (column, value) in values.chars().enumerate() {
+            let flags = value
+                .to_digit(16)
+                .expect("pathing mask row must be hexadecimal") as u8;
+            if flags & pathing_bit == 0 {
+                continue;
+            }
+
+            // WC3 pathing-texture rows map to local world X and columns to local world Y. Work in
+            // half-cell units so even-sized textures rotate exactly around the doodad centre.
+            let local_x2 = i32::try_from(row).expect("pathing row overflow") * 2 + 1
+                - i32::from(texture_height);
+            let local_y2 = i32::try_from(column).expect("pathing column overflow") * 2 + 1
+                - i32::from(texture_width);
+            let (rotated_x2, rotated_y2) = match quarter_turns.rem_euclid(4) {
+                0 => (local_x2, local_y2),
+                1 => (-local_y2, local_x2),
+                2 => (-local_x2, -local_y2),
+                3 => (local_y2, -local_x2),
+                _ => unreachable!(),
+            };
+            let cell_center_x = center_x + rotated_x2 * (NAV_CELL_WORLD / 2);
+            let cell_center_y = center_y + rotated_y2 * (NAV_CELL_WORLD / 2);
+            blockers.push(BuildingFootprint::new(
+                cell_center_x.div_euclid(NAV_CELL_WORLD),
+                cell_center_y.div_euclid(NAV_CELL_WORLD),
+                1,
+                1,
+            ));
+        }
+    }
+    blockers
+}
+
+fn pathing_quarter_turns(
+    rawcode: &str,
+    angle: f64,
+    texture_width: u16,
+    texture_height: u16,
+) -> i32 {
+    let quarter_turns = (angle / 90.0).round() as i32;
+    if texture_width != texture_height {
+        let snapped_angle = f64::from(quarter_turns) * 90.0;
+        assert!(
+            (angle - snapped_angle).abs() < 0.1,
+            "non-square pathing texture for {rawcode} has unsupported rotation {angle}"
+        );
+    }
+    quarter_turns
+}
+
+fn rotated_pathing_dimensions(
+    texture_width: u16,
+    texture_height: u16,
+    quarter_turns: i32,
+) -> (u16, u16) {
+    let (mut width, mut height) = (texture_height, texture_width);
+    if quarter_turns.rem_euclid(2) == 1 {
+        (width, height) = (height, width);
+    }
+    (width, height)
+}
+
+fn parse_pathing_integer(value: &str, axis: &str) -> i32 {
     let value = value
         .parse::<f64>()
-        .unwrap_or_else(|_| panic!("wall {axis} coordinate must be a number"));
+        .unwrap_or_else(|_| panic!("pathing {axis} coordinate must be a number"));
     let rounded = value.round();
     assert!(
         (value - rounded).abs() < 1.0e-6,
-        "wall {axis} coordinate must be integral, got {value}"
+        "pathing {axis} coordinate must be integral, got {value}"
     );
     rounded as i32
+}
+
+fn snap_pathing_center(value: &str, axis: &str) -> i32 {
+    let value = value
+        .parse::<f64>()
+        .unwrap_or_else(|_| panic!("pathing {axis} coordinate must be a number"));
+    ((value / f64::from(NAV_CELL_WORLD)).round() as i32) * NAV_CELL_WORLD
 }
 
 fn world_rect_footprint(
@@ -443,12 +635,12 @@ fn centered_world_footprint(
     assert_eq!(
         min_x_world.rem_euclid(NAV_CELL_WORLD),
         0,
-        "wall pathing footprint must align to the navigation grid"
+        "pathing footprint must align to the navigation grid"
     );
     assert_eq!(
         min_y_world.rem_euclid(NAV_CELL_WORLD),
         0,
-        "wall pathing footprint must align to the navigation grid"
+        "pathing footprint must align to the navigation grid"
     );
     BuildingFootprint::new(
         min_x_world.div_euclid(NAV_CELL_WORLD),
@@ -553,6 +745,12 @@ mod tests {
     }
 
     #[test]
+    fn stress_population_stays_inside_imported_movement_masks() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, Some(2_000));
+        assert_eq!(simulation.units().len(), 2_000);
+    }
+
+    #[test]
     fn original_map_castles_use_runtime_positions_and_pathing_size() {
         let center_world = |footprint: BuildingFootprint| {
             (
@@ -594,11 +792,11 @@ mod tests {
         assert_eq!(config.navigation_max, NavCell::new(199, 111));
         assert_eq!(
             config.team_build_regions[0],
-            vec![BuildingFootprint::new(-192, -64, 132, 128)]
+            vec![BuildingFootprint::new(-193, -64, 133, 128)]
         );
         assert_eq!(
             config.team_build_regions[1],
-            vec![BuildingFootprint::new(60, -64, 132, 128)]
+            vec![BuildingFootprint::new(60, -64, 133, 128)]
         );
         assert_eq!(
             config.targetless_lane,
@@ -629,8 +827,9 @@ mod tests {
         let wall = BuildingFootprint::new(132, 62, 10, 2);
         assert!(blockers.contains(&wall));
 
-        // The left rear cap is centered at x=-5984. Its footprint begins exactly at the authored
-        // NFb base edge x=-6144, rather than bleeding one nav cell inward into the corner cage.
+        // The left rear cap is centered at x=-5984 and begins at x=-6144. WC3's build grid has
+        // one additional legal column behind that cap, so the wall itself must not be padded into
+        // the x=-6176 column.
         assert!(blockers.contains(&BuildingFootprint::new(-192, 62, 10, 2)));
         assert!(blockers.contains(&BuildingFootprint::new(-192, -64, 10, 2)));
 
@@ -646,17 +845,17 @@ mod tests {
 
         // Four-cell buildings can sit flush against both the rear base edge and either horizontal
         // wall. Moving the same footprint one cell into a wall must still be rejected.
-        let top_left_corner = BuildingFootprint::new(-192, 58, 4, 4);
-        let bottom_left_corner = BuildingFootprint::new(-192, -62, 4, 4);
+        let top_left_corner = BuildingFootprint::new(-193, 58, 4, 4);
+        let bottom_left_corner = BuildingFootprint::new(-193, -62, 4, 4);
         assert!(simulation.can_place_building_for_team(Team(0), top_left_corner));
         assert!(simulation.can_place_building_for_team(Team(0), bottom_left_corner));
         assert!(
             !simulation
-                .can_place_building_for_team(Team(0), BuildingFootprint::new(-192, 59, 4, 4))
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-193, 59, 4, 4))
         );
         assert!(
             !simulation
-                .can_place_building_for_team(Team(0), BuildingFootprint::new(-192, -63, 4, 4))
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-193, -63, 4, 4))
         );
 
         // Check wall adjacency away from the cap too, so the regression does not depend only on
@@ -674,20 +873,64 @@ mod tests {
     fn original_map_rear_build_edge_keeps_its_last_legal_cell() {
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
 
-        // NFb/MFb end at +/-6144. A 4x4 footprint may touch that edge exactly, but shifting one
-        // nav cell farther outward must fail the team-region containment check.
+        // WC3 admits one snapped nav column beyond the protected NFb/MFb rear edge. A 4x4
+        // footprint may use that column, but shifting one more cell outward must still fail.
         assert!(
-            simulation.can_place_building_for_team(Team(0), BuildingFootprint::new(-192, 20, 4, 4))
+            simulation.can_place_building_for_team(Team(0), BuildingFootprint::new(-193, 20, 4, 4))
         );
         assert!(
             !simulation
-                .can_place_building_for_team(Team(0), BuildingFootprint::new(-193, 20, 4, 4))
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-194, 20, 4, 4))
         );
         assert!(
-            simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(188, 20, 4, 4))
+            simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(189, 20, 4, 4))
         );
         assert!(
-            !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(189, 20, 4, 4))
+            !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(190, 20, 4, 4))
+        );
+    }
+
+    #[test]
+    fn original_map_doodads_and_entrance_arch_block_building_placement() {
+        let build_blockers = original_doodad_build_blockers();
+
+        // A placed Ruins Firepot inside the right base has a 4x4 default pathing texture.
+        assert!(build_blockers.contains(&BuildingFootprint::new(104, 18, 4, 4)));
+
+        // The two large base-entrance ZSas arches deliberately have movement pathing disabled, but
+        // the original build cursor still rejects footprints directly through their visible span.
+        assert!(build_blockers.contains(&BuildingFootprint::new(-66, -12, 6, 28)));
+        assert!(build_blockers.contains(&BuildingFootprint::new(59, -13, 6, 28)));
+
+        let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
+        assert!(
+            !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(60, 0, 4, 4))
+        );
+        assert!(
+            simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(65, 0, 4, 4))
+        );
+        assert!(
+            !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(104, 18, 1, 1))
+        );
+    }
+
+    #[test]
+    fn original_map_air_pathing_includes_no_mans_land_and_authored_no_fly_blockers() {
+        let terrain = original_terrain();
+        let config = demo_config(&terrain);
+
+        assert!(config.air_static_blockers.contains(&BuildingFootprint::new(
+            CENTRAL_GAP_MIN_X,
+            config.navigation_min.y,
+            (CENTRAL_GAP_MAX_X - CENTRAL_GAP_MIN_X + 1) as u16,
+            (LANE_MIN_Y - config.navigation_min.y) as u16,
+        )));
+        // YTab at (-1952, 800) is one of the original 2x2 air/build pathing blockers around the
+        // lane entrance and must remain part of the independent flying topology.
+        assert!(
+            config
+                .air_static_blockers
+                .contains(&BuildingFootprint::new(-62, 24, 2, 2))
         );
     }
 

@@ -86,6 +86,8 @@ The UI MUST NOT mark a placement illegal merely because it disconnects a travers
 
 A final walling building that completes a legal cage must remain placeable if all ordinary footprint/resource rules pass.
 
+Authored doodad/destructable pathing may contribute **placement-only** no-build cells even when the same object is intentionally walkable or flyable. Those cells participate in ordinary footprint validation without being promoted into unit-navigation blockers. Conversely, purely visual overhang outside the authored no-build footprint does not make a nearby snapped building placement illegal.
+
 The client and server share the same deterministic placement validation code where practical, but server validation remains authoritative.
 
 ## 8. Prediction and reconciliation

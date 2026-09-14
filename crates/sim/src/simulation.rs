@@ -82,6 +82,11 @@ pub struct SimulationConfig {
     pub unit_separation_distance: i32,
     pub max_separation_per_tick: i32,
     pub static_blockers: Vec<BuildingFootprint>,
+    /// Static cells that block flying-unit movement without making ordinary ground obstacles
+    /// impassable to air units.
+    pub air_static_blockers: Vec<BuildingFootprint>,
+    /// Additional static placement-only blockers. These do not affect unit navigation.
+    pub build_static_blockers: Vec<BuildingFootprint>,
     /// Canonical buildable regions for each team. An empty region list leaves that team
     /// unrestricted for generic/test maps that do not author build regions.
     pub team_build_regions: [Vec<BuildingFootprint>; 2],
@@ -110,6 +115,8 @@ impl Default for SimulationConfig {
             unit_separation_distance: 3 * SUBUNITS_PER_WORLD_UNIT / 4,
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT / 16,
             static_blockers: Vec::new(),
+            air_static_blockers: Vec::new(),
+            build_static_blockers: Vec::new(),
             team_build_regions: [Vec::new(), Vec::new()],
             targetless_lane: None,
             team_objective: [
@@ -364,6 +371,7 @@ pub struct Simulation {
     combat_rules: CombatRules,
     pool: ThreadPool,
     topology: TopologyGrid,
+    air_topology: TopologyGrid,
     topology_dirty: bool,
     pursuit_cache: BTreeMap<(NavCell, NavCell, Option<i32>, i8), NavCell>,
     radius_objective_fields: BTreeMap<(u8, i32), Vec<u32>>,
@@ -423,6 +431,13 @@ impl Simulation {
             config.static_blockers.iter().copied(),
             config.team_objective,
         );
+        let air_topology = TopologyGrid::build(
+            config.navigation_cell_size,
+            config.navigation_min,
+            config.navigation_max,
+            config.air_static_blockers.iter().copied(),
+            config.team_objective,
+        );
 
         Self {
             world: World::new(),
@@ -430,6 +445,7 @@ impl Simulation {
             combat_rules,
             pool,
             topology,
+            air_topology,
             topology_dirty: false,
             pursuit_cache: BTreeMap::new(),
             radius_objective_fields: BTreeMap::new(),
@@ -961,9 +977,10 @@ impl Simulation {
             MovementClass::Ground => self
                 .topology
                 .contains(self.topology.cell_of_point(position)),
-            MovementClass::Air => self
-                .topology
-                .circle_is_inside_bounds(position, collision_radius),
+            MovementClass::Air => {
+                let source_cell = self.air_topology.cell_of_point(position);
+                self.air_position_is_traversable_from(source_cell, position, collision_radius)
+            }
         };
         assert!(
             legal,
@@ -1169,6 +1186,7 @@ impl Simulation {
             .config
             .static_blockers
             .iter()
+            .chain(self.config.build_static_blockers.iter())
             .copied()
             .any(|blocker| footprints_overlap(blocker, building.footprint))
         {
@@ -1291,6 +1309,7 @@ impl Simulation {
                 .config
                 .static_blockers
                 .iter()
+                .chain(self.config.build_static_blockers.iter())
                 .copied()
                 .any(|blocker| footprints_overlap(blocker, footprint))
             && !self
@@ -3226,9 +3245,14 @@ impl Simulation {
                                     component,
                                 )
                         }
-                        MovementClass::Air => self
-                            .topology
-                            .circle_is_inside_bounds(position, collision_radius),
+                        MovementClass::Air => {
+                            let component = self.air_topology.component_id(cell)?;
+                            self.air_topology.circle_is_traversable_in_component(
+                                position,
+                                collision_radius,
+                                component,
+                            )
+                        }
                     };
                     (movement_legal
                         && reservations.is_clear_with_radius(position, collision_radius))
@@ -5744,24 +5768,82 @@ impl Simulation {
         if goal == current {
             return MovementDecision::stationary(current);
         }
-        let candidate = current.step_towards(goal, movement_speed);
-        let position = if self
-            .topology
-            .circle_is_inside_bounds(candidate, unit.collision_radius)
-        {
-            candidate
-        } else {
-            current
+
+        let source_cell = self.air_topology.cell_of_point(current);
+        let direct_candidate = current.step_towards(goal, movement_speed);
+        if self.air_position_is_traversable_from(
+            source_cell,
+            direct_candidate,
+            unit.collision_radius,
+        ) {
+            return MovementDecision {
+                position: direct_candidate,
+                pursuit_step: pursuit_target.is_some(),
+                pursuit_target,
+                attack_goal,
+                navigation_route_step: false,
+                used_a_star: false,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+                cache_insert: None,
+            };
+        }
+
+        let target_cell = self.air_topology.cell_of_point(goal);
+        let route = self.air_topology.pursuit_step_with_radius(
+            source_cell,
+            target_cell,
+            None,
+            unit.collision_radius,
+            sidestep_sign(unit.id),
+        );
+        let Some(next_cell) = route.next_cell else {
+            return MovementDecision {
+                position: current,
+                pursuit_step: pursuit_target.is_some(),
+                pursuit_target,
+                attack_goal,
+                navigation_route_step: true,
+                used_a_star: route.used_a_star,
+                a_star_cache_hit: route.a_star_cache_hit,
+                a_star_expanded_nodes: route.a_star_expanded_nodes,
+                cache_insert: None,
+            };
         };
+        let route_target = if next_cell == target_cell {
+            goal
+        } else {
+            self.air_topology.center_of_cell(next_cell)
+        };
+        let candidate = current.step_towards(route_target, movement_speed);
+        let position =
+            if self.air_position_is_traversable_from(source_cell, candidate, unit.collision_radius)
+            {
+                candidate
+            } else {
+                let recenter_target = self.air_topology.center_of_cell(source_cell);
+                let recenter = current.step_towards(recenter_target, movement_speed);
+                if recenter != current
+                    && self.air_position_is_traversable_from(
+                        source_cell,
+                        recenter,
+                        unit.collision_radius,
+                    )
+                {
+                    recenter
+                } else {
+                    current
+                }
+            };
         MovementDecision {
             position,
             pursuit_step: pursuit_target.is_some(),
             pursuit_target,
             attack_goal,
-            navigation_route_step: false,
-            used_a_star: false,
-            a_star_cache_hit: false,
-            a_star_expanded_nodes: 0,
+            navigation_route_step: true,
+            used_a_star: route.used_a_star,
+            a_star_cache_hit: route.a_star_cache_hit,
+            a_star_expanded_nodes: route.a_star_expanded_nodes,
             cache_insert: None,
         }
     }
@@ -6173,9 +6255,10 @@ impl Simulation {
                 candidate,
                 unit.collision_radius_override,
             ),
-            MovementClass::Air => self
-                .topology
-                .circle_is_inside_bounds(candidate, collision_radius),
+            MovementClass::Air => {
+                let source_cell = self.air_topology.cell_of_point(origin);
+                self.air_position_is_traversable_from(source_cell, candidate, collision_radius)
+            }
         };
         let order_multiplier = -search_bias;
         for ring in 1..=max_ring {
@@ -6327,9 +6410,11 @@ impl Simulation {
                 candidate,
                 unit.collision_radius_override,
             ),
-            MovementClass::Air => self
-                .topology
-                .circle_is_inside_bounds(candidate, unit.collision_radius),
+            MovementClass::Air => self.air_position_is_traversable_from(
+                self.air_topology.cell_of_point(unit.position),
+                candidate,
+                unit.collision_radius,
+            ),
         }
     }
 
@@ -6350,6 +6435,19 @@ impl Simulation {
                 .component_id(self.topology.cell_of_point(candidate))
                 == Some(component)
         }
+    }
+
+    fn air_position_is_traversable_from(
+        &self,
+        original_cell: NavCell,
+        candidate: SimPoint,
+        collision_radius: i32,
+    ) -> bool {
+        let Some(component) = self.air_topology.component_id(original_cell) else {
+            return false;
+        };
+        self.air_topology
+            .circle_is_traversable_in_component(candidate, collision_radius, component)
     }
 
     fn valid_separated_position(

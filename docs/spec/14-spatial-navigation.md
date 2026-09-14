@@ -317,7 +317,7 @@ Maps MAY contain:
 - player-specific destination fields;
 - terrain movement classes.
 
-The current authoritative movement-class model distinguishes `Ground` and `Air`. Ground units use ordinary blocked-cell topology, connected components, radius-aware clearance, and building footprints. Air units ignore ground blockers/building footprints for movement and path reachability, but remain bounded by the authoritative map rectangle. Ground and air units occupy separate collision layers: ground units do not physically block air units and air units do not block ground units or ground building placement; units within the same movement class still use deterministic pairwise collision/reservation. Air units therefore pursue targets and objectives by direct bounded movement rather than ground pathfinding.
+The current authoritative movement-class model distinguishes `Ground` and `Air`. Ground units use ordinary blocked-cell topology, connected components, radius-aware clearance, and building footprints. Air units ignore ground blockers/building footprints, but they do **not** ignore explicitly authored no-fly/static air pathing or the authoritative map bounds. Air pathing therefore uses a separate deterministic topology containing only those air blockers; direct flight is used while legal, and a flyer routes through that topology when a direct segment would enter no-fly space. Ground and air units occupy separate collision layers: ground units do not physically block air units and air units do not block ground units or ground building placement; units within the same movement class still use deterministic pairwise collision/reservation.
 
 Shared navigation fields can be keyed by destination/team/movement class as required if additional terrain movement classes are introduced later.
 
@@ -367,5 +367,6 @@ Spatial/navigation tests MUST eventually include:
 40. an air unit crosses ground blockers/building footprints while remaining inside map bounds;
 41. ground and air units may overlap in 2D authoritative position because they occupy separate collision layers, while two air units still cannot overlap each other;
 42. an air unit ignores disconnected ground topology when pursuing an otherwise valid target;
-43. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping;
-44. a targetless unit detouring around reachable static topology does not repeatedly reverse heading because its temporary same-row detour destination changed as it crossed rows; it follows the stable shared objective field until direct horizontal progress is legal again.
+43. an air unit encountering authored no-fly topology deterministically routes through the nearest legal opening instead of crossing the blocked area or stalling forever at its edge;
+44. a tightly packed convoy can advance into positions its neighbors are simultaneously vacating, while the final committed positions remain globally non-overlapping;
+45. a targetless unit detouring around reachable static topology does not repeatedly reverse heading because its temporary same-row detour destination changed as it crossed rows; it follows the stable shared objective field until direct horizontal progress is legal again.

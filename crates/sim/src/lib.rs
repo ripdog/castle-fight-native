@@ -281,6 +281,8 @@ mod tests {
             unit_separation_distance: 2 * SUBUNITS_PER_WORLD_UNIT,
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
             static_blockers: Vec::new(),
+            air_static_blockers: Vec::new(),
+            build_static_blockers: Vec::new(),
             team_build_regions: [Vec::new(), Vec::new()],
             targetless_lane: None,
             team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
@@ -1260,6 +1262,82 @@ mod tests {
             sim.step();
         }
         assert!(sim.unit(air).unwrap().position.x > 11 * cell);
+    }
+
+    #[test]
+    fn air_units_route_around_air_static_blockers() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(20, 10),
+            air_static_blockers: vec![BuildingFootprint::new(10, 4, 1, 7)],
+            team_objective: [
+                SimPoint::new(20 * cell + cell / 2, 8 * cell + cell / 2),
+                SimPoint::new(cell / 2, 8 * cell + cell / 2),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let air = sim.spawn_unit_with_properties(
+            air_unit(
+                0,
+                SimPoint::new(5 * cell + cell / 2, 8 * cell + cell / 2),
+                cell / 2,
+            ),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+
+        let mut minimum_y = i32::MAX;
+        for _ in 0..100 {
+            sim.step();
+            minimum_y = minimum_y.min(sim.unit(air).unwrap().position.y);
+        }
+        let position = sim.unit(air).unwrap().position;
+        assert!(
+            position.x > 11 * cell,
+            "flyer never cleared no-fly barrier: {position:?}"
+        );
+        assert!(
+            minimum_y < 4 * cell,
+            "flyer did not route through the open lane"
+        );
+    }
+
+    #[test]
+    fn build_only_static_blockers_do_not_change_unit_navigation() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let footprint = BuildingFootprint::new(10, 5, 1, 1);
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(20, 10),
+            build_static_blockers: vec![footprint],
+            team_objective: [
+                SimPoint::new(20 * cell + cell / 2, 5 * cell + cell / 2),
+                SimPoint::new(cell / 2, 5 * cell + cell / 2),
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        assert!(!sim.can_place_building(footprint));
+        let ground = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(5 * cell + cell / 2, 5 * cell + cell / 2),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: cell,
+                acquisition_range: cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 2,
+            },
+        });
+        for _ in 0..16 {
+            sim.step();
+        }
+        assert!(sim.unit(ground).unwrap().position.x > 11 * cell);
     }
 
     #[test]
