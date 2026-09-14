@@ -84,7 +84,7 @@ The output root contains `manifest.json`, `models/*.gltf`, matching `models/*.bi
 
 Geometry is converted from Warcraft's Z-up coordinates to glTF/Bevy Y-up coordinates but remains in Warcraft world units. Consumers should apply the per-object `scale` from `manifest.json` rather than baking scale into shared model geometry.
 
-The extractor follows texture references from MDX files and handles modern installations where an SD model still names `foo.blp` but CASC contains the corresponding `foo.dds`. BLP, DDS, and TGA inputs are decoded to PNG. Shared model and texture outputs are deduplicated.
+The extractor follows texture references from MDX files and handles modern installations where an SD model still names `foo.blp` or a v1800 model names source `foo.tif` art but CASC contains the corresponding `foo.dds`. Warcraft III 3.x presentation payloads are resolved from the base namespace first, then the `_de.w3mod` and `_hd.w3mod` layers used by current models. BLP, DDS, and TGA inputs are decoded to PNG. Shared model and texture outputs are deduplicated. Models are staged one at a time through Whiteout's file-stream MDX parser rather than its in-memory span parser: current Warcraft III 3.0-era assets can trigger pathological multi-gigabyte allocations in the latter. CASC's decoded-container cache is flushed between reads and source/PNG/JSON buffers are streamed where practical so extraction stays bounded instead of accumulating asset data across the pack.
 
 ## Current conversion scope
 
