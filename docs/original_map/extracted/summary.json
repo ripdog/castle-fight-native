@@ -140,10 +140,11 @@
       "decayed-damage-weighted-engagement-and-structure-pressure-signals": 1,
       "team-strategic-aura-purchase-state-and-buyer-coordination": 1
     },
-    "runtime_session_mechanics": 2,
+    "runtime_session_mechanics": 3,
     "runtime_session_mechanic_kinds": {
       "leave-cleanup-autobalance-and-match-termination": 1,
-      "player-inactivity-driven-allied-control-sharing": 1
+      "player-inactivity-driven-allied-control-sharing": 1,
+      "round-end-signal-draw-restart-and-round-cleanup": 1
     },
     "runtime_mode_mechanics": 1,
     "runtime_mode_mechanic_kinds": {
@@ -159,6 +160,18 @@
       "normalized-ai-runtime-semantics": 2,
       "normalized-gameplay-semantics": 16,
       "telemetry-only": 1
+    },
+    "action_watch_coverage_rows": 43,
+    "action_watch_coverage_status_counts": {
+      "campaign-protected-runtime-unmodeled": 1,
+      "draft-runtime-unmodeled": 2,
+      "e2e-only": 4,
+      "gameplay-framework-infrastructure": 1,
+      "normalized-gameplay-semantics": 10,
+      "normalized-mode-runtime-semantics": 2,
+      "normalized-session-runtime-semantics": 2,
+      "presentation-only": 18,
+      "telemetry-only": 3
     },
     "event_listener_coverage_rows": 70,
     "event_listener_coverage_status_counts": {

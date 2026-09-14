@@ -1,0 +1,44 @@
+callback_function	coverage_status	normalized_sources	evidence_note	byte_offset
+Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E	e2e-only		generated AI/mode end-to-end verification callback; not production gameplay semantics	472937
+Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E1	e2e-only		generated AI/mode end-to-end verification callback; not production gameplay semantics	473230
+Action_watch_CampaignMissionInfoOverlay_CampaignUI_run_watch_CampaignMissionInfoOverlay_CampaignUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	804535
+Action_watch_CampaignRuntime_run_watch_CampaignRuntime	campaign-protected-runtime-unmodeled		live campaign mission-start callback enters a protected implementation whose target semantics are not yet decoded	657397
+Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942035
+Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI1	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942265
+Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI2	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942493
+Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI3	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942744
+Action_watch_Campaign_run_watch_Campaign	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	952753
+Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator	draft-runtime-unmodeled		live draft orchestration/reminder lifecycle; tracked separately from individual perk mechanics	1111276
+Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry	draft-runtime-unmodeled		live draft orchestration/reminder lifecycle; tracked separately from individual perk mechanics	1114205
+Action_watch_DraftUIScreen_DraftUI_run_watch_DraftUIScreen_DraftUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1152410
+Action_watch_DraftUIScreen_DraftUI_run_watch_DraftUIScreen_DraftUI1	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1154927
+Action_watch_DraftWindow_DraftWindow_run_watch_DraftWindow_DraftWindow	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1186225
+Action_watch_GjallarHorn_run_watch_GjallarHorn	normalized-gameplay-semantics	runtime-system-mechanics:gjallarhorn-team-count-scaling	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1201748
+Action_watch_IdleDetectionRuntime_run_watch_IdleDetectionRuntime	normalized-session-runtime-semantics	runtime-session-mechanics:away-control-and-idle-detection	callback is direct lifecycle evidence for normalized player-session runtime semantics	1219652
+Action_watch_IncomeUI_run_watch_IncomeUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1220471
+Action_watch_InfoWindow_InfoWindow_run_watch_InfoWindow_InfoWindow	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1251848
+Action_watch_ModeRaceRuntime_run_watch_ModeRaceRuntime	normalized-mode-runtime-semantics	runtime-mode-mechanics:mode-selection-controller-and-registry	callback is direct lifecycle evidence for normalized mode runtime semantics	1320045
+Action_watch_ModeRuntimeE2E_run_watch_ModeRuntimeE2E	e2e-only		generated AI/mode end-to-end verification callback; not production gameplay semantics	1322205
+Action_watch_ModeRuntimeE2E_run_watch_ModeRuntimeE2E1	e2e-only		generated AI/mode end-to-end verification callback; not production gameplay semantics	1322380
+Action_watch_MultiboardEventHooks_run_watch_MultiboardEventHooks	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1346111
+Action_watch_MultiboardInit_run_watch_MultiboardInit	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1347912
+Action_watch_OnUnitDeathHandler_run_watch_OnUnitDeathHandler	gameplay-framework-infrastructure		round-lifecycle cache invalidation used by normalized building-count mechanics; not an independent rule	1357638
+Action_watch_PerkBuildingEnchantment_run_watch_PerkBuildingEnchantment	normalized-gameplay-semantics	perk-mechanics:perk_14	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1376159
+Action_watch_PerkBuildingEnchantment_run_watch_PerkBuildingEnchantment1	normalized-gameplay-semantics	perk-mechanics:perk_17	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1377298
+Action_watch_PerkExecutionOrder_run_watch_PerkExecutionOrder	normalized-gameplay-semantics	perk-mechanics:perk_09	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1388562
+Action_watch_PerkFeatheredFriend_run_watch_PerkFeatheredFriend	normalized-gameplay-semantics	perk-mechanics:perk_03	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1392555
+Action_watch_PerkFortifiedOutpost_run_watch_PerkFortifiedOutpost	normalized-gameplay-semantics	perk-mechanics:perk_04	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1393918
+Action_watch_PerkStormchaser_run_watch_PerkStormchaser	normalized-gameplay-semantics	perk-mechanics:perk_02	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1403377
+Action_watch_RaceNelfAbilities_run_watch_RaceNelfAbilities	normalized-gameplay-semantics	building-spell-mechanics:team-charge-next-attack-proc	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1479565
+Action_watch_ReactivePlayerMultiboard_PlayerMultiboard_run_watch_ReactivePlayerMultiboard_PlayerMultiboard	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1415392
+Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime	normalized-session-runtime-semantics	runtime-session-mechanics:unanimous-draw-round-restart	callback is direct lifecycle evidence for normalized player-session runtime semantics	1510451
+Action_watch_RoundStatsTracking_run_watch_RoundStatsTracking	telemetry-only		statistics/MMD timeline observer rather than authoritative gameplay semantics	1540105
+Action_watch_SnowveilFountain_run_watch_SnowveilFountain	normalized-gameplay-semantics	building-spell-mechanics:team-snowfield	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1556498
+Action_watch_UltimateRoll_run_watch_UltimateRoll	normalized-mode-runtime-semantics	runtime-mode-mechanics:mode-selection-controller-and-registry	callback is direct lifecycle evidence for normalized mode runtime semantics	1651705
+Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	638570
+Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1231302
+Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI1	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1232176
+Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData	telemetry-only		statistics/MMD timeline observer rather than authoritative gameplay semantics	1288779
+Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData1	telemetry-only		statistics/MMD timeline observer rather than authoritative gameplay semantics	1289214
+Action_watch_doAfter_RoundStatsBoard_run_watch_doAfter_RoundStatsBoard	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1516663
+Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire	normalized-gameplay-semantics	building-spell-mechanics:armed-next-melee-attack-splash	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1641748

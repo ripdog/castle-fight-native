@@ -3327,8 +3327,9 @@ def _extract_building_spell_mechanics(
                 "order_id": 852269,
                 "dummy_lifetime_seconds": "1",
                 "counter_reset_function": "resetSilverGladeCounterForTeam",
+                "round_end_signal_resets_both_team_counters": True,
             },
-            (silver_handler_name, "addSilverGladeChargeForTeam", "OK", "PK", "NK", "resetSilverGladeCounterForTeam"),
+            (silver_handler_name, "addSilverGladeChargeForTeam", "OK", "PK", "NK", "resetSilverGladeCounterForTeam", "Action_watch_RaceNelfAbilities_run_watch_RaceNelfAbilities"),
         )
 
     # Starfall Obelisk: choose one random live enemy and cast the Starfall object
@@ -3689,8 +3690,9 @@ def _extract_building_spell_mechanics(
             "automatic_target_filter_status": "resolved-generated-filter-SX" if snow_filter is not None else "unresolved-generated-filter-SX",
             "automatic_target_filter_function": snow_filter["resolved_function"] if snow_filter is not None else "",
             "automatic_target_filter_predicate": snow_filter["predicate"] if snow_filter is not None else "",
+            "round_end_signal_removes_all_snow_without_explosion": True,
         },
-        ("createSnowveilSnow", "vec2_setSnow", "DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain", "damageUnitsOnSnowInArea", "explodeSnowInArea", "FL"),
+        ("createSnowveilSnow", "vec2_setSnow", "DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain", "damageUnitsOnSnowInArea", "explodeSnowInArea", "Action_watch_SnowveilFountain_run_watch_SnowveilFountain", "FL"),
         evidence_kind=(
             "script-direct-with-resolved-generated-target-filter"
             if snow_filter is not None else "script-direct-with-unresolved-target-filter"
@@ -3738,8 +3740,9 @@ def _extract_building_spell_mechanics(
                 "special_source_multiplier": "0.35",
                 "damage_type": "universal",
                 "attack_type": "normal",
+                "round_end_signal_resets_all_charge_slots": True,
             },
-            (thunder_handler, listener_name, "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire"),
+            (thunder_handler, listener_name, "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire", "Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire"),
         )
 
     # Fold the already-validated corpse-dependent building mechanics into this
@@ -5361,6 +5364,9 @@ def _extract_runtime_mode_mechanics(
         "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
         "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
         "StartResourceMode_StartResourceMode_applyChoice",
+        "Action_watch_ModeRaceRuntime_run_watch_ModeRaceRuntime",
+        "Action_watch_UltimateRoll_run_watch_UltimateRoll",
+        "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5499,6 +5505,20 @@ def _extract_runtime_mode_mechanics(
     if [str(row["mode_id"]) for row in modes] != expected_ids:
         raise ValueError("mode registry order/IDs changed")
 
+    mode_round_watch = "Action_watch_ModeRaceRuntime_run_watch_ModeRaceRuntime"
+    ultimate_round_watch = "Action_watch_UltimateRoll_run_watch_UltimateRoll"
+    _mode_round_start, mode_round_source = body(mode_round_watch)
+    if b"Signal_Signal_get(bX)" not in mode_round_source or b"startNextRoundViaModeRuntime()" not in mode_round_source:
+        raise ValueError("mode round-end next-round watcher changed")
+    _ultimate_round_start, ultimate_round_source = body(ultimate_round_watch)
+    if (
+        b"Signal_Signal_get(ZW)" not in ultimate_round_source
+        or b"clearUltiTexttags()" not in ultimate_round_source
+        or b"if(C8n>11)then break" not in ultimate_round_source
+        or b"player_allowAllBuildings(V1[C8n])" not in ultimate_round_source
+    ):
+        raise ValueError("ultimate round-end building-availability reset changed")
+
     return [{
         "system_id": "mode-selection-controller-and-registry",
         "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
@@ -5514,13 +5534,17 @@ def _extract_runtime_mode_mechanics(
             "e2e_prefix_is_reserved_before_append_parser": "-e2e ",
             "registered_mode_count": 44,
             "registered_modes": modes,
+            "round_end_signal_starts_next_round_via_mode_runtime": True,
+            "ultimate_round_end_restores_all_building_availability_for_player_ids": [0, 11],
+            "ultimate_round_end_clears_roll_texttags": True,
         },
         "related_rawcode_ids": [],
         "source_functions": [
             listener_name, parse_name, initializer_name,
             "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
             "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
-            "StartResourceMode_StartResourceMode_applyChoice", *callback_functions,
+            "StartResourceMode_StartResourceMode_applyChoice", mode_round_watch, ultimate_round_watch,
+            "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags", *callback_functions,
         ],
         "evidence_kind": "exact-readable-mode-registry-generated-closure-aliases-and-chat-parser-control-flow",
         "byte_offset": min(initializer_start, listener_start, parse_start),
@@ -5538,6 +5562,7 @@ def _extract_runtime_session_mechanics(
         "startIdleDetectionIfEnabled", "stopIdleDetection", "checkPlayerIdle", "recordPlayerAction",
         "togglePlayerAway", "campaignBlocksAwayControl",
         "CallbackPeriodic_doPeriodically_IdleDetectionRuntime_call_doPeriodically_IdleDetectionRuntime",
+        "Action_watch_IdleDetectionRuntime_run_watch_IdleDetectionRuntime",
         "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime",
         "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime1",
         "applyAutobalanceMode", "applyLeaveAutobalance", "redistributeAllLeaverUnits",
@@ -5546,6 +5571,7 @@ def _extract_runtime_session_mechanics(
         "EventListener_add_PlayerLeave_onEvent_add_PlayerLeave",
         "EventListener_add_doAfter_MMDData_onEvent_add_doAfter_MMDData", "handlePlayerLeave",
         "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData2",
+        "Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime", "onAllVotedDraw",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5568,6 +5594,7 @@ def _extract_runtime_session_mechanics(
         ("completeRoundStart", (b"startIdleDetectionIfEnabled()",)),
         ("startIdleDetectionIfEnabled", (b"if(not Lab)then return", b"Mab=doPeriodically(1.,AEq)")),
         ("stopIdleDetection", (b"CallbackPeriodic_destroyCallbackPeriodic",)),
+        ("Action_watch_IdleDetectionRuntime_run_watch_IdleDetectionRuntime", (b"Signal_Signal_get(ZW)", b"stopIdleDetection()")),
         ("CallbackPeriodic_doPeriodically_IdleDetectionRuntime_call_doPeriodically_IdleDetectionRuntime", (b"if(XCm>11)then break", b"checkPlayerIdle(XCm)")),
         ("checkPlayerIdle", (b"zEq==20", b"zEq==30", b"togglePlayerAway(xEq)", b"zEq==60", b"zEq==120", b"(VGb==0)and(UGb<40)")),
         ("EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime", (b"if __wurst_ensureBool(dGb[bDm])then togglePlayerAway(bDm)end", b"recordPlayerAction(aDm)")),
@@ -5596,6 +5623,7 @@ def _extract_runtime_session_mechanics(
             "away_restores_prior_shared_control_state_when_cleared": True,
             "afk_state_blocks_manual_away_toggle": True,
             "automatic_detection_starts_each_round_when_enabled": True,
+            "round_end_signal_stops_automatic_detection": True,
         },
         "related_rawcode_ids": [],
         "source_functions": [name for name, _fragments in away_sources],
@@ -5646,6 +5674,38 @@ def _extract_runtime_session_mechanics(
         "source_functions": [name for name, _fragments in leave_sources],
         "evidence_kind": "exact-leave-listener-autobalance-mode-dispatch-and-delayed-team-empty-resolution",
         "byte_offset": min(leave_offsets),
+    })
+
+    draw_sources = [
+        ("Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime", (
+            b"Signal_Signal_get(XW)", b"if(DCn<=0)then return", b"onAllVotedDraw()",
+        )),
+        ("onAllVotedDraw", (
+            b"if(dY or(not isRoundStarted()))then return", b"bY=false", b"Signal_Signal_set(ZW",
+            b"cleanupAppliedPerks()", b"showRoundEndStats()", b"cleanupRoundUnits()", b"doAfter(1.,OEr)",
+        )),
+    ]
+    draw_offsets = [source(name, fragments)[0] for name, fragments in draw_sources]
+    rows.append({
+        "system_id": "unanimous-draw-round-restart",
+        "mechanic_kind": "round-end-signal-draw-restart-and-round-cleanup",
+        "trigger": "all-players-voted-draw-signal",
+        "parameters": {
+            "ignored_after_match_end": True,
+            "ignored_when_round_not_started": True,
+            "marks_round_not_started": True,
+            "publishes_round_end_signal": True,
+            "cleans_applied_perks": True,
+            "stops_round_runtime_and_timers": True,
+            "shows_round_end_stats": True,
+            "cleans_round_units": True,
+            "restart_delay_seconds": 1,
+            "does_not_set_match_winner": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in draw_sources],
+        "evidence_kind": "exact-round-end-watch-and-readable-unanimous-draw-cleanup-control-flow",
+        "byte_offset": min(draw_offsets),
     })
     return rows
 
@@ -5844,6 +5904,150 @@ def _extract_damage_listener_coverage(
             "evidence_note": note,
             "byte_offset": function_offsets[listener_name],
         })
+    return rows
+
+
+def _extract_action_watch_coverage(
+    functions: list[dict[str, object]],
+    production_unit_special_mechanics: list[dict[str, object]],
+    runtime_system_mechanics: list[dict[str, object]],
+    building_spell_mechanics: list[dict[str, object]],
+    perk_mechanics: list[dict[str, object]],
+    runtime_ai_mechanics: list[dict[str, object]],
+    runtime_session_mechanics: list[dict[str, object]],
+    runtime_mode_mechanics: list[dict[str, object]],
+    runtime_campaign_mechanics: list[dict[str, object]],
+    protected_perk_registry_audit: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Strict closure audit over generated Action_watch callbacks."""
+    if not protected_perk_registry_audit:
+        return []
+
+    function_offsets = {str(row["name"]): int(row["start"]) for row in functions}
+    callback_names = sorted(name for name in function_offsets if name.startswith("Action_watch_"))
+    if len(callback_names) != 43:
+        raise ValueError(f"Action_watch callback inventory changed: {len(callback_names)}")
+
+    normalized_sources: dict[str, set[str]] = defaultdict(set)
+
+    def add_sources(domain: str, rows: list[dict[str, object]], identity_key: str) -> None:
+        for row in rows:
+            identity = str(row[identity_key])
+            for function_name in row.get("source_functions", []):
+                normalized_sources[str(function_name)].add(f"{domain}:{identity}")
+
+    add_sources("production-unit-special-mechanics", production_unit_special_mechanics, "mechanic_kind")
+    add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
+    add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
+    add_sources("perk-mechanics", perk_mechanics, "perk_id")
+    add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
+    add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
+    add_sources("runtime-mode-mechanics", runtime_mode_mechanics, "system_id")
+    add_sources("runtime-campaign-mechanics", runtime_campaign_mechanics, "system_id")
+
+    e2e_only = {
+        "Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E",
+        "Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E1",
+        "Action_watch_ModeRuntimeE2E_run_watch_ModeRuntimeE2E",
+        "Action_watch_ModeRuntimeE2E_run_watch_ModeRuntimeE2E1",
+    }
+    presentation_only = {
+        "Action_watch_CampaignMissionInfoOverlay_CampaignUI_run_watch_CampaignMissionInfoOverlay_CampaignUI",
+        "Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI",
+        "Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI1",
+        "Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI2",
+        "Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI3",
+        "Action_watch_Campaign_run_watch_Campaign",
+        "Action_watch_DraftUIScreen_DraftUI_run_watch_DraftUIScreen_DraftUI",
+        "Action_watch_DraftUIScreen_DraftUI_run_watch_DraftUIScreen_DraftUI1",
+        "Action_watch_DraftWindow_DraftWindow_run_watch_DraftWindow_DraftWindow",
+        "Action_watch_IncomeUI_run_watch_IncomeUI",
+        "Action_watch_InfoWindow_InfoWindow_run_watch_InfoWindow_InfoWindow",
+        "Action_watch_MultiboardEventHooks_run_watch_MultiboardEventHooks",
+        "Action_watch_MultiboardInit_run_watch_MultiboardInit",
+        "Action_watch_ReactivePlayerMultiboard_PlayerMultiboard_run_watch_ReactivePlayerMultiboard_PlayerMultiboard",
+        "Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection",
+        "Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI",
+        "Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI1",
+        "Action_watch_doAfter_RoundStatsBoard_run_watch_doAfter_RoundStatsBoard",
+    }
+    telemetry_only = {
+        "Action_watch_RoundStatsTracking_run_watch_RoundStatsTracking",
+        "Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData",
+        "Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData1",
+    }
+    draft_runtime_unmodeled = {
+        "Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator",
+        "Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry",
+    }
+    campaign_protected_unmodeled = {
+        "Action_watch_CampaignRuntime_run_watch_CampaignRuntime",
+    }
+    gameplay_framework = {
+        "Action_watch_OnUnitDeathHandler_run_watch_OnUnitDeathHandler",
+    }
+
+    rows: list[dict[str, object]] = []
+    for callback_name in callback_names:
+        normalized = sorted(normalized_sources.get(callback_name, ()))
+        if normalized:
+            if all(source.startswith("runtime-session-mechanics:") for source in normalized):
+                status = "normalized-session-runtime-semantics"
+                note = "callback is direct lifecycle evidence for normalized player-session runtime semantics"
+            elif all(source.startswith("runtime-mode-mechanics:") for source in normalized):
+                status = "normalized-mode-runtime-semantics"
+                note = "callback is direct lifecycle evidence for normalized mode runtime semantics"
+            elif all(source.startswith("runtime-campaign-mechanics:") for source in normalized):
+                status = "normalized-campaign-runtime-semantics"
+                note = "callback is direct lifecycle evidence for normalized campaign runtime semantics"
+            elif all(source.startswith("runtime-ai-mechanics:") for source in normalized):
+                status = "normalized-ai-runtime-semantics"
+                note = "callback is direct lifecycle evidence for normalized AI runtime semantics"
+            else:
+                status = "normalized-gameplay-semantics"
+                note = "callback is direct lifecycle evidence for importer-facing normalized gameplay semantics"
+        elif callback_name in e2e_only:
+            status = "e2e-only"
+            note = "generated AI/mode end-to-end verification callback; not production gameplay semantics"
+        elif callback_name in presentation_only:
+            status = "presentation-only"
+            note = "reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation"
+        elif callback_name in telemetry_only:
+            status = "telemetry-only"
+            note = "statistics/MMD timeline observer rather than authoritative gameplay semantics"
+        elif callback_name in draft_runtime_unmodeled:
+            status = "draft-runtime-unmodeled"
+            note = "live draft orchestration/reminder lifecycle; tracked separately from individual perk mechanics"
+        elif callback_name in campaign_protected_unmodeled:
+            status = "campaign-protected-runtime-unmodeled"
+            note = "live campaign mission-start callback enters a protected implementation whose target semantics are not yet decoded"
+        elif callback_name in gameplay_framework:
+            status = "gameplay-framework-infrastructure"
+            note = "round-lifecycle cache invalidation used by normalized building-count mechanics; not an independent rule"
+        else:
+            raise ValueError(f"unclassified Action_watch callback: {callback_name}")
+        rows.append({
+            "callback_function": callback_name,
+            "coverage_status": status,
+            "normalized_sources": normalized,
+            "evidence_note": note,
+            "byte_offset": function_offsets[callback_name],
+        })
+
+    status_counts = Counter(str(row["coverage_status"]) for row in rows)
+    expected_status_counts = Counter({
+        "normalized-gameplay-semantics": 10,
+        "normalized-session-runtime-semantics": 2,
+        "normalized-mode-runtime-semantics": 2,
+        "presentation-only": 18,
+        "e2e-only": 4,
+        "telemetry-only": 3,
+        "draft-runtime-unmodeled": 2,
+        "campaign-protected-runtime-unmodeled": 1,
+        "gameplay-framework-infrastructure": 1,
+    })
+    if status_counts != expected_status_counts:
+        raise ValueError(f"Action_watch coverage classification changed: {dict(sorted(status_counts.items()))}")
     return rows
 
 
@@ -9719,6 +9923,18 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_ai_mechanics,
         protected_perk_registry_audit,
     )
+    action_watch_coverage = _extract_action_watch_coverage(
+        functions,
+        production_unit_special_mechanics,
+        runtime_system_mechanics,
+        building_spell_mechanics,
+        perk_mechanics,
+        runtime_ai_mechanics,
+        runtime_session_mechanics,
+        runtime_mode_mechanics,
+        runtime_campaign_mechanics,
+        protected_perk_registry_audit,
+    )
     event_listener_coverage = _extract_event_listener_coverage(
         functions,
         call_edges,
@@ -9778,5 +9994,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "runtime_mode_mechanics": runtime_mode_mechanics,
         "runtime_campaign_mechanics": runtime_campaign_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
+        "action_watch_coverage": action_watch_coverage,
         "event_listener_coverage": event_listener_coverage,
     }

@@ -777,6 +777,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     runtime_mode_mechanics = analysis["runtime_mode_mechanics"]
     runtime_campaign_mechanics = analysis["runtime_campaign_mechanics"]
     damage_listener_coverage = analysis["damage_listener_coverage"]
+    action_watch_coverage = analysis["action_watch_coverage"]
     event_listener_coverage = analysis["event_listener_coverage"]
     production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
     building_improvement_spawn_mechanics = analysis["building_improvement_spawn_mechanics"]
@@ -1158,6 +1159,18 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 row["system_id"], row["mechanic_kind"], row["trigger"], "[]",
                 script_json(row["parameters"]), ",".join(str(value) for value in row["source_functions"]),
                 row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "action-watch-coverage.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "callback_function", "coverage_status", "normalized_sources", "evidence_note", "byte_offset",
+        ])
+        for row in action_watch_coverage:
+            writer.writerow([
+                row["callback_function"], row["coverage_status"],
+                ",".join(str(value) for value in row["normalized_sources"]),
+                row["evidence_note"], row["byte_offset"],
             ])
 
     with (script_dir / "event-listener-coverage.tsv").open("w", encoding="utf-8", newline="") as f:
@@ -1987,6 +2000,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "damage_listener_coverage_rows": len(damage_listener_coverage),
         "damage_listener_coverage_status_counts": dict(sorted(Counter(
             str(row["coverage_status"]) for row in damage_listener_coverage
+        ).items())),
+        "action_watch_coverage_rows": len(action_watch_coverage),
+        "action_watch_coverage_status_counts": dict(sorted(Counter(
+            str(row["coverage_status"]) for row in action_watch_coverage
         ).items())),
         "event_listener_coverage_rows": len(event_listener_coverage),
         "event_listener_coverage_status_counts": dict(sorted(Counter(

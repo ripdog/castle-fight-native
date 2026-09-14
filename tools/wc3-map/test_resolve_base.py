@@ -189,10 +189,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
         self.assertEqual(summary["perk_mechanics"], 19)
         self.assertEqual(summary["runtime_ai_mechanics"], 3)
-        self.assertEqual(summary["runtime_session_mechanics"], 2)
+        self.assertEqual(summary["runtime_session_mechanics"], 3)
         self.assertEqual(summary["runtime_mode_mechanics"], 1)
         self.assertEqual(summary["runtime_campaign_mechanics"], 1)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
+        self.assertEqual(summary["action_watch_coverage_rows"], 43)
         self.assertEqual(summary["event_listener_coverage_rows"], 70)
         self.assertEqual(
             listeners["DamageListener_addListener_AiEngagement_onEvent_addListener_AiEngagement"]["coverage_status"],
@@ -292,6 +293,67 @@ class ResolvedEvidenceTests(unittest.TestCase):
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
         )
 
+    def test_action_watch_coverage_is_explicit_and_fail_loud(self) -> None:
+        with (self.script / "action-watch-coverage.tsv").open(encoding="utf-8") as handle:
+            rows = {row["callback_function"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 43)
+        self.assertEqual(
+            dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
+            {
+                "campaign-protected-runtime-unmodeled": 1,
+                "draft-runtime-unmodeled": 2,
+                "e2e-only": 4,
+                "gameplay-framework-infrastructure": 1,
+                "normalized-gameplay-semantics": 10,
+                "normalized-mode-runtime-semantics": 2,
+                "normalized-session-runtime-semantics": 2,
+                "presentation-only": 18,
+                "telemetry-only": 3,
+            },
+        )
+        self.assertEqual(
+            rows["Action_watch_IdleDetectionRuntime_run_watch_IdleDetectionRuntime"]["coverage_status"],
+            "normalized-session-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime"]["coverage_status"],
+            "normalized-session-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_ModeRaceRuntime_run_watch_ModeRaceRuntime"]["coverage_status"],
+            "normalized-mode-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_UltimateRoll_run_watch_UltimateRoll"]["coverage_status"],
+            "normalized-mode-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_RaceNelfAbilities_run_watch_RaceNelfAbilities"]["coverage_status"],
+            "normalized-gameplay-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_SnowveilFountain_run_watch_SnowveilFountain"]["coverage_status"],
+            "normalized-gameplay-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire"]["coverage_status"],
+            "normalized-gameplay-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_CampaignRuntime_run_watch_CampaignRuntime"]["coverage_status"],
+            "campaign-protected-runtime-unmodeled",
+        )
+        self.assertEqual(
+            rows["Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator"]["coverage_status"],
+            "draft-runtime-unmodeled",
+        )
+        summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
+        self.assertEqual(summary["action_watch_coverage_rows"], 43)
+        self.assertEqual(
+            summary["action_watch_coverage_status_counts"],
+            dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
+        )
+
     def test_runtime_campaign_restriction_hooks_are_normalized(self) -> None:
         with (self.resolved / "runtime-campaign-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle, delimiter="\t"))
@@ -348,6 +410,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertIn({"symbol": "zGb", "value": "1"}, by_id["co"]["callback_simple_assignments"])
         self.assertIn({"symbol": "zGb", "value": "10"}, by_id["cc"]["callback_simple_assignments"])
         self.assertIn({"symbol": "tX", "value": "true"}, by_id["dom"]["callback_simple_assignments"])
+        self.assertTrue(parameters["round_end_signal_starts_next_round_via_mode_runtime"])
+        self.assertEqual(parameters["ultimate_round_end_restores_all_building_availability_for_player_ids"], [0, 11])
+        self.assertTrue(parameters["ultimate_round_end_clears_roll_texttags"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["runtime_mode_mechanic_rows"], 1)
@@ -357,7 +422,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
         self.assertEqual(
             set(rows),
-            {"away-control-and-idle-detection", "player-leave-autobalance-and-team-empty-resolution"},
+            {
+                "away-control-and-idle-detection",
+                "player-leave-autobalance-and-team-empty-resolution",
+                "unanimous-draw-round-restart",
+            },
         )
 
         away = json.loads(rows["away-control-and-idle-detection"]["parameters_json"])
@@ -372,6 +441,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(away["player_activity_clears_away_immediately"])
         self.assertTrue(away["away_grants_allied_advanced_unit_control"])
         self.assertTrue(away["away_restores_prior_shared_control_state_when_cleared"])
+        self.assertTrue(away["round_end_signal_stops_automatic_detection"])
 
         leave = json.loads(rows["player-leave-autobalance-and-team-empty-resolution"]["parameters_json"])
         self.assertEqual(leave["default_mode_value_observed_in_runtime_initializer"], 1)
@@ -390,8 +460,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(leave["team_empty_sets_opponent_match_winner"])
         self.assertTrue(leave["team_empty_stops_round_and_cleans_round_units"])
 
+        draw = json.loads(rows["unanimous-draw-round-restart"]["parameters_json"])
+        self.assertTrue(draw["ignored_after_match_end"])
+        self.assertTrue(draw["ignored_when_round_not_started"])
+        self.assertTrue(draw["cleans_applied_perks"])
+        self.assertTrue(draw["cleans_round_units"])
+        self.assertEqual(draw["restart_delay_seconds"], 1)
+        self.assertTrue(draw["does_not_set_match_winner"])
+
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_session_mechanic_rows"], 2)
+        self.assertEqual(summary["runtime_session_mechanic_rows"], 3)
 
     def test_runtime_ai_damage_signals_rescue_strike_and_strategic_aura_observer_are_normalized(self) -> None:
         with (self.resolved / "runtime-ai-mechanics.tsv").open(encoding="utf-8") as handle:
