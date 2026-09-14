@@ -2,7 +2,7 @@ use castle_fight_sim::{
     ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingFootprint,
     BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace, CastleFightProductionKind,
     CastleFightTowerKind, CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
-    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, Team,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, TargetlessLane, Team,
     TerrainElevationMap, UnitSpawn, castle_fight_damage_rules,
 };
 
@@ -253,6 +253,11 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
         static_blockers,
         team_build_regions: [vec![left_build_region], vec![right_build_region]],
+        targetless_lane: Some(TargetlessLane::new(
+            LANE_MIN_Y * NAV_CELL_SUBUNITS,
+            (LANE_MAX_Y + 1) * NAV_CELL_SUBUNITS,
+            [LEFT_BUILD_MAX_X_WORLD, RIGHT_BUILD_MIN_X_WORLD].map(|x| x * SUBUNITS_PER_WORLD_UNIT),
+        )),
         // Distance-field objectives must stay outside the castle's blocked 16x16 footprint. These
         // are the lane-facing cells immediately beyond each original castle pathing envelope.
         team_objective: [world_point(4_720, 0), world_point(-4_720, 0)],
@@ -577,6 +582,17 @@ mod tests {
         assert_eq!(
             config.team_build_regions[1],
             vec![BuildingFootprint::new(60, -64, 132, 128)]
+        );
+        assert_eq!(
+            config.targetless_lane,
+            Some(TargetlessLane::new(
+                -768 * SUBUNITS_PER_WORLD_UNIT,
+                768 * SUBUNITS_PER_WORLD_UNIT,
+                [
+                    -1_920 * SUBUNITS_PER_WORLD_UNIT,
+                    1_920 * SUBUNITS_PER_WORLD_UNIT,
+                ],
+            ))
         );
 
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));

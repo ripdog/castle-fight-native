@@ -36,7 +36,7 @@ pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
     BuilderSpawnError, BuilderView, BuildingPlacementError, BuildingView, ChainLightningEvent,
     CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    TargetlessLane, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -276,6 +276,7 @@ mod tests {
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
             static_blockers: Vec::new(),
             team_build_regions: [Vec::new(), Vec::new()],
+            targetless_lane: None,
             team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
         }
     }
@@ -5381,6 +5382,78 @@ mod tests {
     }
 
     #[test]
+    fn targetless_lane_ingress_moves_diagonally_then_keeps_entry_line() {
+        fn run(team: Team, start: SimPoint) {
+            let world = SUBUNITS_PER_WORLD_UNIT;
+            let lane = TargetlessLane::new(-40 * world, 40 * world, [200 * world, 800 * world]);
+            let config = SimulationConfig {
+                navigation_cell_size: 10 * world,
+                navigation_min: NavCell::new(0, -20),
+                navigation_max: NavCell::new(100, 20),
+                targetless_lane: Some(lane),
+                team_objective: [SimPoint::new(900 * world, 0), SimPoint::new(100 * world, 0)],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, 1);
+            let footman = CastleFightUnitKind::Footman.definition();
+            let unit = sim.spawn_unit_with_properties(
+                UnitSpawn::from_template(team, start, footman.template()),
+                footman.gameplay_properties(),
+            );
+
+            sim.step();
+            let first = sim.unit(unit).unwrap().position;
+            let forward = if team.0 == 0 {
+                first.x > start.x
+            } else {
+                first.x < start.x
+            };
+            let inward = if start.y > 0 {
+                first.y < start.y
+            } else {
+                first.y > start.y
+            };
+            assert!(
+                forward && inward,
+                "off-lane unit did not approach the lane diagonally: {start:?} -> {first:?}"
+            );
+
+            let safe_min_y = lane.min_y + footman.collision_radius.0;
+            let safe_max_y = lane.max_y - footman.collision_radius.0;
+            for _ in 0..80 {
+                let position = sim.unit(unit).unwrap().position;
+                if position.y >= safe_min_y && position.y <= safe_max_y {
+                    break;
+                }
+                sim.step();
+            }
+            let entered = sim.unit(unit).unwrap().position;
+            assert!(entered.y >= safe_min_y && entered.y <= safe_max_y);
+            let entry_x = lane.team_entry_x[usize::from(team.0)];
+            assert!(
+                (i64::from(entered.x) - i64::from(entry_x)).abs() <= i64::from(20 * world),
+                "unit entered the lane far from its normal entrance: {entered:?}"
+            );
+
+            sim.step();
+            let marching = sim.unit(unit).unwrap().position;
+            assert_eq!(
+                marching.y, entered.y,
+                "unit recalibrated vertically after reaching a valid lane line"
+            );
+            if team.0 == 0 {
+                assert!(marching.x > entered.x);
+            } else {
+                assert!(marching.x < entered.x);
+            }
+        }
+
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        run(Team(0), SimPoint::new(100 * world, 120 * world));
+        run(Team(1), SimPoint::new(900 * world, -120 * world));
+    }
+
+    #[test]
     fn objective_march_uses_new_horizontal_line_after_combat_displacement() {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
@@ -5453,6 +5526,11 @@ mod tests {
             navigation_min: NavCell::new(0, -10),
             navigation_max: NavCell::new(30, 10),
             static_blockers: vec![BuildingFootprint::new(10, 0, 1, 1)],
+            targetless_lane: Some(TargetlessLane::new(
+                -80 * world,
+                80 * world,
+                [20 * world, 280 * world],
+            )),
             team_objective: [SimPoint::new(290 * world, 0), SimPoint::new(10 * world, 0)],
             ..SimulationConfig::default()
         };

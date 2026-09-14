@@ -40,8 +40,32 @@ use crate::{
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
     terrain::TerrainElevationMap,
-    topology::{NavCell, TopologyGrid},
+    topology::{NavCell, PursuitStep, TopologyGrid},
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TargetlessLane {
+    /// Inclusive lower/upper world-space bounds of the strategic lane corridor in simulation
+    /// subunits. A unit whose full collision circle fits between these bounds is considered lane
+    /// aligned and resumes the normal horizontal objective march from its current `y`.
+    pub min_y: i32,
+    pub max_y: i32,
+    /// World-space x coordinate of each team's normal lane entrance. Units outside the lane band
+    /// approach this x while moving toward the nearest lane edge, so remote base spawns enter the
+    /// cross-map corridor before attempting to march through it.
+    pub team_entry_x: [i32; 2],
+}
+
+impl TargetlessLane {
+    #[must_use]
+    pub const fn new(min_y: i32, max_y: i32, team_entry_x: [i32; 2]) -> Self {
+        Self {
+            min_y,
+            max_y,
+            team_entry_x,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
@@ -57,6 +81,8 @@ pub struct SimulationConfig {
     /// Canonical buildable regions for each team. An empty region list leaves that team
     /// unrestricted for generic/test maps that do not author build regions.
     pub team_build_regions: [Vec<BuildingFootprint>; 2],
+    /// Optional standard-lane ingress guidance for targetless units. Generic maps leave this unset.
+    pub targetless_lane: Option<TargetlessLane>,
     pub team_objective: [SimPoint; 2],
 }
 
@@ -80,6 +106,7 @@ impl Default for SimulationConfig {
             max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT / 16,
             static_blockers: Vec::new(),
             team_build_regions: [Vec::new(), Vec::new()],
+            targetless_lane: None,
             team_objective: [
                 SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
                 SimPoint::new(0, 0),
@@ -357,6 +384,12 @@ impl Simulation {
             "fallback unit separation must be an even collision diameter"
         );
         assert!(config.max_separation_per_tick >= 0);
+        if let Some(lane) = config.targetless_lane {
+            assert!(
+                lane.min_y <= lane.max_y,
+                "targetless lane y bounds are inverted"
+            );
+        }
         validate_combat_rules(&config, &combat_rules);
 
         let pool = ThreadPoolBuilder::new()
@@ -4990,156 +5023,58 @@ impl Simulation {
         }
 
         let mut pursuit_step = false;
-        let mut navigation_route_step = false;
-        let mut used_a_star = false;
-        let mut a_star_cache_hit = false;
-        let mut a_star_expanded_nodes = 0;
-        let mut cache_insert = None;
-        let next_cell = match target_cell {
+        let mut targetless_lane_goal = None;
+        let route = match target_cell {
             Some(cell) => {
                 pursuit_step = pursuit_target.is_some();
                 if cell == source_cell {
-                    Some(cell)
+                    NavigationRoute::at(cell)
                 } else {
-                    navigation_route_step = true;
-                    let route_bias = sidestep_sign(unit.id);
-                    let route_bias_key =
-                        i8::try_from(route_bias).expect("route bias must fit signed byte");
-                    let cache_key = (
+                    self.route_to_cell(
                         source_cell,
                         cell,
                         unit.collision_radius_override,
-                        route_bias_key,
-                    );
-                    let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
-                    let result = if let Some(radius) = unit.collision_radius_override {
-                        self.topology.pursuit_step_with_radius(
-                            source_cell,
-                            cell,
-                            cached_fallback,
-                            radius,
-                            route_bias,
-                        )
-                    } else {
-                        self.topology
-                            .pursuit_step(source_cell, cell, cached_fallback, route_bias)
-                    };
-                    used_a_star = result.used_a_star;
-                    a_star_cache_hit = result.a_star_cache_hit;
-                    a_star_expanded_nodes = result.a_star_expanded_nodes;
-                    if result.used_a_star
-                        && !result.a_star_cache_hit
-                        && let Some(next) = result.next_cell
-                    {
-                        cache_insert = Some(PursuitCacheInsert {
-                            from: source_cell,
-                            target: cell,
-                            collision_radius: unit.collision_radius_override,
-                            route_bias: route_bias_key,
-                            next,
-                        });
-                    }
-                    result.next_cell
+                        sidestep_sign(unit.id),
+                    )
                 }
             }
             None => {
                 let route_bias = sidestep_sign(unit.id);
-                let objective_cell = self
-                    .topology
-                    .cell_of_point(self.config.team_objective[usize::from(unit.team.0)]);
-                let objective_detour_step = if let Some(radius) = unit.collision_radius_override {
-                    let field = self
-                        .radius_objective_fields
-                        .get(&(unit.team.0, radius))
-                        .expect("radius-aware objective field was not prepared");
-                    self.topology.step_from_distance_field_with_radius_bias(
-                        source_cell,
-                        field,
-                        radius,
-                        route_bias,
-                    )
-                } else {
-                    self.topology
-                        .objective_step_with_bias(unit.team.0, source_cell, route_bias)
-                };
-                if objective_cell.x == source_cell.x {
-                    None
-                } else {
-                    let step_x = (objective_cell.x - source_cell.x).signum();
-                    let direct_cell = NavCell::new(source_cell.x + step_x, source_cell.y);
-                    let direct_position = self.topology.center_of_cell(direct_cell);
-                    if self.position_is_traversable_from(
-                        source_cell,
-                        direct_position,
-                        unit.collision_radius_override,
-                    ) {
-                        Some(direct_cell)
-                    } else if objective_detour_step.is_some() {
-                        // While the unit's preferred horizontal step is topologically blocked,
-                        // follow the stable shared objective field instead of repeatedly A*-routing
-                        // to a same-row goal that changes as the detour changes rows. Retargeting
-                        // that row every tick can make a targetless unit bounce between two equally
-                        // plausible obstacle sides until another unit physically displaces it.
-                        // Once horizontal progress is clear again, the normal stateless lane rule
-                        // resumes from the unit's new y coordinate.
-                        navigation_route_step = true;
-                        objective_detour_step
-                    } else if let Some(cell) = self.horizontal_objective_goal_cell(
-                        source_cell,
-                        objective_cell.x,
-                        unit.collision_radius_override,
-                    ) {
-                        // Disconnected/caged components have no objective-field descent. Keep the
-                        // horizontal best-effort A* fallback so those units still press toward the
-                        // objective-side wall without inventing a route through blockers.
-                        navigation_route_step = true;
-                        let route_bias_key =
-                            i8::try_from(route_bias).expect("route bias must fit signed byte");
-                        let cache_key = (
+                if let Some(goal) =
+                    self.targetless_lane_entry_goal(unit.team, current, unit.collision_radius)
+                {
+                    let cell = self.topology.cell_of_point(goal);
+                    let lane_route = if cell == source_cell {
+                        NavigationRoute::at(cell)
+                    } else {
+                        self.route_to_cell(
                             source_cell,
                             cell,
                             unit.collision_radius_override,
-                            route_bias_key,
-                        );
-                        let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
-                        let result = if let Some(radius) = unit.collision_radius_override {
-                            self.topology.pursuit_step_with_radius(
-                                source_cell,
-                                cell,
-                                cached_fallback,
-                                radius,
-                                route_bias,
-                            )
-                        } else {
-                            self.topology.pursuit_step(
-                                source_cell,
-                                cell,
-                                cached_fallback,
-                                route_bias,
-                            )
-                        };
-                        used_a_star = result.used_a_star;
-                        a_star_cache_hit = result.a_star_cache_hit;
-                        a_star_expanded_nodes = result.a_star_expanded_nodes;
-                        if result.used_a_star
-                            && !result.a_star_cache_hit
-                            && let Some(next) = result.next_cell
-                        {
-                            cache_insert = Some(PursuitCacheInsert {
-                                from: source_cell,
-                                target: cell,
-                                collision_radius: unit.collision_radius_override,
-                                route_bias: route_bias_key,
-                                next,
-                            });
-                        }
-                        result.next_cell
+                            route_bias,
+                        )
+                    };
+                    if lane_route.next_cell.is_some() {
+                        targetless_lane_goal = Some((cell, goal));
+                        lane_route
                     } else {
-                        None
+                        // A closed cage or other disconnected local component can make the normal
+                        // lane entrance unreachable. Preserve the established no-route behavior in
+                        // that case: press toward the enemy side within the current component rather
+                        // than freezing or inventing a route through blockers.
+                        self.targetless_horizontal_route(unit, source_cell, route_bias)
                     }
+                } else {
+                    self.targetless_horizontal_route(unit, source_cell, route_bias)
                 }
             }
         };
+        let navigation_route_step = route.navigation_route_step;
+        let used_a_star = route.used_a_star;
+        let a_star_cache_hit = route.a_star_cache_hit;
+        let a_star_expanded_nodes = route.a_star_expanded_nodes;
+        let cache_insert = route.cache_insert;
+        let next_cell = route.next_cell;
         let Some(next_cell) = next_cell else {
             return MovementDecision {
                 position: current,
@@ -5156,7 +5091,14 @@ impl Simulation {
         let target_position =
             if pursuit_step && next_cell == target_cell.expect("pursuit target cell disappeared") {
                 attack_goal.expect("pursuit movement missing attack-envelope goal")
-            } else if target_cell.is_none() && next_cell.y == source_cell.y {
+            } else if let Some((goal_cell, goal)) = targetless_lane_goal
+                && next_cell == goal_cell
+            {
+                goal
+            } else if target_cell.is_none()
+                && targetless_lane_goal.is_none()
+                && next_cell.y == source_cell.y
+            {
                 SimPoint::new(self.topology.center_of_cell(next_cell).x, current.y)
             } else {
                 self.topology.center_of_cell(next_cell)
@@ -5199,6 +5141,155 @@ impl Simulation {
             a_star_expanded_nodes,
             cache_insert,
         }
+    }
+
+    fn route_to_cell(
+        &self,
+        source_cell: NavCell,
+        target_cell: NavCell,
+        collision_radius: Option<i32>,
+        route_bias: i32,
+    ) -> NavigationRoute {
+        debug_assert_ne!(source_cell, target_cell);
+        let route_bias_key = i8::try_from(route_bias).expect("route bias must fit signed byte");
+        let cache_key = (source_cell, target_cell, collision_radius, route_bias_key);
+        let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
+        let result: PursuitStep = if let Some(radius) = collision_radius {
+            self.topology.pursuit_step_with_radius(
+                source_cell,
+                target_cell,
+                cached_fallback,
+                radius,
+                route_bias,
+            )
+        } else {
+            self.topology
+                .pursuit_step(source_cell, target_cell, cached_fallback, route_bias)
+        };
+        let cache_insert = if result.used_a_star && !result.a_star_cache_hit {
+            result.next_cell.map(|next| PursuitCacheInsert {
+                from: source_cell,
+                target: target_cell,
+                collision_radius,
+                route_bias: route_bias_key,
+                next,
+            })
+        } else {
+            None
+        };
+        NavigationRoute {
+            next_cell: result.next_cell,
+            navigation_route_step: true,
+            used_a_star: result.used_a_star,
+            a_star_cache_hit: result.a_star_cache_hit,
+            a_star_expanded_nodes: result.a_star_expanded_nodes,
+            cache_insert,
+        }
+    }
+
+    fn targetless_horizontal_route(
+        &self,
+        unit: &UnitSnapshot,
+        source_cell: NavCell,
+        route_bias: i32,
+    ) -> NavigationRoute {
+        let objective_cell = self
+            .topology
+            .cell_of_point(self.config.team_objective[usize::from(unit.team.0)]);
+        if objective_cell.x == source_cell.x {
+            return NavigationRoute::none();
+        }
+
+        let step_x = (objective_cell.x - source_cell.x).signum();
+        let direct_cell = NavCell::new(source_cell.x + step_x, source_cell.y);
+        let direct_position = self.topology.center_of_cell(direct_cell);
+        if self.position_is_traversable_from(
+            source_cell,
+            direct_position,
+            unit.collision_radius_override,
+        ) {
+            return NavigationRoute::at(direct_cell);
+        }
+
+        let objective_detour_step = if let Some(radius) = unit.collision_radius_override {
+            let field = self
+                .radius_objective_fields
+                .get(&(unit.team.0, radius))
+                .expect("radius-aware objective field was not prepared");
+            self.topology.step_from_distance_field_with_radius_bias(
+                source_cell,
+                field,
+                radius,
+                route_bias,
+            )
+        } else {
+            self.topology
+                .objective_step_with_bias(unit.team.0, source_cell, route_bias)
+        };
+        if let Some(next_cell) = objective_detour_step {
+            // While the unit's preferred horizontal step is topologically blocked, follow the
+            // stable shared objective field instead of repeatedly A*-routing to a same-row goal
+            // that changes as the detour changes rows. Once horizontal progress is clear again,
+            // the normal stateless lane rule resumes from the unit's new y coordinate.
+            return NavigationRoute {
+                next_cell: Some(next_cell),
+                navigation_route_step: true,
+                used_a_star: false,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+                cache_insert: None,
+            };
+        }
+
+        let Some(cell) = self.horizontal_objective_goal_cell(
+            source_cell,
+            objective_cell.x,
+            unit.collision_radius_override,
+        ) else {
+            return NavigationRoute::none();
+        };
+        // Disconnected/caged components have no objective-field descent. Keep the horizontal
+        // best-effort A* fallback so those units still press toward the objective-side wall
+        // without inventing a route through blockers.
+        if cell == source_cell {
+            NavigationRoute::at(cell)
+        } else {
+            self.route_to_cell(
+                source_cell,
+                cell,
+                unit.collision_radius_override,
+                route_bias,
+            )
+        }
+    }
+
+    fn targetless_lane_entry_goal(
+        &self,
+        team: Team,
+        current: SimPoint,
+        collision_radius: i32,
+    ) -> Option<SimPoint> {
+        let lane = self.config.targetless_lane?;
+        let min_center_y = lane.min_y.checked_add(collision_radius)?;
+        let max_center_y = lane.max_y.checked_sub(collision_radius)?;
+        if min_center_y > max_center_y || (current.y >= min_center_y && current.y <= max_center_y) {
+            return None;
+        }
+
+        let team_index = usize::from(team.0);
+        let entry_x = lane.team_entry_x[team_index];
+        let objective_x = self.config.team_objective[team_index].x;
+        let direction = (i64::from(objective_x) - i64::from(entry_x)).signum();
+        let progress_from_entry = (i64::from(current.x) - i64::from(entry_x)) * direction;
+        let goal_x = if direction != 0 && progress_from_entry < 0 {
+            entry_x
+        } else {
+            objective_x
+        };
+        Some(SimPoint::new(
+            goal_x,
+            current.y.clamp(min_center_y, max_center_y),
+        ))
     }
 
     fn desired_air_position(
@@ -5258,10 +5349,13 @@ impl Simulation {
                 }
             })
             .unwrap_or_else(|| {
-                SimPoint::new(
-                    self.config.team_objective[usize::from(unit.team.0)].x,
-                    current.y,
-                )
+                self.targetless_lane_entry_goal(unit.team, current, unit.collision_radius)
+                    .unwrap_or_else(|| {
+                        SimPoint::new(
+                            self.config.team_objective[usize::from(unit.team.0)].x,
+                            current.y,
+                        )
+                    })
             });
 
         if goal == current {
@@ -5914,6 +6008,40 @@ impl Simulation {
             .into_iter()
             .find(|candidate| self.position_is_legal_for_unit(unit, original_cell, *candidate))
             .unwrap_or(desired)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NavigationRoute {
+    next_cell: Option<NavCell>,
+    navigation_route_step: bool,
+    used_a_star: bool,
+    a_star_cache_hit: bool,
+    a_star_expanded_nodes: usize,
+    cache_insert: Option<PursuitCacheInsert>,
+}
+
+impl NavigationRoute {
+    const fn at(cell: NavCell) -> Self {
+        Self {
+            next_cell: Some(cell),
+            navigation_route_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
+    }
+
+    const fn none() -> Self {
+        Self {
+            next_cell: None,
+            navigation_route_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
     }
 }
 
