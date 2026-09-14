@@ -3,21 +3,52 @@ use castle_fight_sim::{BuildingFootprint, Team};
 
 use crate::{
     AuthoritativeSimulation,
+    bridge::PresentationSamples,
     demo::{BuildKind, ProductionKind},
+    inspection::InspectionSelection,
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
     terrain::TerrainSurface,
 };
 
-const PANEL_LEFT: f32 = 16.0;
-const PANEL_TOP: f32 = 16.0;
-const PANEL_WIDTH: f32 = 360.0;
-const PANEL_HEIGHT: f32 = 500.0;
+const PANEL_LEFT: f32 = 12.0;
+const PANEL_BOTTOM: f32 = 12.0;
+const PANEL_PADDING: f32 = 8.0;
+const GRID_GAP: f32 = 4.0;
+const CELL_SIZE: f32 = 66.0;
+const GRID_COLUMNS: usize = 4;
+const GRID_ROWS: usize = 3;
+const PANEL_WIDTH: f32 =
+    PANEL_PADDING * 2.0 + CELL_SIZE * GRID_COLUMNS as f32 + GRID_GAP * (GRID_COLUMNS as f32 - 1.0);
+const PANEL_HEIGHT: f32 =
+    PANEL_PADDING * 2.0 + CELL_SIZE * GRID_ROWS as f32 + GRID_GAP * (GRID_ROWS as f32 - 1.0);
 
-const PANEL_BACKGROUND: Color = Color::srgba(0.035, 0.045, 0.060, 0.94);
-const BUTTON_NORMAL: Color = Color::srgb(0.10, 0.12, 0.15);
-const BUTTON_HOVERED: Color = Color::srgb(0.17, 0.20, 0.24);
-const BUTTON_SELECTED: Color = Color::srgb(0.20, 0.42, 0.30);
-const BUTTON_BORDER: Color = Color::srgb(0.32, 0.36, 0.42);
+const PANEL_BACKGROUND: Color = Color::srgba(0.105, 0.070, 0.040, 0.97);
+const PANEL_BORDER: Color = Color::srgb(0.28, 0.25, 0.20);
+const SLOT_BACKGROUND: Color = Color::srgb(0.018, 0.016, 0.014);
+const SLOT_BORDER: Color = Color::srgb(0.34, 0.34, 0.32);
+const BUTTON_NORMAL: Color = Color::srgb(0.095, 0.075, 0.055);
+const BUTTON_HOVERED: Color = Color::srgb(0.18, 0.14, 0.095);
+const BUTTON_SELECTED: Color = Color::srgb(0.18, 0.27, 0.14);
+const BUTTON_SELECTED_BORDER: Color = Color::srgb(0.86, 0.72, 0.28);
+
+const BUILD_GRID: [Option<BuildKind>; GRID_COLUMNS * GRID_ROWS] = [
+    Some(BuildKind::Production(ProductionKind::Barracks)),
+    Some(BuildKind::Production(ProductionKind::RangersHall)),
+    Some(BuildKind::Production(ProductionKind::OrcishSiegeFactory)),
+    Some(BuildKind::Production(ProductionKind::IceTrollHut)),
+    Some(BuildKind::Production(ProductionKind::GryphonRock)),
+    Some(BuildKind::Tower(
+        castle_fight_sim::CastleFightTowerKind::WatchTower,
+    )),
+    Some(BuildKind::Tower(
+        castle_fight_sim::CastleFightTowerKind::PoofTower,
+    )),
+    None,
+    None,
+    None,
+    None,
+    None,
+];
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BuildRequest {
@@ -48,16 +79,11 @@ impl Default for BuildSelection {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 enum BuildUiAction {
-    Team(u8),
     Building(BuildKind),
-    Cancel,
 }
 
 #[derive(Component)]
-struct BuildSelectionText;
-
-#[derive(Component)]
-struct BuildStatusText;
+struct BuildPanel;
 
 type BuildActionInteractions<'w, 's> = Query<
     'w,
@@ -76,9 +102,9 @@ impl Plugin for BuildUiPlugin {
             .add_systems(
                 Update,
                 (
+                    sync_build_panel_to_selection,
                     handle_build_ui_actions,
                     style_build_ui_buttons,
-                    update_build_ui_text,
                     queue_world_placement,
                     draw_build_preview,
                 )
@@ -93,123 +119,114 @@ fn setup_build_ui(mut commands: Commands) {
             Node {
                 position_type: PositionType::Absolute,
                 left: px(PANEL_LEFT),
-                top: px(PANEL_TOP),
+                bottom: px(PANEL_BOTTOM),
                 width: px(PANEL_WIDTH),
                 height: px(PANEL_HEIGHT),
-                padding: UiRect::all(px(14.0)),
+                padding: UiRect::all(px(PANEL_PADDING)),
+                border: UiRect::all(px(3.0)),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(8.0),
-                border_radius: BorderRadius::all(px(8.0)),
+                row_gap: px(GRID_GAP),
                 ..default()
             },
             BackgroundColor(PANEL_BACKGROUND),
+            BorderColor::all(PANEL_BORDER),
+            Visibility::Hidden,
+            BuildPanel,
         ))
         .with_children(|panel| {
-            panel.spawn((
-                Text::new("BUILDINGS"),
-                TextFont::from_font_size(22.0),
-                TextColor(Color::WHITE),
-            ));
-            panel.spawn((
-                Text::new("Side"),
-                TextFont::from_font_size(15.0),
-                TextColor(Color::srgb(0.72, 0.76, 0.82)),
-            ));
-            panel
-                .spawn((Node {
-                    width: percent(100.0),
-                    column_gap: px(8.0),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    spawn_button(row, "Blue", BuildUiAction::Team(0));
-                    spawn_button(row, "Red", BuildUiAction::Team(1));
-                });
-            panel.spawn((
-                Text::new("Building"),
-                TextFont::from_font_size(15.0),
-                TextColor(Color::srgb(0.72, 0.76, 0.82)),
-            ));
-            spawn_building_button_row(
-                panel,
-                BuildKind::Production(ProductionKind::Barracks),
-                Some(BuildKind::Production(ProductionKind::RangersHall)),
-            );
-            spawn_building_button_row(
-                panel,
-                BuildKind::Production(ProductionKind::OrcishSiegeFactory),
-                Some(BuildKind::Production(ProductionKind::IceTrollHut)),
-            );
-            spawn_building_button_row(
-                panel,
-                BuildKind::Production(ProductionKind::GryphonRock),
-                None,
-            );
-            spawn_building_button_row(
-                panel,
-                BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
-                Some(BuildKind::Tower(
-                    castle_fight_sim::CastleFightTowerKind::PoofTower,
-                )),
-            );
-            spawn_button(panel, "Cancel placement (Esc)", BuildUiAction::Cancel);
-            panel.spawn((
-                Text::new("No building selected"),
-                TextFont::from_font_size(16.0),
-                TextColor(Color::srgb(0.90, 0.92, 0.96)),
-                BuildSelectionText,
-            ));
-            panel.spawn((
-                Text::new(""),
-                TextFont::from_font_size(14.0),
-                TextColor(Color::srgb(0.70, 0.78, 0.86)),
-                BuildStatusText,
-            ));
-        });
-}
-
-fn spawn_building_button_row(
-    parent: &mut ChildSpawnerCommands,
-    first: BuildKind,
-    second: Option<BuildKind>,
-) {
-    parent
-        .spawn((Node {
-            width: percent(100.0),
-            column_gap: px(8.0),
-            ..default()
-        },))
-        .with_children(|row| {
-            spawn_button(row, first.label(), BuildUiAction::Building(first));
-            if let Some(second) = second {
-                spawn_button(row, second.label(), BuildUiAction::Building(second));
+            for row_index in 0..GRID_ROWS {
+                panel
+                    .spawn((Node {
+                        width: percent(100.0),
+                        height: px(CELL_SIZE),
+                        column_gap: px(GRID_GAP),
+                        ..default()
+                    },))
+                    .with_children(|row| {
+                        let row_start = row_index * GRID_COLUMNS;
+                        for slot in &BUILD_GRID[row_start..row_start + GRID_COLUMNS] {
+                            match slot {
+                                Some(kind) => spawn_build_button(row, *kind),
+                                None => spawn_empty_slot(row),
+                            }
+                        }
+                    });
             }
         });
 }
 
-fn spawn_button(parent: &mut ChildSpawnerCommands, label: &'static str, action: BuildUiAction) {
+fn spawn_build_button(parent: &mut ChildSpawnerCommands, kind: BuildKind) {
     parent
         .spawn((
             Button,
             Node {
-                min_width: px(120.0),
-                height: px(38.0),
-                padding: UiRect::horizontal(px(12.0)),
-                border: UiRect::all(px(1.0)),
+                width: px(CELL_SIZE),
+                height: px(CELL_SIZE),
+                border: UiRect::all(px(2.0)),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                flex_grow: 1.0,
+                flex_shrink: 0.0,
                 ..default()
             },
             BackgroundColor(BUTTON_NORMAL),
-            BorderColor::all(BUTTON_BORDER),
-            action,
+            BorderColor::all(SLOT_BORDER),
+            BuildUiAction::Building(kind),
         ))
         .with_child((
-            Text::new(label),
-            TextFont::from_font_size(15.0),
-            TextColor(Color::WHITE),
+            Text::new(build_button_label(kind)),
+            TextFont::from_font_size(12.0),
+            TextColor(Color::srgb(0.92, 0.90, 0.84)),
+            TextLayout::justify(Justify::Center),
         ));
+}
+
+fn spawn_empty_slot(parent: &mut ChildSpawnerCommands) {
+    parent.spawn((
+        Node {
+            width: px(CELL_SIZE),
+            height: px(CELL_SIZE),
+            border: UiRect::all(px(2.0)),
+            flex_shrink: 0.0,
+            ..default()
+        },
+        BackgroundColor(SLOT_BACKGROUND),
+        BorderColor::all(SLOT_BORDER),
+    ));
+}
+
+fn build_button_label(kind: BuildKind) -> &'static str {
+    match kind {
+        BuildKind::Production(ProductionKind::Barracks) => "Barracks",
+        BuildKind::Production(ProductionKind::RangersHall) => "Rngrs\nHall",
+        BuildKind::Production(ProductionKind::OrcishSiegeFactory) => "Siege\nFac.",
+        BuildKind::Production(ProductionKind::IceTrollHut) => "Ice\nHut",
+        BuildKind::Production(ProductionKind::GryphonRock) => "Gryph\nRock",
+        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower) => "Watch\nTower",
+        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::PoofTower) => "Poof\nTower",
+    }
+}
+
+fn sync_build_panel_to_selection(
+    inspection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    mut selection: ResMut<BuildSelection>,
+    mut panel: Single<&mut Visibility, With<BuildPanel>>,
+) {
+    let builder_team = inspection
+        .selected
+        .and_then(|selected| samples.current.builders.get(&selected))
+        .map(|builder| builder.team);
+
+    match builder_team {
+        Some(team) => {
+            selection.team = team;
+            **panel = Visibility::Visible;
+        }
+        None => {
+            selection.kind = None;
+            **panel = Visibility::Hidden;
+        }
+    }
 }
 
 fn handle_build_ui_actions(
@@ -226,24 +243,13 @@ fn handle_build_ui_actions(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        match *action {
-            BuildUiAction::Team(team) => {
-                selection.team = Team(team);
-                selection.status = format!("{} side selected.", team_label(selection.team));
-            }
-            BuildUiAction::Building(kind) => {
-                selection.kind = Some(kind);
-                selection.status = format!(
-                    "{} {} selected — left-click the battlefield to place.",
-                    team_label(selection.team),
-                    kind.label()
-                );
-            }
-            BuildUiAction::Cancel => {
-                selection.kind = None;
-                selection.status = "Placement cancelled.".into();
-            }
-        }
+        let BuildUiAction::Building(kind) = *action;
+        selection.kind = Some(kind);
+        selection.status = format!(
+            "{} {} selected — left-click the battlefield to place.",
+            team_label(selection.team),
+            kind.label()
+        );
     }
 }
 
@@ -257,11 +263,8 @@ fn style_build_ui_buttons(
     )>,
 ) {
     for (action, interaction, mut background, mut border) in &mut buttons {
-        let selected = match *action {
-            BuildUiAction::Team(team) => selection.team.0 == team,
-            BuildUiAction::Building(kind) => selection.kind == Some(kind),
-            BuildUiAction::Cancel => false,
-        };
+        let BuildUiAction::Building(kind) = *action;
+        let selected = selection.kind == Some(kind);
         *background = BackgroundColor(if selected {
             BUTTON_SELECTED
         } else if *interaction == Interaction::Hovered {
@@ -270,36 +273,10 @@ fn style_build_ui_buttons(
             BUTTON_NORMAL
         });
         *border = BorderColor::all(if selected {
-            match *action {
-                BuildUiAction::Team(team) => team_ui_color(Team(team)),
-                BuildUiAction::Building(_) => Color::srgb(0.48, 0.88, 0.56),
-                BuildUiAction::Cancel => BUTTON_BORDER,
-            }
+            BUTTON_SELECTED_BORDER
         } else {
-            BUTTON_BORDER
+            SLOT_BORDER
         });
-    }
-}
-
-fn update_build_ui_text(
-    selection: Res<BuildSelection>,
-    mut selection_text: Query<&mut Text, With<BuildSelectionText>>,
-    mut status_text: Query<&mut Text, (With<BuildStatusText>, Without<BuildSelectionText>)>,
-) {
-    let selected = selection.kind.map_or_else(
-        || {
-            format!(
-                "Side: {} | No building selected",
-                team_label(selection.team)
-            )
-        },
-        |kind| format!("Side: {} | {}", team_label(selection.team), kind.label()),
-    );
-    for mut text in &mut selection_text {
-        **text = selected.clone();
-    }
-    for mut text in &mut status_text {
-        **text = selection.status.clone();
     }
 }
 
@@ -322,7 +299,7 @@ fn queue_world_placement(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    if cursor_over_build_panel(cursor) {
+    if cursor_over_build_panel(cursor, window.height(), true) {
         return;
     }
     let (camera, camera_transform) = *camera;
@@ -363,7 +340,7 @@ fn draw_build_preview(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    if cursor_over_build_panel(cursor) {
+    if cursor_over_build_panel(cursor, window.height(), true) {
         return;
     }
     let (camera, camera_transform) = *camera;
@@ -388,11 +365,19 @@ fn placement_footprint(metrics: &WorldMetrics, world: Vec3, kind: BuildKind) -> 
     metrics.footprint_at_world(world, size, size)
 }
 
-pub(crate) fn cursor_over_build_panel(cursor: Vec2) -> bool {
+pub(crate) fn cursor_over_build_panel(
+    cursor: Vec2,
+    window_height: f32,
+    panel_visible: bool,
+) -> bool {
+    if !panel_visible {
+        return false;
+    }
+    let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
     cursor.x >= PANEL_LEFT
         && cursor.x <= PANEL_LEFT + PANEL_WIDTH
-        && cursor.y >= PANEL_TOP
-        && cursor.y <= PANEL_TOP + PANEL_HEIGHT
+        && cursor.y >= panel_top
+        && cursor.y <= panel_top + PANEL_HEIGHT
 }
 
 fn team_label(team: Team) -> &'static str {
@@ -442,10 +427,40 @@ mod tests {
     }
 
     #[test]
-    fn panel_capture_matches_visible_panel_bounds() {
-        assert!(cursor_over_build_panel(Vec2::new(16.0, 16.0)));
-        assert!(cursor_over_build_panel(Vec2::new(376.0, 516.0)));
-        assert!(!cursor_over_build_panel(Vec2::new(377.0, 200.0)));
-        assert!(!cursor_over_build_panel(Vec2::new(200.0, 517.0)));
+    fn panel_capture_matches_visible_bottom_left_panel_bounds() {
+        let window_height = 720.0;
+        let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
+        assert!(cursor_over_build_panel(
+            Vec2::new(PANEL_LEFT, panel_top),
+            window_height,
+            true,
+        ));
+        assert!(cursor_over_build_panel(
+            Vec2::new(PANEL_LEFT + PANEL_WIDTH, panel_top + PANEL_HEIGHT),
+            window_height,
+            true,
+        ));
+        assert!(!cursor_over_build_panel(
+            Vec2::new(PANEL_LEFT + PANEL_WIDTH + 1.0, panel_top),
+            window_height,
+            true,
+        ));
+        assert!(!cursor_over_build_panel(
+            Vec2::new(PANEL_LEFT, panel_top),
+            window_height,
+            false,
+        ));
+    }
+
+    #[test]
+    fn build_grid_contains_every_currently_implemented_demo_building() {
+        let populated: Vec<_> = BUILD_GRID.iter().flatten().copied().collect();
+        assert_eq!(populated.len(), 7);
+        for production in ProductionKind::ALL {
+            assert!(populated.contains(&BuildKind::Production(production)));
+        }
+        for tower in castle_fight_sim::CastleFightTowerKind::ALL {
+            assert!(populated.contains(&BuildKind::Tower(tower)));
+        }
     }
 }
