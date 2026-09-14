@@ -17,7 +17,11 @@ const TERRAIN_TEXTURE_MANIFEST: &str = "wc3/terrain/manifest.json";
 const TERRAIN_TEXTURE_ASSET_PREFIX: &str = "wc3/terrain";
 const WC3_BLEND_ATLAS_SIDE: u32 = 4;
 const TERRAIN_PRESENTATION_SUBDIVISIONS: u32 = 4;
-const TERRAIN_NORMAL_SAMPLE_GRID_DELTA: f32 = 0.125;
+// Average presentation normals across half a terrain tile. WC3's classic terrain renderer
+// shades ramps as broad, soft transitions rather than exposing each height-sample change.
+const TERRAIN_NORMAL_SAMPLE_GRID_DELTA: f32 = 0.5;
+const TERRAIN_SLOPE_SHADE_STRENGTH: f32 = 0.24;
+const TERRAIN_SLOPE_MIN_BRIGHTNESS: f32 = 0.84;
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainSurface {
@@ -66,6 +70,7 @@ struct TerrainTextureLayer {
 struct TerrainMeshBuilder {
     positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
+    colors: Vec<[f32; 4]>,
     uvs: Vec<[f32; 2]>,
     indices: Vec<u32>,
 }
@@ -601,7 +606,9 @@ impl TerrainMeshBuilder {
                 let fx = sub_x as f32 / subdivisions as f32;
                 let grid = Vec2::new(x as f32 + fx, y as f32 + fy);
                 self.positions.push(terrain.position_at_grid(grid));
-                self.normals.push(terrain.normal_at_grid(grid));
+                let normal = terrain.normal_at_grid(grid);
+                self.normals.push(normal);
+                self.colors.push(terrain_slope_tint(normal));
                 self.uvs.push(interpolate_quad_uv(uvs, fx, fy));
             }
         }
@@ -638,6 +645,8 @@ impl TerrainMeshBuilder {
             .extend_from_slice(&[sort_bounds.0, sort_bounds.1]);
         self.normals
             .extend_from_slice(&[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]);
+        self.colors
+            .extend_from_slice(&[[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]]);
         self.uvs.extend_from_slice(&[[0.0, 0.0], [0.0, 0.0]]);
 
         Some(
@@ -647,6 +656,7 @@ impl TerrainMeshBuilder {
             )
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colors)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
             .with_inserted_indices(Indices::U32(self.indices)),
         )
@@ -667,6 +677,13 @@ fn full_tile_variation(extended: bool, detail: u8) -> u8 {
     } else {
         15
     }
+}
+
+fn terrain_slope_tint(normal: [f32; 3]) -> [f32; 4] {
+    let up = normal[1].clamp(0.0, 1.0);
+    let brightness =
+        (1.0 - (1.0 - up) * TERRAIN_SLOPE_SHADE_STRENGTH).max(TERRAIN_SLOPE_MIN_BRIGHTNESS);
+    [brightness, brightness, brightness, 1.0]
 }
 
 fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
@@ -852,6 +869,21 @@ mod tests {
         assert_eq!(positions.len(), side * side);
         assert_eq!(normals.len(), positions.len());
         assert!(normals.iter().all(|normal| normal[1] > 0.0));
+    }
+
+    #[test]
+    fn terrain_slope_tint_keeps_flats_authored_and_shades_ramps_subtly() {
+        assert_eq!(terrain_slope_tint([0.0, 1.0, 0.0]), [1.0; 4]);
+
+        let ramp = terrain_slope_tint([0.0, std::f32::consts::FRAC_1_SQRT_2, 0.0]);
+        assert!(ramp[0] < 1.0);
+        assert!(ramp[0] > 0.9);
+        assert_eq!(ramp[0], ramp[1]);
+        assert_eq!(ramp[1], ramp[2]);
+        assert_eq!(ramp[3], 1.0);
+
+        let steep = terrain_slope_tint([0.0, 0.0, 1.0]);
+        assert_eq!(steep[0], TERRAIN_SLOPE_MIN_BRIGHTNESS);
     }
 
     #[test]

@@ -9,6 +9,7 @@ use bevy::{
     input::mouse::MouseWheel,
     light::AmbientLight,
     prelude::*,
+    render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
     time::Fixed,
     window::PrimaryWindow,
 };
@@ -49,7 +50,8 @@ const PROJECTILE_HEIGHT: f32 = 6.0;
 const WC3_SCENE_DIRECTIONAL_ILLUMINANCE: f32 = 12_000.0;
 const WC3_SCENE_EXPOSURE_EV100: f32 = Exposure::EV100_OVERCAST;
 const WC3_SCENE_AMBIENT_BRIGHTNESS: f32 = 400.0;
-const WC3_TERRAIN_DIFFUSE_MULTIPLIER: f32 = 0.78;
+const WC3_SCENE_POST_SATURATION: f32 = 1.12;
+const WC3_SCENE_CONTRAST: f32 = 1.04;
 const DEFAULT_BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
 const PROJECTILE_IMPACT_SECONDS: f32 = 0.22;
@@ -775,11 +777,6 @@ fn setup_scene(
                         .atlas(texture_mesh.palette_index)
                         .expect("validated terrain texture mesh references a known atlas");
                     let material = materials.add(StandardMaterial {
-                        base_color: Color::srgb(
-                            WC3_TERRAIN_DIFFUSE_MULTIPLIER,
-                            WC3_TERRAIN_DIFFUSE_MULTIPLIER,
-                            WC3_TERRAIN_DIFFUSE_MULTIPLIER,
-                        ),
                         base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
                         alpha_mode: AlphaMode::Blend,
                         // The Warcraft ground atlases already contain their intended diffuse
@@ -827,6 +824,16 @@ fn setup_scene(
         Exposure {
             ev100: WC3_SCENE_EXPOSURE_EV100,
         },
+        ColorGrading::with_identical_sections(
+            ColorGradingGlobal {
+                post_saturation: WC3_SCENE_POST_SATURATION,
+                ..default()
+            },
+            ColorGradingSection {
+                contrast: WC3_SCENE_CONTRAST,
+                ..default()
+            },
+        ),
         AmbientLight {
             color: Color::WHITE,
             brightness: WC3_SCENE_AMBIENT_BRIGHTNESS,
