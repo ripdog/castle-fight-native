@@ -10,12 +10,30 @@ use crate::presentation::WorldMetrics;
 
 const NAV_CELL_WORLD: i32 = 32;
 const NAV_CELL_SUBUNITS: i32 = NAV_CELL_WORLD * SUBUNITS_PER_WORLD_UNIT;
+// W3I's unplayable-border tile counts leave this authoritative playable rectangle. The smaller
+// camera rectangle below controls what WC3 lets the player see, but legal base cells extend beyond
+// it behind the castles.
+const PLAYABLE_MIN_X_WORLD: i32 = -6_400;
+const PLAYABLE_MAX_X_WORLD: i32 = 6_400;
+const PLAYABLE_MIN_Y_WORLD: i32 = -3_584;
+const PLAYABLE_MAX_Y_WORLD: i32 = 3_584;
 const CAMERA_MIN_X_WORLD: i32 = -5_888;
 const CAMERA_MAX_X_WORLD: i32 = 5_888;
 const CAMERA_MIN_Y_WORLD: i32 = -3_328;
 const CAMERA_MAX_Y_WORLD: i32 = 3_328;
-const MIDDLE_MIN_X: i32 = -128;
-const MIDDLE_MAX_X: i32 = 127;
+// The protected map creates these two base rectangles as NFb/MFb. Their edges line up with the
+// outer wall pathing and are the actual standard build/movement regions, not the camera bounds.
+const LEFT_BUILD_MIN_X_WORLD: i32 = -6_144;
+const LEFT_BUILD_MAX_X_WORLD: i32 = -1_920;
+const RIGHT_BUILD_MIN_X_WORLD: i32 = 1_920;
+const RIGHT_BUILD_MAX_X_WORLD: i32 = 6_144;
+const BUILD_MIN_Y_WORLD: i32 = -2_048;
+const BUILD_MAX_Y_WORLD: i32 = 2_048;
+// Outside the lane, only the central gap between the two protected-map base rectangles is
+// invalid. The old verification mask started this blocker at +/-4096 world units, which cut away
+// almost half of each real base and caused legal wall-adjacent placement to be rejected.
+const CENTRAL_GAP_MIN_X: i32 = LEFT_BUILD_MAX_X_WORLD / NAV_CELL_WORLD;
+const CENTRAL_GAP_MAX_X: i32 = RIGHT_BUILD_MIN_X_WORLD / NAV_CELL_WORLD - 1;
 const LANE_MIN_Y: i32 = -24;
 const LANE_MAX_Y: i32 = 23;
 const CASTLE_HEALTH: i32 = 20_000;
@@ -51,7 +69,12 @@ pub struct DemoWorld {
 pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWorld {
     let terrain = original_terrain();
     let config = demo_config(&terrain);
-    let metrics = WorldMetrics::from_simulation_config(&config);
+    let metrics = WorldMetrics::from_simulation_config(&config).with_camera_focus_bounds_world(
+        CAMERA_MIN_X_WORLD as f32,
+        CAMERA_MIN_Y_WORLD as f32,
+        CAMERA_MAX_X_WORLD as f32,
+        CAMERA_MAX_Y_WORLD as f32,
+    );
     let combat_rules = CombatRules {
         terrain_elevation: Some(terrain.clone()),
         uphill_miss_chance_per_10k: DEMO_UPHILL_MISS_CHANCE_PER_10K,
@@ -170,54 +193,48 @@ fn demo_config(terrain: &TerrainElevationMap) -> SimulationConfig {
         maximum.y.div_euclid(NAV_CELL_SUBUNITS) - 1,
     );
 
-    // W3I's camera bounds are the authored playable rectangle. Terrain outside this rectangle is
-    // only map-edge padding and becomes visibly repetitive once the WC3 camera lock is removed.
-    // Make that same rectangle authoritative for movement and placement in the native client.
+    // W3I's camera bounds are deliberately inset from the actual playable map. The unplayable
+    // border counts, not the camera lock, define where navigation may exist. This distinction is
+    // visible behind each castle, where legal corner cages sit outside the camera-focus rectangle.
     let navigation_min = NavCell::new(
-        CAMERA_MIN_X_WORLD.div_euclid(NAV_CELL_WORLD),
-        CAMERA_MIN_Y_WORLD.div_euclid(NAV_CELL_WORLD),
+        PLAYABLE_MIN_X_WORLD.div_euclid(NAV_CELL_WORLD),
+        PLAYABLE_MIN_Y_WORLD.div_euclid(NAV_CELL_WORLD),
     );
     let navigation_max = NavCell::new(
-        CAMERA_MAX_X_WORLD.div_euclid(NAV_CELL_WORLD) - 1,
-        CAMERA_MAX_Y_WORLD.div_euclid(NAV_CELL_WORLD) - 1,
+        PLAYABLE_MAX_X_WORLD.div_euclid(NAV_CELL_WORLD) - 1,
+        PLAYABLE_MAX_Y_WORLD.div_euclid(NAV_CELL_WORLD) - 1,
     );
     assert!(navigation_min.x >= terrain_navigation_min.x);
     assert!(navigation_min.y >= terrain_navigation_min.y);
     assert!(navigation_max.x <= terrain_navigation_max.x);
     assert!(navigation_max.y <= terrain_navigation_max.y);
 
-    // Preserve the original verification slice's one-third-per-side build ownership, but clip it
-    // to the real playable camera rectangle instead of extending it into hidden map padding.
-    let terrain_navigation_width = terrain_navigation_max.x - terrain_navigation_min.x + 1;
-    assert_eq!(terrain_navigation_width % 3, 0);
-    let build_region_width = terrain_navigation_width / 3;
-    let left_build_max_x = terrain_navigation_min.x + build_region_width - 1;
-    let right_build_min_x = terrain_navigation_max.x - build_region_width + 1;
-    let navigation_height = navigation_max.y - navigation_min.y + 1;
-    let left_build_region = BuildingFootprint::new(
-        navigation_min.x,
-        navigation_min.y,
-        (left_build_max_x - navigation_min.x + 1) as u16,
-        navigation_height as u16,
+    // Use the exact protected-map base rectangles (NFb/MFb). Their max edges are exclusive, just
+    // like WC3 rects; converting them as edge-aligned footprints avoids losing a rear nav cell.
+    let left_build_region = world_rect_footprint(
+        LEFT_BUILD_MIN_X_WORLD,
+        BUILD_MIN_Y_WORLD,
+        LEFT_BUILD_MAX_X_WORLD,
+        BUILD_MAX_Y_WORLD,
     );
-    let right_build_region = BuildingFootprint::new(
-        right_build_min_x,
-        navigation_min.y,
-        (navigation_max.x - right_build_min_x + 1) as u16,
-        navigation_height as u16,
+    let right_build_region = world_rect_footprint(
+        RIGHT_BUILD_MIN_X_WORLD,
+        BUILD_MIN_Y_WORLD,
+        RIGHT_BUILD_MAX_X_WORLD,
+        BUILD_MAX_Y_WORLD,
     );
 
     let mut static_blockers = vec![
         BuildingFootprint::new(
-            MIDDLE_MIN_X,
+            CENTRAL_GAP_MIN_X,
             navigation_min.y,
-            (MIDDLE_MAX_X - MIDDLE_MIN_X + 1) as u16,
+            (CENTRAL_GAP_MAX_X - CENTRAL_GAP_MIN_X + 1) as u16,
             (LANE_MIN_Y - navigation_min.y) as u16,
         ),
         BuildingFootprint::new(
-            MIDDLE_MIN_X,
+            CENTRAL_GAP_MIN_X,
             LANE_MAX_Y + 1,
-            (MIDDLE_MAX_X - MIDDLE_MIN_X + 1) as u16,
+            (CENTRAL_GAP_MAX_X - CENTRAL_GAP_MIN_X + 1) as u16,
             (navigation_max.y - LANE_MAX_Y) as u16,
         ),
     ];
@@ -387,6 +404,30 @@ fn parse_wall_integer(value: &str, axis: &str) -> i32 {
     rounded as i32
 }
 
+fn world_rect_footprint(
+    min_x_world: i32,
+    min_y_world: i32,
+    max_x_world: i32,
+    max_y_world: i32,
+) -> BuildingFootprint {
+    assert!(min_x_world < max_x_world && min_y_world < max_y_world);
+    for edge in [min_x_world, min_y_world, max_x_world, max_y_world] {
+        assert_eq!(
+            edge.rem_euclid(NAV_CELL_WORLD),
+            0,
+            "world rectangle edge must align to the navigation grid"
+        );
+    }
+    let width = (max_x_world - min_x_world).div_euclid(NAV_CELL_WORLD);
+    let height = (max_y_world - min_y_world).div_euclid(NAV_CELL_WORLD);
+    BuildingFootprint::new(
+        min_x_world.div_euclid(NAV_CELL_WORLD),
+        min_y_world.div_euclid(NAV_CELL_WORLD),
+        u16::try_from(width).expect("world rectangle must fit a building footprint"),
+        u16::try_from(height).expect("world rectangle must fit a building footprint"),
+    )
+}
+
 fn centered_world_footprint(
     center_x: i32,
     center_y: i32,
@@ -524,17 +565,25 @@ mod tests {
     }
 
     #[test]
-    fn original_map_camera_bounds_are_authoritative() {
+    fn original_map_playable_bounds_are_wider_than_camera_bounds() {
         let terrain = original_terrain();
         let config = demo_config(&terrain);
-        assert_eq!(config.navigation_min, NavCell::new(-184, -104));
-        assert_eq!(config.navigation_max, NavCell::new(183, 103));
+        assert_eq!(config.navigation_min, NavCell::new(-200, -112));
+        assert_eq!(config.navigation_max, NavCell::new(199, 111));
+        assert_eq!(
+            config.team_build_regions[0],
+            vec![BuildingFootprint::new(-192, -64, 132, 128)]
+        );
+        assert_eq!(
+            config.team_build_regions[1],
+            vec![BuildingFootprint::new(60, -64, 132, 128)]
+        );
 
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
-        assert!(!simulation.can_place_building(BuildingFootprint::new(-185, 0, 1, 1)));
-        assert!(!simulation.can_place_building(BuildingFootprint::new(184, 0, 1, 1)));
-        assert!(!simulation.can_place_building(BuildingFootprint::new(0, -105, 1, 1)));
-        assert!(!simulation.can_place_building(BuildingFootprint::new(0, 104, 1, 1)));
+        assert!(!simulation.can_place_building(BuildingFootprint::new(-201, 0, 1, 1)));
+        assert!(!simulation.can_place_building(BuildingFootprint::new(200, 0, 1, 1)));
+        assert!(!simulation.can_place_building(BuildingFootprint::new(0, -113, 1, 1)));
+        assert!(!simulation.can_place_building(BuildingFootprint::new(0, 112, 1, 1)));
     }
 
     #[test]
@@ -547,6 +596,11 @@ mod tests {
         let wall = BuildingFootprint::new(132, 62, 10, 2);
         assert!(blockers.contains(&wall));
 
+        // The left rear cap is centered at x=-5984. Its footprint begins exactly at the authored
+        // NFb base edge x=-6144, rather than bleeding one nav cell inward into the corner cage.
+        assert!(blockers.contains(&BuildingFootprint::new(-192, 62, 10, 2)));
+        assert!(blockers.contains(&BuildingFootprint::new(-192, -64, 10, 2)));
+
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
         assert!(
             !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(136, 62, 1, 1))
@@ -554,7 +608,58 @@ mod tests {
     }
 
     #[test]
-    fn original_map_middle_third_is_not_buildable() {
+    fn original_map_corner_cages_and_wall_adjacent_cells_are_buildable() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
+
+        // Four-cell buildings can sit flush against both the rear base edge and either horizontal
+        // wall. Moving the same footprint one cell into a wall must still be rejected.
+        let top_left_corner = BuildingFootprint::new(-192, 58, 4, 4);
+        let bottom_left_corner = BuildingFootprint::new(-192, -62, 4, 4);
+        assert!(simulation.can_place_building_for_team(Team(0), top_left_corner));
+        assert!(simulation.can_place_building_for_team(Team(0), bottom_left_corner));
+        assert!(
+            !simulation
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-192, 59, 4, 4))
+        );
+        assert!(
+            !simulation
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-192, -63, 4, 4))
+        );
+
+        // Check wall adjacency away from the cap too, so the regression does not depend only on
+        // corner geometry.
+        assert!(
+            simulation.can_place_building_for_team(Team(0), BuildingFootprint::new(-120, 58, 4, 4))
+        );
+        assert!(
+            simulation
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-120, -62, 4, 4))
+        );
+    }
+
+    #[test]
+    fn original_map_rear_build_edge_keeps_its_last_legal_cell() {
+        let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
+
+        // NFb/MFb end at +/-6144. A 4x4 footprint may touch that edge exactly, but shifting one
+        // nav cell farther outward must fail the team-region containment check.
+        assert!(
+            simulation.can_place_building_for_team(Team(0), BuildingFootprint::new(-192, 20, 4, 4))
+        );
+        assert!(
+            !simulation
+                .can_place_building_for_team(Team(0), BuildingFootprint::new(-193, 20, 4, 4))
+        );
+        assert!(
+            simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(188, 20, 4, 4))
+        );
+        assert!(
+            !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(189, 20, 4, 4))
+        );
+    }
+
+    #[test]
+    fn original_map_central_lane_gap_is_not_buildable() {
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
         let middle = BuildingFootprint::new(0, 0, 4, 4);
         let left = BuildingFootprint::new(-140, 30, 4, 4);

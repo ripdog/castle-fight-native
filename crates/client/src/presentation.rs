@@ -81,16 +81,44 @@ pub struct WorldMetrics {
     navigation_cell_size_subunits: i32,
     navigation_min: IVec2,
     navigation_max: IVec2,
+    camera_focus_min_world: Vec2,
+    camera_focus_max_world: Vec2,
 }
 
 impl WorldMetrics {
     #[must_use]
     pub fn from_simulation_config(config: &SimulationConfig) -> Self {
+        let navigation_cell_world =
+            config.navigation_cell_size as f32 / SUBUNITS_PER_WORLD_UNIT as f32;
+        let navigation_min = IVec2::new(config.navigation_min.x, config.navigation_min.y);
+        let navigation_max = IVec2::new(config.navigation_max.x, config.navigation_max.y);
         Self {
             navigation_cell_size_subunits: config.navigation_cell_size,
-            navigation_min: IVec2::new(config.navigation_min.x, config.navigation_min.y),
-            navigation_max: IVec2::new(config.navigation_max.x, config.navigation_max.y),
+            navigation_min,
+            navigation_max,
+            camera_focus_min_world: navigation_min.as_vec2() * navigation_cell_world,
+            camera_focus_max_world: (navigation_max + IVec2::ONE).as_vec2() * navigation_cell_world,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn with_camera_focus_bounds_world(
+        mut self,
+        min_x: f32,
+        min_y: f32,
+        max_x: f32,
+        max_y: f32,
+    ) -> Self {
+        let min = Vec2::new(min_x, min_y);
+        let max = Vec2::new(max_x, max_y);
+        assert!(min.cmple(max).all(), "camera focus bounds must be ordered");
+        assert!(
+            min.cmpge(self.world_min()).all() && max.cmple(self.world_max()).all(),
+            "camera focus bounds must stay inside navigation bounds"
+        );
+        self.camera_focus_min_world = min;
+        self.camera_focus_max_world = max;
+        self
     }
 
     pub(crate) fn navigation_cell_world(&self) -> f32 {
@@ -115,12 +143,14 @@ impl WorldMetrics {
     }
 
     fn clamp_focus(&self, focus: Vec3) -> Vec3 {
-        let min = self.world_min();
-        let max = self.world_max();
         Vec3::new(
-            focus.x.clamp(min.x, max.x),
+            focus
+                .x
+                .clamp(self.camera_focus_min_world.x, self.camera_focus_max_world.x),
             focus.y,
-            focus.z.clamp(min.y, max.y),
+            focus
+                .z
+                .clamp(self.camera_focus_min_world.y, self.camera_focus_max_world.y),
         )
     }
 
@@ -2879,8 +2909,8 @@ fn update_camera(
         rig.grab_anchor = None;
     }
 
-    // Match the W3I playable/camera rectangle rather than allowing the native free camera to
-    // wander onto the hidden terrain padding outside it.
+    // Keep focus inside the authored camera rectangle even when simulation/navigation extends
+    // farther into the playable map (for example the rear build cells behind each castle).
     rig.focus = metrics.clamp_focus(rig.focus);
     rig.focus.y = terrain.height_at_world(rig.focus.xz());
 
@@ -3335,6 +3365,27 @@ mod tests {
         let extracted = wc3_missile_arc_height(start, target, 0.4);
         assert!(extracted > DEFAULT_BALLISTIC_ARC_HEIGHT * 5.0);
         assert!(extracted < 250.0);
+    }
+
+    #[test]
+    fn camera_focus_bounds_can_be_inset_from_navigation_bounds() {
+        let config = SimulationConfig {
+            navigation_cell_size: 32 * SUBUNITS_PER_WORLD_UNIT,
+            navigation_min: NavCell::new(-200, -112),
+            navigation_max: NavCell::new(199, 111),
+            ..SimulationConfig::default()
+        };
+        let metrics = WorldMetrics::from_simulation_config(&config)
+            .with_camera_focus_bounds_world(-5_888.0, -3_328.0, 5_888.0, 3_328.0);
+
+        assert_eq!(
+            metrics.clamp_focus(Vec3::new(-6_144.0, 50.0, 2_048.0)),
+            Vec3::new(-5_888.0, 50.0, 2_048.0)
+        );
+        assert_eq!(
+            metrics.clamp_focus(Vec3::new(6_144.0, 50.0, -3_500.0)),
+            Vec3::new(5_888.0, 50.0, -3_328.0)
+        );
     }
 
     #[test]
