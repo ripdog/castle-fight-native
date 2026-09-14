@@ -3993,7 +3993,7 @@ mod tests {
         let mut sim = Simulation::new(config, 2);
         let builder = sim.spawn_builder(BuilderSpawn {
             team: Team(0),
-            position: SimPoint::new(1 * cell, 4 * cell),
+            position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: 2 * cell,
                 repair_range: 2 * cell,
