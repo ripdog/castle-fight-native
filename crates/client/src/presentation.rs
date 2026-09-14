@@ -1,9 +1,13 @@
 use std::{collections::HashMap, time::Duration};
 
 use bevy::{
-    camera::primitives::{Frustum, Sphere},
+    camera::{
+        Exposure,
+        primitives::{Frustum, Sphere},
+    },
     gltf::Gltf,
     input::mouse::MouseWheel,
+    light::AmbientLight,
     prelude::*,
     time::Fixed,
     window::PrimaryWindow,
@@ -38,6 +42,14 @@ const AIR_WING_FLAP_AMPLITUDE: f32 = 0.72;
 const AIR_WING_BASE_ANGLE: f32 = 0.18;
 const BUILDING_HEIGHT: f32 = 96.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
+
+// WC3's classic renderer is much flatter than Bevy's default Blender-calibrated exposure.
+// Keep the existing daylight illuminance, but expose it as overcast daylight and restore enough
+// ambient fill that faces turned away from the sun do not become nearly black.
+const WC3_SCENE_DIRECTIONAL_ILLUMINANCE: f32 = 12_000.0;
+const WC3_SCENE_EXPOSURE_EV100: f32 = Exposure::EV100_OVERCAST;
+const WC3_SCENE_AMBIENT_BRIGHTNESS: f32 = 400.0;
+const WC3_TERRAIN_DIFFUSE_MULTIPLIER: f32 = 0.78;
 const DEFAULT_BALLISTIC_ARC_HEIGHT: f32 = 34.0;
 const PROJECTILE_TRAIL_LENGTH: f32 = 14.0;
 const PROJECTILE_IMPACT_SECONDS: f32 = 0.22;
@@ -733,6 +745,11 @@ fn setup_scene(
                         .atlas(texture_mesh.palette_index)
                         .expect("validated terrain texture mesh references a known atlas");
                     let material = materials.add(StandardMaterial {
+                        base_color: Color::srgb(
+                            WC3_TERRAIN_DIFFUSE_MULTIPLIER,
+                            WC3_TERRAIN_DIFFUSE_MULTIPLIER,
+                            WC3_TERRAIN_DIFFUSE_MULTIPLIER,
+                        ),
                         base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
                         alpha_mode: AlphaMode::Blend,
                         // The Warcraft ground atlases already contain their intended diffuse
@@ -761,7 +778,7 @@ fn setup_scene(
 
     commands.spawn((
         DirectionalLight {
-            illuminance: 12_000.0,
+            illuminance: WC3_SCENE_DIRECTIONAL_ILLUMINANCE,
             shadow_maps_enabled: false,
             ..default()
         },
@@ -777,6 +794,14 @@ fn setup_scene(
     };
     commands.spawn((
         Camera3d::default(),
+        Exposure {
+            ev100: WC3_SCENE_EXPOSURE_EV100,
+        },
+        AmbientLight {
+            color: Color::WHITE,
+            brightness: WC3_SCENE_AMBIENT_BRIGHTNESS,
+            ..default()
+        },
         Projection::Perspective(PerspectiveProjection {
             far: 10_000.0,
             ..default()
@@ -3062,6 +3087,25 @@ mod tests {
             ))
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn wc3_lighting_reduces_overexposed_sun_without_crushing_ambient_fill() {
+        let default_exposure = Exposure::default().exposure();
+        let calibrated_exposure = Exposure {
+            ev100: WC3_SCENE_EXPOSURE_EV100,
+        }
+        .exposure();
+        let default_ambient = AmbientLight::default().brightness;
+
+        let old_shadow_fill = default_ambient * default_exposure;
+        let new_shadow_fill = WC3_SCENE_AMBIENT_BRIGHTNESS * calibrated_exposure;
+        assert!((new_shadow_fill / old_shadow_fill - 1.0).abs() < 0.05);
+
+        let old_sunlit = (WC3_SCENE_DIRECTIONAL_ILLUMINANCE + default_ambient) * default_exposure;
+        let new_sunlit = (WC3_SCENE_DIRECTIONAL_ILLUMINANCE + WC3_SCENE_AMBIENT_BRIGHTNESS)
+            * calibrated_exposure;
+        assert!(new_sunlit < old_sunlit * 0.25);
     }
 
     #[test]
