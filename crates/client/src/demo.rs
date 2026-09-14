@@ -38,6 +38,10 @@ const LANE_MIN_Y: i32 = -24;
 const LANE_MAX_Y: i32 = 23;
 const CASTLE_HEALTH: i32 = 20_000;
 const CASTLE_CENTER_X_WORLD: i32 = 4_992;
+// The original W3I player start locations sit at x = +/-4352, with the middle slot on each team
+// at y = 0. The temporary one-builder-per-side demo uses those middle starts instead of spawning
+// builders inside the castle models at +/-4992.
+const BUILDER_START_X_WORLD: i32 = 4_352;
 const CASTLE_PATHING_SIZE_CELLS: u16 = 16;
 const WALL_DOODAD_RAWCODES: [&str; 6] = ["B002", "B003", "D000", "D001", "D002", "D003"];
 // Visual-verification value only; the exact original Castle Fight uphill miss chance is still
@@ -93,8 +97,8 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
         )
         .collect::<Vec<_>>();
     for (team, x) in [
-        (Team(0), -CASTLE_CENTER_X_WORLD),
-        (Team(1), CASTLE_CENTER_X_WORLD),
+        (Team(0), -BUILDER_START_X_WORLD),
+        (Team(1), BUILDER_START_X_WORLD),
     ] {
         simulation.spawn_builder(BuilderSpawn {
             team,
@@ -519,20 +523,20 @@ mod tests {
     }
 
     #[test]
-    fn demo_bootstraps_one_builder_per_side_at_the_castles() {
+    fn demo_bootstraps_one_builder_per_side_at_original_middle_start_locations() {
         let DemoWorld { simulation, .. } = create_demo_world(1, Some(0));
         let builders = simulation.builders();
         assert_eq!(builders.len(), 2);
         let human = CastleFightBuilderRace::Human.definition();
         assert_eq!(builders[0].team, Team(0));
-        assert_eq!(builders[0].position, world_point(-CASTLE_CENTER_X_WORLD, 0));
+        assert_eq!(builders[0].position, world_point(-BUILDER_START_X_WORLD, 0));
         assert_eq!(builders[0].profile, human.profile);
         assert_eq!(builders[0].configuration.appearance.rawcode, human.rawcode);
         assert_eq!(builders[0].configuration.locomotion, human.locomotion);
         assert_eq!(builders[0].configuration.build_catalog.len(), 7);
         assert!(builders[0].repair_autocast_enabled);
         assert_eq!(builders[1].team, Team(1));
-        assert_eq!(builders[1].position, world_point(CASTLE_CENTER_X_WORLD, 0));
+        assert_eq!(builders[1].position, world_point(BUILDER_START_X_WORLD, 0));
         assert_eq!(builders[1].profile, human.profile);
         assert_eq!(builders[1].configuration, builders[0].configuration);
     }
