@@ -140,6 +140,11 @@
       "decayed-damage-weighted-engagement-and-structure-pressure-signals": 1,
       "team-strategic-aura-purchase-state-and-buyer-coordination": 1
     },
+    "runtime_session_mechanics": 2,
+    "runtime_session_mechanic_kinds": {
+      "leave-cleanup-autobalance-and-match-termination": 1,
+      "player-inactivity-driven-allied-control-sharing": 1
+    },
     "damage_listener_coverage_rows": 20,
     "damage_listener_coverage_status_counts": {
       "e2e-only": 1,
@@ -157,7 +162,7 @@
       "normalized-ai-runtime-semantics": 1,
       "normalized-gameplay-dispatch": 10,
       "normalized-gameplay-semantics": 21,
-      "player-session-runtime-unmodeled": 4,
+      "normalized-session-runtime-semantics": 4,
       "presentation-only": 11,
       "telemetry-only": 1
     },

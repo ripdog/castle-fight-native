@@ -773,6 +773,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     protected_perk_registry_audit = analysis["protected_perk_registry_audit"]
     perk_mechanics = analysis["perk_mechanics"]
     runtime_ai_mechanics = analysis["runtime_ai_mechanics"]
+    runtime_session_mechanics = analysis["runtime_session_mechanics"]
     damage_listener_coverage = analysis["damage_listener_coverage"]
     event_listener_coverage = analysis["event_listener_coverage"]
     production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
@@ -1114,6 +1115,19 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 related_objects.append(related)
             writer.writerow([
                 row["system_id"], row["mechanic_kind"], row["trigger"], script_json(related_objects),
+                script_json(row["parameters"]), ",".join(str(value) for value in row["source_functions"]),
+                row["evidence_kind"], row["byte_offset"],
+            ])
+
+    with (script_dir / "runtime-session-mechanics.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "system_id", "mechanic_kind", "trigger", "related_objects_json", "parameters_json",
+            "source_functions", "evidence_kind", "byte_offset",
+        ])
+        for row in runtime_session_mechanics:
+            writer.writerow([
+                row["system_id"], row["mechanic_kind"], row["trigger"], "[]",
                 script_json(row["parameters"]), ",".join(str(value) for value in row["source_functions"]),
                 row["evidence_kind"], row["byte_offset"],
             ])
@@ -1929,6 +1943,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "runtime_ai_mechanics": len(runtime_ai_mechanics),
         "runtime_ai_mechanic_kinds": dict(sorted(Counter(
             str(row["mechanic_kind"]) for row in runtime_ai_mechanics
+        ).items())),
+        "runtime_session_mechanics": len(runtime_session_mechanics),
+        "runtime_session_mechanic_kinds": dict(sorted(Counter(
+            str(row["mechanic_kind"]) for row in runtime_session_mechanics
         ).items())),
         "damage_listener_coverage_rows": len(damage_listener_coverage),
         "damage_listener_coverage_status_counts": dict(sorted(Counter(

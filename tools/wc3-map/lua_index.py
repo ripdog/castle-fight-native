@@ -5345,6 +5345,129 @@ def _extract_runtime_ai_mechanics(
     return rows
 
 
+def _extract_runtime_session_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize live player-session state that changes control/ownership or match flow."""
+    functions_by_name = {str(row["name"]): row for row in functions}
+    required = {
+        "applyNoAfkMode", "beginRoundStartModeSection", "completeRoundStart",
+        "startIdleDetectionIfEnabled", "stopIdleDetection", "checkPlayerIdle", "recordPlayerAction",
+        "togglePlayerAway", "campaignBlocksAwayControl",
+        "CallbackPeriodic_doPeriodically_IdleDetectionRuntime_call_doPeriodically_IdleDetectionRuntime",
+        "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime",
+        "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime1",
+        "applyAutobalanceMode", "applyLeaveAutobalance", "redistributeAllLeaverUnits",
+        "shareDependentSlotsWithRemainingTeam", "enableAiForLeaverIfNeeded",
+        "clearAwayStateOnLeave", "cleanupPlayerAfkOnLeave", "hasRemainingPlayingTeamMember",
+        "EventListener_add_PlayerLeave_onEvent_add_PlayerLeave",
+        "EventListener_add_doAfter_MMDData_onEvent_add_doAfter_MMDData", "handlePlayerLeave",
+        "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData2",
+    }
+    if not required.issubset(functions_by_name):
+        return []
+
+    def source(name: str, fragments: Iterable[bytes]) -> tuple[int, bytes]:
+        row = functions_by_name[name]
+        body = data[int(row["start"]):int(row["end"])]
+        for fragment in fragments:
+            if fragment not in body:
+                raise ValueError(f"runtime session mechanic source changed: {name}: missing {fragment!r}")
+        return int(row["start"]), body
+
+    rows: list[dict[str, object]] = []
+    if data.count(b"KX=1 HX=1 EX=(-1)") != 1:
+        raise ValueError("runtime session default autobalance mode initializer changed")
+
+    away_sources = [
+        ("applyNoAfkMode", (b"rX=MQq", b"No AFK")),
+        ("beginRoundStartModeSection", (b"if rX then Lab=true end",)),
+        ("completeRoundStart", (b"startIdleDetectionIfEnabled()",)),
+        ("startIdleDetectionIfEnabled", (b"if(not Lab)then return", b"Mab=doPeriodically(1.,AEq)")),
+        ("stopIdleDetection", (b"CallbackPeriodic_destroyCallbackPeriodic",)),
+        ("CallbackPeriodic_doPeriodically_IdleDetectionRuntime_call_doPeriodically_IdleDetectionRuntime", (b"if(XCm>11)then break", b"checkPlayerIdle(XCm)")),
+        ("checkPlayerIdle", (b"zEq==20", b"zEq==30", b"togglePlayerAway(xEq)", b"zEq==60", b"zEq==120", b"(VGb==0)and(UGb<40)")),
+        ("EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime", (b"if __wurst_ensureBool(dGb[bDm])then togglePlayerAway(bDm)end", b"recordPlayerAction(aDm)")),
+        ("EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime1", (b"recordPlayerAction(GetTriggerPlayer())",)),
+        ("recordPlayerAction", (b"iY[player_getId(wEq)]=getRoundTimeSeconds()",)),
+        ("togglePlayerAway", (b"dGb[vvo]=true", b"dGb[vvo]=false", b"ALLIANCE_SHARED_CONTROL", b"bj_ALLIANCE_ALLIED_ADVUNITS", b"updatePlayerAlliances()")),
+        ("campaignBlocksAwayControl", (b"AFK and away control are disabled during campaign.", b"return true")),
+    ]
+    away_offsets = [source(name, fragments)[0] for name, fragments in away_sources]
+    rows.append({
+        "system_id": "away-control-and-idle-detection",
+        "mechanic_kind": "player-inactivity-driven-allied-control-sharing",
+        "trigger": "round-start-periodic-idle-check-plus-player-activity/manual-away-toggle",
+        "parameters": {
+            "automatic_idle_detection_enabled_by_no_afk_mode": True,
+            "idle_check_interval_seconds": 1,
+            "player_slots_checked": [0, 11],
+            "round_start_fast_window_seconds": 40,
+            "round_start_warning_idle_seconds": 20,
+            "round_start_auto_away_idle_seconds": 30,
+            "general_warning_idle_seconds": 60,
+            "general_auto_away_idle_seconds": 120,
+            "player_activity_clears_away_immediately": True,
+            "manual_away_blocked_during_campaign": True,
+            "away_grants_allied_advanced_unit_control": True,
+            "away_restores_prior_shared_control_state_when_cleared": True,
+            "afk_state_blocks_manual_away_toggle": True,
+            "automatic_detection_starts_each_round_when_enabled": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in away_sources],
+        "evidence_kind": "exact-round-start-periodic-idle-thresholds-and-control-sharing-state",
+        "byte_offset": min(away_offsets),
+    })
+
+    leave_sources = [
+        ("applyAutobalanceMode", (b"if((eRq<0)or(eRq>2))", b"HX=eRq", b"eRq==0", b"eRq==1", b"AI will take control")),
+        ("EventListener_add_PlayerLeave_onEvent_add_PlayerLeave", (b"voteForDraw(rin)", b"voteForNuke(rin)", b"clearAwayStateOnLeave(rin)", b"cleanupPlayerAfkOnLeave(rin)", b"hasRemainingPlayingTeamMember(qin)", b"if dY then", b"if eY then enableAiForLeaverIfNeeded(rin)else applyLeaveAutobalance",)),
+        ("clearAwayStateOnLeave", (b"togglePlayerAway(Ser)", b"dGb[Ser]=false")),
+        ("cleanupPlayerAfkOnLeave", (b"fGb[mvo]=false", b"eGb[mvo]=false", b"clearPendingVote", b"SetPlayerName")),
+        ("hasRemainingPlayingTeamMember", (b"countRemainingPlayingTeamMembers",)),
+        ("applyLeaveAutobalance", (b"if(HX==0)then redistributeAllLeaverUnits", b"elseif(HX==1)then shareDependentSlotsWithRemainingTeam", b"else enableAiForLeaverIfNeeded")),
+        ("redistributeAllLeaverUnits", (b"redistributePlayerAssetsToTeam", b"ForceClear", b"DestroyForce")),
+        ("shareDependentSlotsWithRemainingTeam", (b"markBuilderSharedControl", b"updatePlayerAlliances()", b"DestroyForce")),
+        ("enableAiForLeaverIfNeeded", (b"TriggerExecute",)),
+        ("EventListener_add_doAfter_MMDData_onEvent_add_doAfter_MMDData", (b"if(getElapsedGameTime()<300.0)then oUm=3 else oUm=1 end", b"doAfter(0.25,pUm)", b"handlePlayerLeave(mUm,0)", b"handlePlayerLeave(mUm,1)")),
+        ("handlePlayerLeave", (b"doAfter(1.,ZMq)",)),
+        ("CallbackSingle_doAfter_MMDData_call_doAfter_MMDData2", (b"countPlayingPlayersInForce", b"if(BTm==0)then", b"setMatchWinnerTeamIndex", b"recordMatchResultNow", b"cleanupRoundUnits()")),
+    ]
+    leave_offsets = [source(name, fragments)[0] for name, fragments in leave_sources]
+    rows.append({
+        "system_id": "player-leave-autobalance-and-team-empty-resolution",
+        "mechanic_kind": "leave-cleanup-autobalance-and-match-termination",
+        "trigger": "player-leave-event",
+        "parameters": {
+            "autobalance_modes": {
+                "0": "redistribute all leaver-controlled player assets across remaining team",
+                "1": "share dependent player slots among remaining team members",
+                "2": "enable AI control for the leaver",
+            },
+            "default_mode_value_observed_in_runtime_initializer": 1,
+            "leave_clears_away_state": True,
+            "leave_cleans_afk_state_and_pending_vote": True,
+            "leave_votes_are_removed_from_draw_and_nuke_votes": True,
+            "autobalance_skipped_if_no_remaining_playing_teammate": True,
+            "autobalance_skipped_after_match_end": True,
+            "special_eY_path_enables_ai_directly": True,
+            "mmd_leave_flag_before_300_seconds": 3,
+            "mmd_leave_flag_at_or_after_300_seconds": 1,
+            "mmd_leave_record_delay_seconds": 0.25,
+            "team_empty_check_delay_seconds": 1,
+            "team_empty_sets_opponent_match_winner": True,
+            "team_empty_stops_round_and_cleans_round_units": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in leave_sources],
+        "evidence_kind": "exact-leave-listener-autobalance-mode-dispatch-and-delayed-team-empty-resolution",
+        "byte_offset": min(leave_offsets),
+    })
+    return rows
+
+
 def _extract_damage_listener_coverage(
     functions: list[dict[str, object]],
     production_unit_special_mechanics: list[dict[str, object]],
@@ -5454,6 +5577,7 @@ def _extract_event_listener_coverage(
     building_spell_mechanics: list[dict[str, object]],
     perk_mechanics: list[dict[str, object]],
     runtime_ai_mechanics: list[dict[str, object]],
+    runtime_session_mechanics: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Strict closure audit over generated EventListener callbacks.
@@ -5491,6 +5615,7 @@ def _extract_event_listener_coverage(
     add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
     add_sources("perk-mechanics", perk_mechanics, "perk_id")
     add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
+    add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
 
     callees_by_caller: dict[str, set[str]] = defaultdict(set)
     for (caller, callee), count in call_edges.items():
@@ -5568,6 +5693,9 @@ def _extract_event_listener_coverage(
             if all(source.startswith("runtime-ai-mechanics:") for source in direct):
                 status = "normalized-ai-runtime-semantics"
                 note = "listener is direct evidence for normalized AI-runtime semantics"
+            elif all(source.startswith("runtime-session-mechanics:") for source in direct):
+                status = "normalized-session-runtime-semantics"
+                note = "listener is direct evidence for normalized player-session runtime semantics"
             else:
                 status = "normalized-gameplay-semantics"
                 note = "listener is direct evidence for importer-facing normalized gameplay semantics"
@@ -5577,6 +5705,9 @@ def _extract_event_listener_coverage(
                 if all(source.startswith("runtime-ai-mechanics:") for source in normalized):
                     status = "normalized-ai-runtime-dispatch"
                     note = "listener reaches normalized AI-runtime semantics through an exact named-call path of at most three edges"
+                elif all(source.startswith("runtime-session-mechanics:") for source in normalized):
+                    status = "normalized-session-runtime-dispatch"
+                    note = "listener reaches normalized player-session runtime semantics through an exact named-call path of at most three edges"
                 else:
                     status = "normalized-gameplay-dispatch"
                     note = "listener reaches normalized gameplay semantics through an exact named-call path of at most three edges"
@@ -5619,12 +5750,12 @@ def _extract_event_listener_coverage(
     expected_status_counts = Counter({
         "normalized-gameplay-semantics": 21,
         "normalized-ai-runtime-semantics": 1,
+        "normalized-session-runtime-semantics": 4,
         "normalized-gameplay-dispatch": 10,
         "presentation-only": 11,
         "e2e-only": 13,
         "gameplay-framework-infrastructure": 3,
         "campaign-runtime-unmodeled": 3,
-        "player-session-runtime-unmodeled": 4,
         "command-runtime-unmodeled": 2,
         "mode-selection-runtime-unmodeled": 1,
         "telemetry-only": 1,
@@ -9289,6 +9420,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     protected_perk_registry_audit = _extract_protected_perk_registry_audit(data, functions)
     perk_mechanics = _extract_perk_mechanics(data, functions, protected_perk_registry_audit)
     runtime_ai_mechanics = _extract_runtime_ai_mechanics(data, functions, protected_filter_bindings)
+    runtime_session_mechanics = _extract_runtime_session_mechanics(data, functions)
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
@@ -9306,6 +9438,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         building_spell_mechanics,
         perk_mechanics,
         runtime_ai_mechanics,
+        runtime_session_mechanics,
         protected_perk_registry_audit,
     )
     for reference in function_value_arguments:
@@ -9350,6 +9483,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "protected_perk_registry_audit": protected_perk_registry_audit,
         "perk_mechanics": perk_mechanics,
         "runtime_ai_mechanics": runtime_ai_mechanics,
+        "runtime_session_mechanics": runtime_session_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
         "event_listener_coverage": event_listener_coverage,
     }

@@ -189,6 +189,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
         self.assertEqual(summary["perk_mechanics"], 19)
         self.assertEqual(summary["runtime_ai_mechanics"], 3)
+        self.assertEqual(summary["runtime_session_mechanics"], 2)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["event_listener_coverage_rows"], 70)
         self.assertEqual(
@@ -213,9 +214,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "gameplay-framework-infrastructure": 3,
                 "mode-selection-runtime-unmodeled": 1,
                 "normalized-ai-runtime-semantics": 1,
+                "normalized-session-runtime-semantics": 4,
                 "normalized-gameplay-dispatch": 10,
                 "normalized-gameplay-semantics": 21,
-                "player-session-runtime-unmodeled": 4,
                 "presentation-only": 11,
                 "telemetry-only": 1,
             },
@@ -248,7 +249,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             rows["EventListener_add_PlayerLeave_onEvent_add_PlayerLeave"]["coverage_status"],
-            "player-session-runtime-unmodeled",
+            "normalized-session-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime"]["coverage_status"],
+            "normalized-session-runtime-semantics",
         )
         self.assertEqual(
             rows["EventListener_add_ModeParser_onEvent_add_ModeParser"]["coverage_status"],
@@ -268,6 +273,47 @@ class ResolvedEvidenceTests(unittest.TestCase):
             summary["event_listener_coverage_status_counts"],
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
         )
+
+    def test_runtime_session_away_control_and_leave_autobalance_are_normalized(self) -> None:
+        with (self.resolved / "runtime-session-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(
+            set(rows),
+            {"away-control-and-idle-detection", "player-leave-autobalance-and-team-empty-resolution"},
+        )
+
+        away = json.loads(rows["away-control-and-idle-detection"]["parameters_json"])
+        self.assertTrue(away["automatic_idle_detection_enabled_by_no_afk_mode"])
+        self.assertEqual(away["idle_check_interval_seconds"], 1)
+        self.assertEqual(away["player_slots_checked"], [0, 11])
+        self.assertEqual(away["round_start_fast_window_seconds"], 40)
+        self.assertEqual(away["round_start_warning_idle_seconds"], 20)
+        self.assertEqual(away["round_start_auto_away_idle_seconds"], 30)
+        self.assertEqual(away["general_warning_idle_seconds"], 60)
+        self.assertEqual(away["general_auto_away_idle_seconds"], 120)
+        self.assertTrue(away["player_activity_clears_away_immediately"])
+        self.assertTrue(away["away_grants_allied_advanced_unit_control"])
+        self.assertTrue(away["away_restores_prior_shared_control_state_when_cleared"])
+
+        leave = json.loads(rows["player-leave-autobalance-and-team-empty-resolution"]["parameters_json"])
+        self.assertEqual(leave["default_mode_value_observed_in_runtime_initializer"], 1)
+        self.assertEqual(
+            leave["autobalance_modes"],
+            {
+                "0": "redistribute all leaver-controlled player assets across remaining team",
+                "1": "share dependent player slots among remaining team members",
+                "2": "enable AI control for the leaver",
+            },
+        )
+        self.assertEqual(leave["mmd_leave_flag_before_300_seconds"], 3)
+        self.assertEqual(leave["mmd_leave_flag_at_or_after_300_seconds"], 1)
+        self.assertEqual(leave["mmd_leave_record_delay_seconds"], 0.25)
+        self.assertEqual(leave["team_empty_check_delay_seconds"], 1)
+        self.assertTrue(leave["team_empty_sets_opponent_match_winner"])
+        self.assertTrue(leave["team_empty_stops_round_and_cleans_round_units"])
+
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["runtime_session_mechanic_rows"], 2)
 
     def test_runtime_ai_damage_signals_rescue_strike_and_strategic_aura_observer_are_normalized(self) -> None:
         with (self.resolved / "runtime-ai-mechanics.tsv").open(encoding="utf-8") as handle:
