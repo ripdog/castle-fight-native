@@ -7,7 +7,7 @@ use crate::{
         BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
         UnitVisualKind,
     },
-    build_ui::{BuildSelection, cursor_over_build_panel},
+    build_ui::{ActionPanelState, cursor_over_action_panel},
     presentation::{
         WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
@@ -94,33 +94,27 @@ fn setup_inspector_ui(mut commands: Commands) {
 
 fn handle_world_selection(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    _keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     world: (Res<Time<Fixed>>, Res<WorldMetrics>, Res<TerrainSurface>),
     state: (
         Res<PresentationSamples>,
-        Res<BuildSelection>,
+        Res<ActionPanelState>,
         Res<SimulationPlayback>,
     ),
     mut selection: ResMut<InspectionSelection>,
 ) {
     let (fixed_time, metrics, terrain) = world;
-    let (samples, build_selection, playback) = state;
-    if keys.just_pressed(KeyCode::Escape) && build_selection.kind.is_none() {
-        selection.selected = None;
-    }
-
-    if !mouse_buttons.just_pressed(MouseButton::Left) || build_selection.kind.is_some() {
+    let (samples, action_panel, playback) = state;
+    if !mouse_buttons.just_pressed(MouseButton::Left) || action_panel.targeting().is_some() {
         return;
     }
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    let build_panel_visible = selection
-        .selected
-        .is_some_and(|selected| samples.current.builders.contains_key(&selected));
-    if cursor_over_build_panel(cursor, window.height(), build_panel_visible)
+    let action_panel_visible = action_panel.actor.is_some();
+    if cursor_over_action_panel(cursor, window.height(), action_panel_visible)
         || cursor_over_inspector_panel(cursor, window.width())
     {
         return;
@@ -211,6 +205,15 @@ fn draw_selection_highlight(
                 center + Vec3::Y * 4.0,
                 target_position + Vec3::Y * 4.0,
                 SELECTION_COLOR.with_alpha(0.55),
+            );
+        }
+        if let Some(footprint) = builder.build_footprint {
+            draw_footprint_outline(
+                &mut gizmos,
+                &metrics,
+                &terrain,
+                footprint,
+                SELECTION_COLOR.with_alpha(0.75),
             );
         }
         return;
@@ -415,13 +418,20 @@ fn inspector_text(id: SimId, samples: &PresentationSamples) -> String {
 
 fn format_builder_inspector(builder: &BuilderSample) -> String {
     let position = sim_point_to_world(builder.position);
-    let order = match (builder.destination, builder.repair_target) {
-        (Some(destination), _) => {
-            let destination = sim_point_to_world(destination);
-            format!("Move to {:.1}, {:.1}", destination.x, destination.z)
+    let order = if let Some(footprint) = builder.build_footprint {
+        format!(
+            "Build footprint {},{} {}x{}",
+            footprint.min_x, footprint.min_y, footprint.width, footprint.height
+        )
+    } else {
+        match (builder.destination, builder.repair_target) {
+            (Some(destination), _) => {
+                let destination = sim_point_to_world(destination);
+                format!("Move to {:.1}, {:.1}", destination.x, destination.z)
+            }
+            (_, Some(target)) => format!("Repair #{}", target.0),
+            (None, None) => "Idle".into(),
         }
-        (_, Some(target)) => format!("Repair #{}", target.0),
-        (None, None) => "Idle".into(),
     };
     [
         format!("BUILDER #{}", builder.id.0),
@@ -443,7 +453,7 @@ fn format_builder_inspector(builder: &BuilderSample) -> String {
             "Blink range: {:.0}",
             builder.blink_range as f32 / SUBUNITS_PER_WORLD_UNIT as f32
         ),
-        "Controls: Right-click move/repair • D then right-click Blink • R toggle repair autocast"
+        "Controls: action panel Move/Repair/Blink/Build • D Blink • right-click smart move/repair • R toggle repair autocast"
             .into(),
     ]
     .join("\n")
@@ -689,6 +699,7 @@ mod tests {
                 locomotion: BuilderLocomotion::Foot,
                 destination: None,
                 repair_target: None,
+                build_footprint: None,
                 repair_autocast_enabled: true,
                 blink_range: 10_000 * SUBUNITS_PER_WORLD_UNIT,
                 build_catalog_len: 7,
@@ -713,7 +724,8 @@ mod tests {
         let text = inspector_text(SimId(5), &samples);
         assert!(text.contains("Human Builder"));
         assert!(text.contains("Repair autocast: On"));
-        assert!(text.contains("D then right-click Blink"));
+        assert!(text.contains("action panel Move/Repair/Blink/Build"));
+        assert!(text.contains("D Blink"));
     }
 
     #[test]

@@ -21,7 +21,7 @@ Normal play has exactly one directly controlled unit per player: the builder.
 The first playable game is expected to need commands such as:
 
 - move the player's builder;
-- select building type for placement;
+- activate the builder's Build command and select a building type for placement;
 - place production/attack/spell/utility/legendary building within the owning team's build region;
 - sell/destroy owned building where rules permit;
 - purchase upgrade;
@@ -30,9 +30,17 @@ The first playable game is expected to need commands such as:
 - choose faction/race/random options before match;
 - game-mode-specific actions.
 
-Ordinary combat units MUST NOT expose move, attack, stop, focus-fire, ability, or other player-authored orders. Selecting a combat unit is inspection only.
+Ordinary combat units MUST NOT expose move, attack, stop, focus-fire, ability, or other player-authored orders. Selecting a combat unit is inspection only. Attack-capable **buildings/towers** are the deliberate exception: they may expose the Warcraft-style Attack action so the player can manually choose an otherwise-valid hostile target. The tower remains stationary and ordinary range/target-category rules still apply.
 
 A generic RTS `OrderUnit` command is intentionally outside the core protocol.
+
+### 3.1 Warcraft-style action panel and targeting modality
+
+The client command card is a generic 4×3 Warcraft-style **action panel**, not a permanently open build menu. A selected builder exposes its applicable commands there (currently Move, Repair, Blink, and Build); an attack-capable selected tower exposes Attack. Build opens the building submenu. The bottom-right command-card cell is Cancel/Back where a modal/submenu needs it.
+
+Point/entity/build-placement commands use one shared targeting modality. Choosing Move, Repair, Blink, Attack, or one building enters a targeting mode and replaces the command card with only **Cancel**. `Esc` performs that same cancellation. Build placement is nested: cancelling a selected building returns to the build submenu, while pressing `Esc`/Cancel from the build submenu returns to the ordinary action panel. Successful placement likewise returns to the build submenu so another building may be chosen.
+
+Command-card coordinates come from Warcraft/map content rather than native layout taste and are part of the selected Castle Fight version's content definition. Stock command data used by 9.27 supplies Move `(0,0)`, Attack `(3,0)`, Build `(0,2)`, and Cancel `(3,2)`. Castle Fight 9.27 object data places Repair at `(1,1)` and its live builder Blink at `(1,2)`. Building submenu entries use their versioned extracted unit button positions (`ubpx`/`ubpy`). Native/client callsites consume the version-aware content API rather than embedding those coordinates directly. Synthetic mixed-race verification menus may contain authored-slot collisions that cannot occur in one normal race catalog; those collisions are resolved into otherwise-empty slots deterministically while preserving every non-conflicting authored position.
 
 ## 4. Builder control and building placement
 
@@ -42,8 +50,8 @@ Building placement and builder movement are restricted to the owning team's auth
 
 Recommended client placement flow:
 
-1. player selects a buildable type;
-2. client enters placement mode;
+1. player activates Build and selects a buildable type from the build submenu;
+2. client enters the shared placement/targeting mode;
 3. cursor is projected into authoritative map coordinates;
 4. local placement preview evaluates current known occupancy/build rules;
 5. UI shows legal/illegal preview;

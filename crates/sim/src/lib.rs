@@ -21,13 +21,16 @@ pub use components::{
     TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
-    CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS, CASTLE_FIGHT_DEFAULT_MAP_VERSION,
-    CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS, CASTLE_FIGHT_SIMULATION_HZ,
-    CastleFightBuilderDefinition, CastleFightBuilderRace, CastleFightProductionDefinition,
+    CASTLE_FIGHT_DEFAULT_MAP_VERSION, CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuilderDefinition,
+    CastleFightBuilderRace, CastleFightCommandCardLayout, CastleFightProductionDefinition,
     CastleFightProductionKind, CastleFightTowerDefinition, CastleFightTowerKind,
-    CastleFightUnitDefinition, CastleFightUnitKind, UnsupportedCastleFightMapVersion,
-    castle_fight_builder_profile, castle_fight_builder_profile_for_version,
-    castle_fight_damage_rules, castle_fight_economy_rules, castle_fight_economy_rules_for_version,
+    CastleFightUnitDefinition, CastleFightUnitKind, CommandCardPosition,
+    UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
+    castle_fight_builder_profile_for_version, castle_fight_command_card_layout,
+    castle_fight_command_card_layout_for_version, castle_fight_damage_rules,
+    castle_fight_damage_rules_for_version, castle_fight_economy_rules,
+    castle_fight_economy_rules_for_version, castle_fight_main_castle_repair_time_ticks,
+    castle_fight_main_castle_repair_time_ticks_for_version,
 };
 pub use damage::{
     ArmorProfile, ArmorType, DAMAGE_MULTIPLIER_SCALE, DamageRules, DamageRulesLoadError, DamageType,
@@ -40,9 +43,9 @@ pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use native_effects::{NativeEffectImplementationId, native_effect_implementation_for};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
-    BuilderSpawnError, BuilderView, BuildingPlacementError, BuildingView, ChainLightningEvent,
-    CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    TargetlessLane, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    BuilderSpawnError, BuilderView, BuildingCommandError, BuildingPlacementError, BuildingView,
+    ChainLightningEvent, CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation,
+    SimulationConfig, TargetlessLane, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -2429,6 +2432,32 @@ mod tests {
     }
 
     #[test]
+    fn attack_building_manual_order_overrides_nearer_automatic_target() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let tower = sim.spawn_building(attack_building(
+            0,
+            BuildingFootprint::new(4, 0, 2, 2),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 4 * cell,
+                },
+                damage: 3,
+                range: 30 * cell,
+                acquisition_range: 30 * cell,
+                cooldown_ticks: 30,
+            },
+        ));
+        let nearer = sim.spawn_unit(passive_unit(1, 8 * cell));
+        let ordered = sim.spawn_unit(passive_unit(1, 14 * cell));
+
+        sim.order_building_attack_target(tower, ordered).unwrap();
+        sim.step();
+        assert_eq!(sim.building(tower).unwrap().target, Some(ordered));
+        assert_ne!(sim.building(tower).unwrap().target, Some(nearer));
+    }
+
+    #[test]
     fn attack_buildings_choose_targets_independently() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 4);
@@ -3948,6 +3977,7 @@ mod tests {
             position: SimPoint::new(2 * cell, 5 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: cell,
                 repair_time_ratio_numerator: 1,
@@ -4014,6 +4044,7 @@ mod tests {
             position: SimPoint::new(5 * cell, 5 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: 10 * cell,
                 repair_time_ratio_numerator: 1,
@@ -4064,6 +4095,7 @@ mod tests {
             position: SimPoint::new(2 * cell, 2 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: cell,
                 repair_time_ratio_numerator: 1,
@@ -4207,6 +4239,85 @@ mod tests {
     }
 
     #[test]
+    fn builder_build_order_walks_into_range_and_refunds_when_replaced() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(259, 19),
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 130, 20)],
+                vec![BuildingFootprint::new(130, 0, 130, 20)],
+            ],
+            economy: castle_fight_economy_rules(),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(2 * cell, 2 * cell),
+            profile: castle_fight_builder_profile(),
+            configuration: test_builder_configuration(vec![barracks.rawcode]),
+            repair_autocast_enabled: false,
+        });
+        let footprint = BuildingFootprint::new(80, 2, 4, 4);
+
+        sim.order_builder_purchase_building_with_properties(
+            builder,
+            barracks.spawn(Team(0), footprint),
+            barracks.gameplay_properties(),
+        )
+        .unwrap();
+        assert_eq!(
+            sim.building_count(),
+            0,
+            "build order must not construct remotely"
+        );
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 150);
+        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 125);
+        assert_eq!(
+            sim.builder(builder).unwrap().build_footprint,
+            Some(footprint)
+        );
+
+        sim.step();
+        assert_eq!(
+            sim.building_count(),
+            0,
+            "builder is still outside 50-unit build range"
+        );
+        sim.step();
+        assert_eq!(
+            sim.building_count(),
+            1,
+            "builder should construct after entering range"
+        );
+        assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 225);
+        assert!(sim.builder(builder).unwrap().position.x > 2 * cell);
+        assert_eq!(sim.builder(builder).unwrap().build_footprint, None);
+
+        let second_footprint = BuildingFootprint::new(110, 2, 4, 4);
+        sim.order_builder_purchase_building_with_properties(
+            builder,
+            barracks.spawn(Team(0), second_footprint),
+            barracks.gameplay_properties(),
+        )
+        .unwrap();
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 50);
+        sim.order_builder_move(builder, SimPoint::new(10 * cell, 2 * cell))
+            .unwrap();
+        assert_eq!(
+            sim.player_resources(Team(0)).unwrap().gold,
+            150,
+            "ConstructionRefundRate=1 must fully refund a build that has not started"
+        );
+        for _ in 0..10 {
+            sim.step();
+        }
+        assert_eq!(sim.building_count(), 1, "cancelled build must never appear");
+    }
+
+    #[test]
     fn builder_moves_to_friendly_building_and_repairs_at_tick_exact_rate() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
@@ -4225,6 +4336,7 @@ mod tests {
             position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: 2 * cell,
+                build_range: 2 * cell,
                 repair_range: 2 * cell,
                 repair_autocast_range: 2 * cell,
                 repair_time_ratio_numerator: 1,
@@ -4313,6 +4425,7 @@ mod tests {
             position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: 0,
+                build_range: 10 * cell,
                 repair_range: 10 * cell,
                 repair_autocast_range: 20 * cell,
                 repair_time_ratio_numerator: 3,
@@ -4412,6 +4525,7 @@ mod tests {
             position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                build_range: 2 * cell,
                 repair_range: 2 * cell,
                 repair_autocast_range: 10 * cell,
                 repair_time_ratio_numerator: 1,

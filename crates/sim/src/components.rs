@@ -454,6 +454,7 @@ pub struct MovementProfile {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuilderProfile {
     pub speed_per_tick: i32,
+    pub build_range: i32,
     pub repair_range: i32,
     pub repair_autocast_range: i32,
     pub repair_time_ratio_numerator: u16,
@@ -501,6 +502,12 @@ pub(crate) struct BuilderState {
     pub repair_target: Option<SimId>,
     pub repair_progress_remainder: u32,
     pub repair_autocast_enabled: bool,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct BuilderBuildOrder {
+    pub building: BuildingSpawn,
+    pub properties: BuildingGameplayProperties,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]

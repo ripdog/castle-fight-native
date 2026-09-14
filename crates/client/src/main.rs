@@ -22,9 +22,9 @@ use bevy::{
 use castle_fight_sim::Simulation;
 
 use bridge::{PresentationSamples, PresentationSnapshot};
-use build_ui::{BuildSelection, BuildUiPlugin, PendingBuildPlacements};
+use build_ui::BuildUiPlugin;
 use builder_controls::BuilderControlPlugin;
-use demo::{create_demo_world, try_spawn_demo_building};
+use demo::create_demo_world;
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
@@ -264,41 +264,10 @@ fn advance_authoritative_simulation(
     playback: Res<SimulationPlayback>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
-    mut pending_builds: ResMut<PendingBuildPlacements>,
-    mut build_selection: ResMut<BuildSelection>,
 ) {
     if playback.paused {
         return;
     }
-    for request in pending_builds.0.drain(..) {
-        match try_spawn_demo_building(
-            &mut authoritative.simulation,
-            request.team,
-            request.footprint,
-            request.kind,
-        ) {
-            Ok(_) => {
-                let side = if request.team.0 == 0 { "Blue" } else { "Red" };
-                let economy = request.kind.economy();
-                let income = authoritative
-                    .simulation
-                    .player_income(request.team)
-                    .expect("placed building belongs to a supported player");
-                build_selection.status = format!(
-                    "Built {side} {}: -{} gold, -{} lumber, +{} lumber reward; income +{}.",
-                    request.kind.label(),
-                    economy.gold_cost,
-                    economy.lumber_cost,
-                    economy.lumber_refund,
-                    income,
-                );
-            }
-            Err(error) => {
-                build_selection.status = format!("Placement rejected by simulation: {error:?}.");
-            }
-        }
-    }
-
     authoritative.simulation.step();
     presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
 }
@@ -334,6 +303,7 @@ fn default_worker_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::build_ui::ActionPanelState;
 
     #[test]
     fn asset_io_pool_keeps_bevys_default_thread_assignment() {
@@ -353,8 +323,7 @@ mod tests {
         app.insert_resource(SimulationPlayback { paused: true })
             .insert_resource(AuthoritativeSimulation { simulation })
             .insert_resource(PresentationSamples::new(initial_snapshot))
-            .init_resource::<PendingBuildPlacements>()
-            .init_resource::<BuildSelection>()
+            .init_resource::<ActionPanelState>()
             .add_systems(Update, advance_authoritative_simulation);
 
         app.update();

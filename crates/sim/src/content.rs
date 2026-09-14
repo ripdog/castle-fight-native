@@ -17,15 +17,18 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS: u16 = 4;
+const CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927: u16 = 4;
 const CASTLE_FIGHT_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 550;
 const CASTLE_FIGHT_CRITTER_BUILDER_MOVE_SPEED_WORLD_UNITS_PER_SECOND: i32 = 190;
+// The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
+// engine's 50-world-unit construction contact range, matching the stock Repair contact range.
+const CASTLE_FIGHT_BUILDER_BUILD_RANGE_WORLD_UNITS: i32 = 50;
 const CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS: i32 = 50;
 const CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS: i32 = 500;
 const CASTLE_FIGHT_BUILDER_BLINK_RANGE_WORLD_UNITS: i32 = 10_000;
 const CASTLE_FIGHT_BUILDER_BLINK_BOUNDARY_INSET_WORLD_UNITS: i32 = 64;
 const CASTLE_FIGHT_STANDARD_REPAIR_TIME_SECONDS: u16 = 70;
-pub const CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS: u32 = 700 * CASTLE_FIGHT_SIMULATION_HZ as u32;
+const CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS_927: u32 = 700 * CASTLE_FIGHT_SIMULATION_HZ as u32;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR: u16 = 3;
 const CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_DENOMINATOR: u16 = 2;
 const CASTLE_FIGHT_COLLISION_WORLD_UNITS: i32 = 16;
@@ -51,6 +54,55 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 }
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandCardPosition {
+    pub x: u8,
+    pub y: u8,
+}
+
+impl CommandCardPosition {
+    #[must_use]
+    pub const fn new(x: u8, y: u8) -> Self {
+        Self { x, y }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CastleFightCommandCardLayout {
+    pub move_command: CommandCardPosition,
+    pub attack_command: CommandCardPosition,
+    pub build_command: CommandCardPosition,
+    pub cancel_command: CommandCardPosition,
+    pub repair_ability: CommandCardPosition,
+    pub blink_ability: CommandCardPosition,
+    pub map_version: MapVersion,
+}
+
+#[must_use]
+pub fn castle_fight_command_card_layout() -> CastleFightCommandCardLayout {
+    castle_fight_command_card_layout_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        .expect("default Castle Fight map version must remain available")
+}
+
+pub fn castle_fight_command_card_layout_for_version(
+    version: MapVersion,
+) -> Result<CastleFightCommandCardLayout, UnsupportedCastleFightMapVersion> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return Err(UnsupportedCastleFightMapVersion(version));
+    }
+    Ok(CastleFightCommandCardLayout {
+        // The basic command positions come from Warcraft III's commandfunc data used by 9.27.
+        move_command: CommandCardPosition::new(0, 0),
+        attack_command: CommandCardPosition::new(3, 0),
+        build_command: CommandCardPosition::new(0, 2),
+        cancel_command: CommandCardPosition::new(3, 2),
+        // Castle Fight's 9.27 Repair and scripted live Blink object data.
+        repair_ability: CommandCardPosition::new(1, 1),
+        blink_ability: CommandCardPosition::new(1, 2),
+        map_version: version,
+    })
+}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -607,6 +659,7 @@ impl CastleFightProductionKind {
                 1_200,
                 20,
                 CastleFightUnitKind::Footman,
+                CommandCardPosition::new(0, 0),
             ),
             Self::RangersHall => production_definition(
                 u32::from_be_bytes(*b"h03D"),
@@ -615,6 +668,7 @@ impl CastleFightProductionKind {
                 1_400,
                 32,
                 CastleFightUnitKind::Ranger,
+                CommandCardPosition::new(3, 0),
             ),
             Self::OrcishSiegeFactory => production_definition(
                 u32::from_be_bytes(*b"h02I"),
@@ -623,6 +677,7 @@ impl CastleFightProductionKind {
                 1_400,
                 34,
                 CastleFightUnitKind::Catapult,
+                CommandCardPosition::new(1, 1),
             ),
             Self::IceTrollHut => production_definition(
                 u32::from_be_bytes(*b"h03K"),
@@ -631,6 +686,7 @@ impl CastleFightProductionKind {
                 1_200,
                 23,
                 CastleFightUnitKind::IceTrollShadowPriest,
+                CommandCardPosition::new(2, 0),
             ),
             Self::GryphonRock => production_definition(
                 u32::from_be_bytes(*b"h015"),
@@ -639,6 +695,7 @@ impl CastleFightProductionKind {
                 1_300,
                 27,
                 CastleFightUnitKind::GryphonRider,
+                CommandCardPosition::new(3, 0),
             ),
         }
     }
@@ -657,6 +714,7 @@ pub struct CastleFightProductionDefinition {
     pub spawn_interval_ticks: u16,
     pub footprint_size_cells: u16,
     pub unit: CastleFightUnitKind,
+    pub command_card_position: CommandCardPosition,
     pub map_version: MapVersion,
 }
 
@@ -718,7 +776,42 @@ impl CastleFightTowerKind {
     pub const ALL: [Self; 2] = [Self::WatchTower, Self::PoofTower];
 
     #[must_use]
+    pub fn from_rawcode(rawcode: u32) -> Option<Self> {
+        Self::from_rawcode_for_version(rawcode, CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn from_rawcode_for_version(
+        rawcode: u32,
+        version: MapVersion,
+    ) -> Result<Option<Self>, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        Ok(match rawcode {
+            value if value == u32::from_be_bytes(*b"h006") => Some(Self::WatchTower),
+            value if value == u32::from_be_bytes(*b"h07P") => Some(Self::PoofTower),
+            _ => None,
+        })
+    }
+
+    #[must_use]
     pub fn definition(self) -> CastleFightTowerDefinition {
+        self.definition_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn definition_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<CastleFightTowerDefinition, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        Ok(self.definition_9_27())
+    }
+
+    fn definition_9_27(self) -> CastleFightTowerDefinition {
         match self {
             Self::WatchTower => CastleFightTowerDefinition {
                 rawcode: u32::from_be_bytes(*b"h006"),
@@ -731,7 +824,8 @@ impl CastleFightTowerKind {
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Pierce,
                 attack_targets: AttackTargetMask::AIR_AND_GROUND,
-                footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS,
+                footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
+                command_card_position: CommandCardPosition::new(0, 2),
                 attack: AttackProfile {
                     delivery: AttackDelivery::RangedGuaranteedHit {
                         speed_per_tick: projectile_speed(1_800),
@@ -741,6 +835,7 @@ impl CastleFightTowerKind {
                     acquisition_range: world(1_000),
                     cooldown_ticks: 15,
                 },
+                map_version: MapVersion::CASTLE_FIGHT_9_27,
             },
             Self::PoofTower => CastleFightTowerDefinition {
                 rawcode: u32::from_be_bytes(*b"h07P"),
@@ -753,7 +848,8 @@ impl CastleFightTowerKind {
                 armor: ArmorProfile::new(ArmorType::Fortified, 5),
                 damage_type: DamageType::Magic,
                 attack_targets: AttackTargetMask::ALL,
-                footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS,
+                footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
+                command_card_position: CommandCardPosition::new(0, 2),
                 attack: AttackProfile {
                     delivery: AttackDelivery::RangedBallistic {
                         speed_per_tick: projectile_speed(900),
@@ -765,6 +861,7 @@ impl CastleFightTowerKind {
                     acquisition_range: world(1_000),
                     cooldown_ticks: 95,
                 },
+                map_version: MapVersion::CASTLE_FIGHT_9_27,
             },
         }
     }
@@ -783,7 +880,9 @@ pub struct CastleFightTowerDefinition {
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
     pub footprint_size_cells: u16,
+    pub command_card_position: CommandCardPosition,
     pub attack: AttackProfile,
+    pub map_version: MapVersion,
 }
 
 impl CastleFightTowerDefinition {
@@ -850,6 +949,7 @@ fn builder_profile(move_speed_world_units_per_second: i32) -> BuilderProfile {
     BuilderProfile {
         speed_per_tick: move_speed_world_units_per_second * SUBUNITS_PER_WORLD_UNIT
             / CASTLE_FIGHT_SIMULATION_HZ,
+        build_range: world(CASTLE_FIGHT_BUILDER_BUILD_RANGE_WORLD_UNITS),
         repair_range: world(CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS),
         repair_autocast_range: world(CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS),
         repair_time_ratio_numerator: CASTLE_FIGHT_BUILDER_REPAIR_TIME_RATIO_NUMERATOR,
@@ -950,11 +1050,36 @@ fn parse_rawcode(value: &str) -> u32 {
 }
 
 #[must_use]
+pub fn castle_fight_main_castle_repair_time_ticks() -> u32 {
+    castle_fight_main_castle_repair_time_ticks_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        .expect("default Castle Fight map version must remain available")
+}
+
+pub fn castle_fight_main_castle_repair_time_ticks_for_version(
+    version: MapVersion,
+) -> Result<u32, UnsupportedCastleFightMapVersion> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return Err(UnsupportedCastleFightMapVersion(version));
+    }
+    Ok(CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS_927)
+}
+
+#[must_use]
 pub fn castle_fight_damage_rules() -> DamageRules {
-    DamageRules::from_wc3_misc_text(include_str!(
+    castle_fight_damage_rules_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        .expect("default Castle Fight map version must remain available")
+}
+
+pub fn castle_fight_damage_rules_for_version(
+    version: MapVersion,
+) -> Result<DamageRules, UnsupportedCastleFightMapVersion> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return Err(UnsupportedCastleFightMapVersion(version));
+    }
+    Ok(DamageRules::from_wc3_misc_text(include_str!(
         "../../../docs/original_map/extracted/war3mapMisc.txt"
     ))
-    .expect("committed Castle Fight war3mapMisc.txt damage table must remain valid")
+    .expect("committed Castle Fight war3mapMisc.txt damage table must remain valid"))
 }
 
 #[must_use]
@@ -1099,6 +1224,7 @@ fn production_definition(
     building_health: i32,
     spawn_seconds: u16,
     unit: CastleFightUnitKind,
+    command_card_position: CommandCardPosition,
 ) -> CastleFightProductionDefinition {
     let economy = verified_building_economy_927(rawcode, gold_cost, 0);
     CastleFightProductionDefinition {
@@ -1111,8 +1237,9 @@ fn production_definition(
         repair_time_ticks: 70 * CASTLE_FIGHT_SIMULATION_HZ as u32,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         spawn_interval_ticks: spawn_seconds * CASTLE_FIGHT_SIMULATION_HZ as u16,
-        footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS,
+        footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
         unit,
+        command_card_position,
         map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
 }
@@ -1139,6 +1266,16 @@ const fn world(world_units: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse_extracted_u8(value: &str) -> u8 {
+        // `object-fields.tsv` is written with CSV-style quote escaping even though it is
+        // tab-delimited, so a JSON string like `"1"` appears in the raw file as `"""1"""`.
+        // Coordinates are scalar integers, so normalize the TSV quoting before parsing.
+        value
+            .trim_matches('"')
+            .parse::<u8>()
+            .expect("extracted button coordinate must be numeric")
+    }
 
     #[test]
     fn economy_rules_match_extracted_927_defaults() {
@@ -1237,6 +1374,7 @@ mod tests {
             castle_fight_builder_profile(),
             BuilderProfile {
                 speed_per_tick: 550 * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ,
+                build_range: 50 * SUBUNITS_PER_WORLD_UNIT,
                 repair_range: 50 * SUBUNITS_PER_WORLD_UNIT,
                 repair_autocast_range: 500 * SUBUNITS_PER_WORLD_UNIT,
                 repair_time_ratio_numerator: 3,
@@ -1477,9 +1615,133 @@ mod tests {
             );
         }
         assert_eq!(
-            CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS,
+            castle_fight_main_castle_repair_time_ticks(),
             repair_ticks(u32::from_be_bytes(*b"hcas"))
         );
+    }
+
+    #[test]
+    fn native_build_command_slots_match_extracted_unit_button_positions() {
+        let object_fields =
+            include_str!("../../../docs/original_map/extracted/resolved/object-fields.tsv");
+        let mut lines = object_fields.lines();
+        let columns = lines
+            .next()
+            .expect("object-fields.tsv header missing")
+            .split('\t')
+            .collect::<Vec<_>>();
+        let category_column = columns
+            .iter()
+            .position(|column| *column == "category")
+            .unwrap();
+        let rawcode_column = columns
+            .iter()
+            .position(|column| *column == "rawcode")
+            .unwrap();
+        let field_id_column = columns
+            .iter()
+            .position(|column| *column == "field_id")
+            .unwrap();
+        let recovered_column = columns
+            .iter()
+            .position(|column| *column == "recovered_value_json")
+            .unwrap();
+        let rows = lines
+            .map(|line| line.split('\t').collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let coordinate = |rawcode: u32, field: &str| {
+            let rawcode = rawcode.to_be_bytes();
+            let rawcode = std::str::from_utf8(&rawcode).expect("rawcode must be ASCII");
+            let row = rows
+                .iter()
+                .find(|row| {
+                    row[category_column] == "units"
+                        && row[rawcode_column] == rawcode
+                        && row[field_id_column] == field
+                })
+                .unwrap_or_else(|| panic!("missing extracted {field} for {rawcode}"));
+            parse_extracted_u8(row[recovered_column])
+        };
+        let extracted_position = |rawcode: u32| {
+            CommandCardPosition::new(coordinate(rawcode, "ubpx"), coordinate(rawcode, "ubpy"))
+        };
+
+        for kind in CastleFightProductionKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                definition.command_card_position,
+                extracted_position(definition.rawcode)
+            );
+        }
+        for kind in CastleFightTowerKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                definition.command_card_position,
+                extracted_position(definition.rawcode)
+            );
+        }
+    }
+
+    #[test]
+    fn command_card_layout_is_versioned_and_matches_extracted_builder_abilities() {
+        let layout = castle_fight_command_card_layout_for_version(MapVersion::CASTLE_FIGHT_9_27)
+            .expect("9.27 command card must be supported");
+        assert_eq!(layout.map_version, MapVersion::CASTLE_FIGHT_9_27);
+        assert!(castle_fight_command_card_layout_for_version(MapVersion::new(9, 28)).is_err());
+        assert!(castle_fight_damage_rules_for_version(MapVersion::new(9, 28)).is_err());
+        assert!(
+            castle_fight_main_castle_repair_time_ticks_for_version(MapVersion::new(9, 28)).is_err()
+        );
+        assert!(
+            CastleFightTowerKind::WatchTower
+                .definition_for_version(MapVersion::new(9, 28))
+                .is_err()
+        );
+
+        let object_fields =
+            include_str!("../../../docs/original_map/extracted/resolved/object-fields.tsv");
+        let mut lines = object_fields.lines();
+        let columns = lines
+            .next()
+            .expect("object-fields.tsv header missing")
+            .split('\t')
+            .collect::<Vec<_>>();
+        let category_column = columns
+            .iter()
+            .position(|column| *column == "category")
+            .unwrap();
+        let rawcode_column = columns
+            .iter()
+            .position(|column| *column == "rawcode")
+            .unwrap();
+        let field_id_column = columns
+            .iter()
+            .position(|column| *column == "field_id")
+            .unwrap();
+        let recovered_column = columns
+            .iter()
+            .position(|column| *column == "recovered_value_json")
+            .unwrap();
+        let rows = lines
+            .map(|line| line.split('\t').collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let ability_position = |rawcode: &str| {
+            let coordinate = |field: &str| {
+                let row = rows
+                    .iter()
+                    .find(|row| {
+                        row[category_column] == "abilities"
+                            && row[rawcode_column] == rawcode
+                            && row[field_id_column] == field
+                    })
+                    .unwrap_or_else(|| panic!("missing extracted {field} for {rawcode}"));
+                parse_extracted_u8(row[recovered_column])
+            };
+            CommandCardPosition::new(coordinate("abpx"), coordinate("abpy"))
+        };
+
+        assert_eq!(layout.repair_ability, ability_position("Ahrp"));
+        assert_eq!(layout.blink_ability, ability_position("A0-1"));
     }
 
     #[test]

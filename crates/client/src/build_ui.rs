@@ -1,9 +1,11 @@
 use bevy::{prelude::*, window::PrimaryWindow};
-use castle_fight_sim::{BuildingFootprint, PlayerResources, Team};
+use castle_fight_sim::{
+    BuildingFootprint, CommandCardPosition, SimId, Team, castle_fight_command_card_layout,
+};
 
 use crate::{
     AuthoritativeSimulation,
-    bridge::PresentationSamples,
+    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
     demo::{BuildKind, ProductionKind},
     inspection::InspectionSelection,
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
@@ -18,6 +20,7 @@ const GRID_GAP: f32 = 4.0;
 const CELL_SIZE: f32 = 66.0;
 const GRID_COLUMNS: usize = 4;
 const GRID_ROWS: usize = 3;
+const SLOT_COUNT: usize = GRID_COLUMNS * GRID_ROWS;
 const PANEL_WIDTH: f32 =
     PANEL_PADDING * 2.0 + CELL_SIZE * GRID_COLUMNS as f32 + GRID_GAP * (GRID_COLUMNS as f32 - 1.0);
 const PANEL_HEIGHT: f32 =
@@ -25,78 +28,105 @@ const PANEL_HEIGHT: f32 =
 
 const PANEL_BACKGROUND: Color = Color::srgba(0.105, 0.070, 0.040, 0.97);
 const PANEL_BORDER: Color = Color::srgb(0.28, 0.25, 0.20);
-const SLOT_BACKGROUND: Color = Color::srgb(0.018, 0.016, 0.014);
 const SLOT_BORDER: Color = Color::srgb(0.34, 0.34, 0.32);
 const BUTTON_NORMAL: Color = Color::srgb(0.095, 0.075, 0.055);
 const BUTTON_HOVERED: Color = Color::srgb(0.18, 0.14, 0.095);
-const BUTTON_SELECTED: Color = Color::srgb(0.18, 0.27, 0.14);
-const BUTTON_SELECTED_BORDER: Color = Color::srgb(0.86, 0.72, 0.28);
 const BUTTON_DISABLED: Color = Color::srgb(0.045, 0.043, 0.040);
 const BUTTON_DISABLED_BORDER: Color = Color::srgb(0.18, 0.17, 0.16);
 const BUTTON_TEXT: Color = Color::srgb(0.92, 0.90, 0.84);
 const BUTTON_TEXT_DISABLED: Color = Color::srgb(0.42, 0.40, 0.37);
 
-const BUILD_GRID: [Option<BuildKind>; GRID_COLUMNS * GRID_ROWS] = [
-    Some(BuildKind::Production(ProductionKind::Barracks)),
-    Some(BuildKind::Production(ProductionKind::RangersHall)),
-    Some(BuildKind::Production(ProductionKind::OrcishSiegeFactory)),
-    Some(BuildKind::Production(ProductionKind::IceTrollHut)),
-    Some(BuildKind::Production(ProductionKind::GryphonRock)),
-    Some(BuildKind::Tower(
-        castle_fight_sim::CastleFightTowerKind::WatchTower,
-    )),
-    Some(BuildKind::Tower(
-        castle_fight_sim::CastleFightTowerKind::PoofTower,
-    )),
-    None,
-    None,
-    None,
-    None,
-    None,
+const ALL_BUILD_KINDS: [BuildKind; 7] = [
+    BuildKind::Production(ProductionKind::Barracks),
+    BuildKind::Production(ProductionKind::RangersHall),
+    BuildKind::Production(ProductionKind::OrcishSiegeFactory),
+    BuildKind::Production(ProductionKind::IceTrollHut),
+    BuildKind::Production(ProductionKind::GryphonRock),
+    BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
+    BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::PoofTower),
 ];
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct BuildRequest {
-    pub(crate) team: Team,
-    pub(crate) kind: BuildKind,
-    pub(crate) footprint: BuildingFootprint,
+fn command_slot(position: CommandCardPosition) -> usize {
+    usize::from(position.y) * GRID_COLUMNS + usize::from(position.x)
 }
 
-#[derive(Resource, Default)]
-pub(crate) struct PendingBuildPlacements(pub(crate) Vec<BuildRequest>);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TargetingAction {
+    Move,
+    Repair,
+    Blink,
+    Attack,
+    Build(BuildKind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ActionPanelMode {
+    #[default]
+    Actions,
+    BuildMenu,
+    Targeting(TargetingAction),
+}
 
 #[derive(Resource)]
-pub(crate) struct BuildSelection {
+pub(crate) struct ActionPanelState {
     pub(crate) team: Team,
-    pub(crate) kind: Option<BuildKind>,
+    pub(crate) actor: Option<SimId>,
+    pub(crate) mode: ActionPanelMode,
     pub(crate) status: String,
 }
 
-impl Default for BuildSelection {
+impl Default for ActionPanelState {
     fn default() -> Self {
         Self {
             team: Team(0),
-            kind: None,
-            status: "Select a building, then left-click the battlefield to place it.".into(),
+            actor: None,
+            mode: ActionPanelMode::Actions,
+            status: "Select a controllable builder or tower.".into(),
         }
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-enum BuildUiAction {
-    Building(BuildKind),
+impl ActionPanelState {
+    pub(crate) const fn targeting(&self) -> Option<TargetingAction> {
+        match self.mode {
+            ActionPanelMode::Targeting(action) => Some(action),
+            ActionPanelMode::Actions | ActionPanelMode::BuildMenu => None,
+        }
+    }
+
+    pub(crate) fn cancel_modal(&mut self) {
+        self.mode = match self.mode {
+            ActionPanelMode::Targeting(TargetingAction::Build(_)) => ActionPanelMode::BuildMenu,
+            ActionPanelMode::Targeting(_) | ActionPanelMode::BuildMenu => ActionPanelMode::Actions,
+            ActionPanelMode::Actions => ActionPanelMode::Actions,
+        };
+        self.status = "Command cancelled.".into();
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PanelAction {
+    Target(TargetingAction),
+    OpenBuildMenu,
+    Cancel,
 }
 
 #[derive(Component)]
-struct BuildPanel;
+struct ActionPanel;
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-struct BuildButtonText(BuildKind);
+#[derive(Component, Debug, Clone, Copy)]
+struct CommandSlot(usize);
 
-type BuildActionInteractions<'w, 's> = Query<
+#[derive(Component, Debug, Clone, Copy, Default)]
+struct SlotAction(Option<PanelAction>);
+
+#[derive(Component)]
+struct SlotLabel;
+
+type ActionInteractions<'w, 's> = Query<
     'w,
     's,
-    (&'static Interaction, &'static BuildUiAction),
+    (&'static Interaction, &'static SlotAction),
     (Changed<Interaction>, With<Button>),
 >;
 
@@ -104,17 +134,16 @@ pub(crate) struct BuildUiPlugin;
 
 impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BuildSelection>()
-            .init_resource::<PendingBuildPlacements>()
-            .add_systems(Startup, setup_build_ui)
+        app.init_resource::<ActionPanelState>()
+            .add_systems(Startup, setup_action_panel)
             .add_systems(
                 Update,
                 (
-                    sync_build_panel_to_selection,
-                    sync_build_selection_affordability,
-                    handle_build_ui_actions,
-                    style_build_ui_buttons,
-                    queue_world_placement,
+                    sync_action_panel_to_selection,
+                    handle_escape,
+                    populate_action_panel,
+                    handle_action_panel_buttons,
+                    style_action_panel_buttons,
                     draw_build_preview,
                 )
                     .chain(),
@@ -122,7 +151,7 @@ impl Plugin for BuildUiPlugin {
     }
 }
 
-fn setup_build_ui(mut commands: Commands) {
+fn setup_action_panel(mut commands: Commands) {
     commands
         .spawn((
             Node {
@@ -140,7 +169,7 @@ fn setup_build_ui(mut commands: Commands) {
             BackgroundColor(PANEL_BACKGROUND),
             BorderColor::all(PANEL_BORDER),
             Visibility::Hidden,
-            BuildPanel,
+            ActionPanel,
         ))
         .with_children(|panel| {
             for row_index in 0..GRID_ROWS {
@@ -152,56 +181,352 @@ fn setup_build_ui(mut commands: Commands) {
                         ..default()
                     },))
                     .with_children(|row| {
-                        let row_start = row_index * GRID_COLUMNS;
-                        for slot in &BUILD_GRID[row_start..row_start + GRID_COLUMNS] {
-                            match slot {
-                                Some(kind) => spawn_build_button(row, *kind),
-                                None => spawn_empty_slot(row),
-                            }
+                        for column_index in 0..GRID_COLUMNS {
+                            let slot = row_index * GRID_COLUMNS + column_index;
+                            row.spawn((
+                                Button,
+                                Node {
+                                    width: px(CELL_SIZE),
+                                    height: px(CELL_SIZE),
+                                    border: UiRect::all(px(2.0)),
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::Center,
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                },
+                                BackgroundColor(BUTTON_NORMAL),
+                                BorderColor::all(SLOT_BORDER),
+                                Visibility::Hidden,
+                                CommandSlot(slot),
+                                SlotAction::default(),
+                            ))
+                            .with_child((
+                                Text::new(""),
+                                TextFont::from_font_size(10.0),
+                                TextColor(BUTTON_TEXT),
+                                TextLayout::justify(Justify::Center),
+                                SlotLabel,
+                            ));
                         }
                     });
             }
         });
 }
 
-fn spawn_build_button(parent: &mut ChildSpawnerCommands, kind: BuildKind) {
-    parent
-        .spawn((
-            Button,
-            Node {
-                width: px(CELL_SIZE),
-                height: px(CELL_SIZE),
-                border: UiRect::all(px(2.0)),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                flex_shrink: 0.0,
-                ..default()
-            },
-            BackgroundColor(BUTTON_NORMAL),
-            BorderColor::all(SLOT_BORDER),
-            BuildUiAction::Building(kind),
-        ))
-        .with_child((
-            Text::new(build_button_label(kind)),
-            TextFont::from_font_size(10.0),
-            TextColor(BUTTON_TEXT),
-            TextLayout::justify(Justify::Center),
-            BuildButtonText(kind),
-        ));
+fn sync_action_panel_to_selection(
+    inspection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    mut state: ResMut<ActionPanelState>,
+    mut panel: Single<&mut Visibility, With<ActionPanel>>,
+) {
+    let selected = inspection.selected;
+    let relevant = selected.and_then(|id| {
+        if let Some(builder) = samples.current.builders.get(&id) {
+            return Some((id, builder.team));
+        }
+        samples.current.buildings.get(&id).and_then(|building| {
+            building_is_controllable_tower(building).then_some((id, building.team))
+        })
+    });
+
+    match relevant {
+        Some((actor, team)) => {
+            if state.actor != Some(actor) {
+                state.actor = Some(actor);
+                state.team = team;
+                state.mode = ActionPanelMode::Actions;
+                state.status = "Choose an action.".into();
+            } else {
+                state.team = team;
+            }
+            **panel = Visibility::Visible;
+        }
+        None => {
+            state.actor = None;
+            state.mode = ActionPanelMode::Actions;
+            **panel = Visibility::Hidden;
+        }
+    }
 }
 
-fn spawn_empty_slot(parent: &mut ChildSpawnerCommands) {
-    parent.spawn((
-        Node {
-            width: px(CELL_SIZE),
-            height: px(CELL_SIZE),
-            border: UiRect::all(px(2.0)),
-            flex_shrink: 0.0,
-            ..default()
-        },
-        BackgroundColor(SLOT_BACKGROUND),
-        BorderColor::all(SLOT_BORDER),
-    ));
+fn handle_escape(keys: Res<ButtonInput<KeyCode>>, mut state: ResMut<ActionPanelState>) {
+    if keys.just_pressed(KeyCode::Escape) && state.mode != ActionPanelMode::Actions {
+        state.cancel_modal();
+    }
+}
+
+fn populate_action_panel(
+    state: Res<ActionPanelState>,
+    authoritative: Res<AuthoritativeSimulation>,
+    mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility, &Children)>,
+    mut labels: Query<&mut Text, With<SlotLabel>>,
+) {
+    let layout = action_layout(&state, &authoritative);
+    for (slot, mut action, mut visibility, children) in &mut buttons {
+        action.0 = layout[slot.0];
+        *visibility = if action.0.is_some() {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        if let Some(child) = children.first()
+            && let Ok(mut text) = labels.get_mut(*child)
+        {
+            text.0 = action.0.map_or_else(String::new, action_label);
+        }
+    }
+}
+
+fn action_layout(
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+) -> [Option<PanelAction>; SLOT_COUNT] {
+    let mut slots = [None; SLOT_COUNT];
+    let Some(actor) = state.actor else {
+        return slots;
+    };
+    let command_card = castle_fight_command_card_layout();
+    let cancel_slot = command_slot(command_card.cancel_command);
+
+    match state.mode {
+        ActionPanelMode::Actions => {
+            if authoritative.simulation.builder(actor).is_some() {
+                slots[command_slot(command_card.move_command)] =
+                    Some(PanelAction::Target(TargetingAction::Move));
+                slots[command_slot(command_card.repair_ability)] =
+                    Some(PanelAction::Target(TargetingAction::Repair));
+                slots[command_slot(command_card.blink_ability)] =
+                    Some(PanelAction::Target(TargetingAction::Blink));
+                slots[command_slot(command_card.build_command)] = Some(PanelAction::OpenBuildMenu);
+            } else if authoritative
+                .simulation
+                .building(actor)
+                .is_some_and(|building| {
+                    building.attack_delivery.is_some()
+                        && building.content.is_some_and(|content| {
+                            castle_fight_sim::CastleFightTowerKind::from_rawcode(content.rawcode)
+                                .is_some()
+                        })
+                })
+            {
+                slots[command_slot(command_card.attack_command)] =
+                    Some(PanelAction::Target(TargetingAction::Attack));
+            }
+        }
+        ActionPanelMode::BuildMenu => {
+            let Some(builder) = authoritative.simulation.builder(actor) else {
+                return slots;
+            };
+            for kind in ALL_BUILD_KINDS {
+                if !builder.configuration.allows_building(kind.rawcode()) {
+                    continue;
+                }
+                let preferred = command_slot(kind.command_card_position());
+                let slot = if preferred < SLOT_COUNT
+                    && preferred != cancel_slot
+                    && slots[preferred].is_none()
+                {
+                    preferred
+                } else {
+                    // The verification client intentionally exposes a mixed-race catalog. Real
+                    // race catalogs do not collide here; for this synthetic menu retain authored
+                    // slots when possible and resolve cross-race collisions deterministically.
+                    (0..SLOT_COUNT)
+                        .find(|index| *index != cancel_slot && slots[*index].is_none())
+                        .expect("implemented build menu must fit the WC3 command card")
+                };
+                slots[slot] = Some(PanelAction::Target(TargetingAction::Build(kind)));
+            }
+            slots[cancel_slot] = Some(PanelAction::Cancel);
+        }
+        ActionPanelMode::Targeting(_) => {
+            slots[cancel_slot] = Some(PanelAction::Cancel);
+        }
+    }
+    slots
+}
+
+fn handle_action_panel_buttons(
+    authoritative: Res<AuthoritativeSimulation>,
+    mut state: ResMut<ActionPanelState>,
+    actions: ActionInteractions,
+) {
+    for (interaction, action) in &actions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(action) = action.0 else {
+            continue;
+        };
+        match action {
+            PanelAction::OpenBuildMenu => {
+                state.mode = ActionPanelMode::BuildMenu;
+                state.status = "Choose a building.".into();
+            }
+            PanelAction::Target(TargetingAction::Build(kind)) => {
+                if !can_afford_build_kind(&authoritative, &state, kind) {
+                    state.status = insufficient_resources_status(&authoritative, &state, kind);
+                    continue;
+                }
+                state.mode = ActionPanelMode::Targeting(TargetingAction::Build(kind));
+                state.status = format!(
+                    "{} selected — {} gold / {} lumber. Left-click a build site; Esc cancels this building.",
+                    kind.label(),
+                    kind.gold_cost(),
+                    kind.lumber_cost(),
+                );
+            }
+            PanelAction::Target(action) => {
+                state.mode = ActionPanelMode::Targeting(action);
+                state.status = match action {
+                    TargetingAction::Move => "Move: left-click a destination; Esc cancels.".into(),
+                    TargetingAction::Repair => {
+                        "Repair: left-click a friendly building or mechanical unit; Esc cancels."
+                            .into()
+                    }
+                    TargetingAction::Blink => {
+                        "Blink: left-click a destination; Esc cancels.".into()
+                    }
+                    TargetingAction::Attack => {
+                        "Attack: left-click an enemy unit or building; Esc cancels.".into()
+                    }
+                    TargetingAction::Build(_) => unreachable!(),
+                };
+            }
+            PanelAction::Cancel => state.cancel_modal(),
+        }
+    }
+}
+
+fn style_action_panel_buttons(
+    state: Res<ActionPanelState>,
+    authoritative: Res<AuthoritativeSimulation>,
+    mut buttons: Query<(
+        &SlotAction,
+        &Interaction,
+        &mut BackgroundColor,
+        &mut BorderColor,
+        &Children,
+    )>,
+    mut labels: Query<&mut TextColor, With<SlotLabel>>,
+) {
+    for (action, interaction, mut background, mut border, children) in &mut buttons {
+        let disabled = action.0.is_some_and(|action| match action {
+            PanelAction::Target(TargetingAction::Build(kind)) => {
+                !can_afford_build_kind(&authoritative, &state, kind)
+            }
+            _ => false,
+        });
+        *background = BackgroundColor(if disabled {
+            BUTTON_DISABLED
+        } else if *interaction == Interaction::Hovered {
+            BUTTON_HOVERED
+        } else {
+            BUTTON_NORMAL
+        });
+        *border = BorderColor::all(if disabled {
+            BUTTON_DISABLED_BORDER
+        } else {
+            SLOT_BORDER
+        });
+        if let Some(child) = children.first()
+            && let Ok(mut color) = labels.get_mut(*child)
+        {
+            color.0 = if disabled {
+                BUTTON_TEXT_DISABLED
+            } else {
+                BUTTON_TEXT
+            };
+        }
+    }
+}
+
+fn draw_build_preview(
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
+    authoritative: Res<AuthoritativeSimulation>,
+    state: Res<ActionPanelState>,
+    mut gizmos: Gizmos,
+) {
+    let Some(TargetingAction::Build(kind)) = state.targeting() else {
+        return;
+    };
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
+    if cursor_over_action_panel(cursor, window.height(), state.actor.is_some()) {
+        return;
+    }
+    let (camera, camera_transform) = *camera;
+    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
+        return;
+    };
+    let footprint = placement_footprint(&metrics, world, kind);
+    let valid = authoritative
+        .simulation
+        .can_place_building_for_team(state.team, footprint)
+        && can_afford_build_kind(&authoritative, &state, kind);
+    let color = if valid {
+        team_ui_color(state.team)
+    } else {
+        Color::srgb(1.0, 0.18, 0.15)
+    };
+    draw_footprint_outline(&mut gizmos, &metrics, &terrain, footprint, color);
+}
+
+pub(crate) fn placement_footprint(
+    metrics: &WorldMetrics,
+    world: Vec3,
+    kind: BuildKind,
+) -> BuildingFootprint {
+    let size = kind.footprint_size();
+    metrics.footprint_at_world(world, size, size)
+}
+
+fn can_afford_build_kind(
+    authoritative: &AuthoritativeSimulation,
+    state: &ActionPanelState,
+    kind: BuildKind,
+) -> bool {
+    let Some(actor) = state.actor else {
+        return false;
+    };
+    authoritative
+        .simulation
+        .can_builder_afford_building(actor, kind.economy())
+}
+
+fn insufficient_resources_status(
+    authoritative: &AuthoritativeSimulation,
+    state: &ActionPanelState,
+    kind: BuildKind,
+) -> String {
+    let resources = authoritative
+        .simulation
+        .player_resources(state.team)
+        .expect("action panel supports the two Castle Fight players");
+    format!(
+        "Cannot afford {}: need {} gold / {} lumber; currently {} / {} committed/free.",
+        kind.label(),
+        kind.gold_cost(),
+        kind.lumber_cost(),
+        resources.gold,
+        resources.lumber,
+    )
+}
+
+fn action_label(action: PanelAction) -> String {
+    match action {
+        PanelAction::OpenBuildMenu => "Build".into(),
+        PanelAction::Cancel => "Cancel\nEsc".into(),
+        PanelAction::Target(TargetingAction::Move) => "Move".into(),
+        PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
+        PanelAction::Target(TargetingAction::Blink) => "Blink".into(),
+        PanelAction::Target(TargetingAction::Attack) => "Attack".into(),
+        PanelAction::Target(TargetingAction::Build(kind)) => build_button_label(kind),
+    }
 }
 
 fn build_button_label(kind: BuildKind) -> String {
@@ -222,260 +547,7 @@ fn build_button_label(kind: BuildKind) -> String {
     }
 }
 
-fn sync_build_panel_to_selection(
-    inspection: Res<InspectionSelection>,
-    samples: Res<PresentationSamples>,
-    mut selection: ResMut<BuildSelection>,
-    mut panel: Single<&mut Visibility, With<BuildPanel>>,
-) {
-    let builder_team = inspection
-        .selected
-        .and_then(|selected| samples.current.builders.get(&selected))
-        .map(|builder| builder.team);
-
-    match builder_team {
-        Some(team) => {
-            selection.team = team;
-            **panel = Visibility::Visible;
-        }
-        None => {
-            selection.kind = None;
-            **panel = Visibility::Hidden;
-        }
-    }
-}
-
-fn sync_build_selection_affordability(
-    authoritative: Res<AuthoritativeSimulation>,
-    pending: Res<PendingBuildPlacements>,
-    mut selection: ResMut<BuildSelection>,
-) {
-    let Some(kind) = selection.kind else {
-        return;
-    };
-    if can_afford_build_kind(&authoritative, &pending, selection.team, kind) {
-        return;
-    }
-    selection.kind = None;
-    selection.status =
-        insufficient_resources_status(&authoritative, &pending, selection.team, kind);
-}
-
-fn handle_build_ui_actions(
-    keys: Res<ButtonInput<KeyCode>>,
-    authoritative: Res<AuthoritativeSimulation>,
-    pending: Res<PendingBuildPlacements>,
-    mut selection: ResMut<BuildSelection>,
-    actions: BuildActionInteractions,
-) {
-    if keys.just_pressed(KeyCode::Escape) {
-        selection.kind = None;
-        selection.status = "Placement cancelled.".into();
-    }
-
-    for (interaction, action) in &actions {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-        let BuildUiAction::Building(kind) = *action;
-        if !can_afford_build_kind(&authoritative, &pending, selection.team, kind) {
-            selection.kind = None;
-            selection.status =
-                insufficient_resources_status(&authoritative, &pending, selection.team, kind);
-            continue;
-        }
-        selection.kind = Some(kind);
-        selection.status = format!(
-            "{} {} selected — {} gold / {} lumber. Left-click to place.",
-            team_label(selection.team),
-            kind.label(),
-            kind.gold_cost(),
-            kind.lumber_cost(),
-        );
-    }
-}
-
-fn style_build_ui_buttons(
-    selection: Res<BuildSelection>,
-    authoritative: Res<AuthoritativeSimulation>,
-    pending: Res<PendingBuildPlacements>,
-    mut buttons: Query<(
-        &BuildUiAction,
-        &Interaction,
-        &mut BackgroundColor,
-        &mut BorderColor,
-    )>,
-    mut labels: Query<(&BuildButtonText, &mut TextColor)>,
-) {
-    for (action, interaction, mut background, mut border) in &mut buttons {
-        let BuildUiAction::Building(kind) = *action;
-        let affordable = can_afford_build_kind(&authoritative, &pending, selection.team, kind);
-        let selected = affordable && selection.kind == Some(kind);
-        *background = BackgroundColor(if !affordable {
-            BUTTON_DISABLED
-        } else if selected {
-            BUTTON_SELECTED
-        } else if *interaction == Interaction::Hovered {
-            BUTTON_HOVERED
-        } else {
-            BUTTON_NORMAL
-        });
-        *border = BorderColor::all(if !affordable {
-            BUTTON_DISABLED_BORDER
-        } else if selected {
-            BUTTON_SELECTED_BORDER
-        } else {
-            SLOT_BORDER
-        });
-    }
-    for (label, mut color) in &mut labels {
-        color.0 = if can_afford_build_kind(&authoritative, &pending, selection.team, label.0) {
-            BUTTON_TEXT
-        } else {
-            BUTTON_TEXT_DISABLED
-        };
-    }
-}
-
-fn queue_world_placement(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    window: Single<&Window, With<PrimaryWindow>>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    world: (Res<WorldMetrics>, Res<TerrainSurface>),
-    authoritative: Res<AuthoritativeSimulation>,
-    mut selection: ResMut<BuildSelection>,
-    mut pending: ResMut<PendingBuildPlacements>,
-) {
-    let (metrics, terrain) = world;
-    if !mouse_buttons.just_pressed(MouseButton::Left) {
-        return;
-    }
-    let Some(kind) = selection.kind else {
-        return;
-    };
-    let Some(cursor) = window.cursor_position() else {
-        return;
-    };
-    if cursor_over_build_panel(cursor, window.height(), true) {
-        return;
-    }
-    let (camera, camera_transform) = *camera;
-    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
-        selection.status = "Placement rejected: cursor does not intersect the battlefield.".into();
-        return;
-    };
-    let footprint = placement_footprint(&metrics, world, kind);
-    if !authoritative
-        .simulation
-        .can_place_building_for_team(selection.team, footprint)
-    {
-        selection.status =
-            "Placement rejected: outside this side's build region, blocked, or occupied.".into();
-        return;
-    }
-    if !can_afford_build_kind(&authoritative, &pending, selection.team, kind) {
-        selection.kind = None;
-        selection.status =
-            insufficient_resources_status(&authoritative, &pending, selection.team, kind);
-        return;
-    }
-
-    pending.0.push(BuildRequest {
-        team: selection.team,
-        kind,
-        footprint,
-    });
-    selection.status = format!("Queued {} {}.", team_label(selection.team), kind.label());
-}
-
-fn draw_build_preview(
-    window: Single<&Window, With<PrimaryWindow>>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    metrics: Res<WorldMetrics>,
-    terrain: Res<TerrainSurface>,
-    authoritative: Res<AuthoritativeSimulation>,
-    pending: Res<PendingBuildPlacements>,
-    selection: Res<BuildSelection>,
-    mut gizmos: Gizmos,
-) {
-    if selection.kind.is_none() {
-        return;
-    }
-    let Some(cursor) = window.cursor_position() else {
-        return;
-    };
-    if cursor_over_build_panel(cursor, window.height(), true) {
-        return;
-    }
-    let (camera, camera_transform) = *camera;
-    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
-        return;
-    };
-    let kind = selection.kind.expect("checked selected build kind");
-    let footprint = placement_footprint(&metrics, world, kind);
-    let valid = authoritative
-        .simulation
-        .can_place_building_for_team(selection.team, footprint)
-        && can_afford_build_kind(&authoritative, &pending, selection.team, kind);
-    let color = if valid {
-        team_ui_color(selection.team)
-    } else {
-        Color::srgb(1.0, 0.18, 0.15)
-    };
-    draw_footprint_outline(&mut gizmos, &metrics, &terrain, footprint, color);
-}
-
-fn placement_footprint(metrics: &WorldMetrics, world: Vec3, kind: BuildKind) -> BuildingFootprint {
-    let size = kind.footprint_size();
-    metrics.footprint_at_world(world, size, size)
-}
-
-fn resources_after_pending_builds(
-    authoritative: &AuthoritativeSimulation,
-    pending: &PendingBuildPlacements,
-    team: Team,
-) -> Option<PlayerResources> {
-    let mut resources = authoritative.simulation.player_resources(team)?;
-    for request in pending.0.iter().filter(|request| request.team == team) {
-        let economy = request.kind.economy();
-        resources.gold = resources.gold.saturating_sub(economy.gold_cost);
-        resources.lumber = resources.lumber.saturating_sub(economy.lumber_cost);
-    }
-    Some(resources)
-}
-
-fn can_afford_build_kind(
-    authoritative: &AuthoritativeSimulation,
-    pending: &PendingBuildPlacements,
-    team: Team,
-    kind: BuildKind,
-) -> bool {
-    let Some(resources) = resources_after_pending_builds(authoritative, pending, team) else {
-        return false;
-    };
-    let economy = kind.economy();
-    resources.gold >= economy.gold_cost && resources.lumber >= economy.lumber_cost
-}
-
-fn insufficient_resources_status(
-    authoritative: &AuthoritativeSimulation,
-    pending: &PendingBuildPlacements,
-    team: Team,
-    kind: BuildKind,
-) -> String {
-    let resources = resources_after_pending_builds(authoritative, pending, team)
-        .expect("build UI supports the two Castle Fight players");
-    format!(
-        "Cannot afford {}: need {} gold / {} lumber; available {} / {}.",
-        kind.label(),
-        kind.gold_cost(),
-        kind.lumber_cost(),
-        resources.gold,
-        resources.lumber,
-    )
-}
-
-pub(crate) fn cursor_over_build_panel(
+pub(crate) fn cursor_over_action_panel(
     cursor: Vec2,
     window_height: f32,
     panel_visible: bool,
@@ -493,12 +565,21 @@ pub(crate) fn cursor_over_build_panel(
         && cursor.y <= panel_top + PANEL_HEIGHT
 }
 
-fn team_label(team: Team) -> &'static str {
-    match team.0 {
-        0 => "Blue",
-        1 => "Red",
-        _ => "Unknown",
-    }
+fn building_is_attack_capable(kind: BuildingVisualKind) -> bool {
+    matches!(
+        kind,
+        BuildingVisualKind::Attack
+            | BuildingVisualKind::ProductionAttack
+            | BuildingVisualKind::AttackSpellcaster
+            | BuildingVisualKind::ProductionAttackSpellcaster
+    )
+}
+
+fn building_is_controllable_tower(building: &BuildingSample) -> bool {
+    building_is_attack_capable(building.visual_kind)
+        && building.content.is_some_and(|content| {
+            castle_fight_sim::CastleFightTowerKind::from_rawcode(content.rawcode).is_some()
+        })
 }
 
 fn team_ui_color(team: Team) -> Color {
@@ -532,40 +613,23 @@ mod tests {
             BuildKind::Production(ProductionKind::Barracks),
         );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
-
-        let tower = placement_footprint(
-            &metrics,
-            Vec3::new(105.0, 0.0, 75.0),
-            BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
-        );
-        assert_eq!(tower, BuildingFootprint::new(8, 5, 4, 4));
     }
 
     #[test]
     fn panel_capture_matches_visible_bottom_left_panel_bounds() {
         let window_height = 720.0;
         let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
-        assert!(cursor_over_build_panel(
+        assert!(cursor_over_action_panel(
             Vec2::new(PANEL_LEFT, panel_top),
             window_height,
             true,
         ));
-        assert!(cursor_over_build_panel(
-            Vec2::new(PANEL_LEFT + PANEL_WIDTH, panel_top + PANEL_HEIGHT),
-            window_height,
-            true,
-        ));
-        assert!(!cursor_over_build_panel(
+        assert!(!cursor_over_action_panel(
             Vec2::new(PANEL_LEFT + PANEL_WIDTH + 1.0, panel_top),
             window_height,
             true,
         ));
-        assert!(!cursor_over_build_panel(
-            Vec2::new(PANEL_LEFT, panel_top),
-            window_height,
-            false,
-        ));
-        assert!(cursor_over_build_panel(
+        assert!(cursor_over_action_panel(
             Vec2::new(900.0, TOP_BAR_HEIGHT / 2.0),
             window_height,
             false,
@@ -573,72 +637,106 @@ mod tests {
     }
 
     #[test]
-    fn starting_resources_disable_unaffordable_build_commands() {
+    fn builder_action_positions_match_wc3_command_card_and_map_abilities() {
         let demo = create_demo_world(1, Some(0));
+        let actor = demo.simulation.builder_for_team(Team(0)).unwrap().id;
+        let state = ActionPanelState {
+            actor: Some(actor),
+            ..ActionPanelState::default()
+        };
         let authoritative = AuthoritativeSimulation {
             simulation: demo.simulation,
         };
-        let mut pending = PendingBuildPlacements::default();
-
-        assert!(can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Production(ProductionKind::Barracks),
-        ));
-        assert!(can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Production(ProductionKind::RangersHall),
-        ));
-        assert!(can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Production(ProductionKind::GryphonRock),
-        ));
-        assert!(!can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Production(ProductionKind::OrcishSiegeFactory),
-        ));
-        assert!(!can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
-        ));
-
-        pending.0.push(BuildRequest {
-            team: Team(0),
-            kind: BuildKind::Production(ProductionKind::Barracks),
-            footprint: BuildingFootprint::new(0, 0, 4, 4),
-        });
-        assert!(!can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Production(ProductionKind::RangersHall),
-        ));
-        assert!(can_afford_build_kind(
-            &authoritative,
-            &pending,
-            Team(0),
-            BuildKind::Production(ProductionKind::Barracks),
-        ));
+        let layout = action_layout(&state, &authoritative);
+        let command_card = castle_fight_command_card_layout();
+        assert_eq!(
+            layout[command_slot(command_card.move_command)],
+            Some(PanelAction::Target(TargetingAction::Move))
+        );
+        assert_eq!(
+            layout[command_slot(command_card.repair_ability)],
+            Some(PanelAction::Target(TargetingAction::Repair))
+        );
+        assert_eq!(
+            layout[command_slot(command_card.blink_ability)],
+            Some(PanelAction::Target(TargetingAction::Blink))
+        );
+        assert_eq!(
+            layout[command_slot(command_card.build_command)],
+            Some(PanelAction::OpenBuildMenu)
+        );
     }
 
     #[test]
-    fn build_grid_contains_every_currently_implemented_demo_building() {
-        let populated: Vec<_> = BUILD_GRID.iter().flatten().copied().collect();
-        assert_eq!(populated.len(), 7);
-        for production in ProductionKind::ALL {
-            assert!(populated.contains(&BuildKind::Production(production)));
-        }
-        for tower in castle_fight_sim::CastleFightTowerKind::ALL {
-            assert!(populated.contains(&BuildKind::Tower(tower)));
-        }
+    fn tower_action_panel_exposes_attack_in_versioned_wc3_slot() {
+        let mut simulation = castle_fight_sim::Simulation::new(SimulationConfig::default(), 1);
+        let tower = castle_fight_sim::CastleFightTowerKind::WatchTower.definition();
+        let tower_id = simulation.spawn_building_with_properties(
+            tower.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4)),
+            tower.gameplay_properties(),
+        );
+        let state = ActionPanelState {
+            actor: Some(tower_id),
+            ..ActionPanelState::default()
+        };
+        let authoritative = AuthoritativeSimulation { simulation };
+        let layout = action_layout(&state, &authoritative);
+        let command_card = castle_fight_command_card_layout();
+        assert_eq!(
+            layout[command_slot(command_card.attack_command)],
+            Some(PanelAction::Target(TargetingAction::Attack))
+        );
+    }
+
+    #[test]
+    fn build_menu_uses_authored_slots_and_resolves_only_mixed_demo_collisions() {
+        let demo = create_demo_world(1, Some(0));
+        let actor = demo.simulation.builder_for_team(Team(0)).unwrap().id;
+        let state = ActionPanelState {
+            actor: Some(actor),
+            mode: ActionPanelMode::BuildMenu,
+            ..ActionPanelState::default()
+        };
+        let authoritative = AuthoritativeSimulation {
+            simulation: demo.simulation,
+        };
+        let layout = action_layout(&state, &authoritative);
+        let barracks = BuildKind::Production(ProductionKind::Barracks);
+        let siege_factory = BuildKind::Production(ProductionKind::OrcishSiegeFactory);
+        assert_eq!(
+            layout[command_slot(barracks.command_card_position())],
+            Some(PanelAction::Target(TargetingAction::Build(barracks)))
+        );
+        assert_eq!(
+            layout[command_slot(siege_factory.command_card_position())],
+            Some(PanelAction::Target(TargetingAction::Build(siege_factory)))
+        );
+        assert_eq!(
+            layout[command_slot(castle_fight_command_card_layout().cancel_command)],
+            Some(PanelAction::Cancel)
+        );
+        let build_count = layout
+            .iter()
+            .filter(|action| matches!(action, Some(PanelAction::Target(TargetingAction::Build(_)))))
+            .count();
+        assert_eq!(build_count, ALL_BUILD_KINDS.len());
+    }
+
+    #[test]
+    fn escape_semantics_keep_build_menu_after_cancelling_one_building() {
+        let mut state = ActionPanelState {
+            mode: ActionPanelMode::Targeting(TargetingAction::Build(BuildKind::Production(
+                ProductionKind::Barracks,
+            ))),
+            ..ActionPanelState::default()
+        };
+        state.cancel_modal();
+        assert_eq!(state.mode, ActionPanelMode::BuildMenu);
+        state.cancel_modal();
+        assert_eq!(state.mode, ActionPanelMode::Actions);
+
+        state.mode = ActionPanelMode::Targeting(TargetingAction::Repair);
+        state.cancel_modal();
+        assert_eq!(state.mode, ActionPanelMode::Actions);
     }
 }

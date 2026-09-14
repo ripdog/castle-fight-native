@@ -20,8 +20,8 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder,
-        BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuilderState,
-        BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, BurningOilZone,
+        BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn,
+        BuilderState, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, BurningOilZone,
         ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
         CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health, MAX_BOUNCE_HITS,
         MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
@@ -301,6 +301,7 @@ pub struct BuilderView {
     pub configuration: BuilderConfiguration,
     pub destination: Option<SimPoint>,
     pub repair_target: Option<SimId>,
+    pub build_footprint: Option<BuildingFootprint>,
     pub repair_autocast_enabled: bool,
 }
 
@@ -361,6 +362,16 @@ pub enum BuilderBuildError {
     BuildingNotInCatalog,
     Resources(ResourcePurchaseError),
     Placement(BuildingPlacementError),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingCommandError {
+    SourceNotFound,
+    SourceCannotAttack,
+    TargetNotFound,
+    FriendlyTarget,
+    InvalidTargetType,
+    TargetOutOfRange,
 }
 
 const PURSUIT_CACHE_CAPACITY: usize = 65_536;
@@ -519,6 +530,117 @@ impl Simulation {
         })
     }
 
+    #[must_use]
+    pub fn can_builder_afford_building(
+        &self,
+        builder: SimId,
+        economy: BuildingEconomyProfile,
+    ) -> bool {
+        let Some(entity) = self.world.iter_entities().find(|entity| {
+            entity.get::<SimId>().copied() == Some(builder) && entity.get::<Builder>().is_some()
+        }) else {
+            return false;
+        };
+        let Some(team) = entity.get::<Team>().copied() else {
+            return false;
+        };
+        let Some(resources) = self.player_resources(team) else {
+            return false;
+        };
+        let committed = entity
+            .get::<BuilderBuildOrder>()
+            .and_then(|order| order.properties.economy);
+        let available_gold = resources
+            .gold
+            .saturating_add(committed.map_or(0, |old| old.gold_cost));
+        let available_lumber = resources
+            .lumber
+            .saturating_add(committed.map_or(0, |old| old.lumber_cost));
+        available_gold >= economy.gold_cost && available_lumber >= economy.lumber_cost
+    }
+
+    pub fn order_building_attack_target(
+        &mut self,
+        source: SimId,
+        target: SimId,
+    ) -> Result<(), BuildingCommandError> {
+        let (source_entity, source_team, source_footprint, attack, attack_targets) = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(source)
+                    && entity.get::<BuildingFootprint>().is_some())
+                .then(|| {
+                    (
+                        entity.id(),
+                        *entity.get::<Team>().expect("building missing team"),
+                        *entity
+                            .get::<BuildingFootprint>()
+                            .expect("building missing footprint"),
+                        entity.get::<AttackProfile>().copied(),
+                        entity.get::<AttackTargetMask>().copied(),
+                    )
+                })
+            })
+            .ok_or(BuildingCommandError::SourceNotFound)?;
+        let attack = attack.ok_or(BuildingCommandError::SourceCannotAttack)?;
+        let attack_targets = attack_targets.expect("attack building missing target mask");
+
+        let target_entity = self
+            .world
+            .iter_entities()
+            .find(|entity| {
+                entity.get::<SimId>().copied() == Some(target)
+                    && entity
+                        .get::<Health>()
+                        .is_some_and(|health| health.current > 0)
+            })
+            .ok_or(BuildingCommandError::TargetNotFound)?;
+        let target_team = *target_entity
+            .get::<Team>()
+            .expect("attack target missing team");
+        if target_team == source_team {
+            return Err(BuildingCommandError::FriendlyTarget);
+        }
+
+        let distance_sq = if let Some(position) = target_entity.get::<Position>() {
+            let movement_class = *target_entity
+                .get::<MovementClass>()
+                .expect("unit attack target missing movement class");
+            if !attack_targets.can_target_unit(movement_class) {
+                return Err(BuildingCommandError::InvalidTargetType);
+            }
+            point_to_footprint_distance_sq(
+                position.0,
+                source_footprint,
+                self.config.navigation_cell_size,
+            )
+        } else if let Some(target_footprint) = target_entity.get::<BuildingFootprint>() {
+            if !attack_targets.can_target_buildings() {
+                return Err(BuildingCommandError::InvalidTargetType);
+            }
+            footprint_to_footprint_distance_sq(
+                source_footprint,
+                *target_footprint,
+                self.config.navigation_cell_size,
+            )
+        } else {
+            return Err(BuildingCommandError::TargetNotFound);
+        };
+        if distance_sq > attack.acquisition_range_sq() {
+            return Err(BuildingCommandError::TargetOutOfRange);
+        }
+
+        let mut source = self.world.entity_mut(source_entity);
+        let mut state = source
+            .get_mut::<TargetState>()
+            .expect("attack building missing target state");
+        state.current = Some(target);
+        state.direct_retaliation_lock = false;
+        state.ally_defense_lock = false;
+        Ok(())
+    }
+
     fn raw_player_income_per_10k(&self, team: Team) -> u64 {
         self.world
             .iter_entities()
@@ -541,6 +663,7 @@ impl Simulation {
             return Err(BuilderSpawnError::UnsupportedTeam);
         }
         assert!(builder.profile.speed_per_tick >= 0);
+        assert!(builder.profile.build_range >= 0);
         assert!(builder.profile.repair_range >= 0);
         assert!(builder.profile.repair_autocast_range >= builder.profile.repair_range);
         assert!(builder.profile.repair_time_ratio_numerator > 0);
@@ -580,6 +703,7 @@ impl Simulation {
         configuration: BuilderConfiguration,
     ) -> Result<(), BuilderCommandError> {
         assert!(profile.speed_per_tick >= 0);
+        assert!(profile.build_range >= 0);
         assert!(profile.repair_range >= 0);
         assert!(profile.repair_autocast_range >= profile.repair_range);
         assert!(profile.repair_time_ratio_numerator > 0);
@@ -629,6 +753,7 @@ impl Simulation {
             return Err(BuilderCommandError::OutsideBuildRegion);
         }
 
+        self.cancel_builder_build_order_internal(entity);
         let mut entity = self.world.entity_mut(entity);
         let mut state = entity
             .get_mut::<BuilderState>()
@@ -672,6 +797,7 @@ impl Simulation {
             .clamp_builder_blink_destination(team, destination, profile.blink_boundary_inset)
             .expect("spawned builder team must have a legal movement region");
 
+        self.cancel_builder_build_order_internal(entity);
         let mut builder = self.world.entity_mut(entity);
         builder
             .get_mut::<Position>()
@@ -731,6 +857,7 @@ impl Simulation {
             return Err(BuilderCommandError::RepairTargetNotRepairable);
         }
 
+        self.cancel_builder_build_order_internal(builder_entity);
         let mut entity = self.world.entity_mut(builder_entity);
         let mut state = entity
             .get_mut::<BuilderState>()
@@ -773,6 +900,7 @@ impl Simulation {
                 .then_some(entity.id())
             })
             .ok_or(BuilderCommandError::BuilderNotFound)?;
+        self.cancel_builder_build_order_internal(entity);
         let mut builder = self.world.entity_mut(entity);
         let mut state = builder
             .get_mut::<BuilderState>()
@@ -785,7 +913,8 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn try_builder_summon_building_with_properties(
+    #[cfg(test)]
+    pub(crate) fn try_builder_summon_building_with_properties(
         &mut self,
         builder: SimId,
         building: BuildingSpawn,
@@ -796,7 +925,8 @@ impl Simulation {
             .map_err(BuilderBuildError::Placement)
     }
 
-    pub fn try_builder_purchase_building_with_properties(
+    #[cfg(test)]
+    pub(crate) fn try_builder_purchase_building_with_properties(
         &mut self,
         builder: SimId,
         building: BuildingSpawn,
@@ -837,12 +967,102 @@ impl Simulation {
         Ok(id)
     }
 
+    pub fn order_builder_purchase_building_with_properties(
+        &mut self,
+        builder: SimId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<(), BuilderBuildError> {
+        let builder_entity = self.validate_builder_summon(builder, building, properties)?;
+        self.validate_building_placement(building.team, building.footprint)
+            .map_err(BuilderBuildError::Placement)?;
+        let economy = properties
+            .economy
+            .ok_or(BuilderBuildError::MissingEconomyProfile)?;
+        let current_order = self
+            .world
+            .entity(builder_entity)
+            .get::<BuilderBuildOrder>()
+            .copied();
+        let current_economy = current_order.and_then(|order| order.properties.economy);
+        let resources = self.player_resources[usize::from(building.team.0)];
+        let available_gold = resources
+            .gold
+            .checked_add(current_economy.map_or(0, |old| old.gold_cost))
+            .expect("player gold availability overflow");
+        let available_lumber = resources
+            .lumber
+            .checked_add(current_economy.map_or(0, |old| old.lumber_cost))
+            .expect("player lumber availability overflow");
+        if available_gold < economy.gold_cost {
+            return Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientGold {
+                    available: available_gold,
+                    required: economy.gold_cost,
+                },
+            ));
+        }
+        if available_lumber < economy.lumber_cost {
+            return Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientLumber {
+                    available: available_lumber,
+                    required: economy.lumber_cost,
+                },
+            ));
+        }
+
+        self.cancel_builder_build_order_internal(builder_entity);
+        let resources = &mut self.player_resources[usize::from(building.team.0)];
+        resources.gold -= economy.gold_cost;
+        resources.lumber -= economy.lumber_cost;
+        self.world
+            .entity_mut(builder_entity)
+            .insert(BuilderBuildOrder {
+                building,
+                properties,
+            });
+        let mut builder_entity_mut = self.world.entity_mut(builder_entity);
+        let mut builder_state = builder_entity_mut
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state");
+        builder_state.destination = None;
+        builder_state.repair_target = None;
+        builder_state.repair_progress_remainder = 0;
+        Ok(())
+    }
+
+    fn cancel_builder_build_order_internal(&mut self, builder_entity: Entity) -> bool {
+        let order = self
+            .world
+            .entity(builder_entity)
+            .get::<BuilderBuildOrder>()
+            .copied();
+        let Some(order) = order else {
+            return false;
+        };
+        self.world
+            .entity_mut(builder_entity)
+            .remove::<BuilderBuildOrder>();
+        if let Some(economy) = order.properties.economy {
+            let resources = &mut self.player_resources[usize::from(order.building.team.0)];
+            resources.gold = resources
+                .gold
+                .checked_add(economy.gold_cost)
+                .expect("player gold refund overflow");
+            resources.lumber = resources
+                .lumber
+                .checked_add(economy.lumber_cost)
+                .expect("player lumber refund overflow");
+        }
+        true
+    }
+
     fn validate_builder_summon(
         &self,
         builder: SimId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
-    ) -> Result<(), BuilderBuildError> {
+    ) -> Result<Entity, BuilderBuildError> {
         let (builder_entity, builder_team) = self
             .world
             .iter_entities()
@@ -875,7 +1095,7 @@ impl Simulation {
         if !building_allowed {
             return Err(BuilderBuildError::BuildingNotInCatalog);
         }
-        Ok(())
+        Ok(builder_entity)
     }
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
@@ -1176,33 +1396,7 @@ impl Simulation {
             );
         }
 
-        if !self.footprint_inside_navigation(building.footprint) {
-            return Err(BuildingPlacementError::OutsideNavigation);
-        }
-        if !self.footprint_inside_team_build_region(building.team, building.footprint) {
-            return Err(BuildingPlacementError::OutsideBuildRegion);
-        }
-        if self
-            .config
-            .static_blockers
-            .iter()
-            .chain(self.config.build_static_blockers.iter())
-            .copied()
-            .any(|blocker| footprints_overlap(blocker, building.footprint))
-        {
-            return Err(BuildingPlacementError::StaticObstacle);
-        }
-        if self
-            .world
-            .iter_entities()
-            .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
-            .any(|existing| footprints_overlap(existing, building.footprint))
-        {
-            return Err(BuildingPlacementError::BuildingOverlap);
-        }
-        if self.footprint_contains_live_unit(building.footprint) {
-            return Err(BuildingPlacementError::UnitOccupied);
-        }
+        self.validate_building_placement(building.team, building.footprint)?;
 
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
@@ -1300,6 +1494,41 @@ impl Simulation {
         self.world.despawn(entity);
         self.topology_dirty = true;
         true
+    }
+
+    fn validate_building_placement(
+        &self,
+        team: Team,
+        footprint: BuildingFootprint,
+    ) -> Result<(), BuildingPlacementError> {
+        if !self.footprint_inside_navigation(footprint) {
+            return Err(BuildingPlacementError::OutsideNavigation);
+        }
+        if !self.footprint_inside_team_build_region(team, footprint) {
+            return Err(BuildingPlacementError::OutsideBuildRegion);
+        }
+        if self
+            .config
+            .static_blockers
+            .iter()
+            .chain(self.config.build_static_blockers.iter())
+            .copied()
+            .any(|blocker| footprints_overlap(blocker, footprint))
+        {
+            return Err(BuildingPlacementError::StaticObstacle);
+        }
+        if self
+            .world
+            .iter_entities()
+            .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
+            .any(|existing| footprints_overlap(existing, footprint))
+        {
+            return Err(BuildingPlacementError::BuildingOverlap);
+        }
+        if self.footprint_contains_live_unit(footprint) {
+            return Err(BuildingPlacementError::UnitOccupied);
+        }
+        Ok(())
     }
 
     #[must_use]
@@ -2867,13 +3096,73 @@ impl Simulation {
                     entity.get::<Position>()?.0,
                     *entity.get::<BuilderProfile>()?,
                     *entity.get::<BuilderState>()?,
+                    entity.get::<BuilderBuildOrder>().copied(),
                 ))
             })
             .collect();
         builders.sort_unstable_by_key(|(id, ..)| *id);
 
-        for (_, builder_entity, team, position, profile, mut state) in builders {
+        for (_, builder_entity, team, position, profile, mut state, build_order) in builders {
             let mut next_position = position;
+
+            if let Some(order) = build_order {
+                let mut distance_sq = point_to_footprint_distance_sq(
+                    next_position,
+                    order.building.footprint,
+                    self.config.navigation_cell_size,
+                );
+                if distance_sq > square_i32(profile.build_range) {
+                    let candidate = next_position.step_towards(
+                        footprint_center_point(
+                            order.building.footprint,
+                            self.config.navigation_cell_size,
+                        ),
+                        profile.speed_per_tick,
+                    );
+                    if self.point_inside_team_build_region(team, candidate) {
+                        next_position = candidate;
+                        distance_sq = point_to_footprint_distance_sq(
+                            next_position,
+                            order.building.footprint,
+                            self.config.navigation_cell_size,
+                        );
+                    } else {
+                        self.cancel_builder_build_order_internal(builder_entity);
+                    }
+                }
+
+                if self
+                    .world
+                    .entity(builder_entity)
+                    .get::<BuilderBuildOrder>()
+                    .is_some()
+                    && distance_sq <= square_i32(profile.build_range)
+                {
+                    match self.try_spawn_building_with_properties(order.building, order.properties)
+                    {
+                        Ok(_) => {
+                            self.world
+                                .entity_mut(builder_entity)
+                                .remove::<BuilderBuildOrder>();
+                            if let Some(economy) = order.properties.economy {
+                                let resources =
+                                    &mut self.player_resources[usize::from(order.building.team.0)];
+                                resources.lumber = resources
+                                    .lumber
+                                    .checked_add(economy.lumber_refund)
+                                    .expect("player lumber reward overflow");
+                            }
+                        }
+                        Err(_) => {
+                            // Construction has not begun yet, so Castle Fight's
+                            // ConstructionRefundRate=1 returns the full committed cost.
+                            self.cancel_builder_build_order_internal(builder_entity);
+                        }
+                    }
+                }
+                self.apply_builder_state(builder_entity, next_position, state);
+                continue;
+            }
 
             if state.repair_target.is_none()
                 && state.destination.is_none()
@@ -7321,6 +7610,9 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
         configuration: entity.get::<BuilderConfiguration>()?.clone(),
         destination: state.destination,
         repair_target: state.repair_target,
+        build_footprint: entity
+            .get::<BuilderBuildOrder>()
+            .map(|order| order.building.footprint),
         repair_autocast_enabled: state.repair_autocast_enabled,
     })
 }
@@ -8493,6 +8785,7 @@ fn canonical_checksum(
                     profile: *entity.get::<BuilderProfile>()?,
                     configuration: entity.get::<BuilderConfiguration>()?.clone(),
                     state: *entity.get::<BuilderState>()?,
+                    build_order: entity.get::<BuilderBuildOrder>().copied(),
                 }));
             }
             let team = *entity.get::<Team>()?;
@@ -8927,6 +9220,7 @@ fn canonical_checksum(
                 hash.write_i32(builder.position.x);
                 hash.write_i32(builder.position.y);
                 hash.write_i32(builder.profile.speed_per_tick);
+                hash.write_i32(builder.profile.build_range);
                 hash.write_i32(builder.profile.repair_range);
                 hash.write_i32(builder.profile.repair_autocast_range);
                 hash.write_u16(builder.profile.repair_time_ratio_numerator);
@@ -8954,6 +9248,34 @@ fn canonical_checksum(
                 hash.write_u64(builder.state.repair_target.map_or(0, |target| target.0));
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
+                if let Some(order) = builder.build_order {
+                    hash.write_u8(1);
+                    hash.write_u8(order.building.team.0);
+                    hash.write_i32(order.building.footprint.min_x);
+                    hash.write_i32(order.building.footprint.min_y);
+                    hash.write_u16(order.building.footprint.width);
+                    hash.write_u16(order.building.footprint.height);
+                    hash.write_i32(order.building.health);
+                    hash.write_u64(u64::from(
+                        order
+                            .properties
+                            .content
+                            .map_or(0, |content| content.rawcode),
+                    ));
+                    if let Some(economy) = order.properties.economy {
+                        hash.write_u64(u64::from(economy.gold_cost));
+                        hash.write_u64(u64::from(economy.lumber_cost));
+                        hash.write_u64(u64::from(economy.lumber_refund));
+                        hash.write_u64(economy.income_per_10k);
+                    } else {
+                        hash.write_u64(0);
+                        hash.write_u64(0);
+                        hash.write_u64(0);
+                        hash.write_u64(0);
+                    }
+                } else {
+                    hash.write_u8(0);
+                }
             }
         }
     }
@@ -9018,6 +9340,7 @@ struct CanonicalBuilder {
     profile: BuilderProfile,
     configuration: BuilderConfiguration,
     state: BuilderState,
+    build_order: Option<BuilderBuildOrder>,
 }
 
 #[derive(Debug, Clone, Copy)]

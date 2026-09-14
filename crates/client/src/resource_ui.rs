@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    bridge::PresentationSamples, build_ui::BuildSelection, inspection::InspectionSelection,
+    bridge::PresentationSamples, build_ui::ActionPanelState, inspection::InspectionSelection,
 };
 
 pub(crate) const TOP_BAR_HEIGHT: f32 = 58.0;
@@ -192,7 +192,7 @@ fn spawn_resource_slot<M: Component>(
 }
 
 fn update_resource_bar(
-    selection: Res<BuildSelection>,
+    selection: Res<ActionPanelState>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
     mut resource_texts: Query<(
@@ -275,7 +275,7 @@ mod tests {
         let demo = create_demo_world(1, Some(0));
         let snapshot = PresentationSnapshot::capture(&demo.simulation);
         let mut app = App::new();
-        app.insert_resource(BuildSelection::default())
+        app.insert_resource(ActionPanelState::default())
             .insert_resource(InspectionSelection::default())
             .insert_resource(PresentationSamples::new(snapshot))
             .add_plugins(ResourceUiPlugin);

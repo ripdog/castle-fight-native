@@ -1,10 +1,11 @@
 use castle_fight_sim::{
     ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingEconomyProfile,
-    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
-    CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS, CastleFightBuilderRace, CastleFightProductionKind,
-    CastleFightTowerKind, CastleFightUnitKind, CombatRules, ContentIdentity, DamageType, NavCell,
-    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, TargetlessLane, Team,
-    TerrainElevationMap, UnitSpawn, castle_fight_damage_rules, castle_fight_economy_rules,
+    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace,
+    CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind, CombatRules,
+    CommandCardPosition, ContentIdentity, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimPoint,
+    Simulation, SimulationConfig, TargetlessLane, Team, TerrainElevationMap, UnitSpawn,
+    castle_fight_damage_rules, castle_fight_economy_rules,
+    castle_fight_main_castle_repair_time_ticks,
 };
 
 use crate::presentation::WorldMetrics;
@@ -123,7 +124,7 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
             rawcode: u32::from_be_bytes(*b"hcas"),
             name: "Main Castle",
         }),
-        repair_time_ticks: Some(CASTLE_FIGHT_MAIN_CASTLE_REPAIR_TIME_TICKS),
+        repair_time_ticks: Some(castle_fight_main_castle_repair_time_ticks()),
         damage_type: DamageType::Normal,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         ..BuildingGameplayProperties::default()
@@ -313,6 +314,20 @@ impl BuildKind {
         }
     }
 
+    pub(crate) fn rawcode(self) -> u32 {
+        match self {
+            Self::Production(kind) => kind.definition().rawcode,
+            Self::Tower(kind) => kind.definition().rawcode,
+        }
+    }
+
+    pub(crate) fn command_card_position(self) -> CommandCardPosition {
+        match self {
+            Self::Production(kind) => kind.definition().command_card_position,
+            Self::Tower(kind) => kind.definition().command_card_position,
+        }
+    }
+
     pub(crate) fn gold_cost(self) -> u32 {
         self.economy().gold_cost
     }
@@ -322,12 +337,12 @@ impl BuildKind {
     }
 }
 
-pub(crate) fn try_spawn_demo_building(
+pub(crate) fn order_demo_building(
     simulation: &mut Simulation,
     team: Team,
     footprint: BuildingFootprint,
     kind: BuildKind,
-) -> Result<SimId, BuilderBuildError> {
+) -> Result<(), BuilderBuildError> {
     let builder = simulation
         .builder_for_team(team)
         .ok_or(BuilderBuildError::Builder(
@@ -336,7 +351,7 @@ pub(crate) fn try_spawn_demo_building(
     match kind {
         BuildKind::Production(kind) => {
             let definition = kind.definition();
-            simulation.try_builder_purchase_building_with_properties(
+            simulation.order_builder_purchase_building_with_properties(
                 builder.id,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
@@ -344,7 +359,7 @@ pub(crate) fn try_spawn_demo_building(
         }
         BuildKind::Tower(kind) => {
             let definition = kind.definition();
-            simulation.try_builder_purchase_building_with_properties(
+            simulation.order_builder_purchase_building_with_properties(
                 builder.id,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),

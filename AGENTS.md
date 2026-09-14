@@ -25,6 +25,7 @@
 - Preserve clear crate/module boundaries and narrow ownership. Avoid global mutable state and broad `&mut World` access where more precise interfaces are possible.
 - Prefer deterministic, parallel-friendly algorithms and explicit phase boundaries over implicit ordering or scheduler-dependent behavior.
 - Do not regress core gameplay invariants documented in `docs/spec`.
+- Castle Fight-derived content/tuning values (unit/building stats, costs, ranges, cooldowns, repair/build times, command-card positions, map geometry, ability parameters, etc.) MUST remain version-scoped. It is acceptable to compile extracted constants into Rust, but they must live behind version-aware definitions/lookups such as `definition_for_version(MapVersion)` (or equivalent generated/versioned content structures), with callers consuming those APIs rather than scattering unqualified map-version literals through simulation/client code. Supporting a future map version must not require replacing large numbers of callsites that embedded an older version's values.
 
 ## Verification
 

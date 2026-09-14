@@ -110,9 +110,11 @@ For 9.27, Blink is a zero-mana, zero-cooldown point command with **10,000 world 
 
 Building placement commands are player commands associated with the builder/player.
 
-The standard rules require placement inside the owning team's build region. Building placement is summon-style: the builder does not need to path to or stand near the requested footprint. Placement legality remains authoritative and still checks the map's placement restrictions, static obstacles, existing buildings, and ordinary ground-unit occupancy.
+The standard rules require placement inside the owning team's build region. A build click creates an authoritative builder construction order rather than constructing remotely. Placement legality is checked when the order is accepted and again when construction begins; it still checks the map's placement restrictions, static obstacles, existing buildings, and ordinary ground-unit occupancy.
 
-The first native simulation slice treats an accepted placement as immediately constructed, matching the existing placement pipeline. A later construction/cancellation phase may model the map's short construction window without changing the builder's remote summon relationship.
+Castle Fight builders use the stock Warcraft worker construction-contact rule. The stock `AHbu` Build ability has no editable `Rng` field; native compatibility uses Warcraft's **50 world-unit** worker construction contact range. If the requested footprint is farther away, the builder walks directly toward it using the same non-colliding, blocker-ignoring movement semantics as ordinary builder movement. The structure is created only after the builder reaches that range. The first native slice still treats the actual construction start as immediate completion once contact range is reached; the map's short cancellation/construction window remains a later extension.
+
+Gold/lumber cost is committed when the build order is accepted. Replacing/cancelling an order before construction begins refunds the committed construction cost according to the map's extracted `ConstructionRefundRate`; 9.27 sets this to **1.0**, so the pre-construction refund is complete. Lumber reward/income begins only when the building is actually created. If the footprint becomes illegal before the builder reaches it, the pending order is cancelled and the unstarted construction cost is refunded.
 
 ### 8.1 Repair
 
