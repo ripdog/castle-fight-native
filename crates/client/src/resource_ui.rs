@@ -195,12 +195,16 @@ fn update_resource_bar(
     selection: Res<BuildSelection>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
-    mut player_text: Single<(&mut Text, &mut TextColor), With<SelectedPlayerText>>,
-    mut gold_text: Single<&mut Text, (With<GoldText>, Without<SelectedPlayerText>)>,
-    mut gold_income_text: Single<&mut Text, (With<GoldIncomeText>, Without<GoldText>)>,
+    mut resource_texts: Query<(
+        &mut Text,
+        Option<&SelectedPlayerText>,
+        Option<&GoldText>,
+        Option<&GoldIncomeText>,
+        Option<&LumberText>,
+        Option<&LegendaryText>,
+        Option<&mut TextColor>,
+    )>,
     mut progress: Single<&mut Node, With<GoldIncomeProgress>>,
-    mut lumber_text: Single<&mut Text, (With<LumberText>, Without<GoldText>)>,
-    mut legendary_text: Single<&mut Text, (With<LegendaryText>, Without<LumberText>)>,
 ) {
     let selected_team = inspection.selected.and_then(|selected| {
         presentation
@@ -227,20 +231,55 @@ fn update_resource_bar(
     let economy = presentation.current.player_economy[team_index];
     let resources = economy.resources;
 
-    gold_text.0 = resources.gold.to_string();
-    gold_income_text.0 = format!("income +{}", economy.income);
     progress.width = percent(f32::from(economy.income_progress_per_10k) / 100.0);
-    lumber_text.0 = resources.lumber.to_string();
-    legendary_text.0 = format!(
-        "{} / {}",
-        resources.legendary_points_used, resources.legendary_points_cap
-    );
 
-    let (label, color) = if team_index == 0 {
+    let (player_label, player_color) = if team_index == 0 {
         ("BLUE PLAYER", Color::srgb(0.35, 0.67, 1.0))
     } else {
         ("RED PLAYER", Color::srgb(1.0, 0.38, 0.31))
     };
-    player_text.0.0 = label.into();
-    player_text.1.0 = color;
+    for (mut text, selected_player, gold, gold_income, lumber, legendary, mut text_color) in
+        &mut resource_texts
+    {
+        if selected_player.is_some() {
+            text.0 = player_label.into();
+            if let Some(color) = text_color.as_mut() {
+                color.0 = player_color;
+            }
+        } else if gold.is_some() {
+            text.0 = resources.gold.to_string();
+        } else if gold_income.is_some() {
+            text.0 = format!("income +{}", economy.income);
+        } else if lumber.is_some() {
+            text.0 = resources.lumber.to_string();
+        } else if legendary.is_some() {
+            text.0 = format!(
+                "{} / {}",
+                resources.legendary_points_used, resources.legendary_points_cap
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        bridge::{PresentationSamples, PresentationSnapshot},
+        demo::create_demo_world,
+        inspection::InspectionSelection,
+    };
+
+    #[test]
+    fn resource_bar_system_runs_without_conflicting_text_queries() {
+        let demo = create_demo_world(1, Some(0));
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let mut app = App::new();
+        app.insert_resource(BuildSelection::default())
+            .insert_resource(InspectionSelection::default())
+            .insert_resource(PresentationSamples::new(snapshot))
+            .add_plugins(ResourceUiPlugin);
+
+        app.update();
+    }
 }
