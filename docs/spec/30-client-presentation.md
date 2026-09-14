@@ -164,6 +164,14 @@ animation keyframe callback
 apply authoritative damage
 ```
 
+### 9.1 Imported building lifecycle animation
+
+Generated Warcraft building assets SHOULD resolve their presentation lifecycle clips during extraction, using the building object's versioned required-animation properties together with the exact sequences present in the shared source model. The generated manifest is the client contract for the selected `Birth`, ambient `Stand`, and `Death` sequence names; the runtime SHOULD NOT maintain per-building animation-name tables or independently guess upgrade variants.
+
+A building that first appears after an ordinary authoritative snapshot boundary MAY play its selected `Birth` sequence once and then transition to the selected looping `Stand` sequence. Buildings already present when presentation is initialized or rebuilt from a snapshot MUST start from `Stand` rather than replaying historical construction. When an authoritative building disappears, the client MAY retain its render entity as a presentation-only remnant long enough to play the selected `Death` sequence and associated sequence-scoped effects, then remove it.
+
+These transitions are strictly cosmetic. The building becomes active/blocks pathing according to the authoritative simulation state, and authoritative destruction immediately removes its occupancy, economy, targeting, production, and other gameplay effects even while the client is still displaying the Death animation. Presentation animation duration MUST NOT extend construction or destruction semantics.
+
 ## 10. Projectiles
 
 Presentation MUST reflect the authoritative attack delivery mode rather than infer semantics from missile art.
