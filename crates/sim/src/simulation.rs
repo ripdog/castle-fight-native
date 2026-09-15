@@ -535,6 +535,78 @@ impl Simulation {
         true
     }
 
+    /// Applies direct developer-tool damage to every live combat unit.
+    ///
+    /// The query intentionally matches the normal unit archetype via `MovementProfile`. Buildings
+    /// and builders therefore do not need special-case exclusions. Fatal damage follows the normal
+    /// unit despawn/corpse lifecycle, and fatalities are ordered by `SimId` so corpse allocation is
+    /// deterministic.
+    pub fn debug_damage_all_units(&mut self, damage: i32) -> usize {
+        assert!(damage >= 0, "debug unit damage must be non-negative");
+
+        let mut affected = 0usize;
+        let mut fatalities = Vec::new();
+        {
+            let mut query = self.world.query::<(
+                Entity,
+                &SimId,
+                &Team,
+                &Position,
+                &mut Health,
+                Option<&CorpseProducer>,
+                &MovementProfile,
+            )>();
+            for (entity, id, team, position, mut health, corpse, _) in
+                query.iter_mut(&mut self.world)
+            {
+                if health.current <= 0 {
+                    continue;
+                }
+                affected += 1;
+                health.current = health
+                    .current
+                    .checked_sub(damage)
+                    .expect("debug unit damage overflowed validated bounds");
+                if health.current <= 0 {
+                    fatalities.push((
+                        entity,
+                        *id,
+                        *team,
+                        position.0,
+                        corpse.map(|corpse| corpse.0),
+                    ));
+                }
+            }
+        }
+
+        fatalities.sort_unstable_by_key(|(_, id, _, _, _)| *id);
+        for (entity, source_unit, source_team, position, corpse) in fatalities {
+            self.world.despawn(entity);
+            let Some(profile) = corpse else {
+                continue;
+            };
+            let id = self.allocate_id();
+            let expires_tick = profile.lifetime_ticks.map(|lifetime_ticks| {
+                self.next_tick
+                    .checked_add(u64::from(lifetime_ticks))
+                    .expect("corpse expiry tick overflow")
+            });
+            self.world.spawn((
+                id,
+                Position(position),
+                Corpse {
+                    source_unit,
+                    source_team,
+                    definition: profile.definition,
+                    created_tick: self.next_tick,
+                    expires_tick,
+                },
+            ));
+        }
+
+        affected
+    }
+
     #[must_use]
     pub fn player_income(&self, team: Team) -> Option<u32> {
         (team.0 < 2).then(|| {

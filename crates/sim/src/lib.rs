@@ -4514,6 +4514,44 @@ mod tests {
     }
 
     #[test]
+    fn debug_damage_all_units_applies_exact_damage_and_ignores_builders_and_buildings() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let doomed = sim.spawn_unit_with_corpse(
+            UnitSpawn {
+                health: 100,
+                ..passive_unit(0, 0)
+            },
+            CorpseProfile {
+                definition: CorpseDefinitionId(42),
+                lifetime_ticks: Some(60),
+            },
+        );
+        let survivor = sim.spawn_unit(UnitSpawn {
+            health: 10_000,
+            ..passive_unit(1, 4 * SUBUNITS_PER_WORLD_UNIT)
+        });
+        let builder = sim.spawn_builder(BuilderSpawn {
+            team: Team(0),
+            position: SimPoint::new(8 * SUBUNITS_PER_WORLD_UNIT, 0),
+            profile: castle_fight_builder_profile(),
+            configuration: test_builder_configuration(vec![]),
+            repair_autocast_enabled: false,
+        });
+        let building = sim.spawn_building(passive_building(0, BuildingFootprint::new(12, 0, 1, 1)));
+        let building_health = sim.building(building).unwrap().health;
+
+        assert_eq!(sim.debug_damage_all_units(9_999), 2);
+        assert!(sim.unit(doomed).is_none());
+        assert_eq!(sim.unit(survivor).unwrap().health, 1);
+        let corpses = sim.corpses();
+        assert_eq!(corpses.len(), 1);
+        assert_eq!(corpses[0].source_unit, doomed);
+        assert_eq!(corpses[0].definition, CorpseDefinitionId(42));
+        assert!(sim.builder(builder).is_some());
+        assert_eq!(sim.building(building).unwrap().health, building_health);
+    }
+
+    #[test]
     fn purchased_buildings_spend_resources_award_lumber_and_pay_tick_income() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {

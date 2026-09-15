@@ -10,11 +10,12 @@ use crate::{
 const PANEL_LEFT: f32 = 12.0;
 const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
 const PANEL_WIDTH: f32 = 360.0;
-const PANEL_HEIGHT: f32 = 318.0;
+const PANEL_HEIGHT: f32 = 364.0;
 const PANEL_PADDING: f32 = 12.0;
 const BUTTON_HEIGHT: f32 = 38.0;
 const BUTTON_GAP: f32 = 6.0;
 const DEBUG_RESOURCE_GRANT: u32 = 1_000_000;
+const DEBUG_KILL_DAMAGE: i32 = 9_999;
 
 const PANEL_BACKGROUND: Color = Color::srgba(0.030, 0.035, 0.045, 0.97);
 const PANEL_BORDER: Color = Color::srgb(0.42, 0.33, 0.17);
@@ -88,6 +89,7 @@ impl Default for DebugMenuState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DebugAction {
     GrantResources,
+    KillAllUnits,
     TogglePause,
     StepOneTick,
     SetSpeed(DebugSpeed),
@@ -157,6 +159,12 @@ fn setup_debug_menu(mut commands: Commands) {
                 panel,
                 DebugAction::GrantResources,
                 "Give all players +1,000,000 gold / lumber",
+                percent(100.0),
+            );
+            spawn_debug_button(
+                panel,
+                DebugAction::KillAllUnits,
+                "Kill all units (9999 damage)",
                 percent(100.0),
             );
             spawn_debug_button(
@@ -285,6 +293,14 @@ fn handle_debug_buttons(
                 }
                 presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
                 state.status = "Granted every player +1,000,000 gold and +1,000,000 lumber.".into();
+            }
+            DebugAction::KillAllUnits => {
+                let affected = authoritative
+                    .simulation
+                    .debug_damage_all_units(DEBUG_KILL_DAMAGE);
+                presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
+                state.status =
+                    format!("Dealt {DEBUG_KILL_DAMAGE} damage to {affected} combat units.");
             }
             DebugAction::TogglePause => {
                 playback.paused = !playback.paused;
