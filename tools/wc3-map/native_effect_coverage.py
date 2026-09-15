@@ -241,9 +241,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--map-version", default="9.27")
     parser.add_argument(
+        "--revision",
+        help="exact retained extraction revision (required when a map version has multiple revisions)",
+    )
+    parser.add_argument(
         "--resolved-dir",
         type=Path,
-        default=repo_root / "docs/original_map/extracted/resolved",
+        help="explicit resolved extraction directory; otherwise resolve it from releases.json",
     )
     parser.add_argument(
         "--bindings",
@@ -259,7 +263,23 @@ def main() -> int:
     args = parser.parse_args()
 
     version = MapVersion.parse(args.map_version)
-    rows = build_coverage(load_inventory(args.resolved_dir), load_bindings(args.bindings), version)
+    resolved_dir = args.resolved_dir
+    if resolved_dir is None:
+        import release_manifest
+
+        try:
+            release = release_manifest.resolve_release(
+                release_manifest.load_manifest(), args.map_version, args.revision
+            )
+        except release_manifest.ManifestError as error:
+            parser.error(str(error))
+        if release["extraction"]["status"] != "retained":
+            parser.error(
+                f"Castle Fight {args.map_version}/{release['revision']} has no retained extraction"
+            )
+        resolved_dir = repo_root / release["extraction"]["working_alias"] / "resolved"
+
+    rows = build_coverage(load_inventory(resolved_dir), load_bindings(args.bindings), version)
     print_summary(rows, version)
     if args.output_tsv:
         write_tsv(rows, args.output_tsv)

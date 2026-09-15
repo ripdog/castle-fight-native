@@ -27,6 +27,14 @@ fi
 rm -rf "$work_dir"
 mkdir -p "$raw_dir" "$translator_input_dir" "$translated_dir"
 
+if [[ -e "$output_dir" ]] && [[ -n "$(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+    if [[ "${CF_MAP_EXTRACT_OVERWRITE:-0}" != "1" ]]; then
+        echo "refusing to overwrite existing extraction snapshot: $output_dir" >&2
+        echo "choose a new version/revision output path, or set CF_MAP_EXTRACT_OVERWRITE=1 only for disposable scratch output" >&2
+        exit 1
+    fi
+fi
+
 "$mpq_extractor" "$map_path" "$raw_dir" > "$work_dir/archive-extract.tsv"
 
 # WC3MapTranslator handles the supported binary object/terrain/doodad formats.
@@ -44,7 +52,9 @@ for required in terrain.json doodads.json obj-units.json obj-items.json obj-abil
     fi
 done
 
-rm -rf "$output_dir"
+if [[ "${CF_MAP_EXTRACT_OVERWRITE:-0}" == "1" ]]; then
+    rm -rf "$output_dir"
+fi
 mkdir -p "$output_dir"
 cp "$work_dir/archive-extract.tsv" "$output_dir/archive-extract.tsv"
 
