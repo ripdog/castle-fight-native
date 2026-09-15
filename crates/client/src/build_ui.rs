@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use bevy::{
-    ecs::system::SystemParam, prelude::*, window::PrimaryWindow,
-    world_serialization::WorldInstanceReady,
-};
+use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
     BuildingConstructionCancelOutcome, BuildingFootprint, CastleFightBuildingKind,
     CastleFightContentBundle, CommandCardPosition, NavCell, SimId, Team,
@@ -20,12 +17,13 @@ use crate::{
     demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
     inspection::{InspectionSelection, cursor_over_inspector_panel},
     presentation::{
-        WC3_MODEL_FACING_OFFSET, WorldMetrics, draw_footprint_outline, viewport_ground_point,
+        WC3_MODEL_FACING_OFFSET, WorldMetrics, draw_footprint_outline, player_color,
+        viewport_ground_point,
     },
     resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey},
-    wc3_effects::Wc3MaterialProcessed,
+    wc3_effects::{Wc3MaterialProcessed, Wc3TeamTint, fix_wc3_scene_materials},
     wc3_text::{Wc3Color, parse_wc3_text},
 };
 
@@ -190,9 +188,8 @@ struct BuildGhostMaterialPair {
     invalid: Handle<StandardMaterial>,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct BuildPreviewMaterials {
-    fallback: BuildGhostMaterialPair,
     textured: HashMap<AssetId<StandardMaterial>, BuildGhostMaterialPair>,
 }
 
@@ -227,8 +224,9 @@ impl Plugin for BuildUiPlugin {
         let map_version = app.world().resource::<SelectedMatch>().content.map_version;
         app.init_resource::<ActionPanelState>()
             .init_resource::<BuildTooltipState>()
+            .init_resource::<BuildPreviewMaterials>()
             .insert_resource(UiIconAssets::load_for_version(map_version))
-            .add_systems(Startup, (setup_action_panel, setup_build_preview_materials))
+            .add_systems(Startup, setup_action_panel)
             .add_systems(
                 Update,
                 (
@@ -240,9 +238,14 @@ impl Plugin for BuildUiPlugin {
                     style_action_panel_buttons,
                     update_build_tooltip,
                     update_build_preview,
-                    refresh_build_preview_ghost_materials,
                 )
                     .chain(),
+            )
+            .add_systems(
+                Update,
+                sync_build_preview_ghost_materials
+                    .after(update_build_preview)
+                    .after(fix_wc3_scene_materials),
             );
     }
 }
@@ -979,33 +982,14 @@ fn wc3_text_for_embedded_font(text: &str) -> String {
 }
 
 fn build_ghost_material(mut source: StandardMaterial, tint: Color) -> StandardMaterial {
-    // Keep the source diffuse texture so the preview reads as the actual selected building,
-    // but flatten lighting and strongly tint it like Warcraft's placement ghost.
+    // Derive the placement material from the already-processed Warcraft building material so
+    // team-colour flattening, alpha/filter-mode fixes, and the diffuse texture are all retained.
     source.base_color = tint;
     source.alpha_mode = AlphaMode::Blend;
     source.unlit = true;
+    source.emissive = LinearRgba::BLACK;
     source.cull_mode = None;
     source
-}
-
-fn setup_build_preview_materials(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let fallback = BuildGhostMaterialPair {
-        valid: materials.add(build_ghost_material(
-            StandardMaterial::default(),
-            BUILD_GHOST_VALID_COLOR,
-        )),
-        invalid: materials.add(build_ghost_material(
-            StandardMaterial::default(),
-            BUILD_GHOST_INVALID_COLOR,
-        )),
-    };
-    commands.insert_resource(BuildPreviewMaterials {
-        fallback,
-        textured: HashMap::new(),
-    });
 }
 
 fn update_build_preview(
@@ -1111,83 +1095,89 @@ fn update_build_preview(
         }
     }
     if !found_matching_ghost {
-        commands
-            .spawn((
-                Name::new(format!(
-                    "WC3 build placement ghost {}",
-                    String::from_utf8_lossy(&rawcode.to_be_bytes())
-                )),
-                WorldAssetRoot(model.scene.clone()),
-                transform,
-                BuildPlacementGhost { rawcode, valid },
-            ))
-            .observe(apply_build_preview_ghost_materials_when_ready);
+        commands.spawn((
+            Name::new(format!(
+                "WC3 build placement ghost {}",
+                String::from_utf8_lossy(&rawcode.to_be_bytes())
+            )),
+            WorldAssetRoot(model.scene.clone()),
+            Wc3TeamTint::new(
+                resources.selected_match.local_player.0,
+                player_color(resources.selected_match.local_player),
+                "wc3/buildings",
+            ),
+            transform,
+            BuildPlacementGhost { rawcode, valid },
+        ));
     }
 }
 
-fn apply_build_preview_ghost_materials_when_ready(
-    scene_ready: On<WorldInstanceReady>,
+fn sync_build_preview_ghost_materials(
     mut commands: Commands,
-    ghosts: Query<&BuildPlacementGhost>,
-    children: Query<&Children>,
-    mut mesh_materials: Query<&mut MeshMaterial3d<StandardMaterial>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut preview_materials: ResMut<BuildPreviewMaterials>,
-) {
-    let Ok(ghost) = ghosts.get(scene_ready.entity) else {
-        return;
-    };
-    for child in children.iter_descendants(scene_ready.entity) {
-        let Ok(mut mesh_material) = mesh_materials.get_mut(child) else {
-            continue;
-        };
-        let source = mesh_material.0.clone();
-        let source_id = source.id();
-        let pair = if let Some(pair) = preview_materials.textured.get(&source_id) {
-            pair.clone()
-        } else if let Some(source_material) = materials.get(&source).cloned() {
-            let pair = BuildGhostMaterialPair {
-                valid: materials.add(build_ghost_material(
-                    source_material.clone(),
-                    BUILD_GHOST_VALID_COLOR,
-                )),
-                invalid: materials.add(build_ghost_material(
-                    source_material,
-                    BUILD_GHOST_INVALID_COLOR,
-                )),
-            };
-            preview_materials.textured.insert(source_id, pair.clone());
-            pair
-        } else {
-            preview_materials.fallback.clone()
-        };
-        mesh_material.0 = if ghost.valid {
-            pair.valid.clone()
-        } else {
-            pair.invalid.clone()
-        };
-        commands.entity(child).insert((pair, Wc3MaterialProcessed));
-    }
-}
-
-fn refresh_build_preview_ghost_materials(
-    ghosts: Query<(Entity, &BuildPlacementGhost), Changed<BuildPlacementGhost>>,
+    ghosts: Query<(Entity, &BuildPlacementGhost)>,
     children: Query<&Children>,
     mut mesh_materials: Query<(
         &mut MeshMaterial3d<StandardMaterial>,
-        &BuildGhostMaterialPair,
+        Option<&BuildGhostMaterialPair>,
+        Has<Wc3MaterialProcessed>,
     )>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut preview_materials: ResMut<BuildPreviewMaterials>,
 ) {
     for (entity, ghost) in &ghosts {
         for child in children.iter_descendants(entity) {
-            let Ok((mut mesh_material, pair)) = mesh_materials.get_mut(child) else {
+            let Ok((mut mesh_material, existing_pair, wc3_material_processed)) =
+                mesh_materials.get_mut(child)
+            else {
                 continue;
             };
+
+            if let Some(pair) = existing_pair {
+                // Reassert the preview-owned material every frame. This makes the ghost immune to
+                // later presentation systems replacing a mesh material because of scene timing.
+                mesh_material.0 = if ghost.valid {
+                    pair.valid.clone()
+                } else {
+                    pair.invalid.clone()
+                };
+                continue;
+            }
+
+            // Never derive a ghost material from the raw glTF material. The normal Warcraft pass
+            // first has to resolve filter modes and building team colour exactly as it does for a
+            // real building; otherwise translucent team-colour layers can make the preview vanish.
+            if !wc3_material_processed {
+                continue;
+            }
+
+            let source = mesh_material.0.clone();
+            let source_id = source.id();
+            let pair = if let Some(pair) = preview_materials.textured.get(&source_id) {
+                pair.clone()
+            } else {
+                let Some(source_material) = materials.get(&source).cloned() else {
+                    continue;
+                };
+                let pair = BuildGhostMaterialPair {
+                    valid: materials.add(build_ghost_material(
+                        source_material.clone(),
+                        BUILD_GHOST_VALID_COLOR,
+                    )),
+                    invalid: materials.add(build_ghost_material(
+                        source_material,
+                        BUILD_GHOST_INVALID_COLOR,
+                    )),
+                };
+                preview_materials.textured.insert(source_id, pair.clone());
+                pair
+            };
+
             mesh_material.0 = if ghost.valid {
                 pair.valid.clone()
             } else {
                 pair.invalid.clone()
             };
+            commands.entity(child).insert(pair);
         }
     }
 }
@@ -1613,6 +1603,28 @@ mod tests {
             Interaction::None,
             Some(PanelAction::Target(TargetingAction::Repair)),
         ));
+    }
+
+    #[test]
+    fn ghost_material_wraps_processed_building_material_without_losing_texture() {
+        let texture = Handle::<Image>::default();
+        let source = StandardMaterial {
+            base_color: Color::WHITE,
+            base_color_texture: Some(texture.clone()),
+            alpha_mode: AlphaMode::Opaque,
+            emissive: LinearRgba::WHITE,
+            depth_bias: 7.0,
+            ..default()
+        };
+        let ghost = build_ghost_material(source, BUILD_GHOST_VALID_COLOR);
+
+        assert_eq!(ghost.base_color_texture, Some(texture));
+        assert_eq!(ghost.base_color, BUILD_GHOST_VALID_COLOR);
+        assert_eq!(ghost.alpha_mode, AlphaMode::Blend);
+        assert!(ghost.unlit);
+        assert_eq!(ghost.emissive, LinearRgba::BLACK);
+        assert_eq!(ghost.depth_bias, 7.0);
+        assert_eq!(ghost.cull_mode, None);
     }
 
     #[test]
