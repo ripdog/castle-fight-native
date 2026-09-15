@@ -607,6 +607,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
 
         executor = json.loads(rows["ai-executor-periodic-fsm"]["parameters_json"])
+        self.assertEqual(executor["ai_start_delay_seconds"], 0.1)
+        self.assertEqual(executor["builder_idle_order_id"], 852064)
+        self.assertEqual(executor["pending_build_order_timeout_seconds"], 90.0)
+        self.assertEqual(executor["pending_build_order_stale_threshold_seconds"], 8.0)
+        self.assertTrue(executor["pending_build_timeout_requires_matching_building_id_and_token"])
+        self.assertEqual(executor["quick_build_disabled_below_base_speed"], 0.45)
+        self.assertEqual(executor["quick_build_guaranteed_at_or_above_base_speed"], 0.9)
+        self.assertEqual(executor["quick_build_delay_no_profile_seconds"], 0.45)
+        self.assertEqual(executor["quick_build_delay_formula_seconds"], "0.45 + (1.0-campaign_ai_speed)*0.8")
+        self.assertEqual(executor["rescue_strike_state_point_order_id"], 852488)
         self.assertEqual(executor["fsm_update_period_seconds"], 1.0)
         self.assertEqual(executor["startup_delay_min_seconds"], 0.02)
         self.assertEqual(executor["startup_delay_max_seconds"], 0.845)
@@ -1203,9 +1213,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 20)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 23)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
+            "allied-production-queue-synchronization-and-order-reset": 1,
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
+            "catalog-authoritative-building-income-cache-correction": 1,
             "buff-marker-non-attack-current-damage-multiplier": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
             "builder-point-teleport-clamped-to-own-castle": 1,
@@ -1225,10 +1237,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "team-presence-gated-owner-scaled-elemental-death-heal": 1,
             "team-shrine-independent-clone-rolls-and-train-transformations": 1,
             "team-stacked-one-time-delayed-unit-revival": 1,
+            "spawn-area-marker-and-conditional-pathing-release-pulse": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 20)
+        self.assertEqual(len(rows), 23)
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -1460,6 +1473,36 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(len(obelisk["removed_persistent_ability_ids"]), 25)
         self.assertIn(1093682737, obelisk["removed_persistent_ability_ids"])
         self.assertIn(1093683033, obelisk["removed_persistent_ability_ids"])
+
+        income_sync = json.loads(rows["building-income-synchronization"]["parameters_json"])
+        self.assertEqual(
+            income_sync["delta_formula"],
+            "buildingIncomeSyncDelta(cached,catalog,catalogBuildingIncomeDelta(unit))",
+        )
+        self.assertEqual(income_sync["authoritative_player_income_accumulator"], "iGb[player_id]")
+        self.assertEqual(income_sync["per_unit_cached_income"], "Eab[unit_income_index]")
+        self.assertTrue(income_sync["refreshes_current_income_cache_after_change"])
+        self.assertEqual(
+            [variant["construction_finished_flag"] for variant in income_sync["callback_variants"]],
+            [True, False],
+        )
+
+        pathing = json.loads(rows["trained-unit-pathing-recovery"]["parameters_json"])
+        self.assertEqual(pathing["marker_ability_rawcode"], "A0BG")
+        self.assertEqual(pathing["tracker_delay_seconds"], 4.0)
+        self.assertEqual(pathing["spawn_distance_threshold"], 768.0)
+        self.assertEqual(pathing["pathing_disabled_pulse_seconds"], 0.7)
+        self.assertTrue(pathing["pathing_restored_after_pulse"])
+        self.assertTrue(pathing["tracker_restarts_after_pathing_restore"])
+
+        building_sync = json.loads(rows["building-unit-synchronization"]["parameters_json"])
+        self.assertEqual(building_sync["queue_cancel_order_id"], 851976)
+        self.assertEqual(building_sync["queue_cancel_repetitions"], 7)
+        self.assertEqual(building_sync["synchronized_train_order_repetitions"], 2)
+        self.assertEqual(building_sync["sync_lightning_code"], "LEAS")
+        self.assertEqual(building_sync["sync_lightning_duration_seconds"], 0.625)
+        self.assertEqual(building_sync["post_sync_point_order_id"], 851971)
+        self.assertEqual(building_sync["post_sync_point_offset_absolute"], [38.0, 68.0])
 
     def test_known_combat_values_use_recovered_protection_fields(self) -> None:
         with (self.resolved / "units.tsv").open(encoding="utf-8") as handle:

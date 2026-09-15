@@ -5141,7 +5141,8 @@ def _extract_runtime_ai_mechanics(
     for fragment in (
         b"oDb=2.0", b"nDb=0.8",
         b"Ghb=28.0", b"Fhb=75.0", b"Ehb=810000.0", b"Dhb=900.0", b"Chb=700.0",
-        b"zhb=16", b"yhb=0.25",
+        b"zhb=16", b"yhb=0.25", b"Vhb=90.0", b"Uhb=8.0", b"Yhb=852064",
+        b"yrb=0.45", b"xrb=0.8",
     ):
         require_global_fragment(fragment)
 
@@ -5272,9 +5273,30 @@ def _extract_runtime_ai_mechanics(
 
     add(
         "ai-executor-periodic-fsm",
-        "staggered-one-second-ai-fsm-controller-tick",
-        "ai-executor-construction-delayed-periodic-update",
+        "delayed-ai-executor-lifecycle-build-timeout-and-one-second-fsm-controller-tick",
+        "ai-enable-build-order-and-state-entry-delays-plus-periodic-update",
         {
+            "ai_start_delay_seconds": 0.1,
+            "ai_start_requires_enabled_flag": True,
+            "ai_start_skips_existing_executor": True,
+            "ai_start_resyncs_controlled_buildings": True,
+            "builder_idle_order_id": 852064,
+            "pending_build_order_timeout_seconds": 90.0,
+            "pending_build_order_stale_threshold_seconds": 8.0,
+            "pending_build_timeout_requires_matching_executor_generation": True,
+            "pending_build_timeout_requires_matching_building_id_and_token": True,
+            "pending_build_timeout_clears_pending_order": True,
+            "pending_build_timeout_marks_placeable_target_failure": True,
+            "quick_build_requires_campaign_profile_base_speed_gate": True,
+            "quick_build_no_profile_is_always_enabled": True,
+            "quick_build_disabled_below_base_speed": 0.45,
+            "quick_build_guaranteed_at_or_above_base_speed": 0.90,
+            "quick_build_intermediate_enable_probability_formula": "clamp((base_speed-0.45)/0.45,0,1)",
+            "quick_build_delay_no_profile_seconds": 0.45,
+            "quick_build_delay_formula_seconds": "0.45 + (1.0-campaign_ai_speed)*0.8",
+            "quick_build_followup_order": "target current active construction with repair/build order L6 when builder remains alive",
+            "rescue_strike_state_followup_delay_seconds": 0.1,
+            "rescue_strike_state_point_order_id": 852488,
             "fsm_update_period_seconds": 1.0,
             "startup_delay_formula_seconds": "0.02 + ((player_id*7) mod 12)*0.075",
             "startup_delay_min_seconds": 0.02,
@@ -5285,6 +5307,45 @@ def _extract_runtime_ai_mechanics(
             "periodic_action": "FSM_FSM_update(executor.fsm,1.0)",
         },
         [
+            ("startAi", (
+                b"Mhb[Clq]=true", b"Dlq=Oj:create372()", b"doAfter(.1,Dlq)",
+            )),
+            ("CallbackSingle_doAfter_CustomAI_call_doAfter_CustomAI", (
+                b"Mhb[h1l.pid]=false", b"aIb[h1l.pid]", b"AiExecutor_new_AiExecutor(h1l.p)",
+                b"Nhb[h1l.pid]=i1l", b"unit_issueImmediateOrderById(i1l.AiExecutor_builder,Yhb)",
+                b"resyncAiControlledBuildings(h1l.p)",
+            )),
+            ("AiExecutor_AiExecutor_tryBuild", (
+                b"AiExecutor_pendingBuildOrderToken=(m5l.AiExecutor_pendingBuildOrderToken+1)",
+                b"s5l=Vhb", b"doAfter(s5l,r5l)",
+            )),
+            ("CallbackSingle_doAfter_AiExecutor_CustomAI_call_doAfter_AiExecutor_CustomAI", (
+                b"AiExecutor_executorGeneration==W8l.timeoutGeneration", b"AiExecutor_pendingBuildOrderId==W8l.buildingId",
+                b"AiExecutor_pendingBuildOrderToken==W8l.token", b"shouldClearPendingBuildOrder",
+                b"AiExecutor_AiExecutor_clearPendingBuildOrder(W8l.this)", b"noteFailure(W8l.this.AiExecutor_stateTarget)",
+                b"noteAiDecisionFailure", b"FSM_FSM_changeState",
+            )),
+            ("shouldCampaignAiQuickBuild", (
+                b"if(not hasCampaignAiProfile(pIp))then return true", b"qIp=getCampaignAiBaseSpeed(pIp)",
+                b"if(qIp<0.45)then return false", b"if(qIp>=0.90)then return true",
+                b"real_clamp(((qIp-0.45)/0.45),0.0,1.0)", b"GetRandomReal(0.0,1.0)<=rIp",
+            )),
+            ("getCampaignAiQuickBuildDelay", (
+                b"if(not hasCampaignAiProfile(sIp))then return yrb", b"yrb+((1.0-getCampaignAiSpeed(sIp))*xrb)",
+            )),
+            ("QuickBuild_QuickBuild_enter", (
+                b"shouldCampaignAiQuickBuild(player_getId(wEk.AiExecutor_plr))",
+                b"xEk=getCampaignAiQuickBuildDelay(player_getId(wEk.AiExecutor_plr))",
+                b"yEk=gc:create44()", b"doAfter(xEk,yEk)",
+            )),
+            ("CallbackSingle_doAfter_QuickBuild_BuilderAIStates_call_doAfter_QuickBuild_BuilderAIStates", (
+                b"unit_isAlive(MEk.ai.AiExecutor_builder)", b"AiExecutor_AiExecutor_hasActiveConstruction(MEk.ai)",
+                b"unit_issueTargetOrderById(MEk.ai.AiExecutor_builder,L6,MEk.ai.AiExecutor_currentInConstruction)",
+            )),
+            ("RescueStrikeTarget_RescueStrikeTarget_enter", (b"doAfter(.1,QEk)",)),
+            ("CallbackSingle_doAfter_RescueStrikeTarget_BuilderAIStates_call_doAfter_RescueStrikeTarget_BuilderAIStates", (
+                b"unit_isAlive(WEk.ai.AiExecutor_builder)", b"unit_issuePointOrderById(WEk.ai.AiExecutor_builder,852488,WEk.ai.AiExecutor_stateTarget)",
+            )),
             ("AiExecutor_construct_AiExecutor", (
                 b"b8l=(0.02+(int_toReal(__wurst_modInt((player_getId(Z7l)*7),12))*0.075))",
                 b"d8l.tick=1.0", b"doAfter(b8l,d8l)",
@@ -8731,6 +8792,19 @@ def _extract_runtime_system_mechanics(
         "code__onLeave_doAfter_ObeliskOfLight",
         "DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight",
         "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+        "syncFinishedBuildingIncome", "syncBuildingIncome",
+        "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime",
+        "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime1",
+        "trackTrainedUnitPathing", "startTrainedUnitPathingTracker", "checkCagedPathingMarker",
+        "checkUncagedPathingPulse", "finishUncagedPathingPulse",
+        "CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime",
+        "CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime1",
+        "CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime2",
+        "syncBuilding", "isValidSyncPair", "unit_resetSpawnQueue", "addLight",
+        "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem",
+        "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem1",
+        "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1",
+        "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2",
     }
     if not required.issubset(available):
         return []
@@ -10235,6 +10309,178 @@ def _extract_runtime_system_mechanics(
         "source_functions": ["EE", "rollBody", "randomizeBloodFiend", "onUnitTrained"],
         "evidence_kind": "exact-body-table-roll-thresholds-and-independent-trait-branches",
         "byte_offset": min(body_init_start, body_start, fiend_start, train_start),
+    })
+
+    # Building-income synchronization is delayed from construction/upgrade
+    # lifecycle signals. The authoritative player-income cache is corrected to
+    # the catalog value, then the public current-income cache/signals refresh.
+    income_finish_start, income_finish_source, _ = source("syncFinishedBuildingIncome")
+    income_sync_start, income_sync_source, _ = source("syncBuildingIncome")
+    income_cb_start, income_cb_source, _ = source("CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime")
+    income_cb1_start, income_cb1_source, _ = source("CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime1")
+    for fragment in (
+        b"if syncBuildingIncome(UFq,VFq,WFq)then refreshCurrentIncomeCache()",
+        b"KFq=buildingIncomeSyncDelta(IFq,JFq,catalogBuildingIncomeDelta(DFq))",
+        b"iGb[GFq]=(__wurst_ensureReal(iGb[GFq])+KFq)", b"Eab[HFq]=JFq",
+    ):
+        if fragment not in (income_finish_source + income_sync_source):
+            raise ValueError(f"building income synchronization changed: missing {fragment!r}")
+    if b"syncFinishedBuildingIncome(iDm.pid,iDm.u,true)" not in income_cb_source:
+        raise ValueError("finished-building income synchronization callback changed")
+    if b"syncFinishedBuildingIncome(kDm.pid,kDm.u,false)" not in income_cb1_source:
+        raise ValueError("alternate building-income synchronization callback changed")
+    rows.append({
+        "system_id": "building-income-synchronization",
+        "mechanic_kind": "catalog-authoritative-building-income-cache-correction",
+        "trigger": "delayed-building-lifecycle-income-resync",
+        "parameters": {
+            "requires_can_sync_building_income": True,
+            "uses_building_owner_player_id": True,
+            "requires_positive_unit_income_index": True,
+            "no_op_when_cached_income_equals_catalog_income": True,
+            "delta_formula": "buildingIncomeSyncDelta(cached,catalog,catalogBuildingIncomeDelta(unit))",
+            "authoritative_player_income_accumulator": "iGb[player_id]",
+            "per_unit_cached_income": "Eab[unit_income_index]",
+            "refreshes_current_income_cache_after_change": True,
+            "callback_variants": [
+                {"construction_finished_flag": True, "callback": "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime"},
+                {"construction_finished_flag": False, "callback": "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime1"},
+            ],
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "syncFinishedBuildingIncome", "syncBuildingIncome",
+            "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime",
+            "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime1",
+        ],
+        "evidence_kind": "exact-readable-delayed-building-income-cache-reconciliation",
+        "byte_offset": min(income_finish_start, income_sync_start, income_cb_start, income_cb1_start),
+    })
+
+    # Newly trained units carry A0BG while the map checks whether they have
+    # escaped their spawn/cage area. With caging disabled, a unit that is still
+    # within 768 after four seconds receives a 0.7-second pathing-off pulse and
+    # an attack order before pathing is restored and the check repeats.
+    path_track_start, path_track_source, _ = source("trackTrainedUnitPathing")
+    path_start_start, path_start_source, _ = source("startTrainedUnitPathingTracker")
+    path_caged_start, path_caged_source, _ = source("checkCagedPathingMarker")
+    path_uncaged_start, path_uncaged_source, _ = source("checkUncagedPathingPulse")
+    path_finish_start, path_finish_source, _ = source("finishUncagedPathingPulse")
+    path_cb_start, path_cb_source, _ = source("CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime")
+    path_cb1_start, path_cb1_source, _ = source("CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime1")
+    path_cb2_start, path_cb2_source, _ = source("CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime2")
+    path_fragments = (
+        (path_track_source, b"addProtectedAbility(Gfs,1093681735)"),
+        (path_start_source, b"if FGb then"), (path_start_source, b"doAfter(4.,vfs)"), (path_start_source, b"doAfter(4.,wfs)"),
+        (path_caged_source, b"distance2d(Dfs,Efs,unit_getX(Cfs),unit_getY(Cfs))>768."),
+        (path_caged_source, b"unit_removeAbility(Cfs,1093681735)"),
+        (path_uncaged_source, b"distance2d(yfs,zfs,unit_getX(xfs),unit_getY(xfs))<768."),
+        (path_uncaged_source, b"__wurst_safe_SetUnitPathing(Bfs,false)"),
+        (path_uncaged_source, b"orderCodeAttackIfAllowed(xfs)"), (path_uncaged_source, b"doAfter(.7,Afs)"),
+        (path_finish_source, b"__wurst_safe_SetUnitPathing(rfs,true)"),
+        (path_finish_source, b"startTrainedUnitPathingTracker(ofs,pfs,qfs)"),
+    )
+    for body, fragment in path_fragments:
+        if fragment not in body:
+            raise ValueError(f"trained-unit pathing recovery changed: missing {fragment!r}")
+    if b"finishUncagedPathingPulse(H_n.u,H_n.spawnX,H_n.spawnY)" not in path_cb_source:
+        raise ValueError("trained-unit pathing restore callback changed")
+    if b"checkCagedPathingMarker(J_n.u,J_n.spawnX,J_n.spawnY)" not in path_cb1_source:
+        raise ValueError("trained-unit caged pathing callback changed")
+    if b"checkUncagedPathingPulse(L_n.u,L_n.spawnX,L_n.spawnY)" not in path_cb2_source:
+        raise ValueError("trained-unit uncaged pathing callback changed")
+    rows.append({
+        "system_id": "trained-unit-pathing-recovery",
+        "mechanic_kind": "spawn-area-marker-and-conditional-pathing-release-pulse",
+        "trigger": "trained-unit-pathing-tracker",
+        "parameters": {
+            "marker_ability_id": 1093681735,
+            "caging_mode_symbol": "FGb",
+            "caging_mode_enabled_meaning": True,
+            "tracker_delay_seconds": 4.0,
+            "spawn_distance_threshold": 768.0,
+            "caging_enabled_behavior": "remove marker after unit moves farther than 768 from spawn",
+            "caging_disabled_behavior_inside_threshold": "temporarily disable pathing, issue attack order, restore after pulse",
+            "caging_disabled_behavior_outside_threshold": "remove marker ability",
+            "pathing_disabled_pulse_seconds": 0.7,
+            "pathing_restored_after_pulse": True,
+            "tracker_restarts_after_pathing_restore": True,
+            "dead_unit_life_threshold": 0.405,
+        },
+        "related_rawcode_ids": [1093681735],
+        "source_functions": [
+            "trackTrainedUnitPathing", "startTrainedUnitPathingTracker", "checkCagedPathingMarker",
+            "checkUncagedPathingPulse", "finishUncagedPathingPulse",
+            "CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime",
+            "CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime1",
+            "CallbackSingle_doAfter_UnitTrainingRuntime_call_doAfter_UnitTrainingRuntime2",
+        ],
+        "evidence_kind": "exact-readable-trained-unit-pathing-marker-distance-and-delayed-pulse-control-flow",
+        "byte_offset": min(
+            path_track_start, path_start_start, path_caged_start, path_uncaged_start, path_finish_start,
+            path_cb_start, path_cb1_start, path_cb2_start,
+        ),
+    })
+
+    # Unit synchronization uses an immediate timer callback so issued training
+    # orders do not collide with the event that triggered the sync. A valid
+    # allied production-building pair has the slower/equal spawning building's
+    # queue cancelled seven times then re-seeded twice with the synchronized
+    # unit type; the visible LEAS lightning lasts 0.625 seconds.
+    sync_start, sync_source, _ = source("syncBuilding")
+    sync_valid_start, sync_valid_source, _ = source("isValidSyncPair")
+    sync_queue_start, sync_queue_source, _ = source("unit_resetSpawnQueue")
+    sync_light_start, sync_light_source, _ = source("addLight")
+    sync_order_cb_start, sync_order_cb_source, _ = source("CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem")
+    sync_apply_cb_start, sync_apply_cb_source, _ = source("CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem1")
+    sync_light_cb_start, sync_light_cb_source, _ = source("CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1")
+    sync_move_cb_start, sync_move_cb_source, _ = source("CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2")
+    for body, fragment in (
+        (sync_source, b"if(not isValidSyncPair(HZr,IZr))then return"),
+        (sync_source, b"unit_resetSpawnQueue(HZr,JZr)"),
+        (sync_valid_source, b"player_isAllyOf(unit_getOwner(KZr),unit_getOwner(LZr))"),
+        (sync_valid_source, b"return(MZr<=NZr)"),
+        (sync_queue_source, b"if(QZr>6)then break"), (sync_queue_source, b"unit_issueImmediateOrderById(OZr,851976)"),
+        (sync_queue_source, b"if(RZr>1)then break"), (sync_queue_source, b"unit_issueImmediateOrderById(OZr,PZr)"),
+        (sync_light_source, b"AddLightning(\"LEAS\""), (sync_light_source, b"doAfter(0.625,VZr)"),
+        (sync_order_cb_source, b"unit_issueImmediateOrderById(EQn.building,EQn.trainedUnitType)"),
+        (sync_apply_cb_source, b"syncBuilding(GQn.syncedBuilding,GQn.building)"),
+        (sync_light_cb_source, b"lightning_destr(IQn.light)"),
+        (sync_move_cb_source, b"unit_issuePointOrderById(KQn.building,L6"),
+    ):
+        if fragment not in body:
+            raise ValueError(f"building synchronization runtime changed: missing {fragment!r}")
+    rows.append({
+        "system_id": "building-unit-synchronization",
+        "mechanic_kind": "allied-production-queue-synchronization-and-order-reset",
+        "trigger": "unit-synchronization-runtime",
+        "parameters": {
+            "requires_distinct_live_structure_pair": True,
+            "requires_allied_owners": True,
+            "requires_positive_spawn_times": True,
+            "valid_pair_spawn_time_comparison": "source_spawn_time <= target_spawn_time",
+            "queue_cancel_order_id": 851976,
+            "queue_cancel_repetitions": 7,
+            "synchronized_train_order_repetitions": 2,
+            "sync_lightning_code": "LEAS",
+            "sync_lightning_duration_seconds": 0.625,
+            "post_sync_point_order_id": 851971,
+            "post_sync_point_offset_absolute": [38.0, 68.0],
+            "post_sync_point_offset_direction": "subtract for positive-Y building; add otherwise",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "syncBuilding", "isValidSyncPair", "unit_resetSpawnQueue", "addLight",
+            "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem",
+            "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem1",
+            "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1",
+            "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2",
+        ],
+        "evidence_kind": "exact-readable-allied-building-sync-validation-queue-orders-and-delayed-light-cleanup",
+        "byte_offset": min(
+            sync_start, sync_valid_start, sync_queue_start, sync_light_start, sync_order_cb_start,
+            sync_apply_cb_start, sync_light_cb_start, sync_move_cb_start,
+        ),
     })
 
     return rows

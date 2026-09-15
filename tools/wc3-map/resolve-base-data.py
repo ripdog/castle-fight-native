@@ -3051,6 +3051,46 @@ def main() -> None:
                     parameters["runtime_attack_max"] = numeric(protected["attack1_max"])
                     parameters["runtime_attack_cooldown_seconds"] = numeric(protected["attack1_cooldown"])
                     parameters["runtime_attack_range"] = numeric(protected["attack1_range"])
+                elif system_id == "building-income-synchronization":
+                    if (
+                        parameters.get("delta_formula")
+                        != "buildingIncomeSyncDelta(cached,catalog,catalogBuildingIncomeDelta(unit))"
+                        or parameters.get("authoritative_player_income_accumulator") != "iGb[player_id]"
+                        or parameters.get("per_unit_cached_income") != "Eab[unit_income_index]"
+                        or parameters.get("callback_variants") != [
+                            {
+                                "construction_finished_flag": True,
+                                "callback": "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime",
+                            },
+                            {
+                                "construction_finished_flag": False,
+                                "callback": "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime1",
+                            },
+                        ]
+                    ):
+                        raise ValueError(f"building-income synchronization parameters changed: {parameters}")
+                elif system_id == "trained-unit-pathing-recovery":
+                    marker = ability_level_one("A0BG")
+                    if (
+                        numeric(parameters.get("tracker_delay_seconds")) != 4
+                        or numeric(parameters.get("spawn_distance_threshold")) != 768
+                        or numeric(parameters.get("pathing_disabled_pulse_seconds")) != 0.7
+                        or int(parameters.get("marker_ability_id", 0)) != 1093681735
+                    ):
+                        raise ValueError(f"trained-unit pathing recovery parameters changed: {parameters}")
+                    parameters["marker_ability_rawcode"] = "A0BG"
+                    parameters["marker_ability_name"] = marker["name"]
+                    parameters["marker_ability_base_rawcode"] = marker["base_rawcode"]
+                elif system_id == "building-unit-synchronization":
+                    if (
+                        int(parameters.get("queue_cancel_order_id", 0)) != 851976
+                        or int(parameters.get("queue_cancel_repetitions", 0)) != 7
+                        or int(parameters.get("synchronized_train_order_repetitions", 0)) != 2
+                        or numeric(parameters.get("sync_lightning_duration_seconds")) != 0.625
+                        or int(parameters.get("post_sync_point_order_id", 0)) != 851971
+                        or parameters.get("post_sync_point_offset_absolute") != [38.0, 68.0]
+                    ):
+                        raise ValueError(f"building-unit synchronization parameters changed: {parameters}")
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 

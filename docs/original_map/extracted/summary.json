@@ -138,7 +138,7 @@
     "runtime_ai_mechanic_kinds": {
       "damage-triggered-ai-rescue-strike-targeting-and-throttling": 1,
       "decayed-damage-weighted-engagement-and-structure-pressure-signals": 1,
-      "staggered-one-second-ai-fsm-controller-tick": 1,
+      "delayed-ai-executor-lifecycle-build-timeout-and-one-second-fsm-controller-tick": 1,
       "team-strategic-aura-purchase-state-and-buyer-coordination": 1
     },
     "runtime_session_mechanics": 4,
@@ -244,14 +244,16 @@
     "building_improvement_spawn_mechanic_kinds": {
       "unreachable-production-spawn-branch-keyed-by-A0EL": 1
     },
-    "runtime_system_mechanics": 20,
+    "runtime_system_mechanics": 23,
     "runtime_system_mechanic_kinds": {
+      "allied-production-queue-synchronization-and-order-reset": 1,
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
       "body-replacement-plus-independent-random-trait-groups": 1,
       "buff-marker-non-attack-current-damage-multiplier": 1,
       "builder-point-cast-team-coordinated-area-execution": 1,
       "builder-point-teleport-clamped-to-own-castle": 1,
       "building-random-enemy-base-attack-ground-controller": 1,
+      "catalog-authoritative-building-income-cache-correction": 1,
       "enchantment-marker-driven-half-damage-cleave": 1,
       "first-fifteen-seconds-castle-damage-immunity": 1,
       "per-player-building-count-income-multiplier": 1,
@@ -259,6 +261,7 @@
       "periodic-idle-combat-unit-attack-order-recovery": 1,
       "persistent-carrier-auto-attack-damage-triggered-full-cleanse": 1,
       "player-order-rejection-autonomous-order-restoration-and-escalating-control-penalty": 1,
+      "spawn-area-marker-and-conditional-pathing-release-pulse": 1,
       "summoned-carrier-random-unit-replacement": 1,
       "team-constructed-building-count-to-spell-level": 1,
       "team-presence-gated-owner-scaled-elemental-death-heal": 1,
