@@ -657,7 +657,7 @@ fn percent_label(per_10k: i32, force_sign: bool) -> String {
     let hundredths = magnitude % 100;
     if hundredths == 0 {
         format!("{sign}{whole}%")
-    } else if hundredths % 10 == 0 {
+    } else if hundredths.is_multiple_of(10) {
         format!("{sign}{whole}.{}%", hundredths / 10)
     } else {
         format!("{sign}{whole}.{hundredths:02}%")

@@ -586,14 +586,17 @@ fn wc3_visual_animation_source(
 
 pub fn setup_wc3_visual_animation_players(
     mut commands: Commands,
-    gltfs: Res<Assets<Gltf>>,
-    clips: Res<Assets<AnimationClip>>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
+    animation_assets: (
+        Res<Assets<Gltf>>,
+        Res<Assets<AnimationClip>>,
+        ResMut<Assets<AnimationGraph>>,
+    ),
     mut cache: ResMut<Wc3VisualAnimationGraphs>,
     parents: Query<&ChildOf>,
     roots: Query<&Wc3VisualAnimationSource>,
     mut players: Query<(Entity, &mut AnimationPlayer), Without<Wc3VisualAnimationController>>,
 ) {
+    let (gltfs, clips, mut graphs) = animation_assets;
     for (entity, mut player) in &mut players {
         let Some(source) = wc3_visual_animation_source(entity, &parents, &roots) else {
             continue;
