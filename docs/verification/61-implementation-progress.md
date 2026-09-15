@@ -67,8 +67,8 @@ Executed verification:
 - revision guard rejects extraction into retained 9.27/r1 and resolves pending 9.32/r1 to its own destination;
 - `native_effect_coverage.py --map-version 9.27` resolves the retained 9.27 extraction; `--map-version 9.32` rejects because no retained 9.32 extraction exists;
 - `bash -n tools/wc3-map/extract.sh tools/wc3-map/extract-release.sh`: passed;
-- `tools/cargo-interactive test -p castle-fight-sim`: 179 passed;
-- `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
+- after rebasing onto the Defender/production-upgrade work, `tools/cargo-interactive test -p castle-fight-sim`: 187 passed;
+- `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed after a separate narrow cleanup of two Defender-era lint warnings (`e91c5fa`);
 - `cargo fmt --all -- --check`: passed.
 
 Pending:
