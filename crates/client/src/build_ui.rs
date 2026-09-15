@@ -9,6 +9,9 @@ use castle_fight_sim::{
     CastleFightContentBundle, CommandCardPosition, NavCell, SimId, Team,
 };
 
+#[cfg(test)]
+use castle_fight_sim::PlayerId;
+
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
@@ -383,6 +386,7 @@ fn setup_action_panel(mut commands: Commands) {
 fn sync_action_panel_to_selection(
     inspection: Res<InspectionSelection>,
     samples: Res<PresentationSamples>,
+    authoritative: Res<AuthoritativeSimulation>,
     selected_match: Res<SelectedMatch>,
     mut state: ResMut<ActionPanelState>,
     mut panel: Single<&mut Visibility, With<ActionPanel>>,
@@ -390,12 +394,18 @@ fn sync_action_panel_to_selection(
     let selected = inspection.selected;
     let relevant = selected.and_then(|id| {
         if let Some(builder) = samples.current.builders.get(&id) {
-            return Some((id, builder.team));
+            return authoritative
+                .simulation
+                .can_player_control_builder(selected_match.local_player, id)
+                .then_some((id, builder.team));
         }
         samples.current.buildings.get(&id).and_then(|building| {
-            (building.construction_complete_tick.is_some()
-                || building_is_controllable_production(building, selected_match.content)
-                || building_is_controllable_tower(building, selected_match.content))
+            (authoritative
+                .simulation
+                .can_player_control_building(selected_match.local_player, id)
+                && (building.construction_complete_tick.is_some()
+                    || building_is_controllable_production(building, selected_match.content)
+                    || building_is_controllable_tower(building, selected_match.content)))
             .then_some((id, building.team))
         })
     });
@@ -422,6 +432,7 @@ fn sync_action_panel_to_selection(
 
 fn handle_escape(
     keys: Res<ButtonInput<KeyCode>>,
+    selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut samples: ResMut<PresentationSamples>,
     mut state: ResMut<ActionPanelState>,
@@ -441,7 +452,13 @@ fn handle_escape(
         .building(actor)
         .is_some_and(|building| building.construction_complete_tick.is_some())
     {
-        cancel_selected_construction(&mut authoritative, &mut samples, &mut state, actor);
+        cancel_selected_construction(
+            &mut authoritative,
+            &mut samples,
+            &mut state,
+            selected_match.local_player,
+            actor,
+        );
     }
 }
 
@@ -449,11 +466,12 @@ fn cancel_selected_construction(
     authoritative: &mut AuthoritativeSimulation,
     samples: &mut PresentationSamples,
     state: &mut ActionPanelState,
+    controller: castle_fight_sim::PlayerId,
     actor: SimId,
 ) {
     match authoritative
         .simulation
-        .cancel_building_construction(state.team, actor)
+        .cancel_building_construction_for_player(controller, actor)
     {
         Ok(BuildingConstructionCancelOutcome::RemovedNewBuilding) => {
             samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
@@ -704,6 +722,7 @@ fn handle_action_panel_buttons(
                 match order_demo_production_upgrade(
                     &mut authoritative.simulation,
                     selected_match.content,
+                    selected_match.local_player,
                     actor,
                     target,
                 ) {
@@ -762,7 +781,13 @@ fn handle_action_panel_buttons(
                 let Some(actor) = state.actor else {
                     continue;
                 };
-                cancel_selected_construction(&mut authoritative, &mut samples, &mut state, actor);
+                cancel_selected_construction(
+                    &mut authoritative,
+                    &mut samples,
+                    &mut state,
+                    selected_match.local_player,
+                    actor,
+                );
             }
             PanelAction::Cancel => state.cancel_modal(),
         }
@@ -771,6 +796,7 @@ fn handle_action_panel_buttons(
 
 fn handle_action_panel_right_click(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    selected_match: Res<SelectedMatch>,
     mut state: ResMut<ActionPanelState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
@@ -793,10 +819,11 @@ fn handle_action_panel_right_click(
     };
 
     let enabled = !builder.repair_autocast_enabled;
-    match authoritative
-        .simulation
-        .set_builder_repair_autocast(actor, enabled)
-    {
+    match authoritative.simulation.set_builder_repair_autocast_as(
+        selected_match.local_player,
+        actor,
+        enabled,
+    ) {
         Ok(()) => {
             state.status = format!(
                 "Repair autocast {}.",
@@ -1198,9 +1225,16 @@ fn can_afford_production_upgrade(
     let definition = content
         .production_building(target)
         .expect("upgrade target must belong to selected bundle");
+    let Some(owner) = state
+        .actor
+        .and_then(|actor| authoritative.simulation.building(actor))
+        .and_then(|building| building.owner)
+    else {
+        return false;
+    };
     authoritative
         .simulation
-        .can_afford_building(state.team, definition.economy)
+        .can_afford_building_for_player(owner, definition.economy)
 }
 
 fn insufficient_upgrade_resources_status(
@@ -1212,10 +1246,15 @@ fn insufficient_upgrade_resources_status(
     let definition = content
         .production_building(target)
         .expect("upgrade target must belong to selected bundle");
+    let owner = state
+        .actor
+        .and_then(|actor| authoritative.simulation.building(actor))
+        .and_then(|building| building.owner)
+        .expect("controllable production building must have an owner");
     let resources = authoritative
         .simulation
-        .player_resources(state.team)
-        .expect("action panel supports the two Castle Fight players");
+        .player_resources_for(owner)
+        .expect("controllable building owner must have economy state");
     format!(
         "Cannot upgrade to {}: need {} gold / {} lumber; currently {} / {}.",
         definition.name,
@@ -1232,10 +1271,15 @@ fn insufficient_resources_status(
     kind: BuildKind,
     content: &CastleFightContentBundle,
 ) -> String {
+    let owner = state
+        .actor
+        .and_then(|actor| authoritative.simulation.builder(actor))
+        .map(|builder| builder.owner)
+        .expect("build action requires an owned builder");
     let resources = authoritative
         .simulation
-        .player_resources(state.team)
-        .expect("action panel supports the two Castle Fight players");
+        .player_resources_for(owner)
+        .expect("controllable builder owner must have economy state");
     format!(
         "Cannot afford {}: need {} gold / {} lumber; currently {} / {} committed/free.",
         kind.label(content),
@@ -1419,6 +1463,7 @@ mod tests {
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings.clone(),
+            local_player: PlayerId(0),
         };
         let authoritative = AuthoritativeSimulation {
             simulation: demo.simulation,
@@ -1463,6 +1508,7 @@ mod tests {
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
         };
         let layout = action_layout(&state, &authoritative, &selected_match);
         let command_card = selected_match.content.command_card;
@@ -1484,6 +1530,7 @@ mod tests {
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings.clone(),
+            local_player: PlayerId(0),
         };
         let authoritative = AuthoritativeSimulation {
             simulation: demo.simulation,
@@ -1536,6 +1583,7 @@ mod tests {
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
         };
         let stronghold = ProductionKind::Stronghold;
         let stronghold_definition = selected_match

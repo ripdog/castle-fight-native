@@ -78,7 +78,7 @@ fn handle_selection_commands(
         match resources
             .authoritative
             .simulation
-            .set_builder_repair_autocast(actor, enabled)
+            .set_builder_repair_autocast_as(resources.selected_match.local_player, actor, enabled)
         {
             Ok(()) => {
                 resources.action_panel.status = format!(
@@ -142,11 +142,11 @@ fn handle_modal_left_click(
                 return;
             };
             let destination = world_to_sim_point(world);
-            match resources
-                .authoritative
-                .simulation
-                .order_builder_move(actor, destination)
-            {
+            match resources.authoritative.simulation.order_builder_move_as(
+                resources.selected_match.local_player,
+                actor,
+                destination,
+            ) {
                 Ok(()) => finish_modal(resources, "Builder move ordered.".into()),
                 Err(error) => {
                     resources.action_panel.status = format!("Move rejected: {error:?}.");
@@ -159,11 +159,11 @@ fn handle_modal_left_click(
                 return;
             };
             let destination = world_to_sim_point(world);
-            match resources
-                .authoritative
-                .simulation
-                .order_builder_blink(actor, destination)
-            {
+            match resources.authoritative.simulation.order_builder_blink_as(
+                resources.selected_match.local_player,
+                actor,
+                destination,
+            ) {
                 Ok(resolved) => finish_modal(
                     resources,
                     format!(
@@ -221,11 +221,11 @@ fn handle_modal_left_click(
                     "Repair requires a friendly building or mechanical unit.".into();
                 return;
             };
-            match resources
-                .authoritative
-                .simulation
-                .order_builder_repair(actor, target)
-            {
+            match resources.authoritative.simulation.order_builder_repair_as(
+                resources.selected_match.local_player,
+                actor,
+                target,
+            ) {
                 Ok(()) => finish_modal(resources, format!("Builder repairing #{}.", target.0)),
                 Err(error) => {
                     resources.action_panel.status = format!("Repair rejected: {error:?}.");
@@ -284,8 +284,11 @@ fn handle_modal_left_click(
             match resources
                 .authoritative
                 .simulation
-                .order_building_attack_target(actor, target)
-            {
+                .order_building_attack_target_as(
+                    resources.selected_match.local_player,
+                    actor,
+                    target,
+                ) {
                 Ok(()) => finish_modal(resources, format!("Tower attacking #{}.", target.0)),
                 Err(error) => {
                     resources.action_panel.status = format!("Attack rejected: {error:?}.");
@@ -317,7 +320,8 @@ fn handle_modal_left_click(
             match order_demo_building(
                 &mut resources.authoritative.simulation,
                 resources.selected_match.content,
-                resources.action_panel.team,
+                resources.selected_match.local_player,
+                actor,
                 footprint,
                 kind,
             ) {
@@ -425,25 +429,25 @@ fn handle_smart_right_click(
         SmartRightClickAction::BuilderMove(destination) => resources
             .authoritative
             .simulation
-            .order_builder_move(actor, destination)
+            .order_builder_move_as(resources.selected_match.local_player, actor, destination)
             .map(|()| "Builder move ordered.".to_owned())
             .map_err(|error| format!("Builder move rejected: {error:?}.")),
         SmartRightClickAction::BuilderFollow(target) => resources
             .authoritative
             .simulation
-            .order_builder_follow(actor, target)
+            .order_builder_follow_as(resources.selected_match.local_player, actor, target)
             .map(|()| format!("Builder following #{}.", target.0))
             .map_err(|error| format!("Builder follow rejected: {error:?}.")),
         SmartRightClickAction::BuilderRepair(target) => resources
             .authoritative
             .simulation
-            .order_builder_repair(actor, target)
+            .order_builder_repair_as(resources.selected_match.local_player, actor, target)
             .map(|()| format!("Builder repairing #{}.", target.0))
             .map_err(|error| format!("Builder repair rejected: {error:?}.")),
         SmartRightClickAction::TowerAttack(target) => resources
             .authoritative
             .simulation
-            .order_building_attack_target(actor, target)
+            .order_building_attack_target_as(resources.selected_match.local_player, actor, target)
             .map(|()| format!("Tower attacking #{}.", target.0))
             .map_err(|error| format!("Tower attack rejected: {error:?}.")),
         SmartRightClickAction::None => return,

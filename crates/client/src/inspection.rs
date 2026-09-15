@@ -765,7 +765,8 @@ mod tests {
 
     use castle_fight_sim::{
         BuilderLocomotion, BuildingFootprint, ContentIdentity, MovementClass, NavCell,
-        PlayerEconomyView, PlayerResources, SimPoint, SimulationConfig, TerrainElevationMap,
+        PlayerConnectionStatus, PlayerEconomyView, PlayerId, PlayerResources, PlayerView, SimPoint,
+        SimulationConfig, Team, TerrainElevationMap,
     };
 
     use super::*;
@@ -798,13 +799,25 @@ mod tests {
         let snapshot = PresentationSnapshot {
             tick: 10,
             damage_rules: castle_fight_sim::DamageRules::warcraft_frozen_throne(),
-            player_economy: [PlayerEconomyView {
-                resources: PlayerResources::default(),
-                income: 0,
-                income_interval_ticks: 0,
-                income_progress_per_10k: 0,
-                ticks_until_income: 0,
-            }; 2],
+            players: BTreeMap::from([(
+                PlayerId(0),
+                PlayerView {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    resources: PlayerResources::default(),
+                    connection: PlayerConnectionStatus::Connected,
+                },
+            )]),
+            player_economy: BTreeMap::from([(
+                PlayerId(0),
+                PlayerEconomyView {
+                    resources: PlayerResources::default(),
+                    income: 0,
+                    income_interval_ticks: 0,
+                    income_progress_per_10k: 0,
+                    ticks_until_income: 0,
+                },
+            )]),
             units: BTreeMap::new(),
             builders: BTreeMap::new(),
             buildings: BTreeMap::new(),
@@ -824,6 +837,7 @@ mod tests {
             SimId(5),
             BuilderSample {
                 id: SimId(5),
+                owner: PlayerId(0),
                 team: Team(0),
                 position: SimPoint::new(
                     100 * SUBUNITS_PER_WORLD_UNIT,
@@ -878,6 +892,7 @@ mod tests {
                     rawcode: u32::from_be_bytes(*b"hfoo"),
                     name: "Footman",
                 }),
+                owner: PlayerId(0),
                 team: Team(0),
                 position: SimPoint::new(
                     100 * SUBUNITS_PER_WORLD_UNIT,
@@ -969,6 +984,7 @@ mod tests {
                     rawcode: u32::from_be_bytes(*b"h000"),
                     name: "Barracks",
                 }),
+                owner: Some(PlayerId(0)),
                 team: Team(1),
                 footprint: BuildingFootprint::new(10, 20, 4, 4),
                 health: 1_000,
@@ -1013,6 +1029,7 @@ mod tests {
                     rawcode: u32::from_be_bytes(*b"h016"),
                     name: "Gryphon Rider",
                 }),
+                owner: PlayerId(0),
                 team: Team(0),
                 position: SimPoint::new(
                     100 * SUBUNITS_PER_WORLD_UNIT,

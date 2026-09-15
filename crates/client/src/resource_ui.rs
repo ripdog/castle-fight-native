@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 
 use crate::{
-    bridge::PresentationSamples, build_ui::ActionPanelState, inspection::InspectionSelection,
-    presentation::FpsDisplay,
+    SelectedMatch,
+    bridge::PresentationSamples,
+    inspection::InspectionSelection,
+    presentation::{FpsDisplay, player_color},
 };
 
 pub(crate) const TOP_BAR_HEIGHT: f32 = 58.0;
@@ -236,45 +238,71 @@ type ResourceTextQuery<'w, 's> = Query<
 >;
 
 fn update_resource_bar(
-    selection: Res<ActionPanelState>,
+    selected_match: Res<SelectedMatch>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
     fps_display: Res<FpsDisplay>,
     mut resource_texts: ResourceTextQuery<'_, '_>,
     mut progress: Single<&mut Node, With<GoldIncomeProgress>>,
 ) {
-    let selected_team = inspection.selected.and_then(|selected| {
-        presentation
-            .current
-            .builders
-            .get(&selected)
-            .map(|builder| builder.team)
-            .or_else(|| {
-                presentation
-                    .current
-                    .units
-                    .get(&selected)
-                    .map(|unit| unit.team)
-            })
-            .or_else(|| {
-                presentation
-                    .current
-                    .buildings
-                    .get(&selected)
-                    .map(|building| building.team)
-            })
-    });
-    let team_index = usize::from(selected_team.unwrap_or(selection.team).0.min(1));
-    let economy = presentation.current.player_economy[team_index];
+    let selected_player = inspection
+        .selected
+        .and_then(|selected| {
+            presentation
+                .current
+                .builders
+                .get(&selected)
+                .map(|builder| builder.owner)
+                .or_else(|| {
+                    presentation
+                        .current
+                        .units
+                        .get(&selected)
+                        .map(|unit| unit.owner)
+                })
+                .or_else(|| {
+                    presentation
+                        .current
+                        .buildings
+                        .get(&selected)
+                        .and_then(|building| building.owner)
+                })
+        })
+        .unwrap_or(selected_match.local_player);
+    let economy = *presentation
+        .current
+        .player_economy
+        .get(&selected_player)
+        .or_else(|| {
+            presentation
+                .current
+                .player_economy
+                .get(&selected_match.local_player)
+        })
+        .expect("local player must have presentation economy state");
     let resources = economy.resources;
 
     progress.width = percent(f32::from(economy.income_progress_per_10k) / 100.0);
 
-    let (player_label, player_color) = if team_index == 0 {
-        ("BLUE PLAYER", Color::srgb(0.35, 0.67, 1.0))
+    let local = presentation
+        .current
+        .players
+        .get(&selected_match.local_player)
+        .expect("local player must exist in presentation state");
+    let selected = presentation
+        .current
+        .players
+        .get(&selected_player)
+        .expect("selected owner must exist in presentation state");
+    let relation = if selected.id == local.id {
+        "YOU"
+    } else if selected.team == local.team {
+        "ALLY"
     } else {
-        ("RED PLAYER", Color::srgb(1.0, 0.38, 0.31))
+        "ENEMY"
     };
+    let player_label = format!("PLAYER {} · {relation}", u16::from(selected_player.0) + 1);
+    let player_text_color = player_color(selected_player);
     for (
         mut text,
         performance,
@@ -292,9 +320,9 @@ fn update_resource_bar(
                 .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
             text.0 = format!("FPS {fps}\nTICK {}", presentation.current.tick);
         } else if selected_player.is_some() {
-            text.0 = player_label.into();
+            text.0.clone_from(&player_label);
             if let Some(color) = text_color.as_mut() {
-                color.0 = player_color;
+                color.0 = player_text_color;
             }
         } else if gold.is_some() {
             text.0 = resources.gold.to_string();
@@ -325,11 +353,15 @@ mod tests {
         let demo = create_demo_world(1, Some(0));
         let snapshot = PresentationSnapshot::capture(&demo.simulation);
         let mut app = App::new();
-        app.insert_resource(ActionPanelState::default())
-            .insert_resource(InspectionSelection::default())
-            .insert_resource(PresentationSamples::new(snapshot))
-            .insert_resource(FpsDisplay::default())
-            .add_plugins(ResourceUiPlugin);
+        app.insert_resource(SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: castle_fight_sim::PlayerId(0),
+        })
+        .insert_resource(InspectionSelection::default())
+        .insert_resource(PresentationSamples::new(snapshot))
+        .insert_resource(FpsDisplay::default())
+        .add_plugins(ResourceUiPlugin);
 
         app.update();
 

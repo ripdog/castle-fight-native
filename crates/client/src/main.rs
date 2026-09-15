@@ -25,7 +25,7 @@ use bevy::{
 };
 use castle_fight_sim::{
     CASTLE_FIGHT_SIMULATION_HZ, CastleFightContentAvailability, CastleFightContentBundle,
-    MapVersion, Simulation, castle_fight_registered_releases,
+    MapVersion, PlayerId, Simulation, castle_fight_registered_releases,
 };
 
 use bridge::{PresentationSamples, PresentationSnapshot};
@@ -51,6 +51,7 @@ pub(crate) struct AuthoritativeSimulation {
 pub(crate) struct SelectedMatch {
     pub(crate) content: &'static CastleFightContentBundle,
     pub(crate) direct_buildings: Vec<BuildKind>,
+    pub(crate) local_player: PlayerId,
 }
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -94,6 +95,12 @@ fn main() {
         );
         std::process::exit(2);
     });
+    let local_player = demo
+        .match_config
+        .participants
+        .first()
+        .expect("playable Castle Fight match must contain a local participant")
+        .id;
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
     let present_mode = if options.stress_units.is_some() {
         PresentMode::AutoNoVsync
@@ -123,6 +130,7 @@ fn main() {
         .insert_resource(SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,
+            local_player,
         })
         .insert_resource(AuthoritativeSimulation {
             simulation: demo.simulation,

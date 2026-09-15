@@ -28,8 +28,8 @@ use bevy::{
 };
 use castle_fight_sim::{
     AbilityCastTarget, AbilityEffect, BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CorpseView,
-    MovementClass, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
-    SimulationConfig, Team,
+    MovementClass, PlayerId, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId,
+    SimPoint, SimulationConfig,
 };
 
 use crate::{
@@ -61,6 +61,7 @@ const AIR_WING_FLAP_AMPLITUDE: f32 = 0.72;
 const AIR_WING_BASE_ANGLE: f32 = 0.18;
 const BUILDING_HEIGHT: f32 = 96.0;
 const PROJECTILE_HEIGHT: f32 = 6.0;
+const WC3_PLAYER_COLOR_COUNT: usize = 12;
 
 // WC3's classic renderer is much flatter than Bevy's default Blender-calibrated exposure.
 // Keep the existing daylight illuminance, but expose it as overcast daylight and restore enough
@@ -243,11 +244,11 @@ struct PresentationAssets {
     ballistic_projectile_mesh: Handle<Mesh>,
     bounce_projectile_mesh: Handle<Mesh>,
     corpse_mesh: Handle<Mesh>,
-    unit_materials: [Handle<StandardMaterial>; 2],
-    building_materials: [Handle<StandardMaterial>; 2],
-    building_accent_materials: [Handle<StandardMaterial>; 2],
-    unit_accent_materials: [Handle<StandardMaterial>; 2],
-    corpse_materials: [Handle<StandardMaterial>; 2],
+    unit_materials: [Handle<StandardMaterial>; WC3_PLAYER_COLOR_COUNT],
+    building_materials: [Handle<StandardMaterial>; WC3_PLAYER_COLOR_COUNT],
+    building_accent_materials: [Handle<StandardMaterial>; WC3_PLAYER_COLOR_COUNT],
+    unit_accent_materials: [Handle<StandardMaterial>; WC3_PLAYER_COLOR_COUNT],
+    corpse_materials: [Handle<StandardMaterial>; WC3_PLAYER_COLOR_COUNT],
     projectile_materials: [Handle<StandardMaterial>; 4],
     weapon_material: Handle<StandardMaterial>,
     neutral_unit_material: Handle<StandardMaterial>,
@@ -269,37 +270,37 @@ impl PresentationAssets {
         }
     }
 
-    fn unit_material(&self, team: Team) -> Handle<StandardMaterial> {
+    fn unit_material(&self, owner: PlayerId) -> Handle<StandardMaterial> {
         self.unit_materials
-            .get(usize::from(team.0))
+            .get(usize::from(owner.0))
             .cloned()
             .unwrap_or_else(|| self.neutral_unit_material.clone())
     }
 
-    fn unit_accent_material(&self, team: Team) -> Handle<StandardMaterial> {
+    fn unit_accent_material(&self, owner: PlayerId) -> Handle<StandardMaterial> {
         self.unit_accent_materials
-            .get(usize::from(team.0))
+            .get(usize::from(owner.0))
             .cloned()
             .unwrap_or_else(|| self.neutral_unit_accent_material.clone())
     }
 
-    fn building_material(&self, team: Team) -> Handle<StandardMaterial> {
-        self.building_materials
-            .get(usize::from(team.0))
+    fn building_material(&self, owner: Option<PlayerId>) -> Handle<StandardMaterial> {
+        owner
+            .and_then(|owner| self.building_materials.get(usize::from(owner.0)))
             .cloned()
             .unwrap_or_else(|| self.neutral_building_material.clone())
     }
 
-    fn building_accent_material(&self, team: Team) -> Handle<StandardMaterial> {
-        self.building_accent_materials
-            .get(usize::from(team.0))
+    fn building_accent_material(&self, owner: Option<PlayerId>) -> Handle<StandardMaterial> {
+        owner
+            .and_then(|owner| self.building_accent_materials.get(usize::from(owner.0)))
             .cloned()
             .unwrap_or_else(|| self.neutral_building_accent_material.clone())
     }
 
-    fn corpse_material(&self, team: Team) -> Handle<StandardMaterial> {
+    fn corpse_material(&self, owner: PlayerId) -> Handle<StandardMaterial> {
         self.corpse_materials
-            .get(usize::from(team.0))
+            .get(usize::from(owner.0))
             .cloned()
             .unwrap_or_else(|| self.neutral_corpse_material.clone())
     }
@@ -363,7 +364,7 @@ struct RenderMap {
 #[derive(Debug, Clone, Copy)]
 struct DeathRemnant {
     position: Vec3,
-    team: Team,
+    owner: Option<PlayerId>,
     building: bool,
     remaining: f32,
 }
@@ -820,74 +821,52 @@ fn setup_scene(
     let corpse_mesh = meshes.add(Cuboid::new(CORPSE_SIZE, CORPSE_THICKNESS, CORPSE_SIZE));
     commands.insert_resource(Wc3ParticleAssets::new(&mut meshes));
 
-    let unit_materials = [
+    let unit_materials = std::array::from_fn(|index| {
+        let player = PlayerId(u8::try_from(index).expect("WC3 player material index fits u8"));
         materials.add(StandardMaterial {
-            base_color: Color::srgb(0.18, 0.48, 0.95),
+            base_color: player_color(player),
             perceptual_roughness: 0.72,
             ..default()
-        }),
+        })
+    });
+    let building_materials = std::array::from_fn(|index| {
+        let player = PlayerId(u8::try_from(index).expect("WC3 player material index fits u8"));
         materials.add(StandardMaterial {
-            base_color: Color::srgb(0.90, 0.22, 0.18),
-            perceptual_roughness: 0.72,
-            ..default()
-        }),
-    ];
-    let building_materials = [
-        materials.add(StandardMaterial {
-            base_color: Color::srgb(0.07, 0.20, 0.52),
+            base_color: player_color(player),
             perceptual_roughness: 0.86,
             ..default()
-        }),
+        })
+    });
+    let building_accent_materials = std::array::from_fn(|index| {
+        let player = PlayerId(u8::try_from(index).expect("WC3 player material index fits u8"));
+        let color = player_color(player);
         materials.add(StandardMaterial {
-            base_color: Color::srgb(0.52, 0.08, 0.06),
-            perceptual_roughness: 0.86,
-            ..default()
-        }),
-    ];
-    let building_accent_materials = [
-        materials.add(StandardMaterial {
-            base_color: Color::srgb(0.20, 0.62, 1.0),
-            emissive: LinearRgba::new(0.04, 0.13, 0.30, 1.0),
+            base_color: color,
+            emissive: color.to_linear() * 0.16,
             perceptual_roughness: 0.52,
             ..default()
-        }),
+        })
+    });
+    let unit_accent_materials = std::array::from_fn(|index| {
+        let player = PlayerId(u8::try_from(index).expect("WC3 player material index fits u8"));
+        let color = player_color(player);
         materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.30, 0.20),
-            emissive: LinearRgba::new(0.30, 0.05, 0.03, 1.0),
-            perceptual_roughness: 0.52,
-            ..default()
-        }),
-    ];
-    let unit_accent_materials = [
-        materials.add(StandardMaterial {
-            base_color: Color::srgb(0.38, 0.78, 1.0),
-            emissive: LinearRgba::new(0.05, 0.20, 0.42, 1.0),
+            base_color: color,
+            emissive: color.to_linear() * 0.20,
             metallic: 0.15,
             perceptual_roughness: 0.35,
             ..default()
-        }),
+        })
+    });
+    let corpse_materials = std::array::from_fn(|index| {
+        let player = PlayerId(u8::try_from(index).expect("WC3 player material index fits u8"));
         materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.42, 0.28),
-            emissive: LinearRgba::new(0.42, 0.07, 0.04, 1.0),
-            metallic: 0.15,
-            perceptual_roughness: 0.35,
-            ..default()
-        }),
-    ];
-    let corpse_materials = [
-        materials.add(StandardMaterial {
-            base_color: Color::srgba(0.12, 0.32, 0.62, 0.42),
+            base_color: player_color(player).with_alpha(0.42),
             alpha_mode: AlphaMode::Blend,
             unlit: true,
             ..default()
-        }),
-        materials.add(StandardMaterial {
-            base_color: Color::srgba(0.58, 0.14, 0.11, 0.42),
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            ..default()
-        }),
-    ];
+        })
+    });
     let projectile_materials = [
         materials.add(Color::srgb(0.55, 0.90, 1.0)),
         materials.add(Color::srgb(1.0, 0.62, 0.18)),
@@ -1080,7 +1059,7 @@ fn spawn_unit_weapon(
     commands: &mut Commands,
     assets: &PresentationAssets,
     unit_entity: Entity,
-    team: Team,
+    owner: PlayerId,
     visual_kind: UnitVisualKind,
 ) -> Entity {
     let kind = match visual_kind.weapon_kind() {
@@ -1151,13 +1130,13 @@ fn spawn_unit_weapon(
                 ));
                 weapon.spawn((
                     Mesh3d(assets.bounce_orb_mesh.clone()),
-                    MeshMaterial3d(assets.unit_accent_material(team)),
+                    MeshMaterial3d(assets.unit_accent_material(owner)),
                     Transform::from_xyz(0.0, 3.0, 4.0),
                 ));
             }
         });
         if visual_kind.is_caster() {
-            let caster_material = assets.unit_accent_material(team);
+            let caster_material = assets.unit_accent_material(owner);
             unit.spawn((
                 Mesh3d(assets.caster_ring_mesh.clone()),
                 MeshMaterial3d(caster_material.clone()),
@@ -1187,7 +1166,7 @@ fn spawn_air_wings(
         return;
     }
 
-    let material = assets.unit_accent_material(unit.team);
+    let material = assets.unit_accent_material(unit.owner);
     let phase = unit.id.0 as f32 * 0.61;
     commands.entity(unit_entity).with_children(|unit_root| {
         for side in [-1.0_f32, 1.0] {
@@ -1987,8 +1966,8 @@ fn spawn_building_visual(
     size: Vec2,
     height: f32,
 ) {
-    let body_material = assets.building_material(building.team);
-    let accent_material = assets.building_accent_material(building.team);
+    let body_material = assets.building_material(building.owner);
+    let accent_material = assets.building_accent_material(building.owner);
     let weapon_material = assets.weapon_material.clone();
     commands
         .entity(root)
@@ -2263,7 +2242,7 @@ fn sync_render_entities(
         {
             remnants.0.push(DeathRemnant {
                 position: sim_point_to_terrain_world(unit.position, &terrain),
-                team: unit.team,
+                owner: Some(unit.owner),
                 building: false,
                 remaining: DEATH_REMAINS_SECONDS,
             });
@@ -2309,7 +2288,7 @@ fn sync_render_entities(
             center.y = terrain.height_at_world(center.xz());
             remnants.0.push(DeathRemnant {
                 position: center,
-                team: building.team,
+                owner: building.owner,
                 building: true,
                 remaining: DEATH_REMAINS_SECONDS,
             });
@@ -2516,7 +2495,7 @@ fn sync_render_entities(
                     rawcode: builder.appearance.rawcode,
                     presentation_root: entity,
                 },
-                Wc3TeamTint::new(builder.team.0, team_color(builder.team), "wc3/units"),
+                Wc3TeamTint::new(builder.owner.0, player_color(builder.owner), "wc3/units"),
                 Transform {
                     translation: Vec3::NEG_Y * BUILDER_HEIGHT * 0.5,
                     rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
@@ -2528,7 +2507,7 @@ fn sync_render_entities(
             let entity = commands
                 .spawn((
                     Mesh3d(assets.melee_mesh.clone()),
-                    MeshMaterial3d(assets.unit_material(builder.team)),
+                    MeshMaterial3d(assets.unit_material(builder.owner)),
                     Transform {
                         translation: position,
                         scale: Vec3::splat(0.9),
@@ -2570,7 +2549,7 @@ fn sync_render_entities(
                     rawcode,
                     presentation_root: entity,
                 },
-                Wc3TeamTint::new(unit.team.0, team_color(unit.team), "wc3/units"),
+                Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
                 Transform {
                     translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
                     rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
@@ -2582,7 +2561,7 @@ fn sync_render_entities(
             let entity = commands
                 .spawn((
                     Mesh3d(assets.unit_mesh(unit.visual_kind)),
-                    MeshMaterial3d(assets.unit_material(unit.team)),
+                    MeshMaterial3d(assets.unit_material(unit.owner)),
                     Transform {
                         translation: position,
                         scale: Vec3::splat(unit_render_scale(unit)),
@@ -2591,7 +2570,7 @@ fn sync_render_entities(
                 ))
                 .id();
             let weapon =
-                spawn_unit_weapon(&mut commands, &assets, entity, unit.team, unit.visual_kind);
+                spawn_unit_weapon(&mut commands, &assets, entity, unit.owner, unit.visual_kind);
             spawn_air_wings(&mut commands, &assets, entity, unit);
             (entity, Some(weapon), None)
         };
@@ -2743,7 +2722,11 @@ fn sync_render_entities(
                         rawcode,
                         presentation_root: entity,
                     },
-                    Wc3TeamTint::new(building.team.0, team_color(building.team), "wc3/buildings"),
+                    Wc3TeamTint::new(
+                        building.owner.map_or(24, |owner| owner.0),
+                        owner_color(building.owner),
+                        "wc3/buildings",
+                    ),
                     Transform {
                         translation: Vec3::NEG_Y * visual_height * 0.5,
                         rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
@@ -2801,8 +2784,8 @@ fn sync_render_entities(
                     presentation_root: entity,
                 },
                 Wc3TeamTint::new(
-                    corpse.source_team.0,
-                    team_color(corpse.source_team),
+                    corpse.source_owner.0,
+                    player_color(corpse.source_owner),
                     "wc3/units",
                 ),
                 Transform {
@@ -2817,7 +2800,7 @@ fn sync_render_entities(
             commands
                 .spawn((
                     Mesh3d(assets.corpse_mesh.clone()),
-                    MeshMaterial3d(assets.corpse_material(corpse.source_team)),
+                    MeshMaterial3d(assets.corpse_material(corpse.source_owner)),
                     Transform::from_translation(position),
                 ))
                 .id()
@@ -3577,7 +3560,7 @@ fn update_health_bar_batch(
                 screen,
                 HEALTH_BAR_HEIGHT_PIXELS,
                 health_ratio(unit.health, unit.health_max),
-                team_color(unit.team),
+                player_color(unit.owner),
                 Color::srgb(0.085, 0.085, 0.095),
                 viewport,
             );
@@ -3605,7 +3588,7 @@ fn update_health_bar_batch(
                 screen,
                 HEALTH_BAR_HEIGHT_PIXELS,
                 health_ratio(building.health, building.health_max),
-                team_color(building.team),
+                owner_color(building.owner),
                 Color::srgb(0.085, 0.085, 0.095),
                 viewport,
             );
@@ -3846,7 +3829,7 @@ fn draw_presentation_gizmos(
                 Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
             ),
             radius,
-            team_color(remnant.team).with_alpha(life),
+            owner_color(remnant.owner).with_alpha(life),
         );
     }
 
@@ -3872,7 +3855,7 @@ fn draw_presentation_gizmos(
         gizmos.line(
             authoritative,
             authoritative + Vec3::Y * 4.0,
-            team_color(unit.team).with_alpha(0.8),
+            player_color(unit.owner).with_alpha(0.8),
         );
         if let Some(target) = unit.target
             && let Some(target_position) =
@@ -3892,7 +3875,7 @@ fn draw_presentation_gizmos(
             &metrics,
             &terrain,
             building.footprint,
-            team_color(building.team),
+            owner_color(building.owner),
         );
         if let Some(target) = building.target
             && let Some(target_position) =
@@ -4284,17 +4267,43 @@ fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
     }
 }
 
-fn team_color(team: Team) -> Color {
-    match team.0 {
-        0 => Color::srgb(0.20, 0.58, 1.0),
-        1 => Color::srgb(1.0, 0.28, 0.22),
+pub(crate) fn player_color(player: PlayerId) -> Color {
+    match player.0 {
+        0 => Color::srgb(1.000, 0.012, 0.012),  // red
+        1 => Color::srgb(0.000, 0.259, 1.000),  // blue
+        2 => Color::srgb(0.110, 0.902, 0.725),  // teal
+        3 => Color::srgb(0.329, 0.000, 0.506),  // purple
+        4 => Color::srgb(1.000, 0.988, 0.004),  // yellow
+        5 => Color::srgb(0.996, 0.541, 0.055),  // orange
+        6 => Color::srgb(0.125, 0.753, 0.000),  // green
+        7 => Color::srgb(0.898, 0.357, 0.690),  // pink
+        8 => Color::srgb(0.584, 0.588, 0.592),  // gray
+        9 => Color::srgb(0.494, 0.749, 0.945),  // light blue
+        10 => Color::srgb(0.063, 0.384, 0.275), // dark green
+        11 => Color::srgb(0.306, 0.165, 0.016), // brown
+        12 => Color::srgb(0.608, 0.000, 0.000), // maroon
+        13 => Color::srgb(0.000, 0.000, 0.765), // navy
+        14 => Color::srgb(0.000, 0.918, 1.000), // turquoise
+        15 => Color::srgb(0.745, 0.000, 0.996), // violet
+        16 => Color::srgb(0.922, 0.804, 0.529), // wheat
+        17 => Color::srgb(0.973, 0.643, 0.545), // peach
+        18 => Color::srgb(0.749, 1.000, 0.502), // mint
+        19 => Color::srgb(0.863, 0.725, 0.922), // lavender
+        20 => Color::srgb(0.157, 0.157, 0.157), // coal
+        21 => Color::srgb(0.922, 0.941, 1.000), // snow
+        22 => Color::srgb(0.000, 0.471, 0.118), // emerald
+        23 => Color::srgb(0.643, 0.435, 0.200), // peanut
         _ => Color::srgb(0.78, 0.78, 0.80),
     }
 }
 
+fn owner_color(owner: Option<PlayerId>) -> Color {
+    owner.map_or(Color::srgb(0.78, 0.78, 0.80), player_color)
+}
+
 #[cfg(test)]
 mod tests {
-    use castle_fight_sim::{CorpseDefinitionId, NavCell, TerrainElevationMap};
+    use castle_fight_sim::{CorpseDefinitionId, NavCell, Team, TerrainElevationMap};
 
     use super::*;
 
@@ -4429,6 +4438,7 @@ mod tests {
             id: SimId(20),
             position: SimPoint::new(0, 0),
             source_unit: SimId(7),
+            source_owner: PlayerId(0),
             source_team: Team(0),
             definition: CorpseDefinitionId(u32::from_be_bytes(*b"n015")),
             created_tick: 100,
@@ -4628,6 +4638,7 @@ mod tests {
         let mut building = BuildingSample {
             id: SimId(1),
             content: None,
+            owner: Some(PlayerId(0)),
             team: Team(0),
             footprint: BuildingFootprint::new(0, 0, 4, 4),
             health: 1_000,
@@ -4661,6 +4672,7 @@ mod tests {
         let building = BuildingSample {
             id: SimId(1),
             content: None,
+            owner: Some(PlayerId(0)),
             team: Team(0),
             footprint: BuildingFootprint::new(0, 0, 4, 4),
             health: 1_000,

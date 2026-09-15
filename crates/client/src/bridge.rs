@@ -4,8 +4,8 @@ use bevy::prelude::Resource;
 use castle_fight_sim::{
     AbilityCastEvent, AbilityId, ArmorProfile, AttackDelivery, AttackEvent, BuilderLocomotion,
     BuildingFootprint, ChainLightningEvent, ContentIdentity, CorpseView, DamageRules, DamageType,
-    MovementClass, PlayerEconomyView, ProjectileView, SimId, SimPoint, Simulation, StatusState,
-    Team,
+    MovementClass, PlayerEconomyView, PlayerId, PlayerView, ProjectileView, SimId, SimPoint,
+    Simulation, StatusState, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +83,7 @@ impl BuildingVisualKind {
 pub struct UnitSample {
     pub id: SimId,
     pub content: Option<ContentIdentity>,
+    pub owner: PlayerId,
     pub team: Team,
     pub position: SimPoint,
     pub collision_radius: i32,
@@ -107,6 +108,7 @@ pub struct UnitSample {
 #[derive(Debug, Clone, Copy)]
 pub struct BuilderSample {
     pub id: SimId,
+    pub owner: PlayerId,
     pub team: Team,
     pub position: SimPoint,
     pub appearance: ContentIdentity,
@@ -124,6 +126,7 @@ pub struct BuilderSample {
 pub struct BuildingSample {
     pub id: SimId,
     pub content: Option<ContentIdentity>,
+    pub owner: Option<PlayerId>,
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
@@ -147,7 +150,8 @@ pub struct BuildingSample {
 pub struct PresentationSnapshot {
     pub tick: u64,
     pub damage_rules: DamageRules,
-    pub player_economy: [PlayerEconomyView; 2],
+    pub players: BTreeMap<PlayerId, PlayerView>,
+    pub player_economy: BTreeMap<PlayerId, PlayerEconomyView>,
     pub units: BTreeMap<SimId, UnitSample>,
     pub builders: BTreeMap<SimId, BuilderSample>,
     pub buildings: BTreeMap<SimId, BuildingSample>,
@@ -170,6 +174,7 @@ impl PresentationSnapshot {
                     UnitSample {
                         id: unit.id,
                         content: unit.content,
+                        owner: unit.owner,
                         team: unit.team,
                         position: unit.position,
                         collision_radius: unit.collision_radius,
@@ -204,6 +209,7 @@ impl PresentationSnapshot {
                     builder.id,
                     BuilderSample {
                         id: builder.id,
+                        owner: builder.owner,
                         team: builder.team,
                         position: builder.position,
                         appearance: builder.configuration.appearance,
@@ -233,6 +239,7 @@ impl PresentationSnapshot {
                     BuildingSample {
                         id: building.id,
                         content: building.content,
+                        owner: building.owner,
                         team: building.team,
                         footprint: building.footprint,
                         health: building.health,
@@ -267,14 +274,29 @@ impl PresentationSnapshot {
             .map(|projectile| (projectile.id, projectile))
             .collect();
 
+        let players = simulation
+            .players()
+            .into_iter()
+            .map(|player| (player.id, player))
+            .collect::<BTreeMap<_, _>>();
+        let player_economy = players
+            .keys()
+            .copied()
+            .map(|player| {
+                (
+                    player,
+                    simulation
+                        .player_economy_for(player)
+                        .expect("presentation player must have canonical economy state"),
+                )
+            })
+            .collect();
+
         Self {
             tick: simulation.tick(),
             damage_rules: simulation.damage_rules(),
-            player_economy: std::array::from_fn(|team| {
-                simulation
-                    .player_economy(Team(u8::try_from(team).expect("player index fits u8")))
-                    .expect("presentation supports the two authoritative Castle Fight players")
-            }),
+            players,
+            player_economy,
             units,
             builders,
             buildings,
