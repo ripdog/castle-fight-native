@@ -584,13 +584,15 @@ fn wc3_visual_animation_source(
     None
 }
 
+type Wc3AnimationAssets<'w> = (
+    Res<'w, Assets<Gltf>>,
+    Res<'w, Assets<AnimationClip>>,
+    ResMut<'w, Assets<AnimationGraph>>,
+);
+
 pub fn setup_wc3_visual_animation_players(
     mut commands: Commands,
-    animation_assets: (
-        Res<Assets<Gltf>>,
-        Res<Assets<AnimationClip>>,
-        ResMut<Assets<AnimationGraph>>,
-    ),
+    animation_assets: Wc3AnimationAssets<'_>,
     mut cache: ResMut<Wc3VisualAnimationGraphs>,
     parents: Query<&ChildOf>,
     roots: Query<&Wc3VisualAnimationSource>,
