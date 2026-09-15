@@ -1,0 +1,12 @@
+tier_symbol	tier_index	tier_hotkey	cache_slot	source_function	byte_offset
+dsb	0	Q	5136	bF	2516088
+csb	1	W	5137	bF	2516207
+bsb	2	E	5138	bF	2516320
+asb	3	R	5139	bF	2516433
+Zrb	4	A	5140	bF	2516546
+Yrb	5	S	5141	bF	2516659
+Xrb	6	D	5142	bF	2516772
+Wrb	7	F	5143	bF	2516885
+Vrb	8	Y	5144	bF	2516998
+Urb	9	X	5145	bF	2517111
+Trb	10	V	5146	bF	2517224

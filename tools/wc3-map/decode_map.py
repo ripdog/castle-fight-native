@@ -763,6 +763,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     unit_object_upgrades = analysis["unit_object_upgrades"]
     race_buildings = analysis["race_buildings"]
     income_factor_constants = analysis["income_factor_constants"]
+    building_tiers = analysis["building_tiers"]
     race_building_semantics = analysis["race_building_semantics"]
     element_building_buckets = analysis["element_building_buckets"]
     effective_unit_stats = analysis["effective_unit_stats"]
@@ -1771,6 +1772,15 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 unit_rawcode, unit_id, unit_names, row["byte_offset"],
             ])
 
+    with (script_dir / "building-tiers.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["tier_symbol", "tier_index", "tier_hotkey", "cache_slot", "source_function", "byte_offset"])
+        for row in building_tiers:
+            writer.writerow([
+                row["symbol"], row["index"], row["hotkey"], row["cache_slot"],
+                row["source_function"], row["byte_offset"],
+            ])
+
     upgrade_pairs = {
         (int(row["source_building_id"]), int(row["target_building_id"]))
         for row in unit_object_upgrades
@@ -1794,7 +1804,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         writer.writerow([
             "building_rawcode", "building_rawcode_integer", "building_names",
             "income_factor_symbol", "income_factor", "precursor_rawcode", "precursor_rawcode_integer", "precursor_names",
-            "has_tier_assignment", "is_legendary_line", "is_anti_air", "is_siege", "is_artillery",
+            "has_tier_assignment", "tier_symbol", "tier_index", "tier_hotkey",
+            "is_legendary_line", "is_anti_air", "is_siege", "is_artillery",
             "is_na_only", "is_ultimate_only", "no_pp", "ai_should_ignore",
             "provides_active_targeted_spell_shield", "area_spell",
             "multi_target_mult", "cage_pressure", "placement_strat", "spell_dps", "ai_tower_strength",
@@ -1818,7 +1829,8 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
                 building_rawcode, building_id, building_names,
                 row["income_factor_symbol"], row["income_factor"],
                 precursor_rawcode, precursor_id, precursor_names,
-                int(bool(row["has_tier_assignment"])), int(bool(row["is_legendary_line"])),
+                int(bool(row["has_tier_assignment"])), row["tier_symbol"] or "", row["tier_index"] if row["tier_index"] is not None else "", row["tier_hotkey"] or "",
+                int(bool(row["is_legendary_line"])),
                 int(bool(row["is_anti_air"])), int(bool(row["is_siege"])), int(bool(row["is_artillery"])),
                 int(bool(row["is_na_only"])), int(bool(row["is_ultimate_only"])), int(bool(row["no_pp"])),
                 int(bool(row["ai_should_ignore"])), int(bool(row["provides_active_targeted_spell_shield"])),
@@ -2106,6 +2118,12 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "campaign_only_race_catalogs": len({int(row["race_index"]) for row in race_buildings if bool(row["campaign_only"])}),
         "race_building_semantic_rows": len(race_building_semantics),
         "race_building_precursor_edges": len(semantic_precursor_pairs),
+        "building_tier_rows": len(building_tiers),
+        "building_tier_hotkeys": [str(row["hotkey"]) for row in building_tiers],
+        "race_building_direct_tier_assignments": sum(bool(row["has_tier_assignment"]) for row in race_building_semantics),
+        "race_building_direct_tier_assignment_counts": dict(sorted(Counter(
+            str(row["tier_hotkey"]) for row in race_building_semantics if row["tier_hotkey"]
+        ).items())),
         "element_building_bucket_rows": len(element_building_buckets),
         "income_factor_constants": dict(sorted(income_factor_constants.items())),
         "effective_unit_stat_rows": len(effective_unit_stats),

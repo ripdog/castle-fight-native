@@ -2706,9 +2706,33 @@ def main() -> None:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
                 if system_id not in {
-                    "draft-round-restart-lifecycle", "draft-controller-periodic-timers", "draft-perk-reminder-reapply"
+                    "default-draft-tier-pairing-and-round-order", "draft-round-restart-lifecycle",
+                    "draft-controller-periodic-timers", "draft-perk-reminder-reapply",
                 }:
                     raise ValueError(f"unrecognized runtime draft mechanic: {system_id}")
+                parameters = json.loads(mechanic["parameters_json"])
+                if system_id == "default-draft-tier-pairing-and-round-order":
+                    if (
+                        parameters.get("draftable_tier_hotkeys") != ["Q", "W", "E", "R", "A", "S", "D", "F", "Y", "X"]
+                        or parameters.get("excluded_tier") != {"symbol": "Trb", "index": 10, "hotkey": "V"}
+                        or parameters.get("excluded_tier_has_direct_building_assignments") is not False
+                        or parameters.get("tier_pair_count") != 5
+                        or parameters.get("tier_pairing_shuffle_random_draws") != 9
+                        or parameters.get("building_round_type_values") != [1, 2, 3, 4, 5]
+                        or parameters.get("perk_round_type_value") != -1
+                        or parameters.get("default_round_slots") != 6
+                        or parameters.get("round_order_shuffle_random_draws") != 5
+                        or parameters.get("tier_pairing_persists_across_draft_restarts") is not True
+                    ):
+                        raise ValueError(f"default draft protected layout semantics changed: {parameters}")
+                elif system_id == "draft-round-restart-lifecycle":
+                    if (
+                        parameters.get("calls_default_draft_tier_initializer") is not True
+                        or parameters.get("default_draft_tier_initializer_is_one_time_guarded") is not True
+                        or parameters.get("preserves_initial_tier_pairing_after_first_initialization") is not True
+                        or parameters.get("rebuilds_default_round_order") is not True
+                    ):
+                        raise ValueError(f"draft restart tier/order semantics changed: {parameters}")
                 runtime_draft_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
                     mechanic["related_objects_json"], mechanic["parameters_json"],
@@ -4737,10 +4761,12 @@ def main() -> None:
     unit_object_metadata_path = map_root / "script" / "unit-object-metadata.tsv"
     race_buildings_path = map_root / "script" / "race-buildings.tsv"
     building_upgrades_path = map_root / "script" / "building-upgrades.tsv"
+    building_tiers_path = map_root / "script" / "building-tiers.tsv"
     race_semantics_path = map_root / "script" / "race-building-semantics.tsv"
     metadata_rows: list[dict[str, str]] = []
     race_by_building: dict[str, dict[str, str]] = {}
     semantics_by_building: dict[str, dict[str, str]] = {}
+    building_tier_rows: list[dict[str, str]] = []
     upgrades_from: dict[str, list[str]] = defaultdict(list)
     upgrades_to: dict[str, list[str]] = defaultdict(list)
     xo_buildings: set[str] = set()
@@ -4756,6 +4782,9 @@ def main() -> None:
             for row in csv.DictReader(handle, delimiter="\t"):
                 upgrades_to[row["source_building_rawcode"]].append(row["target_building_rawcode"])
                 upgrades_from[row["target_building_rawcode"]].append(row["source_building_rawcode"])
+    if building_tiers_path.exists():
+        with building_tiers_path.open(encoding="utf-8", newline="") as handle:
+            building_tier_rows = list(csv.DictReader(handle, delimiter="\t"))
     if race_semantics_path.exists():
         with race_semantics_path.open(encoding="utf-8", newline="") as handle:
             semantics_by_building = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -4768,6 +4797,31 @@ def main() -> None:
         raise ValueError("generated race catalogs do not exactly partition UnitObjectMeta buildings")
     if metadata_rows and set(semantics_by_building) != metadata_buildings:
         raise ValueError("race wrapper semantics do not exactly cover UnitObjectMeta buildings")
+    if building_tier_rows:
+        expected_tiers = [
+            ("dsb", "0", "Q"), ("csb", "1", "W"), ("bsb", "2", "E"), ("asb", "3", "R"),
+            ("Zrb", "4", "A"), ("Yrb", "5", "S"), ("Xrb", "6", "D"), ("Wrb", "7", "F"),
+            ("Vrb", "8", "Y"), ("Urb", "9", "X"), ("Trb", "10", "V"),
+        ]
+        actual_tiers = [(row["tier_symbol"], row["tier_index"], row["tier_hotkey"]) for row in building_tier_rows]
+        if actual_tiers != expected_tiers:
+            raise ValueError(f"resolved BuildingTier catalog changed: {actual_tiers}")
+        tier_assignment_counts = Counter(
+            row["tier_hotkey"] for row in semantics_by_building.values() if row.get("tier_hotkey")
+        )
+        expected_counts = {"Q": 15, "W": 15, "E": 15, "R": 14, "A": 14, "S": 14, "D": 16, "F": 15, "Y": 16, "X": 15}
+        if dict(tier_assignment_counts) != expected_counts:
+            raise ValueError(f"resolved direct BuildingTier assignment counts changed: {dict(tier_assignment_counts)}")
+        if tier_assignment_counts.get("V", 0):
+            raise ValueError("resolved excluded V tier unexpectedly has direct building assignments")
+    write_tsv(
+        output / "building-tiers.tsv",
+        ["tier_symbol", "tier_index", "tier_hotkey", "cache_slot", "source_function", "byte_offset"],
+        [[
+            row["tier_symbol"], row["tier_index"], row["tier_hotkey"], row["cache_slot"],
+            row["source_function"], row["byte_offset"],
+        ] for row in building_tier_rows],
+    )
 
     building_spell_rows: list[list[Any]] = []
     building_spell_by_pair: dict[tuple[str, str], dict[str, str]] = {}
@@ -5148,7 +5202,8 @@ def main() -> None:
             meta["is_air"], meta["is_melee"], meta["is_mechanical"], meta["is_caster"], int(in_xo),
             ",".join(graph_precursors),
             ",".join(sorted(upgrades_to.get(building_rawcode, []))),
-            semantics["has_tier_assignment"], semantics["is_legendary_line"], semantics["is_anti_air"],
+            semantics["has_tier_assignment"], semantics["tier_symbol"], semantics["tier_index"], semantics["tier_hotkey"],
+            semantics["is_legendary_line"], semantics["is_anti_air"],
             semantics["is_siege"], semantics["is_artillery"], semantics["is_na_only"], semantics["is_ultimate_only"],
             semantics["no_pp"], semantics["ai_should_ignore"], semantics["provides_active_targeted_spell_shield"],
             semantics["area_spell"], semantics["multi_target_mult"], semantics["cage_pressure"], semantics["placement_strat"],
@@ -5168,7 +5223,8 @@ def main() -> None:
             "income_factor_symbol", "income_factor", "own_income_contribution", "catalog_income",
             "spawn_time",
             "attack_index", "defense_index", "is_air_unit", "is_melee", "is_mechanical", "is_caster", "in_xo_runtime_catalog",
-            "upgrade_from", "upgrade_to", "has_tier_assignment", "is_legendary_line", "is_anti_air", "is_siege",
+            "upgrade_from", "upgrade_to", "has_tier_assignment", "tier_symbol", "tier_index", "tier_hotkey",
+            "is_legendary_line", "is_anti_air", "is_siege",
             "is_artillery", "is_na_only", "is_ultimate_only", "no_pp", "ai_should_ignore",
             "provides_active_targeted_spell_shield", "area_spell", "multi_target_mult", "cage_pressure", "placement_strat",
             "spell_dps", "ai_tower_strength", "combat_power_factor", "tags", "extra_tags", "override_tags",
@@ -5980,6 +6036,11 @@ def main() -> None:
         "building_catalog_normal_production_rows_in_xo": normal_xo_production_count,
         "building_catalog_upgrade_edges": sum(len(values) for values in upgrades_to.values()),
         "building_catalog_semantic_rows": len(semantics_by_building),
+        "building_tier_rows": len(building_tier_rows),
+        "building_direct_tier_assignments": sum(bool(row.get("tier_hotkey")) for row in semantics_by_building.values()),
+        "building_direct_tier_assignment_counts": dict(sorted(Counter(
+            row["tier_hotkey"] for row in semantics_by_building.values() if row.get("tier_hotkey")
+        ).items())),
         "building_catalog_two_second_production_build_rows": two_second_production_build_count,
         "production_unit_corpse_rows": len(production_corpse_rows),
         "production_unit_death_type_counts": {str(key): death_type_counts[key] for key in sorted(death_type_counts)},
@@ -6003,7 +6064,7 @@ def main() -> None:
             "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; unanimous-draw round cleanup/restart without setting a match winner; and the exact 15-second one-second-tick round-review gate before next-round dispatch",
             "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, Ultimate-roll building-availability reset, the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
             "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, and survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry",
-            "runtime-draft-mechanics.tsv normalizes readable draft lifecycle outside individual perk effects: round-end pool/tier/perk-registry/controller reset followed by warmup restart, the three 1-second draft controller timers with their exact defaults/terminal actions, and round-start reapplication of already-earned permanent perk reminder abilities to each player's current builder",
+            "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",

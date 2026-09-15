@@ -192,7 +192,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
         self.assertEqual(summary["runtime_campaign_mechanics"], 5)
-        self.assertEqual(summary["runtime_draft_mechanics"], 3)
+        self.assertEqual(summary["runtime_draft_mechanics"], 4)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
         self.assertEqual(summary["callback_periodic_coverage_rows"], 29)
@@ -462,13 +462,38 @@ class ResolvedEvidenceTests(unittest.TestCase):
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
         self.assertEqual(
             set(rows),
-            {"draft-round-restart-lifecycle", "draft-controller-periodic-timers", "draft-perk-reminder-reapply"},
+            {
+                "default-draft-tier-pairing-and-round-order", "draft-round-restart-lifecycle",
+                "draft-controller-periodic-timers", "draft-perk-reminder-reapply",
+            },
         )
+
+        layout = json.loads(rows["default-draft-tier-pairing-and-round-order"]["parameters_json"])
+        self.assertEqual(
+            [(tier["index"], tier["hotkey"]) for tier in layout["building_tier_catalog"]],
+            list(enumerate(["Q", "W", "E", "R", "A", "S", "D", "F", "Y", "X", "V"])),
+        )
+        self.assertEqual(layout["draftable_tier_hotkeys"], ["Q", "W", "E", "R", "A", "S", "D", "F", "Y", "X"])
+        self.assertEqual(layout["excluded_tier"], {"symbol": "Trb", "index": 10, "hotkey": "V"})
+        self.assertFalse(layout["excluded_tier_has_direct_building_assignments"])
+        self.assertEqual(layout["tier_pairing_shuffle_random_draws"], 9)
+        self.assertEqual(layout["tier_pair_count"], 5)
+        self.assertTrue(layout["tier_pairing_persists_across_draft_restarts"])
+        self.assertEqual(layout["building_round_type_values"], [1, 2, 3, 4, 5])
+        self.assertEqual(layout["perk_round_type_value"], -1)
+        self.assertEqual(layout["default_round_slots"], 6)
+        self.assertEqual(layout["round_order_shuffle_random_draws"], 5)
+        self.assertTrue(layout["round_order_is_rebuilt_and_reshuffled_on_each_draft_start_or_restart"])
+        self.assertEqual(layout["building_round_pack_count"], 2)
+        self.assertEqual(layout["perk_round_pack_count"], 3)
+        self.assertEqual(layout["perk_round_label"], "P")
 
         restart = json.loads(rows["draft-round-restart-lifecycle"]["parameters_json"])
         self.assertTrue(restart["requires_existing_draft_controller"])
         self.assertTrue(restart["resets_unit_pool"])
-        self.assertTrue(restart["reinitializes_default_draft_tiers"])
+        self.assertTrue(restart["calls_default_draft_tier_initializer"])
+        self.assertTrue(restart["default_draft_tier_initializer_is_one_time_guarded"])
+        self.assertTrue(restart["preserves_initial_tier_pairing_after_first_initialization"])
         self.assertTrue(restart["reinitializes_proven_19_perk_registry"])
         self.assertTrue(restart["resets_existing_draft_controller"])
         self.assertTrue(restart["restarts_controller_with_warmup"])
@@ -491,7 +516,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(reminder["sets_field_value"], 0.0)
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_draft_mechanic_rows"], 3)
+        self.assertEqual(summary["runtime_draft_mechanic_rows"], 4)
 
     def test_runtime_campaign_restriction_hooks_are_normalized(self) -> None:
         with (self.resolved / "runtime-campaign-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -1968,7 +1993,24 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["building_catalog_normal_production_rows_in_xo"], 162)
         self.assertEqual(summary["building_catalog_upgrade_edges"], 90)
         self.assertEqual(summary["building_catalog_semantic_rows"], 240)
+        self.assertEqual(summary["building_tier_rows"], 11)
+        self.assertEqual(summary["building_direct_tier_assignments"], 149)
+        self.assertEqual(summary["building_direct_tier_assignment_counts"], {
+            "A": 14, "D": 16, "E": 15, "F": 15, "Q": 15,
+            "R": 14, "S": 14, "W": 15, "X": 15, "Y": 16,
+        })
         self.assertEqual(summary["building_catalog_two_second_production_build_rows"], 167)
+
+        with (self.resolved / "building-tiers.tsv").open(encoding="utf-8") as handle:
+            tiers = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(
+            [(row["tier_symbol"], row["tier_index"], row["tier_hotkey"]) for row in tiers],
+            [
+                ("dsb", "0", "Q"), ("csb", "1", "W"), ("bsb", "2", "E"), ("asb", "3", "R"),
+                ("Zrb", "4", "A"), ("Yrb", "5", "S"), ("Xrb", "6", "D"), ("Wrb", "7", "F"),
+                ("Vrb", "8", "Y"), ("Urb", "9", "X"), ("Trb", "10", "V"),
+            ],
+        )
 
         with (self.resolved / "production-buildings.tsv").open(encoding="utf-8") as handle:
             rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -1986,11 +2028,14 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(barracks["own_income_contribution"], "0.2")
         self.assertEqual(barracks["catalog_income"], "0.2")
         self.assertEqual(barracks["has_tier_assignment"], "1")
+        self.assertEqual((barracks["tier_symbol"], barracks["tier_index"], barracks["tier_hotkey"]), ("dsb", "0", "Q"))
         self.assertEqual(barracks["upgrade_to"], "h039")
         self.assertEqual(barracks["in_xo_runtime_catalog"], "1")
 
         stronghold = rows["h039"]
         self.assertEqual(stronghold["upgrade_from"], "h000")
+        self.assertEqual(stronghold["has_tier_assignment"], "0")
+        self.assertEqual((stronghold["tier_symbol"], stronghold["tier_index"], stronghold["tier_hotkey"]), ("", "", ""))
         self.assertEqual(stronghold["own_income_contribution"], "0.35")
         self.assertEqual(stronghold["catalog_income"], "0.55")
 

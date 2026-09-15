@@ -812,6 +812,57 @@ def _extract_income_factor_constants(
     return values
 
 
+def _extract_building_tiers(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Recover the authored BuildingTier symbol/index/hotkey catalog.
+
+    The draft runtime stores tier objects in obfuscated globals, while the
+    readable race initializers pass those globals into CFBuilding.tier(...).
+    Keeping the exact symbol/index/hotkey relation lets later extraction join
+    every CFBuilding to the draft pools without executing map code.
+    """
+    row = next((entry for entry in functions if entry["name"] == "bF"), None)
+    if row is None:
+        return []
+    start = int(row["start"])
+    source = data[start:int(row["end"])]
+    pattern = re.compile(
+        rb'oGp=Be:create144\(\)oGp\.BuildingTier_hotkey=\(_d\[(\d+)\]or _y\((\d+),_T\("((?:\\.|[^"\\])*)"\)\)\)'
+        rb'oGp\.BuildingTier_index=(\d+) ([A-Za-z_][A-Za-z0-9_]*)=oGp'
+    )
+
+    tiers: list[dict[str, object]] = []
+    for match in pattern.finditer(source):
+        cache_slot = int(match.group(1))
+        if cache_slot != int(match.group(2)):
+            raise ValueError("BuildingTier hotkey cache slots disagree")
+        payload = _decode_lua_short_string_contents(match.group(3))
+        try:
+            hotkey = _decode_w3p_string_payload(payload, 11351, 1106).decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ValueError("BuildingTier hotkey did not decode as UTF-8") from error
+        tiers.append({
+            "symbol": match.group(5).decode("ascii"),
+            "index": int(match.group(4)),
+            "hotkey": hotkey,
+            "cache_slot": cache_slot,
+            "source_function": "bF",
+            "byte_offset": start + match.start(),
+        })
+
+    expected = [
+        ("dsb", 0, "Q"), ("csb", 1, "W"), ("bsb", 2, "E"), ("asb", 3, "R"),
+        ("Zrb", 4, "A"), ("Yrb", 5, "S"), ("Xrb", 6, "D"), ("Wrb", 7, "F"),
+        ("Vrb", 8, "Y"), ("Urb", 9, "X"), ("Trb", 10, "V"),
+    ]
+    actual = [(str(tier["symbol"]), int(tier["index"]), str(tier["hotkey"])) for tier in tiers]
+    if actual != expected:
+        raise ValueError(f"BuildingTier catalog changed: {actual}")
+    return tiers
+
+
 def _building_id_from_expression(tokens: list[LuaToken]) -> int | None:
     found: set[int] = set()
     for index, token in enumerate(tokens):
@@ -839,10 +890,16 @@ def _extract_race_building_semantics(
     functions: list[dict[str, object]],
     race_buildings: list[dict[str, object]],
     income_factors: dict[str, str],
+    building_tiers: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Recover CFBuilding wrapper semantics attached by generated race initializers."""
     if not race_buildings or not income_factors:
         return []
+
+    tiers_by_symbol = {str(row["symbol"]): row for row in building_tiers}
+    tiers_by_hotkey = {str(row["hotkey"]): row for row in building_tiers}
+    if len(tiers_by_symbol) != len(building_tiers) or len(tiers_by_hotkey) != len(building_tiers):
+        raise ValueError("BuildingTier catalog contains duplicate symbols/hotkeys")
 
     rows_by_function: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in race_buildings:
@@ -914,6 +971,9 @@ def _extract_race_building_semantics(
                 "income_factor": None,
                 "precursor_building_id": None,
                 "has_tier_assignment": False,
+                "tier_symbol": None,
+                "tier_index": None,
+                "tier_hotkey": None,
                 "is_legendary_line": False,
                 "is_anti_air": False,
                 "is_siege": False,
@@ -946,6 +1006,21 @@ def _extract_race_building_semantics(
             if len(argument) == 1 and argument[0].kind == "ident":
                 return variable_buildings.get(argument[0].text)
             return None
+
+        def protected_hotkey_for_argument(argument: list[LuaToken]) -> str:
+            if not argument:
+                raise ValueError(f"empty tier hotkey argument in {function_name}")
+            expression = data[
+                function_start + argument[0].start:function_start + argument[-1].end
+            ]
+            match = re.search(rb'_T\("((?:\\.|[^"\\])*)"\)', expression)
+            if match is None:
+                raise ValueError(f"tier wrapper has no protected hotkey literal in {function_name}")
+            payload = _decode_lua_short_string_contents(match.group(1))
+            try:
+                return _decode_w3p_string_payload(payload, 11351, 1106).decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise ValueError(f"tier wrapper hotkey is not UTF-8 in {function_name}") from error
 
         def set_once(record: dict[str, object], field: str, value: object) -> None:
             prior = record[field]
@@ -989,7 +1064,17 @@ def _extract_race_building_semantics(
                     raise ValueError(f"precursor wrapper cannot resolve parent building in {function_name}")
                 set_once(record, "precursor_building_id", parent)
             elif token.text == "CFBuilding_CFBuilding_tier":
+                if len(args) != 2:
+                    raise ValueError(f"tier wrapper has unexpected argument count in {function_name}")
                 record["has_tier_assignment"] = True
+                if tiers_by_hotkey:
+                    tier_hotkey = protected_hotkey_for_argument(args[1])
+                    tier = tiers_by_hotkey.get(tier_hotkey)
+                    if tier is None:
+                        raise ValueError(f"tier wrapper references unknown BuildingTier hotkey {tier_hotkey!r} in {function_name}")
+                    set_once(record, "tier_symbol", str(tier["symbol"]))
+                    set_once(record, "tier_index", int(tier["index"]))
+                    set_once(record, "tier_hotkey", tier_hotkey)
             elif token.text in flag_wrappers:
                 record[flag_wrappers[token.text]] = True
             elif token.text in value_wrappers:
@@ -4061,12 +4146,16 @@ def _decode_w3p_keyed_hex_string(key: int, cipher_hex: bytes, multiplier: int, o
 
 def _decode_w3p_string_payload(payload: bytes, multiplier: int, offset: int) -> bytes:
     """Mirror the visible _T/_L/_r/_j protected-string transform."""
-    if len(payload) < 5:
+    if len(payload) < 4:
         raise ValueError("W3P protected string payload is too short")
     if payload[0] == 1:
         key = payload[1] * 256 + payload[2]
         cipher = payload[3:]
+        if not cipher:
+            raise ValueError("W3P binary protected string has empty ciphertext")
     else:
+        if len(payload) < 7 or (len(payload) - 5) % 2:
+            raise ValueError("W3P hex protected string has invalid key/ciphertext framing")
         try:
             key = int(payload[1:5].decode("ascii"), 16)
             cipher = bytes.fromhex(payload[5:].decode("ascii"))
@@ -6945,6 +7034,8 @@ def _extract_runtime_campaign_mechanics(
 def _extract_runtime_draft_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
+    building_tiers: list[dict[str, object]],
+    race_building_semantics: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Normalize readable draft lifecycle callbacks outside individual perk semantics."""
     functions_by_name = {str(row["name"]): row for row in functions}
@@ -6953,6 +7044,11 @@ def _extract_runtime_draft_mechanics(
         "Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry", "ensureAppliedList", "addPerkReminderToBuilder",
         "initPerks__w3p_vmProtect", "initializeDefaultDraftTiers__w3p_vmProtect",
         "setupDefaultRoundOrder__w3p_vmProtect", "syncDraftPlayersFromForces",
+        "CFBuilding_CFBuilding_tier", "hotkeyToTier", "LinkedList_LinkedList_shuffle",
+        "getDefaultRoundType", "DefaultPackSupplier_DefaultPackSupplier_makeOne",
+        "DefaultPackSupplier_DefaultPackSupplier_getRoundLabel", "DefaultPackSupplier_DefaultPackSupplier_getPackCount",
+        "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator",
+        "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator1",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -6976,6 +7072,181 @@ def _extract_runtime_draft_mechanics(
         ("initPerks__w3p_vmProtect", (b"return _qr(65)",)),
     ]
     restart_offsets = [source(name, fragments)[0] for name, fragments in restart_sources]
+
+    tier_catalog = [
+        {"symbol": str(row["symbol"]), "index": int(row["index"]), "hotkey": str(row["hotkey"])}
+        for row in building_tiers
+    ]
+    expected_tier_catalog = [
+        {"symbol": "dsb", "index": 0, "hotkey": "Q"},
+        {"symbol": "csb", "index": 1, "hotkey": "W"},
+        {"symbol": "bsb", "index": 2, "hotkey": "E"},
+        {"symbol": "asb", "index": 3, "hotkey": "R"},
+        {"symbol": "Zrb", "index": 4, "hotkey": "A"},
+        {"symbol": "Yrb", "index": 5, "hotkey": "S"},
+        {"symbol": "Xrb", "index": 6, "hotkey": "D"},
+        {"symbol": "Wrb", "index": 7, "hotkey": "F"},
+        {"symbol": "Vrb", "index": 8, "hotkey": "Y"},
+        {"symbol": "Urb", "index": 9, "hotkey": "X"},
+        {"symbol": "Trb", "index": 10, "hotkey": "V"},
+    ]
+    if tier_catalog != expected_tier_catalog:
+        raise ValueError(f"default draft BuildingTier catalog changed: {tier_catalog}")
+    assigned_tier_hotkeys = Counter(
+        str(row["tier_hotkey"])
+        for row in race_building_semantics
+        if row.get("tier_hotkey")
+    )
+    expected_tier_assignment_counts = {
+        "Q": 15, "W": 15, "E": 15, "R": 14, "A": 14,
+        "S": 14, "D": 16, "F": 15, "Y": 16, "X": 15,
+    }
+    if dict(sorted(assigned_tier_hotkeys.items())) != dict(sorted(expected_tier_assignment_counts.items())):
+        raise ValueError(f"default draft direct BuildingTier assignment counts changed: {dict(assigned_tier_hotkeys)}")
+    if assigned_tier_hotkeys.get("V", 0) != 0:
+        raise ValueError("default draft excluded V tier unexpectedly gained direct CFBuilding assignments")
+
+    tier_wrapper_offset, _tier_wrapper = source(
+        "CFBuilding_CFBuilding_tier",
+        (b"CFBuilding_tier_field=hotkeyToTier(BTk)", b"return ATk"),
+    )
+    hotkey_lookup_offset, _hotkey_lookup = source(
+        "hotkeyToTier",
+        (b"LinkedList_LinkedList_iterator(Srb)", b"BuildingTier_hotkey==pGp", b"return rGp"),
+    )
+    shuffle_offset, _shuffle = source(
+        "LinkedList_LinkedList_shuffle",
+        (b"LinkedList_size_field<2", b"GetRandomInt(0,dSm)", b"LLEntry_elem=aSm[eSm].LLEntry_elem"),
+    )
+    round_type_offset, _round_type = source(
+        "getDefaultRoundType",
+        (b"wtq<1", b"wtq>Kfb", b"return Jfb", b"Nfb[wtq]"),
+    )
+    make_one_offset, _make_one = source(
+        "DefaultPackSupplier_DefaultPackSupplier_makeOne",
+        (b"khm=getDefaultRoundType(jhm)", b"if(khm==Jfb)then", b"drawPerk()", b"nhm.roundType=khm", b"ohm.roundType=khm"),
+    )
+    label_offset, _label = source(
+        "DefaultPackSupplier_DefaultPackSupplier_getRoundLabel",
+        (b"if(vhm==Jfb)then return\"P\"", b"Rfb[(vhm-1)]", b"Pfb[(vhm-1)]", b"BuildingTier_hotkey"),
+    )
+    pack_count_offset, _pack_count = source(
+        "DefaultPackSupplier_DefaultPackSupplier_getPackCount",
+        (b"if(getDefaultRoundType(zhm)==Jfb)then return 3 end return 2",),
+    )
+    supplier_a_offset, _supplier_a = source(
+        "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator",
+        (b"randomForTier(Rfb[(Ehm.roundType-1)])",),
+    )
+    supplier_b_offset, _supplier_b = source(
+        "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator1",
+        (b"randomForTier(Pfb[(Ghm.roundType-1)])",),
+    )
+
+    vm41_static = _w3p_vm_static_strings(data, 41)
+    vm41_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 41)
+    ]
+    if vm41_static != ["1", "2", "-1"]:
+        raise ValueError(f"default draft round-order VM41 static values changed: {vm41_static}")
+    if vm41_globals != ["Lfb", "Nfb", "Kfb", "Jfb", "GetRandomInt", "__wurst_ensureInt"]:
+        raise ValueError(f"default draft round-order VM41 globals changed: {vm41_globals}")
+    vm41 = _decode_w3p_vm_program(data, 41, expected_opcode_xor_byte=8)
+    if vm41["operand_mode"] != 1:
+        raise ValueError(f"default draft round-order VM41 operand mode changed: {vm41['operand_mode']}")
+    vm41_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm41["instructions"]
+    }
+    expected_vm41 = {
+        42: (218, (2,)), 44: (253, (1,)), 46: (253, (1,)), 48: (66, ()),
+        55: (218, (2,)), 57: (218, (3,)), 59: (218, (4,)), 61: (66, ()),
+        83: (144, (1,)), 85: (253, (3,)), 87: (42, (5, 33)), 90: (24, (4,)),
+        92: (218, (6,)), 94: (218, (2,)), 96: (253, (3,)), 98: (162, ()), 99: (98, (17,)),
+        103: (218, (2,)), 105: (253, (3,)), 107: (218, (6,)), 109: (218, (2,)),
+        111: (253, (4,)), 113: (162, ()), 114: (98, (17,)), 116: (66, ()),
+        117: (218, (2,)), 119: (253, (4,)), 121: (253, (5,)), 123: (66, ()),
+        124: (63, (3, 3)),
+    }
+    if any(vm41_by_pc.get(pc) != instruction for pc, instruction in expected_vm41.items()):
+        raise ValueError("default draft round-order VM41 shuffle instruction structure changed")
+
+    vm42_static = _w3p_vm_static_strings(data, 42)
+    vm42_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 42)
+    ]
+    if vm42_static != [
+        "0", "DraftOrchestrator_pack1Index", "DraftOrchestrator_pack2Index", "1",
+        "DraftOrchestrator_defaultDraftTiersInitialized", "Qfb", "Ofb", "Mfb",
+    ]:
+        raise ValueError(f"default draft tier-pairing VM42 static values changed: {vm42_static}")
+    if vm42_globals != [
+        "Mfb", "LinkedList_LinkedList_copy", "Srb", "LinkedList_LinkedList_remove", "Trb",
+        "LinkedList_LinkedList_shuffle", "LinkedList_LinkedList_iterator", "LLIterator_LLIterator_hasNext",
+        "LLIterator_LLIterator_next", "Qfb", "Ofb", "Rfb", "Pfb", "LLIterator_LLIterator_close",
+    ]:
+        raise ValueError(f"default draft tier-pairing VM42 globals changed: {vm42_globals}")
+    vm42 = _decode_w3p_vm_program(data, 42, expected_opcode_xor_byte=20)
+    if vm42["operand_mode"] != 0:
+        raise ValueError(f"default draft tier-pairing VM42 operand mode changed: {vm42['operand_mode']}")
+    vm42_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm42["instructions"]
+    }
+    expected_vm42 = {
+        16: (218, (1,)), 18: (10, (0, 1)), 21: (221, ()),
+        22: (144, (1,)), 24: (251, (6,)), 26: (144, (1,)), 28: (251, (7,)),
+        30: (218, (2,)), 32: (218, (3,)), 34: (98, (17,)), 36: (24, (2,)),
+        38: (218, (4,)), 40: (253, (2,)), 42: (218, (5,)), 44: (98, (32,)),
+        46: (253, (2,)), 48: (24, (3,)), 50: (253, (3,)), 52: (42, (6, 16)),
+        90: (218, (10,)), 92: (218, (11,)), 94: (153, (16,)),
+        99: (218, (12,)), 101: (218, (10,)), 103: (253, (5,)), 105: (66, ()),
+        106: (218, (10,)), 108: (144, (4,)), 110: (68, (16,)), 112: (251, (6,)),
+        117: (218, (13,)), 119: (218, (11,)), 121: (253, (5,)), 123: (66, ()),
+        124: (218, (11,)), 126: (144, (4,)), 128: (68, (16,)), 130: (251, (7,)),
+        135: (253, (4,)), 137: (42, (14, 16)), 140: (156, (1,)), 142: (251, (8,)), 144: (221, ()),
+    }
+    if any(vm42_by_pc.get(pc) != instruction for pc, instruction in expected_vm42.items()):
+        raise ValueError("default draft tier-pairing VM42 instruction structure changed")
+
+    # The one-time guard is meaningful only if no other protected VM can reset
+    # the pairing globals. Check every block's decoded global/static-name tables
+    # instead of assuming the readable minified text is exhaustive.
+    pairing_state_names = {"Mfb", "Qfb", "Ofb", "Rfb", "Pfb"}
+    for vm_index in range(1, 120):
+        marker = f"_fr({vm_index},".encode("ascii")
+        vm_start = data.find(marker)
+        if vm_start < 0:
+            continue
+        vm_end = data.find(b"function ", vm_start)
+        if vm_end < 0:
+            raise ValueError(f"W3P VM wrapper missing after block: {vm_index}")
+        block = data[vm_start:vm_end]
+        try:
+            names = {
+                _decode_w3p_global_name(expression, 11351, 1106)
+                for expression in _w3p_vm_global_expressions(data, vm_index)
+            }
+        except ValueError:
+            names = set()
+        static_names = {
+            name for name in pairing_state_names
+            if f'"{name}"'.encode("ascii") in block
+        }
+        if vm_index != 42 and (names | static_names) & pairing_state_names:
+            raise ValueError(
+                f"default draft tier-pairing state gained another protected VM reference: {vm_index} "
+                f"{sorted((names | static_names) & pairing_state_names)}"
+            )
+
+    draft_layout_offsets = [
+        int(row["byte_offset"]) for row in building_tiers
+    ] + [
+        tier_wrapper_offset, hotkey_lookup_offset, shuffle_offset, round_type_offset,
+        make_one_offset, label_offset, pack_count_offset, supplier_a_offset, supplier_b_offset,
+    ]
 
     reminder_sources = [
         ("Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry", (
@@ -7032,13 +7303,59 @@ def _extract_runtime_draft_mechanics(
 
     return [
         {
+            "system_id": "default-draft-tier-pairing-and-round-order",
+            "mechanic_kind": "one-time-tier-pairing-plus-per-start-random-round-order",
+            "trigger": "draft-initialization-before-controller-start",
+            "parameters": {
+                "building_tier_catalog": tier_catalog,
+                "direct_tier_assignment_counts": dict(sorted(assigned_tier_hotkeys.items())),
+                "excluded_tier": {"symbol": "Trb", "index": 10, "hotkey": "V"},
+                "excluded_tier_has_direct_building_assignments": False,
+                "draftable_tier_hotkeys": ["Q", "W", "E", "R", "A", "S", "D", "F", "Y", "X"],
+                "tier_initializer_vm": 42,
+                "tier_initializer_one_time_guard_symbol": "Mfb",
+                "tier_initializer_returns_immediately_after_first_initialization": True,
+                "tier_pairing_algorithm": "copy all 11 BuildingTiers; remove V/Trb; Fisher-Yates shuffle remaining 10; alternate entries into Rfb then Pfb five times",
+                "tier_pairing_shuffle_random_call": "GetRandomInt(0,i) for i=9..1",
+                "tier_pairing_shuffle_random_draws": 9,
+                "tier_pair_count": 5,
+                "tier_pairing_persists_across_draft_restarts": True,
+                "round_order_vm": 41,
+                "building_round_type_values": [1, 2, 3, 4, 5],
+                "perk_round_type_value": -1,
+                "default_round_slots": 6,
+                "round_order_algorithm": "initialize [1,2,3,4,5,-1], then Fisher-Yates shuffle with one-based indices",
+                "round_order_shuffle_random_call": "GetRandomInt(1,i) for i=6..2",
+                "round_order_shuffle_random_draws": 5,
+                "round_order_is_rebuilt_and_reshuffled_on_each_draft_start_or_restart": True,
+                "building_round_pack_count": 2,
+                "perk_round_pack_count": 3,
+                "perk_round_label": "P",
+                "building_round_label": "concatenate paired Rfb/Pfb BuildingTier hotkeys",
+                "building_round_choices": "one random building from each paired tier via randomForTier",
+            },
+            "related_rawcode_ids": [],
+            "source_functions": [
+                "bF", "CFBuilding_CFBuilding_tier", "hotkeyToTier", "LinkedList_LinkedList_shuffle",
+                "initializeDefaultDraftTiers__w3p_vmProtect", "setupDefaultRoundOrder__w3p_vmProtect",
+                "getDefaultRoundType", "DefaultPackSupplier_DefaultPackSupplier_makeOne",
+                "DefaultPackSupplier_DefaultPackSupplier_getRoundLabel", "DefaultPackSupplier_DefaultPackSupplier_getPackCount",
+                "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator",
+                "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator1",
+            ],
+            "evidence_kind": "exact-building-tier-catalog-plus-statically-decoded-vm42-pairing-and-vm41-round-order",
+            "byte_offset": min(draft_layout_offsets),
+        },
+        {
             "system_id": "draft-round-restart-lifecycle",
             "mechanic_kind": "round-end-draft-controller-reset-and-warmup-restart",
             "trigger": "draft-round-end-signal",
             "parameters": {
                 "requires_existing_draft_controller": True,
                 "resets_unit_pool": True,
-                "reinitializes_default_draft_tiers": True,
+                "calls_default_draft_tier_initializer": True,
+                "default_draft_tier_initializer_is_one_time_guarded": True,
+                "preserves_initial_tier_pairing_after_first_initialization": True,
                 "reinitializes_proven_19_perk_registry": True,
                 "asserts_perk_id_hash": True,
                 "rebuilds_default_round_order": True,
@@ -12533,8 +12850,9 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     unit_object_upgrades = _extract_unit_object_upgrades(data, functions)
     race_buildings = _extract_race_buildings(data, functions, call_edges)
     income_factor_constants = _extract_income_factor_constants(data, functions)
+    building_tiers = _extract_building_tiers(data, functions)
     race_building_semantics = _extract_race_building_semantics(
-        data, functions, race_buildings, income_factor_constants
+        data, functions, race_buildings, income_factor_constants, building_tiers
     )
     element_building_buckets = _extract_element_building_buckets(data, functions)
     effective_unit_stats = _extract_effective_unit_stats(data, functions)
@@ -12582,7 +12900,9 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     runtime_session_mechanics = _extract_runtime_session_mechanics(data, functions)
     runtime_mode_mechanics = _extract_runtime_mode_mechanics(data, functions, function_aliases, call_edges)
     runtime_campaign_mechanics = _extract_runtime_campaign_mechanics(data, functions)
-    runtime_draft_mechanics = _extract_runtime_draft_mechanics(data, functions)
+    runtime_draft_mechanics = _extract_runtime_draft_mechanics(
+        data, functions, building_tiers, race_building_semantics
+    )
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
@@ -12671,6 +12991,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "unit_object_upgrades": unit_object_upgrades,
         "race_buildings": race_buildings,
         "income_factor_constants": income_factor_constants,
+        "building_tiers": building_tiers,
         "race_building_semantics": race_building_semantics,
         "element_building_buckets": element_building_buckets,
         "effective_unit_stats": effective_unit_stats,

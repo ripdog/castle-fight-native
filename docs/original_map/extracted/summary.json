@@ -165,9 +165,10 @@
       "quarter-second-fast-win-and-castle-health-star-tracking": 1,
       "round-start-gated-retrying-party-supply-application": 1
     },
-    "runtime_draft_mechanics": 3,
+    "runtime_draft_mechanics": 4,
     "runtime_draft_mechanic_kinds": {
       "one-second-warmup-pick-and-post-draft-countdowns": 1,
+      "one-time-tier-pairing-plus-per-start-random-round-order": 1,
       "round-end-draft-controller-reset-and-warmup-restart": 1,
       "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1
     },
@@ -329,6 +330,33 @@
     "campaign_only_race_catalogs": 1,
     "race_building_semantic_rows": 240,
     "race_building_precursor_edges": 90,
+    "building_tier_rows": 11,
+    "building_tier_hotkeys": [
+      "Q",
+      "W",
+      "E",
+      "R",
+      "A",
+      "S",
+      "D",
+      "F",
+      "Y",
+      "X",
+      "V"
+    ],
+    "race_building_direct_tier_assignments": 149,
+    "race_building_direct_tier_assignment_counts": {
+      "A": 14,
+      "D": 16,
+      "E": 15,
+      "F": 15,
+      "Q": 15,
+      "R": 14,
+      "S": 14,
+      "W": 15,
+      "X": 15,
+      "Y": 16
+    },
     "element_building_bucket_rows": 12,
     "income_factor_constants": {
       "cvb": "0.04",
