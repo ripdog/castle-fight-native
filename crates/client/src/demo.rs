@@ -305,6 +305,19 @@ impl BuildKind {
         }
     }
 
+    pub(crate) fn tooltips(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Production(kind) => {
+                let definition = kind.definition();
+                (definition.basic_tooltip, definition.extended_tooltip)
+            }
+            Self::Tower(kind) => {
+                let definition = kind.definition();
+                (definition.basic_tooltip, definition.extended_tooltip)
+            }
+        }
+    }
+
     pub(crate) fn footprint_size(self) -> u16 {
         match self {
             Self::Production(kind) => kind.definition().footprint_size_cells,

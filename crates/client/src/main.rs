@@ -10,6 +10,7 @@ mod resource_ui;
 mod terrain;
 mod unit_models;
 mod wc3_effects;
+mod wc3_text;
 
 use bevy::{
     asset::AssetPlugin,

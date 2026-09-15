@@ -11,6 +11,7 @@ use crate::{
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
     resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
+    wc3_text::{Wc3Color, parse_wc3_text},
 };
 
 const PANEL_LEFT: f32 = 12.0;
@@ -36,6 +37,12 @@ const BUTTON_DISABLED: Color = Color::srgb(0.045, 0.043, 0.040);
 const BUTTON_DISABLED_BORDER: Color = Color::srgb(0.18, 0.17, 0.16);
 const BUTTON_TEXT: Color = Color::srgb(0.92, 0.90, 0.84);
 const BUTTON_TEXT_DISABLED: Color = Color::srgb(0.42, 0.40, 0.37);
+const TOOLTIP_WIDTH: f32 = 500.0;
+const TOOLTIP_GAP: f32 = 8.0;
+const TOOLTIP_BACKGROUND: Color = Color::srgba(0.025, 0.020, 0.015, 0.98);
+const TOOLTIP_BORDER: Color = Color::srgb(0.48, 0.39, 0.22);
+const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
+const TOOLTIP_TEXT_COLOR: Color = Color::srgb(0.95, 0.95, 0.92);
 
 const ALL_BUILD_KINDS: [BuildKind; 7] = [
     BuildKind::Production(ProductionKind::Barracks),
@@ -125,6 +132,18 @@ struct SlotAction(Option<PanelAction>);
 #[derive(Component)]
 struct SlotLabel;
 
+#[derive(Component)]
+struct BuildTooltip;
+
+#[derive(Component)]
+struct BuildTooltipTitle;
+
+#[derive(Component)]
+struct BuildTooltipBody;
+
+#[derive(Resource, Default)]
+struct BuildTooltipState(Option<BuildKind>);
+
 type ActionInteractions<'w, 's> = Query<
     'w,
     's,
@@ -137,6 +156,7 @@ pub(crate) struct BuildUiPlugin;
 impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ActionPanelState>()
+            .init_resource::<BuildTooltipState>()
             .add_systems(Startup, setup_action_panel)
             .add_systems(
                 Update,
@@ -147,6 +167,7 @@ impl Plugin for BuildUiPlugin {
                     handle_action_panel_buttons,
                     handle_action_panel_right_click,
                     style_action_panel_buttons,
+                    update_build_tooltip,
                     draw_build_preview,
                 )
                     .chain(),
@@ -213,6 +234,51 @@ fn setup_action_panel(mut commands: Commands) {
                         }
                     });
             }
+        });
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(PANEL_LEFT),
+                bottom: px(PANEL_BOTTOM + PANEL_HEIGHT + TOOLTIP_GAP),
+                width: px(TOOLTIP_WIDTH),
+                padding: UiRect::all(px(10.0)),
+                border: UiRect::all(px(2.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6.0),
+                ..default()
+            },
+            BackgroundColor(TOOLTIP_BACKGROUND),
+            BorderColor::all(TOOLTIP_BORDER),
+            GlobalZIndex(20),
+            Pickable::IGNORE,
+            Visibility::Hidden,
+            BuildTooltip,
+        ))
+        .with_children(|tooltip| {
+            tooltip.spawn((
+                Text::new(""),
+                TextFont::from_font_size(14.0),
+                TextColor(TOOLTIP_TITLE_COLOR),
+                TextLayout::default(),
+                Node {
+                    width: percent(100.0),
+                    ..default()
+                },
+                BuildTooltipTitle,
+            ));
+            tooltip.spawn((
+                Text::new(""),
+                TextFont::from_font_size(12.0),
+                TextColor(TOOLTIP_TEXT_COLOR),
+                TextLayout::default(),
+                Node {
+                    width: percent(100.0),
+                    ..default()
+                },
+                BuildTooltipBody,
+            ));
         });
 }
 
@@ -555,6 +621,59 @@ fn style_action_panel_buttons(
             };
         }
     }
+}
+
+fn update_build_tooltip(
+    mut commands: Commands,
+    state: Res<ActionPanelState>,
+    buttons: Query<(&Interaction, &SlotAction), With<Button>>,
+    mut tooltip_state: ResMut<BuildTooltipState>,
+    mut tooltip_visibility: Single<&mut Visibility, With<BuildTooltip>>,
+    tooltip_title: Single<Entity, With<BuildTooltipTitle>>,
+    tooltip_body: Single<Entity, With<BuildTooltipBody>>,
+) {
+    let hovered = (state.mode == ActionPanelMode::BuildMenu)
+        .then(|| {
+            buttons.iter().find_map(|(interaction, action)| {
+                matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+                    .then_some(action.0)
+                    .flatten()
+                    .and_then(|action| match action {
+                        PanelAction::Target(TargetingAction::Build(kind)) => Some(kind),
+                        _ => None,
+                    })
+            })
+        })
+        .flatten();
+
+    if tooltip_state.0 == hovered {
+        return;
+    }
+    tooltip_state.0 = hovered;
+
+    let Some(kind) = hovered else {
+        **tooltip_visibility = Visibility::Hidden;
+        return;
+    };
+
+    let (basic, extended) = kind.tooltips();
+    set_wc3_text(&mut commands, *tooltip_title, basic, TOOLTIP_TITLE_COLOR);
+    set_wc3_text(&mut commands, *tooltip_body, extended, TOOLTIP_TEXT_COLOR);
+    **tooltip_visibility = Visibility::Visible;
+}
+
+fn set_wc3_text(commands: &mut Commands, entity: Entity, source: &str, default_color: Color) {
+    commands.entity(entity).despawn_children();
+    commands.entity(entity).with_children(|text| {
+        for run in parse_wc3_text(source) {
+            let color = run.color.map(wc3_color_to_bevy).unwrap_or(default_color);
+            text.spawn((TextSpan::new(run.text), TextColor(color)));
+        }
+    });
+}
+
+fn wc3_color_to_bevy(color: Wc3Color) -> Color {
+    Color::srgba_u8(color.red, color.green, color.blue, color.alpha)
 }
 
 fn draw_build_preview(

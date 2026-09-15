@@ -709,6 +709,8 @@ impl CastleFightProductionKind {
 pub struct CastleFightProductionDefinition {
     pub rawcode: u32,
     pub name: &'static str,
+    pub basic_tooltip: &'static str,
+    pub extended_tooltip: &'static str,
     pub gold_cost: u16,
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
@@ -819,62 +821,74 @@ impl CastleFightTowerKind {
 
     fn definition_9_27(self) -> CastleFightTowerDefinition {
         match self {
-            Self::WatchTower => CastleFightTowerDefinition {
-                rawcode: u32::from_be_bytes(*b"h006"),
-                name: "Watch Tower",
-                gold_cost: 150,
-                lumber_cost: 300,
-                economy: verified_building_economy_927(u32::from_be_bytes(*b"h006"), 150, 300),
-                health: 1_500,
-                construction_time_ticks: extracted_building_construction_time_ticks_927(
-                    u32::from_be_bytes(*b"h006"),
-                ),
-                repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
-                armor: ArmorProfile::new(ArmorType::Fortified, 5),
-                damage_type: DamageType::Pierce,
-                attack_targets: AttackTargetMask::AIR_AND_GROUND,
-                footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
-                command_card_position: CommandCardPosition::new(0, 2),
-                attack: AttackProfile {
-                    delivery: AttackDelivery::RangedGuaranteedHit {
-                        speed_per_tick: projectile_speed(1_800),
+            Self::WatchTower => {
+                let (basic_tooltip, extended_tooltip) =
+                    extracted_building_tooltips_927(u32::from_be_bytes(*b"h006"));
+                CastleFightTowerDefinition {
+                    rawcode: u32::from_be_bytes(*b"h006"),
+                    name: "Watch Tower",
+                    basic_tooltip,
+                    extended_tooltip,
+                    gold_cost: 150,
+                    lumber_cost: 300,
+                    economy: verified_building_economy_927(u32::from_be_bytes(*b"h006"), 150, 300),
+                    health: 1_500,
+                    construction_time_ticks: extracted_building_construction_time_ticks_927(
+                        u32::from_be_bytes(*b"h006"),
+                    ),
+                    repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                    armor: ArmorProfile::new(ArmorType::Fortified, 5),
+                    damage_type: DamageType::Pierce,
+                    attack_targets: AttackTargetMask::AIR_AND_GROUND,
+                    footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
+                    command_card_position: CommandCardPosition::new(0, 2),
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::RangedGuaranteedHit {
+                            speed_per_tick: projectile_speed(1_800),
+                        },
+                        damage: 45,
+                        range: world(950),
+                        acquisition_range: world(1_000),
+                        cooldown_ticks: 15,
                     },
-                    damage: 45,
-                    range: world(950),
-                    acquisition_range: world(1_000),
-                    cooldown_ticks: 15,
-                },
-                map_version: MapVersion::CASTLE_FIGHT_9_27,
-            },
-            Self::PoofTower => CastleFightTowerDefinition {
-                rawcode: u32::from_be_bytes(*b"h07P"),
-                name: "Poof Tower",
-                gold_cost: 230,
-                lumber_cost: 300,
-                economy: verified_building_economy_927(u32::from_be_bytes(*b"h07P"), 230, 300),
-                health: 1_250,
-                construction_time_ticks: extracted_building_construction_time_ticks_927(
-                    u32::from_be_bytes(*b"h07P"),
-                ),
-                repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
-                armor: ArmorProfile::new(ArmorType::Fortified, 5),
-                damage_type: DamageType::Magic,
-                attack_targets: AttackTargetMask::ALL,
-                footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
-                command_card_position: CommandCardPosition::new(0, 2),
-                attack: AttackProfile {
-                    delivery: AttackDelivery::RangedBallistic {
-                        speed_per_tick: projectile_speed(900),
-                        // Extracted WC3 tiers are 175/200/250 at 100%/75%/45%.
-                        impact_radius: world(250),
+                    map_version: MapVersion::CASTLE_FIGHT_9_27,
+                }
+            }
+            Self::PoofTower => {
+                let (basic_tooltip, extended_tooltip) =
+                    extracted_building_tooltips_927(u32::from_be_bytes(*b"h07P"));
+                CastleFightTowerDefinition {
+                    rawcode: u32::from_be_bytes(*b"h07P"),
+                    name: "Poof Tower",
+                    basic_tooltip,
+                    extended_tooltip,
+                    gold_cost: 230,
+                    lumber_cost: 300,
+                    economy: verified_building_economy_927(u32::from_be_bytes(*b"h07P"), 230, 300),
+                    health: 1_250,
+                    construction_time_ticks: extracted_building_construction_time_ticks_927(
+                        u32::from_be_bytes(*b"h07P"),
+                    ),
+                    repair_time_ticks: 110 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                    armor: ArmorProfile::new(ArmorType::Fortified, 5),
+                    damage_type: DamageType::Magic,
+                    attack_targets: AttackTargetMask::ALL,
+                    footprint_size_cells: CASTLE_FIGHT_BUILDING_FOOTPRINT_CELLS_927,
+                    command_card_position: CommandCardPosition::new(0, 2),
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::RangedBallistic {
+                            speed_per_tick: projectile_speed(900),
+                            // Extracted WC3 tiers are 175/200/250 at 100%/75%/45%.
+                            impact_radius: world(250),
+                        },
+                        damage: 164,
+                        range: world(800),
+                        acquisition_range: world(1_000),
+                        cooldown_ticks: 95,
                     },
-                    damage: 164,
-                    range: world(800),
-                    acquisition_range: world(1_000),
-                    cooldown_ticks: 95,
-                },
-                map_version: MapVersion::CASTLE_FIGHT_9_27,
-            },
+                    map_version: MapVersion::CASTLE_FIGHT_9_27,
+                }
+            }
         }
     }
 }
@@ -883,6 +897,8 @@ impl CastleFightTowerKind {
 pub struct CastleFightTowerDefinition {
     pub rawcode: u32,
     pub name: &'static str,
+    pub basic_tooltip: &'static str,
+    pub extended_tooltip: &'static str,
     pub gold_cost: u16,
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
@@ -1179,6 +1195,32 @@ fn extracted_building_costs_927(rawcode: u32) -> (u16, u16) {
     panic!("building {rawcode:#010x} missing from extracted 9.27 building table")
 }
 
+fn extracted_building_tooltips_927(rawcode: u32) -> (&'static str, &'static str) {
+    for line in include_str!("../../../docs/original_map/extracted/resolved/buildings.tsv")
+        .lines()
+        .skip(1)
+    {
+        let mut columns = line.split('\t');
+        let _table = columns.next();
+        let Some(candidate_rawcode) = columns.next() else {
+            continue;
+        };
+        if parse_rawcode(candidate_rawcode) != rawcode {
+            continue;
+        }
+        let _base_rawcode = columns.next();
+        let _name = columns.next();
+        let basic = columns
+            .next()
+            .expect("building tooltip row must contain basic tooltip");
+        let extended = columns
+            .next()
+            .expect("building tooltip row must contain extended tooltip");
+        return (basic, extended);
+    }
+    panic!("building {rawcode:#010x} missing from extracted 9.27 building table")
+}
+
 fn extracted_building_construction_time_ticks_927(rawcode: u32) -> u32 {
     for line in include_str!("../../../docs/original_map/extracted/resolved/buildings.tsv")
         .lines()
@@ -1260,9 +1302,12 @@ fn production_definition(
     command_card_position: CommandCardPosition,
 ) -> CastleFightProductionDefinition {
     let economy = verified_building_economy_927(rawcode, gold_cost, 0);
+    let (basic_tooltip, extended_tooltip) = extracted_building_tooltips_927(rawcode);
     CastleFightProductionDefinition {
         rawcode,
         name,
+        basic_tooltip,
+        extended_tooltip,
         gold_cost,
         lumber_cost: 0,
         economy,
@@ -1410,6 +1455,24 @@ mod tests {
         ];
         for (actual, expected) in cases {
             assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn exposed_buildings_use_extracted_927_tooltips() {
+        for kind in CastleFightProductionKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                (definition.basic_tooltip, definition.extended_tooltip),
+                extracted_building_tooltips_927(definition.rawcode),
+            );
+        }
+        for kind in CastleFightTowerKind::ALL {
+            let definition = kind.definition();
+            assert_eq!(
+                (definition.basic_tooltip, definition.extended_tooltip),
+                extracted_building_tooltips_927(definition.rawcode),
+            );
         }
     }
 
