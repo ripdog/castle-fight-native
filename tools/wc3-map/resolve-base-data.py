@@ -3569,19 +3569,59 @@ def main() -> None:
                         or parameters.get("post_sync_point_offset_absolute") != [38.0, 68.0]
                     ):
                         raise ValueError(f"building-unit synchronization parameters changed: {parameters}")
-                elif system_id == "protected-runtime-ledger-unresolved-reachability":
+                elif system_id == "protected-runtime-ledger-integrity-penalty":
+                    expected_integrity_sources = [
+                        {"vm_index": 5, "source": "ability-field-source-integrity"},
+                        {"vm_index": 9, "source": "cf-building-catalog-drift"},
+                        {"vm_index": 50, "source": "perk-registration-integrity"},
+                        {"vm_index": 51, "source": "perk-catalog-size-drift"},
+                        {"vm_index": 52, "source": "perk-catalog-order-drift"},
+                        {"vm_index": 53, "source": "perk-catalog-fingerprint-drift"},
+                        {"vm_index": 54, "source": "perk-catalog-entry-drift"},
+                        {"vm_index": 55, "source": "perk-catalog-seal-drift"},
+                        {"vm_index": 56, "source": "perk-catalog-signature-drift"},
+                        {"vm_index": 57, "source": "perk-catalog-token-drift"},
+                        {"vm_index": 86, "source": "unit-stub-sentinel-integrity"},
+                        {"vm_index": 87, "source": "ability-stub-sentinel-integrity"},
+                        {"vm_index": 88, "source": "source-owned-ability-stub-sentinel-integrity"},
+                        {"vm_index": 93, "source": "unit-object-metadata-integrity"},
+                        {"vm_index": 94, "source": "unit-object-upgrade-metadata-integrity"},
+                        {"vm_index": 95, "source": "unit-stat-integrity"},
+                        {"vm_index": 96, "source": "unit-stat-source-integrity"},
+                    ]
                     if (
-                        parameters.get("production_reachability_proven") is not False
+                        parameters.get("production_reachability_proven") is not True
+                        or parameters.get("normal_untampered_gameplay_expected_to_trigger") is not False
+                        or parameters.get("classification") != "anti-tamper-integrity-infrastructure"
+                        or parameters.get("production_gate_symbol") != "Pcb"
+                        or parameters.get("race_registrar_live_callers") != [
+                            "AK", "CK", "EK", "GK", "IK", "KK", "QK", "UK", "WK", "aL", "kK", "nK", "pK", "qK", "wK"
+                        ]
+                        or parameters.get("integrity_variance_vm_sources") != expected_integrity_sources
+                        or parameters.get("variance_signal_increment_formula") != "IW += drift_salt + 31"
+                        or parameters.get("hint_signal_increment_formula") != "IW += hint + 17"
+                        or parameters.get("first_variance_queues_once") is not True
+                        or numeric(parameters.get("scheduler_delay_min_seconds")) != 120
+                        or numeric(parameters.get("scheduler_delay_max_seconds")) != 300
+                        or parameters.get("callback_constructor") != "mz:create1035"
                         or parameters.get("callback_constructor_readable_named_callers") != []
+                        or parameters.get("callback_constructor_reached_through_protected_vm") is not True
+                        or numeric(parameters.get("watermark_initial_review_delay_seconds")) != 1.5
+                        or numeric(parameters.get("watermark_review_delay_min_seconds")) != 90
+                        or numeric(parameters.get("watermark_review_delay_max_seconds")) != 180
+                        or int(parameters.get("watermark_missing_hint", 0)) != 829
+                        or int(parameters.get("watermark_text_mismatch_hint", 0)) != 839
+                        or int(parameters.get("map_label_shorter_than_expected_hint", 0)) != 811
+                        or int(parameters.get("map_label_wrong_prefix_hint", 0)) != 823
+                        or int(parameters.get("map_label_missing_marker_hint", 0)) != 827
                         or int(parameters.get("counter_observed_bootstrap_value", -1)) != 0
                         or parameters.get("branch_formula") != "(counter + lane) mod 3"
                         or int(parameters.get("branch_0_item_id", 0)) != 1918989414
                         or parameters.get("branch_0_item_rawcode") != "ratf"
                         or parameters.get("branch_1_effect") != "selected-lane-player gold +1"
                         or parameters.get("branch_2_effect") != "selected-lane-player lumber +1"
-                        or parameters.get("must_not_be_treated_as_live_gameplay_without_scheduler_proof") is not True
                     ):
-                        raise ValueError(f"protected RuntimeLedger evidence changed: {parameters}")
+                        raise ValueError(f"protected RuntimeLedger integrity evidence changed: {parameters}")
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 

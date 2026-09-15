@@ -425,19 +425,19 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "normalized-draft-runtime-dispatch": 2,
                 "normalized-gameplay-dispatch": 4,
                 "normalized-gameplay-semantics": 41,
+                "normalized-integrity-runtime-semantics": 3,
                 "normalized-mode-runtime-semantics": 10,
                 "normalized-session-runtime-dispatch": 2,
                 "normalized-session-runtime-semantics": 6,
                 "normalized-unit-spell-semantics": 32,
-                "normalized-unresolved-reachability-evidence": 1,
-                "presentation-only": 37,
+                "presentation-only": 35,
                 "sync-framework-infrastructure": 2,
                 "telemetry-infrastructure": 3,
             },
         )
         self.assertEqual(
             rows["CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger"]["coverage_status"],
-            "normalized-unresolved-reachability-evidence",
+            "normalized-integrity-runtime-semantics",
         )
         self.assertEqual(
             rows["CallbackSingle_doAfter_MMDData_call_doAfter_MMDData"]["coverage_status"],
@@ -1421,7 +1421,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "spawn-area-marker-and-conditional-pathing-release-pulse": 1,
             "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
             "enter-rect-combat-sapper-attack-order-recovery": 1,
-            "exact-resource-or-item-mutation-body-with-unresolved-scheduler": 1,
+            "protected-integrity-drift-delayed-ledger-penalty": 1,
             "construction-finish-hidden-native-ability-grants": 1,
             "damage-event-15-percent-chain-lightning-dummy-proc": 1,
             "damage-event-40-percent-hurl-boulder-dummy-proc": 1,
@@ -1501,14 +1501,32 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(wisp["movement_speed_factor"], -0.8)
         self.assertEqual(wisp["slow_aura_timed_life_seconds"], 8)
 
-        ledger = json.loads(rows["protected-runtime-ledger-unresolved-reachability"]["parameters_json"])
-        self.assertFalse(ledger["production_reachability_proven"])
-        self.assertTrue(ledger["must_not_be_treated_as_live_gameplay_without_scheduler_proof"])
+        ledger = json.loads(rows["protected-runtime-ledger-integrity-penalty"]["parameters_json"])
+        self.assertTrue(ledger["production_reachability_proven"])
+        self.assertFalse(ledger["normal_untampered_gameplay_expected_to_trigger"])
+        self.assertEqual(ledger["classification"], "anti-tamper-integrity-infrastructure")
+        self.assertEqual(ledger["production_gate_symbol"], "Pcb")
+        self.assertEqual(ledger["variance_signal_increment_formula"], "IW += drift_salt + 31")
+        self.assertEqual(ledger["hint_signal_increment_formula"], "IW += hint + 17")
+        self.assertTrue(ledger["first_variance_queues_once"])
+        self.assertEqual(ledger["scheduler_delay_min_seconds"], 120)
+        self.assertEqual(ledger["scheduler_delay_max_seconds"], 300)
+        self.assertEqual(ledger["callback_constructor"], "mz:create1035")
+        self.assertEqual(ledger["callback_constructor_readable_named_callers"], [])
+        self.assertTrue(ledger["callback_constructor_reached_through_protected_vm"])
+        self.assertEqual(ledger["watermark_initial_review_delay_seconds"], 1.5)
+        self.assertEqual(ledger["watermark_review_delay_min_seconds"], 90)
+        self.assertEqual(ledger["watermark_review_delay_max_seconds"], 180)
+        self.assertEqual(ledger["watermark_missing_hint"], 829)
+        self.assertEqual(ledger["watermark_text_mismatch_hint"], 839)
+        self.assertEqual(ledger["map_label_shorter_than_expected_hint"], 811)
+        self.assertEqual(ledger["map_label_wrong_prefix_hint"], 823)
+        self.assertEqual(ledger["map_label_missing_marker_hint"], 827)
         self.assertEqual(ledger["branch_formula"], "(counter + lane) mod 3")
         self.assertEqual(ledger["branch_0_item_rawcode"], "ratf")
         self.assertEqual(ledger["branch_1_effect"], "selected-lane-player gold +1")
         self.assertEqual(ledger["branch_2_effect"], "selected-lane-player lumber +1")
-        self.assertEqual(ledger["callback_constructor_readable_named_callers"], [])
+        self.assertEqual(len(ledger["integrity_variance_vm_sources"]), 17)
         order_rects = json.loads(rows["lane-order-rect-attack-reengage"]["parameters_json"])
         self.assertEqual(order_rects["setup_delay_seconds"], 0.1)
         self.assertEqual(order_rects["target_predicate"], "combat-sapper;vulnerable;not-cloaked")

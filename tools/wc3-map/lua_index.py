@@ -3977,8 +3977,11 @@ def _w3p_vm_static_strings(data: bytes, vm_index: int) -> list[str]:
     table_end = data.find(b"};_Y=", table_start)
     if table_start < 0 or table_end < 0:
         raise ValueError(f"W3P VM static-string table missing: {vm_index}")
+    payload = data[table_start + len(b"_s={"):table_end]
+    if not payload:
+        return []
     rows: list[str] = []
-    for expression in data[table_start + len(b"_s={"):table_end].split(b";"):
+    for expression in payload.split(b";"):
         match = re.fullmatch(rb'"((?:\\.|[^"\\])*)"', expression)
         if match is None:
             raise ValueError(f"W3P VM {vm_index} has non-literal static string entry")
@@ -4070,7 +4073,12 @@ def _decode_w3p_global_name(expression: bytes, multiplier: int, offset: int) -> 
         raise ValueError("W3P global name did not decode as UTF-8") from error
 
 
-def _decode_w3p_vm_program(data: bytes, vm_index: int) -> dict[str, object]:
+def _decode_w3p_vm_program(
+    data: bytes,
+    vm_index: int,
+    *,
+    expected_opcode_xor_byte: int | None = None,
+) -> dict[str, object]:
     """Statically decode one W3P VM instruction stream.
 
     This only reverses the visible byte transforms and instruction framing. It
@@ -4140,9 +4148,17 @@ def _decode_w3p_vm_program(data: bytes, vm_index: int) -> dict[str, object]:
             cursor += 1 + widths[opcode - 1]
         if valid and cursor == len(opcodes_encrypted):
             xor_candidates.append(xor_byte)
-    if len(xor_candidates) != 1:
-        raise ValueError(f"W3P VM block {vm_index} opcode xor byte is not unique: {len(xor_candidates)} candidates")
-    xor_byte = xor_candidates[0]
+    if expected_opcode_xor_byte is None:
+        if len(xor_candidates) != 1:
+            raise ValueError(f"W3P VM block {vm_index} opcode xor byte is not unique: {len(xor_candidates)} candidates")
+        xor_byte = xor_candidates[0]
+    else:
+        if expected_opcode_xor_byte not in xor_candidates:
+            raise ValueError(
+                f"W3P VM block {vm_index} expected opcode xor byte {expected_opcode_xor_byte} "
+                f"is not viable: {xor_candidates}"
+            )
+        xor_byte = expected_opcode_xor_byte
 
     if operand_mode == 1:
         operand_transform = lambda value: (value - xor_byte) & 0xFF
@@ -7356,10 +7372,10 @@ def _extract_callback_single_coverage(
     def normalized_status(sources: list[str], *, dispatch: bool) -> tuple[str, str]:
         domains = {source.split(":", 1)[0] for source in sources}
         suffix = "dispatch" if dispatch else "semantics"
-        if any("protected-runtime-ledger-unresolved-reachability" in source for source in sources):
+        if any("protected-runtime-ledger-integrity-penalty" in source for source in sources):
             return (
-                "normalized-unresolved-reachability-evidence",
-                "exact callback body is normalized, but production scheduling/reachability remains explicitly unproven",
+                "normalized-integrity-runtime-semantics",
+                "callback is covered by the statically decoded protected RuntimeLedger integrity/tamper-response scheduler",
             )
         if domains == {"runtime-ai-mechanics"}:
             return f"normalized-ai-runtime-{suffix}", "callback is covered by normalized AI runtime semantics"
@@ -7435,12 +7451,12 @@ def _extract_callback_single_coverage(
         "normalized-draft-runtime-dispatch": 2,
         "normalized-gameplay-dispatch": 4,
         "normalized-gameplay-semantics": 41,
+        "normalized-integrity-runtime-semantics": 3,
         "normalized-mode-runtime-semantics": 10,
         "normalized-session-runtime-dispatch": 2,
         "normalized-session-runtime-semantics": 6,
         "normalized-unit-spell-semantics": 32,
-        "normalized-unresolved-reachability-evidence": 1,
-        "presentation-only": 37,
+        "presentation-only": 35,
         "sync-framework-infrastructure": 2,
         "telemetry-infrastructure": 3,
     })
@@ -9674,6 +9690,13 @@ def _extract_runtime_system_mechanics(
         "hasShield", "checkForShield", "Vd", "Ed",
         "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
         "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
+        "recordCFBuildingCatalogDrift__w3p_vmProtect",
+        "CFRace_CFRace_registerBuildings__w3p_vmProtect",
+        "noteLedgerVariance__w3p_vmProtect", "noteLedgerHint__w3p_vmProtect",
+        "BI", "reviewMapLabel__w3p_vmProtect", "createWatermark__w3p_vmProtect",
+        "reviewWatermark__w3p_vmProtect", "scheduleWatermarkReview__w3p_vmProtect",
+        "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark",
+        "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark1",
     }
     if not required.issubset(available):
         return []
@@ -11779,17 +11802,36 @@ def _extract_runtime_system_mechanics(
         ),
     })
 
-    # RuntimeLedger contains exact protected-body resource/item mutations, but
-    # its generated callback object has no readable named constructor caller in
-    # the recovered call graph. Preserve the body as evidence without claiming
-    # that the 9.27 production runtime actually schedules it.
+    # RuntimeLedger is W3P's delayed integrity/tamper-response ledger rather
+    # than an ordinary Castle Fight economy mechanic. Its constructor has no
+    # readable named caller because the queue path lives in protected VM 91.
+    # Decode that scheduler, the concrete CF-building drift bridge (VMs 1/9),
+    # and the watermark hint/review path (VMs 72/73/92) statically. The delayed
+    # callback itself remains readable and performs one tiny item/resource
+    # mutation selected from a local-player-derived lane and the accumulated
+    # ledger signal.
     ledger_lane_start, ledger_lane_source, _ = source("localLedgerLane")
     ledger_coord_start, ledger_coord_source, _ = source("ledgerCoord")
     ledger_settle_start, ledger_settle_source, _ = source("settleLedger__w3p_vmProtect")
     ledger_callback_start, ledger_callback_source, _ = source(
         "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger"
     )
-    source("mz:create1035")
+    ledger_constructor_start, ledger_constructor_source, _ = source("mz:create1035")
+    cf_drift_start, cf_drift_source, _ = source("recordCFBuildingCatalogDrift__w3p_vmProtect")
+    cf_registrar_start, cf_registrar_source, _ = source("CFRace_CFRace_registerBuildings__w3p_vmProtect")
+    variance_start, variance_source, _ = source("noteLedgerVariance__w3p_vmProtect")
+    hint_start, hint_source, _ = source("noteLedgerHint__w3p_vmProtect")
+    watermark_init_start, watermark_init_source, _ = source("BI")
+    map_label_start, map_label_source, _ = source("reviewMapLabel__w3p_vmProtect")
+    review_start, review_source, _ = source("reviewWatermark__w3p_vmProtect")
+    schedule_start, schedule_source, _ = source("scheduleWatermarkReview__w3p_vmProtect")
+    watermark_callback_start, watermark_callback_source, _ = source(
+        "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark"
+    )
+    watermark_create_callback_start, watermark_create_callback_source, _ = source(
+        "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark1"
+    )
+
     for body, fragment in (
         (ledger_lane_source, b"return __wurst_modInt(CHr,12)"),
         (ledger_lane_source, b"return __wurst_modInt((player_getId(DHr)+CHr),12)"),
@@ -11801,25 +11843,220 @@ def _extract_runtime_system_mechanics(
         (ledger_settle_source, b"PLAYER_STATE_RESOURCE_LUMBER"),
         (ledger_settle_source, b"player_getState(MHr,NHr)+1"),
         (ledger_callback_source, b"settleLedger__w3p_vmProtect(IW)"),
+        (ledger_constructor_source, b"setmetatable(PJn,kLb)"),
+        (cf_drift_source, b"return _qr(9,CGp)"),
+        (cf_registrar_source, b"return _qr(1,oVk,...)") ,
+        (variance_source, b"return _qr(91,OHr)"),
+        (hint_source, b"return _qr(92,PHr)"),
+        (map_label_source, b"return _qr(72)"),
+        (schedule_source, b"return _qr(73)"),
+        (watermark_init_source, b"reviewMapLabel__w3p_vmProtect()"),
+        (watermark_init_source, b"So:create590()"),
+        (watermark_init_source, b"doAfter(1.5,cOq)"),
+        (review_source, b"noteLedgerHint__w3p_vmProtect(829)"),
+        (review_source, b"noteLedgerHint__w3p_vmProtect(839)"),
+        (watermark_callback_source, b"reviewWatermark__w3p_vmProtect()scheduleWatermarkReview__w3p_vmProtect()"),
+        (watermark_create_callback_source, b"createWatermark__w3p_vmProtect()scheduleWatermarkReview__w3p_vmProtect()"),
     ):
         if fragment not in body:
-            raise ValueError(f"RuntimeLedger evidence changed: missing {fragment!r}")
+            raise ValueError(f"RuntimeLedger integrity evidence changed: missing {fragment!r}")
+
+    def vm_global_names(vm_index: int) -> list[str]:
+        return [
+            _decode_w3p_global_name(expression, 11351, 1106)
+            for expression in _w3p_vm_global_expressions(data, vm_index)
+        ]
+
+    def vm_ops(vm_index: int, expected_xor: int | None = None) -> list[tuple[int, tuple[int, ...]]]:
+        program = _decode_w3p_vm_program(
+            data,
+            vm_index,
+            expected_opcode_xor_byte=expected_xor,
+        )
+        return [
+            (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+            for instruction in program["instructions"]
+        ]
+
+    def require_vm_subsequence(
+        vm_index: int,
+        program: list[tuple[int, tuple[int, ...]]],
+        expected: list[tuple[int, tuple[int, ...]]],
+        label: str,
+    ) -> None:
+        width = len(expected)
+        if not any(program[index:index + width] == expected for index in range(len(program) - width + 1)):
+            raise ValueError(f"W3P VM {vm_index} {label} sequence changed")
+
+    # Live race initializers call protected VM 1. It invokes begin-registration,
+    # record-building for each generated building, then finish-registration.
+    race_registrar_callers = sorted(
+        caller for (caller, callee), count in call_edges.items()
+        if callee == "CFRace_CFRace_registerBuildings__w3p_vmProtect" and count > 0 and caller != "<top-level>"
+    )
+    expected_race_registrar_callers = ["AK", "CK", "EK", "GK", "IK", "KK", "QK", "UK", "WK", "aL", "kK", "nK", "pK", "qK", "wK"]
+    if race_registrar_callers != expected_race_registrar_callers:
+        raise ValueError(f"CF race registrar callers changed: {race_registrar_callers}")
+    if vm_global_names(1) != [
+        "beginCFRaceBuildingRegistration__w3p_vmProtect",
+        "recordCFRaceBuilding__w3p_vmProtect",
+        "CFRace_CFRace_addBuilding",
+        "buildingTypeIndex", "lIb", "kIb", "bvb", "jIb", "iIb",
+        "addToPool__w3p_vmProtect", "finishCFRaceBuildingRegistration__w3p_vmProtect",
+    ]:
+        raise ValueError("CF race protected registrar global table changed")
+    registrar_program = vm_ops(1)
+    require_vm_subsequence(1, registrar_program, [(218, (1,)), (241, (1, 1)), (98, (16,))], "begin-registration call")
+    require_vm_subsequence(1, registrar_program, [(253, (3,)), (42, (2, 16))], "record-building call")
+    require_vm_subsequence(1, registrar_program, [(218, (11,)), (241, (1, 1)), (98, (16,))], "finish-registration call")
+
+    # recordCFBuildingCatalogDrift is a tiny protected bridge: pass its drift
+    # salt straight to noteLedgerVariance.
+    if vm_global_names(9) != ["noteLedgerVariance__w3p_vmProtect"]:
+        raise ValueError("CF building catalog drift VM global table changed")
+    if vm_ops(9, 13) != [(253, (1,)), (42, (1, 16)), (221, ())]:
+        raise ValueError("CF building catalog drift -> RuntimeLedger bridge changed")
+
+    # noteLedgerVariance: count and remember the drift, do nothing unless Pcb is
+    # active, add salt+31 to IW, and queue at most one delayed callback after a
+    # random 120..300 seconds.
+    if _w3p_vm_static_strings(data, 91) != [
+        "1", "RuntimeLedger_ledgerVarianceCount", "RuntimeLedger_ledgerLastVarianceSalt", "31",
+        "RuntimeLedger_ledgerSignal", "RuntimeLedger_ledgerQueued", "120.", "300.", "create1035",
+        "HW", "GW", "IW", "JW",
+    ]:
+        raise ValueError("RuntimeLedger variance VM static table changed")
+    if vm_global_names(91) != ["HW", "Pcb", "IW", "JW", "GetRandomReal", "mz", "doAfter"]:
+        raise ValueError("RuntimeLedger variance VM global table changed")
+    variance_program = vm_ops(91)
+    expected_variance_program = [
+        (224, ()), (24, (2,)), (224, ()), (24, (3,)),
+        (218, (1,)), (144, (1,)), (68, (16,)), (251, (10,)),
+        (253, (1,)), (251, (11,)), (218, (2,)), (236, ()), (10, (0, 1)), (221, ()),
+        (218, (3,)), (253, (1,)), (68, (16,)), (144, (4,)), (68, (16,)), (251, (12,)),
+        (218, (4,)), (10, (0, 1)), (221, ()), (156, (1,)), (251, (13,)),
+        (144, (7,)), (144, (8,)), (42, (5, 33)), (24, (3,)),
+        (218, (6,)), (90, (9,)), (87, (1,)), (24, (2,)),
+        (253, (3,)), (253, (2,)), (42, (7, 32)), (221, ()),
+    ]
+    if variance_program != expected_variance_program:
+        raise ValueError("RuntimeLedger variance/scheduler VM changed")
+
+    # noteLedgerHint mutates the same signal without scheduling: IW += hint+17.
+    if _w3p_vm_static_strings(data, 92) != ["17", "RuntimeLedger_ledgerSignal", "IW"]:
+        raise ValueError("RuntimeLedger hint VM static table changed")
+    if vm_global_names(92) != ["IW"]:
+        raise ValueError("RuntimeLedger hint VM global table changed")
+    if vm_ops(92, 143) != [
+        (218, (1,)), (253, (1,)), (68, (16,)), (144, (1,)), (68, (16,)), (251, (3,)), (221, ()),
+    ]:
+        raise ValueError("RuntimeLedger hint signal update changed")
+
+    # Map-label integrity feeds fixed ledger hints 811/823/827; the visible
+    # watermark review feeds 829/839. VM 73 schedules the next review after a
+    # random 90..180 seconds, beginning 1.5 seconds after BI initialization.
+    if _w3p_vm_static_strings(data, 72) != ["811", "823", "827"]:
+        raise ValueError("map-label integrity hint constants changed")
+    if vm_global_names(72) != [
+        "string_length", "y_", "x_", "noteLedgerHint__w3p_vmProtect",
+        "string_startsWith", "string_contains", "w_",
+    ]:
+        raise ValueError("map-label integrity VM global table changed")
+    expected_map_label_program = [
+        (218, (1,)), (218, (2,)), (98, (17,)), (218, (1,)), (218, (3,)), (98, (17,)),
+        (8, (16,)), (10, (0, 8)), (144, (1,)), (42, (4, 16)), (240, (0, 37)),
+        (218, (5,)), (218, (2,)), (218, (3,)), (98, (33,)), (236, ()), (10, (0, 8)),
+        (144, (2,)), (42, (4, 16)), (240, (0, 17)),
+        (218, (6,)), (218, (2,)), (218, (7,)), (98, (33,)), (236, ()), (10, (0, 5)),
+        (144, (3,)), (42, (4, 16)), (221, ()),
+    ]
+    if vm_ops(72, 160) != expected_map_label_program:
+        raise ValueError("map-label integrity checks changed")
+    if _w3p_vm_static_strings(data, 73) != ["90.", "180.", "create589"]:
+        raise ValueError("watermark review scheduling constants changed")
+    if vm_global_names(73) != ["GetRandomReal", "Ro", "doAfter"]:
+        raise ValueError("watermark review scheduler globals changed")
+    if vm_ops(73, 161) != [
+        (224, ()), (24, (1,)), (224, ()), (24, (2,)),
+        (144, (1,)), (144, (2,)), (42, (1, 33)), (24, (2,)),
+        (218, (2,)), (90, (3,)), (87, (1,)), (24, (1,)),
+        (253, (2,)), (253, (1,)), (42, (3, 32)), (221, ()),
+    ]:
+        raise ValueError("watermark review protected scheduler changed")
+
+    # Protected integrity/drift blocks that carry a direct reference to the
+    # variance bridge. These are deliberately reported as integrity sources,
+    # not ordinary gameplay triggers.
+    integrity_vm_labels = {
+        5: "ability-field-source-integrity",
+        9: "cf-building-catalog-drift",
+        50: "perk-registration-integrity",
+        51: "perk-catalog-size-drift",
+        52: "perk-catalog-order-drift",
+        53: "perk-catalog-fingerprint-drift",
+        54: "perk-catalog-entry-drift",
+        55: "perk-catalog-seal-drift",
+        56: "perk-catalog-signature-drift",
+        57: "perk-catalog-token-drift",
+        86: "unit-stub-sentinel-integrity",
+        87: "ability-stub-sentinel-integrity",
+        88: "source-owned-ability-stub-sentinel-integrity",
+        93: "unit-object-metadata-integrity",
+        94: "unit-object-upgrade-metadata-integrity",
+        95: "unit-stat-integrity",
+        96: "unit-stat-source-integrity",
+    }
+    integrity_vm_sources: list[dict[str, object]] = []
+    for vm_index, label in integrity_vm_labels.items():
+        globals_for_vm = vm_global_names(vm_index)
+        if "noteLedgerVariance__w3p_vmProtect" not in globals_for_vm:
+            raise ValueError(f"RuntimeLedger integrity VM {vm_index} lost variance bridge: {globals_for_vm}")
+        integrity_vm_sources.append({"vm_index": vm_index, "source": label})
+
     ledger_constructor_callers = sorted(
         caller for (caller, callee), count in call_edges.items()
         if callee == "mz:create1035" and count > 0
     )
     if ledger_constructor_callers:
         raise ValueError(
-            f"RuntimeLedger callback constructor became readably reachable: {ledger_constructor_callers}"
+            f"RuntimeLedger constructor gained a readable caller despite protected scheduler: {ledger_constructor_callers}"
         )
     rows.append({
-        "system_id": "protected-runtime-ledger-unresolved-reachability",
-        "mechanic_kind": "exact-resource-or-item-mutation-body-with-unresolved-scheduler",
-        "trigger": "generated-CallbackSingle-body;production-scheduler-not-recovered",
+        "system_id": "protected-runtime-ledger-integrity-penalty",
+        "mechanic_kind": "protected-integrity-drift-delayed-ledger-penalty",
+        "trigger": "protected-integrity-drift;single-delayed-settlement-while-production-flag-active",
         "parameters": {
-            "production_reachability_proven": False,
+            "production_reachability_proven": True,
+            "normal_untampered_gameplay_expected_to_trigger": False,
+            "classification": "anti-tamper-integrity-infrastructure",
+            "production_gate_symbol": "Pcb",
+            "race_registrar_live_callers": race_registrar_callers,
+            "race_registrar_vm_index": 1,
+            "cf_building_catalog_drift_vm_index": 9,
+            "integrity_variance_vm_sources": integrity_vm_sources,
+            "variance_counter_symbol": "HW",
+            "variance_last_salt_symbol": "GW",
+            "ledger_signal_symbol": "IW",
+            "ledger_queued_symbol": "JW",
+            "variance_signal_increment_formula": "IW += drift_salt + 31",
+            "hint_signal_increment_formula": "IW += hint + 17",
+            "first_variance_queues_once": True,
+            "scheduler_vm_index": 91,
+            "scheduler_delay_min_seconds": 120,
+            "scheduler_delay_max_seconds": 300,
+            "scheduler_delay_random_function": "GetRandomReal",
+            "callback_constructor": "mz:create1035",
             "callback_constructor_readable_named_callers": [],
-            "counter_symbol": "IW",
+            "callback_constructor_reached_through_protected_vm": True,
+            "settlement_uses_signal_value_at_callback_time": True,
+            "watermark_initial_review_delay_seconds": 1.5,
+            "watermark_review_delay_min_seconds": 90,
+            "watermark_review_delay_max_seconds": 180,
+            "watermark_missing_hint": 829,
+            "watermark_text_mismatch_hint": 839,
+            "map_label_shorter_than_expected_hint": 811,
+            "map_label_wrong_prefix_hint": 823,
+            "map_label_missing_marker_hint": 827,
             "counter_observed_bootstrap_value": 0,
             "lane_formula_without_local_player": "counter mod 12",
             "lane_formula_with_local_player": "(local-player-id + counter) mod 12",
@@ -11831,15 +12068,26 @@ def _extract_runtime_system_mechanics(
             "branch_0_y_coordinate_inputs": "lane=11-lane;counter=counter+17",
             "branch_1_effect": "selected-lane-player gold +1",
             "branch_2_effect": "selected-lane-player lumber +1",
-            "must_not_be_treated_as_live_gameplay_without_scheduler_proof": True,
+            "import_policy": "integrity/anti-tamper infrastructure; do not model as ordinary Castle Fight economy",
         },
         "related_rawcode_ids": [1918989414],
         "source_functions": [
+            "CFRace_CFRace_registerBuildings__w3p_vmProtect", "recordCFBuildingCatalogDrift__w3p_vmProtect",
+            "noteLedgerVariance__w3p_vmProtect", "noteLedgerHint__w3p_vmProtect",
+            "BI", "reviewMapLabel__w3p_vmProtect", "reviewWatermark__w3p_vmProtect",
+            "scheduleWatermarkReview__w3p_vmProtect",
+            "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark",
+            "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark1",
             "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
             "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
         ],
-        "evidence_kind": "exact-readable-mutation-body-with-no-readable-callback-constructor-caller",
-        "byte_offset": min(ledger_lane_start, ledger_coord_start, ledger_settle_start, ledger_callback_start),
+        "evidence_kind": "exact-readable-settlement-plus-statically-decoded-protected-integrity-scheduler",
+        "byte_offset": min(
+            ledger_lane_start, ledger_coord_start, ledger_settle_start, ledger_callback_start,
+            ledger_constructor_start, cf_drift_start, cf_registrar_start, variance_start, hint_start,
+            watermark_init_start, map_label_start, review_start, schedule_start,
+            watermark_callback_start, watermark_create_callback_start,
+        ),
     })
 
     return rows
