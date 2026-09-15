@@ -8414,12 +8414,33 @@ def _extract_production_unit_special_mechanics(
             "byte_offset": death_start,
         })
 
-    # Greater Fire Elemental: WC3's native ANlm split engine owns the attack
-    # counter/generation mechanics. Castle Fight adds a summon listener that
-    # strips the summoned classification from h030 children and converts an
-    # h030 child produced by another h030 into ordinary Fire Elemental h02Z.
-    # Keep the native ANlm fields joined downstream from object data rather than
-    # re-deriving engine internals from the listener.
+    # Greater Fire Elemental has an intentionally misleading train proxy. The
+    # Altar of Blaze trains u00F, but onUnitTrained immediately hides that unit,
+    # issues its native Lava Spawn order, and applies a one-second timed life.
+    # A0DY/ANlm creates h030, which is the actual battlefield Greater Fire
+    # Elemental. WC3's native ANlm split engine then owns the attack counter and
+    # generation mechanics. Castle Fight's summon listener strips the summoned
+    # classification from h030 children and converts an h030 child produced by
+    # another h030 into ordinary Fire Elemental h02Z. Keep the native ANlm
+    # fields joined downstream from object data rather than treating u00F's
+    # deliberately poisoned Ghoul-derived combat fields as gameplay stats.
+    train_start, _ = require_tokens(
+        "onUnitTrained",
+        {
+            "1093682266", "__wurst_safe_ShowUnit", "852667", "__wurst_safe_UnitApplyTimedLife", "1112820806", "1.",
+        },
+    )
+    train_function = next(function for function in functions if function["name"] == "onUnitTrained")
+    train_source = data[int(train_function["start"]):int(train_function["end"])]
+    for fragment in (
+        b"unit_getAbilityLevel(cgs,1093682266)>0",
+        b"__wurst_safe_ShowUnit(igs,false)",
+        b"unit_issueImmediateOrderById(cgs,852667)",
+        b"__wurst_safe_UnitApplyTimedLife(cgs,1112820806,1.)",
+    ):
+        if fragment not in train_source:
+            raise ValueError(f"Greater Fire Elemental train-proxy handoff changed: missing {fragment!r}")
+
     fire_listener_start, _ = require_tokens(
         "EventListener_add_FireElemental_onEvent_add_FireElemental",
         {
@@ -8457,8 +8478,18 @@ def _extract_production_unit_special_mechanics(
     rows.append({
         "unit_id": 1966092358,
         "mechanic_kind": "native-lava-spawn-split-with-child-conversion",
-        "trigger": "wc3-ANlm-split-and-summon-event",
+        "trigger": "trained-proxy-native-ANlm-summon-and-split-events",
         "parameters": {
+            "trained_proxy_unit_id": 1966092358,
+            "trained_proxy_marker_ability_id": 1093682266,
+            "trained_proxy_lava_spawn_ability_id": 1093682265,
+            "trained_proxy_hidden_immediately": True,
+            "trained_proxy_immediate_order_id": 852667,
+            "trained_proxy_timed_life_ability_id": 1112820806,
+            "trained_proxy_timed_life_seconds": 1.0,
+            "trained_proxy_is_gameplay_combat_body": False,
+            "runtime_combat_unit_id": 1747989296,
+            "runtime_combat_unit_created_by_native_ANlm": True,
             "split_ability_id": 1093682265,
             "first_split_child_unit_id": 1747989296,
             "nested_h030_child_replacement_unit_id": 1747989082,
@@ -8475,14 +8506,15 @@ def _extract_production_unit_special_mechanics(
         },
         "related_rawcode_ids": [1093682265, 1747989296, 1747989082],
         "source_functions": [
+            "onUnitTrained",
             "EventListener_add_FireElemental_onEvent_add_FireElemental",
             "setupFireSummon",
             "CallbackSingle_doAfter_FireElemental_call_doAfter_FireElemental",
             "EventListener_add_PerkUtils_onEvent_add_PerkUtils",
             "setSpawnBuilding",
         ],
-        "evidence_kind": "native-ANlm-object-data-plus-exact-summon-listener",
-        "byte_offset": fire_listener_start,
+        "evidence_kind": "exact-trained-proxy-handoff-plus-native-ANlm-object-data-and-summon-listener",
+        "byte_offset": min(train_start, fire_listener_start),
     })
 
     return rows

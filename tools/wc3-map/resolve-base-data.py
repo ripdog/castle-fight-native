@@ -2099,6 +2099,42 @@ def main() -> None:
                         raise ValueError(f"Greater Fire Elemental split child changed: {split_child_rawcode}")
                     if split_fields.get("Split Attack Count") != 15 or split_fields.get("Generation Count") != 3:
                         raise ValueError(f"Greater Fire Elemental split parameters changed: {split_fields}")
+
+                    proxy = static_units.get("u00F")
+                    combat = static_units.get("h030")
+                    combat_runtime = protected_unit_applied.get("h030")
+                    if proxy is None or combat is None or combat_runtime is None:
+                        raise ValueError("Greater Fire Elemental proxy/combat-body definitions are incomplete")
+                    proxy_model = value_as_text(field_lookup(rows_by_object, "units", "u00F", "umdl", 0, 0))
+                    combat_model = value_as_text(field_lookup(rows_by_object, "units", "h030", "umdl", 0, 0))
+                    proxy_abilities = {value for value in proxy["abilities"].split(",") if value}
+                    if (
+                        numeric(proxy["hp"]) != 1
+                        or numeric(proxy["hp_regen"]) != -2
+                        or proxy_model != "no_model.mdl"
+                        or not {"A0DZ", "A0DY"}.issubset(proxy_abilities)
+                    ):
+                        raise ValueError(
+                            "Greater Fire Elemental trained proxy static poison/ability signature changed: "
+                            f"hp={proxy['hp']} regen={proxy['hp_regen']} model={proxy_model!r} abilities={sorted(proxy_abilities)}"
+                        )
+                    expected_combat = {
+                        "hp": 900,
+                        "armor": 7,
+                        "dps": 48.4375,
+                        "attack_range": 450,
+                        "move_speed": 260,
+                    }
+                    actual_combat = {key: numeric(combat_runtime.get(key)) for key in expected_combat}
+                    if actual_combat != expected_combat:
+                        raise ValueError(f"Greater Fire Elemental h030 protected combat stats changed: {actual_combat}")
+                    if numeric(combat["hp_regen"]) != 1 or combat["hp_regen_type"] != "always":
+                        raise ValueError(
+                            f"Greater Fire Elemental h030 regeneration changed: {combat['hp_regen']} / {combat['hp_regen_type']}"
+                        )
+                    if combat_model != "Units\\Creeps\\HeroFlameLord\\HeroFlameLord.mdl":
+                        raise ValueError(f"Greater Fire Elemental h030 model changed: {combat_model!r}")
+
                     parameters["native_split_base_ability_rawcode"] = split["base_rawcode"]
                     parameters["native_split_object_data"] = split_fields
                     parameters["native_split_summoned_unit_rawcode"] = split_child_rawcode
@@ -2109,6 +2145,23 @@ def main() -> None:
                     parameters["native_split_effective_mana_cost"] = numeric(
                         protected_ability_values.get(("A0DY", 1, "mana_cost"), split["mana_cost"])
                     )
+                    parameters["trained_proxy_rawcode"] = "u00F"
+                    parameters["trained_proxy_static_hp"] = numeric(proxy["hp"])
+                    parameters["trained_proxy_static_hp_regen_per_second"] = numeric(proxy["hp_regen"])
+                    parameters["trained_proxy_static_model"] = proxy_model
+                    parameters["trained_proxy_static_stats_are_gameplay_authoritative"] = False
+                    parameters["trained_proxy_role"] = "hidden one-second native-ANlm summoner proxy"
+                    parameters["runtime_combat_unit_rawcode"] = "h030"
+                    parameters["runtime_combat_unit_name"] = combat["name"]
+                    parameters["runtime_combat_unit_hp"] = actual_combat["hp"]
+                    parameters["runtime_combat_unit_hp_regen_per_second"] = numeric(combat["hp_regen"])
+                    parameters["runtime_combat_unit_hp_regen_type"] = combat["hp_regen_type"]
+                    parameters["runtime_combat_unit_armor"] = actual_combat["armor"]
+                    parameters["runtime_combat_unit_dps"] = actual_combat["dps"]
+                    parameters["runtime_combat_unit_attack_range"] = actual_combat["attack_range"]
+                    parameters["runtime_combat_unit_move_speed"] = actual_combat["move_speed"]
+                    parameters["runtime_combat_unit_model"] = combat_model
+                    parameters["runtime_combat_unit_stat_source"] = "h030 map object regeneration/model plus protected UnitStat combat fields"
 
                 production_special_rows.append([
                     production["building_rawcode"], production["building_names"],
@@ -4791,7 +4844,7 @@ def main() -> None:
             "protected-unit-stats.tsv applies the exactly decoded jP UnitStat overrides on top of static resolved unit fields while preserving static, override, source and encoded-row provenance; further scripted modifiers may still change live values",
             "effective-unit-stats.tsv compares the generated xO building-to-unit effective stat catalog against static unit object data; DPS comparison allows 0.011 for hundredths quantization",
             "production-unit-attacks.tsv keeps both weapon profiles for every production unit and structurally labels Agra/War Club conditional attack switching instead of flattening it into xO's one-number summary",
-            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
+            "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental's hidden one-second u00F train proxy -> native A0DY/ANlm -> real h030 combat body (so u00F's poisoned 1 HP/-2 HP/s/no_model.mdl fields are not gameplay stats; h030 supplies protected 900 HP/7 armor/48.4375 DPS/450 range plus authored +1 HP/s), Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
             "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
             "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the staggered 1-second AI executor FSM tick, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
