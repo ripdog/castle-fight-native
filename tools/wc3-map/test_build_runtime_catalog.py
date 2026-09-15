@@ -14,6 +14,13 @@ SPEC.loader.exec_module(MODULE)
 
 
 class RuntimeCatalogTest(unittest.TestCase):
+    def test_catalog_text_hashing_normalizes_crlf(self) -> None:
+        self.assertEqual(
+            MODULE._canonical_text_bytes(b"a\r\nb\r\n"),
+            b"a\nb\n",
+        )
+        self.assertEqual(MODULE._canonical_text_bytes(b"a\nb\n"), b"a\nb\n")
+
     def test_committed_927_supplement_is_generated_from_retained_object_fields(self) -> None:
         release = MODULE._load_release(
             REPO_ROOT / "docs/original_map/releases.json", "9.27", "r1"

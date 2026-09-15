@@ -67,6 +67,10 @@ def _retained_file_bytes(repo_root: Path, git_tree: str, relative_path: str) -> 
     return result.stdout
 
 
+def _canonical_text_bytes(data: bytes) -> bytes:
+    return data.replace(b"\r\n", b"\n")
+
+
 def _fnv64_write_raw(value: int, data: bytes) -> int:
     for byte in data:
         value ^= byte
@@ -147,7 +151,9 @@ def build_source_manifest(
     value = FNV64_OFFSET
     for relative_path in RUNTIME_EXTRACTION_FILES:
         label = f"{working_alias}/{relative_path}".encode("utf-8")
-        contents = _retained_file_bytes(repo_root, git_tree, relative_path)
+        contents = _canonical_text_bytes(
+            _retained_file_bytes(repo_root, git_tree, relative_path)
+        )
         value = _fnv64_write_bytes(value, label)
         value = _fnv64_write_bytes(value, contents)
 
@@ -159,7 +165,9 @@ def build_source_manifest(
     if not supplement_path.is_file():
         raise SystemExit(f"missing runtime catalog supplement: {supplement_path}")
     value = _fnv64_write_bytes(value, supplement_relative.encode("utf-8"))
-    value = _fnv64_write_bytes(value, supplement_path.read_bytes())
+    value = _fnv64_write_bytes(
+        value, _canonical_text_bytes(supplement_path.read_bytes())
+    )
 
     return {
         "schema_version": 1,

@@ -2215,7 +2215,7 @@ fn validate_catalog_source_927() -> Result<(), String> {
     let mut hash = ContentHash64::new();
     for (path, contents) in sources {
         hash.write_bytes(path.as_bytes());
-        hash.write_bytes(contents.as_bytes());
+        write_canonical_catalog_text(&mut hash, contents);
     }
     let actual = hash.finish();
     if actual != manifest.source_evidence_fnv64 {
@@ -2225,6 +2225,15 @@ fn validate_catalog_source_927() -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn write_canonical_catalog_text(hash: &mut ContentHash64, contents: &str) {
+    if contents.as_bytes().windows(2).any(|window| window == b"\r\n") {
+        let normalized = contents.replace("\r\n", "\n");
+        hash.write_bytes(normalized.as_bytes());
+    } else {
+        hash.write_bytes(contents.as_bytes());
+    }
 }
 
 fn calculate_income_927(
@@ -2924,6 +2933,15 @@ mod tests {
                 MapVersion::CASTLE_FIGHT_9_32
             ))
         ));
+    }
+
+    #[test]
+    fn retained_catalog_hash_normalizes_checkout_line_endings() {
+        let mut lf = ContentHash64::new();
+        write_canonical_catalog_text(&mut lf, "a\nb\n");
+        let mut crlf = ContentHash64::new();
+        write_canonical_catalog_text(&mut crlf, "a\r\nb\r\n");
+        assert_eq!(lf.finish(), crlf.finish());
     }
 
     #[test]
