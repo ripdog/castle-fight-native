@@ -282,6 +282,8 @@ pub struct UnitView {
     pub health_max: i32,
     pub attack_delivery: AttackDelivery,
     pub attack_targets: AttackTargetMask,
+    pub damage_type: DamageType,
+    pub armor: ArmorProfile,
     pub target: Option<SimId>,
     pub direct_retaliation_lock: bool,
     pub ally_defense_lock: bool,
@@ -327,6 +329,8 @@ pub struct BuildingView {
     pub next_spawn_tick: Option<u64>,
     pub attack_delivery: Option<AttackDelivery>,
     pub attack_targets: Option<AttackTargetMask>,
+    pub damage_type: DamageType,
+    pub armor: ArmorProfile,
     pub target: Option<SimId>,
     pub cooldown_remaining: Option<u16>,
     pub mana_current: Option<i32>,
@@ -509,6 +513,11 @@ impl Simulation {
     #[must_use]
     pub const fn tick(&self) -> u64 {
         self.next_tick
+    }
+
+    #[must_use]
+    pub const fn damage_rules(&self) -> DamageRules {
+        self.combat_rules.damage_rules
     }
 
     #[must_use]
@@ -8569,6 +8578,8 @@ fn unit_view_from_entity(
         health_max: entity.get::<Health>()?.max,
         attack_delivery: entity.get::<AttackProfile>()?.delivery,
         attack_targets: *entity.get::<AttackTargetMask>()?,
+        damage_type: *entity.get::<DamageType>()?,
+        armor: *entity.get::<ArmorProfile>()?,
         target: entity.get::<TargetState>()?.current,
         direct_retaliation_lock: entity.get::<TargetState>()?.direct_retaliation_lock,
         ally_defense_lock: entity.get::<TargetState>()?.ally_defense_lock,
@@ -8609,6 +8620,8 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
             .map(|state| state.next_spawn_tick),
         attack_delivery: attack.map(|attack| attack.delivery),
         attack_targets: entity.get::<AttackTargetMask>().copied(),
+        damage_type: *entity.get::<DamageType>()?,
+        armor: *entity.get::<ArmorProfile>()?,
         target: entity
             .get::<TargetState>()
             .and_then(|target| target.current),

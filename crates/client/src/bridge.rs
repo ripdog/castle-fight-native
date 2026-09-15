@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AbilityCastEvent, AbilityId, AttackDelivery, AttackEvent, BuilderLocomotion, BuildingFootprint,
-    ChainLightningEvent, ContentIdentity, CorpseView, MovementClass, PlayerEconomyView,
-    ProjectileView, SimId, SimPoint, Simulation, Team,
+    AbilityCastEvent, AbilityId, ArmorProfile, AttackDelivery, AttackEvent, BuilderLocomotion,
+    BuildingFootprint, ChainLightningEvent, ContentIdentity, CorpseView, DamageRules, DamageType,
+    MovementClass, PlayerEconomyView, ProjectileView, SimId, SimPoint, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,11 +89,11 @@ pub struct UnitSample {
     pub mechanical: bool,
     pub health: i32,
     pub health_max: i32,
+    pub damage_type: DamageType,
+    pub armor: ArmorProfile,
     pub target: Option<SimId>,
     pub direct_retaliation_lock: bool,
     pub ally_defense_lock: bool,
-    pub last_attacker: Option<SimId>,
-    pub last_attacked_tick: Option<u64>,
     pub cooldown_remaining: u16,
     pub stunned_until_tick: u64,
     pub mana_current: Option<i32>,
@@ -128,6 +128,8 @@ pub struct BuildingSample {
     pub health_max: i32,
     pub construction_started_tick: Option<u64>,
     pub construction_complete_tick: Option<u64>,
+    pub damage_type: Option<DamageType>,
+    pub armor: ArmorProfile,
     pub target: Option<SimId>,
     pub next_spawn_tick: Option<u64>,
     pub production_interval_ticks: Option<u16>,
@@ -142,6 +144,7 @@ pub struct BuildingSample {
 #[derive(Debug, Clone)]
 pub struct PresentationSnapshot {
     pub tick: u64,
+    pub damage_rules: DamageRules,
     pub player_economy: [PlayerEconomyView; 2],
     pub units: BTreeMap<SimId, UnitSample>,
     pub builders: BTreeMap<SimId, BuilderSample>,
@@ -172,11 +175,11 @@ impl PresentationSnapshot {
                         mechanical: unit.mechanical,
                         health: unit.health,
                         health_max: unit.health_max,
+                        damage_type: unit.damage_type,
+                        armor: unit.armor,
                         target: unit.target,
                         direct_retaliation_lock: unit.direct_retaliation_lock,
                         ally_defense_lock: unit.ally_defense_lock,
-                        last_attacker: unit.last_attacker,
-                        last_attacked_tick: unit.last_attacked_tick,
                         cooldown_remaining: unit.cooldown_remaining,
                         stunned_until_tick: unit.stunned_until_tick,
                         mana_current: unit.mana_current,
@@ -233,6 +236,8 @@ impl PresentationSnapshot {
                         health_max: building.health_max,
                         construction_started_tick: building.construction_started_tick,
                         construction_complete_tick: building.construction_complete_tick,
+                        damage_type: building.attack_delivery.map(|_| building.damage_type),
+                        armor: building.armor,
                         target: building.target,
                         next_spawn_tick: building.next_spawn_tick,
                         production_interval_ticks: building
@@ -261,6 +266,7 @@ impl PresentationSnapshot {
 
         Self {
             tick: simulation.tick(),
+            damage_rules: simulation.damage_rules(),
             player_economy: std::array::from_fn(|team| {
                 simulation
                     .player_economy(Team(u8::try_from(team).expect("player index fits u8")))

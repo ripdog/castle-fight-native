@@ -4312,6 +4312,8 @@ mod tests {
             health_max: 1_000,
             construction_started_tick: None,
             construction_complete_tick: None,
+            damage_type: None,
+            armor: castle_fight_sim::ArmorProfile::UNARMORED,
             target: None,
             next_spawn_tick: Some(40),
             production_interval_ticks: Some(20),

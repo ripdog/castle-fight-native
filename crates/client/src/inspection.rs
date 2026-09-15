@@ -1,5 +1,5 @@
 use bevy::{prelude::*, time::Fixed, window::PrimaryWindow};
-use castle_fight_sim::{SUBUNITS_PER_WORLD_UNIT, SimId, Team};
+use castle_fight_sim::{ArmorType, DamageType, SUBUNITS_PER_WORLD_UNIT, SimId, Team};
 
 use crate::{
     SimulationPlayback,
@@ -412,7 +412,7 @@ fn inspector_text(id: SimId, samples: &PresentationSamples) -> String {
         return format_builder_inspector(builder);
     }
     if let Some(unit) = samples.current.units.get(&id) {
-        return format_unit_inspector(unit, samples.current.tick);
+        return format_unit_inspector(unit, samples.current.tick, samples);
     }
     if let Some(building) = samples.current.buildings.get(&id) {
         return format_building_inspector(building, samples.current.tick);
@@ -461,7 +461,7 @@ fn format_builder_inspector(builder: &BuilderSample) -> String {
     .join("\n")
 }
 
-fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
+fn format_unit_inspector(unit: &UnitSample, tick: u64, samples: &PresentationSamples) -> String {
     let position = sim_point_to_world(unit.position);
     let mut lines = vec![
         format!("UNIT #{}", unit.id.0),
@@ -488,11 +488,8 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64) -> String {
             "Ally defense lock: {}",
             if unit.ally_defense_lock { "Yes" } else { "No" }
         ),
-        format!("Last attacker: {}", target_label(unit.last_attacker)),
-        format!(
-            "Last attacked: {}",
-            attacked_tick_label(unit.last_attacked_tick, tick)
-        ),
+        attack_type_label(unit, samples),
+        defense_type_label(unit, samples),
         format!("Attack cooldown: {} ticks", unit.cooldown_remaining),
         format!("State: {}", stun_label(unit.stunned_until_tick, tick)),
     ];
@@ -557,6 +554,126 @@ fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
     lines.join("\n")
 }
 
+fn attack_type_label(unit: &UnitSample, samples: &PresentationSamples) -> String {
+    let attack_type = damage_type_name(unit.damage_type);
+    let Some(target) = unit.target else {
+        return format!("Attack type: {attack_type}");
+    };
+    let Some(defense_type) = target_armor_type(target, samples) else {
+        return format!("Attack type: {attack_type} -> target: unknown defense");
+    };
+    let multiplier = samples
+        .current
+        .damage_rules
+        .bonus_per_10k(unit.damage_type, defense_type);
+    format!(
+        "Attack type: {attack_type} -> {}: {}",
+        armor_type_name(defense_type),
+        matchup_multiplier_label(multiplier)
+    )
+}
+
+fn defense_type_label(unit: &UnitSample, samples: &PresentationSamples) -> String {
+    let defense_type = unit.armor.armor_type;
+    let defense_name = armor_type_name(defense_type);
+    let Some(target) = unit.target else {
+        return format!("Defense type: {defense_name}");
+    };
+    let Some(attack_type) = target_damage_type(target, samples) else {
+        return format!("Defense type: {defense_name} <- target: no attack");
+    };
+    let multiplier = samples
+        .current
+        .damage_rules
+        .bonus_per_10k(attack_type, defense_type);
+    format!(
+        "Defense type: {defense_name} <- {}: {} incoming",
+        damage_type_name(attack_type),
+        matchup_multiplier_label(multiplier)
+    )
+}
+
+fn target_armor_type(target: SimId, samples: &PresentationSamples) -> Option<ArmorType> {
+    samples
+        .current
+        .units
+        .get(&target)
+        .map(|unit| unit.armor.armor_type)
+        .or_else(|| {
+            samples
+                .current
+                .buildings
+                .get(&target)
+                .map(|building| building.armor.armor_type)
+        })
+}
+
+fn target_damage_type(target: SimId, samples: &PresentationSamples) -> Option<DamageType> {
+    samples
+        .current
+        .units
+        .get(&target)
+        .map(|unit| unit.damage_type)
+        .or_else(|| {
+            samples
+                .current
+                .buildings
+                .get(&target)
+                .and_then(|building| building.damage_type)
+        })
+}
+
+fn matchup_multiplier_label(multiplier_per_10k: u16) -> String {
+    let multiplier = percent_label(i32::from(multiplier_per_10k), false);
+    let delta = percent_label(i32::from(multiplier_per_10k) - 10_000, true);
+    format!("{multiplier} ({delta})")
+}
+
+fn percent_label(per_10k: i32, force_sign: bool) -> String {
+    let sign = if per_10k < 0 {
+        "-"
+    } else if force_sign && per_10k > 0 {
+        "+"
+    } else {
+        ""
+    };
+    let magnitude = per_10k.unsigned_abs();
+    let whole = magnitude / 100;
+    let hundredths = magnitude % 100;
+    if hundredths == 0 {
+        format!("{sign}{whole}%")
+    } else if hundredths % 10 == 0 {
+        format!("{sign}{whole}.{}%", hundredths / 10)
+    } else {
+        format!("{sign}{whole}.{hundredths:02}%")
+    }
+}
+
+fn damage_type_name(damage_type: DamageType) -> &'static str {
+    match damage_type {
+        DamageType::Normal => "Normal",
+        DamageType::Pierce => "Piercing",
+        DamageType::Siege => "Siege",
+        DamageType::Magic => "Magic",
+        DamageType::Chaos => "Chaos",
+        DamageType::Spells => "Spells",
+        DamageType::Hero => "Hero",
+    }
+}
+
+fn armor_type_name(armor_type: ArmorType) -> &'static str {
+    match armor_type {
+        ArmorType::Small => "Small",
+        ArmorType::Medium => "Medium",
+        ArmorType::Large => "Large",
+        ArmorType::Fortified => "Fortified",
+        ArmorType::Normal => "Normal",
+        ArmorType::Hero => "Hero",
+        ArmorType::Divine => "Divine",
+        ArmorType::Unarmored => "Unarmored",
+    }
+}
+
 fn unit_order_label(unit: &UnitSample, tick: u64) -> String {
     if unit.stunned_until_tick > tick {
         return "Disabled/stunned".into();
@@ -575,16 +692,6 @@ fn unit_order_label(unit: &UnitSample, tick: u64) -> String {
 
 fn target_label(target: Option<SimId>) -> String {
     target.map_or_else(|| "None".into(), |target| format!("#{}", target.0))
-}
-
-fn attacked_tick_label(attacked_tick: Option<u64>, tick: u64) -> String {
-    attacked_tick.map_or_else(
-        || "Never".into(),
-        |attacked_tick| {
-            let age = tick.saturating_sub(attacked_tick);
-            format!("tick {attacked_tick} ({age} ticks ago)")
-        },
-    )
 }
 
 fn stun_label(stunned_until_tick: u64, tick: u64) -> String {
@@ -675,6 +782,7 @@ mod tests {
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
             tick: 10,
+            damage_rules: castle_fight_sim::DamageRules::warcraft_frozen_throne(),
             player_economy: [PlayerEconomyView {
                 resources: PlayerResources::default(),
                 income: 0,
@@ -765,11 +873,11 @@ mod tests {
                 mechanical: false,
                 health: 50,
                 health_max: 100,
+                damage_type: DamageType::Normal,
+                armor: castle_fight_sim::ArmorProfile::new(ArmorType::Medium, 2),
                 target: None,
                 direct_retaliation_lock: false,
                 ally_defense_lock: false,
-                last_attacker: None,
-                last_attacked_tick: None,
                 cooldown_remaining: 0,
                 stunned_until_tick: 0,
                 mana_current: None,
@@ -784,8 +892,27 @@ mod tests {
             Some(SimId(7))
         );
         assert!(
-            format_unit_inspector(&samples.current.units[&SimId(7)], 10).contains("Name: Footman")
+            format_unit_inspector(&samples.current.units[&SimId(7)], 10, &samples)
+                .contains("Name: Footman")
         );
+
+        let mut target = samples.current.units[&SimId(7)];
+        target.id = SimId(8);
+        target.team = Team(1);
+        target.damage_type = DamageType::Normal;
+        target.armor = castle_fight_sim::ArmorProfile::new(ArmorType::Small, 0);
+        target.target = Some(SimId(7));
+        samples.current.units.insert(SimId(8), target);
+        let selected = samples.current.units.get_mut(&SimId(7)).unwrap();
+        selected.damage_type = DamageType::Pierce;
+        selected.armor = castle_fight_sim::ArmorProfile::new(ArmorType::Medium, 0);
+        selected.target = Some(SimId(8));
+
+        let text = format_unit_inspector(&samples.current.units[&SimId(7)], 10, &samples);
+        assert!(text.contains("Attack type: Piercing -> Small: 200% (+100%)"));
+        assert!(text.contains("Defense type: Medium <- Normal: 150% (+50%) incoming"));
+        assert!(!text.contains("Last attacker:"));
+        assert!(!text.contains("Last attacked:"));
     }
 
     #[test]
@@ -805,6 +932,8 @@ mod tests {
                 health_max: 1_000,
                 construction_started_tick: None,
                 construction_complete_tick: None,
+                damage_type: None,
+                armor: castle_fight_sim::ArmorProfile::new(ArmorType::Fortified, 5),
                 target: None,
                 next_spawn_tick: Some(20),
                 production_interval_ticks: Some(20),
@@ -851,11 +980,11 @@ mod tests {
                 mechanical: false,
                 health: 50,
                 health_max: 100,
+                damage_type: DamageType::Normal,
+                armor: castle_fight_sim::ArmorProfile::new(ArmorType::Large, 4),
                 target: None,
                 direct_retaliation_lock: false,
                 ally_defense_lock: false,
-                last_attacker: None,
-                last_attacked_tick: None,
                 cooldown_remaining: 0,
                 stunned_until_tick: 0,
                 mana_current: None,
