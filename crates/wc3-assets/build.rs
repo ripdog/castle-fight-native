@@ -481,13 +481,13 @@ fn load_visual_assets(
                 );
             }
         }
-        if kind == "buffs" && field == "ftat" {
-            if let Some(path) = parse_json_model_paths(row.get(recovered).unwrap_or_default())
+        if kind == "buffs"
+            && field == "ftat"
+            && let Some(path) = parse_json_model_paths(row.get(recovered).unwrap_or_default())
                 .into_iter()
                 .find(|path| is_renderable_model_path(path))
-            {
-                buff_target_art.insert(rawcode.to_owned(), path);
-            }
+        {
+            buff_target_art.insert(rawcode.to_owned(), path);
         }
 
         let role = match (kind, field) {
