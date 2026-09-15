@@ -76,20 +76,18 @@ ABILITY_BUFF_COVERAGE_PROFILES: dict[str, dict[str, Any]] = {
             "marker-data-only": 21,
             "native-engine-implicit": 2,
             "native-object-indirect": 27,
-            "native-object-owned": 244,
-            "native-object-owned+normalized-script": 169,
+            "native-object-owned": 243,
+            "native-object-owned+normalized-script": 170,
             "protected-runtime-overlay": 46,
-            "runtime-granted-normalized": 53,
+            "runtime-granted-normalized": 54,
             "runtime-preload-only": 1,
             "scripted-normalized": 83,
-            "unresolved-reachability": 1,
             "unused-orphaned": 43,
         },
         "buff_status_counts": {
             "native-ability-linked": 81,
-            "native-ability-linked+normalized-script": 6,
-            "scripted-normalized": 1,
-            "unresolved-reachability": 2,
+            "native-ability-linked+normalized-script": 7,
+            "protected-parent-overlay-only": 2,
             "unused-orphaned": 10,
         },
     },
@@ -3457,21 +3455,65 @@ def main() -> None:
                     parameters["static_effect_cooldown_seconds"] = numeric(effect["cooldown"])
                     parameters["protected_effect_mana_cost"] = numeric(runtime_mana)
                     parameters["protected_effect_cooldown_seconds"] = numeric(runtime_cooldown)
-                elif system_id == "wisp-death-slow-unresolved-reachability":
+                elif system_id == "ancient-of-wonders-call-of-nature-wisps":
+                    source_building = static_units.get("h02D")
                     wisp = static_units.get("h06B")
+                    wisp_runtime = protected_unit_applied.get("h06B")
+                    source_spell = ability_level_one("A0BS")
+                    bash = ability_level_one("A0EM")
                     slow = ability_level_one("A0ES")
+                    bash_fields = json.loads(bash["data_fields_labeled_json"])
                     slow_fields = json.loads(slow["data_fields_labeled_json"])
+                    bash_duration = numeric(field_lookup(rows_by_object, "abilities", "A0EM", "adur", 1, 0))
                     if (
-                        wisp is None
-                        or parameters.get("production_reachability_proven") is not False
-                        or parameters.get("readable_creation_function_named_callers") != []
+                        source_building is None
+                        or wisp is None
+                        or wisp_runtime is None
+                        or parameters.get("production_reachability_proven") is not True
+                        or parameters.get("pool_initializer_named_callers") != []
+                        or int(parameters.get("pool_slot_count", 0)) != 20
+                        or int(parameters.get("release_iterations", 0)) != 6
+                        or numeric(parameters.get("release_period_seconds")) != 0.3
+                        or numeric(parameters.get("release_timed_life_seconds")) != 42
+                        or numeric(parameters.get("death_damage_amount")) != 160
+                        or numeric(parameters.get("death_damage_radius")) != 350
+                        or numeric(parameters.get("slow_aura_timed_life_seconds")) != 8
                         or numeric(slow["area"]) != 350
                         or numeric(slow_fields.get("Movement Speed Factor")) != -0.8
                         or numeric(slow_fields.get("Attack Speed Factor")) != 0
-                        or numeric(parameters.get("slow_aura_timed_life_seconds")) != 8
+                        or numeric(bash_fields.get("Chance to Bash")) != 50
+                        or bash_duration != 2
+                        or numeric(wisp_runtime["hp"]) != 50
+                        or numeric(wisp_runtime["move_speed"]) != 350
+                        or numeric(wisp_runtime["attack1_min"]) != 1
+                        or numeric(wisp_runtime["attack1_max"]) != 1
+                        or numeric(wisp_runtime["attack1_cooldown"]) != 1
+                        or numeric(wisp_runtime["attack1_range"]) != 30
                     ):
-                        raise ValueError(f"Wisp death slow evidence changed: {parameters} / {slow}")
+                        raise ValueError(
+                            f"Ancient of Wonders Wisp lifecycle changed: {parameters} / {source_building} / {wisp} / {wisp_runtime} / {bash} / {slow}"
+                        )
+                    tooltip = str(source_building["ubertip"])
+                    if "50%" not in tooltip or "150" not in tooltip or "350" not in tooltip:
+                        raise ValueError(f"Ancient of Wonders Call of Nature tooltip changed: {tooltip}")
+                    if rawcode_list(source_building["abilities"]) != ["A0BS", "A06V"]:
+                        raise ValueError(f"Ancient of Wonders ability set changed: {source_building['abilities']}")
+                    if "A0EM" not in rawcode_list(wisp["abilities"]):
+                        raise ValueError(f"Wisp lost native Bash ability: {wisp['abilities']}")
+                    parameters["source_building_name"] = source_building["name"]
+                    parameters["source_building_tooltip"] = tooltip
+                    parameters["source_spell_name"] = source_spell["name"]
                     parameters["wisp_name"] = wisp["name"]
+                    parameters["wisp_runtime_hp"] = numeric(wisp_runtime["hp"])
+                    parameters["wisp_runtime_move_speed"] = numeric(wisp_runtime["move_speed"])
+                    parameters["wisp_attack_damage_min"] = numeric(wisp_runtime["attack1_min"])
+                    parameters["wisp_attack_damage_max"] = numeric(wisp_runtime["attack1_max"])
+                    parameters["wisp_attack_cooldown_seconds"] = numeric(wisp_runtime["attack1_cooldown"])
+                    parameters["wisp_attack_range"] = numeric(wisp_runtime["attack1_range"])
+                    parameters["wisp_combat_stats_source"] = "protected-unit-stats"
+                    parameters["wisp_bash_name"] = bash["name"]
+                    parameters["wisp_bash_duration_seconds"] = bash_duration
+                    parameters["wisp_bash_object_data"] = bash_fields
                     parameters["slow_aura_name"] = slow["name"]
                     parameters["slow_aura_targets"] = slow["targets"]
                     parameters["slow_aura_buff_rawcodes"] = rawcode_list(slow["buffs"])
@@ -5416,15 +5458,7 @@ def main() -> None:
             script_reference_class = "none"
 
         notes = ""
-        if rawcode == "A0ES":
-            status = "unresolved-reachability"
-            reachability = "exact-runtime-body-unresolved-production"
-            semantic_coverage = "normalized-script"
-            notes = (
-                "Wisp death branch and A0ES Slow Aura body are exact, but h06B production reachability remains unproven; "
-                "the only readable h06B creation site is MC with no readable named caller"
-            )
-        elif rawcode in control_ui_abilities:
+        if rawcode in control_ui_abilities:
             status = "control-ui-helper"
             reachability = "proven-runtime-infrastructure"
             semantic_coverage = "control-helper"
@@ -5550,7 +5584,8 @@ def main() -> None:
         "control-ui-helper",
         "marker-data-only",
     }
-    uncertain_parent_statuses = {"unresolved-reachability", "protected-runtime-overlay"}
+    uncertain_parent_statuses = {"unresolved-reachability"}
+    protected_parent_statuses = {"protected-runtime-overlay"}
     for rawcode in sorted(buff_rawcodes):
         record = buff_records[rawcode]
         parent_links = sorted(buff_parent_links.get(rawcode, set()))
@@ -5559,6 +5594,9 @@ def main() -> None:
         )
         uncertain_parents = sorted(
             parent for parent, _field_id in parent_links if ability_coverage_status.get(parent) in uncertain_parent_statuses
+        )
+        protected_parents = sorted(
+            parent for parent, _field_id in parent_links if ability_coverage_status.get(parent) in protected_parent_statuses
         )
         normalized_artifacts = sorted(normalized_coverage.get(rawcode, set()))
         runtime_refs = runtime_script_refs.get(rawcode, [])
@@ -5599,6 +5637,14 @@ def main() -> None:
             reachability = "parent-ability-reachability-unresolved"
             semantic_coverage = "native-object-data"
             notes = f"only linked parent abilities have unresolved reachability: {','.join(uncertain_parents)}"
+        elif protected_parents:
+            status = "protected-parent-overlay-only"
+            reachability = "protected-parent-overlay-only"
+            semantic_coverage = "native-object-data"
+            notes = (
+                "linked parent abilities have protected cooldown/mana overlays but no effective owner, normalized runtime root, "
+                f"or readable runtime reference: {','.join(protected_parents)}"
+            )
         elif e2e_refs:
             status = "e2e-only"
             reachability = "verification-only"
@@ -5629,6 +5675,7 @@ def main() -> None:
             ",".join(f"{parent}:{field_id}" for parent, field_id in parent_links),
             ",".join(live_parents),
             ",".join(uncertain_parents),
+            ",".join(protected_parents),
             ",".join(normalized_artifacts),
             script_reference_class,
             ",".join(script_functions),
@@ -5642,7 +5689,7 @@ def main() -> None:
         [
             "rawcode", "name", "table", "base_rawcode", "coverage_status", "reachability_status",
             "semantic_coverage", "ability_link_fields", "parent_ability_links", "live_parent_abilities",
-            "uncertain_parent_abilities", "normalized_artifacts", "script_reference_class", "script_functions",
+            "uncertain_parent_abilities", "protected_parent_abilities", "normalized_artifacts", "script_reference_class", "script_functions",
             "runtime_script_functions", "runtime_calls", "notes",
         ],
         buff_coverage_rows,

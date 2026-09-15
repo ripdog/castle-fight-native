@@ -1340,21 +1340,19 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "marker-data-only": 21,
             "native-engine-implicit": 2,
             "native-object-indirect": 27,
-            "native-object-owned": 244,
-            "native-object-owned+normalized-script": 169,
+            "native-object-owned": 243,
+            "native-object-owned+normalized-script": 170,
             "protected-runtime-overlay": 46,
-            "runtime-granted-normalized": 53,
+            "runtime-granted-normalized": 54,
             "runtime-preload-only": 1,
             "scripted-normalized": 83,
-            "unresolved-reachability": 1,
             "unused-orphaned": 43,
         })
         self.assertEqual(summary["buff_runtime_coverage_rows"], 100)
         self.assertEqual(summary["buff_runtime_coverage_status_counts"], {
             "native-ability-linked": 81,
-            "native-ability-linked+normalized-script": 6,
-            "scripted-normalized": 1,
-            "unresolved-reachability": 2,
+            "native-ability-linked+normalized-script": 7,
+            "protected-parent-overlay-only": 2,
             "unused-orphaned": 10,
         })
         self.assertEqual(summary["ability_buff_unresolved_script_semantics"], [])
@@ -1371,10 +1369,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(abilities["ACrj"]["coverage_status"], "unused-orphaned")
         self.assertEqual(abilities["Ahsb"]["coverage_status"], "unused-orphaned")
         self.assertEqual(abilities["A0DA"]["coverage_status"], "runtime-preload-only")
-        self.assertEqual(abilities["A0ES"]["coverage_status"], "unresolved-reachability")
+        self.assertEqual(abilities["A0ES"]["coverage_status"], "runtime-granted-normalized")
+        self.assertEqual(abilities["A0EM"]["coverage_status"], "native-object-owned+normalized-script")
         self.assertEqual(
             {rawcode for rawcode, row in abilities.items() if "unresolved" in row["coverage_status"]},
-            {"A0ES"},
+            set(),
         )
 
         for rawcode in ("B006", "B00B", "B00O", "B013", "B01A", "B01G", "B01Z", "B027"):
@@ -1383,11 +1382,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(buffs["B001"]["script_reference_class"], "none")
         self.assertEqual(buffs["Xbdt"]["coverage_status"], "native-ability-linked")
         self.assertEqual(buffs["Xbdt"]["parent_ability_links"], "A9FS:aeff")
-        self.assertEqual(buffs["B00D"]["coverage_status"], "unresolved-reachability")
-        self.assertEqual(buffs["B029"]["coverage_status"], "unresolved-reachability")
+        self.assertEqual(buffs["B00D"]["coverage_status"], "protected-parent-overlay-only")
+        self.assertEqual(buffs["B00D"]["protected_parent_abilities"], "A031")
+        self.assertEqual(buffs["B029"]["coverage_status"], "protected-parent-overlay-only")
+        self.assertEqual(buffs["B029"]["protected_parent_abilities"], "A0E2,A0EY")
         self.assertEqual(
             {rawcode for rawcode, row in buffs.items() if "unresolved" in row["coverage_status"]},
-            {"B00D", "B029"},
+            set(),
         )
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
@@ -1424,7 +1425,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "construction-finish-hidden-native-ability-grants": 1,
             "damage-event-15-percent-chain-lightning-dummy-proc": 1,
             "damage-event-40-percent-hurl-boulder-dummy-proc": 1,
-            "exact-death-spawned-slow-aura-body-with-unresolved-creation-scheduler": 1,
+            "live-forest-wisp-release-bash-death-damage-and-slow-aura": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -1473,13 +1474,32 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(avalanche["protected_effect_cooldown_seconds"], 0.1)
         self.assertEqual(avalanche["protected_effect_mana_cost"], 0.0)
 
-        wisp = json.loads(rows["wisp-death-slow-unresolved-reachability"]["parameters_json"])
-        self.assertFalse(wisp["production_reachability_proven"])
-        self.assertEqual(wisp["readable_creation_function_named_callers"], [])
+        wisp = json.loads(rows["ancient-of-wonders-call-of-nature-wisps"]["parameters_json"])
+        self.assertTrue(wisp["production_reachability_proven"])
+        self.assertEqual(wisp["source_building_rawcode"], "h02D")
+        self.assertEqual(wisp["source_building_name"], "Ancient of Wonders")
+        self.assertEqual(wisp["source_spell_ability_rawcode"], "A0BS")
+        self.assertEqual(wisp["pool_initializer_named_callers"], [])
+        self.assertEqual(wisp["pool_slot_count"], 20)
+        self.assertEqual(wisp["release_iterations"], 6)
+        self.assertEqual(wisp["release_period_seconds"], 0.3)
+        self.assertEqual(wisp["release_timed_life_seconds"], 42)
+        self.assertEqual(wisp["wisp_runtime_hp"], 50)
+        self.assertEqual(wisp["wisp_runtime_move_speed"], 350)
+        self.assertEqual(wisp["wisp_attack_damage_min"], 1)
+        self.assertEqual(wisp["wisp_attack_damage_max"], 1)
+        self.assertEqual(wisp["wisp_attack_cooldown_seconds"], 1)
+        self.assertEqual(wisp["wisp_attack_range"], 30)
+        self.assertEqual(wisp["wisp_combat_stats_source"], "protected-unit-stats")
+        self.assertEqual(wisp["wisp_native_bash_chance_percent"], 50)
+        self.assertEqual(wisp["wisp_bash_duration_seconds"], 2)
+        self.assertEqual(wisp["death_damage_amount"], 160)
+        self.assertEqual(wisp["tooltip_advertised_death_damage"], 150)
+        self.assertTrue(wisp["runtime_death_damage_overrides_tooltip"])
+        self.assertEqual(wisp["death_damage_radius"], 350)
         self.assertEqual(wisp["slow_aura_radius"], 350)
         self.assertEqual(wisp["movement_speed_factor"], -0.8)
         self.assertEqual(wisp["slow_aura_timed_life_seconds"], 8)
-        self.assertTrue(wisp["must_not_be_treated_as_live_gameplay_without_creation_reachability_proof"])
 
         ledger = json.loads(rows["protected-runtime-ledger-unresolved-reachability"]["parameters_json"])
         self.assertFalse(ledger["production_reachability_proven"])

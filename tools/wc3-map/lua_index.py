@@ -3229,11 +3229,12 @@ def _extract_building_spell_mechanics(
             (helper_name,),
         )
 
-    # Ancient of Wonders: six activations at 0.3-second intervals, alternating
-    # between two generated preplaced-unit slots for the owner's team. Each unit
-    # is transferred to the owner, marked sapper, ordered to attack and receives
-    # 42 seconds timed life. The concrete preplaced unit type is map-placement
-    # state rather than an authored rawcode literal in this handler.
+    # Ancient of Wonders: six h06B Wisps are released at 0.3-second intervals,
+    # alternating between the two forest-pool groups for the owner's team. The
+    # pool itself is the WHb array: MC is its only concrete-unit writer and
+    # creates h06B, while sA consumes and clears entries from that same array.
+    # Each released Wisp loses Gather, changes owner, becomes a sapper, receives
+    # an attack order and 42 seconds timed life.
     wonders_registration = registrations_by_building.get(rawcode("h02D"))
     if wonders_registration is not None:
         wonders_handler_name = str(wonders_registration["handler_function"])
@@ -3246,25 +3247,46 @@ def _extract_building_spell_mechanics(
         _wonders_life_index, wonders_life = one_call(wonders_callback, "__wurst_safe_UnitApplyTimedLife")
         if decimal_argument(wonders_life[2]) != Decimal(42):
             raise ValueError("Ancient of Wonders timed life changed")
+        _pool_start, pool_initializer = body("MC")
+        _pool_create_index, pool_create = one_call(pool_initializer, "__wurst_safe_CreateUnit")
+        if integer_argument(pool_create[1]) != rawcode("h06B"):
+            raise ValueError("Ancient of Wonders forest pool unit type changed")
+        _pool_take_start, pool_take = body("sA")
+        pool_initializer_tokens = {token.text for token in pool_initializer}
+        pool_take_tokens = {token.text for token in pool_take}
+        if "WHb" not in pool_initializer_tokens or "WHb" not in pool_take_tokens:
+            raise ValueError("Ancient of Wonders WHb pool data dependency changed")
+        if data.count(b"WHb[") != 7 or b"WHb[Seo]=__wurst_safe_CreateUnit" not in data:
+            raise ValueError("Ancient of Wonders WHb pool writer/consumer structure changed")
+        if b'_I[_T(127265,"261d")]=MC' not in data:
+            raise ValueError("Ancient of Wonders forest-pool initializer registration changed")
         add(
             "h02D",
             "periodic-preplaced-unit-release",
-            "alternating-generated-preplaced-slots-for-owner-team",
-            "slot-source-sA(baseSlot + iteration%2);preplaced-unit-exists",
-            (rawcode("Awha"),),
+            "alternating-generated-forest-wisp-pools-for-owner-team",
+            "slot-source-sA(baseSlot + iteration%2);WHb entries created as h06B by MC",
+            (rawcode("Awha"), rawcode("h06B")),
             {
                 "period_seconds": "0.3",
                 "iterations": 6,
                 "base_slot_formula": "2 * lGb[player_getId(owner)]",
                 "slot_formula": "baseSlot + (iteration % 2)",
                 "unit_source_function": "sA",
+                "pool_initializer_function": "MC",
+                "pool_storage_symbol": "WHb",
+                "pool_unit_id": rawcode("h06B"),
+                "pool_unit_rawcode": "h06B",
+                "pool_slot_count": 20,
+                "pool_group_count": 4,
+                "pool_slots_per_group": 5,
+                "pool_initializer_registered_in_protected_dispatch": True,
                 "removed_ability_id": rawcode("Awha"),
                 "sets_owner_to_building_owner": True,
                 "adds_unit_type": "UNIT_TYPE_SAPPER",
                 "issues_attack_order": True,
                 "timed_life_seconds": "42",
             },
-            (wonders_handler_name, wonders_callback_name, "sA"),
+            (wonders_handler_name, wonders_callback_name, "sA", "MC"),
         )
 
     # Ancient Guardian: shield-gated Banish on one random live enemy.
@@ -9645,7 +9667,10 @@ def _extract_runtime_system_mechanics(
         "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2",
-        "iD", "handleSourceDamageEffects", "h05LAttackProc", "boulderAttackProc", "MC",
+        "iD", "handleSourceDamageEffects", "h05LAttackProc", "boulderAttackProc",
+        "MC", "sA", "BuildingSpellClosure_registerBuildingSpell_RaceNatureAbilities_cast_registerBuildingSpell_RaceNatureAbilities",
+        "CallbackPeriodic_doPeriodically_RaceNatureAbilities_call_doPeriodically_RaceNatureAbilities",
+        "ForGroupCallback_forUnitsInRange_RaceElementalAbilities_callback_forUnitsInRange_RaceElementalAbilities",
         "hasShield", "checkForShield", "Vd", "Ed",
         "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
         "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
@@ -11639,35 +11664,94 @@ def _extract_runtime_system_mechanics(
         "byte_offset": min(building_grant_start, source_damage_start, boulder_start),
     })
 
-    # h06B Wisp has a precise death payload, but its only readable creation site
-    # (MC) has no readable named caller. Keep the slow aura body available to
-    # importers while refusing to claim that production gameplay reaches it.
+    # Ancient of Wonders / Call of Nature Wisp lifecycle. The building handler
+    # consumes WHb through sA; MC is the only concrete-unit writer to that pool
+    # and creates h06B Wisps in four five-slot forest groups. That shared data
+    # dependency closes the previous apparent reachability gap even though MC's
+    # protected-dispatch invocation is opaque to the named call graph. Released
+    # Wisps are live combat sappers for 42 seconds. On death they deal 160 magic
+    # damage in 350 radius and leave an eight-second A0ES -80% movement slow.
     wisp_create_start, wisp_create_source, _ = source("MC")
+    wisp_take_start, wisp_take_source, _ = source("sA")
+    wonders_cast_start, wonders_cast_source, _ = source(
+        "BuildingSpellClosure_registerBuildingSpell_RaceNatureAbilities_cast_registerBuildingSpell_RaceNatureAbilities"
+    )
+    wonders_release_start, wonders_release_source, _ = source(
+        "CallbackPeriodic_doPeriodically_RaceNatureAbilities_call_doPeriodically_RaceNatureAbilities"
+    )
     _death_start, death_source, _ = source("fJ")
-    if b"__wurst_safe_CreateUnit(ZHb,1747990082" not in wisp_create_source:
-        raise ValueError("h06B Wisp creation body changed")
+    death_damage_start, death_damage_source, _ = source(
+        "ForGroupCallback_forUnitsInRange_RaceElementalAbilities_callback_forUnitsInRange_RaceElementalAbilities"
+    )
+    if b"WHb[Seo]=__wurst_safe_CreateUnit(ZHb,1747990082" not in wisp_create_source:
+        raise ValueError("Ancient of Wonders h06B forest-pool creation changed")
+    if b"WHb[deo]=nil return UHb" not in wisp_take_source:
+        raise ValueError("Ancient of Wonders forest-pool consumption changed")
+    if data.count(b"WHb[") != 7 or b'_I[_T(127265,"261d")]=MC' not in data:
+        raise ValueError("Ancient of Wonders forest-pool registration/data dependency changed")
+    if b"xun=(2*__wurst_ensureInt(lGb[player_getId(wun)]))" not in wonders_cast_source or b"doPeriodically(0.3,yun)" not in wonders_cast_source:
+        raise ValueError("Ancient of Wonders owner-team pool selection changed")
     for fragment in (
-        b"unit_getTypeId(M2q)==1747990082", b"__wurst_safe_CreateUnit(l3q,dV", b"addProtectedAbility(r3q,1093682515)",
+        b"Ftn=sA(Etn)",
+        b"unit_removeAbility(Ftn,1098344545)",
+        b"__wurst_safe_SetUnitOwner(Gtn,Htn,false)",
+        b"__wurst_safe_UnitAddType(Ftn,UNIT_TYPE_SAPPER)",
+        b"orderCodeAttack(Ftn)",
+        b"__wurst_safe_UnitApplyTimedLife(Jtn,1112820806,42.)",
+        b"if(Atn.iteration>=6)",
+    ):
+        if fragment not in wonders_release_source:
+            raise ValueError(f"Ancient of Wonders Wisp release changed: missing {fragment!r}")
+    for fragment in (
+        b"unit_getTypeId(M2q)==1747990082",
+        b"forUnitsInRange(p3q,350.,false,q3q)",
+        b"__wurst_safe_CreateUnit(l3q,dV",
+        b"addProtectedAbility(r3q,1093682515)",
         b"__wurst_safe_UnitApplyTimedLife(n3q,1112820806,8.)",
     ):
         if fragment not in death_source:
-            raise ValueError(f"h06B Wisp death slow body changed: missing {fragment!r}")
+            raise ValueError(f"h06B Wisp death payload changed: missing {fragment!r}")
+    if b"__wurst_safe_UnitDamageTarget(Xnn,Ynn,160.,true,false,Znn,aon,bon)" not in death_damage_source:
+        raise ValueError("h06B Wisp death damage changed")
     wisp_creation_callers = sorted(
         caller for (caller, callee), count in call_edges.items()
         if callee == "MC" and count > 0
     )
     if wisp_creation_callers:
-        raise ValueError(f"h06B Wisp creation became readably reachable: {wisp_creation_callers}")
+        raise ValueError(f"MC gained a readable named caller; update Wisp pool provenance: {wisp_creation_callers}")
     rows.append({
-        "system_id": "wisp-death-slow-unresolved-reachability",
-        "mechanic_kind": "exact-death-spawned-slow-aura-body-with-unresolved-creation-scheduler",
-        "trigger": "h06B-death;production-creation-scheduler-not-recovered",
+        "system_id": "ancient-of-wonders-call-of-nature-wisps",
+        "mechanic_kind": "live-forest-wisp-release-bash-death-damage-and-slow-aura",
+        "trigger": "h02D-A0BS-cast-releases-h06B;h06B-death",
         "parameters": {
-            "production_reachability_proven": False,
-            "readable_creation_function": "MC",
-            "readable_creation_function_named_callers": [],
+            "production_reachability_proven": True,
+            "source_building_unit_id": 1747989060,
+            "source_building_rawcode": "h02D",
+            "source_spell_ability_id": 1093681747,
+            "source_spell_ability_rawcode": "A0BS",
+            "pool_initializer_function": "MC",
+            "pool_initializer_named_callers": [],
+            "pool_initializer_registered_in_protected_dispatch": True,
+            "pool_accessor_function": "sA",
+            "pool_storage_symbol": "WHb",
+            "pool_slot_count": 20,
+            "pool_group_count": 4,
+            "pool_slots_per_group": 5,
+            "release_period_seconds": 0.3,
+            "release_iterations": 6,
+            "release_removes_gather_ability_id": 1098344545,
+            "release_adds_sapper_type": True,
+            "release_issues_attack_order": True,
+            "release_timed_life_seconds": 42,
             "wisp_unit_id": 1747990082,
             "wisp_rawcode": "h06B",
+            "wisp_native_bash_ability_id": 1093682509,
+            "wisp_native_bash_ability_rawcode": "A0EM",
+            "wisp_native_bash_chance_percent": 50,
+            "death_damage_amount": 160,
+            "death_damage_radius": 350,
+            "death_damage_attack_type": "normal",
+            "death_damage_type": "magic",
             "death_dummy_unit_id": 1697656888,
             "death_dummy_rawcode": "e008",
             "slow_aura_ability_id": 1093682515,
@@ -11676,12 +11760,23 @@ def _extract_runtime_system_mechanics(
             "movement_speed_factor": -0.8,
             "attack_speed_factor": 0.0,
             "slow_aura_timed_life_seconds": 8,
-            "must_not_be_treated_as_live_gameplay_without_creation_reachability_proof": True,
+            "tooltip_advertised_death_damage": 150,
+            "runtime_death_damage_overrides_tooltip": True,
         },
-        "related_rawcode_ids": [1747990082, 1697656888, 1093682515],
-        "source_functions": ["MC", "fJ"],
-        "evidence_kind": "exact-readable-creation-and-death-payload-with-no-readable-creation-function-caller",
-        "byte_offset": min(wisp_create_start, _death_start),
+        "related_rawcode_ids": [
+            1747989060, 1093681747, 1747990082, 1093682509, 1697656888, 1093682515,
+        ],
+        "source_functions": [
+            "MC", "sA",
+            "BuildingSpellClosure_registerBuildingSpell_RaceNatureAbilities_cast_registerBuildingSpell_RaceNatureAbilities",
+            "CallbackPeriodic_doPeriodically_RaceNatureAbilities_call_doPeriodically_RaceNatureAbilities",
+            "fJ", "ForGroupCallback_forUnitsInRange_RaceElementalAbilities_callback_forUnitsInRange_RaceElementalAbilities",
+        ],
+        "evidence_kind": "exact-live-building-pool-data-dependency-release-and-death-payload",
+        "byte_offset": min(
+            wisp_create_start, wisp_take_start, wonders_cast_start, wonders_release_start,
+            _death_start, death_damage_start,
+        ),
     })
 
     # RuntimeLedger contains exact protected-body resource/item mutations, but

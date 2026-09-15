@@ -1,101 +1,101 @@
-rawcode	name	table	base_rawcode	coverage_status	reachability_status	semantic_coverage	ability_link_fields	parent_ability_links	live_parent_abilities	uncertain_parent_abilities	normalized_artifacts	script_reference_class	script_functions	runtime_script_functions	runtime_calls	notes
-B000	Holy Power	custom	Bblo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A016:abuf	A016			none				
-B001	Rot	custom	Bapl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01L:abuf,A05P:abuf,A05T:abuf	A01L,A05P,A05T			none				
-B002	Fear of the Banshee	custom	BHfs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01N:abuf	A01N			none				
-B003	Plague	custom	Bapl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01T:abuf,A05Q:abuf	A01T,A05Q			none				
-B004	Weaken Soul	custom	Bbof	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01V:abuf	A01V			none				
-B005	Soul Taken	custom	BPSE	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01U:abuf,A01X:abuf	A01U	A01X		none				
-B006	Berserk	custom	Bbsk	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B007	Berserk	custom	Bblo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02I:abuf	A02I			none				
-B008	Drum'n'Bass Beats	custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02F:abuf	A02F			none				
-B009	Shaman's Buff	custom	Binf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02M:abuf,A0GT:abuf	A02M,A0GT			none				
-B00A	Summoned Lobster	custom	BOsf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02S:abuf	A02S			none				
-B00B	Dummy insta kill	custom	BPSE	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B00C	Serpent Rock Poison	custom	BNab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A030:abuf	A030			none				
-B00D	Stasis	custom	BPSE	unresolved-reachability	parent-ability-reachability-unresolved	native-object-data	abuf	A031:abuf		A031		none				only linked parent abilities have unresolved reachability: A031
-B00E	Song of Shields	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A034:abuf	A034			none				
-B00F	Aggressive Warsong	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A035:abuf	A035			none				
-B00G	Poison	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A038:abuf,A0AO:abuf,A0AP:abuf	A038,A0AO,A0AP			none				
-B00H	Double Damage	custom	BNbr	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03F:abuf,A06D:abuf	A03F,A06D			none				
-B00I	Quad Damage	custom	BNbr	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03E:abuf,A06C:abuf	A03E,A06C			none				
-B00J	Blessing	custom	Binf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03I:abuf,A03M:abuf,A0I2:abuf	A03I,A03M,A0I2			none				
-B00K	Battle Cry	custom	Broa	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03R:abuf,A0FR:abuf	A03R,A0FR			none				
-B00L	Drum'n'Bass Bassline	custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03T:abuf	A03T			none				
-B00M	Frozen	custom	BEer	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A03W:abuf,A045:abuf,A047:abuf,A04H:abuf,A08S:abuf	A03W,A045,A047,A04H	A08S	runtime-system-mechanics.tsv,unit-spell-mechanics.tsv	none				
-B00N	Crystal Aura	custom	BHab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A042:abuf	A042			none				
-B00O	Burning Soul	custom	BNic	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B00P	Corrupted Speed	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A04T:abuf	A04T			none				
-B00Q	|c00ff0000Corrupt Armor|r	custom	Bhea	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A02C:abuf,A04S:abuf	A02C		runtime-system-mechanics.tsv	runtime	nK	nK		
-B00R	Broken Weapon	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A04Q:abuf,A055:abuf,A0AB:abuf	A04Q,A055,A0AB			none				
-B00S		custom	BNpi	unused-orphaned	proven-unused	unused	abuf	A056:abuf				none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B00T	Nothing	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06I:abuf,A0FB:abuf	A06I,A0FB			none				
-B00U	Greater Plague	custom	Bapl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05S:abuf	A05S			none				
-B00V	Quill Aura	custom	BEah	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05V:abuf	A05V			none				
-B00W	Inner Void	custom	BHfs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05F:abuf,A05G:abuf	A05F,A05G			none				
-B00X	Frozen	custom	Bens	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06Q:abuf,A0AK:abuf	A0AK	A06Q		none				
-B00Y	Tribal Blessing: Demolish	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06X:abuf	A06X			none				
-B00Z	Tribal Blessing: Critical Strike	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06W:abuf	A06W			none				
-B010	Tribal Blessing: Evasion	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06Y:abuf	A06Y			none				
-B011	Chamber of Darkness	custom	BHab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A00F:abuf	A00F			none				
-B012	Stealth	custom	BOwk	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A077:abuf,A078:abuf,A0G1:abuf	A077,A078	A0G1	runtime-system-mechanics.tsv	runtime	QC,isCloaked,isValidAssassinTarget	QC,isCloaked,isValidAssassinTarget	__wurst_safe_GetUnitAbilityLevel,unit_getAbilityLevel	
-B013	Vitality Aura	custom	BUau	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B014	Freezing Cold	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A081:abuf	A081			none				
-B015	Frozen	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A080:abuf,A082:abuf,A083:abuf,A084:abuf	A080,A082,A083,A084			none				
-B016	Elune's Protection	custom	Bdef	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08A:abuf	A08A			none				
-B017	Blessing of the Wilderness	custom	Bbar	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08F:abuf	A08F			none				
-B018	Solar Attack	custom	BNcs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A07X:abuf,A08U:abuf	A08U	A07X		none				
-B019	Targeted	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A00K:abuf,A02U:abuf,A03S:abuf,A044:abuf,A05C:abuf,A05E:abuf,A07P:abuf,A07R:abuf,A08W:abuf,A09D:abuf,A09X:abuf,A0BJ:abuf,A0BX:abuf,A0E1:abuf,A0FU:abuf,A0FX:abuf,A0G2:abuf,A0G8:abuf,A0G9:abuf,A0GB:abuf,A0H1:abuf,A0HK:abuf	A00K,A02U,A03S,A044,A05C,A05E,A07P,A07R,A09D,A09X,A0BJ,A0BX,A0E1,A0FU,A0G2,A0G8,A0G9,A0GB,A0H1	A08W,A0FX,A0HK		none				
-B01A	Nothing	custom	Bphx	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B01B	Devotion Aura	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03J:abuf,A0HZ:abuf	A03J,A0HZ			none				
-B01C	Scroll of Stone	custom	Bdef	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02G:abuf	A02G			none				
-B01D	Firebolt	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A010:abuf	A010			none				
-B01E	Lightning	custom	Basl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A013:abuf	A013			none				
-B01F	Spell Protection	custom	BHds	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08P:abuf	A08P			none				
-B01G	Red Energy Shield	custom	BHab	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B01H	Energy Shield	custom	BHab	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A09L:abuf	A09L		runtime-system-mechanics.tsv	none				
-B01I	Powered	custom	BHab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09P:abuf	A09P			runtime	KE	KE		
-B01J	Empowered	custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09R:abuf	A09R			none				
-B01K	Power Armor	custom	BHab	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A09S:abuf	A09S		building-spell-mechanics.tsv,runtime-system-mechanics.tsv	runtime	ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,KE,onUnitTrained,setupUnit	ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,KE,onUnitTrained,setupUnit	unit_getAbilityLevel	
-B01L	Power Ammo	custom	Bakb	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09V:abuf	A09V			runtime	KE	KE		
-B01M	Ray of Light	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A000:abuf	A000			none				
-B01N	Rocket	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09F:abuf	A09F			none				
-B01O	Blasted	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02D:abuf	A02D			none				
-B01P	Astral Chains	custom	Bslo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01M:abuf	A01M			none				
-B01Q	Fragrance of Shadows	custom	BIcb	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A07C:abuf,A07D:abuf	A07C,A07D			none				
-B01R	Howl	custom	BNht	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05B:abuf	A05B			none				
-B01S	Impale	custom	BUim	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0AF:abuf	A0AF			none				
-B01T	Targeted	custom	BNpa	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A095:abuf,A0AE:abuf	A095,A0AE			none				
-B01U	Explosive Shells	custom	Basl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06G:abuf	A06G			none				
-B01V	Nothing	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08V:abuf	A08V			none				
-B01W	Earthquake	custom	BHtc	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A00B:abuf	A00B			none				
-B01X	Nothing	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A021:abuf,A023:abuf,A024:abuf	A021,A023,A024			none				
-B01Y	Astral Grenade	custom	BHtc	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09E:abuf	A09E			none				
-B01Z	Cyclone	custom	BOae	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B020	Curse of Nature	custom	BHab	unused-orphaned	proven-unused	unused	abuf	A0BR:abuf				none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B021	Summoned Treant	custom	BOsf	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A0BU:abuf	A0BU		unit-spell-mechanics.tsv	runtime	spawnTreantFromWall	spawnTreantFromWall	__wurst_safe_UnitApplyTimedLife	
-B022	"""Parasite"""	custom	BNpa	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0AV:abuf	A0AV			none				
-B023	Corrosive Breath	custom	Basl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0CA:abuf	A0CA			none				
-B024	Natures Aura	custom	BUau	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0B0:abuf	A0B0			none				
-B025	Nothing	custom	Binf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0B7:abuf,A0B8:abuf	A0B7,A0B8			none				
-B026	Squall	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0CQ:abuf,A0CR:abuf	A0CQ,A0CR			none				
-B027	Haste	custom	Bbar	unused-orphaned	proven-unused	unused						none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
-B028	Lightning Shield	custom	BNcs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D5:abuf	A0D5			none				
-B029	Slowed	custom	Bfro	unresolved-reachability	parent-ability-reachability-unresolved	native-object-data	abuf	A0E2:abuf,A0EY:abuf		A0E2,A0EY		none				only linked parent abilities have unresolved reachability: A0E2,A0EY
-B02A	|cff00ff00Forged Weapon|r	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D4:abuf,A0EQ:abuf,A0F1:abuf	A0F1			none				
-B02B	Haste	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D7:abuf	A0D7			none				
-B02C	|cff00ff00Rock Shield|r	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D6:abuf,A0F2:abuf	A0D6,A0F2			none				
-B02D	Wisp Strike	custom	Basl	scripted-normalized	proven-normalized-runtime	normalized-script	abuf	A0ES:abuf		A0ES	runtime-system-mechanics.tsv	none				
-B02E	|cffd45e19Zen Field|r	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0H2:abuf	A0H2			none				
-B02F		custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HH:abuf	A0HH			none				
-B02G	Devotion Aura	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HY:abuf	A0HY			none				
-B02O	Blind	custom	BNdh	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0GD:abuf	A0GD			none				
-B02Q	Salamanders poison	custom	BNab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HW:abuf	A0HW			none				
-B02R	Sandstorm	custom	Bclf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0G4:abuf,A0GA:abuf,A0GC:abuf,A0HP:abuf	A0G4,A0GA,A0GC,A0HP			none				
-B02S		custom	BUts	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0G6:abuf,A0G7:abuf	A0G6,A0G7			none				
-B02T	Ogre's rage	custom	Bblo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0GR:abuf	A0GR			none				
-B02U	Quicksand	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0H5:abuf	A0H5			none				
-B02W	Slowed by sandshield	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HQ:abuf	A0HQ			none				
-BNic	Incinerate	original	BNic	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0B9:abuf,ANic:abuf	A0B9,ANic			none				
-Bbof	Burning	original	Bbof	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02J:abuf,A02K:abuf,A0FF:abuf	A02J,A02K	A0FF		none				
-Bweb	Web	original	Bweb	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0AR:abuf,A0AS:abuf	A0AR,A0AS			none				
-Xbdt		original	Xbdt	native-ability-linked	proven-live-ability-link	native-object-data	aeff	A9FS:aeff	A9FS			none				
+rawcode	name	table	base_rawcode	coverage_status	reachability_status	semantic_coverage	ability_link_fields	parent_ability_links	live_parent_abilities	uncertain_parent_abilities	protected_parent_abilities	normalized_artifacts	script_reference_class	script_functions	runtime_script_functions	runtime_calls	notes
+B000	Holy Power	custom	Bblo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A016:abuf	A016				none				
+B001	Rot	custom	Bapl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01L:abuf,A05P:abuf,A05T:abuf	A01L,A05P,A05T				none				
+B002	Fear of the Banshee	custom	BHfs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01N:abuf	A01N				none				
+B003	Plague	custom	Bapl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01T:abuf,A05Q:abuf	A01T,A05Q				none				
+B004	Weaken Soul	custom	Bbof	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01V:abuf	A01V				none				
+B005	Soul Taken	custom	BPSE	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01U:abuf,A01X:abuf	A01U		A01X		none				
+B006	Berserk	custom	Bbsk	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B007	Berserk	custom	Bblo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02I:abuf	A02I				none				
+B008	Drum'n'Bass Beats	custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02F:abuf	A02F				none				
+B009	Shaman's Buff	custom	Binf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02M:abuf,A0GT:abuf	A02M,A0GT				none				
+B00A	Summoned Lobster	custom	BOsf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02S:abuf	A02S				none				
+B00B	Dummy insta kill	custom	BPSE	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B00C	Serpent Rock Poison	custom	BNab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A030:abuf	A030				none				
+B00D	Stasis	custom	BPSE	protected-parent-overlay-only	protected-parent-overlay-only	native-object-data	abuf	A031:abuf			A031		none				linked parent abilities have protected cooldown/mana overlays but no effective owner, normalized runtime root, or readable runtime reference: A031
+B00E	Song of Shields	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A034:abuf	A034				none				
+B00F	Aggressive Warsong	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A035:abuf	A035				none				
+B00G	Poison	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A038:abuf,A0AO:abuf,A0AP:abuf	A038,A0AO,A0AP				none				
+B00H	Double Damage	custom	BNbr	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03F:abuf,A06D:abuf	A03F,A06D				none				
+B00I	Quad Damage	custom	BNbr	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03E:abuf,A06C:abuf	A03E,A06C				none				
+B00J	Blessing	custom	Binf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03I:abuf,A03M:abuf,A0I2:abuf	A03I,A03M,A0I2				none				
+B00K	Battle Cry	custom	Broa	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03R:abuf,A0FR:abuf	A03R,A0FR				none				
+B00L	Drum'n'Bass Bassline	custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03T:abuf	A03T				none				
+B00M	Frozen	custom	BEer	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A03W:abuf,A045:abuf,A047:abuf,A04H:abuf,A08S:abuf	A03W,A045,A047,A04H		A08S	runtime-system-mechanics.tsv,unit-spell-mechanics.tsv	none				
+B00N	Crystal Aura	custom	BHab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A042:abuf	A042				none				
+B00O	Burning Soul	custom	BNic	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B00P	Corrupted Speed	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A04T:abuf	A04T				none				
+B00Q	|c00ff0000Corrupt Armor|r	custom	Bhea	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A02C:abuf,A04S:abuf	A02C			runtime-system-mechanics.tsv	runtime	nK	nK		
+B00R	Broken Weapon	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A04Q:abuf,A055:abuf,A0AB:abuf	A04Q,A055,A0AB				none				
+B00S		custom	BNpi	unused-orphaned	proven-unused	unused	abuf	A056:abuf					none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B00T	Nothing	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06I:abuf,A0FB:abuf	A06I,A0FB				none				
+B00U	Greater Plague	custom	Bapl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05S:abuf	A05S				none				
+B00V	Quill Aura	custom	BEah	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05V:abuf	A05V				none				
+B00W	Inner Void	custom	BHfs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05F:abuf,A05G:abuf	A05F,A05G				none				
+B00X	Frozen	custom	Bens	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06Q:abuf,A0AK:abuf	A0AK		A06Q		none				
+B00Y	Tribal Blessing: Demolish	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06X:abuf	A06X				none				
+B00Z	Tribal Blessing: Critical Strike	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06W:abuf	A06W				none				
+B010	Tribal Blessing: Evasion	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06Y:abuf	A06Y				none				
+B011	Chamber of Darkness	custom	BHab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A00F:abuf	A00F				none				
+B012	Stealth	custom	BOwk	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A077:abuf,A078:abuf,A0G1:abuf	A077,A078		A0G1	runtime-system-mechanics.tsv	runtime	QC,isCloaked,isValidAssassinTarget	QC,isCloaked,isValidAssassinTarget	__wurst_safe_GetUnitAbilityLevel,unit_getAbilityLevel	
+B013	Vitality Aura	custom	BUau	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B014	Freezing Cold	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A081:abuf	A081				none				
+B015	Frozen	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A080:abuf,A082:abuf,A083:abuf,A084:abuf	A080,A082,A083,A084				none				
+B016	Elune's Protection	custom	Bdef	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08A:abuf	A08A				none				
+B017	Blessing of the Wilderness	custom	Bbar	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08F:abuf	A08F				none				
+B018	Solar Attack	custom	BNcs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A07X:abuf,A08U:abuf	A08U		A07X		none				
+B019	Targeted	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A00K:abuf,A02U:abuf,A03S:abuf,A044:abuf,A05C:abuf,A05E:abuf,A07P:abuf,A07R:abuf,A08W:abuf,A09D:abuf,A09X:abuf,A0BJ:abuf,A0BX:abuf,A0E1:abuf,A0FU:abuf,A0FX:abuf,A0G2:abuf,A0G8:abuf,A0G9:abuf,A0GB:abuf,A0H1:abuf,A0HK:abuf	A00K,A02U,A03S,A044,A05C,A05E,A07P,A07R,A09D,A09X,A0BJ,A0BX,A0E1,A0FU,A0G2,A0G8,A0G9,A0GB,A0H1		A08W,A0FX,A0HK		none				
+B01A	Nothing	custom	Bphx	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B01B	Devotion Aura	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A03J:abuf,A0HZ:abuf	A03J,A0HZ				none				
+B01C	Scroll of Stone	custom	Bdef	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02G:abuf	A02G				none				
+B01D	Firebolt	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A010:abuf	A010				none				
+B01E	Lightning	custom	Basl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A013:abuf	A013				none				
+B01F	Spell Protection	custom	BHds	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08P:abuf	A08P				none				
+B01G	Red Energy Shield	custom	BHab	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B01H	Energy Shield	custom	BHab	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A09L:abuf	A09L			runtime-system-mechanics.tsv	none				
+B01I	Powered	custom	BHab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09P:abuf	A09P				runtime	KE	KE		
+B01J	Empowered	custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09R:abuf	A09R				none				
+B01K	Power Armor	custom	BHab	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A09S:abuf	A09S			building-spell-mechanics.tsv,runtime-system-mechanics.tsv	runtime	ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,KE,onUnitTrained,setupUnit	ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities1,KE,onUnitTrained,setupUnit	unit_getAbilityLevel	
+B01L	Power Ammo	custom	Bakb	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09V:abuf	A09V				runtime	KE	KE		
+B01M	Ray of Light	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A000:abuf	A000				none				
+B01N	Rocket	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09F:abuf	A09F				none				
+B01O	Blasted	custom	Bpxf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02D:abuf	A02D				none				
+B01P	Astral Chains	custom	Bslo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A01M:abuf	A01M				none				
+B01Q	Fragrance of Shadows	custom	BIcb	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A07C:abuf,A07D:abuf	A07C,A07D				none				
+B01R	Howl	custom	BNht	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A05B:abuf	A05B				none				
+B01S	Impale	custom	BUim	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0AF:abuf	A0AF				none				
+B01T	Targeted	custom	BNpa	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A095:abuf,A0AE:abuf	A095,A0AE				none				
+B01U	Explosive Shells	custom	Basl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A06G:abuf	A06G				none				
+B01V	Nothing	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A08V:abuf	A08V				none				
+B01W	Earthquake	custom	BHtc	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A00B:abuf	A00B				none				
+B01X	Nothing	custom	Bphx	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A021:abuf,A023:abuf,A024:abuf	A021,A023,A024				none				
+B01Y	Astral Grenade	custom	BHtc	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A09E:abuf	A09E				none				
+B01Z	Cyclone	custom	BOae	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B020	Curse of Nature	custom	BHab	unused-orphaned	proven-unused	unused	abuf	A0BR:abuf					none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B021	Summoned Treant	custom	BOsf	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A0BU:abuf	A0BU			unit-spell-mechanics.tsv	runtime	spawnTreantFromWall	spawnTreantFromWall	__wurst_safe_UnitApplyTimedLife	
+B022	"""Parasite"""	custom	BNpa	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0AV:abuf	A0AV				none				
+B023	Corrosive Breath	custom	Basl	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0CA:abuf	A0CA				none				
+B024	Natures Aura	custom	BUau	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0B0:abuf	A0B0				none				
+B025	Nothing	custom	Binf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0B7:abuf,A0B8:abuf	A0B7,A0B8				none				
+B026	Squall	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0CQ:abuf,A0CR:abuf	A0CQ,A0CR				none				
+B027	Haste	custom	Bbar	unused-orphaned	proven-unused	unused							none				custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference
+B028	Lightning Shield	custom	BNcs	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D5:abuf	A0D5				none				
+B029	Slowed	custom	Bfro	protected-parent-overlay-only	protected-parent-overlay-only	native-object-data	abuf	A0E2:abuf,A0EY:abuf			A0E2,A0EY		none				linked parent abilities have protected cooldown/mana overlays but no effective owner, normalized runtime root, or readable runtime reference: A0E2,A0EY
+B02A	|cff00ff00Forged Weapon|r	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D4:abuf,A0EQ:abuf,A0F1:abuf	A0F1				none				
+B02B	Haste	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D7:abuf	A0D7				none				
+B02C	|cff00ff00Rock Shield|r	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0D6:abuf,A0F2:abuf	A0D6,A0F2				none				
+B02D	Wisp Strike	custom	Basl	native-ability-linked+normalized-script	proven-live-ability-link	native+normalized-script	abuf	A0ES:abuf	A0ES			runtime-system-mechanics.tsv	none				
+B02E	|cffd45e19Zen Field|r	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0H2:abuf	A0H2				none				
+B02F		custom	BOac	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HH:abuf	A0HH				none				
+B02G	Devotion Aura	custom	BHad	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HY:abuf	A0HY				none				
+B02O	Blind	custom	BNdh	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0GD:abuf	A0GD				none				
+B02Q	Salamanders poison	custom	BNab	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HW:abuf	A0HW				none				
+B02R	Sandstorm	custom	Bclf	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0G4:abuf,A0GA:abuf,A0GC:abuf,A0HP:abuf	A0G4,A0GA,A0GC,A0HP				none				
+B02S		custom	BUts	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0G6:abuf,A0G7:abuf	A0G6,A0G7				none				
+B02T	Ogre's rage	custom	Bblo	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0GR:abuf	A0GR				none				
+B02U	Quicksand	custom	BOae	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0H5:abuf	A0H5				none				
+B02W	Slowed by sandshield	custom	Bcri	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0HQ:abuf	A0HQ				none				
+BNic	Incinerate	original	BNic	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0B9:abuf,ANic:abuf	A0B9,ANic				none				
+Bbof	Burning	original	Bbof	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A02J:abuf,A02K:abuf,A0FF:abuf	A02J,A02K		A0FF		none				
+Bweb	Web	original	Bweb	native-ability-linked	proven-live-ability-link	native-object-data	abuf	A0AR:abuf,A0AS:abuf	A0AR,A0AS				none				
+Xbdt		original	Xbdt	native-ability-linked	proven-live-ability-link	native-object-data	aeff	A9FS:aeff	A9FS				none				
