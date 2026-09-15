@@ -1,11 +1,11 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
-    BuildingConstructionCancelOutcome, BuildingFootprint, CommandCardPosition, SimId, Team,
-    castle_fight_command_card_layout,
+    BuildingConstructionCancelOutcome, BuildingFootprint, CastleFightBuildingKind,
+    CastleFightContentBundle, CommandCardPosition, SimId, Team,
 };
 
 use crate::{
-    AuthoritativeSimulation,
+    AuthoritativeSimulation, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
@@ -48,17 +48,6 @@ const TOOLTIP_BACKGROUND: Color = Color::srgba(0.025, 0.020, 0.015, 0.98);
 const TOOLTIP_BORDER: Color = Color::srgb(0.48, 0.39, 0.22);
 const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
 const TOOLTIP_TEXT_COLOR: Color = Color::srgb(0.95, 0.95, 0.92);
-
-const ALL_BUILD_KINDS: [BuildKind; 8] = [
-    BuildKind::Production(ProductionKind::Barracks),
-    BuildKind::Production(ProductionKind::Stronghold),
-    BuildKind::Production(ProductionKind::RangersHall),
-    BuildKind::Production(ProductionKind::OrcishSiegeFactory),
-    BuildKind::Production(ProductionKind::IceTrollHut),
-    BuildKind::Production(ProductionKind::GryphonRock),
-    BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower),
-    BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::PoofTower),
-];
 
 fn command_slot(position: CommandCardPosition) -> usize {
     usize::from(position.y) * GRID_COLUMNS + usize::from(position.x)
@@ -163,11 +152,13 @@ enum ActionTooltipKind {
 }
 
 impl ActionTooltipKind {
-    fn tooltips(self) -> (&'static str, &'static str) {
+    fn tooltips(self, content: &CastleFightContentBundle) -> (&'static str, &'static str) {
         match self {
-            Self::Build(kind) => kind.tooltips(),
+            Self::Build(kind) => kind.tooltips(content),
             Self::ProductionUpgrade(kind) => {
-                let definition = kind.definition();
+                let definition = content
+                    .production_building(kind)
+                    .expect("upgrade target must belong to selected content bundle");
                 (definition.basic_tooltip, definition.extended_tooltip)
             }
         }
@@ -348,6 +339,7 @@ fn setup_action_panel(mut commands: Commands) {
 fn sync_action_panel_to_selection(
     inspection: Res<InspectionSelection>,
     samples: Res<PresentationSamples>,
+    selected_match: Res<SelectedMatch>,
     mut state: ResMut<ActionPanelState>,
     mut panel: Single<&mut Visibility, With<ActionPanel>>,
 ) {
@@ -358,8 +350,8 @@ fn sync_action_panel_to_selection(
         }
         samples.current.buildings.get(&id).and_then(|building| {
             (building.construction_complete_tick.is_some()
-                || building_is_controllable_production(building)
-                || building_is_controllable_tower(building))
+                || building_is_controllable_production(building, selected_match.content)
+                || building_is_controllable_tower(building, selected_match.content))
             .then_some((id, building.team))
         })
     });
@@ -437,16 +429,16 @@ fn cancel_selected_construction(
 fn populate_action_panel(
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
+    selected_match: Res<SelectedMatch>,
     asset_server: Res<AssetServer>,
     mut icon_assets: ResMut<UiIconAssets>,
     mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility)>,
     mut labels: Query<(&CommandSlot, &mut Text), With<SlotLabel>>,
     mut icons: Query<(&CommandSlot, &mut ImageNode), With<SlotIcon>>,
 ) {
-    let layout = action_layout(&state, &authoritative);
-    let command_card = castle_fight_command_card_layout();
-    let presentation = CastleFightPresentationCatalog::for_version(command_card.map_version)
-        .expect("active Castle Fight version must have presentation bindings");
+    let layout = action_layout(&state, &authoritative, &selected_match);
+    let presentation = CastleFightPresentationCatalog::for_version(selected_match.content.map_version)
+        .expect("selected Castle Fight version must have presentation bindings");
 
     for (slot, mut action, mut visibility) in &mut buttons {
         action.0 = layout[slot.0];
@@ -457,11 +449,21 @@ fn populate_action_panel(
         };
     }
     for (slot, mut text) in &mut labels {
-        text.0 = layout[slot.0].map_or_else(String::new, action_label);
+        text.0 = layout[slot.0].map_or_else(String::new, |action| {
+            action_label(action, selected_match.content)
+        });
     }
     for (slot, mut image) in &mut icons {
         *image = layout[slot.0]
-            .map(|action| action_icon_key(action, &state, &authoritative, presentation))
+            .map(|action| {
+                action_icon_key(
+                    action,
+                    &state,
+                    &authoritative,
+                    selected_match.content,
+                    presentation,
+                )
+            })
             .and_then(|key| icon_assets.image(key, &asset_server))
             .map_or_else(ImageNode::default, ImageNode::new);
     }
@@ -471,12 +473,17 @@ fn action_icon_key(
     action: PanelAction,
     state: &ActionPanelState,
     authoritative: &AuthoritativeSimulation,
+    content: &CastleFightContentBundle,
     presentation: CastleFightPresentationCatalog,
 ) -> UiIconKey {
     match action {
         PanelAction::OpenBuildMenu => presentation.build_command,
         PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
-            UiIconKey::unit_game_interface(target.definition().rawcode)
+            let rawcode = content
+                .production_building(target)
+                .expect("upgrade target must belong to selected content bundle")
+                .rawcode;
+            UiIconKey::unit_game_interface(rawcode)
         }
         PanelAction::CancelConstruction | PanelAction::Cancel => presentation.cancel_command,
         PanelAction::Target(TargetingAction::Move) => presentation.move_command,
@@ -496,7 +503,7 @@ fn action_icon_key(
         PanelAction::Target(TargetingAction::Blink) => presentation.blink_command,
         PanelAction::Target(TargetingAction::Attack) => presentation.attack_command,
         PanelAction::Target(TargetingAction::Build(kind)) => {
-            UiIconKey::unit_game_interface(kind.rawcode())
+            UiIconKey::unit_game_interface(kind.rawcode(content))
         }
     }
 }
@@ -520,12 +527,13 @@ fn insert_panel_action(
 fn action_layout(
     state: &ActionPanelState,
     authoritative: &AuthoritativeSimulation,
+    selected_match: &SelectedMatch,
 ) -> [Option<PanelAction>; SLOT_COUNT] {
     let mut slots = [None; SLOT_COUNT];
     let Some(actor) = state.actor else {
         return slots;
     };
-    let command_card = castle_fight_command_card_layout();
+    let command_card = selected_match.content.command_card;
     let cancel_slot = command_slot(command_card.cancel_command);
 
     match state.mode {
@@ -541,22 +549,32 @@ fn action_layout(
             } else if let Some(building) = authoritative.simulation.building(actor) {
                 if building.construction_complete_tick.is_some() {
                     slots[cancel_slot] = Some(PanelAction::CancelConstruction);
-                } else if let Some(kind) = building
-                    .content
-                    .and_then(|content| ProductionKind::from_rawcode(content.rawcode))
+                } else if let Some(kind) =
+                    selected_production_kind_from_content(building.content, selected_match.content)
                 {
-                    for target in kind.upgrade_targets() {
+                    for target in kind
+                        .upgrade_targets_for_version(selected_match.content.map_version)
+                        .expect("selected bundle must support its production upgrade graph")
+                    {
+                        let target_definition = selected_match
+                            .content
+                            .production_building(target)
+                            .expect("upgrade target must belong to selected bundle");
                         insert_panel_action(
                             &mut slots,
-                            command_slot(target.definition().command_card_position),
+                            command_slot(target_definition.command_card_position),
                             cancel_slot,
                             PanelAction::Production(ProductionPanelAction::Upgrade(target)),
                         );
                     }
                 } else if building.attack_delivery.is_some()
-                    && building.content.is_some_and(|content| {
-                        castle_fight_sim::CastleFightTowerKind::from_rawcode(content.rawcode)
-                            .is_some()
+                    && building.content.is_some_and(|identity| {
+                        matches!(
+                            selected_match
+                                .content
+                                .building_kind_for_rawcode(identity.rawcode),
+                            Some(CastleFightBuildingKind::Tower(_))
+                        )
                     })
                 {
                     slots[command_slot(command_card.attack_command)] =
@@ -568,16 +586,19 @@ fn action_layout(
             let Some(builder) = authoritative.simulation.builder(actor) else {
                 return slots;
             };
-            for kind in ALL_BUILD_KINDS {
-                if !builder.configuration.allows_building(kind.rawcode()) {
+            for &kind in &selected_match.direct_buildings {
+                if !builder
+                    .configuration
+                    .allows_building(kind.rawcode(selected_match.content))
+                {
                     continue;
                 }
-                // The verification client intentionally exposes a mixed-race catalog. Real
-                // race catalogs do not collide here; for this synthetic menu retain authored
-                // slots when possible and resolve cross-race collisions deterministically.
+                // The development subset intentionally exposes a mixed-race catalog. Preserve
+                // authored command-card positions when possible and resolve collisions in stable
+                // bundle order.
                 insert_panel_action(
                     &mut slots,
-                    command_slot(kind.command_card_position()),
+                    command_slot(kind.command_card_position(selected_match.content)),
                     cancel_slot,
                     PanelAction::Target(TargetingAction::Build(kind)),
                 );
@@ -593,6 +614,7 @@ fn action_layout(
 
 fn handle_action_panel_buttons(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut samples: ResMut<PresentationSamples>,
     mut state: ResMut<ActionPanelState>,
@@ -617,17 +639,35 @@ fn handle_action_panel_buttons(
                 let Some(actor) = state.actor else {
                     continue;
                 };
-                if !can_afford_production_upgrade(&authoritative, &state, target) {
-                    state.status =
-                        insufficient_upgrade_resources_status(&authoritative, &state, target);
+                if !can_afford_production_upgrade(
+                    &authoritative,
+                    &state,
+                    target,
+                    selected_match.content,
+                ) {
+                    state.status = insufficient_upgrade_resources_status(
+                        &authoritative,
+                        &state,
+                        target,
+                        selected_match.content,
+                    );
                     continue;
                 }
-                match order_demo_production_upgrade(&mut authoritative.simulation, actor, target) {
+                match order_demo_production_upgrade(
+                    &mut authoritative.simulation,
+                    selected_match.content,
+                    actor,
+                    target,
+                ) {
                     Ok(()) => {
                         samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
                         state.status = format!(
                             "Upgrading to {} — construction can be cancelled until completion.",
-                            target.definition().name
+                            selected_match
+                                .content
+                                .production_building(target)
+                                .expect("upgrade target must belong to selected bundle")
+                                .name
                         );
                     }
                     Err(error) => {
@@ -636,16 +676,21 @@ fn handle_action_panel_buttons(
                 }
             }
             PanelAction::Target(TargetingAction::Build(kind)) => {
-                if !can_afford_build_kind(&authoritative, &state, kind) {
-                    state.status = insufficient_resources_status(&authoritative, &state, kind);
+                if !can_afford_build_kind(&authoritative, &state, kind, selected_match.content) {
+                    state.status = insufficient_resources_status(
+                        &authoritative,
+                        &state,
+                        kind,
+                        selected_match.content,
+                    );
                     continue;
                 }
                 state.mode = ActionPanelMode::Targeting(TargetingAction::Build(kind));
                 state.status = format!(
                     "{} selected — {} gold / {} lumber. Left-click a build site; Esc cancels this building.",
-                    kind.label(),
-                    kind.gold_cost(),
-                    kind.lumber_cost(),
+                    kind.label(selected_match.content),
+                    kind.gold_cost(selected_match.content),
+                    kind.lumber_cost(selected_match.content),
                 );
             }
             PanelAction::Target(action) => {
@@ -727,6 +772,7 @@ fn repair_autocast_button_hovered(interaction: Interaction, action: Option<Panel
 fn style_action_panel_buttons(
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
+    selected_match: Res<SelectedMatch>,
     mut buttons: Query<(
         &CommandSlot,
         &SlotAction,
@@ -741,10 +787,15 @@ fn style_action_panel_buttons(
     for (slot, action, interaction, mut background, mut border) in &mut buttons {
         let disabled = action.0.is_some_and(|action| match action {
             PanelAction::Target(TargetingAction::Build(kind)) => {
-                !can_afford_build_kind(&authoritative, &state, kind)
+                !can_afford_build_kind(&authoritative, &state, kind, selected_match.content)
             }
             PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
-                !can_afford_production_upgrade(&authoritative, &state, target)
+                !can_afford_production_upgrade(
+                    &authoritative,
+                    &state,
+                    target,
+                    selected_match.content,
+                )
             }
             _ => false,
         });
@@ -790,6 +841,7 @@ fn style_action_panel_buttons(
 fn update_build_tooltip(
     mut commands: Commands,
     buttons: Query<(&Interaction, &SlotAction), With<Button>>,
+    selected_match: Res<SelectedMatch>,
     mut tooltip_state: ResMut<BuildTooltipState>,
     mut tooltip_visibility: Single<&mut Visibility, With<BuildTooltip>>,
     tooltip_title: Single<Entity, With<BuildTooltipTitle>>,
@@ -820,7 +872,7 @@ fn update_build_tooltip(
         return;
     };
 
-    let (basic, extended) = kind.tooltips();
+    let (basic, extended) = kind.tooltips(selected_match.content);
     set_wc3_text(&mut commands, *tooltip_title, basic, TOOLTIP_TITLE_COLOR);
     set_wc3_text(&mut commands, *tooltip_body, extended, TOOLTIP_TEXT_COLOR);
     **tooltip_visibility = Visibility::Visible;
@@ -857,10 +909,14 @@ fn draw_build_preview(
     metrics: Res<WorldMetrics>,
     terrain: Res<TerrainSurface>,
     authoritative: Res<AuthoritativeSimulation>,
-    ui_state: (Res<ActionPanelState>, Res<DebugMenuState>),
+    ui_state: (
+        Res<ActionPanelState>,
+        Res<DebugMenuState>,
+        Res<SelectedMatch>,
+    ),
     mut gizmos: Gizmos,
 ) {
-    let (state, debug_menu) = ui_state;
+    let (state, debug_menu, selected_match) = ui_state;
     let Some(TargetingAction::Build(kind)) = state.targeting() else {
         return;
     };
@@ -876,11 +932,11 @@ fn draw_build_preview(
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         return;
     };
-    let footprint = placement_footprint(&metrics, world, kind);
+    let footprint = placement_footprint(&metrics, world, kind, selected_match.content);
     let valid = authoritative
         .simulation
         .can_place_building_for_team(state.team, footprint)
-        && can_afford_build_kind(&authoritative, &state, kind);
+        && can_afford_build_kind(&authoritative, &state, kind, selected_match.content);
     let color = if valid {
         team_ui_color(state.team)
     } else {
@@ -893,8 +949,9 @@ pub(crate) fn placement_footprint(
     metrics: &WorldMetrics,
     world: Vec3,
     kind: BuildKind,
+    content: &CastleFightContentBundle,
 ) -> BuildingFootprint {
-    let size = kind.footprint_size();
+    let size = kind.footprint_size(content);
     metrics.footprint_at_world(world, size, size)
 }
 
@@ -902,31 +959,39 @@ fn can_afford_build_kind(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
     kind: BuildKind,
+    content: &CastleFightContentBundle,
 ) -> bool {
     let Some(actor) = state.actor else {
         return false;
     };
     authoritative
         .simulation
-        .can_builder_afford_building(actor, kind.economy())
+        .can_builder_afford_building(actor, kind.economy(content))
 }
 
 fn can_afford_production_upgrade(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
     target: ProductionKind,
+    content: &CastleFightContentBundle,
 ) -> bool {
+    let definition = content
+        .production_building(target)
+        .expect("upgrade target must belong to selected bundle");
     authoritative
         .simulation
-        .can_afford_building(state.team, target.definition().economy)
+        .can_afford_building(state.team, definition.economy)
 }
 
 fn insufficient_upgrade_resources_status(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
     target: ProductionKind,
+    content: &CastleFightContentBundle,
 ) -> String {
-    let definition = target.definition();
+    let definition = content
+        .production_building(target)
+        .expect("upgrade target must belong to selected bundle");
     let resources = authoritative
         .simulation
         .player_resources(state.team)
@@ -945,6 +1010,7 @@ fn insufficient_resources_status(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
     kind: BuildKind,
+    content: &CastleFightContentBundle,
 ) -> String {
     let resources = authoritative
         .simulation
@@ -952,31 +1018,36 @@ fn insufficient_resources_status(
         .expect("action panel supports the two Castle Fight players");
     format!(
         "Cannot afford {}: need {} gold / {} lumber; currently {} / {} committed/free.",
-        kind.label(),
-        kind.gold_cost(),
-        kind.lumber_cost(),
+        kind.label(content),
+        kind.gold_cost(content),
+        kind.lumber_cost(content),
         resources.gold,
         resources.lumber,
     )
 }
 
-fn action_label(action: PanelAction) -> String {
+fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> String {
     match action {
         PanelAction::OpenBuildMenu => "Build".into(),
         PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
-            production_upgrade_button_label(target)
+            production_upgrade_button_label(target, content)
         }
         PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
         PanelAction::Target(TargetingAction::Blink) => "Blink".into(),
         PanelAction::Target(TargetingAction::Attack) => "Attack".into(),
-        PanelAction::Target(TargetingAction::Build(kind)) => build_button_label(kind),
+        PanelAction::Target(TargetingAction::Build(kind)) => build_button_label(kind, content),
     }
 }
 
-fn production_upgrade_button_label(target: ProductionKind) -> String {
-    let definition = target.definition();
+fn production_upgrade_button_label(
+    target: ProductionKind,
+    content: &CastleFightContentBundle,
+) -> String {
+    let definition = content
+        .production_building(target)
+        .expect("upgrade target must belong to selected bundle");
     if definition.economy.lumber_cost == 0 {
         format!(
             "Upgrade\n{}\n{}g",
@@ -990,7 +1061,7 @@ fn production_upgrade_button_label(target: ProductionKind) -> String {
     }
 }
 
-fn build_button_label(kind: BuildKind) -> String {
+fn build_button_label(kind: BuildKind, content: &CastleFightContentBundle) -> String {
     let name = match kind {
         BuildKind::Production(ProductionKind::Barracks) => "Barracks",
         BuildKind::Production(ProductionKind::Stronghold) => "Stronghold",
@@ -1001,7 +1072,7 @@ fn build_button_label(kind: BuildKind) -> String {
         BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower) => "Watch Tower",
         BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::PoofTower) => "Poof Tower",
     };
-    let economy = kind.economy();
+    let economy = kind.economy(content);
     if economy.lumber_cost == 0 {
         format!("{name}\n{}g", economy.gold_cost)
     } else {
@@ -1037,16 +1108,35 @@ fn building_is_attack_capable(kind: BuildingVisualKind) -> bool {
     )
 }
 
-fn building_is_controllable_production(building: &BuildingSample) -> bool {
-    building
-        .content
-        .is_some_and(|content| ProductionKind::from_rawcode(content.rawcode).is_some())
+fn selected_production_kind_from_content(
+    identity: Option<castle_fight_sim::ContentIdentity>,
+    content: &CastleFightContentBundle,
+) -> Option<ProductionKind> {
+    identity
+        .and_then(|identity| content.building_kind_for_rawcode(identity.rawcode))
+        .and_then(|kind| match kind {
+            CastleFightBuildingKind::Production(kind) => Some(kind),
+            CastleFightBuildingKind::Tower(_) => None,
+        })
 }
 
-fn building_is_controllable_tower(building: &BuildingSample) -> bool {
+fn building_is_controllable_production(
+    building: &BuildingSample,
+    content: &CastleFightContentBundle,
+) -> bool {
+    selected_production_kind_from_content(building.content, content).is_some()
+}
+
+fn building_is_controllable_tower(
+    building: &BuildingSample,
+    content: &CastleFightContentBundle,
+) -> bool {
     building_is_attack_capable(building.visual_kind)
-        && building.content.is_some_and(|content| {
-            castle_fight_sim::CastleFightTowerKind::from_rawcode(content.rawcode).is_some()
+        && building.content.is_some_and(|identity| {
+            matches!(
+                content.building_kind_for_rawcode(identity.rawcode),
+                Some(CastleFightBuildingKind::Tower(_))
+            )
         })
 }
 
@@ -1075,10 +1165,12 @@ mod tests {
             ..SimulationConfig::default()
         };
         let metrics = WorldMetrics::from_simulation_config(&config);
+        let demo = create_demo_world(1, Some(0));
         let footprint = placement_footprint(
             &metrics,
             Vec3::new(105.0, 0.0, 75.0),
             BuildKind::Production(ProductionKind::Barracks),
+            demo.content,
         );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
     }
@@ -1112,11 +1204,15 @@ mod tests {
             actor: Some(actor),
             ..ActionPanelState::default()
         };
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings.clone(),
+        };
         let authoritative = AuthoritativeSimulation {
             simulation: demo.simulation,
         };
-        let layout = action_layout(&state, &authoritative);
-        let command_card = castle_fight_command_card_layout();
+        let layout = action_layout(&state, &authoritative, &selected_match);
+        let command_card = selected_match.content.command_card;
         assert_eq!(
             layout[command_slot(command_card.move_command)],
             Some(PanelAction::Target(TargetingAction::Move))
@@ -1137,10 +1233,14 @@ mod tests {
 
     #[test]
     fn tower_action_panel_exposes_attack_in_versioned_wc3_slot() {
-        let mut simulation = castle_fight_sim::Simulation::new(SimulationConfig::default(), 1);
-        let tower = castle_fight_sim::CastleFightTowerKind::WatchTower.definition();
+        let demo = create_demo_world(1, Some(0));
+        let tower = demo
+            .content
+            .tower(castle_fight_sim::CastleFightTowerKind::WatchTower)
+            .unwrap();
+        let mut simulation = demo.simulation;
         let tower_id = simulation.spawn_building_with_properties(
-            tower.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4)),
+            tower.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
             tower.gameplay_properties(),
         );
         let state = ActionPanelState {
@@ -1148,8 +1248,12 @@ mod tests {
             ..ActionPanelState::default()
         };
         let authoritative = AuthoritativeSimulation { simulation };
-        let layout = action_layout(&state, &authoritative);
-        let command_card = castle_fight_command_card_layout();
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+        };
+        let layout = action_layout(&state, &authoritative, &selected_match);
+        let command_card = selected_match.content.command_card;
         assert_eq!(
             layout[command_slot(command_card.attack_command)],
             Some(PanelAction::Target(TargetingAction::Attack))
@@ -1165,29 +1269,33 @@ mod tests {
             mode: ActionPanelMode::BuildMenu,
             ..ActionPanelState::default()
         };
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings.clone(),
+        };
         let authoritative = AuthoritativeSimulation {
             simulation: demo.simulation,
         };
-        let layout = action_layout(&state, &authoritative);
+        let layout = action_layout(&state, &authoritative, &selected_match);
         let barracks = BuildKind::Production(ProductionKind::Barracks);
         let siege_factory = BuildKind::Production(ProductionKind::OrcishSiegeFactory);
         assert_eq!(
-            layout[command_slot(barracks.command_card_position())],
+            layout[command_slot(barracks.command_card_position(selected_match.content))],
             Some(PanelAction::Target(TargetingAction::Build(barracks)))
         );
         assert_eq!(
-            layout[command_slot(siege_factory.command_card_position())],
+            layout[command_slot(siege_factory.command_card_position(selected_match.content))],
             Some(PanelAction::Target(TargetingAction::Build(siege_factory)))
         );
         assert_eq!(
-            layout[command_slot(castle_fight_command_card_layout().cancel_command)],
+            layout[command_slot(selected_match.content.command_card.cancel_command)],
             Some(PanelAction::Cancel)
         );
         let build_count = layout
             .iter()
             .filter(|action| matches!(action, Some(PanelAction::Target(TargetingAction::Build(_)))))
             .count();
-        assert_eq!(build_count, ALL_BUILD_KINDS.len() - 1);
+        assert_eq!(build_count, selected_match.direct_buildings.len());
         assert!(!layout.iter().any(|action| {
             *action
                 == Some(PanelAction::Target(TargetingAction::Build(
@@ -1198,10 +1306,14 @@ mod tests {
 
     #[test]
     fn production_building_panel_exposes_versioned_upgrade_target() {
-        let mut simulation = castle_fight_sim::Simulation::new(SimulationConfig::default(), 1);
-        let barracks = ProductionKind::Barracks.definition();
+        let demo = create_demo_world(1, Some(0));
+        let barracks = demo
+            .content
+            .production_building(ProductionKind::Barracks)
+            .unwrap();
+        let mut simulation = demo.simulation;
         let barracks_id = simulation.spawn_building_with_properties(
-            barracks.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4)),
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
             barracks.gameplay_properties(),
         );
         let state = ActionPanelState {
@@ -1209,10 +1321,18 @@ mod tests {
             ..ActionPanelState::default()
         };
         let authoritative = AuthoritativeSimulation { simulation };
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+        };
         let stronghold = ProductionKind::Stronghold;
-        let layout = action_layout(&state, &authoritative);
+        let stronghold_definition = selected_match
+            .content
+            .production_building(stronghold)
+            .unwrap();
+        let layout = action_layout(&state, &authoritative, &selected_match);
         assert_eq!(
-            layout[command_slot(stronghold.definition().command_card_position)],
+            layout[command_slot(stronghold_definition.command_card_position)],
             Some(PanelAction::Production(ProductionPanelAction::Upgrade(
                 stronghold
             )))

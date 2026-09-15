@@ -33,7 +33,7 @@ use castle_fight_sim::{
 };
 
 use crate::{
-    SimulationPlayback,
+    SelectedMatch, SimulationPlayback,
     bridge::{
         BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
         UnitVisualKind,
@@ -723,9 +723,12 @@ impl Plugin for CastlePresentationPlugin {
 
 fn setup_scene(
     mut commands: Commands,
-    mut unit_models: ResMut<UnitModelSet>,
-    mut building_models: ResMut<BuildingModelSet>,
-    mut wc3_visuals: ResMut<Wc3VisualSet>,
+    model_sets: (
+        ResMut<UnitModelSet>,
+        ResMut<BuildingModelSet>,
+        ResMut<Wc3VisualSet>,
+    ),
+    selected_match: Res<SelectedMatch>,
     world: (
         Res<WorldMetrics>,
         Res<TerrainSurface>,
@@ -735,6 +738,7 @@ fn setup_scene(
     assets: SceneAssetResources<'_>,
     mut gizmo_configs: ResMut<GizmoConfigStore>,
 ) {
+    let (mut unit_models, mut building_models, mut wc3_visuals) = model_sets;
     let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
     let SceneAssetResources {
         asset_server,
@@ -743,8 +747,31 @@ fn setup_scene(
         mut health_bar_materials,
         mut shader_buffers,
     } = assets;
-    *unit_models = UnitModelSet::load_default(&asset_server);
-    *building_models = BuildingModelSet::load_default(&asset_server);
+    let selected_unit_models = selected_match
+        .content
+        .unit_definitions()
+        .map(|definition| definition.rawcode)
+        .chain(
+            selected_match
+                .content
+                .builder_definitions()
+                .map(|definition| definition.rawcode),
+        )
+        .collect::<Vec<_>>();
+    *unit_models = UnitModelSet::load_selected(&asset_server, &selected_unit_models);
+    let selected_building_models = selected_match
+        .content
+        .production_building_definitions()
+        .map(|definition| definition.rawcode)
+        .chain(
+            selected_match
+                .content
+                .tower_definitions()
+                .map(|definition| definition.rawcode),
+        )
+        .chain(std::iter::once(u32::from_be_bytes(*b"hcas")))
+        .collect::<Vec<_>>();
+    *building_models = BuildingModelSet::load_selected(&asset_server, &selected_building_models);
     *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
 
     let health_bar_buffer_data = vec![[0.0; 4]; 1 + HEALTH_BAR_BATCH_MIN_BUFFER_RECTS * 2];

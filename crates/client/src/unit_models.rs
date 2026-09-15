@@ -12,30 +12,6 @@ use crate::terrain::client_asset_root;
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
 const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
-const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 21] = [
-    u32::from_be_bytes(*b"hfoo"),
-    u32::from_be_bytes(*b"h03A"),
-    u32::from_be_bytes(*b"e003"),
-    u32::from_be_bytes(*b"o001"),
-    u32::from_be_bytes(*b"n015"),
-    u32::from_be_bytes(*b"h016"),
-    u32::from_be_bytes(*b"X00O"),
-    u32::from_be_bytes(*b"X006"),
-    u32::from_be_bytes(*b"X0Z0"),
-    u32::from_be_bytes(*b"X078"),
-    u32::from_be_bytes(*b"X051"),
-    u32::from_be_bytes(*b"X00P"),
-    u32::from_be_bytes(*b"X00C"),
-    u32::from_be_bytes(*b"X06P"),
-    u32::from_be_bytes(*b"X00E"),
-    u32::from_be_bytes(*b"X01A"),
-    u32::from_be_bytes(*b"X089"),
-    u32::from_be_bytes(*b"X017"),
-    u32::from_be_bytes(*b"X019"),
-    u32::from_be_bytes(*b"X07P"),
-    u32::from_be_bytes(*b"X018"),
-];
-
 #[derive(Resource, Default)]
 pub struct UnitModelSet {
     models: BTreeMap<u32, UnitModelAsset>,
@@ -101,7 +77,7 @@ struct ResolvedUnitAsset {
 
 impl UnitModelSet {
     #[must_use]
-    pub fn load_default(asset_server: &AssetServer) -> Self {
+    pub fn load_selected(asset_server: &AssetServer, selected_rawcodes: &[u32]) -> Self {
         let asset_root = client_asset_root();
         let manifest_path = asset_root.join(UNIT_MODEL_MANIFEST);
         if !manifest_path.is_file() {
@@ -112,7 +88,7 @@ impl UnitModelSet {
             Ok(entries) => {
                 let mut models = BTreeMap::new();
                 for entry in entries {
-                    if !CURRENT_SLICE_WC3_MODEL_RAWCODES.contains(&entry.rawcode) {
+                    if !selected_rawcodes.contains(&entry.rawcode) {
                         continue;
                     }
                     if !asset_root.join(&entry.asset_path).is_file() {

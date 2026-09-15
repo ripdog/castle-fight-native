@@ -1,7 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 
 use crate::{
-    AuthoritativeSimulation, SimulationPlayback,
+    AuthoritativeSimulation, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
     build_ui::{
         ActionPanelMode, ActionPanelState, TargetingAction, cursor_over_action_panel,
@@ -35,6 +35,7 @@ struct SelectionCommandResources<'w> {
     playback: Res<'w, SimulationPlayback>,
     debug_menu: Res<'w, DebugMenuState>,
     action_panel: ResMut<'w, ActionPanelState>,
+    selected_match: Res<'w, SelectedMatch>,
     authoritative: ResMut<'w, AuthoritativeSimulation>,
     presentation: ResMut<'w, PresentationSamples>,
 }
@@ -48,7 +49,7 @@ fn handle_selection_commands(
         return;
     };
 
-    let command_card = castle_fight_sim::castle_fight_command_card_layout();
+    let command_card = resources.selected_match.content.command_card;
 
     try_open_build_menu_hotkey(
         &resources.keys,
@@ -297,7 +298,12 @@ fn handle_modal_left_click(
                     "Placement rejected: cursor does not intersect the battlefield.".into();
                 return;
             };
-            let footprint = placement_footprint(&resources.metrics, world, kind);
+            let footprint = placement_footprint(
+                &resources.metrics,
+                world,
+                kind,
+                resources.selected_match.content,
+            );
             if !resources
                 .authoritative
                 .simulation
@@ -310,6 +316,7 @@ fn handle_modal_left_click(
             }
             match order_demo_building(
                 &mut resources.authoritative.simulation,
+                resources.selected_match.content,
                 resources.action_panel.team,
                 footprint,
                 kind,
@@ -318,7 +325,7 @@ fn handle_modal_left_click(
                     resources.action_panel.mode = ActionPanelMode::BuildMenu;
                     resources.action_panel.status = format!(
                         "{} ordered. Builder will move into construction range.",
-                        kind.label()
+                        kind.label(resources.selected_match.content)
                     );
                     publish_snapshot(&resources.authoritative, &mut resources.presentation);
                 }

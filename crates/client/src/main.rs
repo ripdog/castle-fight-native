@@ -23,14 +23,17 @@ use bevy::{
     time::Fixed,
     window::PresentMode,
 };
-use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, Simulation};
+use castle_fight_sim::{
+    CASTLE_FIGHT_SIMULATION_HZ, CastleFightContentAvailability, CastleFightContentBundle,
+    MapVersion, Simulation, castle_fight_registered_releases,
+};
 
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::BuildUiPlugin;
 use builder_controls::BuilderControlPlugin;
 use cursor::CursorPresentationPlugin;
 use debug_menu::DebugMenuPlugin;
-use demo::create_demo_world;
+use demo::{BuildKind, create_demo_world_for_version};
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use presentation::CastlePresentationPlugin;
@@ -42,6 +45,12 @@ const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 #[derive(Resource)]
 pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
+}
+
+#[derive(Resource)]
+pub(crate) struct SelectedMatch {
+    pub(crate) content: &'static CastleFightContentBundle,
+    pub(crate) direct_buildings: Vec<BuildKind>,
 }
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -68,18 +77,42 @@ struct SimulationPauseText;
 fn main() {
     configure_asset_io_task_pool();
     let options = ClientOptions::parse();
-    let demo = create_demo_world(default_worker_count(), options.stress_units);
+    if options.list_map_versions {
+        print_registered_map_versions();
+        return;
+    }
+    let demo = create_demo_world_for_version(
+        default_worker_count(),
+        options.stress_units,
+        options.map_version,
+        &options.release_revision,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!(
+            "cannot start Castle Fight {}/{}: {error}",
+            options.map_version, options.release_revision
+        );
+        std::process::exit(2);
+    });
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
     let present_mode = if options.stress_units.is_some() {
         PresentMode::AutoNoVsync
     } else {
         PresentMode::AutoVsync
     };
+    let window_title = format!(
+        "Castle Fight Native 3D — CF {}/{} ({})",
+        demo.match_config.release.map_version,
+        demo.match_config.release.release_revision,
+        demo.match_config
+            .release
+            .content_revision
+            .unwrap_or("archived-only"),
+    );
 
-    let terrain_texture_layout = TerrainTextureLayout::from_wc3_terrain_json(include_str!(
-        "../../../docs/original_map/extracted/terrain.json"
-    ))
-    .expect("committed Warcraft terrain texture layout must be valid");
+    let terrain_texture_layout =
+        TerrainTextureLayout::from_wc3_terrain_json(demo.terrain_source_json)
+            .expect("selected Warcraft terrain texture layout must be valid");
     let terrain_textures = TerrainTextureSet::load_default();
 
     let mut app = App::new();
@@ -87,6 +120,10 @@ fn main() {
         .insert_resource(Time::<Fixed>::from_hz(f64::from(
             CASTLE_FIGHT_SIMULATION_HZ,
         )))
+        .insert_resource(SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+        })
         .insert_resource(AuthoritativeSimulation {
             simulation: demo.simulation,
         })
@@ -104,7 +141,7 @@ fn main() {
                 })
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "Castle Fight Native 3D".into(),
+                        title: window_title,
                         resolution: (1440, 900).into(),
                         present_mode,
                         ..default()
@@ -171,11 +208,14 @@ fn print_perf_telemetry(
     );
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct ClientOptions {
     stress_units: Option<usize>,
     health_bars: bool,
     perf_log: bool,
+    map_version: MapVersion,
+    release_revision: String,
+    list_map_versions: bool,
 }
 
 impl ClientOptions {
@@ -184,6 +224,9 @@ impl ClientOptions {
             stress_units: None,
             health_bars: true,
             perf_log: false,
+            map_version: MapVersion::CASTLE_FIGHT_9_27,
+            release_revision: "r1".to_owned(),
+            list_map_versions: false,
         };
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -200,9 +243,23 @@ impl ClientOptions {
                 }
                 "--no-health-bars" => options.health_bars = false,
                 "--perf-log" => options.perf_log = true,
+                "--map-version" => {
+                    let value = args
+                        .next()
+                        .expect("--map-version requires a version such as 9.27");
+                    options.map_version = value
+                        .parse()
+                        .expect("--map-version requires a version such as 9.27");
+                }
+                "--map-revision" => {
+                    options.release_revision = args
+                        .next()
+                        .expect("--map-revision requires an exact revision such as r1");
+                }
+                "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--stress-units N] [--no-health-bars] [--perf-log]"
+                        "Usage: cargo run -p castle-fight-client -- [--map-version 9.27] [--map-revision r1] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log]"
                     );
                     std::process::exit(0);
                 }
@@ -210,6 +267,28 @@ impl ClientOptions {
             }
         }
         options
+    }
+}
+
+fn print_registered_map_versions() {
+    println!("Registered Castle Fight releases:");
+    for release in castle_fight_registered_releases() {
+        let availability = match release.availability {
+            CastleFightContentAvailability::SupportedDevelopmentSubset => {
+                "playable development subset"
+            }
+            CastleFightContentAvailability::SupportedFull => "playable full ruleset",
+            CastleFightContentAvailability::Archived => "archived, not playable",
+            CastleFightContentAvailability::Unavailable => "unavailable",
+        };
+        let content = release.content_revision.map_or_else(
+            || "no runtime content".to_owned(),
+            |revision| revision.to_owned(),
+        );
+        println!(
+            "  {}/{}: {availability} ({content})",
+            release.map_version, release.release_revision
+        );
     }
 }
 

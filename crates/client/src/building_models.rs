@@ -90,7 +90,7 @@ struct ResolvedBuildingAsset {
 
 impl BuildingModelSet {
     #[must_use]
-    pub fn load_default(asset_server: &AssetServer) -> Self {
+    pub fn load_selected(asset_server: &AssetServer, selected_rawcodes: &[u32]) -> Self {
         let asset_root = client_asset_root();
         let manifest_path = asset_root.join(BUILDING_MODEL_MANIFEST);
         if !manifest_path.is_file() {
@@ -101,6 +101,9 @@ impl BuildingModelSet {
             Ok(entries) => {
                 let mut models = BTreeMap::new();
                 for entry in entries {
+                    if !selected_rawcodes.contains(&entry.rawcode) {
+                        continue;
+                    }
                     if !asset_root.join(&entry.asset_path).is_file() {
                         eprintln!(
                             "warning: generated WC3 building model is missing: {}",
