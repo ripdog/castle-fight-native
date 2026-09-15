@@ -142,6 +142,7 @@ Step commits:
 - `3bc0ede` — `docs: define version-selected match setup`
 - `6ad8738` — `client: keep selected content in icon action panel`
 - `0bc6d44` — `client: load UI icons for selected map version`
+- `1f42a3f` — `client: bind cursor validation to selected content`
 
 Supporting cleanup:
 
@@ -172,7 +173,7 @@ Availability behavior:
 Executed verification after rebasing onto the then-current master:
 
 - `tools/cargo-interactive test -p castle-fight-sim`: **214 passed**;
-- `tools/cargo-interactive test -p castle-fight-client`: **102 passed**;
+- `tools/cargo-interactive test -p castle-fight-client`: **105 passed** after rebasing over Warcraft cursor presentation;
 - match-setup focused suite: 6 passed, including worker-independent initial checksums, retained-registry parity, stale bundle rejection, map-source pinning, and topology preservation;
 - selected UI-icon suite: 3 passed;
 - `tools/cargo-interactive clippy -p castle-fight-sim -p castle-fight-client --all-targets -- -D warnings`: passed;
