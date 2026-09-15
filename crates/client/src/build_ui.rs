@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::{
     ecs::system::SystemParam, prelude::*, window::PrimaryWindow,
     world_serialization::WorldInstanceReady,
@@ -57,8 +59,8 @@ const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
 const TOOLTIP_TEXT_COLOR: Color = Color::srgb(0.95, 0.95, 0.92);
 const BUILD_PREVIEW_VALID_COLOR: Color = Color::srgba(0.18, 1.0, 0.24, 0.82);
 const BUILD_PREVIEW_INVALID_COLOR: Color = Color::srgba(1.0, 0.12, 0.10, 0.88);
-const BUILD_GHOST_VALID_COLOR: Color = Color::srgba(0.12, 0.92, 0.20, 0.38);
-const BUILD_GHOST_INVALID_COLOR: Color = Color::srgba(1.0, 0.08, 0.06, 0.42);
+const BUILD_GHOST_VALID_COLOR: Color = Color::srgba(0.48, 1.0, 0.52, 0.82);
+const BUILD_GHOST_INVALID_COLOR: Color = Color::srgba(1.0, 0.30, 0.24, 0.86);
 
 fn command_slot(position: CommandCardPosition) -> usize {
     usize::from(position.y) * GRID_COLUMNS + usize::from(position.x)
@@ -179,10 +181,16 @@ impl ActionTooltipKind {
 #[derive(Resource, Default)]
 struct BuildTooltipState(Option<ActionTooltipKind>);
 
-#[derive(Resource)]
-struct BuildPreviewMaterials {
+#[derive(Component, Clone)]
+struct BuildGhostMaterialPair {
     valid: Handle<StandardMaterial>,
     invalid: Handle<StandardMaterial>,
+}
+
+#[derive(Resource)]
+struct BuildPreviewMaterials {
+    fallback: BuildGhostMaterialPair,
+    textured: HashMap<AssetId<StandardMaterial>, BuildGhostMaterialPair>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -943,20 +951,33 @@ fn wc3_text_for_embedded_font(text: &str) -> String {
     text.replace('•', "-")
 }
 
+fn build_ghost_material(mut source: StandardMaterial, tint: Color) -> StandardMaterial {
+    // Keep the source diffuse texture so the preview reads as the actual selected building,
+    // but flatten lighting and strongly tint it like Warcraft's placement ghost.
+    source.base_color = tint;
+    source.alpha_mode = AlphaMode::Blend;
+    source.unlit = true;
+    source.cull_mode = None;
+    source
+}
+
 fn setup_build_preview_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let ghost_material = |color| StandardMaterial {
-        base_color: color,
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        cull_mode: None,
-        ..default()
+    let fallback = BuildGhostMaterialPair {
+        valid: materials.add(build_ghost_material(
+            StandardMaterial::default(),
+            BUILD_GHOST_VALID_COLOR,
+        )),
+        invalid: materials.add(build_ghost_material(
+            StandardMaterial::default(),
+            BUILD_GHOST_INVALID_COLOR,
+        )),
     };
     commands.insert_resource(BuildPreviewMaterials {
-        valid: materials.add(ghost_material(BUILD_GHOST_VALID_COLOR)),
-        invalid: materials.add(ghost_material(BUILD_GHOST_INVALID_COLOR)),
+        fallback,
+        textured: HashMap::new(),
     });
 }
 
@@ -1083,40 +1104,63 @@ fn apply_build_preview_ghost_materials_when_ready(
     ghosts: Query<&BuildPlacementGhost>,
     children: Query<&Children>,
     mut mesh_materials: Query<&mut MeshMaterial3d<StandardMaterial>>,
-    preview_materials: Res<BuildPreviewMaterials>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut preview_materials: ResMut<BuildPreviewMaterials>,
 ) {
     let Ok(ghost) = ghosts.get(scene_ready.entity) else {
         return;
     };
-    let material = if ghost.valid {
-        &preview_materials.valid
-    } else {
-        &preview_materials.invalid
-    };
     for child in children.iter_descendants(scene_ready.entity) {
-        if let Ok(mut mesh_material) = mesh_materials.get_mut(child) {
-            mesh_material.0 = material.clone();
-            commands.entity(child).insert(Wc3MaterialProcessed);
-        }
+        let Ok(mut mesh_material) = mesh_materials.get_mut(child) else {
+            continue;
+        };
+        let source = mesh_material.0.clone();
+        let source_id = source.id();
+        let pair = if let Some(pair) = preview_materials.textured.get(&source_id) {
+            pair.clone()
+        } else if let Some(source_material) = materials.get(&source).cloned() {
+            let pair = BuildGhostMaterialPair {
+                valid: materials.add(build_ghost_material(
+                    source_material.clone(),
+                    BUILD_GHOST_VALID_COLOR,
+                )),
+                invalid: materials.add(build_ghost_material(
+                    source_material,
+                    BUILD_GHOST_INVALID_COLOR,
+                )),
+            };
+            preview_materials.textured.insert(source_id, pair.clone());
+            pair
+        } else {
+            preview_materials.fallback.clone()
+        };
+        mesh_material.0 = if ghost.valid {
+            pair.valid.clone()
+        } else {
+            pair.invalid.clone()
+        };
+        commands.entity(child).insert((pair, Wc3MaterialProcessed));
     }
 }
 
 fn refresh_build_preview_ghost_materials(
     ghosts: Query<(Entity, &BuildPlacementGhost), Changed<BuildPlacementGhost>>,
     children: Query<&Children>,
-    mut mesh_materials: Query<&mut MeshMaterial3d<StandardMaterial>>,
-    preview_materials: Res<BuildPreviewMaterials>,
+    mut mesh_materials: Query<(
+        &mut MeshMaterial3d<StandardMaterial>,
+        &BuildGhostMaterialPair,
+    )>,
 ) {
     for (entity, ghost) in &ghosts {
-        let material = if ghost.valid {
-            &preview_materials.valid
-        } else {
-            &preview_materials.invalid
-        };
         for child in children.iter_descendants(entity) {
-            if let Ok(mut mesh_material) = mesh_materials.get_mut(child) {
-                mesh_material.0 = material.clone();
-            }
+            let Ok((mut mesh_material, pair)) = mesh_materials.get_mut(child) else {
+                continue;
+            };
+            mesh_material.0 = if ghost.valid {
+                pair.valid.clone()
+            } else {
+                pair.invalid.clone()
+            };
         }
     }
 }
