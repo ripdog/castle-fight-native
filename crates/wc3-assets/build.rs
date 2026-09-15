@@ -64,6 +64,19 @@ struct VisualAssetCatalog {
 }
 
 #[derive(Serialize)]
+struct UiAssetSpec {
+    owner_kind: String,
+    owner_rawcode: String,
+    role: String,
+    texture_path: String,
+}
+
+#[derive(Serialize)]
+struct UiAssetCatalog {
+    assets: Vec<UiAssetSpec>,
+}
+
+#[derive(Serialize)]
 struct DoodadPlacementSpec {
     editor_id: u32,
     position: [f32; 3],
@@ -114,6 +127,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
     let visuals = load_visual_assets(&object_fields_path)?;
+    let ui = load_ui_assets(&object_fields_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
         out_dir.join("unit-assets.json"),
@@ -131,6 +145,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
         out_dir.join("visual-assets.json"),
         serde_json::to_vec(&visuals)?,
     )?;
+    fs::write(out_dir.join("ui-assets.json"), serde_json::to_vec(&ui)?)?;
     Ok(())
 }
 
@@ -594,6 +609,86 @@ fn load_visual_assets(
         status_visuals,
         chain_lightning_abilities: chain_lightning_abilities.into_keys().collect(),
         stun_model_path,
+    })
+}
+
+fn load_ui_assets(object_fields_path: &std::path::Path) -> Result<UiAssetCatalog, Box<dyn Error>> {
+    let mut fields = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(object_fields_path)?;
+    let headers = fields.headers()?.clone();
+    let category = header_index(&headers, "category")?;
+    let rawcode_col = header_index(&headers, "rawcode")?;
+    let field_id = header_index(&headers, "field_id")?;
+    let value_type = header_index(&headers, "value_type")?;
+    let recovered = header_index(&headers, "recovered_value_json")?;
+
+    let mut assets = BTreeSet::<(String, String, String, String)>::new();
+    for row in fields.records() {
+        let row = row?;
+        if row.get(value_type) != Some("icon") {
+            continue;
+        }
+        let Some(owner_kind) = row.get(category) else {
+            continue;
+        };
+        let Some(owner_rawcode) = row.get(rawcode_col) else {
+            continue;
+        };
+        let Some(field) = row.get(field_id) else {
+            continue;
+        };
+        let Some(texture_path) = parse_json_string(row.get(recovered).unwrap_or_default()) else {
+            continue;
+        };
+        let texture_path = texture_path.trim();
+        if texture_path.is_empty() || texture_path.eq_ignore_ascii_case("none") {
+            continue;
+        }
+        let role = match field {
+            "aart" => "normal",
+            "arar" => "research",
+            "auar" => "turn_off",
+            "fart" => "buff",
+            "uico" => "game_interface",
+            "iico" => "interface",
+            "ucua" => "caster_upgrade",
+            _ => field,
+        };
+        assets.insert((
+            owner_kind.to_owned(),
+            owner_rawcode.to_owned(),
+            role.to_owned(),
+            texture_path.to_owned(),
+        ));
+    }
+
+    for (resource, texture_path) in [
+        ("gold", r"UI\Feedback\Resources\ResourceGold.blp"),
+        ("lumber", r"UI\Feedback\Resources\ResourceLumber.blp"),
+        ("supply", r"UI\Feedback\Resources\ResourceSupply.blp"),
+        ("upkeep", r"UI\Feedback\Resources\ResourceUpkeep.blp"),
+    ] {
+        assets.insert((
+            "resources".to_owned(),
+            resource.to_owned(),
+            "bar".to_owned(),
+            texture_path.to_owned(),
+        ));
+    }
+
+    Ok(UiAssetCatalog {
+        assets: assets
+            .into_iter()
+            .map(
+                |(owner_kind, owner_rawcode, role, texture_path)| UiAssetSpec {
+                    owner_kind,
+                    owner_rawcode,
+                    role,
+                    texture_path,
+                },
+            )
+            .collect(),
     })
 }
 

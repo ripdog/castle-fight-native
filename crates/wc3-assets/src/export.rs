@@ -21,8 +21,8 @@ use whiteout::{
 };
 
 use crate::catalog::{
-    BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, StatusVisualSpec, UnitAssetSpec,
-    VisualAssetCatalog, VisualAssetSpec,
+    BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, StatusVisualSpec, UiAssetCatalog,
+    UnitAssetSpec, VisualAssetCatalog, VisualAssetSpec,
 };
 
 const GL_ARRAY_BUFFER: u32 = 34_962;
@@ -34,6 +34,7 @@ const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
 const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 4;
 const BUILDING_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const DOODAD_MANIFEST_SCHEMA_VERSION: u32 = 2;
+const UI_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 1;
 const WHITEOUT_STABLE_MAX_MDX_VERSION: u32 = 1200;
 const WC3_3_MDX_VERSION: u32 = 1800;
 const MAX_MDX_INPUT_BYTES: usize = 64 * 1024 * 1024;
@@ -274,6 +275,32 @@ pub struct VisualBindingManifest {
 #[derive(Debug, Clone, Serialize)]
 pub struct VisualFailureManifest {
     pub source_model: String,
+    pub error: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UiAssetManifest {
+    pub schema_version: u32,
+    pub castle_fight_catalog_version: &'static str,
+    pub wc3_version: Option<String>,
+    pub art_mode: &'static str,
+    pub assets: Vec<UiBindingManifest>,
+    pub textures: Vec<TextureManifest>,
+    pub failures: Vec<UiFailureManifest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UiBindingManifest {
+    pub owner_kind: String,
+    pub owner_rawcode: String,
+    pub role: String,
+    pub source_texture: String,
+    pub png: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UiFailureManifest {
+    pub source_texture: String,
     pub error: String,
 }
 
@@ -685,6 +712,72 @@ impl Exporter {
             chain_lightning_abilities: catalog.chain_lightning_abilities.clone(),
             stun,
             models,
+            failures,
+        })
+    }
+
+    pub fn export_ui(
+        &mut self,
+        catalog: &UiAssetCatalog,
+    ) -> Result<UiAssetManifest, Box<dyn Error>> {
+        let normalized_assets: Vec<_> = catalog
+            .assets
+            .iter()
+            .map(|asset| {
+                (
+                    asset.owner_kind.clone(),
+                    asset.owner_rawcode.clone(),
+                    asset.role.clone(),
+                    normalize_texture_path(&asset.texture_path),
+                )
+            })
+            .collect();
+
+        let mut sources = BTreeMap::<String, String>::new();
+        for (_, _, _, source) in &normalized_assets {
+            sources
+                .entry(source.to_ascii_lowercase())
+                .or_insert_with(|| source.clone());
+        }
+
+        let mut textures = Vec::new();
+        let mut failures = Vec::new();
+        let mut outputs = BTreeMap::<String, TextureManifest>::new();
+        for (key, source) in sources {
+            match self.export_texture(&source) {
+                Ok(texture) => {
+                    outputs.insert(key, texture.clone());
+                    textures.push(texture);
+                }
+                Err(error) => failures.push(UiFailureManifest {
+                    source_texture: source,
+                    error: error.to_string(),
+                }),
+            }
+        }
+
+        let assets = normalized_assets
+            .into_iter()
+            .map(
+                |(owner_kind, owner_rawcode, role, source_texture)| UiBindingManifest {
+                    owner_kind,
+                    owner_rawcode,
+                    role,
+                    png: outputs
+                        .get(&source_texture.to_ascii_lowercase())
+                        .and_then(|texture| texture.png.clone()),
+                    source_texture,
+                },
+            )
+            .collect();
+
+        Ok(UiAssetManifest {
+            schema_version: UI_ASSET_MANIFEST_SCHEMA_VERSION,
+            castle_fight_catalog_version: CATALOG_VERSION,
+            wc3_version: self.wc3_version.clone(),
+            art_mode: "sd",
+            assets,
+            textures,
             failures,
         })
     }

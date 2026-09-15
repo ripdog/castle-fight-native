@@ -11,8 +11,8 @@ use std::{
 };
 
 use catalog::{
-    load_embedded_buildings, load_embedded_doodads, load_embedded_units, load_embedded_visuals,
-    load_production_units,
+    load_embedded_buildings, load_embedded_doodads, load_embedded_ui, load_embedded_units,
+    load_embedded_visuals, load_production_units,
 };
 use export::Exporter;
 
@@ -52,6 +52,45 @@ fn run() -> Result<(), Box<dyn Error>> {
         )
     })?;
     verify_install(&wc3_install)?;
+
+    if args.ui {
+        if args.effects
+            || args.buildings
+            || !args.building_filters.is_empty()
+            || args.doodads
+            || !args.doodad_filters.is_empty()
+            || args.production.is_some()
+            || args.object_fields.is_some()
+            || !args.units.is_empty()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--ui cannot be combined with unit, building, doodad, or effect options",
+            )
+            .into());
+        }
+        let ui = load_embedded_ui()?;
+        println!(
+            "Extracting {} Castle Fight/WC3 UI icon binding(s) from {}",
+            ui.assets.len(),
+            wc3_install.display()
+        );
+        let mut exporter = Exporter::open(
+            &wc3_install,
+            args.map_archive.as_deref(),
+            &output,
+            args.keep_source,
+        )?;
+        let manifest = exporter.export_ui(&ui)?;
+        write_manifest(&output.join("manifest.json"), &manifest)?;
+        println!(
+            "Exported {} unique WC3 UI texture(s) to {} ({} unresolved texture reference(s))",
+            manifest.textures.len(),
+            output.display(),
+            manifest.failures.len()
+        );
+        return Ok(());
+    }
 
     if args.effects {
         if args.buildings
@@ -336,6 +375,7 @@ struct Args {
     doodads: bool,
     doodad_filters: Vec<String>,
     effects: bool,
+    ui: bool,
     art_mode: String,
     keep_source: bool,
     help: bool,
@@ -355,6 +395,7 @@ impl Args {
             doodads: false,
             doodad_filters: Vec::new(),
             effects: false,
+            ui: false,
             art_mode: "sd".to_owned(),
             keep_source: false,
             help: false,
@@ -368,6 +409,7 @@ impl Args {
                 "--buildings" => result.buildings = true,
                 "--doodads" => result.doodads = true,
                 "--effects" => result.effects = true,
+                "--ui" => result.ui = true,
                 "--wc3" => result.wc3_install = Some(PathBuf::from(value(&args, &mut i, "--wc3")?)),
                 "--map" => result.map_archive = Some(PathBuf::from(value(&args, &mut i, "--map")?)),
                 "--output" | "-o" => {
@@ -432,6 +474,7 @@ Options:
   --building RAWCODE    Export one building; repeat for more buildings
   --doodads             Export every doodad/destructable placed by Castle Fight
   --effects             Export projectile/spell/buff models referenced by Castle Fight
+  --ui                  Export resolved unit/ability/buff/item icons and WC3 resource icons
   --doodad RAWCODE      Export one placed doodad type; repeat for more types
   --art sd              Art mode. SD/classic is currently implemented
   --keep-source         Also retain extracted MDX and source texture files
@@ -442,8 +485,8 @@ Options:
 With no --unit filters, every production unit and race builder in the resolved Castle Fight
 catalog is exported. Use --buildings (or --building RAWCODE) for structures and towers,
 --doodads (or --doodad RAWCODE) for map decoration assets and exact placements, and
---effects for the visual-effects catalog. Models shared by multiple objects are converted
-once. Particle/ribbon metadata is retained in the model
+--effects for the visual-effects catalog, and --ui for UI/icon textures. Models or textures
+shared by multiple objects are converted once. Particle/ribbon metadata is retained in the model
 manifest for native presentation even though glTF has no particle-emitter primitive. When
 --map is supplied, map-imported models/textures override install assets and are extracted too.
 "
@@ -511,6 +554,19 @@ mod tests {
             Some(Path::new("/maps/castle-fight.w3x"))
         );
         assert!(args.effects);
+    }
+
+    #[test]
+    fn parses_ui_export_mode() {
+        let args = Args::parse(
+            ["--wc3", "/game", "--output", "/out", "--ui"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .unwrap();
+        assert!(args.ui);
+        assert!(!args.effects);
+        assert!(args.units.is_empty());
     }
 
     #[test]

@@ -49,6 +49,19 @@ pub struct VisualAssetCatalog {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UiAssetSpec {
+    pub owner_kind: String,
+    pub owner_rawcode: String,
+    pub role: String,
+    pub texture_path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UiAssetCatalog {
+    pub assets: Vec<UiAssetSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DoodadAssetSpec {
     pub rawcode: String,
     pub base_rawcode: String,
@@ -88,6 +101,11 @@ pub fn load_embedded_doodads() -> Result<Vec<DoodadAssetSpec>, Box<dyn Error>> {
 
 pub fn load_embedded_visuals() -> Result<VisualAssetCatalog, Box<dyn Error>> {
     let json = include_str!(concat!(env!("OUT_DIR"), "/visual-assets.json"));
+    Ok(serde_json::from_str(json)?)
+}
+
+pub fn load_embedded_ui() -> Result<UiAssetCatalog, Box<dyn Error>> {
+    let json = include_str!(concat!(env!("OUT_DIR"), "/ui-assets.json"));
     Ok(serde_json::from_str(json)?)
 }
 
@@ -295,6 +313,36 @@ mod tests {
             building("h039").animation_properties,
             vec!["upgrade".to_owned(), "second".to_owned()]
         );
+    }
+
+    #[test]
+    fn embedded_ui_catalog_contains_object_and_resource_icons() {
+        let catalog = load_embedded_ui().expect("embedded UI catalog parses");
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "abilities"
+                && asset.owner_rawcode == "A03W"
+                && asset.role == "normal"
+                && asset.texture_path
+                    == r"ReplaceableTextures\PassiveButtons\PASBTNFreezingBreath.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "buffs"
+                && asset.owner_rawcode == "B005"
+                && asset.role == "buff"
+                && asset.texture_path == r"ReplaceableTextures\CommandButtons\BTNStun.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "resources"
+                && asset.owner_rawcode == "gold"
+                && asset.role == "bar"
+                && asset.texture_path == r"UI\Feedback\Resources\ResourceGold.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "resources"
+                && asset.owner_rawcode == "lumber"
+                && asset.role == "bar"
+                && asset.texture_path == r"UI\Feedback\Resources\ResourceLumber.blp"
+        }));
     }
 
     #[test]
