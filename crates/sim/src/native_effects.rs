@@ -1,4 +1,8 @@
-use std::{fmt, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    sync::OnceLock,
+};
 
 use serde::Deserialize;
 
@@ -18,7 +22,7 @@ use crate::{
 const BINDINGS_JSON: &str = include_str!("../data/castle-fight/native-effect-bindings.json");
 const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-effect-tuning.json");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
     WarcraftMarkerOnlyV1,
@@ -32,6 +36,139 @@ pub enum NativeEffectImplementationId {
     WarcraftBurningOilV1,
     WarcraftFrostArmorV1,
 }
+
+impl NativeEffectImplementationId {
+    #[must_use]
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::WarcraftMarkerOnlyV1 => 0,
+            Self::WarcraftZeroDamageBarrageV1 => 1,
+            Self::WarcraftEvasionV1 => 2,
+            Self::WarcraftDefendV1 => 3,
+            Self::WarcraftBashV1 => 4,
+            Self::WarcraftOrbSpellProcV1 => 5,
+            Self::WarcraftChainLightningV1 => 6,
+            Self::WarcraftEntanglingRootsV1 => 7,
+            Self::WarcraftBurningOilV1 => 8,
+            Self::WarcraftFrostArmorV1 => 9,
+        }
+    }
+
+    const fn requires_tuning(self) -> bool {
+        !matches!(
+            self,
+            Self::WarcraftMarkerOnlyV1 | Self::WarcraftZeroDamageBarrageV1
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum NativeEffectSourceKind {
+    UnitAbility,
+    AbilityEffect,
+}
+
+impl NativeEffectSourceKind {
+    #[must_use]
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::UnitAbility => 0,
+            Self::AbilityEffect => 1,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::UnitAbility => "unit-ability",
+            Self::AbilityEffect => "ability-effect",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "unit-ability" => Some(Self::UnitAbility),
+            "ability-effect" => Some(Self::AbilityEffect),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NativeEffectSource {
+    pub kind: NativeEffectSourceKind,
+    pub key: u32,
+}
+
+impl NativeEffectSource {
+    #[must_use]
+    pub const fn new(kind: NativeEffectSourceKind, key: u32) -> Self {
+        Self { kind, key }
+    }
+}
+
+impl fmt::Display for NativeEffectSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{} {}",
+            self.kind.as_str(),
+            display_rawcode(self.key)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ResolvedNativeEffectBinding {
+    pub source: NativeEffectSource,
+    pub implementation: NativeEffectImplementationId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeEffectResolveError {
+    UnsupportedMapVersion(MapVersion),
+    MissingBinding(NativeEffectSource),
+    AmbiguousBinding(NativeEffectSource),
+    MissingTuning(NativeEffectSource),
+    IncompatibleTuning {
+        source: NativeEffectSource,
+        expected: NativeEffectImplementationId,
+        selected: NativeEffectImplementationId,
+    },
+    DependencyCycle(NativeEffectSource),
+}
+
+impl fmt::Display for NativeEffectResolveError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedMapVersion(version) => write!(
+                formatter,
+                "no native-effect tuning snapshot is available for Castle Fight {version}"
+            ),
+            Self::MissingBinding(source) => {
+                write!(formatter, "missing native-effect binding for {source}")
+            }
+            Self::AmbiguousBinding(source) => {
+                write!(formatter, "multiple native-effect bindings match {source}")
+            }
+            Self::MissingTuning(source) => {
+                write!(formatter, "missing native-effect tuning for {source}")
+            }
+            Self::IncompatibleTuning {
+                source,
+                expected,
+                selected,
+            } => write!(
+                formatter,
+                "native-effect tuning for {source} requires {expected:?}, selected {selected:?}"
+            ),
+            Self::DependencyCycle(source) => {
+                write!(formatter, "native-effect dependency cycle reaches {source}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for NativeEffectResolveError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeEffectCatalogError {
@@ -84,9 +221,15 @@ impl NativeEffectCatalog {
                     binding.source_key, valid_from, valid_through
                 ));
             }
+            let source_kind =
+                NativeEffectSourceKind::parse(&binding.source_kind).ok_or_else(|| {
+                    format!(
+                        "unsupported native-effect source kind {:?} for {}",
+                        binding.source_kind, binding.source_key
+                    )
+                })?;
             bindings.push(OwnedBinding {
-                source_kind: binding.source_kind,
-                source_key: binding.source_key,
+                source: NativeEffectSource::new(source_kind, rawcode(&binding.source_key)?),
                 implementation: binding.implementation,
                 valid_versions: MapVersionRange::inclusive(valid_from, valid_through),
             });
@@ -94,13 +237,12 @@ impl NativeEffectCatalog {
 
         for (index, left) in bindings.iter().enumerate() {
             for right in &bindings[index + 1..] {
-                if left.source_kind == right.source_kind
-                    && left.source_key == right.source_key
+                if left.source == right.source
                     && ranges_overlap(left.valid_versions, right.valid_versions)
                 {
                     return Err(format!(
-                        "native-effect bindings overlap for {} {}",
-                        left.source_kind, left.source_key
+                        "native-effect bindings overlap for {}",
+                        left.source
                     ));
                 }
             }
@@ -126,12 +268,12 @@ impl NativeEffectCatalog {
             if let Some(unit_rawcode) = effect.unit_rawcode() {
                 rawcode(unit_rawcode)?;
             }
+            effect.dependency_source()?;
+            let source = effect.source()?;
             let implementation = bindings
                 .iter()
                 .find(|binding| {
-                    binding.source_kind == effect.source_kind()
-                        && binding.source_key == effect.source_key()
-                        && binding.valid_versions.contains(tuning_version)
+                    binding.source == source && binding.valid_versions.contains(tuning_version)
                 })
                 .map(|binding| binding.implementation)
                 .ok_or_else(|| {
@@ -166,21 +308,101 @@ impl NativeEffectCatalog {
         source_key: &str,
         version: MapVersion,
     ) -> Option<NativeEffectImplementationId> {
+        let kind = NativeEffectSourceKind::parse(source_kind)?;
+        let key = rawcode(source_key).ok()?;
         self.bindings
             .iter()
             .find(|binding| {
-                binding.source_kind == source_kind
-                    && binding.source_key == source_key
+                binding.source == NativeEffectSource::new(kind, key)
                     && binding.valid_versions.contains(version)
             })
             .map(|binding| binding.implementation)
     }
+
+    fn resolve_requirements(
+        &self,
+        version: MapVersion,
+        roots: &[NativeEffectSource],
+    ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+        let tuning = self
+            .tuning(version)
+            .ok_or(NativeEffectResolveError::UnsupportedMapVersion(version))?;
+        let mut resolved = BTreeMap::new();
+        let mut visiting = BTreeSet::new();
+        let roots = roots.iter().copied().collect::<BTreeSet<_>>();
+        for root in roots {
+            self.resolve_requirement(version, tuning, root, &mut visiting, &mut resolved)?;
+        }
+        Ok(resolved.into_values().collect())
+    }
+
+    fn resolve_requirement(
+        &self,
+        version: MapVersion,
+        tuning: &TuningFile,
+        source: NativeEffectSource,
+        visiting: &mut BTreeSet<NativeEffectSource>,
+        resolved: &mut BTreeMap<NativeEffectSource, ResolvedNativeEffectBinding>,
+    ) -> Result<(), NativeEffectResolveError> {
+        if resolved.contains_key(&source) {
+            return Ok(());
+        }
+        if !visiting.insert(source) {
+            return Err(NativeEffectResolveError::DependencyCycle(source));
+        }
+
+        let matching = self
+            .bindings
+            .iter()
+            .filter(|binding| binding.source == source && binding.valid_versions.contains(version))
+            .collect::<Vec<_>>();
+        let selected = match matching.as_slice() {
+            [] => return Err(NativeEffectResolveError::MissingBinding(source)),
+            [binding] => binding.implementation,
+            _ => return Err(NativeEffectResolveError::AmbiguousBinding(source)),
+        };
+
+        let effects = tuning
+            .effects
+            .iter()
+            .filter(|effect| effect.source().ok() == Some(source))
+            .collect::<Vec<_>>();
+        if effects.is_empty() && selected.requires_tuning() {
+            return Err(NativeEffectResolveError::MissingTuning(source));
+        }
+
+        for effect in effects {
+            let expected = effect.expected_implementation();
+            if expected != selected {
+                return Err(NativeEffectResolveError::IncompatibleTuning {
+                    source,
+                    expected,
+                    selected,
+                });
+            }
+            if let Some(dependency) = effect
+                .dependency_source()
+                .expect("native-effect dependencies validated at catalog load")
+            {
+                self.resolve_requirement(version, tuning, dependency, visiting, resolved)?;
+            }
+        }
+
+        visiting.remove(&source);
+        resolved.insert(
+            source,
+            ResolvedNativeEffectBinding {
+                source,
+                implementation: selected,
+            },
+        );
+        Ok(())
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct OwnedBinding {
-    source_kind: String,
-    source_key: String,
+    source: NativeEffectSource,
     implementation: NativeEffectImplementationId,
     valid_versions: MapVersionRange,
 }
@@ -310,6 +532,30 @@ enum TuningEffect {
 }
 
 impl TuningEffect {
+    fn source(&self) -> Result<NativeEffectSource, String> {
+        let kind = NativeEffectSourceKind::parse(self.source_kind()).ok_or_else(|| {
+            format!(
+                "unsupported native-effect source kind {:?}",
+                self.source_kind()
+            )
+        })?;
+        Ok(NativeEffectSource::new(kind, rawcode(self.source_key())?))
+    }
+
+    fn dependency_source(&self) -> Result<Option<NativeEffectSource>, String> {
+        let Self::OrbSpellProc {
+            effect_ability_rawcode,
+            ..
+        } = self
+        else {
+            return Ok(None);
+        };
+        Ok(Some(NativeEffectSource::new(
+            NativeEffectSourceKind::AbilityEffect,
+            rawcode(effect_ability_rawcode)?,
+        )))
+    }
+
     fn source_kind(&self) -> &str {
         match self {
             Self::Evasion { source_kind, .. }
@@ -378,6 +624,13 @@ impl TuningEffect {
 fn catalog() -> &'static NativeEffectCatalog {
     static CATALOG: OnceLock<NativeEffectCatalog> = OnceLock::new();
     CATALOG.get_or_init(|| NativeEffectCatalog::load().expect("invalid native-effect content"))
+}
+
+pub fn resolve_native_effect_requirements(
+    version: MapVersion,
+    roots: &[NativeEffectSource],
+) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    catalog().resolve_requirements(version, roots)
 }
 
 pub fn native_unit_mechanics_for(
@@ -670,6 +923,15 @@ fn parse_version(value: &str) -> Result<MapVersion, String> {
         .map_err(|error| format!("invalid map version {value:?}: {error}"))
 }
 
+fn display_rawcode(value: u32) -> String {
+    let bytes = value.to_be_bytes();
+    if bytes.iter().all(u8::is_ascii_graphic) {
+        String::from_utf8_lossy(&bytes).into_owned()
+    } else {
+        format!("0x{value:08x}")
+    }
+}
+
 fn rawcode(value: &str) -> Result<u32, String> {
     let bytes: [u8; 4] = value
         .as_bytes()
@@ -688,6 +950,123 @@ const fn ranges_overlap(left: MapVersionRange, right: MapVersionRange) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn source(kind: NativeEffectSourceKind, key: &str) -> NativeEffectSource {
+        NativeEffectSource::new(kind, rawcode(key).unwrap())
+    }
+
+    #[test]
+    fn resolver_is_root_order_independent_and_includes_indirect_effects() {
+        let first = resolve_native_effect_requirements(
+            MapVersion::CASTLE_FIGHT_9_27,
+            &[
+                source(NativeEffectSourceKind::UnitAbility, "A01B"),
+                source(NativeEffectSourceKind::UnitAbility, "A049"),
+            ],
+        )
+        .unwrap();
+        let second = resolve_native_effect_requirements(
+            MapVersion::CASTLE_FIGHT_9_27,
+            &[
+                source(NativeEffectSourceKind::UnitAbility, "A049"),
+                source(NativeEffectSourceKind::UnitAbility, "A01B"),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(
+            first
+                .iter()
+                .map(|binding| binding.source)
+                .collect::<Vec<_>>(),
+            vec![
+                source(NativeEffectSourceKind::UnitAbility, "A01B"),
+                source(NativeEffectSourceKind::UnitAbility, "A049"),
+                source(NativeEffectSourceKind::AbilityEffect, "A03W"),
+                source(NativeEffectSourceKind::AbilityEffect, "A05X"),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_missing_indirect_effect_binding() {
+        let mut test_catalog = NativeEffectCatalog::load().unwrap();
+        let child = source(NativeEffectSourceKind::AbilityEffect, "A05X");
+        test_catalog
+            .bindings
+            .retain(|binding| binding.source != child);
+
+        assert_eq!(
+            test_catalog.resolve_requirements(
+                MapVersion::CASTLE_FIGHT_9_27,
+                &[source(NativeEffectSourceKind::UnitAbility, "A01B")],
+            ),
+            Err(NativeEffectResolveError::MissingBinding(child))
+        );
+    }
+
+    #[test]
+    fn resolver_accepts_explicit_no_runtime_marker_without_tuning() {
+        let marker = source(NativeEffectSourceKind::UnitAbility, "A0CV");
+        let resolved =
+            resolve_native_effect_requirements(MapVersion::CASTLE_FIGHT_9_27, &[marker]).unwrap();
+        assert_eq!(
+            resolved,
+            vec![ResolvedNativeEffectBinding {
+                source: marker,
+                implementation: NativeEffectImplementationId::WarcraftMarkerOnlyV1,
+            }]
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_ambiguous_binding() {
+        let mut test_catalog = NativeEffectCatalog::load().unwrap();
+        let evasion = source(NativeEffectSourceKind::UnitAbility, "A00U");
+        let duplicate = test_catalog
+            .bindings
+            .iter()
+            .find(|binding| binding.source == evasion)
+            .unwrap()
+            .clone();
+        test_catalog.bindings.push(duplicate);
+
+        assert_eq!(
+            test_catalog.resolve_requirements(MapVersion::CASTLE_FIGHT_9_27, &[evasion]),
+            Err(NativeEffectResolveError::AmbiguousBinding(evasion))
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_dependency_cycles() {
+        let cyclic = source(NativeEffectSourceKind::AbilityEffect, "A0ZZ");
+        let test_catalog = NativeEffectCatalog {
+            bindings: vec![OwnedBinding {
+                source: cyclic,
+                implementation: NativeEffectImplementationId::WarcraftOrbSpellProcV1,
+                valid_versions: MapVersionRange::exactly(MapVersion::CASTLE_FIGHT_9_27),
+            }],
+            tuning_9_27: TuningFile {
+                schema_version: 2,
+                map_version: "9.27".to_owned(),
+                effects: vec![TuningEffect::OrbSpellProc {
+                    source_kind: "ability-effect".to_owned(),
+                    source_key: "A0ZZ".to_owned(),
+                    unit_rawcode: "hfoo".to_owned(),
+                    chance_per_10k: 1_000,
+                    effect_ability_rawcode: "A0ZZ".to_owned(),
+                    targets: "air-ground-units".to_owned(),
+                    provenance: serde_json::Value::Null,
+                }],
+            },
+        };
+
+        assert_eq!(
+            test_catalog.resolve_requirements(MapVersion::CASTLE_FIGHT_9_27, &[cyclic]),
+            Err(NativeEffectResolveError::DependencyCycle(cyclic))
+        );
+    }
 
     #[test]
     fn current_slice_bindings_are_version_scoped() {

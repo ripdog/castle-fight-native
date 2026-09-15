@@ -41,7 +41,11 @@ pub use economy::{
     ResourcePurchaseError,
 };
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
-pub use native_effects::{NativeEffectImplementationId, native_effect_implementation_for};
+pub use native_effects::{
+    NativeEffectImplementationId, NativeEffectResolveError, NativeEffectSource,
+    NativeEffectSourceKind, ResolvedNativeEffectBinding, native_effect_implementation_for,
+    resolve_native_effect_requirements,
+};
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
     BuilderSpawnError, BuilderView, BuildingCommandError, BuildingConstructionCancelError,
