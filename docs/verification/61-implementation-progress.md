@@ -131,6 +131,60 @@ Pending:
 - protected/static object rows that disagree with recovered runtime behavior remain extraction-audit work rather than being silently promoted as gameplay truth;
 - step 4 must make ordinary match construction select and carry this bundle instead of independently selecting default-version content at callsites.
 
+## Step 4 — Shared version-selected match initialization
+
+Status: **implemented and verified**
+
+Step commits:
+
+- `63e8042` — `sim: add version-selected match bootstrap`
+- `97a08ee` — `client: consume selected match content`
+- `3bc0ede` — `docs: define version-selected match setup`
+- `6ad8738` — `client: keep selected content in icon action panel`
+- `0bc6d44` — `client: load UI icons for selected map version`
+
+Supporting cleanup:
+
+- `334b0a7` — `style(client): satisfy current clippy`
+- `ed782f4` — `style(client): simplify animation system parameters`
+- `b9ab3c8` — `style(sim): apply current rustfmt to catalog helper`
+- `fdfcb58` — `style(client): satisfy inspector clippy`
+
+Implemented:
+
+- added shared `CastleFightMatchConfig`, release descriptors, resolved-match state, and deterministic `create_castle_fight_match`; authoritative match setup no longer lives in the Bevy demo client;
+- match selection is pinned to the exact `(map_version, release_revision, content_revision, gameplay bundle identity)` and rejects unregistered, archived-only, stale-content, or mismatched selections before constructing gameplay state;
+- moved 9.27 authoritative map bounds, build regions, targetless lane, castle placement/stats, terrain elevation, doodad/pathing blockers, economy, damage rules, participant builders, and match seed behind shared match construction;
+- pinned the retained 9.27/r1 terrain and placed-doodad evidence with a versioned map-source manifest and checkout-line-ending-stable hashes;
+- runtime release descriptors are tested against `docs/original_map/releases.json` so retained-history metadata and the typed playable selector cannot silently diverge;
+- client startup accepts exact `--map-version` / `--map-revision` selection and can list registered releases with their availability; the window title exposes the selected release/content revision rather than an implicit default;
+- the client consumes the resolved match terrain source and simulation config from shared setup while keeping camera/render-only bounds in presentation code;
+- build menus, production upgrades, tooltips, stress-unit spawning, model selection, building/unit rawcodes, command-card layout, and WC3 UI icon loading now consume the selected immutable content bundle instead of maintaining the former hardcoded seven-building/current-unit/default-version paths;
+- generated unit/building model loaders receive only rawcodes reachable from the selected bundle, preserving lazy/fallback behavior without eagerly loading unrelated retained content;
+- headless and Bevy-client bootstrap paths share the same authoritative initializer; the client adds only presentation/stress-fixture state afterward.
+
+Availability behavior:
+
+- Castle Fight 9.27/r1 remains explicitly `supported-development-subset`, not a claim of complete historical 9.27 support;
+- Castle Fight 9.32/r1 remains visible as `archived` and is rejected as non-playable rather than silently substituting 9.27 content;
+- unknown release revisions are rejected exactly; no nearest/latest revision fallback is used.
+
+Executed verification after rebasing onto the then-current master:
+
+- `tools/cargo-interactive test -p castle-fight-sim`: **214 passed**;
+- `tools/cargo-interactive test -p castle-fight-client`: **102 passed**;
+- match-setup focused suite: 6 passed, including worker-independent initial checksums, retained-registry parity, stale bundle rejection, map-source pinning, and topology preservation;
+- selected UI-icon suite: 3 passed;
+- `tools/cargo-interactive clippy -p castle-fight-sim -p castle-fight-client --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed;
+- `python tools/wc3-map/release_manifest.py verify`: 9.27/r1 and 9.32/r1 both verified;
+- `cargo fmt --all -- --check` and `git diff --check`: passed;
+- client regression `client_and_headless_bootstrap_share_the_same_authoritative_initial_state`: passed.
+
+Pending:
+
+- Step 5 must separate stable player identity/ownership from team allegiance, move economy from team-indexed slots to player records, and add canonical match lifecycle/outcome state before command/network work builds on top of it.
+
 ## Next action
 
-Step 4: move deterministic match initialization out of the client, construct matches from an explicit selected release/content bundle, and drive gameplay defaults/catalog-facing UI from that one resolved selection.
+Step 5: introduce `PlayerId`, propagate ownership independently from `Team`, implement per-player economy/control permissions, and add terminal match lifecycle/objective rules with 2v2 coverage.
