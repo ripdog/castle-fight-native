@@ -349,9 +349,12 @@ Map/faction content that contains no randomness should not behave differently me
 
 ## 24. Initial state
 
+Before creating the match, the user MUST be able to select a supported Castle Fight map version. Match configuration records that selection and the exact validated content bundle, including its automatically resolved native ability/effect implementations. The authoritative server validates this configuration before accepting gameplay commands; clients, replays, and reconnects use the same version and bundle identity. Selection and historical data retention follow `40-content-data.md`, sections 4.1 and 14.1.
+
 Match construction must deterministically establish:
 
-- map;
+- selected map version and canonical content bundle identity;
+- map and version-specific rules;
 - team/player slots;
 - factions;
 - starting resources;

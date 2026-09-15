@@ -127,6 +127,8 @@ Add enough content/game rules for a complete headless match:
 - mana-bearing automatic spellcasting building;
 - at least one player-targeted legendary building ability;
 - data-driven definitions;
+- retained per-map-version content snapshots and user-selected map-version match configuration;
+- automatic, validated native behavior selection for the selected map version;
 - deterministic match seed/config.
 
 A command-line simulation should be able to run an entire match and emit a replay/checksum trace.
@@ -135,7 +137,9 @@ Exit criteria:
 
 - full match completes without client/rendering;
 - replaying the same command stream reproduces final checksum;
-- content bundle hash/version enforced.
+- content bundle hash/version enforced;
+- two historical map-version fixtures coexist without replacing either extraction; shared behavior can use different tuning, while changed behavior selects distinct implementations;
+- missing/ambiguous/incompatible required behavior prevents match creation, and changing the selected implementation changes bundle compatibility identity.
 
 ## 7. Milestone 5 — Snapshot/replay and continuity hardening
 

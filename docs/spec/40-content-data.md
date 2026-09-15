@@ -71,6 +71,16 @@ The bundle has a canonical hash used for:
 
 Cosmetic-only assets SHOULD be separable from gameplay content so harmless visual differences do not necessarily alter gameplay compatibility.
 
+### 4.1 User-selected map versions and retained history
+
+Match setup MUST allow the user to select the Castle Fight map version to play from the versions supported by the installed simulation/content. Historical versions are playable content, not merely migration inputs for the newest version. The selected version determines the map geometry, stats, economy, production, abilities, items, and other authoritative rules used throughout that match.
+
+Extracted map data and validated content MUST retain independently addressable snapshots for each supported map version. Extracting a newer map MUST NOT overwrite the data needed to play an older version. Each snapshot MUST record its source map identity/digest, relevant Warcraft base-data version, extraction schema/tool revision, and content revision. Correcting an extraction for an existing map version produces a new content revision/hash; existing replay/snapshot identities MUST NOT silently resolve to the corrected data.
+
+Storage MAY deduplicate unchanged data or use generated Rust tables, provided each version resolves to a complete, reproducible content snapshot. A single mutable extraction directory or an implicit "latest" lookup is insufficient as the runtime source of historical match content.
+
+Map version, content revision/hash, and simulation compatibility version are distinct identities. A map-version label alone does not establish multiplayer or replay compatibility. The canonical bundle MUST include the resolved native behavior bindings described in section 14.1 as well as numeric data, so changing a selected implementation changes compatibility identity even when its tuning is unchanged.
+
 ## 5. Source format
 
 Source format is open.
@@ -296,7 +306,19 @@ Imported Warcraft/Castle Fight behavior MUST distinguish **behavior identity** f
 
 If a later map changes only numeric tuning, that map version SHOULD reuse the same native implementation while supplying different tuning data. If the original map rewrites the mechanic's semantics, the engine MUST add a distinct native implementation ID and assign it a non-overlapping validity range. The runtime MUST NOT silently select the nearest implementation when the requested map version has a gap; missing behavior coverage is a content error.
 
-The selected Castle Fight map version is authoritative match content. Production definitions and every produced unit/effect MUST resolve against that same version rather than falling back independently to a default version. The selected version must eventually participate in the canonical match/content identity used by multiplayer, snapshots, replays, and UI map-version selection.
+Bindings associate a stable source kind/key with an implementation ID and verified map-version applicability. One implementation MAY serve multiple versions or multiple disjoint validity ranges; retaining an older implementation MUST allow older maps to continue selecting it after a newer implementation is introduced. Numeric similarity, unchanged rawcodes, or a later version number alone MUST NOT extend verified applicability. A behavior-changing edit to an existing implementation requires a new implementation/compatibility identity rather than silently changing historical behavior under the old identity.
+
+Before match creation, content loading MUST automatically resolve a deterministic set of native implementations for the selected map version:
+
+1. Load that version's content snapshot and enumerate every behavior required by the configured mode and reachable content, including upgrades, summons, proc-triggered child effects, and other indirect references.
+2. For each required source kind/key, select exactly one binding whose verified applicability includes the selected map version. Multiple matching bindings are an ambiguity error, not a priority or registration-order decision.
+3. Verify that the selected implementation exists in the installed simulation, accepts the version's tuning schema/parameters, and has compatible implementations/data for all required dependencies. A matching version range alone is insufficient.
+4. Reject configuration before the match starts if required coverage is missing, ambiguous, or incompatible. Report the source key, dependency, and selected map version responsible. A required ability MUST NOT silently disappear or fall back to another map's implementation/tuning. An explicitly verified no-runtime marker binding is valid coverage.
+5. Freeze the resolved source-to-implementation mapping and tuning into the immutable canonical content bundle in stable order. Runtime entities consume that resolved bundle rather than repeating version selection in gameplay phases.
+
+A version with archived extraction but incomplete required native behavior is not yet a supported playable version for that match configuration. Development fixtures MAY explicitly select a restricted content subset, but MUST NOT present silently reduced content as the complete historical ruleset.
+
+Production definitions and every produced unit/effect MUST resolve against the match's selected version rather than falling back independently to a default version. The selected version and resolved bundle identity MUST be recorded in multiplayer handshakes, snapshots, and replays. Loading or rejoining MUST require that exact compatible bundle, not rerun a "best available" selection against a newer registry.
 
 Native-effect coverage is derived from two sources: extracted effect/ability inventories define what exists, while the native binding registry defines which stable source keys have implementations for a requested version. Unbound inventory entries are explicitly **unimplemented** until either a native behavior binding is added or later compatibility work classifies the extracted row as requiring no native runtime behavior. Coverage tooling MUST make gaps queryable per map version.
 
@@ -358,6 +380,8 @@ Decorative terrain/props MAY be client-only where they do not affect navigation/
 ## 17. Content validation
 
 Loading must fail before match start for invalid authoritative content.
+
+The version/binding resolution checks in section 14.1 are mandatory for every match configuration.
 
 Validation SHOULD catch:
 
