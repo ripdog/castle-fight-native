@@ -7127,9 +7127,19 @@ def _extract_runtime_draft_mechanics(
         "setupDefaultRoundOrder__w3p_vmProtect", "syncDraftPlayersFromForces",
         "CFBuilding_CFBuilding_tier", "hotkeyToTier", "LinkedList_LinkedList_shuffle",
         "getDefaultRoundType", "DefaultPackSupplier_DefaultPackSupplier_makeOne",
+        "DefaultPackSupplier_DefaultPackSupplier_putBack",
         "DefaultPackSupplier_DefaultPackSupplier_getRoundLabel", "DefaultPackSupplier_DefaultPackSupplier_getPackCount",
         "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator",
         "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator1",
+        "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools", "resetPool", "randomForTier",
+        "PackSupplier_PackSupplier_makePair",
+        "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData",
+        "DraftController_DraftController_requestPick", "DraftController_DraftController_returnUnpickedPacks",
+        "DraftController_DraftController_pickPack", "DraftController_DraftController_requestReroll",
+        "DraftController_DraftController_reroll", "PlayerDraftState_PlayerDraftState_pick",
+        "PlayerDraftState_PlayerDraftState_useReroll",
+        "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData4",
+        "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData5",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -7223,6 +7233,136 @@ def _extract_runtime_draft_mechanics(
         "SupplierFunc_DefaultPackSupplier_DraftOrchestrator_supply_DefaultPackSupplier_DraftOrchestrator1",
         (b"randomForTier(Pfb[(Ghm.roundType-1)])",),
     )
+
+    pool_filter_offset, _pool_filter = source(
+        "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools",
+        (
+            b"if isBuildingAllowedForCurrentModes(IMk)then",
+            b"LinkedList_LinkedList_add(atb[HMk.tier.BuildingTier_index],IMk)",
+        ),
+    )
+    reset_pool_offset, _reset_pool = source(
+        "resetPool",
+        (
+            b"assertBuildingPoolsIntegrity__w3p_vmProtect()",
+            b"LinkedList_LinkedList_clear(atb[ZEp.BuildingTier_index])",
+            b"LinkedList_LinkedList_forEach(btb[ZEp.BuildingTier_index],aFp)",
+        ),
+    )
+    random_tier_offset, _random_tier = source(
+        "randomForTier",
+        (
+            b"Dtq=atb[Ctq.BuildingTier_index]",
+            b"if(LinkedList_LinkedList_size(Dtq)==0)then",
+            b"LinkedList_LinkedList_addAll(Dtq,Zsb[Ctq.BuildingTier_index])",
+            b"LinkedList_LinkedList_clear(Zsb[Ctq.BuildingTier_index])",
+            b"Etq=GetRandomInt(0,(LinkedList_LinkedList_size(Dtq)-1))",
+            b"return LinkedList_LinkedList_removeAt(Dtq,Etq)",
+        ),
+    )
+    put_back_offset, _put_back = source(
+        "DefaultPackSupplier_DefaultPackSupplier_putBack",
+        (
+            b"shm=getDefaultRoundType(rhm)",
+            b"returnPerk(DraftPack_DraftPack_getPerk(qhm))",
+            b"LinkedList_LinkedList_add(Zsb[Rfb[(shm-1)].BuildingTier_index],DraftPack_DraftPack_getFirst(qhm))",
+            b"LinkedList_LinkedList_add(Zsb[Pfb[(shm-1)].BuildingTier_index],DraftPack_DraftPack_getSecond(qhm))",
+        ),
+    )
+    make_pair_offset, _make_pair = source(
+        "PackSupplier_PackSupplier_makePair",
+        (
+            b"vfm=tfm:DefaultPackSupplier_makeOne(ufm)",
+            b"wfm=tfm:DefaultPackSupplier_makeOne(ufm)",
+            b"if(tfm:DefaultPackSupplier_getPackCount(ufm)>=3)then",
+            b"xfm=tfm:DefaultPackSupplier_makeOne(ufm)",
+        ),
+    )
+    offer_offset, _offer = source(
+        "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData",
+        (
+            b"LinkedList_LinkedList_iterator(nem.TeamDraftState_players)",
+            b"PackSupplier_PackSupplier_makePair(lem.this.DraftController_supplier,lem.this.DraftController_roundIndex)",
+            b"DraftController_DraftController_assignPacks(lem.this,pem,qem[1],qem[2],qem[3])",
+            b"DraftEventBus_firePacks(EVPacks_new_EVPacks",
+        ),
+    )
+    return_unpicked_offset, _return_unpicked = source(
+        "DraftController_DraftController_returnUnpickedPacks",
+        (
+            b"if(not(Rcm==Qcm))then",
+            b"Ocm.DraftController_supplier:DefaultPackSupplier_putBack(Scm,Ocm.DraftController_roundIndex)",
+            b"DraftController_DraftController_setCurrentPack(Ocm,Pcm,Rcm,nil)",
+        ),
+    )
+    pick_pack_offset, _pick_pack = source(
+        "DraftController_DraftController_pickPack",
+        (b"PlayerDraftState_PlayerDraftState_pick(Ucm,Wcm)",),
+    )
+    player_pick_offset, _player_pick = source(
+        "PlayerDraftState_PlayerDraftState_pick",
+        (
+            b"if Afm.PlayerDraftState_hasPicked then return end",
+            b"LinkedList_LinkedList_add(Afm.PlayerDraftState_chosenPacks,Bfm)",
+            b"Afm.PlayerDraftState_hasPicked=true",
+        ),
+    )
+    request_pick_offset, _request_pick = source(
+        "DraftController_DraftController_requestPick",
+        (
+            b"if((Bcm==nil)or Bcm.PlayerDraftState_hasPicked)then",
+            b"DraftController_DraftController_returnUnpickedPacks(ycm,Bcm,Acm)",
+            b"DraftController_DraftController_pickPack(ycm,Bcm,Acm)",
+            b"if DraftPack_DraftPack_isPerkPack(Ccm)then",
+            b"applyPerk(zcm,Ecm)",
+            b"LinkedList_LinkedList_add(ctb[player_getId(zcm)],DraftPack_DraftPack_getFirst(Ccm),DraftPack_DraftPack_getSecond(Ccm))",
+        ),
+    )
+    request_reroll_offset, _request_reroll = source(
+        "DraftController_DraftController_requestReroll",
+        (
+            b"PlayerDraftState_PlayerDraftState_canReroll(ndm)",
+            b"pdm=kdm.DraftController_supplier:DefaultPackSupplier_makeOne(kdm.DraftController_roundIndex)",
+            b"kdm.DraftController_supplier:DefaultPackSupplier_putBack(odm,kdm.DraftController_roundIndex)",
+            b"DraftController_DraftController_reroll(kdm,ndm,pdm,mdm)",
+        ),
+    )
+    reroll_offset, _reroll = source(
+        "DraftController_DraftController_reroll",
+        (
+            b"DraftController_DraftController_setCurrentPack(qdm,rdm,tdm,sdm)",
+            b"PlayerDraftState_PlayerDraftState_useReroll(rdm)",
+        ),
+    )
+    use_reroll_offset, _use_reroll = source(
+        "PlayerDraftState_PlayerDraftState_useReroll",
+        (b"Dfm.PlayerDraftState_rerollsLeft=(Dfm.PlayerDraftState_rerollsLeft-1)",),
+    )
+    ai_away_pick_offset, _ai_away_pick = source(
+        "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData4",
+        (
+            b"not Sem.PlayerDraftState_hasPicked",
+            b"aIb[player_getId(Sem.PlayerDraftState_plr)]",
+            b"dGb[player_getId(Sem.PlayerDraftState_plr)]",
+            b"fGb[player_getId(Sem.PlayerDraftState_plr)]",
+            b"Uem=GetRandomInt(1,Tem)",
+            b"DraftController_DraftController_requestPick(Oem.this,Sem.PlayerDraftState_plr,Uem)",
+        ),
+    )
+    timeout_pick_offset, _timeout_pick = source(
+        "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData5",
+        (
+            b"if(not afm.PlayerDraftState_hasPicked)then",
+            b"cfm=GetRandomInt(1,bfm)",
+            b"DraftController_DraftController_requestPick(Wem.this,afm.PlayerDraftState_plr,cfm)",
+        ),
+    )
+    pack_lifecycle_offsets = [
+        pool_filter_offset, reset_pool_offset, random_tier_offset, put_back_offset,
+        make_pair_offset, offer_offset, return_unpicked_offset, pick_pack_offset,
+        player_pick_offset, request_pick_offset, request_reroll_offset, reroll_offset,
+        use_reroll_offset, ai_away_pick_offset, timeout_pick_offset,
+    ]
 
     vm41_static = _w3p_vm_static_strings(data, 41)
     vm41_globals = [
@@ -7428,6 +7568,56 @@ def _extract_runtime_draft_mechanics(
             "byte_offset": min(draft_layout_offsets),
         },
         {
+            "system_id": "draft-pack-pool-pick-and-reroll-lifecycle",
+            "mechanic_kind": "without-replacement-tier-draws-with-return-pools-and-immediate-pick-application",
+            "trigger": "default-draft-pack-offer-pick-reroll-and-autopick-flow",
+            "parameters": {
+                "authored_tier_pool_symbol": "btb[tier_index]",
+                "active_draw_pool_symbol": "atb[tier_index]",
+                "returned_pool_symbol": "Zsb[tier_index]",
+                "pool_reset_clears_active_draw_pool": True,
+                "pool_reset_repopulates_from_authored_tier_pool": True,
+                "pool_reset_filters_buildings_through_current_modes": True,
+                "building_draw_refills_active_pool_from_returned_pool_only_when_active_pool_empty": True,
+                "building_draw_clears_returned_pool_after_refill": True,
+                "building_draw_random_call": "GetRandomInt(0, active_pool_size - 1)",
+                "building_draw_removes_selected_entry_from_active_pool": True,
+                "building_pack_return_first_goes_to_Rfb_tier_returned_pool": True,
+                "building_pack_return_second_goes_to_Pfb_tier_returned_pool": True,
+                "perk_pack_return_uses_returnPerk": True,
+                "offer_generation_scope": "every PlayerDraftState in every TeamDraftState",
+                "offer_pack_options_building_round": 2,
+                "offer_pack_options_perk_round": 3,
+                "pick_rejects_missing_state_or_already_picked": True,
+                "pick_returns_other_current_packs_before_applying_selected_pack": True,
+                "pick_records_selected_pack_in_chosenPacks": True,
+                "pick_marks_player_round_state_hasPicked": True,
+                "building_pick_adds_both_pack_buildings_to_player_ctb_list": True,
+                "perk_pick_applies_selected_perk_immediately": True,
+                "reroll_requires_remaining_reroll_and_existing_pack": True,
+                "reroll_draws_replacement_before_returning_replaced_pack": True,
+                "reroll_replaces_current_slot_then_consumes_one_reroll": True,
+                "ai_away_or_afk_autopick_each_countdown_tick": True,
+                "ai_away_or_afk_autopick_random_call": "GetRandomInt(1, current_non_null_pack_count)",
+                "timeout_autopicks_every_remaining_player": True,
+                "timeout_autopick_random_call": "GetRandomInt(1, current_non_null_pack_count)",
+            },
+            "related_rawcode_ids": [],
+            "source_functions": [
+                "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools", "resetPool", "randomForTier",
+                "DefaultPackSupplier_DefaultPackSupplier_putBack", "PackSupplier_PackSupplier_makePair",
+                "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData",
+                "DraftController_DraftController_requestPick", "DraftController_DraftController_returnUnpickedPacks",
+                "DraftController_DraftController_pickPack", "PlayerDraftState_PlayerDraftState_pick",
+                "DraftController_DraftController_requestReroll", "DraftController_DraftController_reroll",
+                "PlayerDraftState_PlayerDraftState_useReroll",
+                "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData4",
+                "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData5",
+            ],
+            "evidence_kind": "exact-readable-default-draft-pool-offer-pick-reroll-and-autopick-control-flow",
+            "byte_offset": min(pack_lifecycle_offsets),
+        },
+        {
             "system_id": "draft-round-restart-lifecycle",
             "mechanic_kind": "round-end-draft-controller-reset-and-warmup-restart",
             "trigger": "draft-round-end-signal",
@@ -7467,7 +7657,7 @@ def _extract_runtime_draft_mechanics(
                 },
                 "constructor_overrides_initializer_fields": ["rerolls_per_player", "total_rounds", "seconds_per_round"],
                 "warmup_behavior": "decrement warmupLeft; emit tick; at zero stop warmup, emit warmup-end, MMD-flag active team players, then neutral-result-remove players",
-                "pick_countdown_behavior": "auto-pick AI/AWAY each tick; decrement timer; if expired or all picked, auto-pick remaining and end draft round",
+                "pick_countdown_behavior": "auto-pick AI/AWAY/AFK each tick; decrement timer; if expired or all picked, auto-pick remaining and end draft round",
                 "post_draft_behavior": "decrement timer; at zero stop post-draft countdown and finalize draft",
                 "start_with_warmup_skips_warmup_when_nonpositive": True,
             },

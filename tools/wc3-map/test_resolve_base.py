@@ -192,7 +192,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
         self.assertEqual(summary["runtime_campaign_mechanics"], 5)
-        self.assertEqual(summary["runtime_draft_mechanics"], 4)
+        self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
         self.assertEqual(summary["callback_periodic_coverage_rows"], 29)
@@ -463,8 +463,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(
             set(rows),
             {
-                "default-draft-tier-pairing-and-round-order", "draft-round-restart-lifecycle",
-                "draft-controller-periodic-timers", "draft-perk-reminder-reapply",
+                "default-draft-tier-pairing-and-round-order", "draft-pack-pool-pick-and-reroll-lifecycle",
+                "draft-round-restart-lifecycle", "draft-controller-periodic-timers", "draft-perk-reminder-reapply",
             },
         )
 
@@ -488,6 +488,21 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(layout["perk_round_pack_count"], 3)
         self.assertEqual(layout["perk_round_label"], "P")
 
+        pool = json.loads(rows["draft-pack-pool-pick-and-reroll-lifecycle"]["parameters_json"])
+        self.assertEqual(pool["authored_tier_pool_symbol"], "btb[tier_index]")
+        self.assertEqual(pool["active_draw_pool_symbol"], "atb[tier_index]")
+        self.assertEqual(pool["returned_pool_symbol"], "Zsb[tier_index]")
+        self.assertTrue(pool["pool_reset_filters_buildings_through_current_modes"])
+        self.assertTrue(pool["building_draw_refills_active_pool_from_returned_pool_only_when_active_pool_empty"])
+        self.assertEqual(pool["building_draw_random_call"], "GetRandomInt(0, active_pool_size - 1)")
+        self.assertTrue(pool["pick_returns_other_current_packs_before_applying_selected_pack"])
+        self.assertTrue(pool["building_pick_adds_both_pack_buildings_to_player_ctb_list"])
+        self.assertTrue(pool["perk_pick_applies_selected_perk_immediately"])
+        self.assertTrue(pool["reroll_draws_replacement_before_returning_replaced_pack"])
+        self.assertTrue(pool["reroll_replaces_current_slot_then_consumes_one_reroll"])
+        self.assertTrue(pool["ai_away_or_afk_autopick_each_countdown_tick"])
+        self.assertTrue(pool["timeout_autopicks_every_remaining_player"])
+
         restart = json.loads(rows["draft-round-restart-lifecycle"]["parameters_json"])
         self.assertTrue(restart["requires_existing_draft_controller"])
         self.assertTrue(restart["resets_unit_pool"])
@@ -505,6 +520,10 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(timers["initializer_defaults"]["seconds_per_round"], 20)
         self.assertEqual(timers["initializer_defaults"]["warmup_seconds_when_Pcb"], 60)
         self.assertEqual(timers["initializer_defaults"]["warmup_seconds_otherwise"], 10)
+        self.assertEqual(
+            timers["pick_countdown_behavior"],
+            "auto-pick AI/AWAY/AFK each tick; decrement timer; if expired or all picked, auto-pick remaining and end draft round",
+        )
 
         reminder = json.loads(rows["draft-perk-reminder-reapply"]["parameters_json"])
         self.assertEqual(reminder["player_ids_scanned"], [0, 11])
@@ -516,7 +535,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(reminder["sets_field_value"], 0.0)
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_draft_mechanic_rows"], 4)
+        self.assertEqual(summary["runtime_draft_mechanic_rows"], 5)
 
     def test_runtime_campaign_restriction_hooks_are_normalized(self) -> None:
         with (self.resolved / "runtime-campaign-mechanics.tsv").open(encoding="utf-8") as handle:

@@ -165,12 +165,13 @@
       "quarter-second-fast-win-and-castle-health-star-tracking": 1,
       "round-start-gated-retrying-party-supply-application": 1
     },
-    "runtime_draft_mechanics": 4,
+    "runtime_draft_mechanics": 5,
     "runtime_draft_mechanic_kinds": {
       "one-second-warmup-pick-and-post-draft-countdowns": 1,
       "one-time-tier-pairing-plus-per-start-random-round-order": 1,
       "round-end-draft-controller-reset-and-warmup-restart": 1,
-      "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1
+      "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1,
+      "without-replacement-tier-draws-with-return-pools-and-immediate-pick-application": 1
     },
     "damage_listener_coverage_rows": 20,
     "damage_listener_coverage_status_counts": {

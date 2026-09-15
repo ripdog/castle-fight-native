@@ -2720,8 +2720,8 @@ def main() -> None:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
                 if system_id not in {
-                    "default-draft-tier-pairing-and-round-order", "draft-round-restart-lifecycle",
-                    "draft-controller-periodic-timers", "draft-perk-reminder-reapply",
+                    "default-draft-tier-pairing-and-round-order", "draft-pack-pool-pick-and-reroll-lifecycle",
+                    "draft-round-restart-lifecycle", "draft-controller-periodic-timers", "draft-perk-reminder-reapply",
                 }:
                     raise ValueError(f"unrecognized runtime draft mechanic: {system_id}")
                 parameters = json.loads(mechanic["parameters_json"])
@@ -2739,6 +2739,20 @@ def main() -> None:
                         or parameters.get("tier_pairing_persists_across_draft_restarts") is not True
                     ):
                         raise ValueError(f"default draft protected layout semantics changed: {parameters}")
+                elif system_id == "draft-pack-pool-pick-and-reroll-lifecycle":
+                    if (
+                        parameters.get("authored_tier_pool_symbol") != "btb[tier_index]"
+                        or parameters.get("active_draw_pool_symbol") != "atb[tier_index]"
+                        or parameters.get("returned_pool_symbol") != "Zsb[tier_index]"
+                        or parameters.get("pool_reset_filters_buildings_through_current_modes") is not True
+                        or parameters.get("building_draw_refills_active_pool_from_returned_pool_only_when_active_pool_empty") is not True
+                        or parameters.get("building_draw_random_call") != "GetRandomInt(0, active_pool_size - 1)"
+                        or parameters.get("pick_returns_other_current_packs_before_applying_selected_pack") is not True
+                        or parameters.get("reroll_draws_replacement_before_returning_replaced_pack") is not True
+                        or parameters.get("ai_away_or_afk_autopick_each_countdown_tick") is not True
+                        or parameters.get("timeout_autopicks_every_remaining_player") is not True
+                    ):
+                        raise ValueError(f"default draft pack lifecycle semantics changed: {parameters}")
                 elif system_id == "draft-round-restart-lifecycle":
                     if (
                         parameters.get("calls_default_draft_tier_initializer") is not True
@@ -6078,7 +6092,7 @@ def main() -> None:
             "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; unanimous-draw round cleanup/restart without setting a match winner; and the exact 15-second one-second-tick round-review gate before next-round dispatch",
             "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, Ultimate-roll building-availability reset, the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
             "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, and survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry",
-            "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
+            "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout and exact readable pack lifecycle: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, per-tier without-replacement draw pools with separate returned-pack recycling, reroll replacement-before-return ordering, immediate building/perk pick application, AI/AWAY/AFK and timeout random autopicks, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
