@@ -333,8 +333,8 @@ impl PresentationSamples {
 mod tests {
     use castle_fight_sim::{
         AttackProfile, BuildingFootprint, CastleFightBuilderRace, CastleFightProductionKind,
-        CastleFightUnitKind, CorpseDefinitionId, CorpseProfile, MovementProfile,
-        SUBUNITS_PER_WORLD_UNIT, SimulationConfig, UnitSpawn,
+        CastleFightUnitKind, CorpseDefinitionId, CorpseProfile, MatchDriver, MovementProfile,
+        PlayerCommand, SUBUNITS_PER_WORLD_UNIT, SimulationConfig, UnitSpawn,
     };
 
     use super::*;
@@ -394,27 +394,43 @@ mod tests {
 
     #[test]
     fn capture_includes_configured_builder_state() {
-        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        let demo = crate::demo::create_demo_world(1, Some(0));
         let human = CastleFightBuilderRace::Human.definition();
-        let builder = simulation
-            .spawn_builder(human.spawn(Team(0), SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0)));
-        simulation
-            .order_builder_move(builder, SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0))
-            .unwrap();
+        let mut simulation = demo.simulation;
+        let builder_view = simulation
+            .builder_for_player(PlayerId(0))
+            .expect("western builder");
+        let builder = builder_view.id;
+        let expected_build_catalog_len = builder_view.configuration.build_catalog.len();
+        let destination = SimPoint::new(
+            builder_view.position.x + 20 * SUBUNITS_PER_WORLD_UNIT,
+            builder_view.position.y,
+        );
+        let mut driver = MatchDriver::new(&simulation, demo.content);
+        assert!(
+            driver
+                .submit_local_command(
+                    &simulation,
+                    PlayerId(0),
+                    PlayerCommand::MoveBuilder {
+                        builder,
+                        destination,
+                    },
+                )
+                .is_newly_scheduled()
+        );
+        driver.advance_local_tick(&mut simulation).unwrap();
 
         let snapshot = PresentationSnapshot::capture(&simulation);
         let sample = snapshot.builders.get(&builder).unwrap();
         assert_eq!(sample.appearance.rawcode, human.rawcode);
         assert_eq!(sample.locomotion, human.locomotion);
-        assert_eq!(
-            sample.destination,
-            Some(SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0))
-        );
+        assert_eq!(sample.destination, Some(destination));
         assert_eq!(sample.follow_target, None);
         assert_eq!(sample.repair_target, None);
         assert!(sample.repair_autocast_enabled);
         assert_eq!(sample.blink_range, human.profile.blink_range);
-        assert_eq!(sample.build_catalog_len, human.build_catalog.len());
+        assert_eq!(sample.build_catalog_len, expected_build_catalog_len);
     }
 
     #[test]

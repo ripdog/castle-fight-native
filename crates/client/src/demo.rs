@@ -1,9 +1,9 @@
 use castle_fight_sim::{
-    BuilderBuildError, BuildingEconomyProfile, BuildingFootprint, BuildingUpgradeError,
-    CastleFightBuildingKind, CastleFightContentBundle, CastleFightMatchConfig,
-    CastleFightMatchSetupError, CastleFightProductionKind, CastleFightTowerKind,
-    CastleFightUnitKind, CommandCardPosition, MapVersion, PlayerId, SUBUNITS_PER_WORLD_UNIT, SimId,
-    SimPoint, Simulation, Team, TerrainElevationMap, create_castle_fight_match,
+    BuildingEconomyProfile, CastleFightBuildingKind, CastleFightContentBundle,
+    CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightProductionKind,
+    CastleFightTowerKind, CastleFightUnitKind, CommandCardPosition, MapVersion,
+    SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, Team, TerrainElevationMap,
+    create_castle_fight_match,
 };
 
 use crate::presentation::WorldMetrics;
@@ -172,90 +172,10 @@ impl BuildKind {
     }
 }
 
-pub(crate) fn order_demo_building(
-    simulation: &mut Simulation,
-    content: &CastleFightContentBundle,
-    controller: PlayerId,
-    builder_id: SimId,
-    footprint: BuildingFootprint,
-    kind: BuildKind,
-) -> Result<(), BuilderBuildError> {
-    let builder = simulation
-        .builder(builder_id)
-        .ok_or(BuilderBuildError::Builder(
-            castle_fight_sim::BuilderCommandError::BuilderNotFound,
-        ))?;
-    let team = builder.team;
-    match kind {
-        BuildKind::Production(kind) => {
-            let definition = content
-                .production_building(kind)
-                .expect("build kind must belong to selected content bundle");
-            simulation.order_builder_purchase_building_with_properties_as(
-                controller,
-                builder.id,
-                definition.spawn(team, footprint),
-                definition.gameplay_properties(),
-            )
-        }
-        BuildKind::Tower(kind) => {
-            let definition = content
-                .tower(kind)
-                .expect("build kind must belong to selected content bundle");
-            simulation.order_builder_purchase_building_with_properties_as(
-                controller,
-                builder.id,
-                definition.spawn(team, footprint),
-                definition.gameplay_properties(),
-            )
-        }
-    }
-}
-
-pub(crate) fn order_demo_production_upgrade(
-    simulation: &mut Simulation,
-    content: &CastleFightContentBundle,
-    controller: PlayerId,
-    source_id: SimId,
-    target: ProductionKind,
-) -> Result<(), BuildingUpgradeError> {
-    let source = simulation
-        .building(source_id)
-        .ok_or(BuildingUpgradeError::SourceNotFound)?;
-    let source_kind = source
-        .content
-        .and_then(|identity| content.building_kind_for_rawcode(identity.rawcode))
-        .and_then(|kind| match kind {
-            CastleFightBuildingKind::Production(kind) => Some(kind),
-            CastleFightBuildingKind::Tower(_) => None,
-        })
-        .ok_or(BuildingUpgradeError::SourceDefinitionMismatch)?;
-    if !source_kind
-        .upgrade_targets_for_version(content.map_version)
-        .map_err(|_| BuildingUpgradeError::SourceDefinitionMismatch)?
-        .contains(&target)
-    {
-        return Err(BuildingUpgradeError::SourceDefinitionMismatch);
-    }
-
-    let source_definition = content
-        .production_building(source_kind)
-        .ok_or(BuildingUpgradeError::SourceDefinitionMismatch)?;
-    let target_definition = content
-        .production_building(target)
-        .ok_or(BuildingUpgradeError::SourceDefinitionMismatch)?;
-    simulation.start_building_upgrade_as(
-        controller,
-        source_id,
-        source_definition.spawn(source.team, source.footprint),
-        source_definition.gameplay_properties(),
-        target_definition.spawn(source.team, source.footprint),
-        target_definition.gameplay_properties(),
-    )
-}
-
 #[cfg(test)]
 mod tests {
+    use castle_fight_sim::BuildingFootprint;
+
     use super::*;
 
     #[test]

@@ -1,5 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 
+use castle_fight_sim::{BuildPosition, CommandSubmission, PlayerCommand};
+
 use crate::{
     AuthoritativeSimulation, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
@@ -8,7 +10,6 @@ use crate::{
         placement_footprint,
     },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
-    demo::order_demo_building,
     inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
     terrain::TerrainSurface,
@@ -75,23 +76,23 @@ fn handle_selection_commands(
         && let Some(builder) = resources.presentation.current.builders.get(&actor).copied()
     {
         let enabled = !builder.repair_autocast_enabled;
-        match resources
-            .authoritative
-            .simulation
-            .set_builder_repair_autocast_as(resources.selected_match.local_player, actor, enabled)
-        {
-            Ok(()) => {
-                resources.action_panel.status = format!(
-                    "Repair autocast {}.",
-                    if enabled { "enabled" } else { "disabled" }
-                );
-                publish_snapshot(&resources.authoritative, &mut resources.presentation);
-            }
-            Err(error) => {
-                resources.action_panel.status =
-                    format!("Repair autocast command rejected: {error:?}.");
-            }
-        }
+        let submission = resources.authoritative.submit_local_command(
+            resources.selected_match.local_player,
+            PlayerCommand::SetBuilderRepairAutocast {
+                builder: actor,
+                enabled,
+            },
+        );
+        resources.action_panel.status = match command_submission_status(
+            submission,
+            format!(
+                "Repair autocast {} queued.",
+                if enabled { "enable" } else { "disable" }
+            ),
+            "Repair autocast command rejected",
+        ) {
+            Ok(status) | Err(status) => status,
+        };
     }
 
     if resources.playback.paused {
@@ -142,15 +143,20 @@ fn handle_modal_left_click(
                 return;
             };
             let destination = world_to_sim_point(world);
-            match resources.authoritative.simulation.order_builder_move_as(
+            let submission = resources.authoritative.submit_local_command(
                 resources.selected_match.local_player,
-                actor,
-                destination,
+                PlayerCommand::MoveBuilder {
+                    builder: actor,
+                    destination,
+                },
+            );
+            match command_submission_status(
+                submission,
+                "Builder move queued.".into(),
+                "Move rejected",
             ) {
-                Ok(()) => finish_modal(resources, "Builder move ordered.".into()),
-                Err(error) => {
-                    resources.action_panel.status = format!("Move rejected: {error:?}.");
-                }
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
             }
         }
         TargetingAction::Blink => {
@@ -159,22 +165,20 @@ fn handle_modal_left_click(
                 return;
             };
             let destination = world_to_sim_point(world);
-            match resources.authoritative.simulation.order_builder_blink_as(
+            let submission = resources.authoritative.submit_local_command(
                 resources.selected_match.local_player,
-                actor,
-                destination,
+                PlayerCommand::BlinkBuilder {
+                    builder: actor,
+                    destination,
+                },
+            );
+            match command_submission_status(
+                submission,
+                "Builder blink queued.".into(),
+                "Blink rejected",
             ) {
-                Ok(resolved) => finish_modal(
-                    resources,
-                    format!(
-                        "Blinked to {:.0}, {:.0}.",
-                        resolved.x as f32 / castle_fight_sim::SUBUNITS_PER_WORLD_UNIT as f32,
-                        resolved.y as f32 / castle_fight_sim::SUBUNITS_PER_WORLD_UNIT as f32,
-                    ),
-                ),
-                Err(error) => {
-                    resources.action_panel.status = format!("Blink rejected: {error:?}.");
-                }
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
             }
         }
         TargetingAction::Repair => {
@@ -221,15 +225,20 @@ fn handle_modal_left_click(
                     "Repair requires a friendly building or mechanical unit.".into();
                 return;
             };
-            match resources.authoritative.simulation.order_builder_repair_as(
+            let submission = resources.authoritative.submit_local_command(
                 resources.selected_match.local_player,
-                actor,
-                target,
+                PlayerCommand::RepairWithBuilder {
+                    builder: actor,
+                    target,
+                },
+            );
+            match command_submission_status(
+                submission,
+                format!("Builder repair of #{} queued.", target.0),
+                "Repair rejected",
             ) {
-                Ok(()) => finish_modal(resources, format!("Builder repairing #{}.", target.0)),
-                Err(error) => {
-                    resources.action_panel.status = format!("Repair rejected: {error:?}.");
-                }
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
             }
         }
         TargetingAction::Attack => {
@@ -281,18 +290,20 @@ fn handle_modal_left_click(
                 resources.action_panel.status = "Attack requires an enemy target.".into();
                 return;
             };
-            match resources
-                .authoritative
-                .simulation
-                .order_building_attack_target_as(
-                    resources.selected_match.local_player,
-                    actor,
+            let submission = resources.authoritative.submit_local_command(
+                resources.selected_match.local_player,
+                PlayerCommand::AttackWithBuilding {
+                    building: actor,
                     target,
-                ) {
-                Ok(()) => finish_modal(resources, format!("Tower attacking #{}.", target.0)),
-                Err(error) => {
-                    resources.action_panel.status = format!("Attack rejected: {error:?}.");
-                }
+                },
+            );
+            match command_submission_status(
+                submission,
+                format!("Tower attack on #{} queued.", target.0),
+                "Attack rejected",
+            ) {
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
             }
         }
         TargetingAction::Build(kind) => {
@@ -317,25 +328,27 @@ fn handle_modal_left_click(
                         .into();
                 return;
             }
-            match order_demo_building(
-                &mut resources.authoritative.simulation,
-                resources.selected_match.content,
+            let submission = resources.authoritative.submit_local_command(
                 resources.selected_match.local_player,
-                actor,
-                footprint,
-                kind,
+                PlayerCommand::PlaceBuilding {
+                    builder: actor,
+                    building: kind.shared().stable_id(),
+                    position: BuildPosition::new(footprint.min_x, footprint.min_y),
+                },
+            );
+            match command_submission_status(
+                submission,
+                format!(
+                    "{} queued. Builder will move into construction range after execution.",
+                    kind.label(resources.selected_match.content)
+                ),
+                "Build order rejected",
             ) {
-                Ok(()) => {
+                Ok(status) => {
                     resources.action_panel.mode = ActionPanelMode::BuildMenu;
-                    resources.action_panel.status = format!(
-                        "{} ordered. Builder will move into construction range.",
-                        kind.label(resources.selected_match.content)
-                    );
-                    publish_snapshot(&resources.authoritative, &mut resources.presentation);
+                    resources.action_panel.status = status;
                 }
-                Err(error) => {
-                    resources.action_panel.status = format!("Build order rejected: {error:?}.");
-                }
+                Err(status) => resources.action_panel.status = status,
             }
         }
     }
@@ -425,41 +438,48 @@ fn handle_smart_right_click(
     let target_info =
         target.and_then(|target| smart_target_info(target, &resources.presentation.current));
     let action = resolve_smart_right_click(actor_kind, world_to_sim_point(world), target_info);
-    let result = match action {
-        SmartRightClickAction::BuilderMove(destination) => resources
-            .authoritative
-            .simulation
-            .order_builder_move_as(resources.selected_match.local_player, actor, destination)
-            .map(|()| "Builder move ordered.".to_owned())
-            .map_err(|error| format!("Builder move rejected: {error:?}.")),
-        SmartRightClickAction::BuilderFollow(target) => resources
-            .authoritative
-            .simulation
-            .order_builder_follow_as(resources.selected_match.local_player, actor, target)
-            .map(|()| format!("Builder following #{}.", target.0))
-            .map_err(|error| format!("Builder follow rejected: {error:?}.")),
-        SmartRightClickAction::BuilderRepair(target) => resources
-            .authoritative
-            .simulation
-            .order_builder_repair_as(resources.selected_match.local_player, actor, target)
-            .map(|()| format!("Builder repairing #{}.", target.0))
-            .map_err(|error| format!("Builder repair rejected: {error:?}.")),
-        SmartRightClickAction::TowerAttack(target) => resources
-            .authoritative
-            .simulation
-            .order_building_attack_target_as(resources.selected_match.local_player, actor, target)
-            .map(|()| format!("Tower attacking #{}.", target.0))
-            .map_err(|error| format!("Tower attack rejected: {error:?}.")),
+    let (command, accepted, rejected_prefix) = match action {
+        SmartRightClickAction::BuilderMove(destination) => (
+            PlayerCommand::MoveBuilder {
+                builder: actor,
+                destination,
+            },
+            "Builder move queued.".to_owned(),
+            "Builder move rejected",
+        ),
+        SmartRightClickAction::BuilderFollow(target) => (
+            PlayerCommand::FollowWithBuilder {
+                builder: actor,
+                target,
+            },
+            format!("Builder follow of #{} queued.", target.0),
+            "Builder follow rejected",
+        ),
+        SmartRightClickAction::BuilderRepair(target) => (
+            PlayerCommand::RepairWithBuilder {
+                builder: actor,
+                target,
+            },
+            format!("Builder repair of #{} queued.", target.0),
+            "Builder repair rejected",
+        ),
+        SmartRightClickAction::TowerAttack(target) => (
+            PlayerCommand::AttackWithBuilding {
+                building: actor,
+                target,
+            },
+            format!("Tower attack on #{} queued.", target.0),
+            "Tower attack rejected",
+        ),
         SmartRightClickAction::None => return,
     };
-
-    match result {
-        Ok(status) => {
-            resources.action_panel.status = status;
-            publish_snapshot(&resources.authoritative, &mut resources.presentation);
-        }
-        Err(status) => resources.action_panel.status = status,
-    }
+    let submission = resources
+        .authoritative
+        .submit_local_command(resources.selected_match.local_player, command);
+    resources.action_panel.status =
+        match command_submission_status(submission, accepted, rejected_prefix) {
+            Ok(status) | Err(status) => status,
+        };
 }
 
 fn smart_actor(
@@ -577,17 +597,26 @@ fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
     keys.just_pressed(key_code)
 }
 
+fn command_submission_status(
+    submission: CommandSubmission,
+    accepted: String,
+    rejected_prefix: &str,
+) -> Result<String, String> {
+    match submission {
+        CommandSubmission::Scheduled(command) => Ok(format!("{accepted} [tick {}]", command.tick)),
+        CommandSubmission::DuplicateScheduled(command) => Ok(format!(
+            "{accepted} [already scheduled for tick {}]",
+            command.tick
+        )),
+        CommandSubmission::Rejected(error) | CommandSubmission::DuplicateRejected(error) => {
+            Err(format!("{rejected_prefix}: {error:?}."))
+        }
+    }
+}
+
 fn finish_modal(resources: &mut SelectionCommandResources<'_>, status: String) {
     resources.action_panel.mode = ActionPanelMode::Actions;
     resources.action_panel.status = status;
-    publish_snapshot(&resources.authoritative, &mut resources.presentation);
-}
-
-fn publish_snapshot(
-    authoritative: &AuthoritativeSimulation,
-    presentation: &mut PresentationSamples,
-) {
-    presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
 }
 
 #[cfg(test)]

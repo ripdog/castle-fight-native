@@ -24,12 +24,17 @@ use bevy::{
     window::PresentMode,
 };
 use castle_fight_sim::{
-    CASTLE_FIGHT_SIMULATION_HZ, CastleFightContentAvailability, CastleFightContentBundle,
-    MapVersion, PlayerId, Simulation, castle_fight_registered_releases,
+    CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamError, CastleFightContentAvailability,
+    CastleFightContentBundle, CommandExecution, CommandExecutionResult, CommandOutcome,
+    CommandSubmission, DriverTickResult, MapVersion, MatchDriver, PlayerCommand, PlayerId,
+    Simulation, castle_fight_registered_releases,
 };
 
+#[cfg(test)]
+use castle_fight_sim::SimPoint;
+
 use bridge::{PresentationSamples, PresentationSnapshot};
-use build_ui::BuildUiPlugin;
+use build_ui::{ActionPanelState, BuildUiPlugin};
 use builder_controls::BuilderControlPlugin;
 use cursor::CursorPresentationPlugin;
 use debug_menu::DebugMenuPlugin;
@@ -45,6 +50,30 @@ const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 #[derive(Resource)]
 pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
+    driver: MatchDriver,
+    pending_feedback: Vec<CommandExecution>,
+}
+
+impl AuthoritativeSimulation {
+    fn new(simulation: Simulation, content: &'static CastleFightContentBundle) -> Self {
+        let driver = MatchDriver::new(&simulation, content);
+        Self {
+            simulation,
+            driver,
+            pending_feedback: Vec::new(),
+        }
+    }
+
+    pub(crate) fn submit_local_command(
+        &mut self,
+        player: PlayerId,
+        command: PlayerCommand,
+    ) -> CommandSubmission {
+        let Self {
+            simulation, driver, ..
+        } = self;
+        driver.submit_local_command(simulation, player, command)
+    }
 }
 
 #[derive(Resource)]
@@ -132,9 +161,7 @@ fn main() {
             direct_buildings: demo.direct_buildings,
             local_player,
         })
-        .insert_resource(AuthoritativeSimulation {
-            simulation: demo.simulation,
-        })
+        .insert_resource(AuthoritativeSimulation::new(demo.simulation, demo.content))
         .init_resource::<SimulationPlayback>()
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
@@ -171,7 +198,12 @@ fn main() {
         .add_systems(Startup, setup_simulation_pause_ui)
         .add_systems(
             Update,
-            (toggle_simulation_pause, update_simulation_pause_ui).chain(),
+            (
+                toggle_simulation_pause,
+                update_simulation_pause_ui,
+                sync_local_command_feedback,
+            )
+                .chain(),
         )
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
@@ -353,15 +385,68 @@ fn advance_authoritative_simulation(
     if playback.paused {
         return;
     }
-    advance_authoritative_simulation_once(&mut authoritative, &mut presentation);
+    match advance_authoritative_simulation_once(&mut authoritative, &mut presentation) {
+        Ok(_) | Err(CanonicalStreamError::MatchNotRunning(_)) => {}
+        Err(error) => panic!("local canonical stream invariant failed: {error:?}"),
+    }
 }
 
 pub(crate) fn advance_authoritative_simulation_once(
     authoritative: &mut AuthoritativeSimulation,
     presentation: &mut PresentationSamples,
+) -> Result<DriverTickResult, CanonicalStreamError> {
+    let AuthoritativeSimulation {
+        simulation,
+        driver,
+        pending_feedback,
+    } = authoritative;
+    let result = driver.advance_local_tick(simulation)?;
+    pending_feedback.extend(result.executions.iter().copied());
+    presentation.publish(PresentationSnapshot::capture(simulation));
+    Ok(result)
+}
+
+fn sync_local_command_feedback(
+    selected_match: Res<SelectedMatch>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut action_panel: ResMut<ActionPanelState>,
 ) {
-    authoritative.simulation.step();
-    presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
+    let feedback = std::mem::take(&mut authoritative.pending_feedback);
+    for execution in feedback {
+        if execution.scheduled.player != selected_match.local_player {
+            continue;
+        }
+        action_panel.status = local_command_feedback_text(execution);
+    }
+}
+
+fn local_command_feedback_text(execution: CommandExecution) -> String {
+    let action = match execution.scheduled.command {
+        PlayerCommand::MoveBuilder { .. } => "Move",
+        PlayerCommand::FollowWithBuilder { .. } => "Follow",
+        PlayerCommand::StopBuilder { .. } => "Stop",
+        PlayerCommand::BlinkBuilder { .. } => "Blink",
+        PlayerCommand::RepairWithBuilder { .. } => "Repair",
+        PlayerCommand::SetBuilderRepairAutocast { .. } => "Repair autocast",
+        PlayerCommand::PlaceBuilding { .. } => "Build",
+        PlayerCommand::CancelBuildingConstruction { .. } => "Cancel construction",
+        PlayerCommand::UpgradeBuilding { .. } => "Upgrade",
+        PlayerCommand::AttackWithBuilding { .. } => "Attack",
+    };
+    match execution.outcome {
+        CommandOutcome::Executed(CommandExecutionResult::BuilderBlinkedTo(position)) => format!(
+            "{action} executed on tick {} at ({}, {}).",
+            execution.scheduled.tick, position.x, position.y
+        ),
+        CommandOutcome::Executed(CommandExecutionResult::BuildingConstructionCancelled(_))
+        | CommandOutcome::Executed(CommandExecutionResult::Applied) => {
+            format!("{action} executed on tick {}.", execution.scheduled.tick)
+        }
+        CommandOutcome::Rejected(reason) => format!(
+            "{action} rejected on tick {}: {reason:?}.",
+            execution.scheduled.tick
+        ),
+    }
 }
 
 fn configure_asset_io_task_pool() {
@@ -395,7 +480,6 @@ fn default_worker_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::build_ui::ActionPanelState;
 
     #[test]
     fn asset_io_pool_keeps_bevys_default_thread_assignment() {
@@ -408,12 +492,69 @@ mod tests {
     }
 
     #[test]
+    fn local_command_submission_waits_for_its_canonical_tick() {
+        let demo = crate::demo::create_demo_world(1, Some(0));
+        let builder = demo
+            .simulation
+            .builder_for_player(PlayerId(0))
+            .expect("western builder");
+        let builder_id = builder.id;
+        let start_position = builder.position;
+        let destination = SimPoint::new(
+            builder.position.x + 20 * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+            builder.position.y,
+        );
+        let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        let submission = authoritative.submit_local_command(
+            PlayerId(0),
+            PlayerCommand::MoveBuilder {
+                builder: builder_id,
+                destination,
+            },
+        );
+        let scheduled = submission.scheduled().expect("move must be admitted");
+        assert_eq!(scheduled.tick, 0);
+        assert_eq!(
+            authoritative
+                .simulation
+                .builder(builder_id)
+                .unwrap()
+                .destination,
+            None,
+            "submission alone must not mutate authoritative gameplay state"
+        );
+
+        let mut presentation = PresentationSamples::new(initial_snapshot);
+        let result = advance_authoritative_simulation_once(&mut authoritative, &mut presentation)
+            .expect("canonical tick must execute");
+        assert_eq!(result.finalized.tick, 0);
+        assert_eq!(result.executions.len(), 1);
+        assert_eq!(
+            result.executions[0].outcome,
+            CommandOutcome::Executed(CommandExecutionResult::Applied)
+        );
+        assert_ne!(
+            authoritative
+                .simulation
+                .builder(builder_id)
+                .unwrap()
+                .position,
+            start_position,
+            "the queued command must begin affecting gameplay only when its canonical tick executes"
+        );
+        assert_eq!(authoritative.simulation.tick(), 1);
+    }
+
+    #[test]
     fn paused_fixed_update_does_not_advance_authoritative_tick() {
         let simulation = Simulation::new(Default::default(), 1);
         let initial_snapshot = PresentationSnapshot::capture(&simulation);
+        let content = castle_fight_sim::castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27)
+            .expect("default development content");
         let mut app = App::new();
         app.insert_resource(SimulationPlayback { paused: true })
-            .insert_resource(AuthoritativeSimulation { simulation })
+            .insert_resource(AuthoritativeSimulation::new(simulation, content))
             .insert_resource(PresentationSamples::new(initial_snapshot))
             .init_resource::<ActionPanelState>()
             .add_systems(Update, advance_authoritative_simulation);

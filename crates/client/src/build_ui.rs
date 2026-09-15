@@ -2,8 +2,8 @@ use std::{collections::HashMap, time::Duration};
 
 use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
-    BuildingConstructionCancelOutcome, BuildingFootprint, CastleFightBuildingKind,
-    CastleFightContentBundle, CommandCardPosition, NavCell, SimId, Team,
+    BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle, CommandCardPosition,
+    CommandSubmission, NavCell, PlayerCommand, SimId, Team,
 };
 
 #[cfg(test)]
@@ -11,10 +11,10 @@ use castle_fight_sim::PlayerId;
 
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
-    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
+    bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
     building_models::BuildingModelSet,
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
-    demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
+    demo::{BuildKind, ProductionKind},
     inspection::{InspectionSelection, cursor_over_inspector_panel},
     presentation::{
         WC3_BUILDING_AMBIENT_ANIMATION_SPEED, WC3_MODEL_FACING_OFFSET, WorldMetrics,
@@ -443,7 +443,6 @@ fn handle_escape(
     keys: Res<ButtonInput<KeyCode>>,
     selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
-    mut samples: ResMut<PresentationSamples>,
     mut state: ResMut<ActionPanelState>,
 ) {
     if !keys.just_pressed(KeyCode::Escape) {
@@ -463,7 +462,6 @@ fn handle_escape(
     {
         cancel_selected_construction(
             &mut authoritative,
-            &mut samples,
             &mut state,
             selected_match.local_player,
             actor,
@@ -473,26 +471,35 @@ fn handle_escape(
 
 fn cancel_selected_construction(
     authoritative: &mut AuthoritativeSimulation,
-    samples: &mut PresentationSamples,
     state: &mut ActionPanelState,
     controller: castle_fight_sim::PlayerId,
     actor: SimId,
 ) {
-    match authoritative
-        .simulation
-        .cancel_building_construction_for_player(controller, actor)
-    {
-        Ok(BuildingConstructionCancelOutcome::RemovedNewBuilding) => {
-            samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
-            state.actor = None;
-            state.status = "Construction cancelled and resources refunded.".into();
+    let submission = authoritative.submit_local_command(
+        controller,
+        PlayerCommand::CancelBuildingConstruction { building: actor },
+    );
+    state.status = submission_status(
+        submission,
+        "Construction cancellation queued.",
+        "Unable to cancel construction",
+    );
+}
+
+fn submission_status(
+    submission: CommandSubmission,
+    accepted: &str,
+    rejected_prefix: &str,
+) -> String {
+    match submission {
+        CommandSubmission::Scheduled(command) => {
+            format!("{accepted} [tick {}]", command.tick)
         }
-        Ok(BuildingConstructionCancelOutcome::RevertedUpgrade) => {
-            samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
-            state.status = "Upgrade cancelled and the original building restored.".into();
+        CommandSubmission::DuplicateScheduled(command) => {
+            format!("{accepted} [already scheduled for tick {}]", command.tick)
         }
-        Err(error) => {
-            state.status = format!("Unable to cancel construction: {error:?}.");
+        CommandSubmission::Rejected(error) | CommandSubmission::DuplicateRejected(error) => {
+            format!("{rejected_prefix}: {error:?}.")
         }
     }
 }
@@ -691,7 +698,6 @@ fn handle_action_panel_buttons(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
-    mut samples: ResMut<PresentationSamples>,
     mut state: ResMut<ActionPanelState>,
     actions: ActionInteractions,
 ) {
@@ -728,28 +734,25 @@ fn handle_action_panel_buttons(
                     );
                     continue;
                 }
-                match order_demo_production_upgrade(
-                    &mut authoritative.simulation,
-                    selected_match.content,
+                let target_definition = selected_match
+                    .content
+                    .production_building(target)
+                    .expect("upgrade target must belong to selected bundle");
+                let submission = authoritative.submit_local_command(
                     selected_match.local_player,
-                    actor,
-                    target,
-                ) {
-                    Ok(()) => {
-                        samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
-                        state.status = format!(
-                            "Upgrading to {} — construction can be cancelled until completion.",
-                            selected_match
-                                .content
-                                .production_building(target)
-                                .expect("upgrade target must belong to selected bundle")
-                                .name
-                        );
-                    }
-                    Err(error) => {
-                        state.status = format!("Unable to start upgrade: {error:?}.");
-                    }
-                }
+                    PlayerCommand::UpgradeBuilding {
+                        building: actor,
+                        target: target.stable_id(),
+                    },
+                );
+                state.status = submission_status(
+                    submission,
+                    &format!(
+                        "Upgrade to {} queued — construction can be cancelled after execution.",
+                        target_definition.name
+                    ),
+                    "Unable to start upgrade",
+                );
             }
             PanelAction::Target(TargetingAction::Build(kind)) => {
                 if !can_afford_build_kind(&authoritative, &state, kind, selected_match.content) {
@@ -792,7 +795,6 @@ fn handle_action_panel_buttons(
                 };
                 cancel_selected_construction(
                     &mut authoritative,
-                    &mut samples,
                     &mut state,
                     selected_match.local_player,
                     actor,
@@ -808,7 +810,7 @@ fn handle_action_panel_right_click(
     selected_match: Res<SelectedMatch>,
     mut state: ResMut<ActionPanelState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
-    mut presentation: ResMut<PresentationSamples>,
+    presentation: Res<PresentationSamples>,
     buttons: Query<(&Interaction, &SlotAction), With<Button>>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Right) || state.mode != ActionPanelMode::Actions {
@@ -828,24 +830,22 @@ fn handle_action_panel_right_click(
     };
 
     let enabled = !builder.repair_autocast_enabled;
-    match authoritative.simulation.set_builder_repair_autocast_as(
+    let submission = authoritative.submit_local_command(
         selected_match.local_player,
-        actor,
-        enabled,
-    ) {
-        Ok(()) => {
-            state.status = format!(
-                "Repair autocast {}.",
-                if enabled { "enabled" } else { "disabled" }
-            );
-            presentation.publish(crate::bridge::PresentationSnapshot::capture(
-                &authoritative.simulation,
-            ));
-        }
-        Err(error) => {
-            state.status = format!("Repair autocast command rejected: {error:?}.");
-        }
-    }
+        PlayerCommand::SetBuilderRepairAutocast {
+            builder: actor,
+            enabled,
+        },
+    );
+    state.status = submission_status(
+        submission,
+        if enabled {
+            "Repair autocast enable queued."
+        } else {
+            "Repair autocast disable queued."
+        },
+        "Repair autocast command rejected",
+    );
 }
 
 fn repair_autocast_button_hovered(interaction: Interaction, action: Option<PanelAction>) -> bool {
@@ -1516,9 +1516,7 @@ mod tests {
             direct_buildings: demo.direct_buildings.clone(),
             local_player: PlayerId(0),
         };
-        let authoritative = AuthoritativeSimulation {
-            simulation: demo.simulation,
-        };
+        let authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
         let layout = action_layout(&state, &authoritative, &selected_match);
         let command_card = selected_match.content.command_card;
         assert_eq!(
@@ -1555,7 +1553,7 @@ mod tests {
             actor: Some(tower_id),
             ..ActionPanelState::default()
         };
-        let authoritative = AuthoritativeSimulation { simulation };
+        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,
@@ -1583,9 +1581,7 @@ mod tests {
             direct_buildings: demo.direct_buildings.clone(),
             local_player: PlayerId(0),
         };
-        let authoritative = AuthoritativeSimulation {
-            simulation: demo.simulation,
-        };
+        let authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
         let layout = action_layout(&state, &authoritative, &selected_match);
         let barracks = BuildKind::Production(ProductionKind::Barracks);
         let siege_factory = BuildKind::Production(ProductionKind::OrcishSiegeFactory);
@@ -1630,7 +1626,7 @@ mod tests {
             actor: Some(barracks_id),
             ..ActionPanelState::default()
         };
-        let authoritative = AuthoritativeSimulation { simulation };
+        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,

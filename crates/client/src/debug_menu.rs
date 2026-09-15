@@ -312,11 +312,20 @@ fn handle_debug_buttons(
             }
             DebugAction::StepOneTick => {
                 if playback.paused {
-                    advance_authoritative_simulation_once(&mut authoritative, &mut presentation);
-                    state.status = format!(
-                        "Advanced one tick. Current tick: {}.",
-                        authoritative.simulation.tick()
-                    );
+                    match advance_authoritative_simulation_once(
+                        &mut authoritative,
+                        &mut presentation,
+                    ) {
+                        Ok(_) => {
+                            state.status = format!(
+                                "Advanced one canonical tick. Current tick: {}.",
+                                authoritative.simulation.tick()
+                            );
+                        }
+                        Err(error) => {
+                            state.status = format!("Unable to advance canonical tick: {error:?}.");
+                        }
+                    }
                 } else {
                     state.status = "Pause the simulation before single-stepping.".into();
                 }
