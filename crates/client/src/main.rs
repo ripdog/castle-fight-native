@@ -2,6 +2,7 @@ mod bridge;
 mod build_ui;
 mod builder_controls;
 mod building_models;
+mod debug_menu;
 mod demo;
 mod doodads;
 mod inspection;
@@ -20,11 +21,12 @@ use bevy::{
     time::Fixed,
     window::PresentMode,
 };
-use castle_fight_sim::Simulation;
+use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, Simulation};
 
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::BuildUiPlugin;
 use builder_controls::BuilderControlPlugin;
+use debug_menu::DebugMenuPlugin;
 use demo::create_demo_world;
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
@@ -32,7 +34,6 @@ use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 
-const SIMULATION_HZ: f64 = 30.0;
 const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Resource)]
@@ -80,7 +81,9 @@ fn main() {
 
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
-        .insert_resource(Time::<Fixed>::from_hz(SIMULATION_HZ))
+        .insert_resource(Time::<Fixed>::from_hz(f64::from(
+            CASTLE_FIGHT_SIMULATION_HZ,
+        )))
         .insert_resource(AuthoritativeSimulation {
             simulation: demo.simulation,
         })
@@ -114,6 +117,7 @@ fn main() {
             ResourceUiPlugin,
             InspectionPlugin,
             BuilderControlPlugin,
+            DebugMenuPlugin,
         ))
         .add_systems(Startup, setup_simulation_pause_ui)
         .add_systems(
@@ -258,6 +262,13 @@ fn advance_authoritative_simulation(
     if playback.paused {
         return;
     }
+    advance_authoritative_simulation_once(&mut authoritative, &mut presentation);
+}
+
+pub(crate) fn advance_authoritative_simulation_once(
+    authoritative: &mut AuthoritativeSimulation,
+    presentation: &mut PresentationSamples,
+) {
     authoritative.simulation.step();
     presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
 }

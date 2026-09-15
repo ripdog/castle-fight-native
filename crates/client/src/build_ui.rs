@@ -7,6 +7,7 @@ use castle_fight_sim::{
 use crate::{
     AuthoritativeSimulation,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
+    debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
     inspection::InspectionSelection,
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
@@ -767,16 +768,19 @@ fn draw_build_preview(
     metrics: Res<WorldMetrics>,
     terrain: Res<TerrainSurface>,
     authoritative: Res<AuthoritativeSimulation>,
-    state: Res<ActionPanelState>,
+    ui_state: (Res<ActionPanelState>, Res<DebugMenuState>),
     mut gizmos: Gizmos,
 ) {
+    let (state, debug_menu) = ui_state;
     let Some(TargetingAction::Build(kind)) = state.targeting() else {
         return;
     };
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    if cursor_over_action_panel(cursor, window.height(), state.actor.is_some()) {
+    if cursor_over_action_panel(cursor, window.height(), state.actor.is_some())
+        || cursor_over_debug_menu(cursor, debug_menu.is_open())
+    {
         return;
     }
     let (camera, camera_transform) = *camera;

@@ -7,6 +7,7 @@ use crate::{
         ActionPanelMode, ActionPanelState, TargetingAction, cursor_over_action_panel,
         placement_footprint,
     },
+    debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::order_demo_building,
     inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
@@ -29,6 +30,7 @@ struct SelectionCommandResources<'w> {
     terrain: Res<'w, TerrainSurface>,
     metrics: Res<'w, WorldMetrics>,
     playback: Res<'w, SimulationPlayback>,
+    debug_menu: Res<'w, DebugMenuState>,
     action_panel: ResMut<'w, ActionPanelState>,
     authoritative: ResMut<'w, AuthoritativeSimulation>,
     presentation: ResMut<'w, PresentationSamples>,
@@ -115,6 +117,7 @@ fn handle_modal_left_click(
     };
     if cursor_over_action_panel(cursor, window.height(), true)
         || cursor_over_inspector_panel(cursor, window.width())
+        || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
     {
         return;
     }
@@ -374,6 +377,7 @@ fn handle_smart_right_click(
     };
     if cursor_over_action_panel(cursor, window.height(), true)
         || cursor_over_inspector_panel(cursor, window.width())
+        || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
     {
         return;
     }

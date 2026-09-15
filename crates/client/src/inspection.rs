@@ -8,6 +8,7 @@ use crate::{
         UnitVisualKind,
     },
     build_ui::{ActionPanelState, cursor_over_action_panel},
+    debug_menu::{DebugMenuState, cursor_over_debug_menu},
     presentation::{
         WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
@@ -103,11 +104,12 @@ fn handle_world_selection(
         Res<PresentationSamples>,
         Res<ActionPanelState>,
         Res<SimulationPlayback>,
+        Res<DebugMenuState>,
     ),
     mut selection: ResMut<InspectionSelection>,
 ) {
     let (fixed_time, metrics, terrain) = world;
-    let (samples, action_panel, playback) = state;
+    let (samples, action_panel, playback, debug_menu) = state;
     if !mouse_buttons.just_pressed(MouseButton::Left) || action_panel.targeting().is_some() {
         return;
     }
@@ -117,6 +119,7 @@ fn handle_world_selection(
     let action_panel_visible = action_panel.actor.is_some();
     if cursor_over_action_panel(cursor, window.height(), action_panel_visible)
         || cursor_over_inspector_panel(cursor, window.width())
+        || cursor_over_debug_menu(cursor, debug_menu.is_open())
     {
         return;
     }

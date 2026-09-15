@@ -4481,6 +4481,39 @@ mod tests {
     }
 
     #[test]
+    fn debug_resource_grant_is_authoritative_saturating_and_team_scoped() {
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                economy: EconomyRules {
+                    starting_gold: 10,
+                    starting_lumber: 20,
+                    ..EconomyRules::default()
+                },
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+
+        assert!(sim.debug_grant_player_resources(Team(0), 30, 40));
+        assert_eq!(
+            sim.player_resources(Team(0)).unwrap(),
+            PlayerResources {
+                gold: 40,
+                lumber: 60,
+                legendary_points_used: 0,
+                legendary_points_cap: 0,
+            }
+        );
+        assert_eq!(sim.player_resources(Team(1)).unwrap().gold, 10);
+        assert!(!sim.debug_grant_player_resources(Team(2), 30, 40));
+
+        assert!(sim.debug_grant_player_resources(Team(0), u32::MAX, u32::MAX));
+        let saturated = sim.player_resources(Team(0)).unwrap();
+        assert_eq!(saturated.gold, u32::MAX);
+        assert_eq!(saturated.lumber, u32::MAX);
+    }
+
+    #[test]
     fn purchased_buildings_spend_resources_award_lumber_and_pay_tick_income() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {

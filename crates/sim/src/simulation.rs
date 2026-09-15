@@ -521,6 +521,20 @@ impl Simulation {
         self.player_resources.get(usize::from(team.0)).copied()
     }
 
+    /// Adds resources directly to one player's authoritative economy state for developer tooling.
+    ///
+    /// This intentionally lives on `Simulation` rather than allowing debug UI to mutate economy
+    /// storage directly, so cheats still cross the same authoritative-state boundary as gameplay
+    /// commands. Values saturate instead of wrapping, and invalid teams are rejected.
+    pub fn debug_grant_player_resources(&mut self, team: Team, gold: u32, lumber: u32) -> bool {
+        let Some(resources) = self.player_resources.get_mut(usize::from(team.0)) else {
+            return false;
+        };
+        resources.gold = resources.gold.saturating_add(gold);
+        resources.lumber = resources.lumber.saturating_add(lumber);
+        true
+    }
+
     #[must_use]
     pub fn player_income(&self, team: Team) -> Option<u32> {
         (team.0 < 2).then(|| {
