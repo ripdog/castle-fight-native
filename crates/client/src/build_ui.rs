@@ -179,9 +179,10 @@ pub(crate) struct BuildUiPlugin;
 
 impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
+        let map_version = app.world().resource::<SelectedMatch>().content.map_version;
         app.init_resource::<ActionPanelState>()
             .init_resource::<BuildTooltipState>()
-            .insert_resource(UiIconAssets::load_default())
+            .insert_resource(UiIconAssets::load_for_version(map_version))
             .add_systems(Startup, setup_action_panel)
             .add_systems(
                 Update,

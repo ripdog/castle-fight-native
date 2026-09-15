@@ -6,7 +6,7 @@ use std::{
 };
 
 use bevy::prelude::*;
-use castle_fight_sim::{CASTLE_FIGHT_DEFAULT_MAP_VERSION, MapVersion};
+use castle_fight_sim::MapVersion;
 use serde::Deserialize;
 
 use crate::terrain::client_asset_root;
@@ -140,7 +140,7 @@ pub(crate) struct UiIconAssets {
 
 impl UiIconAssets {
     #[must_use]
-    pub(crate) fn load_default() -> Self {
+    pub(crate) fn load_for_version(map_version: MapVersion) -> Self {
         let asset_root = client_asset_root();
         let manifest_path = asset_root.join(UI_ICON_MANIFEST);
         if !manifest_path.is_file() {
@@ -148,7 +148,7 @@ impl UiIconAssets {
         }
 
         match load_manifest_entries(&manifest_path, UI_ICON_ASSET_PREFIX) {
-            Ok(resolved) if resolved.map_version == CASTLE_FIGHT_DEFAULT_MAP_VERSION => {
+            Ok(resolved) if resolved.map_version == map_version => {
                 println!(
                     "Loaded {} generated WC3 UI icon binding(s) and {} cursor atlas binding(s) for Castle Fight {}",
                     resolved.paths.len(),
@@ -164,8 +164,8 @@ impl UiIconAssets {
             }
             Ok(resolved) => {
                 eprintln!(
-                    "warning: ignoring generated WC3 UI icons for Castle Fight {}; client is using {}",
-                    resolved.map_version, CASTLE_FIGHT_DEFAULT_MAP_VERSION
+                    "warning: ignoring generated WC3 UI icons for Castle Fight {}; selected match is {}",
+                    resolved.map_version, map_version
                 );
                 Self::default()
             }
