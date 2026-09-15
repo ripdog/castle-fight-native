@@ -210,7 +210,7 @@
     "round-end-draft-controller-reset-and-warmup-restart": 1,
     "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1
   },
-  "runtime_system_mechanic_rows": 26,
+  "runtime_system_mechanic_rows": 30,
   "runtime_system_mechanic_kinds": {
     "allied-production-queue-synchronization-and-order-reset": 1,
     "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -220,9 +220,13 @@
     "builder-point-teleport-clamped-to-own-castle": 1,
     "building-random-enemy-base-attack-ground-controller": 1,
     "catalog-authoritative-building-income-cache-correction": 1,
+    "construction-finish-hidden-native-ability-grants": 1,
+    "damage-event-15-percent-chain-lightning-dummy-proc": 1,
+    "damage-event-40-percent-hurl-boulder-dummy-proc": 1,
     "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
     "enchantment-marker-driven-half-damage-cleave": 1,
     "enter-rect-combat-sapper-attack-order-recovery": 1,
+    "exact-death-spawned-slow-aura-body-with-unresolved-creation-scheduler": 1,
     "exact-resource-or-item-mutation-body-with-unresolved-scheduler": 1,
     "first-fifteen-seconds-castle-damage-immunity": 1,
     "per-player-building-count-income-multiplier": 1,

@@ -3118,6 +3118,138 @@ def main() -> None:
                         raise ValueError(f"Stasis Totem rawcode list changed: {parameters}")
                     parameters["stock_stasis_trap_name"] = stock["name"]
                     parameters["totems"] = totems
+                elif system_id == "construction-granted-hidden-building-abilities":
+                    expected = {
+                        "h00G": ["A0HY", "A007"],
+                        "h01O": ["A01V"],
+                        "h061": ["A03Q", "A0EV"],
+                    }
+                    resolved_grants: list[dict[str, Any]] = []
+                    for grant in parameters.get("grants", []):
+                        building_rawcode = grant.get("building_rawcode")
+                        ability_rawcodes = grant.get("granted_ability_rawcodes")
+                        if expected.get(building_rawcode) != ability_rawcodes:
+                            raise ValueError(f"hidden building grant set changed: {grant}")
+                        building = static_units.get(str(building_rawcode))
+                        if building is None:
+                            raise ValueError(f"hidden ability grant building missing: {building_rawcode}")
+                        granted_ability_rows = []
+                        for rawcode in ability_rawcodes:
+                            ability = ability_level_one(rawcode)
+                            granted_ability_rows.append({
+                                "rawcode": rawcode,
+                                "name": ability["name"],
+                                "base_rawcode": ability["base_rawcode"],
+                                "area": numeric(ability["area"]),
+                                "targets": ability["targets"],
+                                "buffs": rawcode_list(ability["buffs"]),
+                                "object_data": json.loads(ability["data_fields_labeled_json"]),
+                            })
+                        resolved_grants.append({
+                            "building_rawcode": building_rawcode,
+                            "building_name": building["name"],
+                            "building_tooltip": building["ubertip"],
+                            "static_abilities": rawcode_list(building["abilities"]),
+                            "runtime_granted_abilities": granted_ability_rows,
+                        })
+                    by_building = {row["building_rawcode"]: row for row in resolved_grants}
+                    coral = by_building["h00G"]["runtime_granted_abilities"]
+                    coral_by_id = {row["rawcode"]: row for row in coral}
+                    if (
+                        coral_by_id["A0HY"]["object_data"].get("Armor Bonus") != 8
+                        or coral_by_id["A0HY"]["area"] != 700
+                        or coral_by_id["A007"]["object_data"].get("Amount of Hit Points Regenerated") != 7.5
+                        or coral_by_id["A007"]["area"] != 700
+                    ):
+                        raise ValueError(f"Coral Statue runtime aura objects changed: {coral_by_id}")
+                    corrosion = by_building["h01O"]["runtime_granted_abilities"][0]
+                    if corrosion["object_data"].get("Armor Bonus") != -3 or corrosion["area"] != 500:
+                        raise ValueError(f"Turret of Souls corrosion aura changed: {corrosion}")
+                    parameters["resolved_grants"] = resolved_grants
+                elif system_id == "energy-tower-energy-burst":
+                    tower = static_units.get("h05L")
+                    effect = ability_level_one("A09T")
+                    if tower is None:
+                        raise ValueError("Energy Tower h05L is missing")
+                    fields = json.loads(effect["data_fields_labeled_json"])
+                    runtime_cooldown = protected_ability_values.get(("A09T", 1, "cooldown"))
+                    runtime_mana = protected_ability_values.get(("A09T", 1, "mana_cost"))
+                    if (
+                        int(parameters.get("proc_probability_percent", 0)) != 15
+                        or fields.get("Damage per Target") != 50
+                        or fields.get("Number of Targets Hit") != 8
+                        or numeric(fields.get("Damage Reduction per Target")) != 0.15
+                        or numeric(runtime_cooldown) != 0
+                        or numeric(runtime_mana) != 0
+                    ):
+                        raise ValueError(f"Energy Tower Energy Burst changed: {parameters} / {effect}")
+                    tooltip = str(tower["ubertip"])
+                    if "15" not in tooltip or "50" not in tooltip or "8" not in tooltip or "20" not in tooltip:
+                        raise ValueError(f"Energy Tower tooltip changed: {tooltip}")
+                    parameters["source_name"] = tower["name"]
+                    parameters["source_tooltip"] = tooltip
+                    parameters["effect_ability_name"] = effect["name"]
+                    parameters["effect_object_data"] = fields
+                    parameters["static_effect_mana_cost"] = numeric(effect["mana_cost"])
+                    parameters["static_effect_cooldown_seconds"] = numeric(effect["cooldown"])
+                    parameters["protected_effect_mana_cost"] = numeric(runtime_mana)
+                    parameters["protected_effect_cooldown_seconds"] = numeric(runtime_cooldown)
+                elif system_id == "elemental-guard-tower-avalanche":
+                    tower = static_units.get("h061")
+                    helper = ability_level_one("A0EV")
+                    effect = ability_level_one("A0DC")
+                    if tower is None:
+                        raise ValueError("Elemental Guard Tower h061 is missing")
+                    effect_fields = json.loads(effect["data_fields_labeled_json"])
+                    runtime_cooldown = protected_ability_values.get(("A0DC", 1, "cooldown"))
+                    runtime_mana = protected_ability_values.get(("A0DC", 1, "mana_cost"))
+                    duration_normal = numeric(field_lookup(rows_by_object, "abilities", "A0DC", "adur", 1, 0))
+                    duration_hero = numeric(field_lookup(rows_by_object, "abilities", "A0DC", "ahdu", 1, 0))
+                    if (
+                        int(parameters.get("proc_probability_percent", 0)) != 40
+                        or effect_fields.get("Damage") != 100
+                        or duration_normal != 10
+                        or duration_hero != 5
+                        or numeric(runtime_cooldown) != 0.1
+                        or numeric(runtime_mana) != 0
+                    ):
+                        raise ValueError(f"Elemental Guard Tower Avalanche changed: {parameters} / {effect}")
+                    tooltip = str(tower["ubertip"])
+                    if "40" not in tooltip or "100" not in tooltip or "10" not in tooltip:
+                        raise ValueError(f"Elemental Guard Tower tooltip changed: {tooltip}")
+                    if "70%" not in str(helper["ubertip"]):
+                        raise ValueError(f"A0EV helper tooltip no longer advertises 70%: {helper}")
+                    parameters["source_name"] = tower["name"]
+                    parameters["source_tooltip"] = tooltip
+                    parameters["helper_ability_name"] = helper["name"]
+                    parameters["helper_ability_tooltip"] = helper["ubertip"]
+                    parameters["effect_ability_name"] = effect["name"]
+                    parameters["effect_object_data"] = effect_fields
+                    parameters["effect_duration_normal_seconds"] = duration_normal
+                    parameters["effect_duration_hero_seconds"] = duration_hero
+                    parameters["static_effect_mana_cost"] = numeric(effect["mana_cost"])
+                    parameters["static_effect_cooldown_seconds"] = numeric(effect["cooldown"])
+                    parameters["protected_effect_mana_cost"] = numeric(runtime_mana)
+                    parameters["protected_effect_cooldown_seconds"] = numeric(runtime_cooldown)
+                elif system_id == "wisp-death-slow-unresolved-reachability":
+                    wisp = static_units.get("h06B")
+                    slow = ability_level_one("A0ES")
+                    slow_fields = json.loads(slow["data_fields_labeled_json"])
+                    if (
+                        wisp is None
+                        or parameters.get("production_reachability_proven") is not False
+                        or parameters.get("readable_creation_function_named_callers") != []
+                        or numeric(slow["area"]) != 350
+                        or numeric(slow_fields.get("Movement Speed Factor")) != -0.8
+                        or numeric(slow_fields.get("Attack Speed Factor")) != 0
+                        or numeric(parameters.get("slow_aura_timed_life_seconds")) != 8
+                    ):
+                        raise ValueError(f"Wisp death slow evidence changed: {parameters} / {slow}")
+                    parameters["wisp_name"] = wisp["name"]
+                    parameters["slow_aura_name"] = slow["name"]
+                    parameters["slow_aura_targets"] = slow["targets"]
+                    parameters["slow_aura_buff_rawcodes"] = rawcode_list(slow["buffs"])
+                    parameters["slow_aura_object_data"] = slow_fields
                 elif system_id == "building-income-synchronization":
                     if (
                         parameters.get("delta_formula")

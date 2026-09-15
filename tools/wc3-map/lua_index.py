@@ -9645,6 +9645,7 @@ def _extract_runtime_system_mechanics(
         "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2",
+        "iD", "handleSourceDamageEffects", "h05LAttackProc", "boulderAttackProc", "MC",
         "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
         "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
     }
@@ -11430,6 +11431,183 @@ def _extract_runtime_system_mechanics(
             sync_start, sync_valid_start, sync_queue_start, sync_light_start, sync_order_cb_start,
             sync_apply_cb_start, sync_light_cb_start, sync_move_cb_start,
         ),
+    })
+
+    # Several buildings deliberately keep their real aura/proc abilities out of
+    # static object ownership and grant them at construction time. Preserve the
+    # handoff explicitly so object-data consumers do not mistake the visible
+    # tooltip/marker abilities for the actual native aura implementation.
+    building_grant_start, building_grant_source, _ = source("iD")
+    for fragment in (
+        b"mho==1747988551)then safeUnitAddAbility(jho,1093683289)safeUnitAddAbility(jho,1093677111)",
+        b"mho==1747990065)then safeUnitAddAbility(jho,1093677905)safeUnitAddAbility(jho,1093682518)",
+        b"mho==1747988815)then safeUnitAddAbility(jho,1093677398)",
+    ):
+        if fragment not in building_grant_source:
+            raise ValueError(f"construction-time hidden building ability grants changed: missing {fragment!r}")
+    rows.append({
+        "system_id": "construction-granted-hidden-building-abilities",
+        "mechanic_kind": "construction-finish-hidden-native-ability-grants",
+        "trigger": "building-construction-finish",
+        "parameters": {
+            "grants": [
+                {
+                    "building_unit_id": 1747988551,
+                    "building_rawcode": "h00G",
+                    "granted_ability_ids": [1093683289, 1093677111],
+                    "granted_ability_rawcodes": ["A0HY", "A007"],
+                    "roles": ["building-only +8 armor aura", "friendly-unit +7.5 hp-per-second aura"],
+                },
+                {
+                    "building_unit_id": 1747988815,
+                    "building_rawcode": "h01O",
+                    "granted_ability_ids": [1093677398],
+                    "granted_ability_rawcodes": ["A01V"],
+                    "roles": ["enemy -3 armor corrosion aura"],
+                },
+                {
+                    "building_unit_id": 1747990065,
+                    "building_rawcode": "h061",
+                    "granted_ability_ids": [1093677905, 1093682518],
+                    "granted_ability_rawcodes": ["A03Q", "A0EV"],
+                    "roles": ["source-damage runtime dispatch marker", "Boulder tooltip/helper marker"],
+                },
+            ],
+        },
+        "related_rawcode_ids": [
+            1747988551, 1093683289, 1093677111,
+            1747988815, 1093677398,
+            1747990065, 1093677905, 1093682518,
+        ],
+        "source_functions": ["iD"],
+        "evidence_kind": "exact-construction-finish-unit-type-branches-and-ability-grants",
+        "byte_offset": building_grant_start,
+    })
+
+    # Energy Tower's Energy Burst and Elemental Guard Tower's Avalanche are
+    # dispatched from the shared source-damage handler. Both use short-lived
+    # e008 dummy casters carrying protected spell objects. Runtime probabilities
+    # are authoritative where their tooltips/object text disagree.
+    source_damage_start, source_damage_source, _ = source("handleSourceDamageEffects")
+    energy_start, energy_source, _ = source("h05LAttackProc")
+    boulder_start, boulder_source, _ = source("boulderAttackProc")
+    if b"Spq==1747989836)then h05LAttackProc(Qpq,Rpq)" not in source_damage_source:
+        raise ValueError("Energy Tower source-damage dispatch changed")
+    if b"Spq==1747990065)then boulderAttackProc(Qpq,Rpq)" not in source_damage_source:
+        raise ValueError("Elemental Guard Tower source-damage dispatch changed")
+    for body, fragments, label in (
+        (energy_source, (
+            b"GetRandomInt(0,99)<15", b"addProtectedAbility(Coq,1093679444)",
+            b"unit_issueTargetOrderById(Boq,852119,yoq)", b"__wurst_safe_UnitApplyTimedLife(Boq,1112820806,4.)",
+        ), "Energy Tower"),
+        (boulder_source, (
+            b"GetRandomInt(0,99)<40", b"addProtectedAbility(Ioq,1093682243)",
+            b"unit_issueTargetOrderById(Hoq,852252,Eoq)", b"__wurst_safe_UnitApplyTimedLife(Hoq,1112820806,4.)",
+        ), "Elemental Guard Tower"),
+    ):
+        for fragment in fragments:
+            if fragment not in body:
+                raise ValueError(f"{label} attack proc changed: missing {fragment!r}")
+    rows.append({
+        "system_id": "energy-tower-energy-burst",
+        "mechanic_kind": "damage-event-15-percent-chain-lightning-dummy-proc",
+        "trigger": "source-damage-event-from-h05L-with-A03Q-runtime-marker",
+        "parameters": {
+            "source_unit_id": 1747989836,
+            "source_rawcode": "h05L",
+            "proc_probability_percent": 15,
+            "dummy_unit_id": 1697656888,
+            "dummy_unit_rawcode": "e008",
+            "effect_ability_id": 1093679444,
+            "effect_ability_rawcode": "A09T",
+            "target_order_id": 852119,
+            "dummy_timed_life_seconds": 4,
+            "effect_damage": 50,
+            "effect_target_count": 8,
+            "effect_damage_reduction_per_bounce": 0.15,
+            "tooltip_advertised_damage_reduction_per_bounce": 0.20,
+            "tooltip_object_discrepancy_preserved": True,
+        },
+        "related_rawcode_ids": [1747989836, 1697656888, 1093679444, 1093677905],
+        "source_functions": ["handleSourceDamageEffects", "h05LAttackProc"],
+        "evidence_kind": "exact-source-type-dispatch-random-threshold-dummy-cast-plus-linked-ability-object",
+        "byte_offset": min(source_damage_start, energy_start),
+    })
+    rows.append({
+        "system_id": "elemental-guard-tower-avalanche",
+        "mechanic_kind": "damage-event-40-percent-hurl-boulder-dummy-proc",
+        "trigger": "source-damage-event-from-h061-with-construction-granted-A03Q-marker",
+        "parameters": {
+            "source_unit_id": 1747990065,
+            "source_rawcode": "h061",
+            "proc_probability_percent": 40,
+            "tooltip_helper_ability_id": 1093682518,
+            "tooltip_helper_ability_rawcode": "A0EV",
+            "dummy_unit_id": 1697656888,
+            "dummy_unit_rawcode": "e008",
+            "effect_ability_id": 1093682243,
+            "effect_ability_rawcode": "A0DC",
+            "target_order_id": 852252,
+            "dummy_timed_life_seconds": 4,
+            "effect_damage": 100,
+            "normal_target_stun_seconds": 10,
+            "hero_target_stun_seconds": 5,
+            "static_effect_mana_cost": 9999,
+            "static_effect_cooldown_seconds": 99,
+            "protected_effect_mana_cost": 0,
+            "protected_effect_cooldown_seconds": 0.1,
+            "A0EV_tooltip_advertised_proc_probability_percent": 70,
+            "runtime_probability_overrides_helper_tooltip": True,
+        },
+        "related_rawcode_ids": [1747990065, 1093677905, 1093682518, 1697656888, 1093682243],
+        "source_functions": ["iD", "handleSourceDamageEffects", "boulderAttackProc", "applyProtectedAbilityFieldsForJassAdd"],
+        "evidence_kind": "exact-construction-grant-source-type-dispatch-random-threshold-dummy-cast-and-protected-effect-fields",
+        "byte_offset": min(building_grant_start, source_damage_start, boulder_start),
+    })
+
+    # h06B Wisp has a precise death payload, but its only readable creation site
+    # (MC) has no readable named caller. Keep the slow aura body available to
+    # importers while refusing to claim that production gameplay reaches it.
+    wisp_create_start, wisp_create_source, _ = source("MC")
+    _death_start, death_source, _ = source("fJ")
+    if b"__wurst_safe_CreateUnit(ZHb,1747990082" not in wisp_create_source:
+        raise ValueError("h06B Wisp creation body changed")
+    for fragment in (
+        b"unit_getTypeId(M2q)==1747990082", b"__wurst_safe_CreateUnit(l3q,dV", b"addProtectedAbility(r3q,1093682515)",
+        b"__wurst_safe_UnitApplyTimedLife(n3q,1112820806,8.)",
+    ):
+        if fragment not in death_source:
+            raise ValueError(f"h06B Wisp death slow body changed: missing {fragment!r}")
+    wisp_creation_callers = sorted(
+        caller for (caller, callee), count in call_edges.items()
+        if callee == "MC" and count > 0
+    )
+    if wisp_creation_callers:
+        raise ValueError(f"h06B Wisp creation became readably reachable: {wisp_creation_callers}")
+    rows.append({
+        "system_id": "wisp-death-slow-unresolved-reachability",
+        "mechanic_kind": "exact-death-spawned-slow-aura-body-with-unresolved-creation-scheduler",
+        "trigger": "h06B-death;production-creation-scheduler-not-recovered",
+        "parameters": {
+            "production_reachability_proven": False,
+            "readable_creation_function": "MC",
+            "readable_creation_function_named_callers": [],
+            "wisp_unit_id": 1747990082,
+            "wisp_rawcode": "h06B",
+            "death_dummy_unit_id": 1697656888,
+            "death_dummy_rawcode": "e008",
+            "slow_aura_ability_id": 1093682515,
+            "slow_aura_ability_rawcode": "A0ES",
+            "slow_aura_radius": 350,
+            "movement_speed_factor": -0.8,
+            "attack_speed_factor": 0.0,
+            "slow_aura_timed_life_seconds": 8,
+            "must_not_be_treated_as_live_gameplay_without_creation_reachability_proof": True,
+        },
+        "related_rawcode_ids": [1747990082, 1697656888, 1093682515],
+        "source_functions": ["MC", "fJ"],
+        "evidence_kind": "exact-readable-creation-and-death-payload-with-no-readable-creation-function-caller",
+        "byte_offset": min(wisp_create_start, _death_start),
     })
 
     # RuntimeLedger contains exact protected-body resource/item mutations, but

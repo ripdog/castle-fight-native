@@ -1333,7 +1333,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 26)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 30)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "allied-production-queue-synchronization-and-order-reset": 1,
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -1361,10 +1361,50 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
             "enter-rect-combat-sapper-attack-order-recovery": 1,
             "exact-resource-or-item-mutation-body-with-unresolved-scheduler": 1,
+            "construction-finish-hidden-native-ability-grants": 1,
+            "damage-event-15-percent-chain-lightning-dummy-proc": 1,
+            "damage-event-40-percent-hurl-boulder-dummy-proc": 1,
+            "exact-death-spawned-slow-aura-body-with-unresolved-creation-scheduler": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 26)
+        self.assertEqual(len(rows), 30)
+        hidden_grants = json.loads(rows["construction-granted-hidden-building-abilities"]["parameters_json"])
+        grants = {row["building_rawcode"]: row for row in hidden_grants["resolved_grants"]}
+        self.assertEqual([row["rawcode"] for row in grants["h00G"]["runtime_granted_abilities"]], ["A0HY", "A007"])
+        self.assertEqual(grants["h00G"]["runtime_granted_abilities"][0]["object_data"]["Armor Bonus"], 8)
+        self.assertEqual(grants["h00G"]["runtime_granted_abilities"][1]["object_data"]["Amount of Hit Points Regenerated"], 7.5)
+        self.assertEqual(grants["h01O"]["runtime_granted_abilities"][0]["object_data"]["Armor Bonus"], -3)
+        self.assertEqual([row["rawcode"] for row in grants["h061"]["runtime_granted_abilities"]], ["A03Q", "A0EV"])
+
+        energy = json.loads(rows["energy-tower-energy-burst"]["parameters_json"])
+        self.assertEqual(energy["proc_probability_percent"], 15)
+        self.assertEqual(energy["effect_damage"], 50)
+        self.assertEqual(energy["effect_target_count"], 8)
+        self.assertEqual(energy["effect_damage_reduction_per_bounce"], 0.15)
+        self.assertEqual(energy["tooltip_advertised_damage_reduction_per_bounce"], 0.2)
+        self.assertTrue(energy["tooltip_object_discrepancy_preserved"])
+        self.assertEqual(energy["protected_effect_cooldown_seconds"], 0.0)
+        self.assertEqual(energy["protected_effect_mana_cost"], 0.0)
+
+        avalanche = json.loads(rows["elemental-guard-tower-avalanche"]["parameters_json"])
+        self.assertEqual(avalanche["proc_probability_percent"], 40)
+        self.assertEqual(avalanche["A0EV_tooltip_advertised_proc_probability_percent"], 70)
+        self.assertTrue(avalanche["runtime_probability_overrides_helper_tooltip"])
+        self.assertEqual(avalanche["effect_damage"], 100)
+        self.assertEqual(avalanche["effect_duration_normal_seconds"], 10.0)
+        self.assertEqual(avalanche["effect_duration_hero_seconds"], 5.0)
+        self.assertEqual(avalanche["protected_effect_cooldown_seconds"], 0.1)
+        self.assertEqual(avalanche["protected_effect_mana_cost"], 0.0)
+
+        wisp = json.loads(rows["wisp-death-slow-unresolved-reachability"]["parameters_json"])
+        self.assertFalse(wisp["production_reachability_proven"])
+        self.assertEqual(wisp["readable_creation_function_named_callers"], [])
+        self.assertEqual(wisp["slow_aura_radius"], 350)
+        self.assertEqual(wisp["movement_speed_factor"], -0.8)
+        self.assertEqual(wisp["slow_aura_timed_life_seconds"], 8)
+        self.assertTrue(wisp["must_not_be_treated_as_live_gameplay_without_creation_reachability_proof"])
+
         ledger = json.loads(rows["protected-runtime-ledger-unresolved-reachability"]["parameters_json"])
         self.assertFalse(ledger["production_reachability_proven"])
         self.assertTrue(ledger["must_not_be_treated_as_live_gameplay_without_scheduler_proof"])
