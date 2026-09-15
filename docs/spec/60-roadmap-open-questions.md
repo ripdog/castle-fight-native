@@ -8,6 +8,8 @@ This document turns the architectural specifications into an implementation sequ
 
 The project should resist the temptation to begin with art/UI/content breadth. Determinism, simulation scaling, navigation, targeting, and continuity are the expensive architectural risks; they should be proven while the world can still be rendered as debug circles/boxes.
 
+For work starting from the September 2026 checkout, follow [the ordered implementation plan](61-implementation-plan.md). It reconciles the existing prototype with user-selected historical map versions and the remaining multiplayer/content prerequisites. The original milestones below retain design context and exit criteria; they are not a record that those criteria have been completed. Normative behavior remains defined by the linked layer specifications.
+
 ## 2. Milestone 0 — Workspace and deterministic primitives
 
 Create the Rust workspace and crate boundaries.

@@ -42,6 +42,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** de
 
 - [50-testing-observability-performance.md](50-testing-observability-performance.md) — determinism testing, property tests, soak tests, profiling, tracing, and performance budgets.
 - [60-roadmap-open-questions.md](60-roadmap-open-questions.md) — implementation sequence, unresolved design choices, and explicit experiments.
+- [61-implementation-plan.md](61-implementation-plan.md) — current ordered handoff for Sol: versioned content, ownership, commands, continuity, multiplayer, and roster expansion.
 
 ## Dependency direction
 
