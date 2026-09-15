@@ -1,12 +1,5 @@
-use bevy::{
-    ecs::system::SystemParam,
-    prelude::*,
-    window::{CursorIcon, CustomCursor, CustomCursorImage, PrimaryWindow},
-};
-use castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION;
-
 use crate::{
-    AuthoritativeSimulation,
+    AuthoritativeSimulation, SelectedMatch,
     bridge::PresentationSamples,
     build_ui::{ActionPanelState, TargetingAction, cursor_over_action_panel, placement_footprint},
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
@@ -14,6 +7,11 @@ use crate::{
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets},
+};
+use bevy::{
+    ecs::system::SystemParam,
+    prelude::*,
+    window::{CursorIcon, CustomCursor, CustomCursorImage, PrimaryWindow},
 };
 
 const WC3_CURSOR_COLUMNS: u32 = 8;
@@ -80,6 +78,7 @@ struct CursorPresentationResources<'w> {
     terrain: Res<'w, TerrainSurface>,
     presentation: Res<'w, PresentationSamples>,
     authoritative: Res<'w, AuthoritativeSimulation>,
+    selected_match: Res<'w, SelectedMatch>,
     asset_server: Res<'w, AssetServer>,
     images: Res<'w, Assets<Image>>,
     ui_assets: ResMut<'w, UiIconAssets>,
@@ -100,7 +99,7 @@ fn update_wc3_cursor(
     mut resources: CursorPresentationResources<'_>,
 ) {
     let Some(presentation) =
-        CastleFightPresentationCatalog::for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        CastleFightPresentationCatalog::for_version(resources.selected_match.content.map_version)
     else {
         return;
     };
@@ -204,12 +203,17 @@ fn desired_cursor_state(
     let Some(world) = world else {
         return Wc3CursorState::InvalidTarget;
     };
-    let footprint = placement_footprint(&resources.metrics, world, kind);
+    let footprint = placement_footprint(
+        &resources.metrics,
+        world,
+        kind,
+        resources.selected_match.content,
+    );
     let affordable = resources.action_panel.actor.is_some_and(|actor| {
         resources
             .authoritative
             .simulation
-            .can_builder_afford_building(actor, kind.economy())
+            .can_builder_afford_building(actor, kind.economy(resources.selected_match.content))
     });
     if affordable
         && resources
