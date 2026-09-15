@@ -2300,7 +2300,7 @@ def main() -> None:
                         "buffs": ability["buffs"],
                         "object_data": json.loads(ability["data_fields_labeled_json"]),
                     }
-                elif system_id != "ai-engagement-damage-signals":
+                elif system_id not in {"ai-engagement-damage-signals", "ai-executor-periodic-fsm"}:
                     raise ValueError(f"unrecognized runtime AI mechanic: {system_id}")
 
                 runtime_ai_rows.append([
@@ -2327,6 +2327,7 @@ def main() -> None:
                     "away-control-and-idle-detection",
                     "player-leave-autobalance-and-team-empty-resolution",
                     "unanimous-draw-round-restart",
+                    "round-end-review-countdown",
                 }:
                     raise ValueError(f"unrecognized runtime session mechanic: {system_id}")
                 runtime_session_rows.append([
@@ -2381,13 +2382,22 @@ def main() -> None:
         with runtime_campaign_path.open(encoding="utf-8", newline="") as handle:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
-                if system_id != "campaign-star-restriction-failure-hooks":
+                if system_id not in {
+                    "campaign-star-restriction-failure-hooks",
+                    "campaign-star-periodic-objectives",
+                    "campaign-survival-countdown",
+                }:
                     raise ValueError(f"unrecognized runtime campaign mechanic: {system_id}")
                 parameters = json.loads(mechanic["parameters_json"])
-                if parameters.get("tracked_building_loss", {}).get("restriction_id") != "challenge_no_buildings_lost":
-                    raise ValueError(f"campaign building-loss restriction changed: {parameters}")
-                if parameters.get("challenge_bound_item_purchase", {}).get("restriction_id") != "challenge_no_items":
-                    raise ValueError(f"campaign no-items restriction changed: {parameters}")
+                if system_id == "campaign-star-restriction-failure-hooks":
+                    if parameters.get("tracked_building_loss", {}).get("restriction_id") != "challenge_no_buildings_lost":
+                        raise ValueError(f"campaign building-loss restriction changed: {parameters}")
+                    if parameters.get("challenge_bound_item_purchase", {}).get("restriction_id") != "challenge_no_items":
+                        raise ValueError(f"campaign no-items restriction changed: {parameters}")
+                elif system_id == "campaign-star-periodic-objectives" and parameters.get("period_seconds") != 0.25:
+                    raise ValueError(f"campaign challenge polling period changed: {parameters}")
+                elif system_id == "campaign-survival-countdown" and parameters.get("period_seconds") != 1:
+                    raise ValueError(f"campaign survival polling period changed: {parameters}")
                 runtime_campaign_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
                     mechanic["related_objects_json"], stable_json(parameters),
@@ -2408,7 +2418,9 @@ def main() -> None:
         with runtime_draft_path.open(encoding="utf-8", newline="") as handle:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
-                if system_id not in {"draft-round-restart-lifecycle", "draft-perk-reminder-reapply"}:
+                if system_id not in {
+                    "draft-round-restart-lifecycle", "draft-controller-periodic-timers", "draft-perk-reminder-reapply"
+                }:
                     raise ValueError(f"unrecognized runtime draft mechanic: {system_id}")
                 runtime_draft_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
@@ -4782,11 +4794,11 @@ def main() -> None:
             "production-unit-special-mechanics.tsv normalizes runtime-only production-unit behavior that bypasses the scripted unit-spell registry; current exact rows cover Mountain Giant War Club, Echofoot Echo Step/remnant, Gnoll anti-air retaliation, Defender Defend maintenance, Greater Fire Elemental splitting, Avatar/Avenging Spirit death/kill effects, Vampire Eternal Servitude, Troll-family Berserk, Winged Riptide Serpent anti-air damage amplification, Forest Troll Trapper persistent low-HP attack tiers, Ironpaw Guardian Whirlwind, Nature dispels/Bear hibernation, Razormane Razor Spray, Emerald corrosion, Greater Water Mirror Image, Greater Wind Kaboom charge, Earth health-scaled Aftershock, Lightning melee-retaliation Thunderbolt, Paladin summon mana reset, Mine Layer random trained mana, Goblin Rocketeer exploded/death-explosion setup, Lich King Mastery over Death, and Vampire Lord Blood Corrosion",
             "production-unit-runtime-coverage.tsv is a closure audit over core combat/train/summon/death handlers plus explicitly audited marker/listener hooks such as Earth, Lightning, Riptide, Troll Blood and Whirlwind; extraction fails if a referenced production unit is not covered by special mechanics, scripted unit spells, the verified Fire-split endpoint, or the strictly asserted Shadow Drake visual-only branch",
             "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
-            "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
-            "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; and unanimous-draw round cleanup/restart without setting a match winner",
-            "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch and Ultimate-roll building-availability reset",
-            "runtime-campaign-mechanics.tsv normalizes the two authoritative campaign star-restriction event hooks: tracked player-built building loss fails challenge_no_buildings_lost, while a challenge-bound player item purchase fails challenge_no_items; both protected restriction IDs are statically decoded rather than inferred from failure text",
-            "runtime-draft-mechanics.tsv normalizes readable draft lifecycle outside individual perk effects: round-end pool/tier/perk-registry/controller reset followed by warmup restart, and round-start reapplication of already-earned permanent perk reminder abilities to each player's current builder",
+            "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the staggered 1-second AI executor FSM tick, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
+            "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; unanimous-draw round cleanup/restart without setting a match winner; and the exact 15-second one-second-tick round-review gate before next-round dispatch",
+            "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, Ultimate-roll building-availability reset, the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
+            "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, and survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry",
+            "runtime-draft-mechanics.tsv normalizes readable draft lifecycle outside individual perk effects: round-end pool/tier/perk-registry/controller reset followed by warmup restart, the three 1-second draft controller timers with their exact defaults/terminal actions, and round-start reapplication of already-earned permanent perk reminder abilities to each player's current builder",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",

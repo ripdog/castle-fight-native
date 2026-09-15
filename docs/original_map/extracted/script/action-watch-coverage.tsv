@@ -2,7 +2,7 @@ callback_function	coverage_status	normalized_sources	evidence_note	byte_offset
 Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E	e2e-only		generated AI/mode end-to-end verification callback; not production gameplay semantics	472937
 Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E1	e2e-only		generated AI/mode end-to-end verification callback; not production gameplay semantics	473230
 Action_watch_CampaignMissionInfoOverlay_CampaignUI_run_watch_CampaignMissionInfoOverlay_CampaignUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	804535
-Action_watch_CampaignRuntime_run_watch_CampaignRuntime	campaign-protected-runtime-unmodeled		live campaign mission-start callback enters a protected implementation whose target semantics are not yet decoded	657397
+Action_watch_CampaignRuntime_run_watch_CampaignRuntime	normalized-campaign-runtime-semantics	runtime-campaign-mechanics:campaign-star-periodic-objectives,runtime-campaign-mechanics:campaign-survival-countdown	callback is direct lifecycle evidence for normalized campaign runtime semantics	657397
 Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942035
 Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI1	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942265
 Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI2	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942493

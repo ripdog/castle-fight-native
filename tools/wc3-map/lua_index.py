@@ -5271,6 +5271,35 @@ def _extract_runtime_ai_mechanics(
     )
 
     add(
+        "ai-executor-periodic-fsm",
+        "staggered-one-second-ai-fsm-controller-tick",
+        "ai-executor-construction-delayed-periodic-update",
+        {
+            "fsm_update_period_seconds": 1.0,
+            "startup_delay_formula_seconds": "0.02 + ((player_id*7) mod 12)*0.075",
+            "startup_delay_min_seconds": 0.02,
+            "startup_delay_max_seconds": 0.845,
+            "startup_generation_must_still_match": True,
+            "executor_must_still_be_registered_for_player": True,
+            "does_not_start_second_periodic_callback_if_one_exists": True,
+            "periodic_action": "FSM_FSM_update(executor.fsm,1.0)",
+        },
+        [
+            ("AiExecutor_construct_AiExecutor", (
+                b"b8l=(0.02+(int_toReal(__wurst_modInt((player_getId(Z7l)*7),12))*0.075))",
+                b"d8l.tick=1.0", b"doAfter(b8l,d8l)",
+            )),
+            ("CallbackSingle_doAfter_AiExecutor_CustomAI_call_doAfter_AiExecutor_CustomAI1", (
+                b"AiExecutor_executorGeneration==b9l.startupGeneration", b"Nhb[player_getId(b9l.plr)]==b9l.this",
+                b"b9l.this.AiExecutor_update==nil", b"b9l.this.AiExecutor_update=doPeriodically(d9l,c9l)",
+            )),
+            ("CallbackPeriodic_doPeriodically_doAfter_AiExecutor_CustomAI_call_doPeriodically_doAfter_AiExecutor_CustomAI", (
+                b"FSM_FSM_update(f9l.this.AiExecutor_fsm,f9l.tick)",
+            )),
+        ],
+    )
+
+    add(
         "ai-rescue-strike-controller",
         "damage-triggered-ai-rescue-strike-targeting-and-throttling",
         "damage-event-on-low-hp-structure",
@@ -5519,6 +5548,35 @@ def _extract_runtime_mode_mechanics(
     ):
         raise ValueError("ultimate round-end building-availability reset changed")
 
+    periodic_mode_sources = {
+        "startLumberLimitClamp": (b"doPeriodically(0.25,IQq)",),
+        "CallbackPeriodic_doPeriodically_ModeAppliers_call_doPeriodically_ModeAppliers": (
+            b"if(BGb<0)then stopLumberLimitClamp()else enforceLumberLimitNow()end",
+        ),
+        "advanceManualRaceBan": (
+            b"if __wurst_ensureBool(aIb[UVq])then WVq=1. else WVq=15. end",
+            b"doPeriodically(.1,XVq)",
+        ),
+        "CallbackPeriodic_doPeriodically_ModeRaceRuntime_call_doPeriodically_ModeRaceRuntime": (
+            b"TimerGetRemaining(L9)<=.05", b"if(AZm<=0)then AZm=MN(OW)end", b"rememberRaceBan__w3p_vmProtect(AZm)",
+            b"G9=(G9-1)", b"advanceManualRaceBan()",
+        ),
+        "advanceDraftRaceSelection": (b"TimerStart(E9,15.", b"doPeriodically(.1,pXq)"),
+        "CallbackPeriodic_doPeriodically_ModeRaceRuntime_call_doPeriodically_ModeRaceRuntime1": (
+            b"TimerGetRemaining(E9)<=.05", b"if(GZm==0)then GZm=(-1)end", b"tGb[IZm]=JZm",
+            b"applyRaceSelectionSideEffects", b"advanceDraftRaceSelection()",
+        ),
+        "runPickRaceSelection": (b"TimerStart(n9,15.", b"doPeriodically(.1,GXq)"),
+        "CallbackPeriodic_doPeriodically_ModeRaceRuntime_call_doPeriodically_ModeRaceRuntime2": (
+            b"if((LW<=0)or(__wurst_safe_TimerGetRemaining(n9)<=.05))then finishPickRaceSelection()end",
+        ),
+    }
+    for periodic_name, fragments in periodic_mode_sources.items():
+        _start, periodic_body = body(periodic_name)
+        for fragment in fragments:
+            if fragment not in periodic_body:
+                raise ValueError(f"mode periodic runtime changed: {periodic_name}: missing {fragment!r}")
+
     return [{
         "system_id": "mode-selection-controller-and-registry",
         "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
@@ -5537,6 +5595,21 @@ def _extract_runtime_mode_mechanics(
             "round_end_signal_starts_next_round_via_mode_runtime": True,
             "ultimate_round_end_restores_all_building_availability_for_player_ids": [0, 11],
             "ultimate_round_end_clears_roll_texttags": True,
+            "periodic_runtime": {
+                "lumber_limit_enforcement_period_seconds": 0.25,
+                "lumber_limit_negative_value_stops_clamp": True,
+                "manual_race_ban_poll_period_seconds": 0.1,
+                "manual_race_ban_timer_seconds_ai": 1,
+                "manual_race_ban_timer_seconds_human": 15,
+                "manual_race_ban_timer_expiry_threshold_seconds": 0.05,
+                "manual_race_ban_missing_choice_uses_random_available_race": True,
+                "draft_race_selection_poll_period_seconds": 0.1,
+                "draft_race_selection_timer_seconds": 15,
+                "draft_race_zero_choice_becomes_skip_sentinel": -1,
+                "pick_race_poll_period_seconds": 0.1,
+                "pick_race_timer_seconds": 15,
+                "pick_race_finishes_when_no_human_choices_remain_or_timer_expires": True,
+            },
         },
         "related_rawcode_ids": [],
         "source_functions": [
@@ -5544,7 +5617,8 @@ def _extract_runtime_mode_mechanics(
             "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
             "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
             "StartResourceMode_StartResourceMode_applyChoice", mode_round_watch, ultimate_round_watch,
-            "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags", *callback_functions,
+            "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags",
+            *periodic_mode_sources.keys(), *callback_functions,
         ],
         "evidence_kind": "exact-readable-mode-registry-generated-closure-aliases-and-chat-parser-control-flow",
         "byte_offset": min(initializer_start, listener_start, parse_start),
@@ -5572,6 +5646,8 @@ def _extract_runtime_session_mechanics(
         "EventListener_add_doAfter_MMDData_onEvent_add_doAfter_MMDData", "handlePlayerLeave",
         "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData2",
         "Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime", "onAllVotedDraw",
+        "beginNextRoundReview", "CallbackPeriodic_doPeriodically_RoundEndRuntime_call_doPeriodically_RoundEndRuntime",
+        "queueNextRound",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5707,6 +5783,44 @@ def _extract_runtime_session_mechanics(
         "evidence_kind": "exact-round-end-watch-and-readable-unanimous-draw-cleanup-control-flow",
         "byte_offset": min(draw_offsets),
     })
+
+    if data.count(b"AY=15 zY=5 yY=90") != 1:
+        raise ValueError("round-end review duration initializer changed")
+    review_sources = [
+        ("beginNextRoundReview", (
+            b"Signal_Signal_set(lY,AY)", b"b0=doPeriodically(1.,LEr)",
+        )),
+        ("CallbackPeriodic_doPeriodically_RoundEndRuntime_call_doPeriodically_RoundEndRuntime", (
+            b"if(hasMatchWinner()or dY)then", b"Signal_Signal_set(lY,0)",
+            b"yCn=(__wurst_ensureInt(Signal_Signal_peek(lY))-1)", b"Signal_Signal_set(lY,max1(0,yCn))",
+            b"if(yCn<=0)then", b"queueNextRound()",
+        )),
+        ("queueNextRound", (
+            b"if(hasMatchWinner()or dY)then return", b"lockRoundStatsBoard()",
+            b"if PGb then Signal_Signal_set(YW", b"else Signal_Signal_set(bX",
+        )),
+    ]
+    review_offsets = [source(name, fragments)[0] for name, fragments in review_sources]
+    rows.append({
+        "system_id": "round-end-review-countdown",
+        "mechanic_kind": "fifteen-second-one-second-tick-next-round-review-gate",
+        "trigger": "round-cleanup-complete-without-match-winner",
+        "parameters": {
+            "duration_seconds": 15,
+            "period_seconds": 1,
+            "countdown_signal_symbol": "lY",
+            "stops_and_clears_countdown_if_match_winner_exists": True,
+            "stops_and_clears_countdown_if_match_end_flag_set": True,
+            "countdown_clamped_minimum": 0,
+            "at_zero_locks_round_stats_board": True,
+            "next_round_signal_when_PGb": "YW",
+            "next_round_signal_otherwise": "bX",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in review_sources],
+        "evidence_kind": "exact-readable-round-review-periodic-countdown-control-flow",
+        "byte_offset": min(review_offsets),
+    })
     return rows
 
 
@@ -5777,7 +5891,7 @@ def _extract_runtime_campaign_mechanics(
     ]
     offsets = [source(name, fragments)[0] for name, fragments in sources]
 
-    return [{
+    rows = [{
         "system_id": "campaign-star-restriction-failure-hooks",
         "mechanic_kind": "campaign-active-star-restriction-event-failure",
         "trigger": "tracked-building-death-or-challenge-bound-player-item-purchase",
@@ -5804,6 +5918,116 @@ def _extract_runtime_campaign_mechanics(
         "evidence_kind": "exact-readable-campaign-listeners-plus-statically-decoded-protected-restriction-ids",
         "byte_offset": min(offsets),
     }]
+
+    challenge_wrapper = "startCampaignCastleHealthChallenge__w3p_vmProtect"
+    challenge_callback = "CallbackPeriodic_doPeriodically_CampaignChallenges_call_doPeriodically_CampaignChallenges"
+    challenge_sources = [
+        ("Action_watch_CampaignRuntime_run_watch_CampaignRuntime", (
+            b"Signal_Signal_get(aX)", b"finishPendingCampaignMissionStart__w3p_vmProtect()",
+        )),
+        (challenge_wrapper, (b"return _qr(23)",)),
+        (challenge_callback, (
+            b"recordCampaignChallengeElapsedSeconds((getElapsedGameTime()-tqb))",
+            b"if(not iYk.tracksCastleHealth)then return",
+            b"if(not(kYk==zqb))then zqb=kYk yqb=false end",
+            b"if((lYk>0.)and(unit_getMaxHP(kYk)>0.))then yqb=true end",
+            b"recordCampaignCastleHealthPercent(real_toInt((lYk*100.)))",
+        )),
+        ("recordCampaignChallengeElapsedSeconds", (
+            b"starTracksFastWin(PMp.CampaignMission_secondStar)", b"OMp>int_toReal",
+            b"starTracksFastWin(PMp.CampaignMission_thirdStar)", b"the completion time limit expired.",
+        )),
+        ("recordCampaignCastleHealthPercent", (
+            b"RMp<SMp.CampaignMission_secondStar.CampaignStarChallenge_minimumCastleHpPercent",
+            b"RMp<SMp.CampaignMission_thirdStar.CampaignStarChallenge_minimumCastleHpPercent",
+            b"castle health dropped below the required minimum.",
+        )),
+        ("finishPendingCampaignMissionStart__w3p_vmProtect", (
+            b"startCampaignCastleHealthChallenge__w3p_vmProtect()", b"startCampaignSurvivalTimer(mTp,lTp)",
+        )),
+    ]
+    challenge_offsets = [source(name, fragments)[0] for name, fragments in challenge_sources]
+    challenge_static = _w3p_vm_static_strings(data, 23)
+    challenge_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 23)
+    ]
+    if len(challenge_static) < 15 or challenge_static[10] != "0.25" or challenge_static[6] != "create165":
+        raise ValueError(f"campaign challenge VM static setup changed: {challenge_static}")
+    if len(challenge_globals) < 15 or challenge_globals[13] != "df" or challenge_globals[14] != "doPeriodically":
+        raise ValueError(f"campaign challenge VM callback globals changed: {challenge_globals}")
+    challenge_program = list(_decode_w3p_vm_program(data, 23)["instructions"])
+    if not any(
+        int(left["opcode"]) == 144 and list(left["operands"]) == [11]
+        and int(right["opcode"]) == 42 and list(right["operands"]) == [15, 33]
+        for index, left in enumerate(challenge_program)
+        for right in challenge_program[index + 1:index + 4]
+    ):
+        raise ValueError("campaign challenge VM no longer feeds static 0.25 into doPeriodically")
+    rows.append({
+        "system_id": "campaign-star-periodic-objectives",
+        "mechanic_kind": "quarter-second-fast-win-and-castle-health-star-tracking",
+        "trigger": "campaign-mission-start-protected-periodic-callback",
+        "parameters": {
+            "period_seconds": 0.25,
+            "protected_setup_vm_index": 23,
+            "elapsed_time_source": "getElapsedGameTime()-campaignChallengeStartedAt",
+            "fast_win_failure_comparison": "elapsed_seconds > configured_fast_win_seconds",
+            "fast_win_comparison_is_strict": True,
+            "castle_health_percent_source": "real_toInt(unit_hp_ratio*100)",
+            "castle_health_failure_comparison": "health_percent < configured_minimum_castle_hp_percent",
+            "castle_health_comparison_is_strict": True,
+            "castle_health_baseline_waits_for_positive_current_and_max_hp": True,
+            "castle_health_baseline_resets_when_tracked_castle_reference_changes": True,
+            "callback_self_stops_if_campaign_mission_changes_or_challenge_is_locked": True,
+            "active_star_slots": ["second-star", "third-star"],
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in challenge_sources],
+        "evidence_kind": "readable-periodic-objective-control-flow-plus-statically-decoded-w3p-vm23-period",
+        "byte_offset": min(challenge_offsets),
+    })
+
+    survival_sources = [
+        ("Action_watch_CampaignRuntime_run_watch_CampaignRuntime", (
+            b"Signal_Signal_get(aX)", b"finishPendingCampaignMissionStart__w3p_vmProtect()",
+        )),
+        ("startCampaignSurvivalTimer", (
+            b"CampaignMission_survivalSeconds<=0", b"Dpb=GSp.CampaignMission_survivalSeconds",
+            b"Epb=doPeriodically(1.,KSp)",
+        )),
+        ("CallbackPeriodic_doPeriodically_CampaignRuntime_call_doPeriodically_CampaignRuntime", (
+            b"if(((not bqb)or(not(Zpb==wYk.mission)))or dY)then stopCampaignSurvivalTimer()return",
+            b"Dpb=(Dpb-1)", b"updateCampaignSurvivalTimer(zYk,Dpb)", b"if(Dpb<=0)then",
+            b"noteRoundVictoryCondition(LY)", b"KillUnit",
+        )),
+        ("finishPendingCampaignMissionStart__w3p_vmProtect", (
+            b"startCampaignCastleHealthChallenge__w3p_vmProtect()", b"startCampaignSurvivalTimer(mTp,lTp)",
+        )),
+    ]
+    survival_offsets = [source(name, fragments)[0] for name, fragments in survival_sources]
+    rows.append({
+        "system_id": "campaign-survival-countdown",
+        "mechanic_kind": "one-second-survival-objective-countdown-and-castle-kill-victory",
+        "trigger": "campaign-mission-start-with-positive-survival-seconds",
+        "parameters": {
+            "period_seconds": 1,
+            "initial_seconds": "CampaignMission_survivalSeconds",
+            "updates_visible_timer_for_campaign_player_list_each_tick": True,
+            "stops_if_campaign_flow_inactive": True,
+            "stops_if_active_mission_changes": True,
+            "stops_if_match_has_ended": True,
+            "completion_condition": "remaining_seconds <= 0",
+            "completion_sets_round_victory_condition": "LY",
+            "completion_kills_owner_team_castle": True,
+            "castle_team_selection": "western owner force -> team 0; otherwise team 1",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in survival_sources],
+        "evidence_kind": "exact-readable-campaign-survival-periodic-control-flow",
+        "byte_offset": min(survival_offsets),
+    })
+    return rows
 
 
 def _extract_runtime_draft_mechanics(
@@ -5854,6 +6078,46 @@ def _extract_runtime_draft_mechanics(
     ]
     reminder_offsets = [source(name, fragments)[0] for name, fragments in reminder_sources]
 
+    timer_sources = [
+        ("DraftController_DraftController_init", (
+            b"DraftController_rerollsPerPlayer=5", b"DraftController_totalRounds=5", b"DraftController_secondsPerRound=20",
+            b"if Pcb then Rdm=7 else Rdm=0 end", b"DraftController_postDraftDelaySeconds=Rdm",
+            b"if Pcb then Sdm=60 else Sdm=10 end", b"DraftController_warmupSecondsDefault=Sdm",
+        )),
+        ("DraftController_new_DraftController", (
+            b"DraftController_DraftController_init(Xdm)", b"DraftController_rerollsPerPlayer=Tdm",
+            b"DraftController_totalRounds=Udm", b"DraftController_secondsPerRound=Vdm",
+        )),
+        ("DraftController_DraftController_startWithWarmup", (
+            b"DraftController_warmupSecondsDefault<=0", b"DraftController_DraftController_beginRound(lbm)",
+            b"DraftController_DraftController_beginWarmup(lbm,lbm.DraftController_warmupSecondsDefault",
+        )),
+        ("DraftController_DraftController_beginWarmup", (
+            b"DraftController_warmupLeft=pbm", b"DraftEventBus_fireWarmupStart", b"doPeriodically(1.0,vbm)",
+        )),
+        ("CallbackPeriodic_doPeriodically_DraftController_DraftData_call_doPeriodically_DraftController_DraftData", (
+            b"DraftController_warmupLeft=(cem.this.DraftController_warmupLeft-1)", b"DraftEventBus_fireWarmupTick",
+            b"DraftController_DraftController_stopWarmup", b"DraftEventBus_fireWarmupEnd", b"MMD_flagPlayer(gem,0)",
+            b"RemovePlayerPreserveUnitsBJ",
+        )),
+        ("DraftController_DraftController_startCountdown", (
+            b"DraftController_timeLeft=ecm", b"DraftEventBus_fireTimer", b"doPeriodically(1.0,fcm)",
+        )),
+        ("CallbackPeriodic_doPeriodically_DraftController_DraftData_call_doPeriodically_DraftController_DraftData1", (
+            b"DraftController_DraftController_autoPickAiAndAway", b"DraftController_timeLeft=(Eem.this.DraftController_timeLeft-1)",
+            b"DraftController_DraftController_allPicked", b"DraftController_DraftController_autoPickRemaining",
+            b"DraftController_DraftController_endRound",
+        )),
+        ("DraftController_DraftController_startPostDraftCountdown", (
+            b"DraftController_timeLeft=Idm.DraftController_postDraftDelaySeconds", b"doPeriodically(1.0,Jdm)",
+        )),
+        ("CallbackPeriodic_doPeriodically_DraftController_DraftData_call_doPeriodically_DraftController_DraftData2", (
+            b"DraftController_timeLeft=(Hem.this.DraftController_timeLeft-1)",
+            b"DraftController_DraftController_stopPostDraftCountdown", b"DraftController_DraftController_finalizeDraft",
+        )),
+    ]
+    timer_offsets = [source(name, fragments)[0] for name, fragments in timer_sources]
+
     return [
         {
             "system_id": "draft-round-restart-lifecycle",
@@ -5875,6 +6139,32 @@ def _extract_runtime_draft_mechanics(
             "source_functions": [name for name, _fragments in restart_sources],
             "evidence_kind": "exact-readable-draft-restart-control-flow-plus-proven-protected-perk-registry-entrypoint",
             "byte_offset": min(restart_offsets),
+        },
+        {
+            "system_id": "draft-controller-periodic-timers",
+            "mechanic_kind": "one-second-warmup-pick-and-post-draft-countdowns",
+            "trigger": "draft-controller-warmup-round-and-post-draft-phases",
+            "parameters": {
+                "period_seconds": 1,
+                "initializer_defaults": {
+                    "rerolls_per_player": 5,
+                    "total_rounds": 5,
+                    "seconds_per_round": 20,
+                    "post_draft_delay_seconds_when_Pcb": 7,
+                    "post_draft_delay_seconds_otherwise": 0,
+                    "warmup_seconds_when_Pcb": 60,
+                    "warmup_seconds_otherwise": 10,
+                },
+                "constructor_overrides_initializer_fields": ["rerolls_per_player", "total_rounds", "seconds_per_round"],
+                "warmup_behavior": "decrement warmupLeft; emit tick; at zero stop warmup, emit warmup-end, MMD-flag active team players, then neutral-result-remove players",
+                "pick_countdown_behavior": "auto-pick AI/AWAY each tick; decrement timer; if expired or all picked, auto-pick remaining and end draft round",
+                "post_draft_behavior": "decrement timer; at zero stop post-draft countdown and finalize draft",
+                "start_with_warmup_skips_warmup_when_nonpositive": True,
+            },
+            "related_rawcode_ids": [],
+            "source_functions": [name for name, _fragments in timer_sources],
+            "evidence_kind": "exact-readable-draft-controller-periodic-timer-control-flow",
+            "byte_offset": min(timer_offsets),
         },
         {
             "system_id": "draft-perk-reminder-reapply",
@@ -6071,9 +6361,6 @@ def _extract_action_watch_coverage(
         "Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData",
         "Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData1",
     }
-    campaign_protected_unmodeled = {
-        "Action_watch_CampaignRuntime_run_watch_CampaignRuntime",
-    }
     gameplay_framework = {
         "Action_watch_OnUnitDeathHandler_run_watch_OnUnitDeathHandler",
     }
@@ -6109,9 +6396,6 @@ def _extract_action_watch_coverage(
         elif callback_name in telemetry_only:
             status = "telemetry-only"
             note = "statistics/MMD timeline observer rather than authoritative gameplay semantics"
-        elif callback_name in campaign_protected_unmodeled:
-            status = "campaign-protected-runtime-unmodeled"
-            note = "live campaign mission-start callback enters a protected implementation whose target semantics are not yet decoded"
         elif callback_name in gameplay_framework:
             status = "gameplay-framework-infrastructure"
             note = "round-lifecycle cache invalidation used by normalized building-count mechanics; not an independent rule"
@@ -6134,11 +6418,146 @@ def _extract_action_watch_coverage(
         "e2e-only": 4,
         "telemetry-only": 3,
         "normalized-draft-runtime-semantics": 2,
-        "campaign-protected-runtime-unmodeled": 1,
+        "normalized-campaign-runtime-semantics": 1,
         "gameplay-framework-infrastructure": 1,
     })
     if status_counts != expected_status_counts:
         raise ValueError(f"Action_watch coverage classification changed: {dict(sorted(status_counts.items()))}")
+    return rows
+
+
+def _extract_callback_periodic_coverage(
+    functions: list[dict[str, object]],
+    production_unit_special_mechanics: list[dict[str, object]],
+    runtime_system_mechanics: list[dict[str, object]],
+    building_spell_mechanics: list[dict[str, object]],
+    perk_mechanics: list[dict[str, object]],
+    runtime_ai_mechanics: list[dict[str, object]],
+    runtime_session_mechanics: list[dict[str, object]],
+    runtime_mode_mechanics: list[dict[str, object]],
+    runtime_campaign_mechanics: list[dict[str, object]],
+    runtime_draft_mechanics: list[dict[str, object]],
+    unit_spell_mechanics: list[dict[str, object]],
+    protected_perk_registry_audit: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Strict closure audit over all generated CallbackPeriodic functions."""
+    if not protected_perk_registry_audit:
+        return []
+
+    function_offsets = {str(row["name"]): int(row["start"]) for row in functions}
+    callback_names = sorted(name for name in function_offsets if name.startswith("CallbackPeriodic_"))
+    if len(callback_names) != 29:
+        raise ValueError(f"CallbackPeriodic callback inventory changed: {len(callback_names)}")
+
+    normalized_sources: dict[str, set[str]] = defaultdict(set)
+
+    def add_sources(domain: str, rows: list[dict[str, object]], identity_key: str) -> None:
+        for row in rows:
+            identity = str(row[identity_key])
+            for function_name in row.get("source_functions", []):
+                normalized_sources[str(function_name)].add(f"{domain}:{identity}")
+
+    add_sources("production-unit-special-mechanics", production_unit_special_mechanics, "mechanic_kind")
+    add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
+    add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
+    add_sources("perk-mechanics", perk_mechanics, "perk_id")
+    add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
+    add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
+    add_sources("runtime-mode-mechanics", runtime_mode_mechanics, "system_id")
+    add_sources("runtime-campaign-mechanics", runtime_campaign_mechanics, "system_id")
+    add_sources("runtime-draft-mechanics", runtime_draft_mechanics, "system_id")
+    for row in unit_spell_mechanics:
+        identity = f"{row['unit_id']}:{row['ability_id']}"
+        for field in ("delayed_callback_functions", "dynamic_callback_functions"):
+            for function_name in row.get(field, []):
+                normalized_sources[str(function_name)].add(f"unit-spell-mechanics:{identity}")
+
+    callback_framework = {
+        "CallbackPeriodic_CallbackPeriodic_start",
+        "CallbackPeriodic_destroyCallbackPeriodic",
+        "CallbackPeriodic_staticCallback",
+    }
+    gameplay_framework = {
+        "CallbackPeriodic_doPeriodically_doAfter_CfCastlePathing_call_doPeriodically_doAfter_CfCastlePathing",
+    }
+    e2e_only = {
+        "CallbackPeriodic_doPeriodically_E2E_E2E_call_doPeriodically_E2E_E2E",
+        "CallbackPeriodic_doPeriodically_doAfter_doAfter_AiFullGameE2E_call_doPeriodically_doAfter_doAfter_AiFullGameE2E",
+    }
+    telemetry_only = {
+        "CallbackPeriodic_doPeriodically_MMD_call_doPeriodically_MMD",
+        "CallbackPeriodic_doPeriodically_doAfter_MMDData_call_doPeriodically_doAfter_MMDData",
+    }
+    presentation_only = {
+        "CallbackPeriodic_doPeriodically_MultiboardAttach_call_doPeriodically_MultiboardAttach",
+        "CallbackPeriodic_doPeriodically_PSA_call_doPeriodically_PSA",
+        "CallbackPeriodic_doPeriodically_addCommand_Commands_call_doPeriodically_addCommand_Commands",
+        "CallbackPeriodic_doPeriodically_addCommand_Commands_call_doPeriodically_addCommand_Commands1",
+        "CallbackPeriodic_doPeriodically_watch_doAfter_IncomeUI_call_doPeriodically_watch_doAfter_IncomeUI",
+    }
+
+    rows: list[dict[str, object]] = []
+    for callback_name in callback_names:
+        normalized = sorted(normalized_sources.get(callback_name, ()))
+        if normalized:
+            domains = {source.split(":", 1)[0] for source in normalized}
+            if domains == {"runtime-ai-mechanics"}:
+                status = "normalized-ai-runtime-semantics"
+            elif domains == {"runtime-session-mechanics"}:
+                status = "normalized-session-runtime-semantics"
+            elif domains == {"runtime-mode-mechanics"}:
+                status = "normalized-mode-runtime-semantics"
+            elif domains == {"runtime-campaign-mechanics"}:
+                status = "normalized-campaign-runtime-semantics"
+            elif domains == {"runtime-draft-mechanics"}:
+                status = "normalized-draft-runtime-semantics"
+            elif domains == {"unit-spell-mechanics"}:
+                status = "normalized-unit-spell-semantics"
+            else:
+                status = "normalized-gameplay-semantics"
+            note = "callback is direct evidence for importer-facing normalized semantics"
+        elif callback_name in callback_framework:
+            status = "callback-framework-infrastructure"
+            note = "generic CallbackPeriodic timer lifecycle/virtual dispatch infrastructure"
+        elif callback_name in gameplay_framework:
+            status = "gameplay-framework-infrastructure"
+            note = "castle pathing job-queue ticker; authoritative infrastructure but not an independent unit/ability mechanic"
+        elif callback_name in e2e_only:
+            status = "e2e-only"
+            note = "end-to-end harness periodic callback"
+        elif callback_name in telemetry_only:
+            status = "telemetry-only"
+            note = "MMD/timeline telemetry periodic callback"
+        elif callback_name in presentation_only:
+            status = "presentation-only"
+            note = "UI/message/PSA refresh callback without authoritative gameplay mutation"
+        else:
+            raise ValueError(f"unclassified CallbackPeriodic callback: {callback_name}")
+        rows.append({
+            "callback_function": callback_name,
+            "coverage_status": status,
+            "normalized_sources": normalized,
+            "evidence_note": note,
+            "byte_offset": function_offsets[callback_name],
+        })
+
+    status_counts = Counter(str(row["coverage_status"]) for row in rows)
+    expected_status_counts = Counter({
+        "normalized-gameplay-semantics": 2,
+        "normalized-unit-spell-semantics": 1,
+        "normalized-ai-runtime-semantics": 2,
+        "normalized-session-runtime-semantics": 2,
+        "normalized-mode-runtime-semantics": 4,
+        "normalized-campaign-runtime-semantics": 2,
+        "normalized-draft-runtime-semantics": 3,
+        "callback-framework-infrastructure": 3,
+        "gameplay-framework-infrastructure": 1,
+        "presentation-only": 5,
+        "telemetry-only": 2,
+        "e2e-only": 2,
+    })
+    if status_counts != expected_status_counts:
+        raise ValueError(f"CallbackPeriodic coverage classification changed: {dict(sorted(status_counts.items()))}")
     return rows
 
 
@@ -10028,6 +10447,20 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_draft_mechanics,
         protected_perk_registry_audit,
     )
+    callback_periodic_coverage = _extract_callback_periodic_coverage(
+        functions,
+        production_unit_special_mechanics,
+        runtime_system_mechanics,
+        building_spell_mechanics,
+        perk_mechanics,
+        runtime_ai_mechanics,
+        runtime_session_mechanics,
+        runtime_mode_mechanics,
+        runtime_campaign_mechanics,
+        runtime_draft_mechanics,
+        unit_spell_mechanics,
+        protected_perk_registry_audit,
+    )
     event_listener_coverage = _extract_event_listener_coverage(
         functions,
         call_edges,
@@ -10089,5 +10522,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "runtime_draft_mechanics": runtime_draft_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
         "action_watch_coverage": action_watch_coverage,
+        "callback_periodic_coverage": callback_periodic_coverage,
         "event_listener_coverage": event_listener_coverage,
     }
