@@ -49,8 +49,16 @@ struct VisualAssetSpec {
 }
 
 #[derive(Serialize)]
+struct StatusVisualSpec {
+    ability_rawcode: String,
+    status_kind: String,
+    model_path: String,
+}
+
+#[derive(Serialize)]
 struct VisualAssetCatalog {
     assets: Vec<VisualAssetSpec>,
+    status_visuals: Vec<StatusVisualSpec>,
     chain_lightning_abilities: Vec<String>,
     stun_model_path: Option<String>,
 }
@@ -444,6 +452,9 @@ fn load_visual_assets(
 
     let mut assets = BTreeSet::<(String, String, String, String)>::new();
     let mut missile_arcs = BTreeMap::<(String, String), f32>::new();
+    let mut ability_base_rawcodes = BTreeMap::<String, String>::new();
+    let mut ability_buff_ids = BTreeMap::<String, Vec<String>>::new();
+    let mut buff_target_art = BTreeMap::<String, String>::new();
     let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
     let mut stun_model_path = None;
     for row in fields.records() {
@@ -458,6 +469,26 @@ fn load_visual_assets(
         let Some(field) = row.get(field_id) else {
             continue;
         };
+
+        if kind == "abilities" {
+            ability_base_rawcodes
+                .entry(rawcode.to_owned())
+                .or_insert_with(|| base_rawcode.to_owned());
+            if field == "abuf" {
+                ability_buff_ids.insert(
+                    rawcode.to_owned(),
+                    parse_json_comma_list(row.get(recovered).unwrap_or_default()),
+                );
+            }
+        }
+        if kind == "buffs" && field == "ftat" {
+            if let Some(path) = parse_json_model_paths(row.get(recovered).unwrap_or_default())
+                .into_iter()
+                .find(|path| is_renderable_model_path(path))
+            {
+                buff_target_art.insert(rawcode.to_owned(), path);
+            }
+        }
 
         let role = match (kind, field) {
             ("units", "ua1m") => Some("attack1_projectile"),
@@ -506,6 +537,44 @@ fn load_visual_assets(
         }
     }
 
+    let mut status_visuals = Vec::new();
+    for (ability_rawcode, buffs) in ability_buff_ids {
+        let Some(base_rawcode) = ability_base_rawcodes
+            .get(&ability_rawcode)
+            .map(String::as_str)
+        else {
+            continue;
+        };
+        let status_kinds: &[&str] = match base_rawcode {
+            // Entangling Roots-family effects hold the target in place for the buff lifetime.
+            "Aenr" => &["movement"],
+            // Frost Armor applies one persistent shield buff and one reactive slow buff.
+            "ACf2" => &["armor", "movement"],
+            _ => continue,
+        };
+        for (buff_rawcode, status_kind) in buffs.iter().zip(status_kinds.iter().copied()) {
+            let model_path = buff_target_art
+                .get(buff_rawcode)
+                .cloned()
+                .or_else(|| stock_buff_target_art(buff_rawcode));
+            let Some(model_path) = model_path else {
+                continue;
+            };
+            status_visuals.push(StatusVisualSpec {
+                ability_rawcode: ability_rawcode.clone(),
+                status_kind: status_kind.to_owned(),
+                model_path,
+            });
+        }
+    }
+    status_visuals.sort_by(|left, right| {
+        (&left.ability_rawcode, &left.status_kind, &left.model_path).cmp(&(
+            &right.ability_rawcode,
+            &right.status_kind,
+            &right.model_path,
+        ))
+    });
+
     Ok(VisualAssetCatalog {
         assets: assets
             .into_iter()
@@ -522,9 +591,22 @@ fn load_visual_assets(
                 }
             })
             .collect(),
+        status_visuals,
         chain_lightning_abilities: chain_lightning_abilities.into_keys().collect(),
         stun_model_path,
     })
+}
+
+fn stock_buff_target_art(rawcode: &str) -> Option<String> {
+    let path = match rawcode {
+        // These are stock Warcraft III buff objects referenced by Frost Armor's inherited
+        // BUfa/Bfro buff list. They do not appear as standalone rows in Castle Fight's custom
+        // object-data delta, so retain the stock presentation lookup alongside the extractor.
+        "BUfa" => r"Abilities\Spells\Undead\FrostArmor\FrostArmorTarget.mdl",
+        "Bfro" => r"Abilities\Spells\Other\FrostDamage\FrostDamage.mdl",
+        _ => return None,
+    };
+    Some(path.to_owned())
 }
 
 fn parse_catalog_version(readme: &str) -> Result<String, Box<dyn Error>> {

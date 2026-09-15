@@ -31,6 +31,7 @@ const MAX_RIBBON_POINTS: usize = 512;
 pub struct Wc3VisualSet {
     projectile_by_rawcode: BTreeMap<u32, Wc3ProjectileVisual>,
     ability_by_rawcode: BTreeMap<u32, Vec<Wc3AbilityVisual>>,
+    status_by_rawcode: BTreeMap<u32, Vec<Wc3StatusVisual>>,
     chain_lightning_abilities: BTreeSet<u32>,
     stun: Option<Wc3VisualModel>,
 }
@@ -47,9 +48,19 @@ pub struct Wc3VisualModel {
 impl Wc3VisualModel {
     #[must_use]
     pub fn animation_source(&self) -> Option<Wc3VisualAnimationSource> {
+        self.animation_source_with_looping(false)
+    }
+
+    #[must_use]
+    pub fn looping_animation_source(&self) -> Option<Wc3VisualAnimationSource> {
+        self.animation_source_with_looping(true)
+    }
+
+    fn animation_source_with_looping(&self, looping: bool) -> Option<Wc3VisualAnimationSource> {
         Some(Wc3VisualAnimationSource {
             gltf: self.gltf.clone(),
             animation_name: self.animation_name.clone()?,
+            looping,
         })
     }
 }
@@ -70,6 +81,18 @@ pub enum Wc3AbilityVisualAnchor {
 pub struct Wc3AbilityVisual {
     pub model: Wc3VisualModel,
     pub anchor: Wc3AbilityVisualAnchor,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Wc3StatusVisualKind {
+    Movement,
+    Armor,
+}
+
+#[derive(Clone)]
+pub struct Wc3StatusVisual {
+    pub model: Wc3VisualModel,
+    pub kind: Wc3StatusVisualKind,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -115,9 +138,17 @@ pub struct Wc3RibbonEmitter {
 struct VisualManifest {
     schema_version: u32,
     assets: Vec<VisualBinding>,
+    status_visuals: Vec<StatusVisualBinding>,
     chain_lightning_abilities: Vec<String>,
     stun: Option<VisualBinding>,
     models: Vec<ModelManifest>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct StatusVisualBinding {
+    ability_rawcode: String,
+    status_kind: String,
+    gltf: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -150,6 +181,7 @@ struct ModelAnimationManifest {
 pub struct Wc3VisualAnimationSource {
     gltf: Handle<Gltf>,
     animation_name: String,
+    looping: bool,
 }
 
 #[derive(Component)]
@@ -245,9 +277,10 @@ impl Wc3VisualSet {
         match load_manifest(&manifest_path, asset_server) {
             Ok(set) => {
                 println!(
-                    "Loaded {} WC3 projectile visual(s), {} ability visual(s), and {} chain-lightning id(s)",
+                    "Loaded {} WC3 projectile visual(s), {} ability visual(s), {} status visual id(s), and {} chain-lightning id(s)",
                     set.projectile_by_rawcode.len(),
                     set.ability_by_rawcode.len(),
+                    set.status_by_rawcode.len(),
                     set.chain_lightning_abilities.len()
                 );
                 set
@@ -267,6 +300,14 @@ impl Wc3VisualSet {
     #[must_use]
     pub fn ability(&self, rawcode: u32) -> &[Wc3AbilityVisual] {
         self.ability_by_rawcode
+            .get(&rawcode)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn status(&self, rawcode: u32) -> &[Wc3StatusVisual] {
+        self.status_by_rawcode
             .get(&rawcode)
             .map(Vec::as_slice)
             .unwrap_or_default()
@@ -576,7 +617,10 @@ pub fn setup_wc3_visual_animation_players(
             (graphs.add(graph), nodes[0])
         });
         let mut transitions = AnimationTransitions::new();
-        transitions.play(&mut player, *node, Duration::ZERO);
+        let active = transitions.play(&mut player, *node, Duration::ZERO);
+        if source.looping {
+            active.repeat();
+        }
         commands.entity(entity).insert((
             AnimationGraphHandle(graph.clone()),
             transitions,
@@ -1168,7 +1212,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
     let manifest: VisualManifest =
         serde_json::from_str(&json).map_err(|error| format!("invalid visual manifest: {error}"))?;
-    if manifest.schema_version != 3 {
+    if manifest.schema_version != 4 {
         return Err(format!(
             "unsupported visual asset manifest schema {}",
             manifest.schema_version
@@ -1223,6 +1267,23 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         }
     }
 
+    let mut status_by_rawcode = BTreeMap::<u32, Vec<Wc3StatusVisual>>::new();
+    for binding in &manifest.status_visuals {
+        let Some(gltf) = &binding.gltf else {
+            continue;
+        };
+        let Some(model) = model_by_gltf.get(gltf) else {
+            continue;
+        };
+        status_by_rawcode
+            .entry(parse_rawcode(&binding.ability_rawcode)?)
+            .or_default()
+            .push(Wc3StatusVisual {
+                model: resolve_status_visual_model(gltf, model, asset_server)?,
+                kind: parse_status_visual_kind(&binding.status_kind)?,
+            });
+    }
+
     let chain_lightning_abilities = manifest
         .chain_lightning_abilities
         .iter()
@@ -1239,9 +1300,18 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
     Ok(Wc3VisualSet {
         projectile_by_rawcode,
         ability_by_rawcode,
+        status_by_rawcode,
         chain_lightning_abilities,
         stun,
     })
+}
+
+fn parse_status_visual_kind(value: &str) -> Result<Wc3StatusVisualKind, String> {
+    match value {
+        "movement" => Ok(Wc3StatusVisualKind::Movement),
+        "armor" => Ok(Wc3StatusVisualKind::Armor),
+        other => Err(format!("unsupported WC3 status visual kind {other:?}")),
+    }
 }
 
 fn resolve_visual_model(
@@ -1276,6 +1346,32 @@ fn resolve_visual_model(
         emitters: model.particle_emitters.clone(),
         ribbons: model.ribbon_emitters.clone(),
     })
+}
+
+fn resolve_status_visual_model(
+    gltf: &str,
+    model: &ModelManifest,
+    asset_server: &AssetServer,
+) -> Result<Wc3VisualModel, String> {
+    let mut visual = resolve_visual_model(gltf, model, asset_server)?;
+    visual.animation_name = model
+        .animations
+        .iter()
+        .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
+        .or_else(|| {
+            model
+                .animations
+                .iter()
+                .find(|animation| animation.name.eq_ignore_ascii_case("Birth"))
+        })
+        .or_else(|| {
+            model
+                .animations
+                .iter()
+                .find(|animation| !animation.name.eq_ignore_ascii_case("Nothing"))
+        })
+        .map(|animation| animation.name.clone());
+    Ok(visual)
 }
 
 fn ability_visual_anchor(role: &str) -> Wc3AbilityVisualAnchor {
@@ -1447,6 +1543,19 @@ mod tests {
         assert_eq!(positions[0], [0.0, 2.0, 0.0]);
         assert_eq!(positions[1], [0.0, -3.0, 0.0]);
         assert!(mesh.attribute(Mesh::ATTRIBUTE_COLOR).is_some());
+    }
+
+    #[test]
+    fn status_visual_kinds_are_manifest_driven() {
+        assert_eq!(
+            parse_status_visual_kind("movement").unwrap(),
+            Wc3StatusVisualKind::Movement
+        );
+        assert_eq!(
+            parse_status_visual_kind("armor").unwrap(),
+            Wc3StatusVisualKind::Armor
+        );
+        assert!(parse_status_visual_kind("unknown").is_err());
     }
 
     #[test]

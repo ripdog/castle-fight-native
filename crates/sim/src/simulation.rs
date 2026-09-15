@@ -291,6 +291,7 @@ pub struct UnitView {
     pub last_attacked_tick: Option<u64>,
     pub cooldown_remaining: u16,
     pub stunned_until_tick: u64,
+    pub status: StatusState,
     pub mana_current: Option<i32>,
     pub mana_maximum: Option<i32>,
     pub ability_ready_tick: Option<u64>,
@@ -8585,6 +8586,7 @@ fn unit_view_from_entity(
     let spawn_tick = entity.get::<SpawnTick>()?.0;
     let active_defend_ability = active_defend_profile(passive_effects, spawn_tick, current_tick)
         .map(|profile| profile.ability);
+    let status = *entity.get::<StatusState>()?;
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -8607,7 +8609,8 @@ fn unit_view_from_entity(
         last_attacker: entity.get::<RetaliationState>()?.attacker,
         last_attacked_tick: entity.get::<RetaliationState>()?.attacked_tick,
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
-        stunned_until_tick: entity.get::<StatusState>()?.stunned_until_tick,
+        stunned_until_tick: status.stunned_until_tick,
+        status,
         mana_current: entity.get::<ManaState>().map(|mana| mana.current),
         mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
         ability_ready_tick: ability_state.map(|state| state.ready_tick),

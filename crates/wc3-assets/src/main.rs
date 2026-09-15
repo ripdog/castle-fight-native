@@ -71,7 +71,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         let visuals = load_embedded_visuals()?;
         println!(
             "Extracting {} Castle Fight projectile/effect art reference(s) from {}",
-            visuals.assets.len() + usize::from(visuals.stun_model_path.is_some()),
+            visuals.assets.len()
+                + visuals.status_visuals.len()
+                + usize::from(visuals.stun_model_path.is_some()),
             wc3_install.display()
         );
         let mut exporter = Exporter::open(

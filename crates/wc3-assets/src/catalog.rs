@@ -34,8 +34,16 @@ pub struct VisualAssetSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct StatusVisualSpec {
+    pub ability_rawcode: String,
+    pub status_kind: String,
+    pub model_path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VisualAssetCatalog {
     pub assets: Vec<VisualAssetSpec>,
+    pub status_visuals: Vec<StatusVisualSpec>,
     pub chain_lightning_abilities: Vec<String>,
     pub stun_model_path: Option<String>,
 }
@@ -326,6 +334,22 @@ mod tests {
                 && asset.owner_rawcode == "A03G"
                 && asset.role == "caster"
                 && asset.model_path == r"Abilities\Spells\Human\Defend\DefendCaster.mdl"
+        }));
+        assert!(catalog.status_visuals.iter().any(|visual| {
+            visual.ability_rawcode == "A03W"
+                && visual.status_kind == "movement"
+                && visual.model_path
+                    == r"Abilities\Spells\Undead\FreezingBreath\FreezingBreathTargetArt.mdl"
+        }));
+        assert!(catalog.status_visuals.iter().any(|visual| {
+            visual.ability_rawcode == "A03Z"
+                && visual.status_kind == "armor"
+                && visual.model_path == r"Abilities\Spells\Undead\FrostArmor\FrostArmorTarget.mdl"
+        }));
+        assert!(catalog.status_visuals.iter().any(|visual| {
+            visual.ability_rawcode == "A03Z"
+                && visual.status_kind == "movement"
+                && visual.model_path == r"Abilities\Spells\Other\FrostDamage\FrostDamage.mdl"
         }));
         let flame_strike_special: Vec<_> = catalog
             .assets

@@ -21,8 +21,8 @@ use whiteout::{
 };
 
 use crate::catalog::{
-    BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, UnitAssetSpec, VisualAssetCatalog,
-    VisualAssetSpec,
+    BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, StatusVisualSpec, UnitAssetSpec,
+    VisualAssetCatalog, VisualAssetSpec,
 };
 
 const GL_ARRAY_BUFFER: u32 = 34_962;
@@ -246,10 +246,19 @@ pub struct VisualAssetManifest {
     pub wc3_version: Option<String>,
     pub art_mode: &'static str,
     pub assets: Vec<VisualBindingManifest>,
+    pub status_visuals: Vec<StatusVisualBindingManifest>,
     pub chain_lightning_abilities: Vec<String>,
     pub stun: Option<VisualBindingManifest>,
     pub models: Vec<ModelManifest>,
     pub failures: Vec<VisualFailureManifest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusVisualBindingManifest {
+    pub ability_rawcode: String,
+    pub status_kind: String,
+    pub source_model: String,
+    pub gltf: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -585,11 +594,23 @@ impl Exporter {
                 missile_arc: asset.missile_arc,
             })
             .collect();
+        let normalized_status_visuals: Vec<_> = catalog
+            .status_visuals
+            .iter()
+            .map(|visual| StatusVisualSpec {
+                ability_rawcode: visual.ability_rawcode.clone(),
+                status_kind: visual.status_kind.clone(),
+                model_path: normalize_model_path(&visual.model_path),
+            })
+            .collect();
         let stun_source = catalog.stun_model_path.as_deref().map(normalize_model_path);
 
         let mut sources = BTreeSet::new();
         for asset in &normalized_assets {
             sources.insert(asset.model_path.clone());
+        }
+        for visual in &normalized_status_visuals {
+            sources.insert(visual.model_path.clone());
         }
         if let Some(source) = &stun_source {
             sources.insert(source.clone());
@@ -632,6 +653,17 @@ impl Exporter {
                 missile_arc: asset.missile_arc,
             })
             .collect();
+        let status_visuals = normalized_status_visuals
+            .into_iter()
+            .map(|visual| StatusVisualBindingManifest {
+                ability_rawcode: visual.ability_rawcode,
+                status_kind: visual.status_kind,
+                gltf: model_outputs
+                    .get(&visual.model_path.to_ascii_lowercase())
+                    .cloned(),
+                source_model: visual.model_path,
+            })
+            .collect();
         let stun = stun_source.map(|source_model| VisualBindingManifest {
             owner_kind: "status".to_owned(),
             owner_rawcode: "stun".to_owned(),
@@ -644,11 +676,12 @@ impl Exporter {
         });
 
         Ok(VisualAssetManifest {
-            schema_version: 3,
+            schema_version: 4,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",
             assets,
+            status_visuals,
             chain_lightning_abilities: catalog.chain_lightning_abilities.clone(),
             stun,
             models,

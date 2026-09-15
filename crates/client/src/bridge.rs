@@ -4,7 +4,8 @@ use bevy::prelude::Resource;
 use castle_fight_sim::{
     AbilityCastEvent, AbilityId, ArmorProfile, AttackDelivery, AttackEvent, BuilderLocomotion,
     BuildingFootprint, ChainLightningEvent, ContentIdentity, CorpseView, DamageRules, DamageType,
-    MovementClass, PlayerEconomyView, ProjectileView, SimId, SimPoint, Simulation, Team,
+    MovementClass, PlayerEconomyView, ProjectileView, SimId, SimPoint, Simulation, StatusState,
+    Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +97,7 @@ pub struct UnitSample {
     pub ally_defense_lock: bool,
     pub cooldown_remaining: u16,
     pub stunned_until_tick: u64,
+    pub status: StatusState,
     pub mana_current: Option<i32>,
     pub mana_maximum: Option<i32>,
     pub visual_kind: UnitVisualKind,
@@ -182,6 +184,7 @@ impl PresentationSnapshot {
                         ally_defense_lock: unit.ally_defense_lock,
                         cooldown_remaining: unit.cooldown_remaining,
                         stunned_until_tick: unit.stunned_until_tick,
+                        status: unit.status,
                         mana_current: unit.mana_current,
                         mana_maximum: unit.mana_maximum,
                         visual_kind: UnitVisualKind::from_delivery(

@@ -29,10 +29,10 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3RibbonSource, Wc3TeamTint,
-        Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, emit_wc3_particles,
-        fix_wc3_scene_materials, setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails,
-        update_wc3_particles, update_wc3_ribbon_trails,
+        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3RibbonSource,
+        Wc3StatusVisualKind, Wc3TeamTint, Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet,
+        emit_wc3_particles, fix_wc3_scene_materials, setup_wc3_visual_animation_players,
+        spawn_wc3_ribbon_trails, update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
 
@@ -325,6 +325,14 @@ struct PresentedProjectile {
     missile_arc: Option<f32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct StatusEffectKey {
+    target: SimId,
+    ability_rawcode: u32,
+    kind: Wc3StatusVisualKind,
+    slot: u16,
+}
+
 #[derive(Resource, Default)]
 struct RenderMap {
     units: HashMap<SimId, PresentedEntry>,
@@ -333,6 +341,7 @@ struct RenderMap {
     corpses: HashMap<SimId, Entity>,
     projectiles: HashMap<SimId, PresentedProjectile>,
     stun_effects: HashMap<SimId, Entity>,
+    status_effects: HashMap<StatusEffectKey, Entity>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2447,6 +2456,59 @@ fn sync_render_entities(
         );
     }
 
+    let stale_status_effects: Vec<_> = render_map
+        .status_effects
+        .keys()
+        .copied()
+        .filter(|key| {
+            !samples.current.units.get(&key.target).is_some_and(|unit| {
+                unit_status_visual_is_active(
+                    unit,
+                    samples.current.tick,
+                    key.ability_rawcode,
+                    key.kind,
+                )
+            })
+        })
+        .collect();
+    for key in stale_status_effects {
+        if let Some(entity) = render_map.status_effects.remove(&key) {
+            commands.entity(entity).despawn();
+        }
+    }
+    for unit in samples.current.units.values() {
+        let movement_count = usize::from(unit.status.movement_modifier_count);
+        for modifier in unit.status.movement_modifiers[..movement_count]
+            .iter()
+            .filter(|modifier| modifier.expires_tick > samples.current.tick)
+        {
+            spawn_unit_status_visuals(
+                &mut commands,
+                &mut render_map,
+                &wc3_visuals,
+                unit,
+                modifier.id.0,
+                Wc3StatusVisualKind::Movement,
+                &terrain,
+            );
+        }
+        let armor_count = usize::from(unit.status.armor_modifier_count);
+        for modifier in unit.status.armor_modifiers[..armor_count]
+            .iter()
+            .filter(|modifier| modifier.expires_tick > samples.current.tick)
+        {
+            spawn_unit_status_visuals(
+                &mut commands,
+                &mut render_map,
+                &wc3_visuals,
+                unit,
+                modifier.id.0,
+                Wc3StatusVisualKind::Armor,
+                &terrain,
+            );
+        }
+    }
+
     let stale_stun_effects: Vec<_> = render_map
         .stun_effects
         .keys()
@@ -2744,6 +2806,27 @@ fn interpolate_render_transforms(
         }
     }
 
+    for (key, entity) in &render_map.status_effects {
+        let Some(current) = samples.current.units.get(&key.target) else {
+            continue;
+        };
+        let previous = samples.previous.units.get(&key.target).unwrap_or(current);
+        let moving = previous.position != current.position;
+        let bob = unit_motion_bob(current.id, current.movement_class, render_tick, moving);
+        let position = unit_ground_position_lerp(
+            previous.position,
+            current.position,
+            current.movement_class,
+            alpha,
+            &terrain,
+        ) + Vec3::Y * bob;
+        if let Ok(mut transform) = transforms.get_mut(*entity)
+            && transform.translation != position
+        {
+            transform.translation = position;
+        }
+    }
+
     for (id, current) in &samples.current.buildings {
         let Some(entry) = render_map.buildings.get(id) else {
             continue;
@@ -2932,6 +3015,66 @@ fn walk_bob(id: SimId, render_tick: f32, moving: bool) -> f32 {
     }
     let phase = render_tick * UNIT_WALK_PHASE_PER_TICK + id.0 as f32 * 0.71;
     phase.sin().abs() * UNIT_WALK_BOB_HEIGHT
+}
+
+fn unit_status_visual_is_active(
+    unit: &UnitSample,
+    tick: u64,
+    ability_rawcode: u32,
+    kind: Wc3StatusVisualKind,
+) -> bool {
+    match kind {
+        Wc3StatusVisualKind::Movement => {
+            let count = usize::from(unit.status.movement_modifier_count);
+            unit.status.movement_modifiers[..count]
+                .iter()
+                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+        }
+        Wc3StatusVisualKind::Armor => {
+            let count = usize::from(unit.status.armor_modifier_count);
+            unit.status.armor_modifiers[..count]
+                .iter()
+                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+        }
+    }
+}
+
+fn spawn_unit_status_visuals(
+    commands: &mut Commands,
+    render_map: &mut RenderMap,
+    wc3_visuals: &Wc3VisualSet,
+    unit: &UnitSample,
+    ability_rawcode: u32,
+    kind: Wc3StatusVisualKind,
+    terrain: &TerrainSurface,
+) {
+    let position = unit_ground_position(unit.position, unit.movement_class, terrain);
+    for (slot, visual) in wc3_visuals.status(ability_rawcode).iter().enumerate() {
+        if visual.kind != kind {
+            continue;
+        }
+        let key = StatusEffectKey {
+            target: unit.id,
+            ability_rawcode,
+            kind,
+            slot: u16::try_from(slot).expect("WC3 status visual slot exceeds u16"),
+        };
+        if render_map.status_effects.contains_key(&key) {
+            continue;
+        }
+        let entity = commands
+            .spawn((
+                WorldAssetRoot(visual.model.scene.clone()),
+                Transform::from_translation(position),
+                Wc3EmitterSource::new(&visual.model.emitters),
+                Wc3RibbonSource::new(&visual.model.ribbons),
+            ))
+            .id();
+        if let Some(animation) = visual.model.looping_animation_source() {
+            commands.entity(entity).insert(animation);
+        }
+        render_map.status_effects.insert(key, entity);
+    }
 }
 
 fn entity_is_stunned(id: SimId, snapshot: &crate::bridge::PresentationSnapshot, tick: u64) -> bool {
