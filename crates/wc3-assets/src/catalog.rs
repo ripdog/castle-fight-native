@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn embedded_unit_catalog_includes_human_builder_art() {
+    fn embedded_unit_catalog_includes_human_builder_and_defender_art() {
         let units = load_embedded_units().expect("embedded unit catalog loads");
         let builder = units
             .iter()
@@ -216,6 +216,17 @@ mod tests {
             Some(r"units\human\Peasant\Peasant")
         );
         assert_eq!(builder.scale, Some(1.0));
+
+        let defender = units
+            .iter()
+            .find(|unit| unit.rawcode == "h03A")
+            .expect("Defender should be exportable as a unit asset");
+        assert_eq!(defender.base_rawcode, "hfoo");
+        assert_eq!(defender.name, "Defender");
+        assert_eq!(
+            defender.model_path.as_deref(),
+            Some(r"units\human\TheCaptain\TheCaptain.mdl")
+        );
     }
 
     #[test]
@@ -234,6 +245,7 @@ mod tests {
                 r"buildings\human\HumanBarracks\HumanBarracks.mdl",
                 0.5,
             ),
+            ("h039", r"buildings\human\TownHall\TownHall.mdl", 0.37),
             (
                 "h03D",
                 r"buildings\nightelf\HuntersHall\HuntersHall.mdl",
@@ -271,6 +283,10 @@ mod tests {
             vec!["upgrade".to_owned(), "second".to_owned()]
         );
         assert!(building("h000").animation_properties.is_empty());
+        assert_eq!(
+            building("h039").animation_properties,
+            vec!["upgrade".to_owned(), "second".to_owned()]
+        );
     }
 
     #[test]
@@ -305,6 +321,12 @@ mod tests {
             catalog.stun_model_path.as_deref(),
             Some(r"Abilities\Spells\Human\Thunderclap\ThunderclapTarget.mdl")
         );
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "abilities"
+                && asset.owner_rawcode == "A03G"
+                && asset.role == "caster"
+                && asset.model_path == r"Abilities\Spells\Human\Defend\DefendCaster.mdl"
+        }));
         let flame_strike_special: Vec<_> = catalog
             .assets
             .iter()

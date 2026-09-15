@@ -136,20 +136,18 @@ Per-tick unit/building snapshots, spatial partitions/reservation grids, movement
 
 A snapshot is taken only at a defined completed boundary. Step 7 must not attempt to capture the simulation halfway through `step()` unless a separate mid-tick schema and phase-resume contract is deliberately introduced.
 
-## 7. Checksum coverage revision 2
+## 7. Checksum coverage revision 3
 
-`CANONICAL_CHECKSUM_SCHEMA_VERSION = 2` changes compatibility from the earlier prototype checksum. Revision 2 includes:
+`CANONICAL_CHECKSUM_SCHEMA_VERSION = 3` is the current compatibility boundary. Revision 2 added immutable configuration/combat identity, allocator state, audited optional presence, content rawcodes, canonical entity-shape validation, and duplicate-`SimId` rejection. Revision 3 retains that coverage and adds the authoritative state introduced by the Defender/production-upgrade slice:
 
-- immutable configuration/combat identity, including match seed and rule data;
-- `next_id` in addition to `next_tick`;
-- explicit optional-value/component presence rather than zero/sentinel aliases for audited fields;
-- live unit/building/production content rawcodes;
-- canonical entity-shape validation and duplicate-`SimId` rejection;
-- all previously covered resources, entities, timers/effect state, navigation continuity, projectiles, build orders, and defense alerts.
+- fixed-point unit health-regeneration rate/remainder state;
+- persistent reflected-projectile state;
+- in-progress building-upgrade identity and the complete saved precursor runtime required for deterministic cancellation, including production timer, attack cooldown/target state, spawn tick, mana/ability state, and status state;
+- the associated production-unit regeneration/profile data needed to preserve future spawn semantics.
 
-`ContentIdentity.name`, worker count, derived caches, presentation events, and diagnostic timings remain deliberately excluded.
+All previously covered resources, entities, timers/effect state, navigation continuity, ordinary projectiles, build orders, and defense alerts remain included. `ContentIdentity.name`, worker count, derived caches, presentation events, and diagnostic timings remain deliberately excluded.
 
-Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. A checksum from revision 1 is not comparable to revision 2.
+Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. Checksums from revisions 1, 2, and 3 are mutually incompatible.
 
 ## 8. Required additions before step 7 completion
 

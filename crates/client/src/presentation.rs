@@ -33,8 +33,9 @@ use crate::{
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3RibbonSource, Wc3TeamTint,
-        Wc3VisualModel, Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials,
-        spawn_wc3_ribbon_trails, update_wc3_particles, update_wc3_ribbon_trails,
+        Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, emit_wc3_particles,
+        fix_wc3_scene_materials, setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails,
+        update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
 
@@ -285,7 +286,9 @@ impl PresentationAssets {
 
     fn projectile_mesh(&self, projectile: &ProjectileView) -> Handle<Mesh> {
         match projectile.kind {
-            ProjectileViewKind::GuaranteedHit { .. } => self.guaranteed_projectile_mesh.clone(),
+            ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Reflected { .. } => {
+                self.guaranteed_projectile_mesh.clone()
+            }
             ProjectileViewKind::Ballistic { .. } => self.ballistic_projectile_mesh.clone(),
             ProjectileViewKind::Bounce { .. } => self.bounce_projectile_mesh.clone(),
         }
@@ -293,7 +296,7 @@ impl PresentationAssets {
 
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
-            ProjectileViewKind::GuaranteedHit { .. } => 0,
+            ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Reflected { .. } => 0,
             ProjectileViewKind::Ballistic { .. } => 1,
             ProjectileViewKind::Bounce {
                 bounce_index: 0, ..
@@ -466,6 +469,9 @@ struct ImportedUnitAnimationController {
     stand: AnimationNodeIndex,
     walk: Option<AnimationNodeIndex>,
     attack: Option<AnimationNodeIndex>,
+    defend_stand: Option<AnimationNodeIndex>,
+    defend_walk: Option<AnimationNodeIndex>,
+    defend_attack: Option<AnimationNodeIndex>,
     cast: Option<AnimationNodeIndex>,
     death: Option<UnitAnimationClip>,
     decay_flesh: Option<UnitAnimationClip>,
@@ -473,6 +479,7 @@ struct ImportedUnitAnimationController {
     state: ImportedUnitAnimationState,
     last_attack_snapshot_tick: Option<u64>,
     last_cast_snapshot_tick: Option<u64>,
+    defend_active: bool,
 }
 
 #[derive(Component)]
@@ -535,6 +542,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<UnitModelSet>()
             .init_resource::<BuildingModelSet>()
             .init_resource::<Wc3VisualSet>()
+            .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<FpsDisplay>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
@@ -556,6 +564,7 @@ impl Plugin for CastlePresentationPlugin {
                     prepare_building_model_animations,
                     sync_render_entities,
                     fix_wc3_scene_materials,
+                    setup_wc3_visual_animation_players,
                     setup_imported_unit_animation_players,
                     setup_imported_building_animation_players,
                     update_imported_building_animations,
@@ -1056,6 +1065,9 @@ fn setup_imported_unit_animation_players(
                 stand: animations.stand,
                 walk: animations.walk,
                 attack: animations.attack,
+                defend_stand: animations.defend_stand,
+                defend_walk: animations.defend_walk,
+                defend_attack: animations.defend_attack,
                 cast: animations.cast,
                 death: animations.death,
                 decay_flesh: animations.decay_flesh,
@@ -1063,6 +1075,7 @@ fn setup_imported_unit_animation_players(
                 state: ImportedUnitAnimationState::Stand,
                 last_attack_snapshot_tick: None,
                 last_cast_snapshot_tick: None,
+                defend_active: false,
             },
         ));
     }
@@ -1443,6 +1456,7 @@ fn update_live_imported_unit_animation(
         }
     }
 
+    let defend_active = current.active_defend_ability.is_some();
     let attack_this_snapshot = controller.last_attack_snapshot_tick != Some(samples.current.tick)
         && samples
             .current
@@ -1451,14 +1465,23 @@ fn update_live_imported_unit_animation(
             .any(|attack| attack.source == controller.sim_id);
     if attack_this_snapshot {
         controller.last_attack_snapshot_tick = Some(samples.current.tick);
-        if let Some(attack) = controller.attack {
+        let attack = if defend_active {
+            controller.defend_attack.or(controller.attack)
+        } else {
+            controller.attack
+        };
+        if let Some(attack) = attack {
             transitions.play(player, attack, Duration::from_millis(50));
             controller.state = ImportedUnitAnimationState::Attack;
+            controller.defend_active = defend_active;
             return;
         }
     }
 
     let one_shot_still_playing = match controller.state {
+        ImportedUnitAnimationState::Attack if controller.defend_active => {
+            controller.defend_attack.or(controller.attack)
+        }
         ImportedUnitAnimationState::Attack => controller.attack,
         ImportedUnitAnimationState::Cast => controller.cast,
         _ => None,
@@ -1479,10 +1502,17 @@ fn update_live_imported_unit_animation(
     } else {
         ImportedUnitAnimationState::Stand
     };
-    if controller.state == desired {
+    if controller.state == desired && controller.defend_active == defend_active {
         return;
     }
     let animation = match desired {
+        ImportedUnitAnimationState::Stand if defend_active => {
+            controller.defend_stand.unwrap_or(controller.stand)
+        }
+        ImportedUnitAnimationState::Walk if defend_active => controller
+            .defend_walk
+            .or(controller.defend_stand)
+            .unwrap_or_else(|| controller.walk.unwrap_or(controller.stand)),
         ImportedUnitAnimationState::Stand => controller.stand,
         ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
         ImportedUnitAnimationState::Attack
@@ -1497,6 +1527,7 @@ fn update_live_imported_unit_animation(
         .play(player, animation, Duration::from_millis(100))
         .repeat();
     controller.state = desired;
+    controller.defend_active = defend_active;
 }
 
 fn update_imported_death_remnant(
@@ -2116,6 +2147,29 @@ fn sync_render_entities(
         }
     }
 
+    // Upgrades deliberately retain the authoritative building SimId and footprint. If the
+    // content rawcode changes in place, replace only the presentation root so the target model can
+    // play its Birth sequence; cancellation performs the inverse swap back to the precursor's
+    // Stand model without fabricating a death/remnant.
+    let changed_building_models: Vec<_> = render_map
+        .buildings
+        .iter()
+        .filter_map(|(id, entry)| {
+            let building = samples.current.buildings.get(id)?;
+            let desired_rawcode = building.content.and_then(|content| {
+                building_models
+                    .get(content.rawcode)
+                    .map(|_| content.rawcode)
+            });
+            (entry.imported_rawcode != desired_rawcode).then_some(*id)
+        })
+        .collect();
+    for id in changed_building_models {
+        if let Some(entry) = render_map.buildings.remove(&id) {
+            commands.entity(entry.entity).despawn();
+        }
+    }
+
     let stale_corpses: Vec<_> = render_map
         .corpses
         .keys()
@@ -2211,6 +2265,9 @@ fn sync_render_entities(
                     Wc3RibbonSource::new(&visual.model.ribbons),
                 ))
                 .id();
+            if let Some(animation) = visual.model.animation_source() {
+                commands.entity(entity).insert(animation);
+            }
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: ABILITY_MODEL_EFFECT_SECONDS,
@@ -2227,6 +2284,47 @@ fn sync_render_entities(
                 position: sim_point_to_terrain_world(target_position, &terrain) + Vec3::Y * 2.0,
                 radius: radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
                 remaining: ABILITY_AREA_EFFECT_SECONDS,
+            });
+        }
+    }
+
+    // Defend is auto-maintained by Castle Fight rather than cast through the normal automatic
+    // spell system. Detect the authoritative inactive->active transition so the stock WC3
+    // DefendCaster particle/model still plays exactly when the shield state comes online.
+    for unit in samples.current.units.values() {
+        let Some(ability) = unit.active_defend_ability else {
+            continue;
+        };
+        if samples
+            .previous
+            .units
+            .get(&unit.id)
+            .is_some_and(|previous| previous.active_defend_ability == Some(ability))
+        {
+            continue;
+        }
+        let Some(position) = entity_render_position(unit.id, &samples, &metrics, &terrain, 1.0)
+        else {
+            continue;
+        };
+        for visual in wc3_visuals.ability(ability.0) {
+            let entity = commands
+                .spawn((
+                    WorldAssetRoot(visual.model.scene.clone()),
+                    Transform::from_translation(position),
+                    Wc3EmitterSource::new(&visual.model.emitters),
+                    Wc3RibbonSource::new(&visual.model.ribbons),
+                ))
+                .id();
+            if let Some(animation) = visual.model.animation_source() {
+                commands.entity(entity).insert(animation);
+            }
+            timed_effects.0.push(TimedWc3Effect {
+                entity,
+                remaining: ABILITY_MODEL_EFFECT_SECONDS,
+                lifetime: ABILITY_MODEL_EFFECT_SECONDS,
+                mesh: None,
+                fade_material: None,
             });
         }
     }
@@ -2521,15 +2619,22 @@ fn sync_render_entities(
         let missile_arc = imported_projectile.map(|visual| visual.missile_arc);
         let entity = if let Some(visual) = imported_projectile {
             let model = &visual.model;
-            commands
+            let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
-                .with_child((
+                .id();
+            let model_root = commands
+                .spawn((
                     WorldAssetRoot(model.scene.clone()),
                     Transform::from_rotation(Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET)),
                     Wc3EmitterSource::new(&model.emitters),
                     Wc3RibbonSource::new(&model.ribbons),
                 ))
-                .id()
+                .id();
+            if let Some(animation) = model.animation_source() {
+                commands.entity(model_root).insert(animation);
+            }
+            commands.entity(entity).add_child(model_root);
+            entity
         } else {
             commands
                 .spawn((
@@ -2731,6 +2836,7 @@ fn projectile_target(
 ) -> Vec3 {
     match projectile.kind {
         ProjectileViewKind::GuaranteedHit { target }
+        | ProjectileViewKind::Reflected { target, .. }
         | ProjectileViewKind::Bounce { target, .. } => {
             entity_render_position(target, samples, metrics, terrain, alpha).unwrap_or(fallback)
         }
@@ -2849,6 +2955,9 @@ fn spawn_stun_effect(
             Wc3RibbonSource::new(&model.ribbons),
         ))
         .id();
+    if let Some(animation) = model.animation_source() {
+        commands.entity(entity).insert(animation);
+    }
     render_map.stun_effects.insert(id, entity);
 }
 
@@ -3582,6 +3691,7 @@ fn building_height(building: &BuildingSample) -> f32 {
 fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
     match kind {
         ProjectileViewKind::GuaranteedHit { .. } => Color::srgb(0.48, 0.90, 1.0),
+        ProjectileViewKind::Reflected { .. } => Color::srgb(0.92, 0.92, 1.0),
         ProjectileViewKind::Ballistic { .. } => Color::srgb(1.0, 0.56, 0.12),
         ProjectileViewKind::Bounce { bounce_index, .. } if bounce_index % 2 == 0 => {
             Color::srgb(0.58, 1.0, 0.26)

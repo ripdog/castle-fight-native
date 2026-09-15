@@ -772,6 +772,7 @@ mod tests {
                 mana_current: None,
                 mana_maximum: None,
                 visual_kind: UnitVisualKind::Melee,
+                active_defend_ability: None,
             },
         );
         let terrain = flat_terrain();
@@ -856,6 +857,7 @@ mod tests {
                 mana_current: None,
                 mana_maximum: None,
                 visual_kind: UnitVisualKind::Melee,
+                active_defend_ability: None,
             },
         );
         let terrain = flat_terrain();

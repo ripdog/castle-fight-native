@@ -101,7 +101,11 @@ removed
 
 Castle Fight construction duration is authoritative versioned content. The native 9.27 profile reads the resolved object `Build Time`; the currently exposed production buildings are 2 seconds / 60 simulation ticks, while Watch Tower and Poof Tower are 20 seconds / 600 ticks in the extracted object data.
 
-A constructing building begins blocking navigation and building placement as soon as its site is created. It MUST NOT produce units, attack, cast automatic spells, contribute income, or grant its completion lumber before the completion tick. Production and combat timers begin from completion rather than construction start. The owning player may cancel before completion; 9.27's `ConstructionRefundRate=1.0` fully refunds the committed gold/lumber cost, and cancellation does not grant construction lumber.
+A freshly constructed building begins blocking navigation and building placement as soon as its site is created. It MUST NOT produce units, attack, cast automatic spells, contribute income, or grant its completion lumber before the completion tick. Production and combat timers begin from completion rather than construction start. The owning player may cancel before completion; 9.27's `ConstructionRefundRate=1.0` fully refunds the committed gold/lumber cost, and cancellation does not grant construction lumber.
+
+An in-place production-building upgrade uses the same authoritative construction timing but has different precursor semantics. It preserves the existing building `SimId`, owner/team, and footprint; the current native upgrade path therefore requires source and target footprints to match. While upgrading, the precursor's active production/attack/spell behavior is suspended and no precursor production deadlines fire, but its already-completed income contribution remains active until the target completes. Health is mapped proportionally from the precursor maximum to the target maximum so starting an upgrade does not implicitly heal or damage the building by changing its content definition. The target content identity and construction presentation are visible during the upgrade window.
+
+Cancelling an upgrade fully refunds the committed target upgrade cost and restores the precursor definition in place. Because cancellation can make earlier live state observable again, the upgrade snapshot preserves the precursor's production deadline, attack cooldown/target state, spell mana/readiness, spawn timing, and status state exactly; this saved state participates in canonical checksums. Completion instead activates the target definition, applies its completion lumber/income semantics, and starts the target's production/combat/spell timers from the completion tick. The precursor's paused production timer is discarded on successful completion.
 
 ## 8. Placement and ownership
 
@@ -265,9 +269,11 @@ Upgrade purchase is an authoritative command validated against:
 - current upgrade level/state;
 - match phase.
 
-Upgrade effects begin at the command's canonical execution tick/phase.
+Building upgrade relationships are versioned content, not name-based simulation logic. For Castle Fight 9.27 the native content layer consumes the extracted production-building `upgrade_from`/`upgrade_to` graph, including branching successor sets. A selected production building may expose every implemented successor valid for the selected map version through the common action panel. A successor with an implemented precursor is reached through that edge rather than being independently placeable by the builder; if the precursor is not yet implemented in the current native content slice, the verification client may temporarily expose that implemented successor as a root so the slice remains playable.
 
-Whether existing units are modified retroactively or only future spawns inherit an upgrade is content/rule-specific and must be explicit.
+Starting a production-building upgrade commits the target building's authored upgrade cost and construction duration while retaining the source building identity and occupancy. The lifecycle, pause/cancel/completion semantics are defined in section 7. No Stronghold-specific simulation path is permitted: Barracks → Stronghold is merely the first executable edge using the generic system, and later races/branching production lines must use the same versioned graph and command path.
+
+For non-building technology upgrades, upgrade effects begin at the command's canonical execution tick/phase unless their content definition specifies a construction/research interval. Whether existing units are modified retroactively or only future spawns inherit an upgrade is content/rule-specific and must be explicit.
 
 ## 20. Attack and spellcasting buildings
 

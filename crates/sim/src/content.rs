@@ -381,6 +381,7 @@ const fn builder_race_metadata(
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CastleFightUnitKind {
     Footman,
+    Defender,
     Ranger,
     Catapult,
     IceTrollShadowPriest,
@@ -388,8 +389,9 @@ pub enum CastleFightUnitKind {
 }
 
 impl CastleFightUnitKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Footman,
+        Self::Defender,
         Self::Ranger,
         Self::Catapult,
         Self::IceTrollShadowPriest,
@@ -423,6 +425,7 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"hfoo"),
                 name: "Footman",
                 health: 250,
+                health_regen_per_second_per_10k: 2_500,
                 build_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 repair_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Large, 4),
@@ -448,10 +451,40 @@ impl CastleFightUnitKind {
                 },
                 movement: movement(270),
             },
+            Self::Defender => CastleFightUnitDefinition {
+                rawcode: u32::from_be_bytes(*b"h03A"),
+                name: "Defender",
+                health: 575,
+                health_regen_per_second_per_10k: 17_500,
+                build_time_ticks: 28 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                repair_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
+                armor: ArmorProfile::new(ArmorType::Large, 7),
+                passive_effects: PassiveUnitEffects::EMPTY,
+                spellcasting: None,
+                damage_type: DamageType::Normal,
+                attack_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
+                movement_class: MovementClass::Ground,
+                mechanical: false,
+                collision_radius: collision_radius(),
+                corpse: Some(CorpseProfile {
+                    definition: CorpseDefinitionId(u32::from_be_bytes(*b"h03A")),
+                    lifetime_ticks: Some(901),
+                }),
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    // Protected runtime stats are 44 base + 1d16 = 45-60 (52.5 average).
+                    damage: 53,
+                    range: world(90),
+                    acquisition_range: world(800),
+                    cooldown_ticks: 41,
+                },
+                movement: movement(250),
+            },
             Self::Ranger => CastleFightUnitDefinition {
                 rawcode: u32::from_be_bytes(*b"e003"),
                 name: "Ranger",
                 health: 500,
+                health_regen_per_second_per_10k: 5_000,
                 build_time_ticks: 32 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 repair_time_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Small, 3),
@@ -481,6 +514,7 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"o001"),
                 name: "Catapult",
                 health: 475,
+                health_regen_per_second_per_10k: 5_000,
                 build_time_ticks: 34 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 repair_time_ticks: 36 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Medium, 5),
@@ -511,6 +545,7 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"n015"),
                 name: "Ice Troll Shadow Priest",
                 health: 350,
+                health_regen_per_second_per_10k: 10_000,
                 build_time_ticks: 23 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 repair_time_ticks: 25 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Small, 1),
@@ -540,6 +575,7 @@ impl CastleFightUnitKind {
                 rawcode: u32::from_be_bytes(*b"h016"),
                 name: "Gryphon Rider",
                 health: 500,
+                health_regen_per_second_per_10k: 10_000,
                 build_time_ticks: 27 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 repair_time_ticks: 45 * CASTLE_FIGHT_SIMULATION_HZ as u32,
                 armor: ArmorProfile::new(ArmorType::Medium, 2),
@@ -574,6 +610,7 @@ pub struct CastleFightUnitDefinition {
     pub rawcode: u32,
     pub name: &'static str,
     pub health: i32,
+    pub health_regen_per_second_per_10k: u32,
     pub build_time_ticks: u32,
     pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
@@ -606,6 +643,7 @@ impl CastleFightUnitDefinition {
                 rawcode: self.rawcode,
                 name: self.name,
             }),
+            health_regen_per_second_per_10k: self.health_regen_per_second_per_10k,
             corpse: self.corpse,
             collision_radius: Some(self.collision_radius),
             movement_class: self.movement_class,
@@ -623,6 +661,7 @@ impl CastleFightUnitDefinition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CastleFightProductionKind {
     Barracks,
+    Stronghold,
     RangersHall,
     OrcishSiegeFactory,
     IceTrollHut,
@@ -630,13 +669,79 @@ pub enum CastleFightProductionKind {
 }
 
 impl CastleFightProductionKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Barracks,
+        Self::Stronghold,
         Self::RangersHall,
         Self::OrcishSiegeFactory,
         Self::IceTrollHut,
         Self::GryphonRock,
     ];
+
+    #[must_use]
+    pub fn from_rawcode(rawcode: u32) -> Option<Self> {
+        Self::from_rawcode_for_version(rawcode, CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn from_rawcode_for_version(
+        rawcode: u32,
+        version: MapVersion,
+    ) -> Result<Option<Self>, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        Ok(match rawcode {
+            value if value == u32::from_be_bytes(*b"h000") => Some(Self::Barracks),
+            value if value == u32::from_be_bytes(*b"h039") => Some(Self::Stronghold),
+            value if value == u32::from_be_bytes(*b"h03D") => Some(Self::RangersHall),
+            value if value == u32::from_be_bytes(*b"h02I") => Some(Self::OrcishSiegeFactory),
+            value if value == u32::from_be_bytes(*b"h03K") => Some(Self::IceTrollHut),
+            value if value == u32::from_be_bytes(*b"h015") => Some(Self::GryphonRock),
+            _ => None,
+        })
+    }
+
+    #[must_use]
+    pub fn upgrade_from(self) -> Option<Self> {
+        self.upgrade_from_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn upgrade_from_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<Option<Self>, UnsupportedCastleFightMapVersion> {
+        let definition = self.definition_for_version(version)?;
+        let (precursor, _) = extracted_building_upgrade_links_927(definition.rawcode);
+        match precursor {
+            Some(rawcode) => Self::from_rawcode_for_version(rawcode, version),
+            None => Ok(None),
+        }
+    }
+
+    #[must_use]
+    pub fn upgrade_targets(self) -> Vec<Self> {
+        self.upgrade_targets_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+            .expect("default Castle Fight map version must remain available")
+    }
+
+    pub fn upgrade_targets_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<Vec<Self>, UnsupportedCastleFightMapVersion> {
+        let definition = self.definition_for_version(version)?;
+        let (_, targets) = extracted_building_upgrade_links_927(definition.rawcode);
+        targets
+            .into_iter()
+            .map(|rawcode| Self::from_rawcode_for_version(rawcode, version))
+            .filter_map(|result| match result {
+                Ok(Some(kind)) => Some(Ok(kind)),
+                Ok(None) => None,
+                Err(error) => Some(Err(error)),
+            })
+            .collect()
+    }
 
     #[must_use]
     pub fn definition(self) -> CastleFightProductionDefinition {
@@ -664,6 +769,15 @@ impl CastleFightProductionKind {
                 20,
                 CastleFightUnitKind::Footman,
                 CommandCardPosition::new(0, 0),
+            ),
+            Self::Stronghold => production_definition(
+                u32::from_be_bytes(*b"h039"),
+                "Stronghold",
+                175,
+                1_300,
+                28,
+                CastleFightUnitKind::Defender,
+                CommandCardPosition::new(3, 0),
             ),
             Self::RangersHall => production_definition(
                 u32::from_be_bytes(*b"h03D"),
@@ -949,6 +1063,7 @@ impl CastleFightTowerDefinition {
                 build_time_ticks: None,
                 repair_time_ticks: None,
                 attack_targets: AttackTargetMask::ALL,
+                health_regen_per_second_per_10k: 0,
                 damage_type: DamageType::Normal,
                 armor: ArmorProfile::UNARMORED,
                 passive_effects: PassiveUnitEffects::EMPTY,
@@ -1062,7 +1177,15 @@ fn extracted_builder_catalog(
             "builder race {race_index} repeats building rawcode {building_rawcode:#010x}"
         );
         expected_order += 1;
-        catalog.push(building_rawcode);
+        // Upgrade targets are reached from the precursor building's command card rather than
+        // placed directly by the builder. Keep the builder catalog authoritative for direct
+        // placement so UI/network callers cannot bypass that rule.
+        if extracted_building_upgrade_links_927(building_rawcode)
+            .0
+            .is_none()
+        {
+            catalog.push(building_rawcode);
+        }
     }
     assert!(
         !catalog.is_empty(),
@@ -1238,6 +1361,40 @@ fn extracted_building_construction_time_ticks_927(rawcode: u32) -> u32 {
             .expect("building construction time tick overflow");
     }
     panic!("building {rawcode:#010x} missing from extracted 9.27 building table")
+}
+
+fn extracted_building_upgrade_links_927(rawcode: u32) -> (Option<u32>, Vec<u32>) {
+    let mut precursor = None;
+    let mut targets = Vec::new();
+    for line in include_str!("../../../docs/original_map/extracted/script/building-upgrades.tsv")
+        .lines()
+        .skip(1)
+    {
+        let mut columns = line.split('\t');
+        let source = parse_rawcode(
+            columns
+                .next()
+                .expect("building-upgrade row missing source rawcode"),
+        );
+        let _source_integer = columns.next();
+        let _source_name = columns.next();
+        let target = parse_rawcode(
+            columns
+                .next()
+                .expect("building-upgrade row missing target rawcode"),
+        );
+        if source == rawcode {
+            targets.push(target);
+        }
+        if target == rawcode {
+            assert!(
+                precursor.replace(source).is_none(),
+                "building {rawcode:#010x} has more than one extracted precursor"
+            );
+        }
+    }
+    targets.sort_unstable();
+    (precursor, targets)
 }
 
 fn extracted_building_income_per_10k_927(rawcode: u32) -> u64 {
@@ -1542,7 +1699,7 @@ mod tests {
         let unit_rows = unit_lines
             .map(|line| line.split('\t').collect::<Vec<_>>())
             .collect::<Vec<_>>();
-        let expected_catalog_sizes = [15, 15, 7, 16, 21, 13, 18, 20, 15, 17, 15, 17, 22, 13, 16];
+        let expected_catalog_sizes = [10, 10, 6, 10, 11, 10, 12, 10, 10, 10, 10, 11, 10, 10, 10];
 
         for (race, expected_catalog_size) in CastleFightBuilderRace::ALL
             .into_iter()
@@ -1585,6 +1742,42 @@ mod tests {
     }
 
     #[test]
+    fn production_upgrade_links_are_versioned_and_match_extracted_927_edges() {
+        assert_eq!(
+            CastleFightProductionKind::Barracks.upgrade_targets(),
+            vec![CastleFightProductionKind::Stronghold]
+        );
+        assert_eq!(
+            CastleFightProductionKind::Stronghold.upgrade_from(),
+            Some(CastleFightProductionKind::Barracks)
+        );
+        assert!(
+            CastleFightProductionKind::Stronghold
+                .upgrade_targets()
+                .is_empty()
+        );
+
+        // Ranger's Hall is itself an upgrade in 9.27, but its Hunter's Hall precursor is not
+        // implemented in the current native slice yet. The raw extracted relation remains
+        // authoritative even though the typed lookup cannot expose an unimplemented kind.
+        let ranger = CastleFightProductionKind::RangersHall.definition();
+        let (ranger_precursor, ranger_targets) =
+            extracted_building_upgrade_links_927(ranger.rawcode);
+        assert_eq!(ranger_precursor, Some(u32::from_be_bytes(*b"h00S")));
+        assert_eq!(ranger_targets, vec![u32::from_be_bytes(*b"h03E")]);
+        assert_eq!(CastleFightProductionKind::RangersHall.upgrade_from(), None);
+        assert!(
+            CastleFightProductionKind::RangersHall
+                .upgrade_targets()
+                .is_empty()
+        );
+
+        let human = CastleFightBuilderRace::Human.definition();
+        assert!(human.build_catalog.contains(&u32::from_be_bytes(*b"h000")));
+        assert!(!human.build_catalog.contains(&u32::from_be_bytes(*b"h039")));
+    }
+
+    #[test]
     fn draft_builder_configuration_changes_menu_without_changing_appearance() {
         let human = CastleFightBuilderRace::Human.definition();
         let drafted = human.configuration_with_catalog(vec![
@@ -1605,6 +1798,11 @@ mod tests {
                 CastleFightUnitKind::Footman,
                 DamageType::Normal,
                 ArmorProfile::new(ArmorType::Large, 4),
+            ),
+            (
+                CastleFightUnitKind::Defender,
+                DamageType::Normal,
+                ArmorProfile::new(ArmorType::Large, 7),
             ),
             (
                 CastleFightUnitKind::Ranger,

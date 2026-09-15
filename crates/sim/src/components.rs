@@ -25,6 +25,15 @@ pub struct Health {
     pub max: i32,
 }
 
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct HealthRegeneration {
+    /// Hit points regenerated per second in 1/10,000 HP units.
+    pub per_second_per_10k: u32,
+    /// Fixed-point numerator retained across simulation ticks. The denominator is
+    /// `10_000 * CASTLE_FIGHT_SIMULATION_HZ`.
+    pub remainder_per_10k_hz: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AttackDelivery {
     Melee,
@@ -90,9 +99,26 @@ pub(crate) struct PendingAttackEffects {
 pub(crate) struct GuaranteedHitProjectile {
     pub source: SimId,
     pub source_team: Team,
+    pub source_is_building: bool,
     pub target: SimId,
     pub damage: i32,
     pub on_hit: PendingAttackEffects,
+    pub damage_type: DamageType,
+    pub speed_per_tick: i32,
+    pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReflectedProjectile {
+    /// Original attacker. Kept as the visual source so the reflected missile retains its art.
+    pub original_source: SimId,
+    /// Unit whose Defend state reflected the projectile and owns the returned damage.
+    pub reflector: SimId,
+    pub reflector_team: Team,
+    pub target: SimId,
+    pub damage: i32,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub launch_tick: u64,
@@ -118,6 +144,7 @@ pub(crate) struct BallisticProjectile {
 pub(crate) struct BounceProjectile {
     pub source: SimId,
     pub source_team: Team,
+    pub source_is_building: bool,
     pub target_mask: AttackTargetMask,
     pub target: SimId,
     pub damage: i32,
@@ -237,6 +264,21 @@ pub struct EvasionEffectProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DefendEffectProfile {
+    pub ability: AbilityId,
+    /// Fraction of ordinary ranged attack damage retained while Defend is active.
+    pub ranged_damage_taken_per_10k: u16,
+    /// Fraction of spell damage retained while Defend is active.
+    pub spell_damage_taken_per_10k: u16,
+    /// Chance for a directed Pierce projectile to be deflected.
+    pub deflect_chance_per_10k: u16,
+    /// Fraction of Pierce damage retained by the defender on a successful deflection.
+    pub deflected_pierce_damage_taken_per_10k: u16,
+    /// Castle Fight waits briefly after spawn before ordering Defend on.
+    pub activation_delay_ticks: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChainLightningEffectProfile {
     pub ability: AbilityId,
     pub initial_damage: i32,
@@ -286,6 +328,7 @@ pub struct BurningOilEffectProfile {
 pub enum PassiveUnitEffect {
     Bash(BashEffectProfile),
     Evasion(EvasionEffectProfile),
+    Defend(DefendEffectProfile),
     TriggeredSpellProc(TriggeredSpellProcProfile),
     BurningOil(BurningOilEffectProfile),
 }
@@ -346,6 +389,7 @@ impl Default for PassiveUnitEffects {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct UnitGameplayProperties {
     pub content: Option<ContentIdentity>,
+    pub health_regen_per_second_per_10k: u32,
     pub corpse: Option<CorpseProfile>,
     pub collision_radius: Option<CollisionRadius>,
     pub movement_class: MovementClass,
@@ -400,6 +444,9 @@ pub(crate) struct ProductionArmorProfile(pub ArmorProfile);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionPassiveEffects(pub PassiveUnitEffects);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionHealthRegeneration(pub u32);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
@@ -514,12 +561,32 @@ pub(crate) struct BuilderBuildOrder {
     pub properties: BuildingGameplayProperties,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct BuildingRuntimeState {
+    pub production: Option<ProductionState>,
+    pub attack_cooldown: Option<AttackCooldown>,
+    pub target: Option<TargetState>,
+    pub spawn_tick: Option<SpawnTick>,
+    pub mana: Option<ManaState>,
+    pub ability_state: Option<AutomaticAbilityState>,
+    pub status: Option<StatusState>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BuildingUpgradeSource {
+    pub building: BuildingSpawn,
+    pub properties: BuildingGameplayProperties,
+    pub health: Health,
+    pub runtime: BuildingRuntimeState,
+}
+
 #[derive(Component, Debug, Clone, Copy)]
 pub(crate) struct BuildingConstruction {
     pub started_tick: u64,
     pub complete_tick: u64,
     pub building: BuildingSpawn,
     pub properties: BuildingGameplayProperties,
+    pub upgrade_from: Option<BuildingUpgradeSource>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]

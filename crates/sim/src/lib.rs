@@ -15,10 +15,11 @@ pub use components::{
     AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
     BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
-    CorpseDefinitionId, CorpseProfile, EntanglingRootsEffectProfile, EvasionEffectProfile,
-    ManaProfile, ModifierId, MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects,
-    ProductionProfile, SimId, SpellcastingProfile, StatusState, Team, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    CorpseDefinitionId, CorpseProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
+    EvasionEffectProfile, ManaProfile, ModifierId, MovementClass, MovementProfile,
+    PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, SimId, SpellcastingProfile,
+    StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile, UnitGameplayProperties,
+    UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_DEFAULT_MAP_VERSION, CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuilderDefinition,
@@ -44,9 +45,10 @@ pub use native_effects::{NativeEffectImplementationId, native_effect_implementat
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
     BuilderSpawnError, BuilderView, BuildingCommandError, BuildingConstructionCancelError,
-    BuildingPlacementError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
-    CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    TargetlessLane, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingUpgradeError, BuildingView,
+    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView,
+    ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TargetlessLane, TickResult,
+    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -655,6 +657,273 @@ mod tests {
                 .iter()
                 .any(|event| event.target == target && event.missed)
         );
+    }
+
+    fn always_on_defend() -> PassiveUnitEffects {
+        PassiveUnitEffects::single(PassiveUnitEffect::Defend(DefendEffectProfile {
+            ability: AbilityId(u32::from_be_bytes(*b"DEFD")),
+            ranged_damage_taken_per_10k: 4_000,
+            spell_damage_taken_per_10k: 5_000,
+            deflect_chance_per_10k: 10_000,
+            deflected_pierce_damage_taken_per_10k: 0,
+            activation_delay_ticks: 0,
+        }))
+    }
+
+    #[test]
+    fn defend_reduces_directed_ranged_damage_at_projectile_impact() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attacker = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedGuaranteedHit {
+                        speed_per_tick: world,
+                    },
+                    damage: 100,
+                    range: 4 * world,
+                    acquisition_range: 8 * world,
+                    cooldown_ticks: 100,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                damage_type: DamageType::Normal,
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let defender = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(42 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 100,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: always_on_defend(),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        sim.step();
+        let launch = sim.step();
+        assert_eq!(launch.projectiles_launched, 1);
+        let impact_tick = sim.projectiles()[0].impact_tick;
+        while sim.tick() <= impact_tick {
+            sim.step();
+        }
+        assert_eq!(sim.unit(defender).unwrap().health, 60);
+        assert_eq!(sim.unit(attacker).unwrap().health, 100);
+    }
+
+    #[test]
+    fn defend_reflects_pierce_as_persistent_return_projectile_without_ping_pong() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: world,
+            },
+            damage: 40,
+            range: 4 * world,
+            acquisition_range: 8 * world,
+            cooldown_ticks: 100,
+        };
+        let attacker = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                damage_type: DamageType::Pierce,
+                // If returned missiles re-enter Defend interception this would ping-pong forever.
+                passive_effects: always_on_defend(),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let defender = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(42 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    ..attack
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: always_on_defend(),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        sim.step();
+        sim.step();
+        let outgoing = sim.projectiles()[0];
+        let first_impact_tick = outgoing.impact_tick;
+        while sim.tick() <= first_impact_tick {
+            sim.step();
+        }
+        assert_eq!(sim.unit(defender).unwrap().health, 100);
+        let reflected = sim
+            .projectiles()
+            .into_iter()
+            .find(|projectile| matches!(projectile.kind, ProjectileViewKind::Reflected { .. }))
+            .expect("Defend must create a persistent reflected projectile");
+        assert_eq!(
+            reflected.source, attacker,
+            "return missile keeps original source art"
+        );
+        assert!(matches!(
+            reflected.kind,
+            ProjectileViewKind::Reflected {
+                target,
+                reflector
+            } if target == attacker && reflector == defender
+        ));
+
+        let return_impact_tick = reflected.impact_tick;
+        while sim.tick() <= return_impact_tick {
+            sim.step();
+        }
+        // The reflected missile retains Pierce attack type. Against the synthetic attacker's
+        // default Unarmored defense, Warcraft's damage table scales 40 raw Pierce to 60 damage.
+        assert_eq!(sim.unit(attacker).unwrap().health, 40);
+        assert_eq!(sim.unit(defender).unwrap().health, 100);
+        assert!(
+            sim.projectiles().is_empty(),
+            "reflected missiles cannot reflect again"
+        );
+    }
+
+    #[test]
+    fn fractional_health_regeneration_accumulates_deterministically() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 30,
+            range: 4 * world,
+            acquisition_range: 8 * world,
+            cooldown_ticks: 100,
+        };
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(40 * world, 0),
+            health: 100,
+            attack,
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let target = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(41 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    ..attack
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                // Defender's extracted 1.75 HP/s. At 30 Hz the first whole HP arrives after
+                // 18 regeneration ticks; fixed-point remainder must make this exact and stable.
+                health_regen_per_second_per_10k: 17_500,
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 70);
+        for _ in 0..17 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(target).unwrap().health, 70);
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 71);
+    }
+
+    #[test]
+    fn defend_halves_spell_damage() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let attack = AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 0,
+            range: 4 * world,
+            acquisition_range: 8 * world,
+            cooldown_ticks: 100,
+        };
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack,
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                    TriggeredSpellProcProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
+                        chance_per_10k: 10_000,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                        effect: TriggeredAttackEffect::ChainLightning(
+                            ChainLightningEffectProfile {
+                                ability: AbilityId(u32::from_be_bytes(*b"CHLN")),
+                                initial_damage: 100,
+                                maximum_targets: 1,
+                                jump_radius: 0,
+                                damage_reduction_per_10k: 0,
+                                targets: AttackTargetMask::GROUND_UNITS,
+                            },
+                        ),
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let defender = sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(1),
+                position: SimPoint::new(41 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    ..attack
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: always_on_defend(),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().health, 50);
     }
 
     #[test]
@@ -3615,7 +3884,9 @@ mod tests {
         assert_eq!(launch.projectiles_launched, 1);
         let destination = match sim.projectiles()[0].kind {
             ProjectileViewKind::Ballistic { destination, .. } => destination,
-            ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Bounce { .. } => {
+            ProjectileViewKind::GuaranteedHit { .. }
+            | ProjectileViewKind::Reflected { .. }
+            | ProjectileViewKind::Bounce { .. } => {
                 panic!("expected ballistic projectile")
             }
         };
@@ -4435,7 +4706,10 @@ mod tests {
             sim.cancel_building_construction(Team(1), site.id),
             Err(BuildingConstructionCancelError::NotOwner)
         );
-        sim.cancel_building_construction(Team(0), site.id).unwrap();
+        assert_eq!(
+            sim.cancel_building_construction(Team(0), site.id).unwrap(),
+            BuildingConstructionCancelOutcome::RemovedNewBuilding
+        );
         assert_eq!(sim.building_count(), 0);
         assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 250);
         assert_eq!(sim.player_resources(Team(0)).unwrap().lumber, 125);
@@ -4443,6 +4717,183 @@ mod tests {
         for _ in 0..barracks.construction_time_ticks + 1 {
             assert_eq!(sim.step().units_spawned, 0);
         }
+    }
+
+    #[test]
+    fn production_upgrade_reuses_identity_pauses_production_and_cancels_to_precursor() {
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                economy: castle_fight_economy_rules(),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        let stronghold = CastleFightProductionKind::Stronghold.definition();
+        let footprint = BuildingFootprint::new(0, 0, 4, 4);
+        let mut source_spawn = barracks.spawn(Team(0), footprint);
+        source_spawn
+            .production
+            .as_mut()
+            .expect("Barracks must produce")
+            .initial_delay_ticks = 5;
+        let building =
+            sim.spawn_building_with_properties(source_spawn, barracks.gameplay_properties());
+        let source_income = sim.player_income(Team(0)).unwrap();
+        assert_eq!(sim.building(building).unwrap().next_spawn_tick, Some(5));
+
+        sim.start_building_upgrade(
+            building,
+            source_spawn,
+            barracks.gameplay_properties(),
+            stronghold.spawn(Team(0), footprint),
+            stronghold.gameplay_properties(),
+        )
+        .unwrap();
+
+        let upgrading = sim.building(building).unwrap();
+        assert_eq!(upgrading.id, building);
+        assert_eq!(upgrading.content.unwrap().rawcode, stronghold.rawcode);
+        assert_eq!(upgrading.footprint, footprint);
+        assert_eq!(upgrading.construction_started_tick, Some(0));
+        assert_eq!(
+            upgrading.construction_complete_tick,
+            Some(u64::from(stronghold.construction_time_ticks))
+        );
+        assert!(upgrading.production.is_none());
+        assert_eq!(upgrading.next_spawn_tick, None);
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 75);
+        assert_eq!(sim.player_income(Team(0)).unwrap(), source_income);
+
+        for _ in 0..3 {
+            assert_eq!(sim.step().units_spawned, 0);
+        }
+        assert_eq!(
+            sim.cancel_building_construction(Team(0), building).unwrap(),
+            BuildingConstructionCancelOutcome::RevertedUpgrade
+        );
+        let restored = sim.building(building).unwrap();
+        assert_eq!(restored.id, building);
+        assert_eq!(restored.content.unwrap().rawcode, barracks.rawcode);
+        assert_eq!(restored.footprint, footprint);
+        assert_eq!(restored.construction_started_tick, None);
+        assert_eq!(restored.construction_complete_tick, None);
+        assert!(restored.production.is_some());
+        assert_eq!(restored.next_spawn_tick, Some(5));
+        assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 250);
+        assert_eq!(sim.player_income(Team(0)).unwrap(), source_income);
+
+        assert_eq!(sim.step().units_spawned, 0); // tick 3
+        assert_eq!(sim.step().units_spawned, 0); // tick 4
+        assert_eq!(sim.step().units_spawned, 1); // original tick-5 deadline survives cancellation
+    }
+
+    #[test]
+    fn upgrade_checksum_includes_saved_precursor_runtime() {
+        fn upgrading_checksum(source_delay_ticks: u16) -> u64 {
+            let mut sim = Simulation::new(
+                SimulationConfig {
+                    economy: castle_fight_economy_rules(),
+                    ..SimulationConfig::default()
+                },
+                1,
+            );
+            let barracks = CastleFightProductionKind::Barracks.definition();
+            let stronghold = CastleFightProductionKind::Stronghold.definition();
+            let footprint = BuildingFootprint::new(0, 0, 4, 4);
+            let mut source_spawn = barracks.spawn(Team(0), footprint);
+            source_spawn
+                .production
+                .as_mut()
+                .expect("Barracks must produce")
+                .initial_delay_ticks = source_delay_ticks;
+            let building =
+                sim.spawn_building_with_properties(source_spawn, barracks.gameplay_properties());
+            sim.start_building_upgrade(
+                building,
+                source_spawn,
+                barracks.gameplay_properties(),
+                stronghold.spawn(Team(0), footprint),
+                stronghold.gameplay_properties(),
+            )
+            .unwrap();
+            sim.step().checksum
+        }
+
+        assert_ne!(
+            upgrading_checksum(5),
+            upgrading_checksum(6),
+            "saved precursor runtime can change cancellation outcome and must be canonical state"
+        );
+    }
+
+    #[test]
+    fn production_upgrade_completion_switches_definition_and_starts_target_timer() {
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                economy: castle_fight_economy_rules(),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let barracks = CastleFightProductionKind::Barracks.definition();
+        let stronghold = CastleFightProductionKind::Stronghold.definition();
+        let footprint = BuildingFootprint::new(0, 0, 4, 4);
+        let mut source_spawn = barracks.spawn(Team(0), footprint);
+        source_spawn
+            .production
+            .as_mut()
+            .expect("Barracks must produce")
+            .initial_delay_ticks = 1;
+        let building =
+            sim.spawn_building_with_properties(source_spawn, barracks.gameplay_properties());
+        let source_income = sim.player_income(Team(0)).unwrap();
+
+        sim.start_building_upgrade(
+            building,
+            source_spawn,
+            barracks.gameplay_properties(),
+            stronghold.spawn(Team(0), footprint),
+            stronghold.gameplay_properties(),
+        )
+        .unwrap();
+
+        let mut steps = 0;
+        while sim
+            .building(building)
+            .is_some_and(|view| view.construction_complete_tick.is_some())
+        {
+            assert_eq!(sim.step().units_spawned, 0);
+            steps += 1;
+            assert!(steps <= stronghold.construction_time_ticks + 1);
+        }
+        assert_eq!(steps, stronghold.construction_time_ticks + 1);
+
+        let completed = sim.building(building).unwrap();
+        assert_eq!(completed.id, building);
+        assert_eq!(completed.content.unwrap().rawcode, stronghold.rawcode);
+        assert_eq!(completed.footprint, footprint);
+        assert!(completed.production.is_some());
+        assert_eq!(
+            completed.production.unwrap().unit,
+            stronghold
+                .spawn(Team(0), footprint)
+                .production
+                .expect("Stronghold must produce")
+                .unit
+        );
+        assert_eq!(
+            completed.next_spawn_tick,
+            Some(
+                u64::from(stronghold.construction_time_ticks)
+                    + u64::from(stronghold.spawn_interval_ticks)
+            )
+        );
+        assert_eq!(
+            sim.player_resources(Team(0)).unwrap().lumber,
+            125 + stronghold.economy.lumber_refund
+        );
+        assert!(sim.player_income(Team(0)).unwrap() > source_income);
     }
 
     #[test]

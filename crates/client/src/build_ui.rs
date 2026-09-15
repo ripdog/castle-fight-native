@@ -1,12 +1,13 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
-    BuildingFootprint, CommandCardPosition, SimId, Team, castle_fight_command_card_layout,
+    BuildingConstructionCancelOutcome, BuildingFootprint, CommandCardPosition, SimId, Team,
+    castle_fight_command_card_layout,
 };
 
 use crate::{
     AuthoritativeSimulation,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
-    demo::{BuildKind, ProductionKind},
+    demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
     inspection::InspectionSelection,
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
     resource_ui::TOP_BAR_HEIGHT,
@@ -44,8 +45,9 @@ const TOOLTIP_BORDER: Color = Color::srgb(0.48, 0.39, 0.22);
 const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
 const TOOLTIP_TEXT_COLOR: Color = Color::srgb(0.95, 0.95, 0.92);
 
-const ALL_BUILD_KINDS: [BuildKind; 7] = [
+const ALL_BUILD_KINDS: [BuildKind; 8] = [
     BuildKind::Production(ProductionKind::Barracks),
+    BuildKind::Production(ProductionKind::Stronghold),
     BuildKind::Production(ProductionKind::RangersHall),
     BuildKind::Production(ProductionKind::OrcishSiegeFactory),
     BuildKind::Production(ProductionKind::IceTrollHut),
@@ -89,7 +91,7 @@ impl Default for ActionPanelState {
             team: Team(0),
             actor: None,
             mode: ActionPanelMode::Actions,
-            status: "Select a controllable builder or tower.".into(),
+            status: "Select a controllable builder, production building, or tower.".into(),
         }
     }
 }
@@ -113,8 +115,14 @@ impl ActionPanelState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProductionPanelAction {
+    Upgrade(ProductionKind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PanelAction {
     Target(TargetingAction),
+    Production(ProductionPanelAction),
     OpenBuildMenu,
     CancelConstruction,
     Cancel,
@@ -141,8 +149,26 @@ struct BuildTooltipTitle;
 #[derive(Component)]
 struct BuildTooltipBody;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActionTooltipKind {
+    Build(BuildKind),
+    ProductionUpgrade(ProductionKind),
+}
+
+impl ActionTooltipKind {
+    fn tooltips(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Build(kind) => kind.tooltips(),
+            Self::ProductionUpgrade(kind) => {
+                let definition = kind.definition();
+                (definition.basic_tooltip, definition.extended_tooltip)
+            }
+        }
+    }
+}
+
 #[derive(Resource, Default)]
-struct BuildTooltipState(Option<BuildKind>);
+struct BuildTooltipState(Option<ActionTooltipKind>);
 
 type ActionInteractions<'w, 's> = Query<
     'w,
@@ -295,6 +321,7 @@ fn sync_action_panel_to_selection(
         }
         samples.current.buildings.get(&id).and_then(|building| {
             (building.construction_complete_tick.is_some()
+                || building_is_controllable_production(building)
                 || building_is_controllable_tower(building))
             .then_some((id, building.team))
         })
@@ -340,14 +367,33 @@ fn handle_escape(
         .simulation
         .building(actor)
         .is_some_and(|building| building.construction_complete_tick.is_some())
-        && authoritative
-            .simulation
-            .cancel_building_construction(state.team, actor)
-            .is_ok()
     {
-        samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
-        state.actor = None;
-        state.status = "Construction cancelled and resources refunded.".into();
+        cancel_selected_construction(&mut authoritative, &mut samples, &mut state, actor);
+    }
+}
+
+fn cancel_selected_construction(
+    authoritative: &mut AuthoritativeSimulation,
+    samples: &mut PresentationSamples,
+    state: &mut ActionPanelState,
+    actor: SimId,
+) {
+    match authoritative
+        .simulation
+        .cancel_building_construction(state.team, actor)
+    {
+        Ok(BuildingConstructionCancelOutcome::RemovedNewBuilding) => {
+            samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
+            state.actor = None;
+            state.status = "Construction cancelled and resources refunded.".into();
+        }
+        Ok(BuildingConstructionCancelOutcome::RevertedUpgrade) => {
+            samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
+            state.status = "Upgrade cancelled and the original building restored.".into();
+        }
+        Err(error) => {
+            state.status = format!("Unable to cancel construction: {error:?}.");
+        }
     }
 }
 
@@ -373,6 +419,22 @@ fn populate_action_panel(
     }
 }
 
+fn insert_panel_action(
+    slots: &mut [Option<PanelAction>; SLOT_COUNT],
+    preferred: usize,
+    cancel_slot: usize,
+    action: PanelAction,
+) {
+    let slot = if preferred < SLOT_COUNT && preferred != cancel_slot && slots[preferred].is_none() {
+        preferred
+    } else {
+        (0..SLOT_COUNT)
+            .find(|index| *index != cancel_slot && slots[*index].is_none())
+            .expect("implemented command card actions must fit the WC3 command card")
+    };
+    slots[slot] = Some(action);
+}
+
 fn action_layout(
     state: &ActionPanelState,
     authoritative: &AuthoritativeSimulation,
@@ -394,25 +456,30 @@ fn action_layout(
                 slots[command_slot(command_card.blink_ability)] =
                     Some(PanelAction::Target(TargetingAction::Blink));
                 slots[command_slot(command_card.build_command)] = Some(PanelAction::OpenBuildMenu);
-            } else if authoritative
-                .simulation
-                .building(actor)
-                .is_some_and(|building| building.construction_complete_tick.is_some())
-            {
-                slots[cancel_slot] = Some(PanelAction::CancelConstruction);
-            } else if authoritative
-                .simulation
-                .building(actor)
-                .is_some_and(|building| {
-                    building.attack_delivery.is_some()
-                        && building.content.is_some_and(|content| {
-                            castle_fight_sim::CastleFightTowerKind::from_rawcode(content.rawcode)
-                                .is_some()
-                        })
-                })
-            {
-                slots[command_slot(command_card.attack_command)] =
-                    Some(PanelAction::Target(TargetingAction::Attack));
+            } else if let Some(building) = authoritative.simulation.building(actor) {
+                if building.construction_complete_tick.is_some() {
+                    slots[cancel_slot] = Some(PanelAction::CancelConstruction);
+                } else if let Some(kind) = building
+                    .content
+                    .and_then(|content| ProductionKind::from_rawcode(content.rawcode))
+                {
+                    for target in kind.upgrade_targets() {
+                        insert_panel_action(
+                            &mut slots,
+                            command_slot(target.definition().command_card_position),
+                            cancel_slot,
+                            PanelAction::Production(ProductionPanelAction::Upgrade(target)),
+                        );
+                    }
+                } else if building.attack_delivery.is_some()
+                    && building.content.is_some_and(|content| {
+                        castle_fight_sim::CastleFightTowerKind::from_rawcode(content.rawcode)
+                            .is_some()
+                    })
+                {
+                    slots[command_slot(command_card.attack_command)] =
+                        Some(PanelAction::Target(TargetingAction::Attack));
+                }
             }
         }
         ActionPanelMode::BuildMenu => {
@@ -423,21 +490,15 @@ fn action_layout(
                 if !builder.configuration.allows_building(kind.rawcode()) {
                     continue;
                 }
-                let preferred = command_slot(kind.command_card_position());
-                let slot = if preferred < SLOT_COUNT
-                    && preferred != cancel_slot
-                    && slots[preferred].is_none()
-                {
-                    preferred
-                } else {
-                    // The verification client intentionally exposes a mixed-race catalog. Real
-                    // race catalogs do not collide here; for this synthetic menu retain authored
-                    // slots when possible and resolve cross-race collisions deterministically.
-                    (0..SLOT_COUNT)
-                        .find(|index| *index != cancel_slot && slots[*index].is_none())
-                        .expect("implemented build menu must fit the WC3 command card")
-                };
-                slots[slot] = Some(PanelAction::Target(TargetingAction::Build(kind)));
+                // The verification client intentionally exposes a mixed-race catalog. Real
+                // race catalogs do not collide here; for this synthetic menu retain authored
+                // slots when possible and resolve cross-race collisions deterministically.
+                insert_panel_action(
+                    &mut slots,
+                    command_slot(kind.command_card_position()),
+                    cancel_slot,
+                    PanelAction::Target(TargetingAction::Build(kind)),
+                );
             }
             slots[cancel_slot] = Some(PanelAction::Cancel);
         }
@@ -469,6 +530,28 @@ fn handle_action_panel_buttons(
             PanelAction::OpenBuildMenu => {
                 state.mode = ActionPanelMode::BuildMenu;
                 state.status = "Choose a building.".into();
+            }
+            PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
+                let Some(actor) = state.actor else {
+                    continue;
+                };
+                if !can_afford_production_upgrade(&authoritative, &state, target) {
+                    state.status =
+                        insufficient_upgrade_resources_status(&authoritative, &state, target);
+                    continue;
+                }
+                match order_demo_production_upgrade(&mut authoritative.simulation, actor, target) {
+                    Ok(()) => {
+                        samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
+                        state.status = format!(
+                            "Upgrading to {} — construction can be cancelled until completion.",
+                            target.definition().name
+                        );
+                    }
+                    Err(error) => {
+                        state.status = format!("Unable to start upgrade: {error:?}.");
+                    }
+                }
             }
             PanelAction::Target(TargetingAction::Build(kind)) => {
                 if !can_afford_build_kind(&authoritative, &state, kind) {
@@ -504,19 +587,7 @@ fn handle_action_panel_buttons(
                 let Some(actor) = state.actor else {
                     continue;
                 };
-                match authoritative
-                    .simulation
-                    .cancel_building_construction(state.team, actor)
-                {
-                    Ok(()) => {
-                        samples.publish(PresentationSnapshot::capture(&authoritative.simulation));
-                        state.actor = None;
-                        state.status = "Construction cancelled and resources refunded.".into();
-                    }
-                    Err(error) => {
-                        state.status = format!("Unable to cancel construction: {error:?}.");
-                    }
-                }
+                cancel_selected_construction(&mut authoritative, &mut samples, &mut state, actor);
             }
             PanelAction::Cancel => state.cancel_modal(),
         }
@@ -588,6 +659,9 @@ fn style_action_panel_buttons(
             PanelAction::Target(TargetingAction::Build(kind)) => {
                 !can_afford_build_kind(&authoritative, &state, kind)
             }
+            PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
+                !can_afford_production_upgrade(&authoritative, &state, target)
+            }
             _ => false,
         });
         *background = BackgroundColor(if disabled {
@@ -625,26 +699,26 @@ fn style_action_panel_buttons(
 
 fn update_build_tooltip(
     mut commands: Commands,
-    state: Res<ActionPanelState>,
     buttons: Query<(&Interaction, &SlotAction), With<Button>>,
     mut tooltip_state: ResMut<BuildTooltipState>,
     mut tooltip_visibility: Single<&mut Visibility, With<BuildTooltip>>,
     tooltip_title: Single<Entity, With<BuildTooltipTitle>>,
     tooltip_body: Single<Entity, With<BuildTooltipBody>>,
 ) {
-    let hovered = (state.mode == ActionPanelMode::BuildMenu)
-        .then(|| {
-            buttons.iter().find_map(|(interaction, action)| {
-                matches!(interaction, Interaction::Hovered | Interaction::Pressed)
-                    .then_some(action.0)
-                    .flatten()
-                    .and_then(|action| match action {
-                        PanelAction::Target(TargetingAction::Build(kind)) => Some(kind),
-                        _ => None,
-                    })
+    let hovered = buttons.iter().find_map(|(interaction, action)| {
+        matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+            .then_some(action.0)
+            .flatten()
+            .and_then(|action| match action {
+                PanelAction::Target(TargetingAction::Build(kind)) => {
+                    Some(ActionTooltipKind::Build(kind))
+                }
+                PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
+                    Some(ActionTooltipKind::ProductionUpgrade(target))
+                }
+                _ => None,
             })
-        })
-        .flatten();
+    });
 
     if tooltip_state.0 == hovered {
         return;
@@ -744,6 +818,36 @@ fn can_afford_build_kind(
         .can_builder_afford_building(actor, kind.economy())
 }
 
+fn can_afford_production_upgrade(
+    authoritative: &AuthoritativeSimulation,
+    state: &ActionPanelState,
+    target: ProductionKind,
+) -> bool {
+    authoritative
+        .simulation
+        .can_afford_building(state.team, target.definition().economy)
+}
+
+fn insufficient_upgrade_resources_status(
+    authoritative: &AuthoritativeSimulation,
+    state: &ActionPanelState,
+    target: ProductionKind,
+) -> String {
+    let definition = target.definition();
+    let resources = authoritative
+        .simulation
+        .player_resources(state.team)
+        .expect("action panel supports the two Castle Fight players");
+    format!(
+        "Cannot upgrade to {}: need {} gold / {} lumber; currently {} / {}.",
+        definition.name,
+        definition.economy.gold_cost,
+        definition.economy.lumber_cost,
+        resources.gold,
+        resources.lumber,
+    )
+}
+
 fn insufficient_resources_status(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
@@ -766,6 +870,9 @@ fn insufficient_resources_status(
 fn action_label(action: PanelAction) -> String {
     match action {
         PanelAction::OpenBuildMenu => "Build".into(),
+        PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
+            production_upgrade_button_label(target)
+        }
         PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
@@ -775,9 +882,25 @@ fn action_label(action: PanelAction) -> String {
     }
 }
 
+fn production_upgrade_button_label(target: ProductionKind) -> String {
+    let definition = target.definition();
+    if definition.economy.lumber_cost == 0 {
+        format!(
+            "Upgrade\n{}\n{}g",
+            definition.name, definition.economy.gold_cost
+        )
+    } else {
+        format!(
+            "Upgrade\n{}\n{}g {}w",
+            definition.name, definition.economy.gold_cost, definition.economy.lumber_cost
+        )
+    }
+}
+
 fn build_button_label(kind: BuildKind) -> String {
     let name = match kind {
         BuildKind::Production(ProductionKind::Barracks) => "Barracks",
+        BuildKind::Production(ProductionKind::Stronghold) => "Stronghold",
         BuildKind::Production(ProductionKind::RangersHall) => "Rngrs Hall",
         BuildKind::Production(ProductionKind::OrcishSiegeFactory) => "Siege Fac.",
         BuildKind::Production(ProductionKind::IceTrollHut) => "Ice Hut",
@@ -819,6 +942,12 @@ fn building_is_attack_capable(kind: BuildingVisualKind) -> bool {
             | BuildingVisualKind::AttackSpellcaster
             | BuildingVisualKind::ProductionAttackSpellcaster
     )
+}
+
+fn building_is_controllable_production(building: &BuildingSample) -> bool {
+    building
+        .content
+        .is_some_and(|content| ProductionKind::from_rawcode(content.rawcode).is_some())
 }
 
 fn building_is_controllable_tower(building: &BuildingSample) -> bool {
@@ -965,7 +1094,36 @@ mod tests {
             .iter()
             .filter(|action| matches!(action, Some(PanelAction::Target(TargetingAction::Build(_)))))
             .count();
-        assert_eq!(build_count, ALL_BUILD_KINDS.len());
+        assert_eq!(build_count, ALL_BUILD_KINDS.len() - 1);
+        assert!(!layout.iter().any(|action| {
+            *action
+                == Some(PanelAction::Target(TargetingAction::Build(
+                    BuildKind::Production(ProductionKind::Stronghold),
+                )))
+        }));
+    }
+
+    #[test]
+    fn production_building_panel_exposes_versioned_upgrade_target() {
+        let mut simulation = castle_fight_sim::Simulation::new(SimulationConfig::default(), 1);
+        let barracks = ProductionKind::Barracks.definition();
+        let barracks_id = simulation.spawn_building_with_properties(
+            barracks.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4)),
+            barracks.gameplay_properties(),
+        );
+        let state = ActionPanelState {
+            actor: Some(barracks_id),
+            ..ActionPanelState::default()
+        };
+        let authoritative = AuthoritativeSimulation { simulation };
+        let stronghold = ProductionKind::Stronghold;
+        let layout = action_layout(&state, &authoritative);
+        assert_eq!(
+            layout[command_slot(stronghold.definition().command_card_position)],
+            Some(PanelAction::Production(ProductionPanelAction::Upgrade(
+                stronghold
+            )))
+        );
     }
 
     #[test]

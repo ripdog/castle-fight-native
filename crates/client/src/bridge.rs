@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AbilityCastEvent, AttackDelivery, AttackEvent, BuilderLocomotion, BuildingFootprint,
+    AbilityCastEvent, AbilityId, AttackDelivery, AttackEvent, BuilderLocomotion, BuildingFootprint,
     ChainLightningEvent, ContentIdentity, CorpseView, MovementClass, PlayerEconomyView,
     ProjectileView, SimId, SimPoint, Simulation, Team,
 };
@@ -99,6 +99,7 @@ pub struct UnitSample {
     pub mana_current: Option<i32>,
     pub mana_maximum: Option<i32>,
     pub visual_kind: UnitVisualKind,
+    pub active_defend_ability: Option<AbilityId>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -183,6 +184,7 @@ impl PresentationSnapshot {
                             unit.attack_delivery,
                             unit.mana_maximum.is_some(),
                         ),
+                        active_defend_ability: unit.active_defend_ability,
                     },
                 )
             })

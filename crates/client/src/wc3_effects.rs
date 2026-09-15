@@ -2,12 +2,13 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fs,
     path::{Component, Path},
+    time::Duration,
 };
 
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
     camera::visibility::NoFrustumCulling,
-    gltf::GltfMaterialExtras,
+    gltf::{Gltf, GltfMaterialExtras},
     mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
     prelude::*,
     render::render_resource::TextureFormat,
@@ -37,8 +38,20 @@ pub struct Wc3VisualSet {
 #[derive(Clone)]
 pub struct Wc3VisualModel {
     pub scene: Handle<WorldAsset>,
+    gltf: Handle<Gltf>,
+    animation_name: Option<String>,
     pub emitters: Vec<Wc3ParticleEmitter>,
     pub ribbons: Vec<Wc3RibbonEmitter>,
+}
+
+impl Wc3VisualModel {
+    #[must_use]
+    pub fn animation_source(&self) -> Option<Wc3VisualAnimationSource> {
+        Some(Wc3VisualAnimationSource {
+            gltf: self.gltf.clone(),
+            animation_name: self.animation_name.clone()?,
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -121,9 +134,30 @@ struct VisualBinding {
 struct ModelManifest {
     gltf: String,
     #[serde(default)]
+    animations: Vec<ModelAnimationManifest>,
+    #[serde(default)]
     particle_emitters: Vec<Wc3ParticleEmitter>,
     #[serde(default)]
     ribbon_emitters: Vec<Wc3RibbonEmitter>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ModelAnimationManifest {
+    name: String,
+}
+
+#[derive(Component, Clone)]
+pub struct Wc3VisualAnimationSource {
+    gltf: Handle<Gltf>,
+    animation_name: String,
+}
+
+#[derive(Component)]
+pub struct Wc3VisualAnimationController;
+
+#[derive(Resource, Default)]
+pub struct Wc3VisualAnimationGraphs {
+    entries: HashMap<(AssetId<Gltf>, String), (Handle<AnimationGraph>, AnimationNodeIndex)>,
 }
 
 #[derive(Component)]
@@ -488,6 +522,66 @@ fn wc3_material_alpha_mode(filter_mode: &str, fallback: AlphaMode) -> AlphaMode 
         "Modulate" | "Modulate2x" => AlphaMode::Multiply,
         "None" => fallback,
         _ => fallback,
+    }
+}
+
+fn wc3_visual_animation_source(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&Wc3VisualAnimationSource>,
+) -> Option<Wc3VisualAnimationSource> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(source) = roots.get(current) {
+            return Some(source.clone());
+        }
+        let Ok(parent) = parents.get(current) else {
+            return None;
+        };
+        current = parent.parent();
+    }
+    None
+}
+
+pub fn setup_wc3_visual_animation_players(
+    mut commands: Commands,
+    gltfs: Res<Assets<Gltf>>,
+    clips: Res<Assets<AnimationClip>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut cache: ResMut<Wc3VisualAnimationGraphs>,
+    parents: Query<&ChildOf>,
+    roots: Query<&Wc3VisualAnimationSource>,
+    mut players: Query<(Entity, &mut AnimationPlayer), Without<Wc3VisualAnimationController>>,
+) {
+    for (entity, mut player) in &mut players {
+        let Some(source) = wc3_visual_animation_source(entity, &parents, &roots) else {
+            continue;
+        };
+        let Some(gltf) = gltfs.get(&source.gltf) else {
+            continue;
+        };
+        let Some((_, clip)) = gltf
+            .named_animations
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(&source.animation_name))
+        else {
+            continue;
+        };
+        if clips.get(clip).is_none() {
+            continue;
+        }
+        let key = (source.gltf.id(), source.animation_name.clone());
+        let (graph, node) = cache.entries.entry(key).or_insert_with(|| {
+            let (graph, nodes) = AnimationGraph::from_clips(vec![clip.clone()]);
+            (graphs.add(graph), nodes[0])
+        });
+        let mut transitions = AnimationTransitions::new();
+        transitions.play(&mut player, *node, Duration::ZERO);
+        commands.entity(entity).insert((
+            AnimationGraphHandle(graph.clone()),
+            transitions,
+            Wc3VisualAnimationController,
+        ));
     }
 }
 
@@ -1158,8 +1252,27 @@ fn resolve_visual_model(
     let gltf = gltf.replace('\\', "/");
     validate_relative_asset_path(&gltf)?;
     let asset_path = format!("{EFFECT_ASSET_PREFIX}/{gltf}");
+    let animation_name = model
+        .animations
+        .iter()
+        .find(|animation| animation.name.eq_ignore_ascii_case("Birth"))
+        .or_else(|| {
+            model
+                .animations
+                .iter()
+                .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
+        })
+        .or_else(|| {
+            model
+                .animations
+                .iter()
+                .find(|animation| !animation.name.eq_ignore_ascii_case("Nothing"))
+        })
+        .map(|animation| animation.name.clone());
     Ok(Wc3VisualModel {
-        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path)),
+        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path.clone())),
+        gltf: asset_server.load(asset_path),
+        animation_name,
         emitters: model.particle_emitters.clone(),
         ribbons: model.ribbon_emitters.clone(),
     })

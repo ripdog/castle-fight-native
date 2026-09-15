@@ -5,9 +5,10 @@ use serde::Deserialize;
 use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackTargetMask, BashEffectProfile,
-        BurningOilEffectProfile, ChainLightningEffectProfile, EntanglingRootsEffectProfile,
-        EvasionEffectProfile, ManaProfile, ModifierId, PassiveUnitEffect, PassiveUnitEffects,
-        SpellcastingProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
+        BurningOilEffectProfile, ChainLightningEffectProfile, DefendEffectProfile,
+        EntanglingRootsEffectProfile, EvasionEffectProfile, ManaProfile, ModifierId,
+        PassiveUnitEffect, PassiveUnitEffects, SpellcastingProfile, TriggeredAttackEffect,
+        TriggeredSpellProcProfile,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -23,6 +24,7 @@ pub enum NativeEffectImplementationId {
     WarcraftMarkerOnlyV1,
     WarcraftZeroDamageBarrageV1,
     WarcraftEvasionV1,
+    WarcraftDefendV1,
     WarcraftBashV1,
     WarcraftOrbSpellProcV1,
     WarcraftChainLightningV1,
@@ -218,6 +220,18 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    Defend {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        ranged_damage_taken_per_10k: u16,
+        spell_damage_taken_per_10k: u16,
+        deflect_chance_per_10k: u16,
+        deflected_pierce_damage_taken_per_10k: u16,
+        activation_delay_millis: u32,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     Bash {
         source_kind: String,
         source_key: String,
@@ -299,6 +313,7 @@ impl TuningEffect {
     fn source_kind(&self) -> &str {
         match self {
             Self::Evasion { source_kind, .. }
+            | Self::Defend { source_kind, .. }
             | Self::Bash { source_kind, .. }
             | Self::OrbSpellProc { source_kind, .. }
             | Self::ChainLightning { source_kind, .. }
@@ -311,6 +326,7 @@ impl TuningEffect {
     fn source_key(&self) -> &str {
         match self {
             Self::Evasion { source_key, .. }
+            | Self::Defend { source_key, .. }
             | Self::Bash { source_key, .. }
             | Self::OrbSpellProc { source_key, .. }
             | Self::ChainLightning { source_key, .. }
@@ -323,6 +339,7 @@ impl TuningEffect {
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
             Self::Evasion { unit_rawcode, .. }
+            | Self::Defend { unit_rawcode, .. }
             | Self::Bash { unit_rawcode, .. }
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
@@ -334,6 +351,7 @@ impl TuningEffect {
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
             Self::Evasion { .. } => NativeEffectImplementationId::WarcraftEvasionV1,
+            Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
             Self::OrbSpellProc { .. } => NativeEffectImplementationId::WarcraftOrbSpellProcV1,
             Self::ChainLightning { .. } => NativeEffectImplementationId::WarcraftChainLightningV1,
@@ -346,6 +364,7 @@ impl TuningEffect {
     const fn kind_name(&self) -> &'static str {
         match self {
             Self::Evasion { .. } => "evasion",
+            Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
             Self::OrbSpellProc { .. } => "orb-spell-proc",
             Self::ChainLightning { .. } => "chain-lightning",
@@ -388,6 +407,7 @@ pub fn native_unit_mechanics_for(
                 spellcasting = Some(build_spellcasting(effect));
             }
             TuningEffect::Evasion { .. }
+            | TuningEffect::Defend { .. }
             | TuningEffect::Bash { .. }
             | TuningEffect::OrbSpellProc { .. }
             | TuningEffect::BurningOil { .. } => {
@@ -423,6 +443,38 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             PassiveUnitEffect::Evasion(EvasionEffectProfile {
                 ability: AbilityId(rawcode(source_key).expect("validated Evasion rawcode")),
                 chance_per_10k: *chance_per_10k,
+            })
+        }
+        TuningEffect::Defend {
+            source_key,
+            ranged_damage_taken_per_10k,
+            spell_damage_taken_per_10k,
+            deflect_chance_per_10k,
+            deflected_pierce_damage_taken_per_10k,
+            activation_delay_millis,
+            ..
+        } => {
+            for (name, value) in [
+                ("ranged damage taken", *ranged_damage_taken_per_10k),
+                ("spell damage taken", *spell_damage_taken_per_10k),
+                ("deflect chance", *deflect_chance_per_10k),
+                (
+                    "deflected Pierce damage taken",
+                    *deflected_pierce_damage_taken_per_10k,
+                ),
+            ] {
+                assert!(value <= 10_000, "Defend {name} exceeds 100%");
+            }
+            PassiveUnitEffect::Defend(DefendEffectProfile {
+                ability: AbilityId(rawcode(source_key).expect("validated Defend rawcode")),
+                ranged_damage_taken_per_10k: *ranged_damage_taken_per_10k,
+                spell_damage_taken_per_10k: *spell_damage_taken_per_10k,
+                deflect_chance_per_10k: *deflect_chance_per_10k,
+                deflected_pierce_damage_taken_per_10k: *deflected_pierce_damage_taken_per_10k,
+                activation_delay_ticks: exact_millis_to_ticks(
+                    *activation_delay_millis,
+                    "Defend activation delay",
+                ),
             })
         }
         TuningEffect::Bash {
@@ -643,6 +695,7 @@ mod tests {
             ("unit-ability", "A0CV"),
             ("unit-ability", "A03N"),
             ("unit-ability", "A00U"),
+            ("unit-ability", "A03G"),
             ("unit-ability", "A05K"),
             ("unit-ability", "A01B"),
             ("ability-effect", "A05X"),
@@ -671,6 +724,29 @@ mod tests {
                 ..
             }))
         ));
+
+        let defender =
+            native_unit_mechanics_for(MapVersion::CASTLE_FIGHT_9_27, u32::from_be_bytes(*b"h03A"))
+                .unwrap();
+        let defender_effects = defender.passive_effects.iter().collect::<Vec<_>>();
+        assert!(defender_effects.iter().any(|effect| matches!(
+            effect,
+            PassiveUnitEffect::Evasion(EvasionEffectProfile {
+                chance_per_10k: 1_500,
+                ..
+            })
+        )));
+        assert!(defender_effects.iter().any(|effect| matches!(
+            effect,
+            PassiveUnitEffect::Defend(DefendEffectProfile {
+                ranged_damage_taken_per_10k: 4_000,
+                spell_damage_taken_per_10k: 5_000,
+                deflect_chance_per_10k: 5_000,
+                deflected_pierce_damage_taken_per_10k: 0,
+                activation_delay_ticks: 21,
+                ..
+            })
+        )));
 
         let troll =
             native_unit_mechanics_for(MapVersion::CASTLE_FIGHT_9_27, u32::from_be_bytes(*b"n015"))

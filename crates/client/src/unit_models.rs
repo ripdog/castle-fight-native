@@ -12,8 +12,9 @@ use crate::terrain::client_asset_root;
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
 const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
-const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 20] = [
+const CURRENT_SLICE_WC3_MODEL_RAWCODES: [u32; 21] = [
     u32::from_be_bytes(*b"hfoo"),
+    u32::from_be_bytes(*b"h03A"),
     u32::from_be_bytes(*b"e003"),
     u32::from_be_bytes(*b"o001"),
     u32::from_be_bytes(*b"n015"),
@@ -61,6 +62,9 @@ pub struct UnitAnimationSet {
     pub stand: AnimationNodeIndex,
     pub walk: Option<AnimationNodeIndex>,
     pub attack: Option<AnimationNodeIndex>,
+    pub defend_stand: Option<AnimationNodeIndex>,
+    pub defend_walk: Option<AnimationNodeIndex>,
+    pub defend_attack: Option<AnimationNodeIndex>,
     pub cast: Option<AnimationNodeIndex>,
     pub death: Option<UnitAnimationClip>,
     pub decay_flesh: Option<UnitAnimationClip>,
@@ -163,6 +167,9 @@ impl UnitModelSet {
             };
             let walk = find_animation(gltf, AnimationRole::Walk);
             let attack = find_animation(gltf, AnimationRole::Attack);
+            let defend_stand = find_animation(gltf, AnimationRole::DefendStand);
+            let defend_walk = find_animation(gltf, AnimationRole::DefendWalk);
+            let defend_attack = find_animation(gltf, AnimationRole::DefendAttack);
             let cast = find_animation(gltf, AnimationRole::Cast);
             let death = find_animation(gltf, AnimationRole::Death);
             let decay_flesh = find_animation(gltf, AnimationRole::DecayFlesh);
@@ -172,6 +179,9 @@ impl UnitModelSet {
                 Some(&stand),
                 walk.as_ref(),
                 attack.as_ref(),
+                defend_stand.as_ref(),
+                defend_walk.as_ref(),
+                defend_attack.as_ref(),
                 cast.as_ref(),
                 death.as_ref(),
                 decay_flesh.as_ref(),
@@ -188,6 +198,9 @@ impl UnitModelSet {
             let mut clips = vec![stand];
             let walk_slot = append_optional_clip(&mut clips, walk);
             let attack_slot = append_optional_clip(&mut clips, attack);
+            let defend_stand_slot = append_optional_clip(&mut clips, defend_stand);
+            let defend_walk_slot = append_optional_clip(&mut clips, defend_walk);
+            let defend_attack_slot = append_optional_clip(&mut clips, defend_attack);
             let cast_slot = append_optional_clip(&mut clips, cast);
             let death_slot = append_optional_clip(&mut clips, death);
             let decay_flesh_slot = append_optional_clip(&mut clips, decay_flesh);
@@ -208,6 +221,9 @@ impl UnitModelSet {
                 stand: nodes[0],
                 walk: walk_slot.map(|slot| nodes[slot]),
                 attack: attack_slot.map(|slot| nodes[slot]),
+                defend_stand: defend_stand_slot.map(|slot| nodes[slot]),
+                defend_walk: defend_walk_slot.map(|slot| nodes[slot]),
+                defend_attack: defend_attack_slot.map(|slot| nodes[slot]),
                 cast: cast_slot.map(|slot| nodes[slot]),
                 death: death_slot.map(|slot| UnitAnimationClip {
                     node: nodes[slot],
@@ -241,6 +257,9 @@ enum AnimationRole {
     Stand,
     Walk,
     Attack,
+    DefendStand,
+    DefendWalk,
+    DefendAttack,
     Cast,
     Death,
     DecayFlesh,
@@ -281,6 +300,15 @@ fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
             _ if name.starts_with("attack") && !name.contains("defend") => Some(2),
             _ => None,
         },
+        AnimationRole::DefendStand => {
+            (name.starts_with("stand") && name.contains("defend")).then_some(0)
+        }
+        AnimationRole::DefendWalk => {
+            (name.starts_with("walk") && name.contains("defend")).then_some(0)
+        }
+        AnimationRole::DefendAttack => {
+            (name.starts_with("attack") && name.contains("defend")).then_some(0)
+        }
         AnimationRole::Cast => match name.as_str() {
             "spell" => Some(0),
             "spell - 1" | "spell 1" => Some(1),

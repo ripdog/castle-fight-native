@@ -251,7 +251,19 @@ Guaranteed-hit and bounce projectiles that become due in the same pre-movement s
 
 The exact Castle Fight-compatible bounce range, repeat policy, scaling, building eligibility, maximum chain length, and random-selection distribution remain compatibility-tunable. Any replacement MUST remain explicitly bounded, keyed-deterministic, and independent of candidate enumeration/worker order.
 
-### 9.5 Authoritative vs presentation projectile state
+### 9.5 Defend interception and reflection
+
+Castle Fight 9.27 Defender (`h03A`) keeps Warcraft Defend (`A03G`) active through map-script state maintenance. The extracted script issues the initial `defend` order after 0.7 seconds, reissues it 5.5 seconds after an `undefend` event, and resumes the unit's attack order after the Defend order. In the native combat slice there is no player command that can put a Defender into the transient undefended state, so the authoritative passive becomes active exactly 21 simulation ticks after spawn and remains active thereafter.
+
+Defend is evaluated at **projectile impact time**, not attack launch time. This is required because a missile may already be in flight when the target enters Defend. The Castle Fight 9.27 tuning for `A03G` takes 40% of ordinary ranged attack damage, takes 50% of spell damage, and has a 50% deflection chance for Pierce projectiles. The deflection roll is keyed from stable simulation identity (match seed, impact tick, projectile `SimId`, target `SimId`, and ability identity), never from a shared mutable RNG stream.
+
+For a target-bound Pierce projectile, a successful deflection consumes the incoming projectile and suppresses any pending on-hit payload carried by that projectile. If the original attacker is a still-living unit, deflection creates a new authoritative return projectile from the Defender to that attacker. The return projectile keeps the original raw attack damage, attack/damage type, travel speed, and original missile-art provenance; normal damage-type/armor rules are applied when it hits. Warcraft Defend does not return building-origin attacks to the building: a successful deflection of such a projectile prevents its damage but creates no return projectile. This matches the Warcraft rule that unit attacks can be reflected for full damage while building attacks can be fully blocked by the same deflection roll.
+
+A reflected projectile is explicitly marked as a terminal reflection and is **not** itself eligible for Defend reflection. This prevents two Defenders from producing an unbounded ping-pong chain. Reflection also ends an in-progress bounce chain at the reflecting target. Ballistic area impacts have no retained attacking target to return a missile toward, so affected Defenders receive the authored ranged-damage reduction but do not reflect ballistic splash.
+
+The return projectile remains authoritative until impact/invalidation and participates in canonical checksums like other persistent projectiles. Presentation may reverse/reuse the original missile model, but visual ownership cannot alter damage attribution or termination semantics.
+
+### 9.6 Authoritative vs presentation projectile state
 
 A projectile/delivery needs authoritative state whenever its future impact time, target identity, destination, area query, bounce sequence, interception, or other behavior can change gameplay.
 

@@ -10,9 +10,10 @@ const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
 const RANDOM_PURPOSE_UPHILL_MISS: u64 = 0x5550_4849_4c4c_0001;
 const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
+const RANDOM_PURPOSE_DEFEND_DEFLECT: u64 = 0x4445_4645_4e44_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 2;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 3;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -24,19 +25,21 @@ use crate::{
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder,
         BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn,
         BuilderState, BuildingConstruction, BuildingFootprint, BuildingGameplayProperties,
-        BuildingSpawn, BurningOilZone, ChainLightningState, CollisionRadius, ContentIdentity,
-        Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile, GuaranteedHitProjectile, Health,
-        MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS,
-        MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit,
-        ModifierId, MovementClass, MovementProfile, NavigationGoal, NavigationState,
-        PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
+        BuildingRuntimeState, BuildingSpawn, BuildingUpgradeSource, BurningOilZone,
+        ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
+        CorpseProducer, CorpseProfile, DefendEffectProfile, GuaranteedHitProjectile, Health,
+        HealthRegeneration, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
+        ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
+        NavigationState, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
         ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
         ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
-        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
-        ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
-        RepairTimeTicks, RetaliationState, SimId, SpawnTick, SpellcastingProfile, StatusState,
-        TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier, TimedDamageOverTime,
-        TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
+        ProductionHealthRegeneration, ProductionMovementClass, ProductionPassiveEffects,
+        ProductionProfile, ProductionSpellcastingProfile, ProductionState,
+        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, RetaliationState,
+        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
+        UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -239,6 +242,10 @@ pub enum ProjectileViewKind {
         bounce_index: u8,
         remaining_bounces: u8,
     },
+    Reflected {
+        target: SimId,
+        reflector: SimId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,6 +293,8 @@ pub struct UnitView {
     pub mana_maximum: Option<i32>,
     pub ability_ready_tick: Option<u64>,
     pub ability_cast_sequence: Option<u64>,
+    /// Active auto-maintained Warcraft Defend ability, if any.
+    pub active_defend_ability: Option<AbilityId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -369,6 +378,23 @@ pub enum BuilderBuildError {
 pub enum BuildingConstructionCancelError {
     ConstructionNotFound,
     NotOwner,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingConstructionCancelOutcome {
+    RemovedNewBuilding,
+    RevertedUpgrade,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingUpgradeError {
+    SourceNotFound,
+    SourceUnderConstruction,
+    SourceDefinitionMismatch,
+    TeamMismatch,
+    FootprintMismatch,
+    MissingEconomyProfile,
+    Resources(ResourcePurchaseError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1434,6 +1460,7 @@ impl Simulation {
             complete_tick,
             building,
             properties,
+            upgrade_from: None,
         });
         self.topology_dirty = true;
         Ok(id)
@@ -1541,6 +1568,9 @@ impl Simulation {
                     repair_time_ticks: properties.production_unit.repair_time_ticks,
                 },
                 ProductionAttackTargets(properties.production_unit.attack_targets),
+                ProductionHealthRegeneration(
+                    properties.production_unit.health_regen_per_second_per_10k,
+                ),
             ));
             if let Some(content) = properties.production_unit.content {
                 entity.insert(ProductionContentIdentity(content));
@@ -1587,6 +1617,230 @@ impl Simulation {
         }
     }
 
+    fn deactivate_building_entity(&mut self, entity: Entity) {
+        let mut entity = self.world.entity_mut(entity);
+        entity.remove::<BuildingEconomyProfile>();
+        entity.remove::<RepairTimeTicks>();
+        entity.remove::<ProductionProfile>();
+        entity.remove::<ProductionState>();
+        entity.remove::<ProductionContentIdentity>();
+        entity.remove::<ProductionCorpseProfile>();
+        entity.remove::<ProductionCollisionRadius>();
+        entity.remove::<ProductionMovementClass>();
+        entity.remove::<ProductionUnitRepairMetadata>();
+        entity.remove::<ProductionAttackTargets>();
+        entity.remove::<ProductionHealthRegeneration>();
+        entity.remove::<ProductionDamageType>();
+        entity.remove::<ProductionArmorProfile>();
+        entity.remove::<ProductionPassiveEffects>();
+        entity.remove::<ProductionSpellcastingProfile>();
+        entity.remove::<AttackProfile>();
+        entity.remove::<AttackTargetMask>();
+        entity.remove::<AttackCooldown>();
+        entity.remove::<TargetState>();
+        entity.remove::<SpawnTick>();
+        entity.remove::<SpellcastingProfile>();
+        entity.remove::<ManaState>();
+        entity.remove::<AutomaticAbilityState>();
+        entity.remove::<StatusState>();
+    }
+
+    fn restore_building_runtime_state(&mut self, entity: Entity, runtime: BuildingRuntimeState) {
+        let mut entity = self.world.entity_mut(entity);
+        match runtime.production {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<ProductionState>();
+            }
+        }
+        match runtime.attack_cooldown {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<AttackCooldown>();
+            }
+        }
+        match runtime.target {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<TargetState>();
+            }
+        }
+        match runtime.spawn_tick {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<SpawnTick>();
+            }
+        }
+        match runtime.mana {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<ManaState>();
+            }
+        }
+        match runtime.ability_state {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<AutomaticAbilityState>();
+            }
+        }
+        match runtime.status {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<StatusState>();
+            }
+        }
+    }
+
+    pub fn start_building_upgrade(
+        &mut self,
+        source_id: SimId,
+        source_building: BuildingSpawn,
+        source_properties: BuildingGameplayProperties,
+        target_building: BuildingSpawn,
+        target_properties: BuildingGameplayProperties,
+    ) -> Result<(), BuildingUpgradeError> {
+        self.validate_building_definition(source_building, source_properties);
+        self.validate_building_definition(target_building, target_properties);
+        let duration_ticks = target_properties
+            .construction_time_ticks
+            .expect("Castle Fight building upgrades require authored construction time");
+        let target_economy = target_properties
+            .economy
+            .ok_or(BuildingUpgradeError::MissingEconomyProfile)?;
+
+        let Some((entity, actual_team, actual_footprint, actual_health, actual_content, runtime)) =
+            self.world.iter_entities().find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(source_id)
+                    && entity.get::<BuildingFootprint>().is_some())
+                .then(|| {
+                    Some((
+                        entity.id(),
+                        *entity.get::<Team>()?,
+                        *entity.get::<BuildingFootprint>()?,
+                        *entity.get::<Health>()?,
+                        entity.get::<ContentIdentity>().copied(),
+                        BuildingRuntimeState {
+                            production: entity.get::<ProductionState>().copied(),
+                            attack_cooldown: entity.get::<AttackCooldown>().copied(),
+                            target: entity.get::<TargetState>().copied(),
+                            spawn_tick: entity.get::<SpawnTick>().copied(),
+                            mana: entity.get::<ManaState>().copied(),
+                            ability_state: entity.get::<AutomaticAbilityState>().copied(),
+                            status: entity.get::<StatusState>().copied(),
+                        },
+                    ))
+                })?
+            })
+        else {
+            return Err(BuildingUpgradeError::SourceNotFound);
+        };
+        if self
+            .world
+            .entity(entity)
+            .get::<BuildingConstruction>()
+            .is_some()
+        {
+            return Err(BuildingUpgradeError::SourceUnderConstruction);
+        }
+        if source_building.team != actual_team || target_building.team != actual_team {
+            return Err(BuildingUpgradeError::TeamMismatch);
+        }
+        if source_building.footprint != actual_footprint
+            || target_building.footprint != actual_footprint
+        {
+            return Err(BuildingUpgradeError::FootprintMismatch);
+        }
+        if actual_content != source_properties.content {
+            return Err(BuildingUpgradeError::SourceDefinitionMismatch);
+        }
+
+        let resources = &mut self.player_resources[usize::from(actual_team.0)];
+        if resources.gold < target_economy.gold_cost {
+            return Err(BuildingUpgradeError::Resources(
+                ResourcePurchaseError::InsufficientGold {
+                    required: target_economy.gold_cost,
+                    available: resources.gold,
+                },
+            ));
+        }
+        if resources.lumber < target_economy.lumber_cost {
+            return Err(BuildingUpgradeError::Resources(
+                ResourcePurchaseError::InsufficientLumber {
+                    required: target_economy.lumber_cost,
+                    available: resources.lumber,
+                },
+            ));
+        }
+        resources.gold -= target_economy.gold_cost;
+        resources.lumber -= target_economy.lumber_cost;
+
+        let complete_tick = self
+            .next_tick
+            .checked_add(u64::from(duration_ticks))
+            .expect("building upgrade completion tick overflow");
+        let upgrade_from = BuildingUpgradeSource {
+            building: source_building,
+            properties: source_properties,
+            health: actual_health,
+            runtime,
+        };
+
+        self.deactivate_building_entity(entity);
+        let target_health = scale_building_health(
+            actual_health.current,
+            actual_health.max,
+            target_building.health,
+        );
+        let mut entity_mut = self.world.entity_mut(entity);
+        *entity_mut
+            .get_mut::<Health>()
+            .expect("upgrade source building missing health") = Health {
+            current: target_health,
+            max: target_building.health,
+        };
+        *entity_mut
+            .get_mut::<DamageType>()
+            .expect("upgrade source building missing damage type") = target_properties.damage_type;
+        *entity_mut
+            .get_mut::<ArmorProfile>()
+            .expect("upgrade source building missing armor profile") = target_properties.armor;
+        match target_properties.content {
+            Some(content) => {
+                entity_mut.insert(content);
+            }
+            None => {
+                entity_mut.remove::<ContentIdentity>();
+            }
+        }
+        // An upgrading Castle Fight production building still represents its precursor's
+        // completed economic investment until the upgrade completes.
+        if let Some(economy) = source_properties.economy {
+            entity_mut.insert(economy);
+        }
+        entity_mut.insert(BuildingConstruction {
+            started_tick: self.next_tick,
+            complete_tick,
+            building: target_building,
+            properties: target_properties,
+            upgrade_from: Some(upgrade_from),
+        });
+        Ok(())
+    }
+
     #[must_use]
     pub fn remove_building(&mut self, id: SimId) -> bool {
         let entity = self.world.iter_entities().find_map(|entity| {
@@ -1606,16 +1860,19 @@ impl Simulation {
         &mut self,
         team: Team,
         id: SimId,
-    ) -> Result<(), BuildingConstructionCancelError> {
-        let Some((entity, owner, construction)) = self.world.iter_entities().find_map(|entity| {
-            (entity.get::<SimId>().copied() == Some(id)).then(|| {
-                Some((
-                    entity.id(),
-                    *entity.get::<Team>()?,
-                    *entity.get::<BuildingConstruction>()?,
-                ))
-            })?
-        }) else {
+    ) -> Result<BuildingConstructionCancelOutcome, BuildingConstructionCancelError> {
+        let Some((entity, owner, construction, current_health)) =
+            self.world.iter_entities().find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(id)).then(|| {
+                    Some((
+                        entity.id(),
+                        *entity.get::<Team>()?,
+                        *entity.get::<BuildingConstruction>()?,
+                        *entity.get::<Health>()?,
+                    ))
+                })?
+            })
+        else {
             return Err(BuildingConstructionCancelError::ConstructionNotFound);
         };
         if owner != team {
@@ -1633,9 +1890,49 @@ impl Simulation {
                 .checked_add(economy.lumber_cost)
                 .expect("player lumber refund overflow");
         }
-        self.world.despawn(entity);
-        self.topology_dirty = true;
-        Ok(())
+        let outcome = if let Some(source) = construction.upgrade_from {
+            self.world
+                .entity_mut(entity)
+                .remove::<BuildingConstruction>();
+            self.deactivate_building_entity(entity);
+            let restored_health = scale_building_health(
+                current_health.current,
+                current_health.max,
+                source.health.max,
+            );
+            let mut entity_mut = self.world.entity_mut(entity);
+            *entity_mut
+                .get_mut::<Health>()
+                .expect("upgrade cancellation source missing health") = Health {
+                current: restored_health,
+                max: source.health.max,
+            };
+            *entity_mut
+                .get_mut::<DamageType>()
+                .expect("upgrade cancellation source missing damage type") =
+                source.properties.damage_type;
+            *entity_mut
+                .get_mut::<ArmorProfile>()
+                .expect("upgrade cancellation source missing armor profile") =
+                source.properties.armor;
+            match source.properties.content {
+                Some(content) => {
+                    entity_mut.insert(content);
+                }
+                None => {
+                    entity_mut.remove::<ContentIdentity>();
+                }
+            }
+            drop(entity_mut);
+            self.activate_building_entity(entity, source.building, source.properties);
+            self.restore_building_runtime_state(entity, source.runtime);
+            BuildingConstructionCancelOutcome::RevertedUpgrade
+        } else {
+            self.world.despawn(entity);
+            self.topology_dirty = true;
+            BuildingConstructionCancelOutcome::RemovedNewBuilding
+        };
+        Ok(outcome)
     }
 
     fn advance_building_construction(&mut self) {
@@ -2017,6 +2314,7 @@ impl Simulation {
                 .combat_rules
                 .damage_rules
                 .apply_spell(state.next_damage, units[next_index].armor.armor_type);
+            let adjusted = spell_damage_after_defend(units[next_index], adjusted, completed_tick);
             unit_health[next_index] = unit_health[next_index]
                 .checked_sub(adjusted)
                 .expect("Chain Lightning damage overflow");
@@ -2065,14 +2363,21 @@ impl Simulation {
 
         let phase_start = Instant::now();
         let due_projectiles = self.snapshot_due_projectiles();
+        let due_reflected_projectiles = self.snapshot_due_reflected_projectiles();
         let due_bounce_projectiles = self.snapshot_due_bounce_projectiles();
         let due_ballistic_projectiles = self.snapshot_due_ballistic_projectiles();
-        let due_target_projectile_count = due_projectiles.len() + due_bounce_projectiles.len();
+        let due_target_projectile_count =
+            due_projectiles.len() + due_reflected_projectiles.len() + due_bounce_projectiles.len();
         let mut due_target_projectiles = Vec::with_capacity(due_target_projectile_count);
         due_target_projectiles.extend(
             due_projectiles
                 .into_iter()
                 .map(DueTargetProjectileSnapshot::GuaranteedHit),
+        );
+        due_target_projectiles.extend(
+            due_reflected_projectiles
+                .into_iter()
+                .map(DueTargetProjectileSnapshot::Reflected),
         );
         due_target_projectiles.extend(
             due_bounce_projectiles
@@ -2090,6 +2395,7 @@ impl Simulation {
         let mut bounce_jumps = 0usize;
         let mut bounce_candidate_checks = 0usize;
         let mut chain_lightning_launches = Vec::new();
+        let mut reflected_projectile_launches = Vec::new();
         for snapshot in due_target_projectiles {
             match snapshot {
                 DueTargetProjectileSnapshot::GuaranteedHit(snapshot) => {
@@ -2100,9 +2406,117 @@ impl Simulation {
                         projectile_invalidations += 1;
                         continue;
                     };
+                    let Some(impact_position) = live_target_position(
+                        target,
+                        &units,
+                        &buildings,
+                        &unit_health,
+                        &building_health,
+                        self.config.navigation_cell_size,
+                    ) else {
+                        projectile_invalidations += 1;
+                        continue;
+                    };
+                    let defense = resolve_directed_projectile_defense(
+                        target,
+                        snapshot.id,
+                        snapshot.projectile.damage,
+                        snapshot.projectile.damage_type,
+                        completed_tick,
+                        self.config.match_seed,
+                        &units,
+                    );
+                    if defense.reflected && !snapshot.projectile.source_is_building {
+                        if let Some(source_index) =
+                            find_unit_index(&units, snapshot.projectile.source)
+                                .filter(|index| unit_health[*index] > 0)
+                        {
+                            let source_position = positions[source_index];
+                            let impact_tick = completed_tick
+                                .checked_add(projectile_travel_ticks(
+                                    impact_position.distance_sq(source_position),
+                                    snapshot.projectile.speed_per_tick,
+                                ))
+                                .expect("reflected projectile impact tick overflow");
+                            reflected_projectile_launches.push(ReflectedProjectileLaunch {
+                                original_source: snapshot.projectile.source,
+                                reflector: target_sim_id(target, &units, &buildings),
+                                reflector_team: match target {
+                                    TargetIndex::Unit(index) => units[index].team,
+                                    TargetIndex::Building(index) => buildings[index].team,
+                                },
+                                target: snapshot.projectile.source,
+                                damage: snapshot.projectile.damage,
+                                damage_type: snapshot.projectile.damage_type,
+                                launch_position: impact_position,
+                                launch_tick: completed_tick,
+                                impact_tick,
+                            });
+                        }
+                    }
+                    projectile_impacts += 1;
+                    if defense.damage <= 0 {
+                        continue;
+                    }
                     if apply_damage_to_target(
                         target,
                         snapshot.projectile.source,
+                        defense.damage,
+                        snapshot.projectile.damage_type,
+                        completed_tick,
+                        DamageTargetState {
+                            damage_rules: self.combat_rules.damage_rules,
+                            units: &units,
+                            buildings: &buildings,
+                            unit_positions: &positions,
+                            unit_health: &mut unit_health,
+                            building_health: &mut building_health,
+                            attackers_this_tick: &mut attackers_this_tick,
+                            next_defense_alerts: &mut next_defense_alerts,
+                            navigation_cell_size: self.config.navigation_cell_size,
+                        },
+                    )
+                    .is_some()
+                    {
+                        if !defense.reflected {
+                            let pending = apply_pending_attack_effects(
+                                target,
+                                snapshot.projectile.on_hit,
+                                PendingAttackEffectSource {
+                                    id: snapshot.projectile.source,
+                                    position: snapshot.projectile.launch_position,
+                                    team: snapshot.projectile.source_team,
+                                },
+                                PendingAttackEffectState {
+                                    completed_tick,
+                                    units: &mut units,
+                                    unit_health: &mut unit_health,
+                                    damage_rules: self.combat_rules.damage_rules,
+                                },
+                            );
+                            if let Some(event) = pending.chain_event {
+                                self.last_chain_lightnings.push(event);
+                            }
+                            if let Some(state) = pending.chain_state {
+                                chain_lightning_launches.push(state);
+                            }
+                        }
+                        projectile_effects += 1;
+                    } else {
+                        projectile_invalidations += 1;
+                    }
+                }
+                DueTargetProjectileSnapshot::Reflected(snapshot) => {
+                    projectile_entities_to_remove.push(snapshot.entity);
+                    let Some(target) =
+                        find_target_index(&units, &buildings, snapshot.projectile.target)
+                    else {
+                        projectile_invalidations += 1;
+                        continue;
+                    };
+                    if apply_damage_to_target(
+                        target,
+                        snapshot.projectile.reflector,
                         snapshot.projectile.damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
@@ -2120,27 +2534,6 @@ impl Simulation {
                     )
                     .is_some()
                     {
-                        let pending = apply_pending_attack_effects(
-                            target,
-                            snapshot.projectile.on_hit,
-                            PendingAttackEffectSource {
-                                id: snapshot.projectile.source,
-                                position: snapshot.projectile.launch_position,
-                                team: snapshot.projectile.source_team,
-                            },
-                            PendingAttackEffectState {
-                                completed_tick,
-                                units: &mut units,
-                                unit_health: &mut unit_health,
-                                damage_rules: self.combat_rules.damage_rules,
-                            },
-                        );
-                        if let Some(event) = pending.chain_event {
-                            self.last_chain_lightnings.push(event);
-                        }
-                        if let Some(state) = pending.chain_state {
-                            chain_lightning_launches.push(state);
-                        }
                         projectile_impacts += 1;
                         projectile_effects += 1;
                     } else {
@@ -2155,10 +2548,64 @@ impl Simulation {
                         projectile_invalidations += 1;
                         continue;
                     };
-                    let Some(impact_position) = apply_damage_to_target(
+                    let Some(impact_position) = live_target_position(
+                        target,
+                        &units,
+                        &buildings,
+                        &unit_health,
+                        &building_health,
+                        self.config.navigation_cell_size,
+                    ) else {
+                        projectile_entities_to_remove.push(snapshot.entity);
+                        projectile_invalidations += 1;
+                        continue;
+                    };
+                    let defense = resolve_directed_projectile_defense(
+                        target,
+                        snapshot.id,
+                        snapshot.projectile.damage,
+                        snapshot.projectile.damage_type,
+                        completed_tick,
+                        self.config.match_seed,
+                        &units,
+                    );
+                    if defense.reflected {
+                        projectile_entities_to_remove.push(snapshot.entity);
+                        if !snapshot.projectile.source_is_building
+                            && let Some(source_index) =
+                                find_unit_index(&units, snapshot.projectile.source)
+                                    .filter(|index| unit_health[*index] > 0)
+                        {
+                            let source_position = positions[source_index];
+                            reflected_projectile_launches.push(ReflectedProjectileLaunch {
+                                original_source: snapshot.projectile.source,
+                                reflector: target_sim_id(target, &units, &buildings),
+                                reflector_team: match target {
+                                    TargetIndex::Unit(index) => units[index].team,
+                                    TargetIndex::Building(index) => buildings[index].team,
+                                },
+                                target: snapshot.projectile.source,
+                                damage: snapshot.projectile.damage,
+                                damage_type: snapshot.projectile.damage_type,
+                                launch_position: impact_position,
+                                launch_tick: completed_tick,
+                                impact_tick: completed_tick
+                                    .checked_add(projectile_travel_ticks(
+                                        impact_position.distance_sq(source_position),
+                                        snapshot.projectile.speed_per_tick,
+                                    ))
+                                    .expect("reflected projectile impact tick overflow"),
+                            });
+                        }
+                        if defense.damage <= 0 {
+                            projectile_impacts += 1;
+                            continue;
+                        }
+                    }
+                    if apply_damage_to_target(
                         target,
                         snapshot.projectile.source,
-                        snapshot.projectile.damage,
+                        defense.damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
                         DamageTargetState {
@@ -2172,15 +2619,17 @@ impl Simulation {
                             next_defense_alerts: &mut next_defense_alerts,
                             navigation_cell_size: self.config.navigation_cell_size,
                         },
-                    ) else {
+                    )
+                    .is_none()
+                    {
                         projectile_entities_to_remove.push(snapshot.entity);
                         projectile_invalidations += 1;
                         continue;
-                    };
+                    }
                     projectile_impacts += 1;
                     projectile_effects += 1;
 
-                    if snapshot.projectile.remaining_bounces == 0 {
+                    if defense.reflected || snapshot.projectile.remaining_bounces == 0 {
                         projectile_entities_to_remove.push(snapshot.entity);
                         continue;
                     }
@@ -2341,10 +2790,15 @@ impl Simulation {
                         projectile_launches.push(ProjectileLaunch {
                             source: intent.source_id,
                             source_team: intent.source_team,
+                            source_is_building: matches!(
+                                intent.source,
+                                AttackSourceIndex::Building(_)
+                            ),
                             target: intent.target_id,
                             damage,
                             on_hit,
                             damage_type: intent.damage_type,
+                            speed_per_tick,
                             launch_position: intent.source_position,
                             launch_tick: completed_tick,
                             impact_tick,
@@ -2402,6 +2856,10 @@ impl Simulation {
                         bounce_projectile_launches.push(BounceProjectileLaunch {
                             source: intent.source_id,
                             source_team: intent.source_team,
+                            source_is_building: matches!(
+                                intent.source,
+                                AttackSourceIndex::Building(_)
+                            ),
                             target_mask: intent.attack_targets,
                             target: intent.target_id,
                             damage: intent.attack.damage,
@@ -2443,6 +2901,7 @@ impl Simulation {
             attacks_resolved += 1;
         }
         let projectiles_launched = projectile_launches.len()
+            + reflected_projectile_launches.len()
             + ballistic_projectile_launches.len()
             + bounce_projectile_launches.len();
         let combat = phase_start.elapsed();
@@ -2521,10 +2980,16 @@ impl Simulation {
                 }
                 targets.sort_unstable_by_key(|target| target_sim_id(*target, &units, &buildings));
                 for target in targets {
+                    let damage = ranged_projectile_damage_after_defend(
+                        target,
+                        snapshot.projectile.damage,
+                        completed_tick,
+                        &units,
+                    );
                     if apply_damage_to_target(
                         target,
                         snapshot.projectile.source,
-                        snapshot.projectile.damage,
+                        damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
                         DamageTargetState {
@@ -2604,9 +3069,28 @@ impl Simulation {
                 GuaranteedHitProjectile {
                     source: launch.source,
                     source_team: launch.source_team,
+                    source_is_building: launch.source_is_building,
                     target: launch.target,
                     damage: launch.damage,
                     on_hit: launch.on_hit,
+                    damage_type: launch.damage_type,
+                    speed_per_tick: launch.speed_per_tick,
+                    launch_position: launch.launch_position,
+                    launch_tick: launch.launch_tick,
+                    impact_tick: launch.impact_tick,
+                },
+            ));
+        }
+        for launch in reflected_projectile_launches {
+            let id = self.allocate_id();
+            self.world.spawn((
+                id,
+                ReflectedProjectile {
+                    original_source: launch.original_source,
+                    reflector: launch.reflector,
+                    reflector_team: launch.reflector_team,
+                    target: launch.target,
+                    damage: launch.damage,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     launch_tick: launch.launch_tick,
@@ -2642,6 +3126,7 @@ impl Simulation {
                 BounceProjectile {
                     source: launch.source,
                     source_team: launch.source_team,
+                    source_is_building: launch.source_is_building,
                     target_mask: launch.target_mask,
                     target: launch.target,
                     damage: launch.damage,
@@ -2965,6 +3450,7 @@ impl Simulation {
             .iter_entities()
             .filter(|entity| {
                 entity.get::<GuaranteedHitProjectile>().is_some()
+                    || entity.get::<ReflectedProjectile>().is_some()
                     || entity.get::<BallisticProjectile>().is_some()
                     || entity.get::<BounceProjectile>().is_some()
             })
@@ -3034,7 +3520,9 @@ impl Simulation {
         let mut units: Vec<_> = self
             .world
             .iter_entities()
-            .filter_map(|entity| unit_view_from_entity(entity, default_collision_radius))
+            .filter_map(|entity| {
+                unit_view_from_entity(entity, default_collision_radius, self.next_tick)
+            })
             .collect();
         units.sort_unstable_by_key(|unit| unit.id);
         units
@@ -3056,7 +3544,9 @@ impl Simulation {
         let default_collision_radius = self.default_collision_radius();
         self.world
             .iter_entities()
-            .filter_map(|entity| unit_view_from_entity(entity, default_collision_radius))
+            .filter_map(|entity| {
+                unit_view_from_entity(entity, default_collision_radius, self.next_tick)
+            })
             .find(|unit| unit.id == id)
     }
 
@@ -3105,6 +3595,10 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
+        entity.insert(HealthRegeneration {
+            per_second_per_10k: properties.health_regen_per_second_per_10k,
+            remainder_per_10k_hz: 0,
+        });
         if let Some(content) = properties.content {
             entity.insert(content);
         }
@@ -3199,6 +3693,35 @@ impl Simulation {
         let mut query = self.world.query::<&mut AttackCooldown>();
         for mut cooldown in query.iter_mut(&mut self.world) {
             cooldown.remaining = cooldown.remaining.saturating_sub(1);
+        }
+
+        let mut health_regen_query = self.world.query::<(&mut Health, &mut HealthRegeneration)>();
+        for (mut health, mut regeneration) in health_regen_query.iter_mut(&mut self.world) {
+            if health.current >= health.max || regeneration.per_second_per_10k == 0 {
+                health.current = health.current.min(health.max);
+                regeneration.remainder_per_10k_hz = 0;
+                continue;
+            }
+            let denominator = 10_000_u64
+                .checked_mul(
+                    u64::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz is positive"),
+                )
+                .expect("health regeneration fixed-point denominator overflow");
+            let accumulated = u64::from(regeneration.remainder_per_10k_hz)
+                + u64::from(regeneration.per_second_per_10k);
+            let whole_health = accumulated / denominator;
+            let remainder = accumulated % denominator;
+            let regenerated = i64::from(health.current)
+                + i64::try_from(whole_health).expect("health regeneration exceeds i64");
+            if regenerated >= i64::from(health.max) {
+                health.current = health.max;
+                regeneration.remainder_per_10k_hz = 0;
+            } else {
+                health.current = i32::try_from(regenerated)
+                    .expect("health regeneration overflowed validated bounds");
+                regeneration.remainder_per_10k_hz =
+                    u32::try_from(remainder).expect("health regeneration remainder fits u32");
+            }
         }
 
         let mut mana_query = self.world.query::<(&SpellcastingProfile, &mut ManaState)>();
@@ -3547,6 +4070,7 @@ impl Simulation {
                             .combat_rules
                             .damage_rules
                             .apply_spell(damage, unit.armor.armor_type);
+                        let adjusted = spell_damage_after_defend(*unit, adjusted, completed_tick);
                         unit.health = unit
                             .health
                             .checked_sub(adjusted)
@@ -3635,12 +4159,15 @@ impl Simulation {
                     passive_effects,
                     spellcasting,
                 )| {
-                    let repair_metadata = self
-                        .world
-                        .entity(entity)
+                    let entity_ref = self.world.entity(entity);
+                    let repair_metadata = entity_ref
                         .get::<ProductionUnitRepairMetadata>()
                         .copied()
                         .expect("production building missing repair metadata");
+                    let health_regeneration = entity_ref
+                        .get::<ProductionHealthRegeneration>()
+                        .copied()
+                        .expect("production building missing health regeneration metadata");
                     ProductionAttempt {
                         entity,
                         id: *id,
@@ -3655,6 +4182,7 @@ impl Simulation {
                         build_time_ticks: repair_metadata.build_time_ticks,
                         repair_time_ticks: repair_metadata.repair_time_ticks,
                         attack_targets: attack_targets.0,
+                        health_regen_per_second_per_10k: health_regeneration.0,
                         damage_type: damage_type.0,
                         armor: armor.0,
                         passive_effects: passive_effects.0,
@@ -3768,6 +4296,7 @@ impl Simulation {
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                     UnitGameplayProperties {
                         content: attempt.content,
+                        health_regen_per_second_per_10k: attempt.health_regen_per_second_per_10k,
                         corpse: attempt.corpse,
                         collision_radius: attempt.collision_radius,
                         movement_class: attempt.movement_class,
@@ -3985,6 +4514,21 @@ impl Simulation {
             .iter(&self.world)
             .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
             .map(|(entity, id, projectile)| ProjectileSnapshot {
+                entity,
+                id: *id,
+                projectile: *projectile,
+            })
+            .collect();
+        projectiles.sort_unstable_by_key(|projectile| projectile.id);
+        projectiles
+    }
+
+    fn snapshot_due_reflected_projectiles(&mut self) -> Vec<ReflectedProjectileSnapshot> {
+        let mut query = self.world.query::<(Entity, &SimId, &ReflectedProjectile)>();
+        let mut projectiles: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+            .map(|(entity, id, projectile)| ReflectedProjectileSnapshot {
                 entity,
                 id: *id,
                 projectile: *projectile,
@@ -5512,7 +6056,7 @@ impl Simulation {
                     );
                     on_hit.burning_oil = Some(profile);
                 }
-                PassiveUnitEffect::Evasion(_) => {}
+                PassiveUnitEffect::Evasion(_) | PassiveUnitEffect::Defend(_) => {}
             }
         }
         (bonus_damage, on_hit)
@@ -7159,6 +7703,7 @@ struct ProductionAttempt {
     build_time_ticks: Option<u32>,
     repair_time_ticks: Option<u32>,
     attack_targets: AttackTargetMask,
+    health_regen_per_second_per_10k: u32,
     damage_type: DamageType,
     armor: ArmorProfile,
     passive_effects: PassiveUnitEffects,
@@ -7345,6 +7890,13 @@ struct ProjectileSnapshot {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct ReflectedProjectileSnapshot {
+    entity: Entity,
+    id: SimId,
+    projectile: ReflectedProjectile,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct BallisticProjectileSnapshot {
     entity: Entity,
     id: SimId,
@@ -7361,6 +7913,7 @@ struct BounceProjectileSnapshot {
 #[derive(Debug, Clone, Copy)]
 enum DueTargetProjectileSnapshot {
     GuaranteedHit(ProjectileSnapshot),
+    Reflected(ReflectedProjectileSnapshot),
     Bounce(BounceProjectileSnapshot),
 }
 
@@ -7368,6 +7921,7 @@ impl DueTargetProjectileSnapshot {
     const fn id(&self) -> SimId {
         match self {
             Self::GuaranteedHit(snapshot) => snapshot.id,
+            Self::Reflected(snapshot) => snapshot.id,
             Self::Bounce(snapshot) => snapshot.id,
         }
     }
@@ -7377,9 +7931,24 @@ impl DueTargetProjectileSnapshot {
 struct ProjectileLaunch {
     source: SimId,
     source_team: Team,
+    source_is_building: bool,
     target: SimId,
     damage: i32,
     on_hit: PendingAttackEffects,
+    damage_type: DamageType,
+    speed_per_tick: i32,
+    launch_position: SimPoint,
+    launch_tick: u64,
+    impact_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ReflectedProjectileLaunch {
+    original_source: SimId,
+    reflector: SimId,
+    reflector_team: Team,
+    target: SimId,
+    damage: i32,
     damage_type: DamageType,
     launch_position: SimPoint,
     launch_tick: u64,
@@ -7405,6 +7974,7 @@ struct BallisticProjectileLaunch {
 struct BounceProjectileLaunch {
     source: SimId,
     source_team: Team,
+    source_is_building: bool,
     target_mask: AttackTargetMask,
     target: SimId,
     damage: i32,
@@ -7824,6 +8394,19 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             },
         });
     }
+    if let Some(projectile) = entity.get::<ReflectedProjectile>() {
+        return Some(ProjectileView {
+            id,
+            source: projectile.original_source,
+            launch_position: projectile.launch_position,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::Reflected {
+                target: projectile.target,
+                reflector: projectile.reflector,
+            },
+        });
+    }
     if let Some(projectile) = entity.get::<BallisticProjectile>() {
         return Some(ProjectileView {
             id,
@@ -7874,12 +8457,17 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
 fn unit_view_from_entity(
     entity: bevy_ecs::world::EntityRef<'_>,
     default_collision_radius: i32,
+    current_tick: u64,
 ) -> Option<UnitView> {
     if entity.get::<BuildingFootprint>().is_some() {
         return None;
     }
     let spellcasting = entity.get::<SpellcastingProfile>().copied();
     let ability_state = entity.get::<AutomaticAbilityState>().copied();
+    let passive_effects = *entity.get::<PassiveUnitEffects>()?;
+    let spawn_tick = entity.get::<SpawnTick>()?.0;
+    let active_defend_ability = active_defend_profile(passive_effects, spawn_tick, current_tick)
+        .map(|profile| profile.ability);
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -7905,6 +8493,7 @@ fn unit_view_from_entity(
         mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
         ability_ready_tick: ability_state.map(|state| state.ready_tick),
         ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
+        active_defend_ability,
     })
 }
 
@@ -7983,6 +8572,105 @@ fn live_target_position(
         TargetIndex::Building(index) => (building_health[index] > 0)
             .then(|| footprint_center_point(buildings[index].footprint, navigation_cell_size)),
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ProjectileDefenseResolution {
+    damage: i32,
+    reflected: bool,
+}
+
+fn active_defend_profile(
+    passive_effects: PassiveUnitEffects,
+    spawn_tick: u64,
+    current_tick: u64,
+) -> Option<DefendEffectProfile> {
+    passive_effects.iter().find_map(|effect| {
+        let PassiveUnitEffect::Defend(profile) = effect else {
+            return None;
+        };
+        let activation_tick = spawn_tick.checked_add(u64::from(profile.activation_delay_ticks))?;
+        (current_tick >= activation_tick).then_some(profile)
+    })
+}
+
+fn scale_damage_per_10k(damage: i32, factor_per_10k: u16) -> i32 {
+    if damage <= 0 || factor_per_10k == 0 {
+        return 0;
+    }
+    let scaled = (i64::from(damage) * i64::from(factor_per_10k) + 5_000) / 10_000;
+    i32::try_from(scaled.max(1)).expect("scaled damage exceeds i32")
+}
+
+fn ranged_projectile_damage_after_defend(
+    target: TargetIndex,
+    damage: i32,
+    completed_tick: u64,
+    units: &[UnitSnapshot],
+) -> i32 {
+    let TargetIndex::Unit(index) = target else {
+        return damage;
+    };
+    let unit = units[index];
+    active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
+        .map_or(damage, |profile| {
+            scale_damage_per_10k(damage, profile.ranged_damage_taken_per_10k)
+        })
+}
+
+fn resolve_directed_projectile_defense(
+    target: TargetIndex,
+    projectile_id: SimId,
+    damage: i32,
+    damage_type: DamageType,
+    completed_tick: u64,
+    match_seed: u64,
+    units: &[UnitSnapshot],
+) -> ProjectileDefenseResolution {
+    let TargetIndex::Unit(index) = target else {
+        return ProjectileDefenseResolution {
+            damage,
+            reflected: false,
+        };
+    };
+    let unit = units[index];
+    let Some(profile) =
+        active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
+    else {
+        return ProjectileDefenseResolution {
+            damage,
+            reflected: false,
+        };
+    };
+
+    let reflected = damage_type == DamageType::Pierce
+        && profile.deflect_chance_per_10k > 0
+        && deterministic_random(
+            match_seed,
+            completed_tick,
+            projectile_id,
+            RANDOM_PURPOSE_DEFEND_DEFLECT
+                ^ unit.id.0.rotate_left(17)
+                ^ u64::from(profile.ability.0),
+            0,
+        ) % u64::from(ATTACK_PROC_CHANCE_SCALE)
+            < u64::from(profile.deflect_chance_per_10k);
+    let factor = if reflected {
+        profile.deflected_pierce_damage_taken_per_10k
+    } else {
+        profile.ranged_damage_taken_per_10k
+    };
+    ProjectileDefenseResolution {
+        damage: scale_damage_per_10k(damage, factor),
+        reflected,
+    }
+}
+
+fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u64) -> i32 {
+    active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
+        .map_or(damage, |profile| {
+            scale_damage_per_10k(damage, profile.spell_damage_taken_per_10k)
+        })
 }
 
 fn apply_damage_to_target(
@@ -8091,6 +8779,8 @@ fn apply_pending_attack_effects(
                 if max_targets > 0 {
                     let adjusted = damage_rules
                         .apply_spell(profile.initial_damage, units[index].armor.armor_type);
+                    let adjusted =
+                        spell_damage_after_defend(units[index], adjusted, completed_tick);
                     unit_health[index] = unit_health[index]
                         .checked_sub(adjusted)
                         .expect("Chain Lightning damage overflow");
@@ -8171,6 +8861,7 @@ fn apply_ability_effect_to_unit(
     match effect {
         AbilityEffect::Damage { amount } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
+            let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
             target.health = target
                 .health
                 .checked_sub(adjusted)
@@ -8200,6 +8891,7 @@ fn apply_ability_effect_to_unit(
         }
         AbilityEffect::AreaDamage { amount, radius: _ } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
+            let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
             target.health = target
                 .health
                 .checked_sub(adjusted)
@@ -8478,6 +9170,9 @@ fn resolve_periodic_unit_statuses(
         }
         let count = usize::from(unit.status.damage_over_time_count);
         debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
+        let spell_damage_taken_per_10k =
+            active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
+                .map(|profile| profile.spell_damage_taken_per_10k);
         for index in 0..count {
             let effect = &mut unit.status.damage_over_time[index];
             while completed_tick >= effect.next_pulse_tick
@@ -8486,6 +9181,8 @@ fn resolve_periodic_unit_statuses(
             {
                 let adjusted =
                     damage_rules.apply_spell(effect.damage_per_pulse, unit.armor.armor_type);
+                let adjusted = spell_damage_taken_per_10k
+                    .map_or(adjusted, |factor| scale_damage_per_10k(adjusted, factor));
                 unit.health = unit
                     .health
                     .checked_sub(adjusted)
@@ -8628,6 +9325,18 @@ fn projectile_travel_ticks(distance_sq: u64, speed_per_tick: i32) -> u64 {
             u64::try_from(speed_per_tick).expect("validated projectile speed must be positive"),
         )
         .max(1)
+}
+
+fn scale_building_health(current: i32, source_max: i32, target_max: i32) -> i32 {
+    assert!(source_max > 0 && target_max > 0);
+    if current <= 0 {
+        return 0;
+    }
+    let scaled = (i64::from(current) * i64::from(target_max) + i64::from(source_max) - 1)
+        / i64::from(source_max);
+    i32::try_from(scaled)
+        .expect("scaled building health exceeds i32")
+        .clamp(1, target_max)
 }
 
 fn scaled_bounce_damage(damage: i32, percent: u16) -> i32 {
@@ -9153,6 +9862,14 @@ fn canonical_checksum(
                     projectile: *projectile,
                 }));
             }
+            if let Some(projectile) = entity.get::<ReflectedProjectile>() {
+                return Some(CanonicalEntity::ReflectedProjectile(
+                    CanonicalReflectedProjectile {
+                        id,
+                        projectile: *projectile,
+                    },
+                ));
+            }
             if let Some(projectile) = entity.get::<BallisticProjectile>() {
                 return Some(CanonicalEntity::BallisticProjectile(
                     CanonicalBallisticProjectile {
@@ -9208,6 +9925,7 @@ fn canonical_checksum(
                     team,
                     position: position.0,
                     health,
+                    health_regeneration: *entity.get::<HealthRegeneration>()?,
                     attack: *entity.get::<AttackProfile>()?,
                     attack_targets: *entity.get::<AttackTargetMask>()?,
                     damage_type: *entity.get::<DamageType>()?,
@@ -9246,6 +9964,19 @@ fn canonical_checksum(
                                 construction.building,
                                 construction.properties,
                             );
+                            if let Some(source) = construction.upgrade_from {
+                                definition_hash.write_u8(1);
+                                hash_building_definition(
+                                    &mut definition_hash,
+                                    source.building,
+                                    source.properties,
+                                );
+                                definition_hash.write_i32(source.health.current);
+                                definition_hash.write_i32(source.health.max);
+                                hash_building_runtime_state(&mut definition_hash, source.runtime);
+                            } else {
+                                definition_hash.write_u8(0);
+                            }
                             CanonicalBuildingConstruction {
                                 started_tick: construction.started_tick,
                                 complete_tick: construction.complete_tick,
@@ -9275,6 +10006,9 @@ fn canonical_checksum(
                     production_attack_targets: entity
                         .get::<ProductionAttackTargets>()
                         .map(|targets| targets.0),
+                    production_health_regen_per_second_per_10k: entity
+                        .get::<ProductionHealthRegeneration>()
+                        .map(|regeneration| regeneration.0),
                     production_damage_type: entity
                         .get::<ProductionDamageType>()
                         .map(|damage_type| damage_type.0),
@@ -9315,7 +10049,7 @@ fn canonical_checksum(
     }
 
     let mut hash = Fnv64::new();
-    hash.write_u64(0x4346_5354_4154_4502);
+    hash.write_u64(0x4346_5354_4154_4503);
     hash.write_u64(u64::from(CANONICAL_CHECKSUM_SCHEMA_VERSION));
     hash.write_u64(configuration_identity);
     hash.write_u64(next_tick);
@@ -9338,6 +10072,8 @@ fn canonical_checksum(
                 hash.write_i32(unit.position.y);
                 hash.write_i32(unit.health.current);
                 hash.write_i32(unit.health.max);
+                hash.write_u32(unit.health_regeneration.per_second_per_10k);
+                hash.write_u32(unit.health_regeneration.remainder_per_10k_hz);
                 hash_attack_delivery(&mut hash, unit.attack.delivery);
                 hash.write_u8(unit.attack_targets.bits());
                 hash.write_u8(unit.damage_type.stable_tag());
@@ -9498,6 +10234,11 @@ fn canonical_checksum(
                             .expect("production building missing attack target mask")
                             .bits(),
                     );
+                    hash.write_u32(
+                        building
+                            .production_health_regen_per_second_per_10k
+                            .expect("production building missing unit health regeneration"),
+                    );
                     let production_damage_type = building
                         .production_damage_type
                         .expect("production building missing unit damage type");
@@ -9587,9 +10328,25 @@ fn canonical_checksum(
                 hash.write_u64(projectile.id.0);
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
+                hash.write_u8(u8::from(projectile.projectile.source_is_building));
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
                 hash_pending_attack_effects(&mut hash, projectile.projectile.on_hit);
+                hash.write_u8(projectile.projectile.damage_type.stable_tag());
+                hash.write_i32(projectile.projectile.speed_per_tick);
+                hash.write_i32(projectile.projectile.launch_position.x);
+                hash.write_i32(projectile.projectile.launch_position.y);
+                hash.write_u64(projectile.projectile.launch_tick);
+                hash.write_u64(projectile.projectile.impact_tick);
+            }
+            CanonicalEntity::ReflectedProjectile(projectile) => {
+                hash.write_u8(3);
+                hash.write_u64(projectile.id.0);
+                hash.write_u64(projectile.projectile.original_source.0);
+                hash.write_u64(projectile.projectile.reflector.0);
+                hash.write_u8(projectile.projectile.reflector_team.0);
+                hash.write_u64(projectile.projectile.target.0);
+                hash.write_i32(projectile.projectile.damage);
                 hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.launch_position.x);
                 hash.write_i32(projectile.projectile.launch_position.y);
@@ -9597,7 +10354,7 @@ fn canonical_checksum(
                 hash.write_u64(projectile.projectile.impact_tick);
             }
             CanonicalEntity::BallisticProjectile(projectile) => {
-                hash.write_u8(3);
+                hash.write_u8(4);
                 hash.write_u64(projectile.id.0);
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
@@ -9620,10 +10377,11 @@ fn canonical_checksum(
                 hash.write_u64(projectile.projectile.impact_tick);
             }
             CanonicalEntity::BounceProjectile(projectile) => {
-                hash.write_u8(4);
+                hash.write_u8(5);
                 hash.write_u64(projectile.id.0);
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
+                hash.write_u8(u8::from(projectile.projectile.source_is_building));
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
@@ -9644,7 +10402,7 @@ fn canonical_checksum(
                 }
             }
             CanonicalEntity::Corpse(corpse) => {
-                hash.write_u8(5);
+                hash.write_u8(6);
                 hash.write_u64(corpse.id.0);
                 hash.write_i32(corpse.position.x);
                 hash.write_i32(corpse.position.y);
@@ -9655,7 +10413,7 @@ fn canonical_checksum(
                 hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
             }
             CanonicalEntity::BurningOil(zone) => {
-                hash.write_u8(6);
+                hash.write_u8(7);
                 hash.write_u64(zone.id.0);
                 hash.write_u64(zone.zone.source.0);
                 hash.write_u8(zone.zone.source_team.0);
@@ -9666,7 +10424,7 @@ fn canonical_checksum(
                 hash.write_u16(zone.zone.pulse_index);
             }
             CanonicalEntity::ChainLightning(chain) => {
-                hash.write_u8(7);
+                hash.write_u8(8);
                 hash.write_u64(chain.id.0);
                 hash.write_u64(chain.state.source.0);
                 hash.write_u8(chain.state.source_team.0);
@@ -9688,7 +10446,7 @@ fn canonical_checksum(
                 }
             }
             CanonicalEntity::Builder(builder) => {
-                hash.write_u8(8);
+                hash.write_u8(9);
                 hash.write_u64(builder.id.0);
                 hash.write_u8(builder.team.0);
                 hash.write_i32(builder.position.x);
@@ -9761,6 +10519,7 @@ enum CanonicalEntity {
     Unit(CanonicalUnit),
     Building(CanonicalBuilding),
     Projectile(CanonicalProjectile),
+    ReflectedProjectile(CanonicalReflectedProjectile),
     BallisticProjectile(CanonicalBallisticProjectile),
     BounceProjectile(CanonicalBounceProjectile),
     Corpse(CanonicalCorpse),
@@ -9775,6 +10534,7 @@ impl CanonicalEntity {
             Self::Unit(unit) => unit.id,
             Self::Building(building) => building.id,
             Self::Projectile(projectile) => projectile.id,
+            Self::ReflectedProjectile(projectile) => projectile.id,
             Self::BallisticProjectile(projectile) => projectile.id,
             Self::BounceProjectile(projectile) => projectile.id,
             Self::Corpse(corpse) => corpse.id,
@@ -9803,6 +10563,7 @@ struct CanonicalUnit {
     team: Team,
     position: SimPoint,
     health: Health,
+    health_regeneration: HealthRegeneration,
     attack: AttackProfile,
     attack_targets: AttackTargetMask,
     damage_type: DamageType,
@@ -9852,6 +10613,7 @@ struct CanonicalBuilding {
     production_movement_class: Option<MovementClass>,
     production_repair_metadata: Option<ProductionUnitRepairMetadata>,
     production_attack_targets: Option<AttackTargetMask>,
+    production_health_regen_per_second_per_10k: Option<u32>,
     production_damage_type: Option<DamageType>,
     production_armor: Option<ArmorProfile>,
     production_passive_effects: Option<PassiveUnitEffects>,
@@ -9873,6 +10635,12 @@ struct CanonicalBuilding {
 struct CanonicalProjectile {
     id: SimId,
     projectile: GuaranteedHitProjectile,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CanonicalReflectedProjectile {
+    id: SimId,
+    projectile: ReflectedProjectile,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -9941,6 +10709,62 @@ fn hash_optional_u64(hash: &mut Fnv64, value: Option<u64>) {
         Some(value) => {
             hash.write_u8(1);
             hash.write_u64(value);
+        }
+        None => hash.write_u8(0),
+    }
+}
+
+fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) {
+    match runtime.production {
+        Some(production) => {
+            hash.write_u8(1);
+            hash.write_u64(production.next_spawn_tick);
+        }
+        None => hash.write_u8(0),
+    }
+    match runtime.attack_cooldown {
+        Some(cooldown) => {
+            hash.write_u8(1);
+            hash.write_u16(cooldown.remaining);
+        }
+        None => hash.write_u8(0),
+    }
+    match runtime.target {
+        Some(target) => {
+            hash.write_u8(1);
+            hash_optional_sim_id(hash, target.current);
+            hash.write_u8(u8::from(target.direct_retaliation_lock));
+            hash.write_u8(u8::from(target.ally_defense_lock));
+        }
+        None => hash.write_u8(0),
+    }
+    match runtime.spawn_tick {
+        Some(spawn_tick) => {
+            hash.write_u8(1);
+            hash.write_u64(spawn_tick.0);
+        }
+        None => hash.write_u8(0),
+    }
+    match runtime.mana {
+        Some(mana) => {
+            hash.write_u8(1);
+            hash.write_i32(mana.current);
+            hash.write_u16(mana.regen_remainder_per_10k);
+        }
+        None => hash.write_u8(0),
+    }
+    match runtime.ability_state {
+        Some(state) => {
+            hash.write_u8(1);
+            hash.write_u64(state.ready_tick);
+            hash.write_u64(state.cast_sequence);
+        }
+        None => hash.write_u8(0),
+    }
+    match runtime.status {
+        Some(status) => {
+            hash.write_u8(1);
+            hash_status_state(hash, status);
         }
         None => hash.write_u8(0),
     }
@@ -10036,6 +10860,7 @@ fn hash_building_definition(
         hash_optional_u32(hash, unit.build_time_ticks);
         hash_optional_u32(hash, unit.repair_time_ticks);
         hash.write_u8(unit.attack_targets.bits());
+        hash.write_u32(unit.health_regen_per_second_per_10k);
         hash.write_u8(unit.damage_type.stable_tag());
         hash.write_u8(unit.armor.armor_type.stable_tag());
         hash.write_i32(i32::from(unit.armor.armor_points));
@@ -10105,15 +10930,24 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u64(u64::from(profile.ability.0));
                 hash.write_u16(profile.chance_per_10k);
             }
-            PassiveUnitEffect::TriggeredSpellProc(profile) => {
+            PassiveUnitEffect::Defend(profile) => {
                 hash.write_u8(2);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_u16(profile.ranged_damage_taken_per_10k);
+                hash.write_u16(profile.spell_damage_taken_per_10k);
+                hash.write_u16(profile.deflect_chance_per_10k);
+                hash.write_u16(profile.deflected_pierce_damage_taken_per_10k);
+                hash.write_u16(profile.activation_delay_ticks);
+            }
+            PassiveUnitEffect::TriggeredSpellProc(profile) => {
+                hash.write_u8(3);
                 hash.write_u64(u64::from(profile.ability.0));
                 hash.write_u16(profile.chance_per_10k);
                 hash.write_u8(profile.targets.bits());
                 hash_triggered_attack_effect(hash, profile.effect);
             }
             PassiveUnitEffect::BurningOil(profile) => {
-                hash.write_u8(3);
+                hash.write_u8(4);
                 hash_burning_oil_profile(hash, profile);
             }
         }
@@ -10265,6 +11099,10 @@ impl Fnv64 {
     }
 
     fn write_u16(&mut self, value: u16) {
+        self.write(&value.to_le_bytes());
+    }
+
+    fn write_u32(&mut self, value: u32) {
         self.write(&value.to_le_bytes());
     }
 

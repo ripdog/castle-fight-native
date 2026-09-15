@@ -27,6 +27,14 @@
     },
     {
       "source_kind": "unit-ability",
+      "source_key": "A03G",
+      "implementation": "warcraft-defend-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Castle Fight Defender auto-maintained Warcraft Defend state, including ranged reduction and Pierce projectile deflection."
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A05K",
       "implementation": "warcraft-bash-v1",
       "valid_from": "9.27",

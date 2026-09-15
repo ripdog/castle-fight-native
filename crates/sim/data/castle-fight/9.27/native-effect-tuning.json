@@ -14,6 +14,39 @@
     },
     {
       "source_kind": "unit-ability",
+      "source_key": "A00U",
+      "unit_rawcode": "h03A",
+      "kind": "evasion",
+      "chance_per_10k": 1500,
+      "provenance": {
+        "fields": ["DataA1=0.15"],
+        "source": "production-unit-abilities.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03G",
+      "unit_rawcode": "h03A",
+      "kind": "defend",
+      "ranged_damage_taken_per_10k": 4000,
+      "spell_damage_taken_per_10k": 5000,
+      "deflect_chance_per_10k": 5000,
+      "deflected_pierce_damage_taken_per_10k": 0,
+      "activation_delay_millis": 700,
+      "provenance": {
+        "ability_fields": [
+          "DataA1=0.4",
+          "DataE1=0.5",
+          "DataF1=50",
+          "DataG1=0"
+        ],
+        "gameplay_constant": "DefendDeflection=1",
+        "script_fields": ["initial_defend_delay_seconds=0.7"],
+        "tooltip": "Massive Shield: all ranged damage taken reduced by 60%; Pierce projectiles have 50% chance to be reflected"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A05K",
       "unit_rawcode": "h016",
       "kind": "bash",

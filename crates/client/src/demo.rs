@@ -1,10 +1,10 @@
 use castle_fight_sim::{
     ArmorProfile, ArmorType, BuilderBuildError, BuilderSpawn, BuildingEconomyProfile,
-    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, CastleFightBuilderRace,
-    CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind, CombatRules,
-    CommandCardPosition, ContentIdentity, DamageType, NavCell, SUBUNITS_PER_WORLD_UNIT, SimPoint,
-    Simulation, SimulationConfig, TargetlessLane, Team, TerrainElevationMap, UnitSpawn,
-    castle_fight_damage_rules, castle_fight_economy_rules,
+    BuildingFootprint, BuildingGameplayProperties, BuildingSpawn, BuildingUpgradeError,
+    CastleFightBuilderRace, CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind,
+    CombatRules, CommandCardPosition, ContentIdentity, DamageType, NavCell,
+    SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig, TargetlessLane, Team,
+    TerrainElevationMap, UnitSpawn, castle_fight_damage_rules, castle_fight_economy_rules,
     castle_fight_main_castle_repair_time_ticks,
 };
 
@@ -102,6 +102,10 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
     let builder_definition = CastleFightBuilderRace::Human.definition();
     let demo_build_catalog = CastleFightProductionKind::ALL
         .into_iter()
+        // The verification client is a mixed-race slice. Keep an upgrade target directly
+        // placeable only while its precursor is not implemented in that slice; once both ends
+        // exist, the target moves to the selected production building's command card.
+        .filter(|kind| kind.upgrade_from().is_none())
         .map(|kind| kind.definition().rawcode)
         .chain(
             CastleFightTowerKind::ALL
@@ -384,6 +388,33 @@ pub(crate) fn order_demo_building(
             )
         }
     }
+}
+
+pub(crate) fn order_demo_production_upgrade(
+    simulation: &mut Simulation,
+    source_id: castle_fight_sim::SimId,
+    target: ProductionKind,
+) -> Result<(), BuildingUpgradeError> {
+    let source = simulation
+        .building(source_id)
+        .ok_or(BuildingUpgradeError::SourceNotFound)?;
+    let source_kind = source
+        .content
+        .and_then(|content| ProductionKind::from_rawcode(content.rawcode))
+        .ok_or(BuildingUpgradeError::SourceDefinitionMismatch)?;
+    if !source_kind.upgrade_targets().contains(&target) {
+        return Err(BuildingUpgradeError::SourceDefinitionMismatch);
+    }
+
+    let source_definition = source_kind.definition();
+    let target_definition = target.definition();
+    simulation.start_building_upgrade(
+        source_id,
+        source_definition.spawn(source.team, source.footprint),
+        source_definition.gameplay_properties(),
+        target_definition.spawn(source.team, source.footprint),
+        target_definition.gameplay_properties(),
+    )
 }
 
 fn original_wall_blockers() -> Vec<BuildingFootprint> {
@@ -699,7 +730,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn demo_builder_catalog_exposes_every_imported_build_kind() {
+    fn demo_builder_catalog_exposes_placeable_slice_and_routes_implemented_upgrades() {
         let DemoWorld { simulation, .. } = create_demo_world(1, None);
         let builder = simulation.builder_for_team(Team(0)).expect("blue builder");
         let kinds = [
@@ -713,16 +744,22 @@ mod tests {
         ];
 
         for kind in kinds {
-            let rawcode = match kind {
-                BuildKind::Production(kind) => kind.definition().rawcode,
-                BuildKind::Tower(kind) => kind.definition().rawcode,
-            };
             assert!(
-                builder.configuration.allows_building(rawcode),
+                builder.configuration.allows_building(kind.rawcode()),
                 "builder catalog missing {}",
                 kind.label()
             );
         }
+        assert!(
+            !builder
+                .configuration
+                .allows_building(ProductionKind::Stronghold.definition().rawcode),
+            "Stronghold must be reached by upgrading Barracks, not direct placement"
+        );
+        assert_eq!(
+            ProductionKind::Barracks.upgrade_targets(),
+            vec![ProductionKind::Stronghold]
+        );
     }
 
     #[test]
