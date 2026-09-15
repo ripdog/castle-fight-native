@@ -5762,6 +5762,70 @@ mod tests {
     }
 
     #[test]
+    fn castle_attackers_answer_nearby_ally_defense_against_distant_tower() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let castle = sim.spawn_building(passive_building(0, BuildingFootprint::new(20, -1, 2, 3)));
+        let castle_attacker = |y: i32| UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(18 * cell, y),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 3 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        };
+        let directly_attacked = sim.spawn_unit(castle_attacker(0));
+        let nearby_attacker = sim.spawn_unit(castle_attacker(2 * cell));
+
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(castle));
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(castle));
+
+        let tower = sim.spawn_building(attack_building(
+            0,
+            BuildingFootprint::new(8, 0, 1, 1),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 20 * cell,
+                },
+                damage: 1,
+                range: 12 * cell,
+                acquisition_range: 12 * cell,
+                cooldown_ticks: 30,
+            },
+        ));
+
+        // The attacked gryphon is nearby enough to call for help, but the tower's right edge at
+        // x=9 is beyond the other gryphon's ordinary 4-tile acquisition + 3-tile pursuit allowance.
+        let tower_right_edge_x = 9 * cell;
+        assert!(sim.unit(nearby_attacker).unwrap().position.x - tower_right_edge_x > 7 * cell);
+
+        let mut tower_hit = false;
+        for _ in 0..4 {
+            sim.step();
+            if sim.unit(directly_attacked).unwrap().last_attacker == Some(tower) {
+                tower_hit = true;
+                break;
+            }
+        }
+        assert!(tower_hit, "tower never attacked the castle attacker");
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(castle));
+
+        sim.step();
+        assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(tower));
+        assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(tower));
+        assert!(sim.unit(nearby_attacker).unwrap().ally_defense_lock);
+    }
+
+    #[test]
     fn ally_defense_orders_nearest_ally_then_nearest_attacker_when_idle() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {

@@ -5801,6 +5801,27 @@ impl Simulation {
                     }
                 },
             );
+
+            // The nearby attacked ally, not the aggressor's distance, gates a call for help. The
+            // spatial lookup above keeps the common case cheap; when it finds no ordinary-range
+            // attacker, evaluate that victim's explicit attacker relation beyond the pursuit leash.
+            if best.is_none() {
+                for &unit_index in &victim.unit_attackers {
+                    let candidate = &context.units[unit_index];
+                    let distance_sq = source.position.distance_sq(candidate.position);
+                    if distance_sq <= pursuit_range_sq {
+                        continue;
+                    }
+                    *attacker_candidates += 1;
+                    if !self.unit_target_reachable(source, candidate, distance_sq, u64::MAX) {
+                        continue;
+                    }
+                    let key = (distance_sq, candidate.id);
+                    if best.is_none_or(|current| key < current) {
+                        best = Some(key);
+                    }
+                }
+            }
         }
 
         for &building_index in &victim.building_attackers {
@@ -5811,7 +5832,7 @@ impl Simulation {
                 target.footprint,
                 self.config.navigation_cell_size,
             );
-            if !self.building_target_reachable(source, target, distance_sq, pursuit_range_sq) {
+            if !self.building_target_reachable(source, target, distance_sq, u64::MAX) {
                 continue;
             }
             let key = (distance_sq, target.id);
