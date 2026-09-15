@@ -10,7 +10,7 @@ The builder is intentionally outside ordinary combat. Items may influence combat
 
 ## 2. Exactly one commandable unit
 
-Each active player has exactly one builder under normal rules. Until player entities are implemented, the native match bootstrap creates exactly one builder for each side/team as the temporary ownership model.
+Each active player has exactly one builder under normal rules. Native match bootstrap now creates one authoritative builder per configured `PlayerId`; ownership remains with that player even when a disconnected owner temporarily delegates builder control to a connected teammate.
 
 Ordinary combat units MUST NOT accept player-authored orders. The builder is the only unit with direct movement commands.
 

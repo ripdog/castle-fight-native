@@ -94,6 +94,8 @@ Imported Warcraft ground atlases are presentation diffuse assets and SHOULD reta
 
 The client MUST consume the selected release's validated terrain source and resolved content bundle from shared match setup rather than independently opening an implicit default-version extraction. Generated unit/building models should be loaded only for content promoted into that resolved bundle (plus explicitly required shared objective/presentation assets), so adding another retained archive does not eagerly load or accidentally expose unrelated roster art. Cosmetic camera limits remain client-owned even when authoritative navigation/build bounds come from shared match definitions.
 
+Warcraft player colour is presentation keyed by the entity owner's stable `PlayerId`/WC3 slot, not by `Team`. Allied players therefore retain distinct model tint, team-glow, corpse/remnant, health-bar, and UI colours while `Team` continues to express allegiance. Replaceable Team Glow (`ReplaceableId=2`) resolves `TeamGlowNN` using that owning slot; generated packs that contain team-glow materials SHOULD include the full Warcraft player-colour glow set needed by supported slots rather than assuming a red/blue two-side palette.
+
 Ground-bound render entities such as units, buildings, corpses, selection markers, and building-placement previews SHOULD sample this same presentation heightfield. Rendered unit positions MUST be clamped to the imported terrain bounds/height so interpolation or cosmetic motion cannot leave a unit visibly below, above, or outside the terrain. This clamping MUST NOT feed presentation Y coordinates back into authoritative movement or combat.
 
 ## 6. Catch-up and discontinuities

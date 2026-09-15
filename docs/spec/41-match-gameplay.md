@@ -24,6 +24,8 @@ Canonical player state includes at least:
 
 Network connection state itself is operational, but any gameplay consequence of absence must be represented explicitly in canonical state/rules.
 
+For the retained Castle Fight 9.27 map, native `PlayerId` is the original Warcraft III player-slot index rather than a dense per-match ordinal. The authored human slots are **0/1/2** on the Western force and **6/7/8** on the Eastern force, with fixed builder starts at Y **+128 / 0 / -128** world units respectively. The current development mode supports the map's balanced 1v1, 2v2, and 3v3 prefixes: slots `0` vs `6`, then `0/1` vs `6/7`, then `0/1/2` vs `6/7/8`. Retaining the Warcraft slot identity also gives presentation a stable key for the original player colour; `Team` is not a colour identity.
+
 ### 2.1 Player builder
 
 Each active player has exactly one directly controlled builder under the standard rules.
@@ -224,19 +226,15 @@ Castles/objectives are authoritative entities or canonical match structures with
 
 If the castle participates in ordinary combat targeting, its target categories/rules are defined in content like other buildings.
 
+For the 9.27 development bootstrap, each side's Main Castle is registered explicitly as that team's authoritative objective and retains the map's first-slot ownership convention: Western slot `0` owns the Western castle and Eastern slot `6` owns the Eastern castle. Objective/victory semantics remain team-level even though Warcraft ownership and player-colour presentation use those player slots.
+
 ## 16. Victory
 
 Victory evaluation occurs at an explicit phase after relevant combat/death resolution.
 
 The rules MUST define outcomes when multiple victory conditions become true on the same tick, e.g. both castles reach zero health.
 
-Possible deterministic policies include:
-
-- draw;
-- game-mode-specific priority;
-- canonical event ordering.
-
-The outcome MUST NOT depend on which worker reported destruction first.
+The current 9.27 development mode evaluates both registered team objectives together after structural death resolution. If exactly one objective is gone, the opposing team wins. If both objectives are gone at that boundary, the result is a **draw**. The outcome therefore does not depend on worker order or which castle happened to be observed first.
 
 Once match outcome is final, the authoritative gameplay simulation is terminal: production, movement, combat, abilities, and other gameplay ticks MUST NOT continue advancing. The server MAY retain the final frozen state for results, replay, spectators, or post-match UI, but further gameplay commands are rejected or ignored according to protocol state.
 
