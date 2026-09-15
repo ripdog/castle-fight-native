@@ -136,24 +136,23 @@ Per-tick unit/building snapshots, spatial partitions/reservation grids, movement
 
 A snapshot is taken only at a defined completed boundary. Step 7 must not attempt to capture the simulation halfway through `step()` unless a separate mid-tick schema and phase-resume contract is deliberately introduced.
 
-## 7. Checksum coverage revision 3
+## 7. Checksum coverage revision 4
 
-`CANONICAL_CHECKSUM_SCHEMA_VERSION = 3` is the current compatibility boundary. Revision 2 added immutable configuration/combat identity, allocator state, audited optional presence, content rawcodes, canonical entity-shape validation, and duplicate-`SimId` rejection. Revision 3 retains that coverage and adds the authoritative state introduced by the Defender/production-upgrade slice:
+`CANONICAL_CHECKSUM_SCHEMA_VERSION = 4` is the current compatibility boundary. Revision 2 added immutable configuration/combat identity, allocator state, audited optional presence, content rawcodes, canonical entity-shape validation, and duplicate-`SimId` rejection. Revision 3 retains that coverage and adds the authoritative state introduced by the Defender/production-upgrade slice:
 
 - fixed-point unit health-regeneration rate/remainder state;
 - persistent reflected-projectile state;
 - in-progress building-upgrade identity and the complete saved precursor runtime required for deterministic cancellation, including production timer, attack cooldown/target state, spawn tick, mana/ability state, and status state;
 - the associated production-unit regeneration/profile data needed to preserve future spawn semantics.
 
-All previously covered resources, entities, timers/effect state, navigation continuity, ordinary projectiles, build orders, and defense alerts remain included. `ContentIdentity.name`, worker count, derived caches, presentation events, and diagnostic timings remain deliberately excluded.
+Revision 4 additionally incorporates the immutable resolved gameplay-bundle schema/hash into the cached match-configuration identity. This makes content-definition or implementation-binding differences incompatible even when the live ECS happens to contain the same entities. All previously covered resources, entities, timers/effect state, navigation continuity, ordinary projectiles, build orders, and defense alerts remain included. `ContentIdentity.name`, worker count, derived caches, presentation events, and diagnostic timings remain deliberately excluded.
 
-Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. Checksums from revisions 1, 2, and 3 are mutually incompatible.
+Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. Checksums from revisions 1 through 4 are mutually incompatible.
 
 ## 8. Required additions before step 7 completion
 
 Steps 3–6 introduce new authoritative concepts that are not present in the current `Simulation` yet. Before snapshot/replay sign-off, this inventory must be extended for:
 
-- canonical content bundle and implementation-binding identities;
 - stable `PlayerId`, ownership/control delegation, and per-player economy;
 - match lifecycle/outcome/pause state and objective identities;
 - finalized command-stream position, admitted future commands, client/player sequence tracking, and any scheduler history owned by the match driver.

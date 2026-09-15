@@ -6,7 +6,7 @@ use std::{
 use bevy::{prelude::*, time::Fixed};
 use castle_fight_sim::{
     BuildingFootprint, CastleFightProductionKind, CastleFightUnitKind, CombatRules,
-    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, Team, UnitSpawn,
+    SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig, Team,
     castle_fight_damage_rules,
 };
 
@@ -92,11 +92,7 @@ fn spawn_imported_unit(
     team: Team,
     position: SimPoint,
 ) {
-    let definition = kind.definition();
-    simulation.spawn_unit_with_properties(
-        UnitSpawn::from_template(team, position, definition.template()),
-        definition.gameplay_properties(),
-    );
+    simulation.spawn_resolved_unit(team, position, kind.definition().resolved());
 }
 
 fn populate_imported_lane(simulation: &mut Simulation, total_units: usize) {

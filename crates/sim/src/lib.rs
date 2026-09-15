@@ -16,21 +16,25 @@ pub use components::{
     BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
     CorpseDefinitionId, CorpseProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
-    EvasionEffectProfile, ManaProfile, ModifierId, MovementClass, MovementProfile,
-    PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, SimId, SpellcastingProfile,
-    StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile, UnitGameplayProperties,
-    UnitSpawn, UnitTemplate,
+    EvasionEffectProfile, GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass,
+    MovementProfile, PassiveUnitEffect, PassiveUnitEffects, ProductionProfile,
+    ResolvedUnitDefinition, SimId, SpellcastingProfile, StatusState, Team, TriggeredAttackEffect,
+    TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
-    CASTLE_FIGHT_DEFAULT_MAP_VERSION, CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuilderDefinition,
-    CastleFightBuilderRace, CastleFightCommandCardLayout, CastleFightProductionDefinition,
+    CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_DEFAULT_MAP_VERSION,
+    CASTLE_FIGHT_SIMULATION_HZ, CastleFightAbilityId, CastleFightBuilderDefinition,
+    CastleFightBuilderId, CastleFightBuilderRace, CastleFightBuildingId,
+    CastleFightCommandCardLayout, CastleFightContentAvailability, CastleFightContentBundle,
+    CastleFightContentError, CastleFightContentIdentity, CastleFightProductionDefinition,
     CastleFightProductionKind, CastleFightTowerDefinition, CastleFightTowerKind,
-    CastleFightUnitDefinition, CastleFightUnitKind, CommandCardPosition,
-    UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
+    CastleFightUnitDefinition, CastleFightUnitId, CastleFightUnitKind, CommandCardPosition,
+    ResolvedCastleFightBehavior, UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
     castle_fight_builder_profile_for_version, castle_fight_command_card_layout,
-    castle_fight_command_card_layout_for_version, castle_fight_damage_rules,
-    castle_fight_damage_rules_for_version, castle_fight_economy_rules,
-    castle_fight_economy_rules_for_version, castle_fight_main_castle_repair_time_ticks,
+    castle_fight_command_card_layout_for_version, castle_fight_content_availability,
+    castle_fight_content_bundle, castle_fight_damage_rules, castle_fight_damage_rules_for_version,
+    castle_fight_economy_rules, castle_fight_economy_rules_for_version,
+    castle_fight_main_castle_repair_time_ticks,
     castle_fight_main_castle_repair_time_ticks_for_version,
 };
 pub use damage::{
@@ -1217,14 +1221,12 @@ mod tests {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let troll = CastleFightUnitKind::IceTrollShadowPriest.definition();
-        let spellcasting = troll
-            .spellcasting
-            .expect("Ice Troll Shadow Priest must have Frost Armor autocast");
-        let caster = sim.spawn_unit_with_properties_and_spellcasting(
-            UnitSpawn::from_template(Team(0), SimPoint::new(30 * world, 0), troll.template()),
-            troll.gameplay_properties(),
-            spellcasting,
+        assert!(
+            troll.spellcasting.is_some(),
+            "Ice Troll Shadow Priest must have Frost Armor autocast"
         );
+        let caster =
+            sim.spawn_resolved_unit(Team(0), SimPoint::new(30 * world, 0), troll.resolved());
         let ally = sim.spawn_unit(UnitSpawn {
             team: Team(0),
             position: SimPoint::new(60 * world, 0),

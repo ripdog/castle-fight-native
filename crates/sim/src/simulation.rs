@@ -13,7 +13,7 @@ const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
 const RANDOM_PURPOSE_DEFEND_DEFLECT: u64 = 0x4445_4645_4e44_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 3;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 4;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -27,19 +27,19 @@ use crate::{
         BuilderState, BuildingConstruction, BuildingFootprint, BuildingGameplayProperties,
         BuildingRuntimeState, BuildingSpawn, BuildingUpgradeSource, BurningOilZone,
         ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
-        CorpseProducer, CorpseProfile, DefendEffectProfile, GuaranteedHitProjectile, Health,
-        HealthRegeneration, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
-        MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
-        ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
-        NavigationState, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects, Position,
-        ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
-        ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
-        ProductionHealthRegeneration, ProductionMovementClass, ProductionPassiveEffects,
-        ProductionProfile, ProductionSpellcastingProfile, ProductionState,
-        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, RetaliationState,
-        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
-        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
-        UnitGameplayProperties, UnitSpawn,
+        CorpseProducer, CorpseProfile, DefendEffectProfile, GameplayBundleIdentity,
+        GuaranteedHitProjectile, Health, HealthRegeneration, MAX_BOUNCE_HITS,
+        MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
+        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit, ModifierId, MovementClass,
+        MovementProfile, NavigationGoal, NavigationState, PassiveUnitEffect, PassiveUnitEffects,
+        PendingAttackEffects, Position, ProductionArmorProfile, ProductionAttackTargets,
+        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
+        ProductionDamageType, ProductionHealthRegeneration, ProductionMovementClass,
+        ProductionPassiveEffects, ProductionProfile, ProductionSpellcastingProfile,
+        ProductionState, ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks,
+        ResolvedUnitDefinition, RetaliationState, SimId, SpawnTick, SpellcastingProfile,
+        StatusState, TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier,
+        TimedDamageOverTime, TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -444,6 +444,24 @@ impl Simulation {
         workers: usize,
         combat_rules: CombatRules,
     ) -> Self {
+        Self::new_internal(config, workers, combat_rules, None)
+    }
+
+    pub fn new_with_gameplay_bundle(
+        config: SimulationConfig,
+        workers: usize,
+        combat_rules: CombatRules,
+        gameplay_bundle: GameplayBundleIdentity,
+    ) -> Self {
+        Self::new_internal(config, workers, combat_rules, Some(gameplay_bundle))
+    }
+
+    fn new_internal(
+        config: SimulationConfig,
+        workers: usize,
+        combat_rules: CombatRules,
+        gameplay_bundle: Option<GameplayBundleIdentity>,
+    ) -> Self {
         assert!(workers > 0, "simulation requires at least one worker");
         assert!(config.spatial_cell_size > 0);
         assert!(config.navigation_cell_size > 0);
@@ -462,7 +480,8 @@ impl Simulation {
             );
         }
         validate_combat_rules(&config, &combat_rules);
-        let configuration_identity = canonical_configuration_identity(&config, &combat_rules);
+        let configuration_identity =
+            canonical_configuration_identity(&config, &combat_rules, gameplay_bundle);
         let starting_resources = PlayerResources {
             gold: config.economy.starting_gold,
             lumber: config.economy.starting_lumber,
@@ -1265,6 +1284,21 @@ impl Simulation {
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
         self.spawn_unit_with_properties(unit, UnitGameplayProperties::default())
+    }
+
+    pub fn spawn_resolved_unit(
+        &mut self,
+        team: Team,
+        position: SimPoint,
+        definition: ResolvedUnitDefinition,
+    ) -> SimId {
+        let unit = UnitSpawn::from_template(team, position, definition.template);
+        validate_unit_spawn(unit);
+        self.validate_unit_gameplay_properties(position, definition.properties);
+        if let Some(spellcasting) = definition.spellcasting {
+            validate_spellcasting_profile(spellcasting);
+        }
+        self.spawn_unit_unchecked(unit, definition.properties, definition.spellcasting)
     }
 
     pub fn spawn_unit_with_spellcasting(
@@ -9845,7 +9879,11 @@ fn building_source_query_radius(
         .expect("building acquisition query radius overflow")
 }
 
-fn canonical_configuration_identity(config: &SimulationConfig, combat_rules: &CombatRules) -> u64 {
+fn canonical_configuration_identity(
+    config: &SimulationConfig,
+    combat_rules: &CombatRules,
+    gameplay_bundle: Option<GameplayBundleIdentity>,
+) -> u64 {
     const DOMAIN: u64 = 0x4346_434f_4e46_4947;
     const DAMAGE_TYPES: [DamageType; DamageType::COUNT] = [
         DamageType::Normal,
@@ -9871,6 +9909,14 @@ fn canonical_configuration_identity(config: &SimulationConfig, combat_rules: &Co
     hash.write_u64(DOMAIN);
     hash.write_u64(u64::from(CANONICAL_CHECKSUM_SCHEMA_VERSION));
     hash.write_i32(CASTLE_FIGHT_SIMULATION_HZ);
+    match gameplay_bundle {
+        Some(identity) => {
+            hash.write_u8(1);
+            hash.write_u32(identity.schema_version);
+            hash.write_u64(identity.gameplay_hash);
+        }
+        None => hash.write_u8(0),
+    }
     hash.write_u64(config.match_seed);
     hash.write_i32(config.spatial_cell_size);
     hash.write_i32(config.navigation_cell_size);
@@ -11287,6 +11333,30 @@ mod canonical_checksum_tests {
                 ..SimulationConfig::default()
             },
             1,
+        );
+
+        assert_ne!(first.checksum(), second.checksum());
+    }
+
+    #[test]
+    fn gameplay_bundle_identity_changes_authoritative_checksum() {
+        let first = Simulation::new_with_gameplay_bundle(
+            SimulationConfig::default(),
+            1,
+            CombatRules::default(),
+            GameplayBundleIdentity {
+                schema_version: 1,
+                gameplay_hash: 0x1111,
+            },
+        );
+        let second = Simulation::new_with_gameplay_bundle(
+            SimulationConfig::default(),
+            1,
+            CombatRules::default(),
+            GameplayBundleIdentity {
+                schema_version: 1,
+                gameplay_hash: 0x2222,
+            },
         );
 
         assert_ne!(first.checksum(), second.checksum());

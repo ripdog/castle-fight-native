@@ -4,7 +4,7 @@ use castle_fight_sim::{
     CastleFightBuilderRace, CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind,
     CombatRules, CommandCardPosition, ContentIdentity, DamageType, NavCell,
     SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig, TargetlessLane, Team,
-    TerrainElevationMap, UnitSpawn, castle_fight_damage_rules, castle_fight_economy_rules,
+    TerrainElevationMap, castle_fight_damage_rules, castle_fight_economy_rules,
     castle_fight_main_castle_repair_time_ticks,
 };
 
@@ -177,10 +177,10 @@ fn populate_render_stress_units(simulation: &mut Simulation, unit_count: usize) 
             (START_Y_WORLD + row as i32 * SPACING_WORLD) * SUBUNITS_PER_WORLD_UNIT,
         );
         let kind = CastleFightUnitKind::ALL[index % CastleFightUnitKind::ALL.len()];
-        let definition = kind.definition();
-        simulation.spawn_unit_with_properties(
-            UnitSpawn::from_template(Team((index & 1) as u8), position, definition.template()),
-            definition.gameplay_properties(),
+        simulation.spawn_resolved_unit(
+            Team((index & 1) as u8),
+            position,
+            kind.definition().resolved(),
         );
     }
 }
@@ -891,10 +891,7 @@ mod tests {
         let mut simulation = Simulation::new(config, 1);
         let footman = CastleFightUnitKind::Footman.definition();
         let start = world_point(-5_600, 1_800);
-        let unit = simulation.spawn_unit_with_properties(
-            UnitSpawn::from_template(Team(0), start, footman.template()),
-            footman.gameplay_properties(),
-        );
+        let unit = simulation.spawn_resolved_unit(Team(0), start, footman.resolved());
 
         simulation.step();
         let first = simulation

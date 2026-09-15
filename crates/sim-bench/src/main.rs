@@ -598,11 +598,7 @@ fn spawn_imported_unit(
     team: Team,
     position: SimPoint,
 ) {
-    let definition = kind.definition();
-    simulation.spawn_unit_with_properties(
-        UnitSpawn::from_template(team, position, definition.template()),
-        definition.gameplay_properties(),
-    );
+    simulation.spawn_resolved_unit(team, position, kind.definition().resolved());
 }
 
 fn populate_imported_lane_battle(simulation: &mut Simulation, total_units: usize) {
