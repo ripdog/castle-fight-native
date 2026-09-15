@@ -652,20 +652,20 @@ fn percent_label(per_10k: i32, force_sign: bool) -> String {
 fn damage_type_name(damage_type: DamageType) -> &'static str {
     match damage_type {
         DamageType::Normal => "Normal",
-        DamageType::Pierce => "Piercing",
+        DamageType::Pierce => "Pierce",
         DamageType::Siege => "Siege",
         DamageType::Magic => "Magic",
         DamageType::Chaos => "Chaos",
-        DamageType::Spells => "Spells",
+        DamageType::Spells => "Spell",
         DamageType::Hero => "Hero",
     }
 }
 
 fn armor_type_name(armor_type: ArmorType) -> &'static str {
     match armor_type {
-        ArmorType::Small => "Small",
+        ArmorType::Small => "Light",
         ArmorType::Medium => "Medium",
-        ArmorType::Large => "Large",
+        ArmorType::Large => "Heavy",
         ArmorType::Fortified => "Fortified",
         ArmorType::Normal => "Normal",
         ArmorType::Hero => "Hero",
@@ -910,10 +910,30 @@ mod tests {
         selected.target = Some(SimId(8));
 
         let text = format_unit_inspector(&samples.current.units[&SimId(7)], 10, &samples);
-        assert!(text.contains("Attack type: Piercing -> Small: 200% (+100%)"));
+        assert!(text.contains("Attack type: Pierce -> Light: 200% (+100%)"));
         assert!(text.contains("Defense type: Medium <- Normal: 150% (+50%) incoming"));
         assert!(!text.contains("Last attacker:"));
         assert!(!text.contains("Last attacked:"));
+    }
+
+    #[test]
+    fn combat_type_labels_use_castle_fight_player_facing_names() {
+        assert_eq!(armor_type_name(ArmorType::Small), "Light");
+        assert_eq!(armor_type_name(ArmorType::Medium), "Medium");
+        assert_eq!(armor_type_name(ArmorType::Large), "Heavy");
+        assert_eq!(armor_type_name(ArmorType::Fortified), "Fortified");
+        assert_eq!(armor_type_name(ArmorType::Normal), "Normal");
+        assert_eq!(armor_type_name(ArmorType::Hero), "Hero");
+        assert_eq!(armor_type_name(ArmorType::Divine), "Divine");
+        assert_eq!(armor_type_name(ArmorType::Unarmored), "Unarmored");
+
+        assert_eq!(damage_type_name(DamageType::Normal), "Normal");
+        assert_eq!(damage_type_name(DamageType::Pierce), "Pierce");
+        assert_eq!(damage_type_name(DamageType::Siege), "Siege");
+        assert_eq!(damage_type_name(DamageType::Magic), "Magic");
+        assert_eq!(damage_type_name(DamageType::Chaos), "Chaos");
+        assert_eq!(damage_type_name(DamageType::Spells), "Spell");
+        assert_eq!(damage_type_name(DamageType::Hero), "Hero");
     }
 
     #[test]
