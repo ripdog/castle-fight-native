@@ -227,6 +227,8 @@ The absence of a canonical member such as `war3mapUnits.doo`, `war3map.w3q`, or 
 
 The extractor inventory and native engine implementation ledger are intentionally separate. `crates/sim/data/castle-fight/native-effect-bindings.json` binds extracted stable source keys to native implementation IDs and inclusive map-version ranges; per-version numeric tuning lives under `crates/sim/data/castle-fight/<version>/`. This means a balance-only change can reuse the same behavior implementation while a semantic rewrite gets a new implementation ID/range.
 
+Runtime catalog supplements are generated from retained extraction evidence rather than hand-entered numbers. For example, the compact 9.27 repair-time/command-card source can be regenerated from `resolved/object-fields.tsv` with `python tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1`. The committed supplement records the source object-field digest and extraction Git tree; the Rust catalog additionally pins the other retained source tables with a canonical evidence hash, so changing extraction evidence requires a new content revision instead of silently redefining an existing bundle.
+
 Report the current 9.27 implementation gaps with:
 
 ```sh
@@ -234,15 +236,15 @@ python tools/wc3-map/native_effect_coverage.py --map-version 9.27
 python tools/wc3-map/native_effect_coverage.py --map-version 9.27 --show-unimplemented
 ```
 
-The report inventories normalized unit abilities, scripted unit spells, scripted building spells, and production-unit special mechanics directly from the resolved extraction. A row is `implemented` only when a binding covers the requested version; otherwise it remains explicitly `unimplemented`. The first playable-unit slice covers all eight distinct 9.27 unit-ability keys attached to the currently exposed Footman/Ranger/Catapult/Ice Troll Shadow Priest/Gryphon Rider roster, so the repository currently reports `8/398` distinct inventory keys covered for 9.27. The ledger includes explicit no-runtime bindings for the shared Channel marker (`A0CV`) and Ranger's zero-damage Barrage (`A03N`) rather than silently dropping them. Other currently unimplemented entries may likewise prove data-only/marker behavior, but that classification must remain explicit.
+The report inventories normalized unit abilities, scripted unit spells, scripted building spells, and production-unit special mechanics directly from the resolved extraction. A row is `implemented` only when a binding covers the requested version; otherwise it remains explicitly `unimplemented`. The current playable development slice resolves the production-unit abilities plus the exposed towers' shared `A09A` range-display helper, so the repository currently reports `9/401` distinct inventory keys covered for 9.27. The ledger includes explicit no-runtime bindings for the shared Channel marker (`A0CV`), Ranger's zero-damage Barrage (`A03N`), and `A09A` rather than silently dropping them. Other currently unimplemented entries may likewise prove data-only/marker behavior, but that classification must remain explicit.
 
 Use `--output-tsv <path>` when a reviewable snapshot is useful. For a newer extracted map, point `--resolved-dir` at that version's resolved output and use the matching `--map-version`; this keeps extraction data version-conscious without baking 9.27 paths into the coverage algorithm.
 
 ## Tests
 
 ```sh
-python -m unittest tools/wc3-map/test_decode.py tools/wc3-map/test_resolve_base.py tools/wc3-map/test_native_effect_coverage.py
-python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/lua_index.py tools/wc3-map/resolve-base-data.py tools/wc3-map/native_effect_coverage.py
+python -m unittest tools/wc3-map/test_decode.py tools/wc3-map/test_resolve_base.py tools/wc3-map/test_native_effect_coverage.py tools/wc3-map/test_build_runtime_catalog.py
+python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/lua_index.py tools/wc3-map/resolve-base-data.py tools/wc3-map/native_effect_coverage.py tools/wc3-map/build_runtime_catalog.py
 ```
 
 A full end-to-end validation is `tools/wc3-map/extract-base-data.sh` followed by `tools/wc3-map/extract.sh` and inspection of both `summary.json` and `resolved/summary.json`. The current resolved summary requires zero unresolved inheritance anchors, missing referenced pathing textures, or unknown placed doodad rawcodes.

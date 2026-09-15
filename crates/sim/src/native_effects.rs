@@ -424,14 +424,14 @@ struct BindingRecord {
     notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct TuningFile {
     schema_version: u32,
     map_version: String,
     effects: Vec<TuningEffect>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
     Evasion {
@@ -636,44 +636,92 @@ pub fn resolve_native_effect_requirements(
 pub fn native_unit_mechanics_for(
     version: MapVersion,
     unit_rawcode: u32,
+    ability_rawcodes: &[u32],
 ) -> Result<NativeUnitMechanics, NativeEffectCatalogError> {
     let catalog = catalog();
     let tuning = catalog
         .tuning(version)
         .ok_or(NativeEffectCatalogError::UnsupportedMapVersion(version))?;
+    Ok(native_unit_mechanics_from_tuning(
+        tuning,
+        unit_rawcode,
+        ability_rawcodes,
+    ))
+}
+
+fn native_unit_mechanics_from_tuning(
+    tuning: &TuningFile,
+    unit_rawcode: u32,
+    ability_rawcodes: &[u32],
+) -> NativeUnitMechanics {
+    let abilities = ability_rawcodes.iter().copied().collect::<BTreeSet<_>>();
     let mut passive_effects = Vec::new();
     let mut spellcasting = None;
 
-    for effect in &tuning.effects {
-        let Some(effect_unit_rawcode) = effect.unit_rawcode() else {
-            continue;
-        };
-        if rawcode(effect_unit_rawcode).expect("validated unit rawcode") != unit_rawcode {
-            continue;
+    for ability in abilities {
+        let source = NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, ability);
+        let mut passive = None;
+        let mut automatic_spell = None;
+        for effect in tuning
+            .effects
+            .iter()
+            .filter(|effect| effect.source().ok() == Some(source))
+        {
+            match effect {
+                TuningEffect::FrostArmor { .. } => {
+                    let candidate = build_spellcasting(effect);
+                    if let Some(existing) = automatic_spell {
+                        assert_eq!(
+                            existing,
+                            candidate,
+                            "ability {} has conflicting tuning rows while resolving unit {}",
+                            display_rawcode(ability),
+                            display_rawcode(unit_rawcode)
+                        );
+                    } else {
+                        automatic_spell = Some(candidate);
+                    }
+                }
+                TuningEffect::Evasion { .. }
+                | TuningEffect::Defend { .. }
+                | TuningEffect::Bash { .. }
+                | TuningEffect::OrbSpellProc { .. }
+                | TuningEffect::BurningOil { .. } => {
+                    let candidate = build_passive_effect(tuning, effect);
+                    if let Some(existing) = passive {
+                        assert_eq!(
+                            existing,
+                            candidate,
+                            "ability {} has conflicting tuning rows while resolving unit {}",
+                            display_rawcode(ability),
+                            display_rawcode(unit_rawcode)
+                        );
+                    } else {
+                        passive = Some(candidate);
+                    }
+                }
+                TuningEffect::ChainLightning { .. } | TuningEffect::EntanglingRoots { .. } => {
+                    unreachable!("ability-effect tuning cannot match a unit-ability source")
+                }
+            }
         }
-        match effect {
-            TuningEffect::FrostArmor { .. } => {
-                assert!(
-                    spellcasting.is_none(),
-                    "one automatic spell per verification unit"
-                );
-                spellcasting = Some(build_spellcasting(effect));
-            }
-            TuningEffect::Evasion { .. }
-            | TuningEffect::Defend { .. }
-            | TuningEffect::Bash { .. }
-            | TuningEffect::OrbSpellProc { .. }
-            | TuningEffect::BurningOil { .. } => {
-                passive_effects.push(build_passive_effect(tuning, effect));
-            }
-            TuningEffect::ChainLightning { .. } | TuningEffect::EntanglingRoots { .. } => {}
+
+        if let Some(effect) = passive {
+            passive_effects.push(effect);
+        }
+        if let Some(candidate) = automatic_spell {
+            assert!(
+                spellcasting.replace(candidate).is_none(),
+                "unit {} has more than one automatic spell in the current native primitive",
+                display_rawcode(unit_rawcode)
+            );
         }
     }
 
-    Ok(NativeUnitMechanics {
+    NativeUnitMechanics {
         passive_effects: PassiveUnitEffects::from_slice(&passive_effects),
         spellcasting,
-    })
+    }
 }
 
 #[must_use]
@@ -990,6 +1038,27 @@ mod tests {
     }
 
     #[test]
+    fn resolver_does_not_depend_on_binding_registry_order() {
+        let roots = [
+            source(NativeEffectSourceKind::UnitAbility, "A01B"),
+            source(NativeEffectSourceKind::UnitAbility, "A049"),
+            source(NativeEffectSourceKind::UnitAbility, "A03Z"),
+        ];
+        let original = NativeEffectCatalog::load().unwrap();
+        let expected = original
+            .resolve_requirements(MapVersion::CASTLE_FIGHT_9_27, &roots)
+            .unwrap();
+        let mut reversed = NativeEffectCatalog::load().unwrap();
+        reversed.bindings.reverse();
+        assert_eq!(
+            reversed
+                .resolve_requirements(MapVersion::CASTLE_FIGHT_9_27, &roots)
+                .unwrap(),
+            expected
+        );
+    }
+
+    #[test]
     fn resolver_rejects_missing_indirect_effect_binding() {
         let mut test_catalog = NativeEffectCatalog::load().unwrap();
         let child = source(NativeEffectSourceKind::AbilityEffect, "A05X");
@@ -1069,6 +1138,66 @@ mod tests {
     }
 
     #[test]
+    fn unit_mechanics_do_not_depend_on_tuning_file_order() {
+        let tuning = catalog().tuning_9_27.clone();
+        let mut reversed = tuning.clone();
+        reversed.effects.reverse();
+
+        for (unit_rawcode, abilities) in [
+            (
+                u32::from_be_bytes(*b"e003"),
+                vec![
+                    u32::from_be_bytes(*b"A0CV"),
+                    u32::from_be_bytes(*b"A03N"),
+                    u32::from_be_bytes(*b"A00U"),
+                ],
+            ),
+            (
+                u32::from_be_bytes(*b"h03A"),
+                vec![u32::from_be_bytes(*b"A00U"), u32::from_be_bytes(*b"A03G")],
+            ),
+            (
+                u32::from_be_bytes(*b"o001"),
+                vec![u32::from_be_bytes(*b"A0CV"), u32::from_be_bytes(*b"A02J")],
+            ),
+            (
+                u32::from_be_bytes(*b"n015"),
+                vec![
+                    u32::from_be_bytes(*b"A0CV"),
+                    u32::from_be_bytes(*b"A049"),
+                    u32::from_be_bytes(*b"A03Z"),
+                ],
+            ),
+            (
+                u32::from_be_bytes(*b"h016"),
+                vec![u32::from_be_bytes(*b"A05K"), u32::from_be_bytes(*b"A01B")],
+            ),
+        ] {
+            assert_eq!(
+                native_unit_mechanics_from_tuning(&tuning, unit_rawcode, &abilities),
+                native_unit_mechanics_from_tuning(&reversed, unit_rawcode, &abilities),
+            );
+        }
+    }
+
+    #[test]
+    fn shared_ability_rawcode_reuses_verified_tuning_for_new_unit_users() {
+        let mechanics = native_unit_mechanics_for(
+            MapVersion::CASTLE_FIGHT_9_27,
+            u32::from_be_bytes(*b"zzzz"),
+            &[u32::from_be_bytes(*b"A00U")],
+        )
+        .unwrap();
+        assert_eq!(
+            mechanics.passive_effects.iter().collect::<Vec<_>>(),
+            vec![PassiveUnitEffect::Evasion(EvasionEffectProfile {
+                ability: AbilityId(u32::from_be_bytes(*b"A00U")),
+                chance_per_10k: 1_500,
+            })]
+        );
+    }
+
+    #[test]
     fn current_slice_bindings_are_version_scoped() {
         for (kind, key) in [
             ("unit-ability", "A0CV"),
@@ -1082,6 +1211,7 @@ mod tests {
             ("ability-effect", "A03W"),
             ("unit-ability", "A02J"),
             ("unit-ability", "A03Z"),
+            ("unit-ability", "A09A"),
         ] {
             assert!(native_effect_implementation_for(kind, key, MapVersion::new(9, 27)).is_some());
             assert_eq!(
@@ -1093,9 +1223,16 @@ mod tests {
 
     #[test]
     fn current_unit_mechanics_are_loaded_from_927_tuning() {
-        let ranger =
-            native_unit_mechanics_for(MapVersion::CASTLE_FIGHT_9_27, u32::from_be_bytes(*b"e003"))
-                .unwrap();
+        let ranger = native_unit_mechanics_for(
+            MapVersion::CASTLE_FIGHT_9_27,
+            u32::from_be_bytes(*b"e003"),
+            &[
+                u32::from_be_bytes(*b"A0CV"),
+                u32::from_be_bytes(*b"A03N"),
+                u32::from_be_bytes(*b"A00U"),
+            ],
+        )
+        .unwrap();
         assert!(matches!(
             ranger.passive_effects.iter().next(),
             Some(PassiveUnitEffect::Evasion(EvasionEffectProfile {
@@ -1104,9 +1241,12 @@ mod tests {
             }))
         ));
 
-        let defender =
-            native_unit_mechanics_for(MapVersion::CASTLE_FIGHT_9_27, u32::from_be_bytes(*b"h03A"))
-                .unwrap();
+        let defender = native_unit_mechanics_for(
+            MapVersion::CASTLE_FIGHT_9_27,
+            u32::from_be_bytes(*b"h03A"),
+            &[u32::from_be_bytes(*b"A00U"), u32::from_be_bytes(*b"A03G")],
+        )
+        .unwrap();
         let defender_effects = defender.passive_effects.iter().collect::<Vec<_>>();
         assert!(defender_effects.iter().any(|effect| matches!(
             effect,
@@ -1127,9 +1267,16 @@ mod tests {
             })
         )));
 
-        let troll =
-            native_unit_mechanics_for(MapVersion::CASTLE_FIGHT_9_27, u32::from_be_bytes(*b"n015"))
-                .unwrap();
+        let troll = native_unit_mechanics_for(
+            MapVersion::CASTLE_FIGHT_9_27,
+            u32::from_be_bytes(*b"n015"),
+            &[
+                u32::from_be_bytes(*b"A0CV"),
+                u32::from_be_bytes(*b"A049"),
+                u32::from_be_bytes(*b"A03Z"),
+            ],
+        )
+        .unwrap();
         let spellcasting = troll.spellcasting.expect("Ice Troll must cast Frost Armor");
         assert_eq!(spellcasting.mana.maximum, 250);
         assert_eq!(spellcasting.mana.starting, 150);

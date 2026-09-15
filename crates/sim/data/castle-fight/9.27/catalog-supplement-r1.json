@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "map_version": "9.27",
+  "release_revision": "r1",
+  "extraction_git_tree": "bb38bb165fcee1371557208f99de6cf69c70ba1e",
+  "source_object_fields_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
+  "objects": [
+    {"rawcode":"e003","repair_time_seconds":20,"button_x":0,"button_y":0},
+    {"rawcode":"h000","repair_time_seconds":70,"button_x":0,"button_y":0},
+    {"rawcode":"h006","repair_time_seconds":110,"button_x":0,"button_y":2},
+    {"rawcode":"h015","repair_time_seconds":70,"button_x":3,"button_y":0},
+    {"rawcode":"h016","repair_time_seconds":45,"button_x":1,"button_y":0},
+    {"rawcode":"h02I","repair_time_seconds":70,"button_x":1,"button_y":1},
+    {"rawcode":"h039","repair_time_seconds":70,"button_x":3,"button_y":0},
+    {"rawcode":"h03A","repair_time_seconds":20,"button_x":0,"button_y":0},
+    {"rawcode":"h03D","repair_time_seconds":70,"button_x":3,"button_y":0},
+    {"rawcode":"h03K","repair_time_seconds":70,"button_x":2,"button_y":0},
+    {"rawcode":"h07P","repair_time_seconds":110,"button_x":0,"button_y":2},
+    {"rawcode":"hcas","repair_time_seconds":700,"button_x":0,"button_y":2},
+    {"rawcode":"hfoo","repair_time_seconds":20,"button_x":0,"button_y":0},
+    {"rawcode":"n015","repair_time_seconds":25,"button_x":null,"button_y":null},
+    {"rawcode":"o001","repair_time_seconds":36,"button_x":0,"button_y":0}
+  ]
+}

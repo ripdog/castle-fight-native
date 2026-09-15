@@ -11,6 +11,14 @@
     },
     {
       "source_kind": "unit-ability",
+      "source_key": "A09A",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Check Range display helper carried by Castle Fight towers; it has no authoritative gameplay effect."
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A03N",
       "implementation": "warcraft-zero-damage-barrage-v1",
       "valid_from": "9.27",

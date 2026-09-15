@@ -240,6 +240,12 @@ impl Default for AttackTargetMask {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GameplayBundleIdentity {
+    pub schema_version: u32,
+    pub gameplay_hash: u64,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContentIdentity {
     pub rawcode: u32,
@@ -606,6 +612,13 @@ pub struct UnitTemplate {
     pub health: i32,
     pub attack: AttackProfile,
     pub movement: MovementProfile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedUnitDefinition {
+    pub template: UnitTemplate,
+    pub properties: UnitGameplayProperties,
+    pub spellcasting: Option<SpellcastingProfile>,
 }
 
 #[derive(Debug, Clone, Copy)]
