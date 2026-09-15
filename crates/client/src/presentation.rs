@@ -111,7 +111,7 @@ const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
 const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
 pub(crate) const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
-const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
+pub(crate) const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -219,6 +219,32 @@ impl WorldMetrics {
             height,
         )
     }
+}
+
+/// Presentation elevation for a flat building model covering `footprint`.
+///
+/// WC3 building models are rigid even when the terrain under their pathing footprint spans a
+/// ramp. Sampling only the footprint centre can therefore bury the low geosets under a higher
+/// edge of the terrain. Use the highest presentation-height sample on the navigation-cell grid
+/// covered by the footprint so both placement ghosts and completed buildings remain entirely
+/// above the rendered ground.
+pub(crate) fn building_terrain_height(
+    metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
+    footprint: BuildingFootprint,
+) -> f32 {
+    let cell = metrics.navigation_cell_world();
+    let max_x = footprint.max_x().saturating_add(1);
+    let max_y = footprint.max_y().saturating_add(1);
+    let mut maximum = f32::NEG_INFINITY;
+    for cell_y in footprint.min_y..=max_y {
+        for cell_x in footprint.min_x..=max_x {
+            maximum = maximum.max(
+                terrain.height_at_world(Vec2::new(cell_x as f32 * cell, cell_y as f32 * cell)),
+            );
+        }
+    }
+    maximum
 }
 
 #[derive(Resource)]
@@ -2285,7 +2311,7 @@ fn sync_render_entities(
         commands.entity(entry.entity).despawn();
         if let Some(building) = samples.previous.buildings.get(&id) {
             let (mut center, _) = metrics.footprint_center_size(building.footprint);
-            center.y = terrain.height_at_world(center.xz());
+            center.y = building_terrain_height(&metrics, &terrain, building.footprint);
             remnants.0.push(DeathRemnant {
                 position: center,
                 owner: building.owner,
@@ -2677,7 +2703,7 @@ fn sync_render_entities(
                 continue;
             }
             let (mut center, _) = metrics.footprint_center_size(building.footprint);
-            center.y = terrain.height_at_world(center.xz());
+            center.y = building_terrain_height(&metrics, &terrain, building.footprint);
             let position = center + Vec3::Y * building_height(building) * 1.08;
             spawn_stun_effect(
                 &mut commands,
@@ -2694,7 +2720,7 @@ fn sync_render_entities(
             continue;
         }
         let (mut center, size) = metrics.footprint_center_size(building.footprint);
-        center.y = terrain.height_at_world(center.xz());
+        center.y = building_terrain_height(&metrics, &terrain, building.footprint);
         let visual_height = building_height(building);
         let entity = commands
             .spawn((
@@ -2964,7 +2990,7 @@ fn interpolate_render_transforms(
             continue;
         };
         let (mut center, _) = metrics.footprint_center_size(current.footprint);
-        center.y = terrain.height_at_world(center.xz());
+        center.y = building_terrain_height(&metrics, &terrain, current.footprint);
         let position = Vec3::new(
             center.x,
             center.y + building_height(current) * 0.5,
@@ -3294,7 +3320,7 @@ fn entity_render_position(
     }
     samples.current.buildings.get(&id).map(|building| {
         let (mut center, _) = metrics.footprint_center_size(building.footprint);
-        center.y = terrain.height_at_world(center.xz());
+        center.y = building_terrain_height(metrics, terrain, building.footprint);
         center
     })
 }
@@ -3571,7 +3597,7 @@ fn update_health_bar_batch(
                 continue;
             };
             let (mut center, size) = metrics.footprint_center_size(building.footprint);
-            center.y = terrain.height_at_world(center.xz());
+            center.y = building_terrain_height(&metrics, &terrain, building.footprint);
             let overhead_height = building_bar_overhead_height(building, entry, &building_models);
             let world_width = building_health_bar_width(size, overhead_height);
             let anchor = center + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
@@ -3882,7 +3908,7 @@ fn draw_presentation_gizmos(
                 entity_render_position(target, &samples, &metrics, &terrain, alpha)
         {
             let (mut center, _) = metrics.footprint_center_size(building.footprint);
-            center.y = terrain.height_at_world(center.xz());
+            center.y = building_terrain_height(&metrics, &terrain, building.footprint);
             gizmos.line(
                 center + Vec3::Y * 3.0,
                 target_position + Vec3::Y * 2.0,
@@ -4735,5 +4761,24 @@ mod tests {
 
         assert_eq!(size, Vec2::new(70.0, 70.0));
         assert_eq!(center, Vec3::new(335.0, 0.0, 375.0));
+    }
+
+    #[test]
+    fn building_elevation_uses_highest_terrain_under_footprint() {
+        let terrain = original_terrain();
+        let config = SimulationConfig {
+            navigation_cell_size: 32 * SUBUNITS_PER_WORLD_UNIT,
+            ..SimulationConfig::default()
+        };
+        let metrics = WorldMetrics::from_simulation_config(&config);
+        // This 4x4 site crosses the authored ramp north-east of the left castle. Its centre is
+        // substantially lower than one edge, which used to bury low building geosets.
+        let footprint = BuildingFootprint::new(-168, 9, 4, 4);
+        let (center, _) = metrics.footprint_center_size(footprint);
+        let center_height = terrain.height_at_world(center.xz());
+        let support_height = building_terrain_height(&metrics, &terrain, footprint);
+
+        assert!(support_height > center_height + 30.0);
+        assert!(support_height >= 574.0);
     }
 }

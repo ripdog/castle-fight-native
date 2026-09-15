@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
@@ -17,8 +17,8 @@ use crate::{
     demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
     inspection::{InspectionSelection, cursor_over_inspector_panel},
     presentation::{
-        WC3_MODEL_FACING_OFFSET, WorldMetrics, draw_footprint_outline, player_color,
-        viewport_ground_point,
+        WC3_BUILDING_AMBIENT_ANIMATION_SPEED, WC3_MODEL_FACING_OFFSET, WorldMetrics,
+        building_terrain_height, draw_footprint_outline, player_color, viewport_ground_point,
     },
     resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
@@ -199,6 +199,9 @@ struct BuildPlacementGhost {
     valid: bool,
 }
 
+#[derive(Component)]
+struct BuildPlacementGhostAnimationController;
+
 #[derive(SystemParam)]
 struct BuildPreviewResources<'w> {
     metrics: Res<'w, WorldMetrics>,
@@ -243,9 +246,12 @@ impl Plugin for BuildUiPlugin {
             )
             .add_systems(
                 Update,
-                sync_build_preview_ghost_materials
-                    .after(update_build_preview)
-                    .after(fix_wc3_scene_materials),
+                (
+                    sync_build_preview_ghost_materials
+                        .after(update_build_preview)
+                        .after(fix_wc3_scene_materials),
+                    setup_build_preview_ghost_animation_players.after(update_build_preview),
+                ),
             );
     }
 }
@@ -1075,7 +1081,7 @@ fn update_build_preview(
         return;
     };
     let (mut center, _) = resources.metrics.footprint_center_size(footprint);
-    center.y = resources.terrain.height_at_world(center.xz()) + 0.05;
+    center.y = building_terrain_height(&resources.metrics, &resources.terrain, footprint) + 0.05;
     let transform = Transform {
         translation: center,
         rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
@@ -1110,6 +1116,61 @@ fn update_build_preview(
             BuildPlacementGhost { rawcode, valid },
         ));
     }
+}
+
+fn setup_build_preview_ghost_animation_players(
+    mut commands: Commands,
+    building_models: Res<BuildingModelSet>,
+    parents: Query<&ChildOf>,
+    ghosts: Query<&BuildPlacementGhost>,
+    mut players: Query<
+        (Entity, &mut AnimationPlayer),
+        Without<BuildPlacementGhostAnimationController>,
+    >,
+) {
+    for (entity, mut player) in &mut players {
+        let Some(rawcode) = build_preview_ghost_rawcode(entity, &parents, &ghosts) else {
+            continue;
+        };
+        let Some(animations) = building_models.animations(rawcode) else {
+            continue;
+        };
+        let Some(stand) = animations.stand.clone() else {
+            commands
+                .entity(entity)
+                .insert(BuildPlacementGhostAnimationController);
+            continue;
+        };
+
+        let mut transitions = AnimationTransitions::new();
+        transitions
+            .play(&mut player, stand.node, Duration::ZERO)
+            .repeat()
+            .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+        commands.entity(entity).insert((
+            AnimationGraphHandle(animations.graph.clone()),
+            transitions,
+            BuildPlacementGhostAnimationController,
+        ));
+    }
+}
+
+fn build_preview_ghost_rawcode(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    ghosts: &Query<&BuildPlacementGhost>,
+) -> Option<u32> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(ghost) = ghosts.get(current) {
+            return Some(ghost.rawcode);
+        }
+        let Ok(parent) = parents.get(current) else {
+            return None;
+        };
+        current = parent.parent();
+    }
+    None
 }
 
 fn sync_build_preview_ghost_materials(
