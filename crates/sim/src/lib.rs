@@ -2,6 +2,7 @@ mod components;
 mod content;
 mod damage;
 mod economy;
+mod match_setup;
 mod math;
 mod native_effects;
 mod simulation;
@@ -22,19 +23,20 @@ pub use components::{
     TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
-    CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_DEFAULT_MAP_VERSION,
-    CASTLE_FIGHT_SIMULATION_HZ, CastleFightAbilityId, CastleFightBuilderDefinition,
-    CastleFightBuilderId, CastleFightBuilderRace, CastleFightBuildingId,
-    CastleFightCommandCardLayout, CastleFightContentAvailability, CastleFightContentBundle,
-    CastleFightContentError, CastleFightContentIdentity, CastleFightProductionDefinition,
-    CastleFightProductionKind, CastleFightTowerDefinition, CastleFightTowerKind,
-    CastleFightUnitDefinition, CastleFightUnitId, CastleFightUnitKind, CommandCardPosition,
-    ResolvedCastleFightBehavior, UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
+    CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
+    CASTLE_FIGHT_DEFAULT_MAP_VERSION, CASTLE_FIGHT_SIMULATION_HZ, CastleFightAbilityId,
+    CastleFightBuilderDefinition, CastleFightBuilderId, CastleFightBuilderRace,
+    CastleFightBuildingId, CastleFightBuildingKind, CastleFightCommandCardLayout,
+    CastleFightContentAvailability, CastleFightContentBundle, CastleFightContentError,
+    CastleFightContentIdentity, CastleFightProductionDefinition, CastleFightProductionKind,
+    CastleFightTowerDefinition, CastleFightTowerKind, CastleFightUnitDefinition, CastleFightUnitId,
+    CastleFightUnitKind, CommandCardPosition, ResolvedCastleFightBehavior,
+    UnsupportedCastleFightMapVersion, castle_fight_builder_profile,
     castle_fight_builder_profile_for_version, castle_fight_command_card_layout,
     castle_fight_command_card_layout_for_version, castle_fight_content_availability,
-    castle_fight_content_bundle, castle_fight_damage_rules, castle_fight_damage_rules_for_version,
-    castle_fight_economy_rules, castle_fight_economy_rules_for_version,
-    castle_fight_main_castle_repair_time_ticks,
+    castle_fight_content_bundle, castle_fight_content_bundle_for_revision,
+    castle_fight_damage_rules, castle_fight_damage_rules_for_version, castle_fight_economy_rules,
+    castle_fight_economy_rules_for_version, castle_fight_main_castle_repair_time_ticks,
     castle_fight_main_castle_repair_time_ticks_for_version,
 };
 pub use damage::{
@@ -43,6 +45,12 @@ pub use damage::{
 pub use economy::{
     BuildingEconomyProfile, EconomyRules, PlayerEconomyView, PlayerResources, RESOURCE_FIXED_SCALE,
     ResourcePurchaseError,
+};
+pub use match_setup::{
+    CASTLE_FIGHT_REGISTERED_RELEASES, CastleFightMatch, CastleFightMatchConfig,
+    CastleFightMatchMode, CastleFightMatchSetupError, CastleFightParticipantConfig,
+    CastleFightReleaseDescriptor, CastleFightResolvedMatch, castle_fight_registered_releases,
+    castle_fight_release_descriptor, create_castle_fight_match, resolve_castle_fight_match,
 };
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use native_effects::{

@@ -27,7 +27,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r2";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r2";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "bb38bb165fcee1371557208f99de6cf69c70ba1e";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -175,11 +175,73 @@ impl CastleFightContentBundle {
     pub fn behaviors(&self) -> &[ResolvedCastleFightBehavior] {
         &self.behaviors
     }
+
+    pub fn unit_definitions(&self) -> impl Iterator<Item = CastleFightUnitDefinition> + '_ {
+        self.units.values().copied()
+    }
+
+    pub fn builder_definitions(&self) -> impl Iterator<Item = &CastleFightBuilderDefinition> + '_ {
+        self.builders.values()
+    }
+
+    pub fn production_building_definitions(
+        &self,
+    ) -> impl Iterator<Item = CastleFightProductionDefinition> + '_ {
+        self.production_buildings.values().copied()
+    }
+
+    pub fn tower_definitions(&self) -> impl Iterator<Item = CastleFightTowerDefinition> + '_ {
+        self.towers.values().copied()
+    }
+
+    #[must_use]
+    pub fn building_kind_for_rawcode(&self, rawcode: u32) -> Option<CastleFightBuildingKind> {
+        CastleFightProductionKind::ALL
+            .into_iter()
+            .find(|kind| {
+                self.production_building(*kind)
+                    .is_some_and(|definition| definition.rawcode == rawcode)
+            })
+            .map(CastleFightBuildingKind::Production)
+            .or_else(|| {
+                CastleFightTowerKind::ALL
+                    .into_iter()
+                    .find(|kind| {
+                        self.tower(*kind)
+                            .is_some_and(|definition| definition.rawcode == rawcode)
+                    })
+                    .map(CastleFightBuildingKind::Tower)
+            })
+    }
+
+    #[must_use]
+    pub fn direct_building_kinds(&self) -> Vec<CastleFightBuildingKind> {
+        CastleFightProductionKind::ALL
+            .into_iter()
+            .filter(|kind| self.production_building(*kind).is_some())
+            .filter(|kind| {
+                kind.upgrade_from_for_version(self.map_version)
+                    .expect("bundle map version must support its production definitions")
+                    .is_none()
+            })
+            .map(CastleFightBuildingKind::Production)
+            .chain(
+                CastleFightTowerKind::ALL
+                    .into_iter()
+                    .filter(|kind| self.tower(*kind).is_some())
+                    .map(CastleFightBuildingKind::Tower),
+            )
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CastleFightContentError {
     UnsupportedRelease(MapVersion),
+    UnsupportedContentRevision {
+        map_version: MapVersion,
+        content_revision: &'static str,
+    },
     ArchivedOnly(MapVersion),
     NativeEffect(NativeEffectResolveError),
     MissingAbilityInventory(u32),
@@ -195,6 +257,13 @@ impl fmt::Display for CastleFightContentError {
                     "Castle Fight {version} is not registered as runtime content"
                 )
             }
+            Self::UnsupportedContentRevision {
+                map_version,
+                content_revision,
+            } => write!(
+                formatter,
+                "Castle Fight {map_version} content revision {content_revision} is not available in this build"
+            ),
             Self::ArchivedOnly(version) => write!(
                 formatter,
                 "Castle Fight {version} is archived source evidence but has no supported runtime bundle"
@@ -252,6 +321,101 @@ pub fn castle_fight_content_bundle(
         }
         CastleFightContentAvailability::SupportedFull => {
             unreachable!("no full Castle Fight content bundle is registered yet")
+        }
+    }
+}
+
+pub fn castle_fight_content_bundle_for_revision(
+    version: MapVersion,
+    content_revision: &'static str,
+) -> Result<&'static CastleFightContentBundle, CastleFightContentError> {
+    if version == MapVersion::CASTLE_FIGHT_9_27
+        && content_revision == CASTLE_FIGHT_CONTENT_REVISION_927
+    {
+        return castle_fight_content_bundle(version);
+    }
+    Err(CastleFightContentError::UnsupportedContentRevision {
+        map_version: version,
+        content_revision,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CastleFightBuildingKind {
+    Production(CastleFightProductionKind),
+    Tower(CastleFightTowerKind),
+}
+
+impl CastleFightBuildingKind {
+    #[must_use]
+    pub fn rawcode(self, bundle: &CastleFightContentBundle) -> Option<u32> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| definition.rawcode),
+            Self::Tower(kind) => bundle.tower(kind).map(|definition| definition.rawcode),
+        }
+    }
+
+    #[must_use]
+    pub fn name(self, bundle: &CastleFightContentBundle) -> Option<&'static str> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| definition.name),
+            Self::Tower(kind) => bundle.tower(kind).map(|definition| definition.name),
+        }
+    }
+
+    #[must_use]
+    pub fn tooltips(
+        self,
+        bundle: &CastleFightContentBundle,
+    ) -> Option<(&'static str, &'static str)> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| (definition.basic_tooltip, definition.extended_tooltip)),
+            Self::Tower(kind) => bundle
+                .tower(kind)
+                .map(|definition| (definition.basic_tooltip, definition.extended_tooltip)),
+        }
+    }
+
+    #[must_use]
+    pub fn footprint_size_cells(self, bundle: &CastleFightContentBundle) -> Option<u16> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| definition.footprint_size_cells),
+            Self::Tower(kind) => bundle
+                .tower(kind)
+                .map(|definition| definition.footprint_size_cells),
+        }
+    }
+
+    #[must_use]
+    pub fn economy(self, bundle: &CastleFightContentBundle) -> Option<BuildingEconomyProfile> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| definition.economy),
+            Self::Tower(kind) => bundle.tower(kind).map(|definition| definition.economy),
+        }
+    }
+
+    #[must_use]
+    pub fn command_card_position(
+        self,
+        bundle: &CastleFightContentBundle,
+    ) -> Option<CommandCardPosition> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| definition.command_card_position),
+            Self::Tower(kind) => bundle
+                .tower(kind)
+                .map(|definition| definition.command_card_position),
         }
     }
 }
@@ -2932,6 +3096,16 @@ mod tests {
             Err(CastleFightContentError::ArchivedOnly(
                 MapVersion::CASTLE_FIGHT_9_32
             ))
+        ));
+        assert!(matches!(
+            castle_fight_content_bundle_for_revision(
+                MapVersion::CASTLE_FIGHT_9_27,
+                "cf-native-dev-slice-r1"
+            ),
+            Err(CastleFightContentError::UnsupportedContentRevision {
+                map_version: MapVersion::CASTLE_FIGHT_9_27,
+                content_revision: "cf-native-dev-slice-r1"
+            })
         ));
     }
 
