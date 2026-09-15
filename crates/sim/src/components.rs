@@ -864,6 +864,20 @@ impl StatusState {
     pub const fn is_stunned(self, tick: u64) -> bool {
         tick < self.stunned_until_tick
     }
+
+    #[must_use]
+    pub fn effective_armor_points_per_100(&self, armor: ArmorProfile) -> i32 {
+        let count = usize::from(self.armor_modifier_count);
+        debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
+        self.armor_modifiers[..count].iter().fold(
+            i32::from(armor.armor_points) * 100,
+            |total, modifier| {
+                total
+                    .checked_add(i32::from(modifier.armor_bonus_per_100))
+                    .expect("effective armor overflow")
+            },
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

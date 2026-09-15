@@ -575,7 +575,8 @@ fn attack_type_label(unit: &UnitSample, samples: &PresentationSamples) -> String
 
 fn defense_type_label(unit: &UnitSample, samples: &PresentationSamples) -> String {
     let defense_type = unit.armor.armor_type;
-    let defense_name = armor_type_name(defense_type);
+    let armor_points = armor_points_label(unit.status.effective_armor_points_per_100(unit.armor));
+    let defense_name = format!("{} ({armor_points})", armor_type_name(defense_type));
     let Some(target) = unit.target else {
         return format!("Defense type: {defense_name}");
     };
@@ -627,6 +628,20 @@ fn matchup_multiplier_label(multiplier_per_10k: u16) -> String {
     let multiplier = percent_label(i32::from(multiplier_per_10k), false);
     let delta = percent_label(i32::from(multiplier_per_10k) - 10_000, true);
     format!("{multiplier} ({delta})")
+}
+
+fn armor_points_label(points_per_100: i32) -> String {
+    let sign = if points_per_100 < 0 { "-" } else { "" };
+    let magnitude = points_per_100.unsigned_abs();
+    let whole = magnitude / 100;
+    let hundredths = magnitude % 100;
+    if hundredths == 0 {
+        format!("{sign}{whole}")
+    } else if hundredths % 10 == 0 {
+        format!("{sign}{whole}.{}", hundredths / 10)
+    } else {
+        format!("{sign}{whole}.{hundredths:02}")
+    }
 }
 
 fn percent_label(per_10k: i32, force_sign: bool) -> String {
@@ -906,12 +921,15 @@ mod tests {
         samples.current.units.insert(SimId(8), target);
         let selected = samples.current.units.get_mut(&SimId(7)).unwrap();
         selected.damage_type = DamageType::Pierce;
-        selected.armor = castle_fight_sim::ArmorProfile::new(ArmorType::Medium, 0);
+        selected.armor = castle_fight_sim::ArmorProfile::new(ArmorType::Small, 2);
+        selected.status.armor_modifiers[0].armor_bonus_per_100 = 100;
+        selected.status.armor_modifiers[0].expires_tick = 20;
+        selected.status.armor_modifier_count = 1;
         selected.target = Some(SimId(8));
 
         let text = format_unit_inspector(&samples.current.units[&SimId(7)], 10, &samples);
         assert!(text.contains("Attack type: Pierce -> Light: 200% (+100%)"));
-        assert!(text.contains("Defense type: Medium <- Normal: 150% (+50%) incoming"));
+        assert!(text.contains("Defense type: Light (3) <- Normal: 100% (0%) incoming"));
         assert!(!text.contains("Last attacker:"));
         assert!(!text.contains("Last attacked:"));
     }
@@ -934,6 +952,10 @@ mod tests {
         assert_eq!(damage_type_name(DamageType::Chaos), "Chaos");
         assert_eq!(damage_type_name(DamageType::Spells), "Spell");
         assert_eq!(damage_type_name(DamageType::Hero), "Hero");
+
+        assert_eq!(armor_points_label(300), "3");
+        assert_eq!(armor_points_label(350), "3.5");
+        assert_eq!(armor_points_label(-125), "-1.25");
     }
 
     #[test]
