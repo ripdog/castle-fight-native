@@ -19,8 +19,6 @@ use crate::terrain::client_asset_root;
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
-const TEAM_GLOW_RED_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow00.png";
-const TEAM_GLOW_BLUE_TEXTURE: &str = "textures/replaceabletextures__teamglow__teamglow01.png";
 const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
 const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
@@ -890,12 +888,11 @@ fn linear_channel_to_srgb(channel: f32) -> f32 {
 }
 
 fn team_glow_texture_path(team: Wc3TeamTint) -> String {
-    let texture = if team.index == 0 {
-        TEAM_GLOW_BLUE_TEXTURE
-    } else {
-        TEAM_GLOW_RED_TEXTURE
-    };
-    format!("{}/{texture}", team.asset_prefix.trim_end_matches('/'))
+    format!(
+        "{}/textures/replaceabletextures__teamglow__teamglow{:02}.png",
+        team.asset_prefix.trim_end_matches('/'),
+        team.index,
+    )
 }
 
 fn wc3_team_tint(
@@ -1451,16 +1448,21 @@ mod tests {
     }
 
     #[test]
-    fn team_glow_texture_uses_the_owning_model_pack() {
-        let blue = Wc3TeamTint::new(0, Color::WHITE, "wc3/buildings");
-        let red = Wc3TeamTint::new(1, Color::WHITE, "wc3/buildings");
-        assert_eq!(
-            team_glow_texture_path(blue),
-            "wc3/buildings/textures/replaceabletextures__teamglow__teamglow01.png"
-        );
+    fn team_glow_texture_uses_owner_slot_and_model_pack() {
+        let red = Wc3TeamTint::new(0, Color::WHITE, "wc3/buildings");
+        let teal = Wc3TeamTint::new(2, Color::WHITE, "wc3/buildings");
+        let green = Wc3TeamTint::new(6, Color::WHITE, "wc3/units");
         assert_eq!(
             team_glow_texture_path(red),
             "wc3/buildings/textures/replaceabletextures__teamglow__teamglow00.png"
+        );
+        assert_eq!(
+            team_glow_texture_path(teal),
+            "wc3/buildings/textures/replaceabletextures__teamglow__teamglow02.png"
+        );
+        assert_eq!(
+            team_glow_texture_path(green),
+            "wc3/units/textures/replaceabletextures__teamglow__teamglow06.png"
         );
     }
 

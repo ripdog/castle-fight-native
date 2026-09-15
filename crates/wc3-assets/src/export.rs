@@ -38,8 +38,7 @@ const UI_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const WHITEOUT_STABLE_MAX_MDX_VERSION: u32 = 1200;
 const WC3_3_MDX_VERSION: u32 = 1800;
 const MAX_MDX_INPUT_BYTES: usize = 64 * 1024 * 1024;
-const TEAM_GLOW_RED_TEXTURE: &str = r"ReplaceableTextures\TeamGlow\TeamGlow00.blp";
-const TEAM_GLOW_BLUE_TEXTURE: &str = r"ReplaceableTextures\TeamGlow\TeamGlow01.blp";
+const WC3_PLAYER_COLOR_COUNT: u8 = 24;
 const STOCK_BUILDING_ART_CATEGORIES: [&str; 7] = [
     "human", "orc", "undead", "nightelf", "naga", "other", "demon",
 ];
@@ -1279,10 +1278,14 @@ impl Exporter {
             .textures_iter()
             .any(|texture| texture.replaceable_id() == 2)
         {
-            for logical in [TEAM_GLOW_RED_TEXTURE, TEAM_GLOW_BLUE_TEXTURE] {
+            // Replaceable ID 2 is player team glow. Export the complete modern WC3 player-colour
+            // set once so runtime presentation can select the texture from the authoritative
+            // PlayerId/slot instead of baking a red/blue placeholder into each converted model.
+            for player_index in 0..WC3_PLAYER_COLOR_COUNT {
+                let logical = team_glow_texture_logical(player_index);
                 let key = logical.to_ascii_lowercase();
                 if !self.texture_cache.contains_key(&key) {
-                    let exported = self.export_texture(logical)?;
+                    let exported = self.export_texture(&logical)?;
                     self.texture_cache.insert(key, exported);
                 }
             }
@@ -1297,7 +1300,7 @@ impl Exporter {
                 replaceable_textures
                     .get(&replaceable_id)
                     .cloned()
-                    .or_else(|| (replaceable_id == 2).then(|| TEAM_GLOW_BLUE_TEXTURE.to_owned()))
+                    .or_else(|| (replaceable_id == 2).then(|| team_glow_texture_logical(0)))
             };
             let Some(logical) = logical else {
                 manifests.push(TextureManifest {
@@ -4340,6 +4343,10 @@ fn casc_asset_paths(logical_path: &str) -> [String; 3] {
     ]
 }
 
+fn team_glow_texture_logical(player_index: u8) -> String {
+    format!(r"ReplaceableTextures\TeamGlow\TeamGlow{player_index:02}.blp")
+}
+
 fn legacy_texture_stems(stem: &str) -> Vec<String> {
     let mut stems = vec![stem.to_owned()];
     if stem.eq_ignore_ascii_case(r"Textures\Clouds8x8") {
@@ -4514,6 +4521,22 @@ mod tests {
         assert_eq!(
             legacy_texture_stems(r"Textures\Other"),
             [r"Textures\Other".to_owned()]
+        );
+    }
+
+    #[test]
+    fn team_glow_paths_follow_wc3_player_slot_indices() {
+        assert_eq!(
+            team_glow_texture_logical(0),
+            r"ReplaceableTextures\TeamGlow\TeamGlow00.blp"
+        );
+        assert_eq!(
+            team_glow_texture_logical(6),
+            r"ReplaceableTextures\TeamGlow\TeamGlow06.blp"
+        );
+        assert_eq!(
+            team_glow_texture_logical(23),
+            r"ReplaceableTextures\TeamGlow\TeamGlow23.blp"
         );
     }
 
