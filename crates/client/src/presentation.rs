@@ -2,10 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 use bevy::{
     asset::RenderAssetUsages,
-    camera::{
-        Exposure,
-        primitives::{Frustum, Sphere},
-    },
+    camera::Exposure,
     ecs::system::SystemParam,
     gltf::Gltf,
     input::mouse::MouseWheel,
@@ -76,9 +73,10 @@ const WC3_CHAIN_LIGHTNING_NOISE_SCALE: f32 = 0.05;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const FLESH_DECAY_TICKS: u64 = 2 * CASTLE_FIGHT_SIMULATION_HZ as u64;
 const BONE_DECAY_TICKS: u64 = 25 * CASTLE_FIGHT_SIMULATION_HZ as u64;
-const HEALTH_BAR_LINE_WIDTH_PIXELS: f32 = 9.0;
+const HEALTH_BAR_HEIGHT_PIXELS: f32 = 9.0;
+const PRODUCTION_BAR_HEIGHT_PIXELS: f32 = 7.0;
+const PRODUCTION_BAR_GAP_PIXELS: f32 = 4.0;
 const HEALTH_BAR_VERTICAL_GAP: f32 = 16.0;
-const PRODUCTION_BAR_VERTICAL_OFFSET: f32 = 10.0;
 const UNIT_HEALTH_BAR_MIN_WIDTH: f32 = 32.0;
 const UNIT_HEALTH_BAR_COLLISION_SCALE: f32 = 4.0;
 const UNIT_HEALTH_BAR_HEIGHT_SCALE: f32 = 0.60;
@@ -500,8 +498,19 @@ struct MissIndicator {
     remaining: f32,
 }
 
-#[derive(Default, Reflect, GizmoConfigGroup)]
-struct HealthBarGizmos;
+#[derive(Debug, Clone, Copy)]
+struct HealthBarUiEntry {
+    root: Entity,
+    health_fill: Entity,
+    progress_track: Option<Entity>,
+    progress_fill: Option<Entity>,
+}
+
+#[derive(Resource, Default)]
+struct HealthBarUiMap {
+    units: HashMap<SimId, HealthBarUiEntry>,
+    buildings: HashMap<SimId, HealthBarUiEntry>,
+}
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct ProjectileEffectGizmos;
@@ -553,7 +562,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
             .init_resource::<TimedWc3Effects>()
-            .init_gizmo_group::<HealthBarGizmos>()
+            .init_resource::<HealthBarUiMap>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
@@ -595,7 +604,7 @@ impl Plugin for CastlePresentationPlugin {
                     update_wc3_particles,
                     emit_wc3_particles,
                     draw_projectile_effects,
-                    draw_health_bars,
+                    update_health_bar_overlays,
                     draw_presentation_gizmos,
                     sample_display_fps,
                 )
@@ -628,10 +637,6 @@ fn setup_scene(
     *unit_models = UnitModelSet::load_default(&asset_server);
     *building_models = BuildingModelSet::load_default(&asset_server);
     *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
-    let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
-    health_bar_config.line.width = HEALTH_BAR_LINE_WIDTH_PIXELS;
-    health_bar_config.line.perspective = false;
-    health_bar_config.depth_bias = -1.0;
     let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
     projectile_effect_config.line.width = 3.0;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
@@ -3220,27 +3225,51 @@ fn draw_projectile_effects(
     }
 }
 
-fn draw_health_bars(
+fn update_health_bar_overlays(
+    mut commands: Commands,
     clocks: (Res<Time<Fixed>>, Res<SimulationPlayback>),
     samples: Res<PresentationSamples>,
     world: (Res<WorldMetrics>, Res<TerrainSurface>),
     models: (Res<UnitModelSet>, Res<BuildingModelSet>),
     render_map: Res<RenderMap>,
     debug: Res<DebugPresentation>,
-    camera_frustum: Single<&Frustum, With<Camera3d>>,
-    mut health_gizmos: Gizmos<HealthBarGizmos>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut ui_map: ResMut<HealthBarUiMap>,
+    mut nodes: Query<&mut Node>,
 ) {
     let (fixed_time, playback) = clocks;
     let (metrics, terrain) = world;
     let (unit_models, building_models) = models;
+    let (camera, camera_transform) = *camera;
+
+    ui_map.units.retain(|id, entry| {
+        let keep = samples.current.units.contains_key(id);
+        if !keep {
+            commands.entity(entry.root).despawn();
+        }
+        keep
+    });
+    ui_map.buildings.retain(|id, entry| {
+        let keep = samples.current.buildings.contains_key(id);
+        if !keep {
+            commands.entity(entry.root).despawn();
+        }
+        keep
+    });
+
     if !debug.health_bars {
+        for entry in ui_map.units.values().chain(ui_map.buildings.values()) {
+            if let Ok(mut root) = nodes.get_mut(entry.root) {
+                root.display = Display::None;
+            }
+        }
         return;
     }
 
     let alpha = playback.interpolation_alpha(&fixed_time);
     let rendered_tick = interpolated_sim_tick(&samples, alpha);
     for (id, unit) in &samples.current.units {
-        let Some(entry) = render_map.units.get(id) else {
+        let Some(render_entry) = render_map.units.get(id) else {
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(unit);
@@ -3251,48 +3280,61 @@ fn draw_health_bars(
             alpha,
             &terrain,
         );
-        let overhead_height = unit_bar_overhead_height(unit, entry, &unit_models);
-        let width = unit_health_bar_width(unit, entry, &unit_models);
-        let position = ground_position + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
-        if !health_bar_visible(&camera_frustum, position, width) {
+        let overhead_height = unit_bar_overhead_height(unit, render_entry, &unit_models);
+        let world_width = unit_health_bar_width(unit, render_entry, &unit_models);
+        let world_anchor = ground_position + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
+        let Some(layout) =
+            health_bar_screen_layout(camera, camera_transform, world_anchor, world_width)
+        else {
+            hide_health_bar_overlay(ui_map.units.get(id), &mut nodes);
             continue;
+        };
+        let health_ratio = health_ratio(unit.health, unit.health_max);
+        if let Some(entry) = ui_map.units.get(id).copied() {
+            update_health_bar_overlay(entry, layout, health_ratio, None, &mut nodes);
+        } else {
+            let entry = spawn_health_bar_overlay(
+                &mut commands,
+                layout,
+                health_ratio,
+                unit.team,
+                false,
+                None,
+            );
+            ui_map.units.insert(*id, entry);
         }
-        draw_health_bar(
-            &mut health_gizmos,
-            position,
-            width,
-            unit.health,
-            unit.health_max,
-            unit.team,
-        );
     }
+
     for (id, building) in &samples.current.buildings {
-        let Some(entry) = render_map.buildings.get(id) else {
+        let Some(render_entry) = render_map.buildings.get(id) else {
             continue;
         };
         let (mut center, size) = metrics.footprint_center_size(building.footprint);
         center.y = terrain.height_at_world(center.xz());
-        let overhead_height = building_bar_overhead_height(building, entry, &building_models);
-        let width = building_health_bar_width(size, overhead_height);
-        let position = center + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
-        if !health_bar_visible(&camera_frustum, position, width) {
+        let overhead_height =
+            building_bar_overhead_height(building, render_entry, &building_models);
+        let world_width = building_health_bar_width(size, overhead_height);
+        let world_anchor = center + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
+        let Some(layout) =
+            health_bar_screen_layout(camera, camera_transform, world_anchor, world_width)
+        else {
+            hide_health_bar_overlay(ui_map.buildings.get(id), &mut nodes);
             continue;
-        }
-        draw_health_bar(
-            &mut health_gizmos,
-            position,
-            width,
-            building.health,
-            building.health_max,
-            building.team,
-        );
-        if let Some(progress) = production_progress(building, rendered_tick) {
-            draw_progress_bar(
-                &mut health_gizmos,
-                position - Vec3::Y * PRODUCTION_BAR_VERTICAL_OFFSET,
-                width,
+        };
+        let health_ratio = health_ratio(building.health, building.health_max);
+        let progress = production_progress(building, rendered_tick);
+        if let Some(entry) = ui_map.buildings.get(id).copied() {
+            update_health_bar_overlay(entry, layout, health_ratio, progress, &mut nodes);
+        } else {
+            let entry = spawn_health_bar_overlay(
+                &mut commands,
+                layout,
+                health_ratio,
+                building.team,
+                true,
                 progress,
             );
+            ui_map.buildings.insert(*id, entry);
         }
     }
 }
@@ -3381,73 +3423,180 @@ fn draw_presentation_gizmos(
     }
 }
 
-fn health_bar_visible(frustum: &Frustum, center: Vec3, width: f32) -> bool {
-    frustum.intersects_sphere(
-        &Sphere {
-            center: center.into(),
-            radius: width * 0.6,
-        },
-        false,
-    )
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HealthBarScreenLayout {
+    left: f32,
+    top: f32,
+    width: f32,
 }
 
-fn draw_health_bar(
-    gizmos: &mut Gizmos<HealthBarGizmos>,
-    center: Vec3,
-    width: f32,
-    health: i32,
-    max_health: i32,
+fn health_bar_screen_layout(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    world_anchor: Vec3,
+    world_width: f32,
+) -> Option<HealthBarScreenLayout> {
+    let center = camera
+        .world_to_viewport(camera_transform, world_anchor)
+        .ok()?;
+    let camera_right = camera_transform.rotation() * Vec3::X;
+    let half_width = world_width * 0.5;
+    let left_world = world_anchor - camera_right * half_width;
+    let right_world = world_anchor + camera_right * half_width;
+    let left = camera
+        .world_to_viewport(camera_transform, left_world)
+        .ok()?;
+    let right = camera
+        .world_to_viewport(camera_transform, right_world)
+        .ok()?;
+    let width = (right.x - left.x).abs();
+    if !width.is_finite() || width <= 0.0 {
+        return None;
+    }
+    Some(HealthBarScreenLayout {
+        left: center.x - width * 0.5,
+        top: center.y - HEALTH_BAR_HEIGHT_PIXELS * 0.5,
+        width,
+    })
+}
+
+fn health_ratio(health: i32, max_health: i32) -> f32 {
+    (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0)
+}
+
+fn spawn_health_bar_overlay(
+    commands: &mut Commands,
+    layout: HealthBarScreenLayout,
+    health_ratio: f32,
     team: Team,
-) {
-    let ratio = (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0);
-    draw_bar(
-        gizmos,
-        center,
-        width,
-        ratio,
-        Color::srgb(0.085, 0.085, 0.095),
-        team_color(team),
-    );
+    include_progress: bool,
+    progress: Option<f32>,
+) -> HealthBarUiEntry {
+    let health_fill = commands
+        .spawn((
+            Node {
+                width: percent(health_ratio * 100.0),
+                height: percent(100.0),
+                ..default()
+            },
+            BackgroundColor(team_color(team)),
+            Pickable::IGNORE,
+        ))
+        .id();
+    let health_track = commands
+        .spawn((
+            Node {
+                width: percent(100.0),
+                height: px(HEALTH_BAR_HEIGHT_PIXELS),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.085, 0.085, 0.095)),
+            Pickable::IGNORE,
+        ))
+        .add_child(health_fill)
+        .id();
+
+    let (progress_track, progress_fill) = if include_progress {
+        let fill = commands
+            .spawn((
+                Node {
+                    width: percent(progress.unwrap_or(0.0).clamp(0.0, 1.0) * 100.0),
+                    height: percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.72, 0.72, 0.74)),
+                Pickable::IGNORE,
+            ))
+            .id();
+        let track = commands
+            .spawn((
+                Node {
+                    display: if progress.is_some() {
+                        Display::Flex
+                    } else {
+                        Display::None
+                    },
+                    width: percent(100.0),
+                    height: px(PRODUCTION_BAR_HEIGHT_PIXELS),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.16, 0.16, 0.17)),
+                Pickable::IGNORE,
+            ))
+            .add_child(fill)
+            .id();
+        (Some(track), Some(fill))
+    } else {
+        (None, None)
+    };
+
+    let root = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(layout.left),
+                top: px(layout.top),
+                width: px(layout.width),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(PRODUCTION_BAR_GAP_PIXELS),
+                ..default()
+            },
+            GlobalZIndex(-10),
+            Pickable::IGNORE,
+        ))
+        .add_child(health_track)
+        .id();
+    if let Some(track) = progress_track {
+        commands.entity(root).add_child(track);
+    }
+
+    HealthBarUiEntry {
+        root,
+        health_fill,
+        progress_track,
+        progress_fill,
+    }
 }
 
-fn draw_progress_bar(
-    gizmos: &mut Gizmos<HealthBarGizmos>,
-    center: Vec3,
-    width: f32,
-    progress: f32,
+fn update_health_bar_overlay(
+    entry: HealthBarUiEntry,
+    layout: HealthBarScreenLayout,
+    health_ratio: f32,
+    progress: Option<f32>,
+    nodes: &mut Query<&mut Node>,
 ) {
-    draw_bar(
-        gizmos,
-        center,
-        width,
-        progress,
-        Color::srgb(0.16, 0.16, 0.17),
-        Color::srgb(0.72, 0.72, 0.74),
-    );
+    if let Ok(mut root) = nodes.get_mut(entry.root) {
+        root.display = Display::Flex;
+        root.left = px(layout.left);
+        root.top = px(layout.top);
+        root.width = px(layout.width);
+    }
+    if let Ok(mut fill) = nodes.get_mut(entry.health_fill) {
+        fill.width = percent(health_ratio.clamp(0.0, 1.0) * 100.0);
+    }
+    if let Some(track_entity) = entry.progress_track
+        && let Ok(mut track) = nodes.get_mut(track_entity)
+    {
+        track.display = if progress.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    if let Some(fill_entity) = entry.progress_fill
+        && let Some(progress) = progress
+        && let Ok(mut fill) = nodes.get_mut(fill_entity)
+    {
+        fill.width = percent(progress.clamp(0.0, 1.0) * 100.0);
+    }
 }
 
-fn draw_bar(
-    gizmos: &mut Gizmos<HealthBarGizmos>,
-    center: Vec3,
-    width: f32,
-    ratio: f32,
-    background: Color,
-    foreground: Color,
-) {
-    let ratio = ratio.clamp(0.0, 1.0);
-    let half = width * 0.5;
-    let start = center - Vec3::X * half;
-    let end = center + Vec3::X * half;
-    let fill_end = start + Vec3::X * width * ratio;
-
-    gizmos.line(start, end, background);
-    if ratio > 0.0 {
-        let foreground_offset = Vec3::new(0.0, 0.04, 0.12);
-        gizmos.line(
-            start + foreground_offset,
-            fill_end + foreground_offset,
-            foreground,
-        );
+fn hide_health_bar_overlay(entry: Option<&HealthBarUiEntry>, nodes: &mut Query<&mut Node>) {
+    let Some(entry) = entry else {
+        return;
+    };
+    if let Ok(mut root) = nodes.get_mut(entry.root) {
+        root.display = Display::None;
     }
 }
 
