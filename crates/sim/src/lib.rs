@@ -44,9 +44,9 @@ pub use native_effects::{NativeEffectImplementationId, native_effect_implementat
 pub use simulation::{
     AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
     BuilderSpawnError, BuilderView, BuildingCommandError, BuildingConstructionCancelError,
-    BuildingPlacementError, BuildingView, ChainLightningEvent, CombatRules, CorpseView,
-    ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TargetlessLane, TickResult,
-    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    BuildingPlacementError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
+    CombatRules, CorpseView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
+    TargetlessLane, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,

@@ -11,6 +11,8 @@ const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
 const RANDOM_PURPOSE_UPHILL_MISS: u64 = 0x5550_4849_4c4c_0001;
 const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
+/// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 2;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -37,7 +39,7 @@ use crate::{
         TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
-    damage::{ArmorProfile, DamageRules, DamageType},
+    damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     economy::{
         BuildingEconomyProfile, EconomyRules, PlayerEconomyView, PlayerResources,
         RESOURCE_FIXED_SCALE, ResourcePurchaseError, taxed_income_from_fixed,
@@ -398,6 +400,7 @@ pub struct Simulation {
     player_resources: [PlayerResources; 2],
     next_tick: u64,
     next_id: u64,
+    configuration_identity: u64,
 }
 
 impl Simulation {
@@ -428,6 +431,7 @@ impl Simulation {
             );
         }
         validate_combat_rules(&config, &combat_rules);
+        let configuration_identity = canonical_configuration_identity(&config, &combat_rules);
         let starting_resources = PlayerResources {
             gold: config.economy.starting_gold,
             lumber: config.economy.starting_lumber,
@@ -472,6 +476,7 @@ impl Simulation {
             player_resources: [starting_resources; 2],
             next_tick: 0,
             next_id: 1,
+            configuration_identity,
         }
     }
 
@@ -2816,6 +2821,8 @@ impl Simulation {
         let checksum = canonical_checksum(
             &self.world,
             self.next_tick,
+            self.next_id,
+            self.configuration_identity,
             &self.defense_alerts,
             &self.player_resources,
         );
@@ -2902,6 +2909,8 @@ impl Simulation {
         canonical_checksum(
             &self.world,
             self.next_tick,
+            self.next_id,
+            self.configuration_identity,
             &self.defense_alerts,
             &self.player_resources,
         )
@@ -9003,12 +9012,137 @@ fn building_source_query_radius(
         .expect("building acquisition query radius overflow")
 }
 
+fn canonical_configuration_identity(config: &SimulationConfig, combat_rules: &CombatRules) -> u64 {
+    const DOMAIN: u64 = 0x4346_434f_4e46_4947;
+    const DAMAGE_TYPES: [DamageType; DamageType::COUNT] = [
+        DamageType::Normal,
+        DamageType::Pierce,
+        DamageType::Siege,
+        DamageType::Magic,
+        DamageType::Chaos,
+        DamageType::Spells,
+        DamageType::Hero,
+    ];
+    const ARMOR_TYPES: [ArmorType; ArmorType::COUNT] = [
+        ArmorType::Small,
+        ArmorType::Medium,
+        ArmorType::Large,
+        ArmorType::Fortified,
+        ArmorType::Normal,
+        ArmorType::Hero,
+        ArmorType::Divine,
+        ArmorType::Unarmored,
+    ];
+
+    let mut hash = Fnv64::new();
+    hash.write_u64(DOMAIN);
+    hash.write_u64(u64::from(CANONICAL_CHECKSUM_SCHEMA_VERSION));
+    hash.write_i32(CASTLE_FIGHT_SIMULATION_HZ);
+    hash.write_u64(config.match_seed);
+    hash.write_i32(config.spatial_cell_size);
+    hash.write_i32(config.navigation_cell_size);
+    hash.write_i32(config.navigation_min.x);
+    hash.write_i32(config.navigation_min.y);
+    hash.write_i32(config.navigation_max.x);
+    hash.write_i32(config.navigation_max.y);
+    hash.write_i32(config.target_pursuit_extra_range);
+    hash.write_i32(config.unit_separation_distance);
+    hash.write_i32(config.max_separation_per_tick);
+    hash_footprint_list(&mut hash, &config.static_blockers);
+    hash_footprint_list(&mut hash, &config.air_static_blockers);
+    hash_footprint_list(&mut hash, &config.build_static_blockers);
+    for regions in &config.team_build_regions {
+        hash_footprint_list(&mut hash, regions);
+    }
+    match config.targetless_lane {
+        Some(lane) => {
+            hash.write_u8(1);
+            hash.write_i32(lane.min_y);
+            hash.write_i32(lane.max_y);
+        }
+        None => hash.write_u8(0),
+    }
+    for objective in config.team_objective {
+        hash.write_i32(objective.x);
+        hash.write_i32(objective.y);
+    }
+    hash.write_u64(u64::from(config.economy.starting_gold));
+    hash.write_u64(u64::from(config.economy.starting_lumber));
+    hash.write_u16(config.economy.starting_legendary_points);
+    hash.write_u64(config.economy.base_income_per_10k);
+    hash.write_u64(u64::from(config.economy.income_interval_ticks));
+    hash.write_u64(config.economy.income_tax_bracket_per_10k);
+
+    hash.write_u16(combat_rules.uphill_miss_chance_per_10k);
+    hash.write_u16(combat_rules.damage_rules.armor_factor_per_10k());
+    for damage_type in DAMAGE_TYPES {
+        for armor_type in ARMOR_TYPES {
+            hash.write_u16(
+                combat_rules
+                    .damage_rules
+                    .bonus_per_10k(damage_type, armor_type),
+            );
+        }
+    }
+    match &combat_rules.terrain_elevation {
+        Some(terrain) => {
+            hash.write_u8(1);
+            let origin = terrain.origin();
+            hash.write_i32(origin.x);
+            hash.write_i32(origin.y);
+            hash.write_i32(terrain.tile_size());
+            hash.write_u64(u64::from(terrain.width_tiles()));
+            hash.write_u64(u64::from(terrain.height_tiles()));
+            for y in 0..=terrain.height_tiles() {
+                for x in 0..=terrain.width_tiles() {
+                    let sample = terrain
+                        .vertex_sample(x, y)
+                        .expect("validated terrain dimensions must expose every vertex");
+                    hash.write_u8(sample.cliff_level);
+                    hash.write_i32(sample.ground_height_raw);
+                }
+            }
+        }
+        None => hash.write_u8(0),
+    }
+    hash.finish()
+}
+
+fn hash_footprint_list(hash: &mut Fnv64, footprints: &[BuildingFootprint]) {
+    let mut canonical = footprints.to_vec();
+    canonical.sort_unstable_by_key(|footprint| {
+        (
+            footprint.min_x,
+            footprint.min_y,
+            footprint.width,
+            footprint.height,
+        )
+    });
+    hash.write_u64(canonical.len() as u64);
+    for footprint in canonical {
+        hash_building_footprint(hash, footprint);
+    }
+}
+
+fn hash_building_footprint(hash: &mut Fnv64, footprint: BuildingFootprint) {
+    hash.write_i32(footprint.min_x);
+    hash.write_i32(footprint.min_y);
+    hash.write_u16(footprint.width);
+    hash.write_u16(footprint.height);
+}
+
 fn canonical_checksum(
     world: &World,
     next_tick: u64,
+    next_id: u64,
+    configuration_identity: u64,
     defense_alerts: &[DefenseAlert],
     player_resources: &[PlayerResources; 2],
 ) -> u64 {
+    let authoritative_entity_count = world
+        .iter_entities()
+        .filter(|entity| entity.get::<SimId>().is_some())
+        .count();
     let mut entities: Vec<CanonicalEntity> = world
         .iter_entities()
         .filter_map(|entity| {
@@ -9070,6 +9204,7 @@ fn canonical_checksum(
             if let Some(position) = entity.get::<Position>() {
                 Some(CanonicalEntity::Unit(CanonicalUnit {
                     id,
+                    content: entity.get::<ContentIdentity>().copied(),
                     team,
                     position: position.0,
                     health,
@@ -9099,6 +9234,7 @@ fn canonical_checksum(
             } else {
                 Some(CanonicalEntity::Building(CanonicalBuilding {
                     id,
+                    content: entity.get::<ContentIdentity>().copied(),
                     team,
                     footprint: *entity.get::<BuildingFootprint>()?,
                     health,
@@ -9121,6 +9257,9 @@ fn canonical_checksum(
                     repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
                     production: entity.get::<ProductionProfile>().copied(),
                     production_state: entity.get::<ProductionState>().copied(),
+                    production_content: entity
+                        .get::<ProductionContentIdentity>()
+                        .map(|content| content.0),
                     production_corpse: entity
                         .get::<ProductionCorpseProfile>()
                         .map(|corpse| corpse.0),
@@ -9161,10 +9300,26 @@ fn canonical_checksum(
             }
         })
         .collect();
+    assert_eq!(
+        entities.len(),
+        authoritative_entity_count,
+        "canonical checksum omitted an entity with an invalid authoritative component shape"
+    );
     entities.sort_unstable_by_key(CanonicalEntity::id);
+    for pair in entities.windows(2) {
+        assert_ne!(
+            pair[0].id(),
+            pair[1].id(),
+            "canonical state contains duplicate SimIds"
+        );
+    }
 
     let mut hash = Fnv64::new();
+    hash.write_u64(0x4346_5354_4154_4502);
+    hash.write_u64(u64::from(CANONICAL_CHECKSUM_SCHEMA_VERSION));
+    hash.write_u64(configuration_identity);
     hash.write_u64(next_tick);
+    hash.write_u64(next_id);
     for resources in player_resources {
         hash.write_u64(u64::from(resources.gold));
         hash.write_u64(u64::from(resources.lumber));
@@ -9177,6 +9332,7 @@ fn canonical_checksum(
             CanonicalEntity::Unit(unit) => {
                 hash.write_u8(0);
                 hash.write_u64(unit.id.0);
+                hash_content_identity(&mut hash, unit.content);
                 hash.write_u8(unit.team.0);
                 hash.write_i32(unit.position.x);
                 hash.write_i32(unit.position.y);
@@ -9193,8 +9349,8 @@ fn canonical_checksum(
                     MovementClass::Air => 1,
                 });
                 hash.write_u8(u8::from(unit.mechanical));
-                hash.write_u64(unit.build_time_ticks.map_or(0, u64::from));
-                hash.write_u64(unit.repair_time_ticks.map_or(0, u64::from));
+                hash_optional_u32(&mut hash, unit.build_time_ticks);
+                hash_optional_u32(&mut hash, unit.repair_time_ticks);
                 hash.write_i32(unit.attack.damage);
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
@@ -9202,34 +9358,43 @@ fn canonical_checksum(
                 hash.write_i32(unit.movement.speed_per_tick);
                 hash.write_u16(unit.cooldown.remaining);
                 hash.write_u64(unit.attack_sequence.0);
-                hash.write_u64(unit.target.current.map_or(0, |target| target.0));
+                hash_optional_sim_id(&mut hash, unit.target.current);
                 hash.write_u8(u8::from(unit.target.direct_retaliation_lock));
                 hash.write_u8(u8::from(unit.target.ally_defense_lock));
-                hash.write_u64(unit.retaliation.attacker.map_or(0, |attacker| attacker.0));
-                hash.write_u64(unit.retaliation.attacked_tick.unwrap_or(u64::MAX));
+                hash_optional_sim_id(&mut hash, unit.retaliation.attacker);
+                hash_optional_u64(&mut hash, unit.retaliation.attacked_tick);
                 hash_status_state(&mut hash, unit.status);
                 match unit.navigation.avoidance_goal {
-                    NavigationGoal::None => hash.write_u64(0),
-                    NavigationGoal::Target(target) => hash.write_u64(target.0),
+                    NavigationGoal::None => hash.write_u8(0),
                     NavigationGoal::Objective(team) => {
-                        hash.write_u64(u64::MAX);
+                        hash.write_u8(1);
                         hash.write_u8(team.0);
+                    }
+                    NavigationGoal::Target(target) => {
+                        hash.write_u8(2);
+                        hash.write_u64(target.0);
                     }
                 }
                 hash.write_i32(i32::from(unit.navigation.bypass_side));
                 hash.write_u8(unit.navigation.clear_ticks);
                 hash.write_u64(unit.spawn_tick.0);
-                if let Some(corpse) = unit.corpse {
-                    hash.write_u64(0x434f_5250_5345_554e);
-                    hash.write_u64(u64::from(corpse.definition.0));
-                    hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+                match unit.corpse {
+                    Some(corpse) => {
+                        hash.write_u8(1);
+                        hash.write_u64(u64::from(corpse.definition.0));
+                        hash_optional_u32(&mut hash, corpse.lifetime_ticks);
+                    }
+                    None => hash.write_u8(0),
                 }
-                if let Some(collision_radius) = unit.collision_radius {
-                    hash.write_u64(0x434f_4c4c_4953_554e);
-                    hash.write_i32(collision_radius.0);
+                match unit.collision_radius {
+                    Some(collision_radius) => {
+                        hash.write_u8(1);
+                        hash.write_i32(collision_radius.0);
+                    }
+                    None => hash.write_u8(0),
                 }
                 if let Some(spellcasting) = unit.spellcasting {
-                    hash.write_u64(0x5350_454c_4c55_4e54);
+                    hash.write_u8(1);
                     hash.write_i32(spellcasting.mana.maximum);
                     hash.write_i32(spellcasting.mana.starting);
                     hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
@@ -9242,11 +9407,14 @@ fn canonical_checksum(
                         .expect("spellcasting unit missing ability state");
                     hash.write_u64(state.ready_tick);
                     hash.write_u64(state.cast_sequence);
+                } else {
+                    hash.write_u8(0);
                 }
             }
             CanonicalEntity::Building(building) => {
                 hash.write_u8(1);
                 hash.write_u64(building.id.0);
+                hash_content_identity(&mut hash, building.content);
                 hash.write_u8(building.team.0);
                 hash.write_i32(building.footprint.min_x);
                 hash.write_i32(building.footprint.min_y);
@@ -9271,7 +9439,7 @@ fn canonical_checksum(
                 } else {
                     hash.write_u8(0);
                 }
-                hash.write_u64(building.repair_time_ticks.map_or(0, u64::from));
+                hash_optional_u32(&mut hash, building.repair_time_ticks);
                 hash.write_u8(building.damage_type.stable_tag());
                 hash.write_u8(building.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(building.armor.armor_points));
@@ -9293,14 +9461,21 @@ fn canonical_checksum(
                             .expect("production profile missing state")
                             .next_spawn_tick,
                     );
-                    if let Some(corpse) = building.production_corpse {
-                        hash.write_u64(0x434f_5250_5345_5052);
-                        hash.write_u64(u64::from(corpse.definition.0));
-                        hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+                    hash_content_identity(&mut hash, building.production_content);
+                    match building.production_corpse {
+                        Some(corpse) => {
+                            hash.write_u8(1);
+                            hash.write_u64(u64::from(corpse.definition.0));
+                            hash_optional_u32(&mut hash, corpse.lifetime_ticks);
+                        }
+                        None => hash.write_u8(0),
                     }
-                    if let Some(collision_radius) = building.production_collision_radius {
-                        hash.write_u64(0x434f_4c4c_4953_5052);
-                        hash.write_i32(collision_radius.0);
+                    match building.production_collision_radius {
+                        Some(collision_radius) => {
+                            hash.write_u8(1);
+                            hash.write_i32(collision_radius.0);
+                        }
+                        None => hash.write_u8(0),
                     }
                     hash.write_u8(
                         match building
@@ -9315,8 +9490,8 @@ fn canonical_checksum(
                         .production_repair_metadata
                         .expect("production building missing repair metadata");
                     hash.write_u8(u8::from(repair_metadata.mechanical));
-                    hash.write_u64(repair_metadata.build_time_ticks.map_or(0, u64::from));
-                    hash.write_u64(repair_metadata.repair_time_ticks.map_or(0, u64::from));
+                    hash_optional_u32(&mut hash, repair_metadata.build_time_ticks);
+                    hash_optional_u32(&mut hash, repair_metadata.repair_time_ticks);
                     hash.write_u8(
                         building
                             .production_attack_targets
@@ -9339,11 +9514,10 @@ fn canonical_checksum(
                             .expect("production building missing unit passive effects"),
                     );
                     if let Some(spellcasting) = building.production_spellcasting {
-                        hash.write_u64(0x5350_454c_4c50_524f);
-                        hash.write_i32(spellcasting.mana.maximum);
-                        hash.write_i32(spellcasting.mana.starting);
-                        hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
-                        hash_automatic_ability(&mut hash, spellcasting.ability);
+                        hash.write_u8(1);
+                        hash_spellcasting_profile(&mut hash, spellcasting);
+                    } else {
+                        hash.write_u8(0);
                     }
                 } else {
                     hash.write_u8(0);
@@ -9370,7 +9544,7 @@ fn canonical_checksum(
                     let target = building
                         .target
                         .expect("attack building missing target state");
-                    hash.write_u64(target.current.map_or(0, |target| target.0));
+                    hash_optional_sim_id(&mut hash, target.current);
                     hash.write_u8(u8::from(target.direct_retaliation_lock));
                     hash.write_u8(u8::from(target.ally_defense_lock));
                     hash.write_u64(
@@ -9478,7 +9652,7 @@ fn canonical_checksum(
                 hash.write_u8(corpse.corpse.source_team.0);
                 hash.write_u64(u64::from(corpse.corpse.definition.0));
                 hash.write_u64(corpse.corpse.created_tick);
-                hash.write_u64(corpse.corpse.expires_tick.unwrap_or(u64::MAX));
+                hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
             }
             CanonicalEntity::BurningOil(zone) => {
                 hash.write_u8(6);
@@ -9545,8 +9719,8 @@ fn canonical_checksum(
                     }
                     None => hash.write_u8(0),
                 }
-                hash.write_u64(builder.state.follow_target.map_or(0, |target| target.0));
-                hash.write_u64(builder.state.repair_target.map_or(0, |target| target.0));
+                hash_optional_sim_id(&mut hash, builder.state.follow_target);
+                hash_optional_sim_id(&mut hash, builder.state.repair_target);
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
                 if let Some(order) = builder.build_order {
@@ -9625,6 +9799,7 @@ struct CanonicalBuilder {
 #[derive(Debug, Clone, Copy)]
 struct CanonicalUnit {
     id: SimId,
+    content: Option<ContentIdentity>,
     team: Team,
     position: SimPoint,
     health: Health,
@@ -9662,6 +9837,7 @@ struct CanonicalBuildingConstruction {
 #[derive(Debug, Clone, Copy)]
 struct CanonicalBuilding {
     id: SimId,
+    content: Option<ContentIdentity>,
     team: Team,
     footprint: BuildingFootprint,
     health: Health,
@@ -9670,6 +9846,7 @@ struct CanonicalBuilding {
     repair_time_ticks: Option<u32>,
     production: Option<ProductionProfile>,
     production_state: Option<ProductionState>,
+    production_content: Option<ContentIdentity>,
     production_corpse: Option<CorpseProfile>,
     production_collision_radius: Option<CollisionRadius>,
     production_movement_class: Option<MovementClass>,
@@ -9729,6 +9906,46 @@ struct CanonicalChainLightning {
     state: ChainLightningState,
 }
 
+fn hash_content_identity(hash: &mut Fnv64, content: Option<ContentIdentity>) {
+    match content {
+        Some(content) => {
+            hash.write_u8(1);
+            hash.write_u64(u64::from(content.rawcode));
+        }
+        None => hash.write_u8(0),
+    }
+}
+
+fn hash_optional_sim_id(hash: &mut Fnv64, value: Option<SimId>) {
+    match value {
+        Some(value) => {
+            hash.write_u8(1);
+            hash.write_u64(value.0);
+        }
+        None => hash.write_u8(0),
+    }
+}
+
+fn hash_optional_u32(hash: &mut Fnv64, value: Option<u32>) {
+    match value {
+        Some(value) => {
+            hash.write_u8(1);
+            hash.write_u64(u64::from(value));
+        }
+        None => hash.write_u8(0),
+    }
+}
+
+fn hash_optional_u64(hash: &mut Fnv64, value: Option<u64>) {
+    match value {
+        Some(value) => {
+            hash.write_u8(1);
+            hash.write_u64(value);
+        }
+        None => hash.write_u8(0),
+    }
+}
+
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
     hash.write_u8(status.movement_modifier_count);
@@ -9781,11 +9998,9 @@ fn hash_building_definition(
     hash.write_u16(building.footprint.width);
     hash.write_u16(building.footprint.height);
     hash.write_i32(building.health);
-    hash.write_u64(u64::from(
-        properties.content.map_or(0, |content| content.rawcode),
-    ));
-    hash.write_u64(properties.construction_time_ticks.map_or(0, u64::from));
-    hash.write_u64(properties.repair_time_ticks.map_or(0, u64::from));
+    hash_content_identity(hash, properties.content);
+    hash_optional_u32(hash, properties.construction_time_ticks);
+    hash_optional_u32(hash, properties.repair_time_ticks);
     hash.write_u8(properties.attack_targets.bits());
     hash.write_u8(properties.damage_type.stable_tag());
     hash.write_u8(properties.armor.armor_type.stable_tag());
@@ -9812,14 +10027,14 @@ fn hash_building_definition(
         hash.write_u16(production.unit.attack.cooldown_ticks);
         hash.write_i32(production.unit.movement.speed_per_tick);
         let unit = properties.production_unit;
-        hash.write_u64(u64::from(unit.content.map_or(0, |content| content.rawcode)));
+        hash_content_identity(hash, unit.content);
         hash.write_u8(match unit.movement_class {
             MovementClass::Ground => 0,
             MovementClass::Air => 1,
         });
         hash.write_u8(u8::from(unit.mechanical));
-        hash.write_u64(unit.build_time_ticks.map_or(0, u64::from));
-        hash.write_u64(unit.repair_time_ticks.map_or(0, u64::from));
+        hash_optional_u32(hash, unit.build_time_ticks);
+        hash_optional_u32(hash, unit.repair_time_ticks);
         hash.write_u8(unit.attack_targets.bits());
         hash.write_u8(unit.damage_type.stable_tag());
         hash.write_u8(unit.armor.armor_type.stable_tag());
@@ -9828,7 +10043,7 @@ fn hash_building_definition(
         if let Some(corpse) = unit.corpse {
             hash.write_u8(1);
             hash.write_u64(u64::from(corpse.definition.0));
-            hash.write_u64(corpse.lifetime_ticks.map_or(u64::MAX, u64::from));
+            hash_optional_u32(hash, corpse.lifetime_ticks);
         } else {
             hash.write_u8(0);
         }
@@ -10063,5 +10278,121 @@ impl Fnv64 {
 
     const fn finish(self) -> u64 {
         self.0
+    }
+}
+
+#[cfg(test)]
+mod canonical_checksum_tests {
+    use super::*;
+
+    fn inert_unit() -> UnitSpawn {
+        UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        }
+    }
+
+    #[test]
+    fn allocator_history_changes_authoritative_checksum() {
+        let first = Simulation::new(SimulationConfig::default(), 1);
+        let mut second = Simulation::new(SimulationConfig::default(), 1);
+        second.next_id = second.next_id.checked_add(1).unwrap();
+
+        assert_ne!(first.checksum(), second.checksum());
+    }
+
+    #[test]
+    fn match_seed_changes_authoritative_checksum() {
+        let first = Simulation::new(
+            SimulationConfig {
+                match_seed: 1,
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let second = Simulation::new(
+            SimulationConfig {
+                match_seed: 2,
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+
+        assert_ne!(first.checksum(), second.checksum());
+    }
+
+    #[test]
+    fn combat_rules_change_authoritative_checksum() {
+        let first = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            1,
+            CombatRules::default(),
+        );
+        let second = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            1,
+            CombatRules {
+                damage_rules: DamageRules::from_wc3_misc_text("[Misc]\nDefenseArmor=0.07\n")
+                    .unwrap(),
+                ..CombatRules::default()
+            },
+        );
+
+        assert_ne!(first.checksum(), second.checksum());
+    }
+
+    #[test]
+    fn optional_component_presence_changes_authoritative_checksum() {
+        let mut absent = Simulation::new(SimulationConfig::default(), 1);
+        absent.spawn_unit_with_properties(inert_unit(), UnitGameplayProperties::default());
+
+        let mut present = Simulation::new(SimulationConfig::default(), 1);
+        present.spawn_unit_with_properties(
+            inert_unit(),
+            UnitGameplayProperties {
+                build_time_ticks: Some(0),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        assert_ne!(absent.checksum(), present.checksum());
+    }
+
+    #[test]
+    fn content_rawcode_changes_authoritative_checksum() {
+        let mut first = Simulation::new(SimulationConfig::default(), 1);
+        first.spawn_unit_with_properties(
+            inert_unit(),
+            UnitGameplayProperties {
+                content: Some(ContentIdentity {
+                    rawcode: u32::from_be_bytes(*b"u001"),
+                    name: "first",
+                }),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        let mut second = Simulation::new(SimulationConfig::default(), 1);
+        second.spawn_unit_with_properties(
+            inert_unit(),
+            UnitGameplayProperties {
+                content: Some(ContentIdentity {
+                    rawcode: u32::from_be_bytes(*b"u002"),
+                    name: "second",
+                }),
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        assert_ne!(first.checksum(), second.checksum());
     }
 }
