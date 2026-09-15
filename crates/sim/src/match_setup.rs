@@ -7,8 +7,8 @@ use crate::{
     BuildingSpawn, CASTLE_FIGHT_CONTENT_REVISION_927, CastleFightBuilderRace,
     CastleFightBuildingKind, CastleFightContentAvailability, CastleFightContentBundle,
     CastleFightContentError, CastleFightContentIdentity, CombatRules, ContentIdentity, DamageType,
-    MapVersion, NavCell, SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, SimulationConfig,
-    TargetlessLane, Team, TerrainElevationMap, TerrainLoadError,
+    MapVersion, NavCell, PlayerConfig, PlayerId, SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation,
+    SimulationConfig, TargetlessLane, Team, TerrainElevationMap, TerrainLoadError,
     castle_fight_content_bundle_for_revision,
 };
 
@@ -93,17 +93,18 @@ pub enum CastleFightMatchMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CastleFightParticipantConfig {
+    pub id: PlayerId,
     pub team: Team,
     pub builder_race: CastleFightBuilderRace,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CastleFightMatchConfig {
     pub release: CastleFightReleaseDescriptor,
     pub content_identity: CastleFightContentIdentity,
     pub mode: CastleFightMatchMode,
     pub match_seed: u64,
-    pub participants: [CastleFightParticipantConfig; 2],
+    pub participants: Vec<CastleFightParticipantConfig>,
 }
 
 impl CastleFightMatchConfig {
@@ -112,6 +113,31 @@ impl CastleFightMatchConfig {
         release_revision: &str,
         match_seed: u64,
     ) -> Result<Self, CastleFightMatchSetupError> {
+        Self::development_subset_with_participants(
+            version,
+            release_revision,
+            match_seed,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(6),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        )
+    }
+
+    pub fn development_subset_with_participants(
+        version: MapVersion,
+        release_revision: &str,
+        match_seed: u64,
+        mut participants: Vec<CastleFightParticipantConfig>,
+    ) -> Result<Self, CastleFightMatchSetupError> {
         let release = castle_fight_release_descriptor(version, release_revision).ok_or(
             CastleFightMatchSetupError::UnregisteredReleaseRevision {
                 map_version: version,
@@ -119,21 +145,14 @@ impl CastleFightMatchConfig {
             },
         )?;
         let bundle = resolve_playable_bundle(release)?;
+        validate_participants(&participants)?;
+        participants.sort_unstable_by_key(|participant| participant.id);
         Ok(Self {
             release,
             content_identity: bundle.identity,
             mode: CastleFightMatchMode::DevelopmentSubset,
             match_seed,
-            participants: [
-                CastleFightParticipantConfig {
-                    team: Team(0),
-                    builder_race: CastleFightBuilderRace::Human,
-                },
-                CastleFightParticipantConfig {
-                    team: Team(1),
-                    builder_race: CastleFightBuilderRace::Human,
-                },
-            ],
+            participants,
         })
     }
 }
@@ -213,7 +232,7 @@ impl fmt::Display for CastleFightMatchSetupError {
                 actual.gameplay_hash
             ),
             Self::UnsupportedParticipants => formatter.write_str(
-                "the current development match requires exactly team 0 and team 1 participants",
+                "Castle Fight 9.27 development matches support balanced 1v1, 2v2, or 3v3 rosters using authored slots 0/1/2 versus 6/7/8",
             ),
             Self::MapSource(error) => formatter.write_str(error),
             Self::Terrain(error) => error.fmt(formatter),
@@ -230,9 +249,12 @@ impl From<TerrainLoadError> for CastleFightMatchSetupError {
 }
 
 pub fn resolve_castle_fight_match(
-    config: CastleFightMatchConfig,
+    mut config: CastleFightMatchConfig,
 ) -> Result<CastleFightResolvedMatch, CastleFightMatchSetupError> {
-    validate_participants(config.participants)?;
+    validate_participants(&config.participants)?;
+    config
+        .participants
+        .sort_unstable_by_key(|participant| participant.id);
     let content = resolve_playable_bundle(config.release)?;
     if content.identity != config.content_identity {
         return Err(CastleFightMatchSetupError::ContentIdentityMismatch {
@@ -275,11 +297,21 @@ pub fn create_castle_fight_match(
 ) -> Result<CastleFightMatch, CastleFightMatchSetupError> {
     let resolved = resolve_castle_fight_match(config)?;
     let simulation_config = resolved.simulation_config.clone();
-    let mut simulation = Simulation::new_with_gameplay_bundle(
+    let player_configs = resolved
+        .match_config
+        .participants
+        .iter()
+        .map(|participant| PlayerConfig {
+            id: participant.id,
+            team: participant.team,
+        })
+        .collect::<Vec<_>>();
+    let mut simulation = Simulation::new_with_gameplay_bundle_and_players(
         simulation_config.clone(),
         workers,
         resolved.combat_rules.clone(),
         resolved.content.identity.into(),
+        &player_configs,
     );
     let direct_rawcodes = resolved
         .direct_buildings
@@ -290,7 +322,7 @@ pub fn create_castle_fight_match(
         })
         .collect::<Vec<_>>();
 
-    for participant in resolved.match_config.participants {
+    for participant in resolved.match_config.participants.iter().copied() {
         let builder = resolved
             .content
             .builder(participant.builder_race)
@@ -300,13 +332,22 @@ pub fn create_castle_fight_match(
             1 => BUILDER_START_X_WORLD,
             _ => unreachable!("participants validated before match construction"),
         };
-        simulation.spawn_builder(BuilderSpawn {
-            team: participant.team,
-            position: world_point(x, 0),
-            profile: builder.profile,
-            configuration: builder.configuration_with_catalog(direct_rawcodes.clone()),
-            repair_autocast_enabled: builder.repair_autocast_enabled_by_default,
-        });
+        let y = match participant.id.0 {
+            0 | 6 => 128,
+            1 | 7 => 0,
+            2 | 8 => -128,
+            _ => unreachable!("participants validated against Castle Fight player slots"),
+        };
+        simulation.spawn_builder_for_player(
+            participant.id,
+            BuilderSpawn {
+                team: participant.team,
+                position: world_point(x, y),
+                profile: builder.profile,
+                configuration: builder.configuration_with_catalog(direct_rawcodes.clone()),
+                repair_autocast_enabled: builder.repair_autocast_enabled_by_default,
+            },
+        );
     }
 
     let castle_properties = BuildingGameplayProperties {
@@ -319,14 +360,24 @@ pub fn create_castle_fight_match(
         armor: ArmorProfile::new(ArmorType::Fortified, 5),
         ..BuildingGameplayProperties::default()
     };
-    simulation.spawn_building_with_properties(
-        passive_structure(Team(0), castle_footprint(0), DEVELOPMENT_CASTLE_HEALTH),
-        castle_properties,
-    );
-    simulation.spawn_building_with_properties(
-        passive_structure(Team(1), castle_footprint(1), DEVELOPMENT_CASTLE_HEALTH),
-        castle_properties,
-    );
+    for team in [Team(0), Team(1)] {
+        let owner = resolved
+            .match_config
+            .participants
+            .iter()
+            .filter(|participant| participant.team == team)
+            .map(|participant| participant.id)
+            .min()
+            .expect("validated Castle Fight team must contain a player");
+        let castle = simulation.spawn_building_for_player_with_properties(
+            owner,
+            passive_structure(team, castle_footprint(team.0), DEVELOPMENT_CASTLE_HEALTH),
+            castle_properties,
+        );
+        simulation
+            .register_team_objective(team, castle)
+            .expect("authored main castle must be a valid team objective");
+    }
 
     Ok(CastleFightMatch {
         simulation,
@@ -361,12 +412,39 @@ fn resolve_playable_bundle(
 }
 
 fn validate_participants(
-    participants: [CastleFightParticipantConfig; 2],
+    participants: &[CastleFightParticipantConfig],
 ) -> Result<(), CastleFightMatchSetupError> {
-    let mut teams = participants.map(|participant| participant.team.0);
-    teams.sort_unstable();
-    if teams != [0, 1] {
+    if !matches!(participants.len(), 2 | 4 | 6) {
         return Err(CastleFightMatchSetupError::UnsupportedParticipants);
+    }
+    let mut ids = participants
+        .iter()
+        .map(|participant| participant.id)
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    if ids.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err(CastleFightMatchSetupError::UnsupportedParticipants);
+    }
+    let team_size = participants.len() / 2;
+    let expected_ids =
+        (0..team_size)
+            .map(|slot| PlayerId(u8::try_from(slot).expect("Castle Fight team size fits u8")))
+            .chain((0..team_size).map(|slot| {
+                PlayerId(6 + u8::try_from(slot).expect("Castle Fight team size fits u8"))
+            }))
+            .collect::<Vec<_>>();
+    if ids != expected_ids {
+        return Err(CastleFightMatchSetupError::UnsupportedParticipants);
+    }
+    for participant in participants {
+        let expected_team = if participant.id.0 <= 2 {
+            Team(0)
+        } else {
+            Team(1)
+        };
+        if participant.team != expected_team {
+            return Err(CastleFightMatchSetupError::UnsupportedParticipants);
+        }
     }
     Ok(())
 }
@@ -780,6 +858,7 @@ fn fnv64_canonical_text(contents: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CastleFightProductionKind;
 
     #[test]
     fn runtime_release_selector_matches_retained_release_registry() {
@@ -877,13 +956,473 @@ mod tests {
             0x4341_5354_4c45,
         )
         .unwrap();
-        let first = create_castle_fight_match(config, 1).unwrap();
-        let second = create_castle_fight_match(config, 4).unwrap();
+        let first = create_castle_fight_match(config.clone(), 1).unwrap();
+        let second = create_castle_fight_match(config.clone(), 4).unwrap();
         assert_eq!(first.simulation.checksum(), second.simulation.checksum());
         assert_eq!(first.simulation.tick(), 0);
         assert_eq!(first.simulation.building_count(), 2);
         assert_eq!(first.content.identity, config.content_identity);
         assert_eq!(first.direct_buildings.len(), 7);
+    }
+
+    #[test]
+    fn participant_rosters_follow_authored_wc3_slot_prefixes() {
+        let invalid = CastleFightMatchConfig::development_subset_with_participants(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(7),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        );
+        assert!(matches!(
+            invalid,
+            Err(CastleFightMatchSetupError::UnsupportedParticipants)
+        ));
+
+        let three_vs_three = CastleFightMatchConfig::development_subset_with_participants(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(2),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(6),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(7),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(8),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            three_vs_three
+                .participants
+                .iter()
+                .map(|participant| participant.id)
+                .collect::<Vec<_>>(),
+            vec![
+                PlayerId(0),
+                PlayerId(1),
+                PlayerId(2),
+                PlayerId(6),
+                PlayerId(7),
+                PlayerId(8),
+            ]
+        );
+    }
+
+    #[test]
+    fn two_vs_two_match_has_one_builder_and_economy_per_player() {
+        let config = CastleFightMatchConfig::development_subset_with_participants(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(6),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(7),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        )
+        .unwrap();
+        let mut game = create_castle_fight_match(config, 1).unwrap();
+        assert_eq!(game.simulation.players().len(), 4);
+        assert_eq!(game.simulation.builders().len(), 4);
+        for id in [PlayerId(0), PlayerId(1), PlayerId(6), PlayerId(7)] {
+            assert!(game.simulation.builder_for_player(id).is_some());
+            let resources = game.simulation.player_resources_for(id).unwrap();
+            assert_eq!(resources.gold, 250);
+            assert_eq!(resources.lumber, 125);
+        }
+        assert!(game.simulation.player_resources(Team(0)).is_none());
+        assert!(game.simulation.player_resources(Team(1)).is_none());
+        assert!(
+            game.simulation
+                .debug_grant_player_resources_for(PlayerId(0), 100, 50)
+        );
+        assert_eq!(
+            game.simulation
+                .player_resources_for(PlayerId(0))
+                .unwrap()
+                .gold,
+            350
+        );
+        assert_eq!(
+            game.simulation
+                .player_resources_for(PlayerId(1))
+                .unwrap()
+                .gold,
+            250
+        );
+        let castles = game.simulation.buildings();
+        assert_eq!(castles.len(), 2);
+        assert_eq!(castles[0].team, Team(0));
+        assert_eq!(castles[0].owner, Some(PlayerId(0)));
+        assert_eq!(castles[1].team, Team(1));
+        assert_eq!(castles[1].owner, Some(PlayerId(6)));
+    }
+
+    #[test]
+    fn allied_players_keep_independent_building_ownership_and_refunds() {
+        let config = CastleFightMatchConfig::development_subset_with_participants(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(6),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(7),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        )
+        .unwrap();
+        let mut game = create_castle_fight_match(config, 1).unwrap();
+        let builder = game
+            .simulation
+            .builder_for_player(PlayerId(0))
+            .expect("player 0 builder");
+        let barracks = game
+            .content
+            .production_building(CastleFightProductionKind::Barracks)
+            .expect("Barracks in development content");
+        let footprint = BuildingFootprint::new(-138, 2, 4, 4);
+        game.simulation
+            .order_builder_purchase_building_with_properties_as(
+                PlayerId(0),
+                builder.id,
+                barracks.spawn(Team(0), footprint),
+                barracks.gameplay_properties(),
+            )
+            .unwrap();
+        assert_eq!(
+            game.simulation
+                .player_resources_for(PlayerId(0))
+                .unwrap()
+                .gold,
+            150
+        );
+        assert_eq!(
+            game.simulation
+                .player_resources_for(PlayerId(1))
+                .unwrap()
+                .gold,
+            250
+        );
+
+        game.simulation.step();
+        let building = game
+            .simulation
+            .buildings()
+            .into_iter()
+            .find(|building| {
+                building.content.map(|content| content.rawcode) == Some(barracks.rawcode)
+            })
+            .expect("builder should begin Barracks construction");
+        assert_eq!(building.owner, Some(PlayerId(0)));
+        assert_eq!(building.team, Team(0));
+        assert!(building.construction_complete_tick.is_some());
+
+        game.simulation
+            .cancel_building_construction_for_player(PlayerId(0), building.id)
+            .unwrap();
+        assert_eq!(
+            game.simulation
+                .player_resources_for(PlayerId(0))
+                .unwrap()
+                .gold,
+            250
+        );
+        assert_eq!(
+            game.simulation
+                .player_resources_for(PlayerId(1))
+                .unwrap()
+                .gold,
+            250
+        );
+    }
+
+    #[test]
+    fn production_preserves_the_owning_player_on_spawned_units() {
+        let config = CastleFightMatchConfig::development_subset_with_participants(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(6),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(7),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        )
+        .unwrap();
+        let mut game = create_castle_fight_match(config, 1).unwrap();
+        let barracks = game
+            .content
+            .production_building(CastleFightProductionKind::Barracks)
+            .expect("Barracks in development content");
+        let building = barracks.spawn(Team(0), BuildingFootprint::new(-138, 8, 4, 4));
+        let initial_delay = building
+            .production
+            .expect("Barracks must produce units")
+            .initial_delay_ticks;
+        game.simulation.spawn_building_for_player_with_properties(
+            PlayerId(1),
+            building,
+            barracks.gameplay_properties(),
+        );
+
+        for _ in 0..=initial_delay {
+            game.simulation.step();
+        }
+        let produced = game
+            .simulation
+            .units()
+            .into_iter()
+            .find(|unit| unit.owner == PlayerId(1))
+            .expect("player 1 Barracks should produce a player 1 unit");
+        assert_eq!(produced.team, Team(0));
+        assert_eq!(
+            produced.content.map(|content| content.rawcode),
+            Some(
+                game.content
+                    .unit(barracks.unit)
+                    .expect("Barracks unit must belong to development content")
+                    .rawcode
+            )
+        );
+    }
+
+    #[test]
+    fn disconnected_owner_delegates_only_their_builder_to_connected_teammates() {
+        let config = CastleFightMatchConfig::development_subset_with_participants(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+            vec![
+                CastleFightParticipantConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(6),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+                CastleFightParticipantConfig {
+                    id: PlayerId(7),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                },
+            ],
+        )
+        .unwrap();
+        let mut game = create_castle_fight_match(config, 1).unwrap();
+        let builder = game
+            .simulation
+            .builder_for_player(PlayerId(0))
+            .expect("player 0 builder");
+        let destination = SimPoint::new(
+            builder.position.x + 64 * SUBUNITS_PER_WORLD_UNIT,
+            builder.position.y,
+        );
+
+        assert_eq!(
+            game.simulation
+                .order_builder_move_as(PlayerId(1), builder.id, destination),
+            Err(crate::BuilderCommandError::NotAuthorized)
+        );
+        let western_castle = game.simulation.team_objective(Team(0)).unwrap();
+        assert!(
+            !game
+                .simulation
+                .can_player_control_building(PlayerId(1), western_castle)
+        );
+        assert!(game.simulation.set_player_connection_status(
+            PlayerId(0),
+            crate::PlayerConnectionStatus::Disconnected
+        ));
+        assert_eq!(game.simulation.lifecycle(), crate::MatchLifecycle::Running);
+        game.simulation
+            .order_builder_move_as(PlayerId(1), builder.id, destination)
+            .unwrap();
+        assert!(
+            !game
+                .simulation
+                .can_player_control_building(PlayerId(1), western_castle)
+        );
+
+        assert!(
+            game.simulation.set_player_connection_status(
+                PlayerId(0),
+                crate::PlayerConnectionStatus::Connected
+            )
+        );
+        assert_eq!(
+            game.simulation
+                .order_builder_move_as(PlayerId(1), builder.id, destination),
+            Err(crate::BuilderCommandError::NotAuthorized)
+        );
+
+        assert!(game.simulation.set_player_connection_status(
+            PlayerId(0),
+            crate::PlayerConnectionStatus::Disconnected
+        ));
+        assert!(game.simulation.set_player_connection_status(
+            PlayerId(1),
+            crate::PlayerConnectionStatus::Disconnected
+        ));
+        assert_eq!(
+            game.simulation.lifecycle(),
+            crate::MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask: 1
+            }
+        );
+        let paused_tick = game.simulation.tick();
+        let paused_checksum = game.simulation.checksum();
+        game.simulation.step();
+        assert_eq!(game.simulation.tick(), paused_tick);
+        assert_eq!(game.simulation.checksum(), paused_checksum);
+
+        assert!(
+            game.simulation.set_player_connection_status(
+                PlayerId(1),
+                crate::PlayerConnectionStatus::Connected
+            )
+        );
+        assert_eq!(game.simulation.lifecycle(), crate::MatchLifecycle::Running);
+        game.simulation.step();
+        assert_eq!(game.simulation.tick(), paused_tick + 1);
+    }
+
+    #[test]
+    fn objective_destruction_finishes_and_freezes_match_deterministically() {
+        let config = CastleFightMatchConfig::development_subset(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x4341_5354_4c45,
+        )
+        .unwrap();
+        let mut game = create_castle_fight_match(config.clone(), 1).unwrap();
+        let eastern_castle = game.simulation.team_objective(Team(1)).unwrap();
+        assert!(game.simulation.remove_building(eastern_castle));
+        game.simulation.step();
+        assert_eq!(
+            game.simulation.lifecycle(),
+            crate::MatchLifecycle::Finished {
+                outcome: crate::MatchOutcome::Victory(Team(0)),
+                finished_tick: 0,
+            }
+        );
+        let final_tick = game.simulation.tick();
+        let final_checksum = game.simulation.checksum();
+        assert!(!game.simulation.set_player_connection_status(
+            PlayerId(0),
+            crate::PlayerConnectionStatus::Disconnected
+        ));
+        game.simulation.step();
+        assert_eq!(game.simulation.tick(), final_tick);
+        assert_eq!(game.simulation.checksum(), final_checksum);
+
+        let mut draw = create_castle_fight_match(config, 1).unwrap();
+        let western_castle = draw.simulation.team_objective(Team(0)).unwrap();
+        let eastern_castle = draw.simulation.team_objective(Team(1)).unwrap();
+        assert!(draw.simulation.remove_building(western_castle));
+        assert!(draw.simulation.remove_building(eastern_castle));
+        draw.simulation.step();
+        assert_eq!(
+            draw.simulation.lifecycle(),
+            crate::MatchLifecycle::Finished {
+                outcome: crate::MatchOutcome::Draw,
+                finished_tick: 0,
+            }
+        );
     }
 
     #[test]

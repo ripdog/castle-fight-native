@@ -18,7 +18,7 @@ pub use components::{
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
     CorpseDefinitionId, CorpseProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
     EvasionEffectProfile, GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass,
-    MovementProfile, PassiveUnitEffect, PassiveUnitEffects, ProductionProfile,
+    MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects, PlayerId, ProductionProfile,
     ResolvedUnitDefinition, SimId, SpellcastingProfile, StatusState, Team, TriggeredAttackEffect,
     TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
@@ -63,8 +63,9 @@ pub use simulation::{
     BuilderSpawnError, BuilderView, BuildingCommandError, BuildingConstructionCancelError,
     BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingUpgradeError, BuildingView,
     CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView,
-    ProjectileView, ProjectileViewKind, Simulation, SimulationConfig, TargetlessLane, TickResult,
-    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus, PlayerView, ProjectileView,
+    ProjectileViewKind, Simulation, SimulationConfig, TargetlessLane, TeamObjectiveError,
+    TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -4361,7 +4362,7 @@ mod tests {
                 configuration: existing_builder.configuration,
                 repair_autocast_enabled: existing_builder.repair_autocast_enabled,
             }),
-            Err(BuilderSpawnError::TeamAlreadyHasBuilder)
+            Err(BuilderSpawnError::PlayerAlreadyHasBuilder)
         );
         assert_eq!(
             sim.order_builder_move(builder, SimPoint::new(12 * cell, 5 * cell)),

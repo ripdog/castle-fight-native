@@ -13,7 +13,7 @@ const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
 const RANDOM_PURPOSE_DEFEND_DEFLECT: u64 = 0x4445_4645_4e44_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 4;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 5;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -31,15 +31,16 @@ use crate::{
         GuaranteedHitProjectile, Health, HealthRegeneration, MAX_BOUNCE_HITS,
         MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
         MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit, ModifierId, MovementClass,
-        MovementProfile, NavigationGoal, NavigationState, PassiveUnitEffect, PassiveUnitEffects,
-        PendingAttackEffects, Position, ProductionArmorProfile, ProductionAttackTargets,
-        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
-        ProductionDamageType, ProductionHealthRegeneration, ProductionMovementClass,
-        ProductionPassiveEffects, ProductionProfile, ProductionSpellcastingProfile,
-        ProductionState, ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks,
-        ResolvedUnitDefinition, RetaliationState, SimId, SpawnTick, SpellcastingProfile,
-        StatusState, TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier,
-        TimedDamageOverTime, TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
+        MovementProfile, NavigationGoal, NavigationState, Owner, PassiveUnitEffect,
+        PassiveUnitEffects, PendingAttackEffects, PlayerId, Position, ProductionArmorProfile,
+        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
+        ProductionCorpseProfile, ProductionDamageType, ProductionHealthRegeneration,
+        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
+        ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
+        ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition, RetaliationState, SimId,
+        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
+        UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -126,6 +127,71 @@ impl Default for SimulationConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayerConfig {
+    pub id: PlayerId,
+    pub team: Team,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerConnectionStatus {
+    Connected,
+    Disconnected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchOutcome {
+    Victory(Team),
+    Draw,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchLifecycle {
+    Running,
+    PausedForDisconnect {
+        disconnected_teams_mask: u8,
+    },
+    Finished {
+        outcome: MatchOutcome,
+        finished_tick: u64,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeamObjectiveError {
+    UnsupportedTeam,
+    ObjectiveNotFound,
+    TeamMismatch,
+    ObjectiveAlreadyRegistered,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayerView {
+    pub id: PlayerId,
+    pub team: Team,
+    pub resources: PlayerResources,
+    pub connection: PlayerConnectionStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlayerState {
+    id: PlayerId,
+    team: Team,
+    resources: PlayerResources,
+    connection: PlayerConnectionStatus,
+}
+
+const DEFAULT_PLAYER_CONFIGS: [PlayerConfig; 2] = [
+    PlayerConfig {
+        id: PlayerId(0),
+        team: Team(0),
+    },
+    PlayerConfig {
+        id: PlayerId(1),
+        team: Team(1),
+    },
+];
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TickTimings {
     pub topology: Duration,
@@ -143,7 +209,7 @@ pub struct TickTimings {
     pub total: Duration,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TickResult {
     pub completed_tick: u64,
     pub units_alive: usize,
@@ -263,6 +329,7 @@ pub struct CorpseView {
     pub id: SimId,
     pub position: SimPoint,
     pub source_unit: SimId,
+    pub source_owner: PlayerId,
     pub source_team: Team,
     pub definition: CorpseDefinitionId,
     pub created_tick: u64,
@@ -273,6 +340,7 @@ pub struct CorpseView {
 pub struct UnitView {
     pub id: SimId,
     pub content: Option<ContentIdentity>,
+    pub owner: PlayerId,
     pub team: Team,
     pub position: SimPoint,
     pub collision_radius: i32,
@@ -303,6 +371,7 @@ pub struct UnitView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuilderView {
     pub id: SimId,
+    pub owner: PlayerId,
     pub team: Team,
     pub position: SimPoint,
     pub profile: BuilderProfile,
@@ -318,6 +387,7 @@ pub struct BuilderView {
 pub struct BuildingView {
     pub id: SimId,
     pub content: Option<ContentIdentity>,
+    pub owner: Option<PlayerId>,
     pub team: Team,
     pub footprint: BuildingFootprint,
     pub health: i32,
@@ -352,14 +422,17 @@ pub enum BuildingPlacementError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuilderSpawnError {
+    UnsupportedPlayer,
     UnsupportedTeam,
-    TeamAlreadyHasBuilder,
+    PlayerAlreadyHasBuilder,
+    PlayerTeamMismatch,
     OutsideBuildRegion,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuilderCommandError {
     BuilderNotFound,
+    NotAuthorized,
     OutsideBuildRegion,
     BlinkOutOfRange,
     FollowTargetNotFound,
@@ -394,6 +467,7 @@ pub enum BuildingConstructionCancelOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildingUpgradeError {
     SourceNotFound,
+    NotOwner,
     SourceUnderConstruction,
     SourceDefinitionMismatch,
     TeamMismatch,
@@ -405,6 +479,7 @@ pub enum BuildingUpgradeError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildingCommandError {
     SourceNotFound,
+    NotAuthorized,
     SourceCannotAttack,
     TargetNotFound,
     FriendlyTarget,
@@ -428,7 +503,9 @@ pub struct Simulation {
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
     last_chain_lightnings: Vec<ChainLightningEvent>,
-    player_resources: [PlayerResources; 2],
+    players: Vec<PlayerState>,
+    lifecycle: MatchLifecycle,
+    team_objectives: [Option<SimId>; 2],
     next_tick: u64,
     next_id: u64,
     configuration_identity: u64,
@@ -444,7 +521,7 @@ impl Simulation {
         workers: usize,
         combat_rules: CombatRules,
     ) -> Self {
-        Self::new_internal(config, workers, combat_rules, None)
+        Self::new_internal(config, workers, combat_rules, None, &DEFAULT_PLAYER_CONFIGS)
     }
 
     pub fn new_with_gameplay_bundle(
@@ -453,7 +530,29 @@ impl Simulation {
         combat_rules: CombatRules,
         gameplay_bundle: GameplayBundleIdentity,
     ) -> Self {
-        Self::new_internal(config, workers, combat_rules, Some(gameplay_bundle))
+        Self::new_internal(
+            config,
+            workers,
+            combat_rules,
+            Some(gameplay_bundle),
+            &DEFAULT_PLAYER_CONFIGS,
+        )
+    }
+
+    pub fn new_with_gameplay_bundle_and_players(
+        config: SimulationConfig,
+        workers: usize,
+        combat_rules: CombatRules,
+        gameplay_bundle: GameplayBundleIdentity,
+        players: &[PlayerConfig],
+    ) -> Self {
+        Self::new_internal(
+            config,
+            workers,
+            combat_rules,
+            Some(gameplay_bundle),
+            players,
+        )
     }
 
     fn new_internal(
@@ -461,6 +560,7 @@ impl Simulation {
         workers: usize,
         combat_rules: CombatRules,
         gameplay_bundle: Option<GameplayBundleIdentity>,
+        player_configs: &[PlayerConfig],
     ) -> Self {
         assert!(workers > 0, "simulation requires at least one worker");
         assert!(config.spatial_cell_size > 0);
@@ -480,14 +580,29 @@ impl Simulation {
             );
         }
         validate_combat_rules(&config, &combat_rules);
-        let configuration_identity =
-            canonical_configuration_identity(&config, &combat_rules, gameplay_bundle);
+        let player_configs = validate_player_configs(player_configs);
+        let configuration_identity = canonical_configuration_identity(
+            &config,
+            &combat_rules,
+            gameplay_bundle,
+            &player_configs,
+        );
         let starting_resources = PlayerResources {
             gold: config.economy.starting_gold,
             lumber: config.economy.starting_lumber,
             legendary_points_used: 0,
             legendary_points_cap: config.economy.starting_legendary_points,
         };
+
+        let players = player_configs
+            .iter()
+            .map(|player| PlayerState {
+                id: player.id,
+                team: player.team,
+                resources: starting_resources,
+                connection: PlayerConnectionStatus::Connected,
+            })
+            .collect();
 
         let pool = ThreadPoolBuilder::new()
             .num_threads(workers)
@@ -523,7 +638,9 @@ impl Simulation {
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
             last_chain_lightnings: Vec::new(),
-            player_resources: [starting_resources; 2],
+            players,
+            lifecycle: MatchLifecycle::Running,
+            team_objectives: [None, None],
             next_tick: 0,
             next_id: 1,
             configuration_identity,
@@ -546,22 +663,245 @@ impl Simulation {
     }
 
     #[must_use]
+    pub const fn lifecycle(&self) -> MatchLifecycle {
+        self.lifecycle
+    }
+
+    #[must_use]
+    pub fn team_objective(&self, team: Team) -> Option<SimId> {
+        self.team_objectives
+            .get(usize::from(team.0))
+            .copied()
+            .flatten()
+    }
+
+    pub fn register_team_objective(
+        &mut self,
+        team: Team,
+        objective: SimId,
+    ) -> Result<(), TeamObjectiveError> {
+        let Some(slot) = self.team_objectives.get(usize::from(team.0)) else {
+            return Err(TeamObjectiveError::UnsupportedTeam);
+        };
+        if slot.is_some() {
+            return Err(TeamObjectiveError::ObjectiveAlreadyRegistered);
+        }
+        let Some(entity) = self.world.iter_entities().find(|entity| {
+            entity.get::<SimId>().copied() == Some(objective)
+                && entity.get::<BuildingFootprint>().is_some()
+        }) else {
+            return Err(TeamObjectiveError::ObjectiveNotFound);
+        };
+        if entity.get::<Team>().copied() != Some(team) {
+            return Err(TeamObjectiveError::TeamMismatch);
+        }
+        self.team_objectives[usize::from(team.0)] = Some(objective);
+        Ok(())
+    }
+
+    pub fn set_player_connection_status(
+        &mut self,
+        player: PlayerId,
+        connection: PlayerConnectionStatus,
+    ) -> bool {
+        if matches!(self.lifecycle, MatchLifecycle::Finished { .. }) {
+            return false;
+        }
+        let Some(state) = self.player_state_mut(player) else {
+            return false;
+        };
+        state.connection = connection;
+        self.refresh_disconnect_pause();
+        true
+    }
+
+    #[must_use]
+    pub fn can_player_control_builder(&self, controller: PlayerId, builder: SimId) -> bool {
+        if self.lifecycle != MatchLifecycle::Running {
+            return false;
+        }
+        let Some(controller_state) = self.player_state(controller) else {
+            return false;
+        };
+        if controller_state.connection != PlayerConnectionStatus::Connected {
+            return false;
+        }
+        let Some((owner, team)) = self.world.iter_entities().find_map(|entity| {
+            (entity.get::<SimId>().copied() == Some(builder) && entity.get::<Builder>().is_some())
+                .then(|| Some((entity.get::<Owner>()?.0, *entity.get::<Team>()?)))?
+        }) else {
+            return false;
+        };
+        if owner == controller {
+            return true;
+        }
+        let Some(owner_state) = self.player_state(owner) else {
+            return false;
+        };
+        owner_state.connection == PlayerConnectionStatus::Disconnected
+            && owner_state.team == controller_state.team
+            && team == controller_state.team
+    }
+
+    #[must_use]
+    pub fn can_player_control_building(&self, controller: PlayerId, building: SimId) -> bool {
+        if self.lifecycle != MatchLifecycle::Running {
+            return false;
+        }
+        let Some(controller_state) = self.player_state(controller) else {
+            return false;
+        };
+        if controller_state.connection != PlayerConnectionStatus::Connected {
+            return false;
+        }
+        self.world.iter_entities().any(|entity| {
+            entity.get::<SimId>().copied() == Some(building)
+                && entity.get::<BuildingFootprint>().is_some()
+                && entity.get::<Owner>().map(|owner| owner.0) == Some(controller)
+        })
+    }
+
+    pub fn order_builder_move_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        destination: SimPoint,
+    ) -> Result<(), BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        self.order_builder_move(builder, destination)
+    }
+
+    pub fn order_builder_follow_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        target: SimId,
+    ) -> Result<(), BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        self.order_builder_follow(builder, target)
+    }
+
+    pub fn order_builder_blink_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        destination: SimPoint,
+    ) -> Result<SimPoint, BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        self.order_builder_blink(builder, destination)
+    }
+
+    pub fn order_builder_repair_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        target: SimId,
+    ) -> Result<(), BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        self.order_builder_repair(builder, target)
+    }
+
+    pub fn set_builder_repair_autocast_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        enabled: bool,
+    ) -> Result<(), BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        self.set_builder_repair_autocast(builder, enabled)
+    }
+
+    pub fn stop_builder_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+    ) -> Result<(), BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        self.stop_builder(builder)
+    }
+
+    pub fn order_building_attack_target_as(
+        &mut self,
+        controller: PlayerId,
+        source: SimId,
+        target: SimId,
+    ) -> Result<(), BuildingCommandError> {
+        if !self.can_player_control_building(controller, source) {
+            return Err(BuildingCommandError::NotAuthorized);
+        }
+        self.order_building_attack_target(source, target)
+    }
+
+    #[must_use]
+    pub fn players(&self) -> Vec<PlayerView> {
+        self.players
+            .iter()
+            .map(|player| PlayerView {
+                id: player.id,
+                team: player.team,
+                resources: player.resources,
+                connection: player.connection,
+            })
+            .collect()
+    }
+
+    #[must_use]
+    pub fn player(&self, id: PlayerId) -> Option<PlayerView> {
+        let player = self.player_state(id)?;
+        Some(PlayerView {
+            id: player.id,
+            team: player.team,
+            resources: player.resources,
+            connection: player.connection,
+        })
+    }
+
+    #[must_use]
+    pub fn player_resources_for(&self, player: PlayerId) -> Option<PlayerResources> {
+        self.player_state(player).map(|state| state.resources)
+    }
+
+    /// Compatibility lookup for maps/tests with exactly one player on a team. Multi-player teams
+    /// are intentionally ambiguous and return `None`; authoritative gameplay should use PlayerId.
+    #[must_use]
     pub fn player_resources(&self, team: Team) -> Option<PlayerResources> {
-        self.player_resources.get(usize::from(team.0)).copied()
+        let player = self.unique_player_for_team(team)?;
+        self.player_resources_for(player)
     }
 
     /// Adds resources directly to one player's authoritative economy state for developer tooling.
-    ///
-    /// This intentionally lives on `Simulation` rather than allowing debug UI to mutate economy
-    /// storage directly, so cheats still cross the same authoritative-state boundary as gameplay
-    /// commands. Values saturate instead of wrapping, and invalid teams are rejected.
-    pub fn debug_grant_player_resources(&mut self, team: Team, gold: u32, lumber: u32) -> bool {
-        let Some(resources) = self.player_resources.get_mut(usize::from(team.0)) else {
+    pub fn debug_grant_player_resources_for(
+        &mut self,
+        player: PlayerId,
+        gold: u32,
+        lumber: u32,
+    ) -> bool {
+        let Some(state) = self.player_state_mut(player) else {
             return false;
         };
-        resources.gold = resources.gold.saturating_add(gold);
-        resources.lumber = resources.lumber.saturating_add(lumber);
+        state.resources.gold = state.resources.gold.saturating_add(gold);
+        state.resources.lumber = state.resources.lumber.saturating_add(lumber);
         true
+    }
+
+    /// Compatibility helper for the current one-player-per-team fixtures.
+    pub fn debug_grant_player_resources(&mut self, team: Team, gold: u32, lumber: u32) -> bool {
+        let Some(player) = self.unique_player_for_team(team) else {
+            return false;
+        };
+        self.debug_grant_player_resources_for(player, gold, lumber)
     }
 
     /// Applies direct developer-tool damage to every live combat unit.
@@ -579,13 +919,14 @@ impl Simulation {
             let mut query = self.world.query::<(
                 Entity,
                 &SimId,
+                &Owner,
                 &Team,
                 &Position,
                 &mut Health,
                 Option<&CorpseProducer>,
                 &MovementProfile,
             )>();
-            for (entity, id, team, position, mut health, corpse, _) in
+            for (entity, id, owner, team, position, mut health, corpse, _) in
                 query.iter_mut(&mut self.world)
             {
                 if health.current <= 0 {
@@ -600,6 +941,7 @@ impl Simulation {
                     fatalities.push((
                         entity,
                         *id,
+                        owner.0,
                         *team,
                         position.0,
                         corpse.map(|corpse| corpse.0),
@@ -608,8 +950,8 @@ impl Simulation {
             }
         }
 
-        fatalities.sort_unstable_by_key(|(_, id, _, _, _)| *id);
-        for (entity, source_unit, source_team, position, corpse) in fatalities {
+        fatalities.sort_unstable_by_key(|(_, id, _, _, _, _)| *id);
+        for (entity, source_unit, source_owner, source_team, position, corpse) in fatalities {
             self.world.despawn(entity);
             let Some(profile) = corpse else {
                 continue;
@@ -625,6 +967,7 @@ impl Simulation {
                 Position(position),
                 Corpse {
                     source_unit,
+                    source_owner,
                     source_team,
                     definition: profile.definition,
                     created_tick: self.next_tick,
@@ -637,18 +980,22 @@ impl Simulation {
     }
 
     #[must_use]
-    pub fn player_income(&self, team: Team) -> Option<u32> {
-        (team.0 < 2).then(|| {
-            taxed_income_from_fixed(
-                self.raw_player_income_per_10k(team),
-                self.config.economy.income_tax_bracket_per_10k,
-            )
-        })
+    pub fn player_income_for(&self, player: PlayerId) -> Option<u32> {
+        self.player_state(player)?;
+        Some(taxed_income_from_fixed(
+            self.raw_player_income_per_10k(player),
+            self.config.economy.income_tax_bracket_per_10k,
+        ))
     }
 
     #[must_use]
-    pub fn player_economy(&self, team: Team) -> Option<PlayerEconomyView> {
-        let resources = self.player_resources(team)?;
+    pub fn player_income(&self, team: Team) -> Option<u32> {
+        self.player_income_for(self.unique_player_for_team(team)?)
+    }
+
+    #[must_use]
+    pub fn player_economy_for(&self, player: PlayerId) -> Option<PlayerEconomyView> {
+        let resources = self.player_resources_for(player)?;
         let interval = self.config.economy.income_interval_ticks;
         let (progress, ticks_until_income) = if interval == 0 {
             (0, 0)
@@ -667,7 +1014,7 @@ impl Simulation {
         };
         Some(PlayerEconomyView {
             resources,
-            income: self.player_income(team).expect("validated player team"),
+            income: self.player_income_for(player).expect("validated player id"),
             income_interval_ticks: interval,
             income_progress_per_10k: progress,
             ticks_until_income,
@@ -675,10 +1022,124 @@ impl Simulation {
     }
 
     #[must_use]
-    pub fn can_afford_building(&self, team: Team, economy: BuildingEconomyProfile) -> bool {
-        self.player_resources(team).is_some_and(|resources| {
+    pub fn player_economy(&self, team: Team) -> Option<PlayerEconomyView> {
+        self.player_economy_for(self.unique_player_for_team(team)?)
+    }
+
+    #[must_use]
+    pub fn can_afford_building_for_player(
+        &self,
+        player: PlayerId,
+        economy: BuildingEconomyProfile,
+    ) -> bool {
+        self.player_resources_for(player).is_some_and(|resources| {
             resources.gold >= economy.gold_cost && resources.lumber >= economy.lumber_cost
         })
+    }
+
+    #[must_use]
+    pub fn can_afford_building(&self, team: Team, economy: BuildingEconomyProfile) -> bool {
+        self.unique_player_for_team(team)
+            .is_some_and(|player| self.can_afford_building_for_player(player, economy))
+    }
+
+    fn player_state(&self, player: PlayerId) -> Option<&PlayerState> {
+        self.players
+            .binary_search_by_key(&player, |state| state.id)
+            .ok()
+            .map(|index| &self.players[index])
+    }
+
+    fn player_state_mut(&mut self, player: PlayerId) -> Option<&mut PlayerState> {
+        let index = self
+            .players
+            .binary_search_by_key(&player, |state| state.id)
+            .ok()?;
+        Some(&mut self.players[index])
+    }
+
+    fn unique_player_for_team(&self, team: Team) -> Option<PlayerId> {
+        let mut players = self
+            .players
+            .iter()
+            .filter(|player| player.team == team)
+            .map(|player| player.id);
+        let player = players.next()?;
+        players.next().is_none().then_some(player)
+    }
+
+    fn inferred_owner_for_team(&self, team: Team) -> PlayerId {
+        self.unique_player_for_team(team).unwrap_or_else(|| {
+            panic!(
+                "team {} does not have exactly one player; use an explicit PlayerId ownership API",
+                team.0
+            )
+        })
+    }
+
+    fn refresh_disconnect_pause(&mut self) {
+        if matches!(self.lifecycle, MatchLifecycle::Finished { .. }) {
+            return;
+        }
+        let mut disconnected_teams_mask = 0u8;
+        for team in [Team(0), Team(1)] {
+            let mut team_players = self.players.iter().filter(|player| player.team == team);
+            let Some(first) = team_players.next() else {
+                continue;
+            };
+            let any_connected = first.connection == PlayerConnectionStatus::Connected
+                || team_players
+                    .any(|player| player.connection == PlayerConnectionStatus::Connected);
+            if !any_connected {
+                disconnected_teams_mask |= 1 << team.0;
+            }
+        }
+        self.lifecycle = if disconnected_teams_mask == 0 {
+            MatchLifecycle::Running
+        } else {
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask,
+            }
+        };
+    }
+
+    fn evaluate_objective_outcome(&mut self, completed_tick: u64) {
+        let [Some(team_0_objective), Some(team_1_objective)] = self.team_objectives else {
+            return;
+        };
+        let team_0_alive = self.world.iter_entities().any(|entity| {
+            entity.get::<SimId>().copied() == Some(team_0_objective)
+                && entity
+                    .get::<Health>()
+                    .is_some_and(|health| health.current > 0)
+        });
+        let team_1_alive = self.world.iter_entities().any(|entity| {
+            entity.get::<SimId>().copied() == Some(team_1_objective)
+                && entity
+                    .get::<Health>()
+                    .is_some_and(|health| health.current > 0)
+        });
+        let outcome = match (team_0_alive, team_1_alive) {
+            (true, true) => return,
+            (false, false) => MatchOutcome::Draw,
+            (false, true) => MatchOutcome::Victory(Team(1)),
+            (true, false) => MatchOutcome::Victory(Team(0)),
+        };
+        self.lifecycle = MatchLifecycle::Finished {
+            outcome,
+            finished_tick: completed_tick,
+        };
+    }
+
+    fn assert_player_team(&self, player: PlayerId, team: Team) {
+        let state = self
+            .player_state(player)
+            .unwrap_or_else(|| panic!("unknown player {}", player.0));
+        assert_eq!(
+            state.team, team,
+            "player {} belongs to team {}, not team {}",
+            player.0, state.team.0, team.0
+        );
     }
 
     #[must_use]
@@ -692,10 +1153,10 @@ impl Simulation {
         }) else {
             return false;
         };
-        let Some(team) = entity.get::<Team>().copied() else {
+        let Some(owner) = entity.get::<Owner>().copied() else {
             return false;
         };
-        let Some(resources) = self.player_resources(team) else {
+        let Some(resources) = self.player_resources_for(owner.0) else {
             return false;
         };
         let committed = entity
@@ -792,10 +1253,10 @@ impl Simulation {
         Ok(())
     }
 
-    fn raw_player_income_per_10k(&self, team: Team) -> u64 {
+    fn raw_player_income_per_10k(&self, player: PlayerId) -> u64 {
         self.world
             .iter_entities()
-            .filter(|entity| entity.get::<Team>() == Some(&team))
+            .filter(|entity| entity.get::<Owner>() == Some(&Owner(player)))
             .filter_map(|entity| entity.get::<BuildingEconomyProfile>())
             .fold(self.config.economy.base_income_per_10k, |total, economy| {
                 total
@@ -805,13 +1266,35 @@ impl Simulation {
     }
 
     pub fn spawn_builder(&mut self, builder: BuilderSpawn) -> SimId {
-        self.try_spawn_builder(builder)
+        let owner = self.inferred_owner_for_team(builder.team);
+        self.spawn_builder_for_player(owner, builder)
+    }
+
+    pub fn spawn_builder_for_player(&mut self, owner: PlayerId, builder: BuilderSpawn) -> SimId {
+        self.try_spawn_builder_for_player(owner, builder)
             .expect("invalid authored builder spawn")
     }
 
     pub fn try_spawn_builder(&mut self, builder: BuilderSpawn) -> Result<SimId, BuilderSpawnError> {
+        let Some(owner) = self.unique_player_for_team(builder.team) else {
+            return Err(BuilderSpawnError::UnsupportedPlayer);
+        };
+        self.try_spawn_builder_for_player(owner, builder)
+    }
+
+    pub fn try_spawn_builder_for_player(
+        &mut self,
+        owner: PlayerId,
+        builder: BuilderSpawn,
+    ) -> Result<SimId, BuilderSpawnError> {
         if builder.team.0 >= 2 {
             return Err(BuilderSpawnError::UnsupportedTeam);
+        }
+        let player = self
+            .player_state(owner)
+            .ok_or(BuilderSpawnError::UnsupportedPlayer)?;
+        if player.team != builder.team {
+            return Err(BuilderSpawnError::PlayerTeamMismatch);
         }
         assert!(builder.profile.speed_per_tick >= 0);
         assert!(builder.profile.build_range >= 0);
@@ -823,9 +1306,9 @@ impl Simulation {
         assert!(builder.profile.blink_range >= 0);
         assert!(builder.profile.blink_boundary_inset >= 0);
         if self.world.iter_entities().any(|entity| {
-            entity.get::<Builder>().is_some() && entity.get::<Team>() == Some(&builder.team)
+            entity.get::<Builder>().is_some() && entity.get::<Owner>() == Some(&Owner(owner))
         }) {
-            return Err(BuilderSpawnError::TeamAlreadyHasBuilder);
+            return Err(BuilderSpawnError::PlayerAlreadyHasBuilder);
         }
         if !self.point_inside_team_build_region(builder.team, builder.position) {
             return Err(BuilderSpawnError::OutsideBuildRegion);
@@ -835,6 +1318,7 @@ impl Simulation {
         self.world.spawn((
             id,
             builder.team,
+            Owner(owner),
             Position(builder.position),
             Builder,
             builder.profile,
@@ -1103,8 +1587,8 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuilderBuildError> {
-        self.validate_builder_summon(builder, building, properties)?;
-        self.try_spawn_building_with_properties(building, properties)
+        let (_, owner) = self.validate_builder_summon(builder, building, properties)?;
+        self.try_spawn_building_internal(Some(owner), building, properties)
             .map_err(BuilderBuildError::Placement)
     }
 
@@ -1115,11 +1599,13 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuilderBuildError> {
-        self.validate_builder_summon(builder, building, properties)?;
+        let (_, owner) = self.validate_builder_summon(builder, building, properties)?;
         let economy = properties
             .economy
             .ok_or(BuilderBuildError::MissingEconomyProfile)?;
-        let resources = self.player_resources[usize::from(building.team.0)];
+        let resources = self
+            .player_resources_for(owner)
+            .expect("builder owner must have player resources");
         if resources.gold < economy.gold_cost {
             return Err(BuilderBuildError::Resources(
                 ResourcePurchaseError::InsufficientGold {
@@ -1138,9 +1624,12 @@ impl Simulation {
         }
 
         let id = self
-            .try_spawn_building_with_properties(building, properties)
+            .try_spawn_building_internal(Some(owner), building, properties)
             .map_err(BuilderBuildError::Placement)?;
-        let resources = &mut self.player_resources[usize::from(building.team.0)];
+        let resources = &mut self
+            .player_state_mut(owner)
+            .expect("builder owner must exist")
+            .resources;
         resources.gold -= economy.gold_cost;
         resources.lumber -= economy.lumber_cost;
         resources.lumber = resources
@@ -1150,13 +1639,29 @@ impl Simulation {
         Ok(id)
     }
 
+    pub fn order_builder_purchase_building_with_properties_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> Result<(), BuilderBuildError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderBuildError::Builder(
+                BuilderCommandError::NotAuthorized,
+            ));
+        }
+        self.order_builder_purchase_building_with_properties(builder, building, properties)
+    }
+
     pub fn order_builder_purchase_building_with_properties(
         &mut self,
         builder: SimId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<(), BuilderBuildError> {
-        let builder_entity = self.validate_builder_summon(builder, building, properties)?;
+        let (builder_entity, owner) =
+            self.validate_builder_summon(builder, building, properties)?;
         self.validate_building_placement(building.team, building.footprint)
             .map_err(BuilderBuildError::Placement)?;
         let economy = properties
@@ -1168,7 +1673,9 @@ impl Simulation {
             .get::<BuilderBuildOrder>()
             .copied();
         let current_economy = current_order.and_then(|order| order.properties.economy);
-        let resources = self.player_resources[usize::from(building.team.0)];
+        let resources = self
+            .player_resources_for(owner)
+            .expect("builder owner must have player resources");
         let available_gold = resources
             .gold
             .checked_add(current_economy.map_or(0, |old| old.gold_cost))
@@ -1195,7 +1702,10 @@ impl Simulation {
         }
 
         self.cancel_builder_build_order_internal(builder_entity);
-        let resources = &mut self.player_resources[usize::from(building.team.0)];
+        let resources = &mut self
+            .player_state_mut(owner)
+            .expect("builder owner must exist")
+            .resources;
         resources.gold -= economy.gold_cost;
         resources.lumber -= economy.lumber_cost;
         self.world
@@ -1228,7 +1738,17 @@ impl Simulation {
             .entity_mut(builder_entity)
             .remove::<BuilderBuildOrder>();
         if let Some(economy) = order.properties.economy {
-            let resources = &mut self.player_resources[usize::from(order.building.team.0)];
+            let owner = self
+                .world
+                .entity(builder_entity)
+                .get::<Owner>()
+                .copied()
+                .expect("builder missing owner")
+                .0;
+            let resources = &mut self
+                .player_state_mut(owner)
+                .expect("builder owner must exist")
+                .resources;
             resources.gold = resources
                 .gold
                 .checked_add(economy.gold_cost)
@@ -1246,8 +1766,8 @@ impl Simulation {
         builder: SimId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
-    ) -> Result<Entity, BuilderBuildError> {
-        let (builder_entity, builder_team) = self
+    ) -> Result<(Entity, PlayerId), BuilderBuildError> {
+        let (builder_entity, builder_team, builder_owner) = self
             .world
             .iter_entities()
             .find_map(|entity| {
@@ -1257,6 +1777,7 @@ impl Simulation {
                     (
                         entity.id(),
                         *entity.get::<Team>().expect("builder missing team"),
+                        entity.get::<Owner>().expect("builder missing owner").0,
                     )
                 })
             })
@@ -1279,7 +1800,7 @@ impl Simulation {
         if !building_allowed {
             return Err(BuilderBuildError::BuildingNotInCatalog);
         }
-        Ok(builder_entity)
+        Ok((builder_entity, builder_owner))
     }
 
     pub fn spawn_unit(&mut self, unit: UnitSpawn) -> SimId {
@@ -1292,13 +1813,30 @@ impl Simulation {
         position: SimPoint,
         definition: ResolvedUnitDefinition,
     ) -> SimId {
+        let owner = self.inferred_owner_for_team(team);
+        self.spawn_resolved_unit_for_player(owner, team, position, definition)
+    }
+
+    pub fn spawn_resolved_unit_for_player(
+        &mut self,
+        owner: PlayerId,
+        team: Team,
+        position: SimPoint,
+        definition: ResolvedUnitDefinition,
+    ) -> SimId {
+        self.assert_player_team(owner, team);
         let unit = UnitSpawn::from_template(team, position, definition.template);
         validate_unit_spawn(unit);
         self.validate_unit_gameplay_properties(position, definition.properties);
         if let Some(spellcasting) = definition.spellcasting {
             validate_spellcasting_profile(spellcasting);
         }
-        self.spawn_unit_unchecked(unit, definition.properties, definition.spellcasting)
+        self.spawn_unit_unchecked(
+            Some(owner),
+            unit,
+            definition.properties,
+            definition.spellcasting,
+        )
     }
 
     pub fn spawn_unit_with_spellcasting(
@@ -1322,7 +1860,8 @@ impl Simulation {
         validate_unit_spawn(unit);
         self.validate_unit_gameplay_properties(unit.position, properties);
         validate_spellcasting_profile(spellcasting);
-        self.spawn_unit_unchecked(unit, properties, Some(spellcasting))
+        let owner = self.inferred_owner_for_team(unit.team);
+        self.spawn_unit_unchecked(Some(owner), unit, properties, Some(spellcasting))
     }
 
     pub fn spawn_unit_with_corpse(&mut self, unit: UnitSpawn, corpse: CorpseProfile) -> SimId {
@@ -1356,7 +1895,8 @@ impl Simulation {
     ) -> SimId {
         validate_unit_spawn(unit);
         self.validate_unit_gameplay_properties(unit.position, properties);
-        self.spawn_unit_unchecked(unit, properties, None)
+        let owner = self.inferred_owner_for_team(unit.team);
+        self.spawn_unit_unchecked(Some(owner), unit, properties, None)
     }
 
     fn validate_unit_gameplay_properties(
@@ -1416,8 +1956,28 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> SimId {
-        self.try_spawn_building_with_properties(building, properties)
+        let owner = self.inferred_owner_for_team(building.team);
+        self.spawn_building_for_player_with_properties(owner, building, properties)
+    }
+
+    pub fn spawn_building_for_player_with_properties(
+        &mut self,
+        owner: PlayerId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> SimId {
+        self.assert_player_team(owner, building.team);
+        self.try_spawn_building_internal(Some(owner), building, properties)
             .expect("invalid authored building placement")
+    }
+
+    pub fn spawn_shared_building_with_properties(
+        &mut self,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> SimId {
+        self.try_spawn_building_internal(None, building, properties)
+            .expect("invalid authored shared building placement")
     }
 
     pub fn spawn_building_with_attack_targets(
@@ -1460,7 +2020,8 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuildingPlacementError> {
-        self.try_spawn_building_internal(building, properties)
+        let owner = self.inferred_owner_for_team(building.team);
+        self.try_spawn_building_internal(Some(owner), building, properties)
     }
 
     pub fn try_spawn_building_with_production_corpse(
@@ -1515,7 +2076,9 @@ impl Simulation {
         if let Some(collision_radius) = properties.collision_radius {
             validate_collision_radius(collision_radius);
         }
+        let owner = self.inferred_owner_for_team(building.team);
         self.try_spawn_building_internal(
+            Some(owner),
             building,
             BuildingGameplayProperties {
                 production_unit: properties,
@@ -1543,7 +2106,9 @@ impl Simulation {
             "production spellcasting profile requires a production building"
         );
         validate_spellcasting_profile(spellcasting);
+        let owner = self.inferred_owner_for_team(building.team);
         self.try_spawn_building_internal(
+            Some(owner),
             building,
             BuildingGameplayProperties {
                 production_spellcasting: Some(spellcasting),
@@ -1554,12 +2119,13 @@ impl Simulation {
 
     fn try_spawn_building_internal(
         &mut self,
+        owner: Option<PlayerId>,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuildingPlacementError> {
         self.validate_building_definition(building, properties);
         self.validate_building_placement(building.team, building.footprint)?;
-        let (id, entity) = self.spawn_building_shell(building, properties);
+        let (id, entity) = self.spawn_building_shell(owner, building, properties);
         self.activate_building_entity(entity, building, properties);
         self.topology_dirty = true;
         Ok(id)
@@ -1567,6 +2133,7 @@ impl Simulation {
 
     fn try_start_building_construction(
         &mut self,
+        owner: PlayerId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<SimId, BuildingPlacementError> {
@@ -1584,7 +2151,7 @@ impl Simulation {
             .next_tick
             .checked_add(u64::from(duration_ticks))
             .expect("building construction tick overflow");
-        let (id, entity) = self.spawn_building_shell(building, properties);
+        let (id, entity) = self.spawn_building_shell(Some(owner), building, properties);
         self.world.entity_mut(entity).insert(BuildingConstruction {
             started_tick: self.next_tick,
             complete_tick,
@@ -1648,6 +2215,7 @@ impl Simulation {
 
     fn spawn_building_shell(
         &mut self,
+        owner: Option<PlayerId>,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> (SimId, Entity) {
@@ -1663,6 +2231,9 @@ impl Simulation {
             properties.damage_type,
             properties.armor,
         ));
+        if let Some(owner) = owner {
+            entity.insert(Owner(owner));
+        }
         if let Some(content) = properties.content {
             entity.insert(content);
         }
@@ -1835,6 +2406,27 @@ impl Simulation {
         }
     }
 
+    pub fn start_building_upgrade_as(
+        &mut self,
+        controller: PlayerId,
+        source_id: SimId,
+        source_building: BuildingSpawn,
+        source_properties: BuildingGameplayProperties,
+        target_building: BuildingSpawn,
+        target_properties: BuildingGameplayProperties,
+    ) -> Result<(), BuildingUpgradeError> {
+        if !self.can_player_control_building(controller, source_id) {
+            return Err(BuildingUpgradeError::NotOwner);
+        }
+        self.start_building_upgrade(
+            source_id,
+            source_building,
+            source_properties,
+            target_building,
+            target_properties,
+        )
+    }
+
     pub fn start_building_upgrade(
         &mut self,
         source_id: SimId,
@@ -1852,29 +2444,37 @@ impl Simulation {
             .economy
             .ok_or(BuildingUpgradeError::MissingEconomyProfile)?;
 
-        let Some((entity, actual_team, actual_footprint, actual_health, actual_content, runtime)) =
-            self.world.iter_entities().find_map(|entity| {
-                (entity.get::<SimId>().copied() == Some(source_id)
-                    && entity.get::<BuildingFootprint>().is_some())
-                .then(|| {
-                    Some((
-                        entity.id(),
-                        *entity.get::<Team>()?,
-                        *entity.get::<BuildingFootprint>()?,
-                        *entity.get::<Health>()?,
-                        entity.get::<ContentIdentity>().copied(),
-                        BuildingRuntimeState {
-                            production: entity.get::<ProductionState>().copied(),
-                            attack_cooldown: entity.get::<AttackCooldown>().copied(),
-                            target: entity.get::<TargetState>().copied(),
-                            spawn_tick: entity.get::<SpawnTick>().copied(),
-                            mana: entity.get::<ManaState>().copied(),
-                            ability_state: entity.get::<AutomaticAbilityState>().copied(),
-                            status: entity.get::<StatusState>().copied(),
-                        },
-                    ))
-                })?
-            })
+        let Some((
+            entity,
+            actual_owner,
+            actual_team,
+            actual_footprint,
+            actual_health,
+            actual_content,
+            runtime,
+        )) = self.world.iter_entities().find_map(|entity| {
+            (entity.get::<SimId>().copied() == Some(source_id)
+                && entity.get::<BuildingFootprint>().is_some())
+            .then(|| {
+                Some((
+                    entity.id(),
+                    entity.get::<Owner>()?.0,
+                    *entity.get::<Team>()?,
+                    *entity.get::<BuildingFootprint>()?,
+                    *entity.get::<Health>()?,
+                    entity.get::<ContentIdentity>().copied(),
+                    BuildingRuntimeState {
+                        production: entity.get::<ProductionState>().copied(),
+                        attack_cooldown: entity.get::<AttackCooldown>().copied(),
+                        target: entity.get::<TargetState>().copied(),
+                        spawn_tick: entity.get::<SpawnTick>().copied(),
+                        mana: entity.get::<ManaState>().copied(),
+                        ability_state: entity.get::<AutomaticAbilityState>().copied(),
+                        status: entity.get::<StatusState>().copied(),
+                    },
+                ))
+            })?
+        })
         else {
             return Err(BuildingUpgradeError::SourceNotFound);
         };
@@ -1898,7 +2498,10 @@ impl Simulation {
             return Err(BuildingUpgradeError::SourceDefinitionMismatch);
         }
 
-        let resources = &mut self.player_resources[usize::from(actual_team.0)];
+        let resources = &mut self
+            .player_state_mut(actual_owner)
+            .expect("building owner must exist")
+            .resources;
         if resources.gold < target_economy.gold_cost {
             return Err(BuildingUpgradeError::Resources(
                 ResourcePurchaseError::InsufficientGold {
@@ -1991,12 +2594,23 @@ impl Simulation {
         team: Team,
         id: SimId,
     ) -> Result<BuildingConstructionCancelOutcome, BuildingConstructionCancelError> {
+        let player = self
+            .unique_player_for_team(team)
+            .ok_or(BuildingConstructionCancelError::NotOwner)?;
+        self.cancel_building_construction_for_player(player, id)
+    }
+
+    pub fn cancel_building_construction_for_player(
+        &mut self,
+        player: PlayerId,
+        id: SimId,
+    ) -> Result<BuildingConstructionCancelOutcome, BuildingConstructionCancelError> {
         let Some((entity, owner, construction, current_health)) =
             self.world.iter_entities().find_map(|entity| {
                 (entity.get::<SimId>().copied() == Some(id)).then(|| {
                     Some((
                         entity.id(),
-                        *entity.get::<Team>()?,
+                        entity.get::<Owner>()?.0,
                         *entity.get::<BuildingConstruction>()?,
                         *entity.get::<Health>()?,
                     ))
@@ -2005,12 +2619,15 @@ impl Simulation {
         else {
             return Err(BuildingConstructionCancelError::ConstructionNotFound);
         };
-        if owner != team {
+        if owner != player {
             return Err(BuildingConstructionCancelError::NotOwner);
         }
 
         if let Some(economy) = construction.properties.economy {
-            let resources = &mut self.player_resources[usize::from(team.0)];
+            let resources = &mut self
+                .player_state_mut(player)
+                .expect("building owner must exist")
+                .resources;
             resources.gold = resources
                 .gold
                 .checked_add(economy.gold_cost)
@@ -2075,20 +2692,23 @@ impl Simulation {
                 (construction.complete_tick <= self.next_tick).then_some((
                     *entity.get::<SimId>()?,
                     entity.id(),
+                    entity.get::<Owner>()?.0,
                     construction,
                 ))
             })
             .collect();
         completing.sort_unstable_by_key(|(id, ..)| *id);
 
-        for (_, entity, construction) in completing {
+        for (_, entity, owner, construction) in completing {
             self.world
                 .entity_mut(entity)
                 .remove::<BuildingConstruction>();
             self.activate_building_entity(entity, construction.building, construction.properties);
             if let Some(economy) = construction.properties.economy {
-                let resources =
-                    &mut self.player_resources[usize::from(construction.building.team.0)];
+                let resources = &mut self
+                    .player_state_mut(owner)
+                    .expect("building owner must exist")
+                    .resources;
                 resources.lumber = resources
                     .lumber
                     .checked_add(economy.lumber_refund)
@@ -2278,6 +2898,15 @@ impl Simulation {
     }
 
     pub fn step(&mut self) -> TickResult {
+        if self.lifecycle != MatchLifecycle::Running {
+            // Presentation events describe one completed gameplay tick. A paused/terminal step has
+            // no gameplay tick, so do not keep replaying the previous tick's cosmetic events while
+            // the authoritative state is frozen.
+            self.last_attacks.clear();
+            self.last_ability_casts.clear();
+            self.last_chain_lightnings.clear();
+            return self.frozen_tick_result();
+        }
         self.last_attacks.clear();
         self.last_ability_casts.clear();
         self.last_chain_lightnings.clear();
@@ -3310,7 +3939,7 @@ impl Simulation {
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
                 if let Some(profile) = unit.corpse {
-                    corpse_spawns.push((unit.id, unit.team, positions[index], profile));
+                    corpse_spawns.push((unit.id, unit.owner, unit.team, positions[index], profile));
                 }
                 self.world.despawn(unit.entity);
                 deaths += 1;
@@ -3376,7 +4005,7 @@ impl Simulation {
         }
 
         let corpses_spawned = corpse_spawns.len();
-        for (source_unit, source_team, position, profile) in corpse_spawns {
+        for (source_unit, source_owner, source_team, position, profile) in corpse_spawns {
             let id = self.allocate_id();
             let expires_tick = profile.lifetime_ticks.map(|lifetime_ticks| {
                 completed_tick
@@ -3388,6 +4017,7 @@ impl Simulation {
                 Position(position),
                 Corpse {
                     source_unit,
+                    source_owner,
                     source_team,
                     definition: profile.definition,
                     created_tick: completed_tick,
@@ -3451,7 +4081,10 @@ impl Simulation {
             self.topology_dirty = true;
         }
 
-        self.advance_economy_income();
+        self.evaluate_objective_outcome(completed_tick);
+        if self.lifecycle == MatchLifecycle::Running {
+            self.advance_economy_income();
+        }
         self.defense_alerts = next_defense_alerts;
         let projectiles_alive = self.projectile_count();
         let corpses_alive = self.corpse_count();
@@ -3464,11 +4097,15 @@ impl Simulation {
         let phase_start = Instant::now();
         let checksum = canonical_checksum(
             &self.world,
-            self.next_tick,
-            self.next_id,
-            self.configuration_identity,
-            &self.defense_alerts,
-            &self.player_resources,
+            CanonicalMatchState {
+                next_tick: self.next_tick,
+                next_id: self.next_id,
+                configuration_identity: self.configuration_identity,
+                defense_alerts: &self.defense_alerts,
+                players: &self.players,
+                lifecycle: self.lifecycle,
+                team_objectives: self.team_objectives,
+            },
         );
         let checksum_time = phase_start.elapsed();
         let timings = TickTimings {
@@ -3548,15 +4185,31 @@ impl Simulation {
         }
     }
 
+    fn frozen_tick_result(&self) -> TickResult {
+        TickResult {
+            completed_tick: self.next_tick.saturating_sub(1),
+            units_alive: self.unit_count(),
+            buildings_alive: self.building_count(),
+            corpses_alive: self.corpse_count(),
+            projectiles_alive: self.projectile_count(),
+            checksum: self.checksum(),
+            ..TickResult::default()
+        }
+    }
+
     #[must_use]
     pub fn checksum(&self) -> u64 {
         canonical_checksum(
             &self.world,
-            self.next_tick,
-            self.next_id,
-            self.configuration_identity,
-            &self.defense_alerts,
-            &self.player_resources,
+            CanonicalMatchState {
+                next_tick: self.next_tick,
+                next_id: self.next_id,
+                configuration_identity: self.configuration_identity,
+                defense_alerts: &self.defense_alerts,
+                players: &self.players,
+                lifecycle: self.lifecycle,
+                team_objectives: self.team_objectives,
+            },
         )
     }
 
@@ -3666,11 +4319,17 @@ impl Simulation {
     }
 
     #[must_use]
-    pub fn builder_for_team(&self, team: Team) -> Option<BuilderView> {
+    pub fn builder_for_player(&self, player: PlayerId) -> Option<BuilderView> {
         self.world
             .iter_entities()
             .filter_map(builder_view_from_entity)
-            .find(|builder| builder.team == team)
+            .find(|builder| builder.owner == player)
+    }
+
+    #[must_use]
+    pub fn builder_for_team(&self, team: Team) -> Option<BuilderView> {
+        let player = self.unique_player_for_team(team)?;
+        self.builder_for_player(player)
     }
 
     #[must_use]
@@ -3729,6 +4388,7 @@ impl Simulation {
 
     fn spawn_unit_unchecked(
         &mut self,
+        owner: Option<PlayerId>,
         unit: UnitSpawn,
         properties: UnitGameplayProperties,
         spellcasting: Option<SpellcastingProfile>,
@@ -3754,6 +4414,9 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
+        if let Some(owner) = owner {
+            entity.insert(Owner(owner));
+        }
         entity.insert(HealthRegeneration {
             per_second_per_10k: properties.health_regen_per_second_per_10k,
             remainder_per_10k_hz: 0,
@@ -3835,13 +4498,25 @@ impl Simulation {
             return;
         }
 
-        for team_index in 0..self.player_resources.len() {
-            let team = Team(u8::try_from(team_index).expect("two-player team index fits u8"));
-            let income = taxed_income_from_fixed(
-                self.raw_player_income_per_10k(team),
-                self.config.economy.income_tax_bracket_per_10k,
-            );
-            self.player_resources[team_index].gold = self.player_resources[team_index]
+        let payouts: Vec<_> = self
+            .players
+            .iter()
+            .map(|player| {
+                (
+                    player.id,
+                    taxed_income_from_fixed(
+                        self.raw_player_income_per_10k(player.id),
+                        self.config.economy.income_tax_bracket_per_10k,
+                    ),
+                )
+            })
+            .collect();
+        for (player, income) in payouts {
+            let resources = &mut self
+                .player_state_mut(player)
+                .expect("income player must exist")
+                .resources;
+            resources.gold = resources
                 .gold
                 .checked_add(income)
                 .expect("player gold overflow");
@@ -3966,6 +4641,7 @@ impl Simulation {
                 Some((
                     *entity.get::<SimId>()?,
                     entity.id(),
+                    entity.get::<Owner>()?.0,
                     *entity.get::<Team>()?,
                     entity.get::<Position>()?.0,
                     *entity.get::<BuilderProfile>()?,
@@ -3976,7 +4652,8 @@ impl Simulation {
             .collect();
         builders.sort_unstable_by_key(|(id, ..)| *id);
 
-        for (_, builder_entity, team, position, profile, mut state, build_order) in builders {
+        for (_, builder_entity, owner, team, position, profile, mut state, build_order) in builders
+        {
             let mut next_position = position;
 
             if let Some(order) = build_order {
@@ -4014,9 +4691,17 @@ impl Simulation {
                 {
                     let starts_construction = order.properties.construction_time_ticks.is_some();
                     let result = if starts_construction {
-                        self.try_start_building_construction(order.building, order.properties)
+                        self.try_start_building_construction(
+                            owner,
+                            order.building,
+                            order.properties,
+                        )
                     } else {
-                        self.try_spawn_building_with_properties(order.building, order.properties)
+                        self.try_spawn_building_internal(
+                            Some(owner),
+                            order.building,
+                            order.properties,
+                        )
                     };
                     match result {
                         Ok(_) => {
@@ -4025,8 +4710,10 @@ impl Simulation {
                                 .remove::<BuilderBuildOrder>();
                             if !starts_construction && let Some(economy) = order.properties.economy
                             {
-                                let resources =
-                                    &mut self.player_resources[usize::from(order.building.team.0)];
+                                let resources = &mut self
+                                    .player_state_mut(owner)
+                                    .expect("builder owner must exist")
+                                    .resources;
                                 resources.lumber = resources
                                     .lumber
                                     .checked_add(economy.lumber_refund)
@@ -4319,6 +5006,11 @@ impl Simulation {
                     spellcasting,
                 )| {
                     let entity_ref = self.world.entity(entity);
+                    let owner = entity_ref
+                        .get::<Owner>()
+                        .copied()
+                        .expect("production building missing owner")
+                        .0;
                     let repair_metadata = entity_ref
                         .get::<ProductionUnitRepairMetadata>()
                         .copied()
@@ -4330,6 +5022,7 @@ impl Simulation {
                     ProductionAttempt {
                         entity,
                         id: *id,
+                        owner,
                         team: *team,
                         footprint: *footprint,
                         profile: *profile,
@@ -4452,6 +5145,7 @@ impl Simulation {
 
             if let Some((_cell, position)) = spawn {
                 self.spawn_unit_unchecked(
+                    Some(attempt.owner),
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                     UnitGameplayProperties {
                         content: attempt.content,
@@ -4494,6 +5188,7 @@ impl Simulation {
         let mut query = self.world.query::<(
             Entity,
             &SimId,
+            &Owner,
             &Team,
             &Position,
             &Health,
@@ -4509,11 +5204,12 @@ impl Simulation {
         let default_collision_radius = self.default_collision_radius();
         let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
             .map(
                 |(
                     entity,
                     id,
+                    owner,
                     team,
                     position,
                     health,
@@ -4556,6 +5252,7 @@ impl Simulation {
                     UnitSnapshot {
                         entity,
                         id: *id,
+                        owner: owner.0,
                         team: *team,
                         position: position.0,
                         health: health.current,
@@ -7867,6 +8564,7 @@ struct MovementMetrics {
 struct UnitSnapshot {
     entity: Entity,
     id: SimId,
+    owner: PlayerId,
     team: Team,
     position: SimPoint,
     health: i32,
@@ -7918,6 +8616,7 @@ struct BuildingSnapshot {
 struct ProductionAttempt {
     entity: Entity,
     id: SimId,
+    owner: PlayerId,
     team: Team,
     footprint: BuildingFootprint,
     profile: ProductionProfile,
@@ -8406,6 +9105,29 @@ fn grouped_defense_victims(
     victims
 }
 
+fn validate_player_configs(players: &[PlayerConfig]) -> Vec<PlayerConfig> {
+    assert!(
+        !players.is_empty(),
+        "simulation requires at least one player"
+    );
+    let mut players = players.to_vec();
+    players.sort_unstable_by_key(|player| player.id);
+    for player in &players {
+        assert!(
+            player.team.0 < 2,
+            "verification slice supports teams 0 and 1 only"
+        );
+    }
+    for pair in players.windows(2) {
+        assert_ne!(
+            pair[0].id, pair[1].id,
+            "duplicate PlayerId {}",
+            pair[0].id.0
+        );
+    }
+    players
+}
+
 fn validate_combat_rules(config: &SimulationConfig, rules: &CombatRules) {
     assert!(
         rules.uphill_miss_chance_per_10k <= UPHILL_MISS_CHANCE_SCALE,
@@ -8599,6 +9321,7 @@ fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Cor
         id: *entity.get::<SimId>()?,
         position: entity.get::<Position>()?.0,
         source_unit: corpse.source_unit,
+        source_owner: corpse.source_owner,
         source_team: corpse.source_team,
         definition: corpse.definition,
         created_tick: corpse.created_tick,
@@ -8666,6 +9389,7 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
     let state = *entity.get::<BuilderState>()?;
     Some(BuilderView {
         id: *entity.get::<SimId>()?,
+        owner: entity.get::<Owner>()?.0,
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
         profile: *entity.get::<BuilderProfile>()?,
@@ -8698,6 +9422,7 @@ fn unit_view_from_entity(
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
+        owner: entity.get::<Owner>()?.0,
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
         collision_radius: entity
@@ -8736,6 +9461,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
     Some(BuildingView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
+        owner: entity.get::<Owner>().map(|owner| owner.0),
         team: *entity.get::<Team>()?,
         footprint: *entity.get::<BuildingFootprint>()?,
         health: entity.get::<Health>()?.current,
@@ -9957,6 +10683,7 @@ fn canonical_configuration_identity(
     config: &SimulationConfig,
     combat_rules: &CombatRules,
     gameplay_bundle: Option<GameplayBundleIdentity>,
+    players: &[PlayerConfig],
 ) -> u64 {
     const DOMAIN: u64 = 0x4346_434f_4e46_4947;
     const DAMAGE_TYPES: [DamageType; DamageType::COUNT] = [
@@ -9990,6 +10717,11 @@ fn canonical_configuration_identity(
             hash.write_u64(identity.gameplay_hash);
         }
         None => hash.write_u8(0),
+    }
+    hash.write_u64(players.len() as u64);
+    for player in players {
+        hash.write_u8(player.id.0);
+        hash.write_u8(player.team.0);
     }
     hash.write_u64(config.match_seed);
     hash.write_i32(config.spatial_cell_size);
@@ -10084,14 +10816,27 @@ fn hash_building_footprint(hash: &mut Fnv64, footprint: BuildingFootprint) {
     hash.write_u16(footprint.height);
 }
 
-fn canonical_checksum(
-    world: &World,
+#[derive(Clone, Copy)]
+struct CanonicalMatchState<'a> {
     next_tick: u64,
     next_id: u64,
     configuration_identity: u64,
-    defense_alerts: &[DefenseAlert],
-    player_resources: &[PlayerResources; 2],
-) -> u64 {
+    defense_alerts: &'a [DefenseAlert],
+    players: &'a [PlayerState],
+    lifecycle: MatchLifecycle,
+    team_objectives: [Option<SimId>; 2],
+}
+
+fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
+    let CanonicalMatchState {
+        next_tick,
+        next_id,
+        configuration_identity,
+        defense_alerts,
+        players,
+        lifecycle,
+        team_objectives,
+    } = state;
     let authoritative_entity_count = world
         .iter_entities()
         .filter(|entity| entity.get::<SimId>().is_some())
@@ -10152,6 +10897,7 @@ fn canonical_checksum(
             if entity.get::<Builder>().is_some() {
                 return Some(CanonicalEntity::Builder(CanonicalBuilder {
                     id,
+                    owner: entity.get::<Owner>()?.0,
                     team: *entity.get::<Team>()?,
                     position: entity.get::<Position>()?.0,
                     profile: *entity.get::<BuilderProfile>()?,
@@ -10166,6 +10912,7 @@ fn canonical_checksum(
                 Some(CanonicalEntity::Unit(CanonicalUnit {
                     id,
                     content: entity.get::<ContentIdentity>().copied(),
+                    owner: entity.get::<Owner>()?.0,
                     team,
                     position: position.0,
                     health,
@@ -10197,6 +10944,7 @@ fn canonical_checksum(
                 Some(CanonicalEntity::Building(CanonicalBuilding {
                     id,
                     content: entity.get::<ContentIdentity>().copied(),
+                    owner: entity.get::<Owner>().map(|owner| owner.0),
                     team,
                     footprint: *entity.get::<BuildingFootprint>()?,
                     health,
@@ -10298,11 +11046,44 @@ fn canonical_checksum(
     hash.write_u64(configuration_identity);
     hash.write_u64(next_tick);
     hash.write_u64(next_id);
-    for resources in player_resources {
-        hash.write_u64(u64::from(resources.gold));
-        hash.write_u64(u64::from(resources.lumber));
-        hash.write_u16(resources.legendary_points_used);
-        hash.write_u16(resources.legendary_points_cap);
+    match lifecycle {
+        MatchLifecycle::Running => hash.write_u8(0),
+        MatchLifecycle::PausedForDisconnect {
+            disconnected_teams_mask,
+        } => {
+            hash.write_u8(1);
+            hash.write_u8(disconnected_teams_mask);
+        }
+        MatchLifecycle::Finished {
+            outcome,
+            finished_tick,
+        } => {
+            hash.write_u8(2);
+            match outcome {
+                MatchOutcome::Victory(team) => {
+                    hash.write_u8(0);
+                    hash.write_u8(team.0);
+                }
+                MatchOutcome::Draw => hash.write_u8(1),
+            }
+            hash.write_u64(finished_tick);
+        }
+    }
+    for objective in team_objectives {
+        hash_optional_sim_id(&mut hash, objective);
+    }
+    hash.write_u64(players.len() as u64);
+    for player in players {
+        hash.write_u8(player.id.0);
+        hash.write_u8(player.team.0);
+        hash.write_u8(match player.connection {
+            PlayerConnectionStatus::Connected => 0,
+            PlayerConnectionStatus::Disconnected => 1,
+        });
+        hash.write_u64(u64::from(player.resources.gold));
+        hash.write_u64(u64::from(player.resources.lumber));
+        hash.write_u16(player.resources.legendary_points_used);
+        hash.write_u16(player.resources.legendary_points_cap);
     }
     hash.write_u64(entities.len() as u64);
     for entity in entities {
@@ -10311,6 +11092,7 @@ fn canonical_checksum(
                 hash.write_u8(0);
                 hash.write_u64(unit.id.0);
                 hash_content_identity(&mut hash, unit.content);
+                hash.write_u8(unit.owner.0);
                 hash.write_u8(unit.team.0);
                 hash.write_i32(unit.position.x);
                 hash.write_i32(unit.position.y);
@@ -10395,6 +11177,13 @@ fn canonical_checksum(
                 hash.write_u8(1);
                 hash.write_u64(building.id.0);
                 hash_content_identity(&mut hash, building.content);
+                match building.owner {
+                    Some(owner) => {
+                        hash.write_u8(1);
+                        hash.write_u8(owner.0);
+                    }
+                    None => hash.write_u8(0),
+                }
                 hash.write_u8(building.team.0);
                 hash.write_i32(building.footprint.min_x);
                 hash.write_i32(building.footprint.min_y);
@@ -10651,6 +11440,7 @@ fn canonical_checksum(
                 hash.write_i32(corpse.position.x);
                 hash.write_i32(corpse.position.y);
                 hash.write_u64(corpse.corpse.source_unit.0);
+                hash.write_u8(corpse.corpse.source_owner.0);
                 hash.write_u8(corpse.corpse.source_team.0);
                 hash.write_u64(u64::from(corpse.corpse.definition.0));
                 hash.write_u64(corpse.corpse.created_tick);
@@ -10692,6 +11482,7 @@ fn canonical_checksum(
             CanonicalEntity::Builder(builder) => {
                 hash.write_u8(9);
                 hash.write_u64(builder.id.0);
+                hash.write_u8(builder.owner.0);
                 hash.write_u8(builder.team.0);
                 hash.write_i32(builder.position.x);
                 hash.write_i32(builder.position.y);
@@ -10792,6 +11583,7 @@ impl CanonicalEntity {
 #[derive(Debug, Clone)]
 struct CanonicalBuilder {
     id: SimId,
+    owner: PlayerId,
     team: Team,
     position: SimPoint,
     profile: BuilderProfile,
@@ -10804,6 +11596,7 @@ struct CanonicalBuilder {
 struct CanonicalUnit {
     id: SimId,
     content: Option<ContentIdentity>,
+    owner: PlayerId,
     team: Team,
     position: SimPoint,
     health: Health,
@@ -10843,6 +11636,7 @@ struct CanonicalBuildingConstruction {
 struct CanonicalBuilding {
     id: SimId,
     content: Option<ContentIdentity>,
+    owner: Option<PlayerId>,
     team: Team,
     footprint: BuildingFootprint,
     health: Health,

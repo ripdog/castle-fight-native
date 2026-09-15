@@ -16,6 +16,12 @@ pub struct SimId(pub u64);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Team(pub u8);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PlayerId(pub u8);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Owner(pub PlayerId);
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position(pub SimPoint);
 
@@ -460,6 +466,7 @@ pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Corpse {
     pub source_unit: SimId,
+    pub source_owner: PlayerId,
     pub source_team: Team,
     pub definition: CorpseDefinitionId,
     pub created_tick: u64,
