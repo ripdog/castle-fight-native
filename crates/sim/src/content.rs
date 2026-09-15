@@ -2938,7 +2938,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_ne!(bundle.identity.gameplay_hash, 0);
+        assert_eq!(bundle.identity.gameplay_hash, 0x4ff9_3f04_c180_3f1e);
         assert_eq!(bundle.behaviors().len(), 12);
         assert!(
             bundle
