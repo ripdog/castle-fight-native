@@ -6926,7 +6926,7 @@ def _extract_runtime_campaign_mechanics(
             "player_assigned_supply_definition": "perk id is nonempty OR item id is nonzero",
             "player_assigned_perk_applies_to_selected_party_slot": True,
             "player_assigned_item_applies_to_selected_party_slot": True,
-            "unresolved_player_slot_item_falls_back_to_every_party_player": True,
+            "player_slot_lookup_failure_item_falls_back_to_every_party_player": True,
             "positive_speed_bonus_applies_to_own_added_ai_players": True,
             "speed_bonus_effect": "setCampaignAiSpeedBonus(player_id,total_speed_bonus)",
             "gold_bonus_is_accumulated_for_summary_text_in_this_function": True,
