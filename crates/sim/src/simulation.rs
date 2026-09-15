@@ -1900,30 +1900,31 @@ impl Simulation {
                 current_health.max,
                 source.health.max,
             );
-            let mut entity_mut = self.world.entity_mut(entity);
-            *entity_mut
-                .get_mut::<Health>()
-                .expect("upgrade cancellation source missing health") = Health {
-                current: restored_health,
-                max: source.health.max,
-            };
-            *entity_mut
-                .get_mut::<DamageType>()
-                .expect("upgrade cancellation source missing damage type") =
-                source.properties.damage_type;
-            *entity_mut
-                .get_mut::<ArmorProfile>()
-                .expect("upgrade cancellation source missing armor profile") =
-                source.properties.armor;
-            match source.properties.content {
-                Some(content) => {
-                    entity_mut.insert(content);
-                }
-                None => {
-                    entity_mut.remove::<ContentIdentity>();
+            {
+                let mut entity_mut = self.world.entity_mut(entity);
+                *entity_mut
+                    .get_mut::<Health>()
+                    .expect("upgrade cancellation source missing health") = Health {
+                    current: restored_health,
+                    max: source.health.max,
+                };
+                *entity_mut
+                    .get_mut::<DamageType>()
+                    .expect("upgrade cancellation source missing damage type") =
+                    source.properties.damage_type;
+                *entity_mut
+                    .get_mut::<ArmorProfile>()
+                    .expect("upgrade cancellation source missing armor profile") =
+                    source.properties.armor;
+                match source.properties.content {
+                    Some(content) => {
+                        entity_mut.insert(content);
+                    }
+                    None => {
+                        entity_mut.remove::<ContentIdentity>();
+                    }
                 }
             }
-            drop(entity_mut);
             self.activate_building_entity(entity, source.building, source.properties);
             self.restore_building_runtime_state(entity, source.runtime);
             BuildingConstructionCancelOutcome::RevertedUpgrade
@@ -2426,33 +2427,33 @@ impl Simulation {
                         self.config.match_seed,
                         &units,
                     );
-                    if defense.reflected && !snapshot.projectile.source_is_building {
-                        if let Some(source_index) =
+                    if defense.reflected
+                        && !snapshot.projectile.source_is_building
+                        && let Some(source_index) =
                             find_unit_index(&units, snapshot.projectile.source)
                                 .filter(|index| unit_health[*index] > 0)
-                        {
-                            let source_position = positions[source_index];
-                            let impact_tick = completed_tick
-                                .checked_add(projectile_travel_ticks(
-                                    impact_position.distance_sq(source_position),
-                                    snapshot.projectile.speed_per_tick,
-                                ))
-                                .expect("reflected projectile impact tick overflow");
-                            reflected_projectile_launches.push(ReflectedProjectileLaunch {
-                                original_source: snapshot.projectile.source,
-                                reflector: target_sim_id(target, &units, &buildings),
-                                reflector_team: match target {
-                                    TargetIndex::Unit(index) => units[index].team,
-                                    TargetIndex::Building(index) => buildings[index].team,
-                                },
-                                target: snapshot.projectile.source,
-                                damage: snapshot.projectile.damage,
-                                damage_type: snapshot.projectile.damage_type,
-                                launch_position: impact_position,
-                                launch_tick: completed_tick,
-                                impact_tick,
-                            });
-                        }
+                    {
+                        let source_position = positions[source_index];
+                        let impact_tick = completed_tick
+                            .checked_add(projectile_travel_ticks(
+                                impact_position.distance_sq(source_position),
+                                snapshot.projectile.speed_per_tick,
+                            ))
+                            .expect("reflected projectile impact tick overflow");
+                        reflected_projectile_launches.push(ReflectedProjectileLaunch {
+                            original_source: snapshot.projectile.source,
+                            reflector: target_sim_id(target, &units, &buildings),
+                            reflector_team: match target {
+                                TargetIndex::Unit(index) => units[index].team,
+                                TargetIndex::Building(index) => buildings[index].team,
+                            },
+                            target: snapshot.projectile.source,
+                            damage: snapshot.projectile.damage,
+                            damage_type: snapshot.projectile.damage_type,
+                            launch_position: impact_position,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                        });
                     }
                     projectile_impacts += 1;
                     if defense.damage <= 0 {
