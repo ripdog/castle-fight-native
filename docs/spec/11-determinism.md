@@ -236,6 +236,8 @@ canonical global resources
 
 Derived caches MAY be excluded if they are guaranteed to be reconstructable and cannot influence authoritative behavior except through their canonical inputs.
 
+The concrete current classification and field-level coverage is maintained in `22-authoritative-state-inventory.md`. New future-affecting fields MUST be added to that inventory at the same time they are introduced; checksum and snapshot coverage must not be maintained as unrelated ad-hoc lists.
+
 ## 12. State checksums
 
 The simulation MUST expose a reproducible state checksum for desync detection.
@@ -247,6 +249,8 @@ The checksum mechanism MUST distinguish at least:
 - simulation version mismatch;
 - content hash mismatch;
 - state mismatch.
+
+The current executable checksum projection is schema revision **2** (`CANONICAL_CHECKSUM_SCHEMA_VERSION`). Revision 2 deliberately invalidates comparison with the prototype projection: it includes deterministic allocator state, immutable simulation configuration/combat-rule identity (including the match seed), audited optional component presence, and live content rawcodes. Until step 3 provides a resolved content-bundle identity, immutable rules are canonically encoded into a cached configuration identity at match construction. Worker count, derived navigation caches, presentation events, and diagnostic timings remain outside the checksum.
 
 For diagnostics, the engine SHOULD support hierarchical checksums, e.g. per subsystem/component/entity range, so a desync can be localized without diffing an entire world dump.
 

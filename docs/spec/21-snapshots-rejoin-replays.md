@@ -39,6 +39,8 @@ It includes, directly or transitively:
 
 Derived caches SHOULD be excluded if safely reconstructable.
 
+`22-authoritative-state-inventory.md` is the field-level coverage checklist for the current implementation. Snapshot work MUST reconcile that inventory against the implementation before declaring restore complete, and MUST extend it for content-bundle, player/lifecycle, and command-stream state introduced by steps 3–6.
+
 ## 3. Snapshot loading
 
 Loading a snapshot MUST be deterministic regardless of ECS insertion/archetype order.

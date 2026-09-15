@@ -26,6 +26,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** de
 
 - [20-networking.md](20-networking.md) — authoritative server, deterministic clients, command transport, validation, tick assignment, and desync handling.
 - [21-snapshots-rejoin-replays.md](21-snapshots-rejoin-replays.md) — snapshots, reconnect, fast-forward, spectators, replay logs, and compatibility/versioning.
+- [22-authoritative-state-inventory.md](22-authoritative-state-inventory.md) — current authoritative/immutable/derived/presentation state boundary used by checksums and future restore.
 
 ### Layer 3 — Client/presentation
 
