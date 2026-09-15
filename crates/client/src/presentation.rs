@@ -2,14 +2,27 @@ use std::{collections::HashMap, time::Duration};
 
 use bevy::{
     asset::RenderAssetUsages,
-    camera::Exposure,
+    camera::{
+        Exposure,
+        primitives::{Frustum, Sphere},
+        visibility::NoFrustumCulling,
+    },
     ecs::system::SystemParam,
     gltf::Gltf,
     input::mouse::MouseWheel,
     light::AmbientLight,
-    mesh::{Indices, PrimitiveTopology},
+    mesh::{Indices, MeshVertexBufferLayoutRef, PrimitiveTopology},
+    pbr::{Material, MaterialPipeline, MaterialPipelineKey},
     prelude::*,
-    render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
+    reflect::TypePath,
+    render::{
+        render_resource::{
+            AsBindGroup, CompareFunction, RenderPipelineDescriptor, SpecializedMeshPipelineError,
+        },
+        storage::ShaderBuffer,
+        view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
+    },
+    shader::ShaderRef,
     time::Fixed,
     window::PrimaryWindow,
 };
@@ -73,6 +86,9 @@ const WC3_CHAIN_LIGHTNING_NOISE_SCALE: f32 = 0.05;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const FLESH_DECAY_TICKS: u64 = 2 * CASTLE_FIGHT_SIMULATION_HZ as u64;
 const BONE_DECAY_TICKS: u64 = 25 * CASTLE_FIGHT_SIMULATION_HZ as u64;
+const HEALTH_BAR_SHADER_PATH: &str = "shaders/health_bar_overlay.wgsl";
+const HEALTH_BAR_BATCH_MAX_RECTS: usize = 8_192;
+const HEALTH_BAR_BATCH_MIN_BUFFER_RECTS: usize = 64;
 const HEALTH_BAR_HEIGHT_PIXELS: f32 = 9.0;
 const PRODUCTION_BAR_HEIGHT_PIXELS: f32 = 7.0;
 const PRODUCTION_BAR_GAP_PIXELS: f32 = 4.0;
@@ -507,18 +523,100 @@ struct MissIndicator {
     remaining: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct HealthBarUiEntry {
-    root: Entity,
-    health_fill: Entity,
-    progress_track: Option<Entity>,
-    progress_fill: Option<Entity>,
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+struct HealthBarMaterial {
+    #[storage(0, read_only)]
+    rect_data: Handle<ShaderBuffer>,
 }
 
-#[derive(Resource, Default)]
-struct HealthBarUiMap {
-    units: HashMap<SimId, HealthBarUiEntry>,
-    buildings: HashMap<SimId, HealthBarUiEntry>,
+impl Material for HealthBarMaterial {
+    fn vertex_shader() -> ShaderRef {
+        HEALTH_BAR_SHADER_PATH.into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        HEALTH_BAR_SHADER_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex_layout = layout
+            .0
+            .get_layout(&[Mesh::ATTRIBUTE_POSITION.at_shader_location(0)])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+        descriptor.primitive.cull_mode = None;
+        if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
+            depth_stencil.depth_compare = Some(CompareFunction::Always);
+            depth_stencil.depth_write_enabled = Some(false);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Component)]
+struct HealthBarBatchEntity;
+
+#[derive(Debug, Clone, Copy)]
+struct HealthBarRect {
+    min: Vec2,
+    max: Vec2,
+    color: [f32; 4],
+}
+
+// World-attached bars are deliberately batched into one static clip-space mesh and one small
+// storage buffer. Per-entity Bevy UI nodes made camera motion main-thread-bound even when bars
+// were offscreen, while mutating a Mesh asset every frame would force Bevy to re-prepare it.
+#[derive(Resource)]
+struct HealthBarBatch {
+    buffer: Handle<ShaderBuffer>,
+    rects: Vec<HealthBarRect>,
+    gpu_data: Vec<[f32; 4]>,
+    gpu_capacity_rects: usize,
+    last_rect_count: usize,
+}
+
+#[derive(SystemParam)]
+struct SceneAssetResources<'w> {
+    asset_server: Res<'w, AssetServer>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+    materials: ResMut<'w, Assets<StandardMaterial>>,
+    health_bar_materials: ResMut<'w, Assets<HealthBarMaterial>>,
+    shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
+}
+
+#[derive(SystemParam)]
+struct HealthBarRenderParams<'w, 's> {
+    debug: Res<'w, DebugPresentation>,
+    camera: Single<
+        'w,
+        's,
+        (&'static Camera, &'static GlobalTransform, &'static Frustum),
+        With<Camera3d>,
+    >,
+    batch: ResMut<'w, HealthBarBatch>,
+    shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
+    batch_entity: Single<
+        'w,
+        's,
+        (&'static mut Transform, &'static mut Visibility),
+        With<HealthBarBatchEntity>,
+    >,
 }
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -561,7 +659,8 @@ impl CastlePresentationPlugin {
 
 impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<RenderMap>()
+        app.add_plugins(MaterialPlugin::<HealthBarMaterial>::default())
+            .init_resource::<RenderMap>()
             .init_resource::<UnitModelSet>()
             .init_resource::<BuildingModelSet>()
             .init_resource::<Wc3VisualSet>()
@@ -571,7 +670,6 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
             .init_resource::<TimedWc3Effects>()
-            .init_resource::<HealthBarUiMap>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
@@ -613,7 +711,7 @@ impl Plugin for CastlePresentationPlugin {
                     update_wc3_particles,
                     emit_wc3_particles,
                     draw_projectile_effects,
-                    update_health_bar_overlays,
+                    update_health_bar_batch,
                     draw_presentation_gizmos,
                     sample_display_fps,
                 )
@@ -634,18 +732,42 @@ fn setup_scene(
         Res<TerrainTextureLayout>,
         Res<TerrainTextureSet>,
     ),
-    assets: (
-        Res<AssetServer>,
-        ResMut<Assets<Mesh>>,
-        ResMut<Assets<StandardMaterial>>,
-    ),
+    assets: SceneAssetResources<'_>,
     mut gizmo_configs: ResMut<GizmoConfigStore>,
 ) {
     let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
-    let (asset_server, mut meshes, mut materials) = assets;
+    let SceneAssetResources {
+        asset_server,
+        mut meshes,
+        mut materials,
+        mut health_bar_materials,
+        mut shader_buffers,
+    } = assets;
     *unit_models = UnitModelSet::load_default(&asset_server);
     *building_models = BuildingModelSet::load_default(&asset_server);
     *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
+
+    let health_bar_buffer_data = vec![[0.0; 4]; 1 + HEALTH_BAR_BATCH_MIN_BUFFER_RECTS * 2];
+    let health_bar_buffer = shader_buffers.add(ShaderBuffer::from(health_bar_buffer_data.clone()));
+    let health_bar_mesh = meshes.add(health_bar_batch_mesh());
+    commands.spawn((
+        Mesh3d(health_bar_mesh),
+        MeshMaterial3d(health_bar_materials.add(HealthBarMaterial {
+            rect_data: health_bar_buffer.clone(),
+        })),
+        Transform::default(),
+        Visibility::Hidden,
+        NoFrustumCulling,
+        HealthBarBatchEntity,
+    ));
+    commands.insert_resource(HealthBarBatch {
+        buffer: health_bar_buffer,
+        rects: Vec::with_capacity(256),
+        gpu_data: health_bar_buffer_data,
+        gpu_capacity_rects: HEALTH_BAR_BATCH_MIN_BUFFER_RECTS,
+        last_rect_count: 0,
+    });
+
     let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
     projectile_effect_config.line.width = 3.0;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
@@ -3368,118 +3490,312 @@ fn draw_projectile_effects(
     }
 }
 
-fn update_health_bar_overlays(
-    mut commands: Commands,
+fn update_health_bar_batch(
     clocks: (Res<Time<Fixed>>, Res<SimulationPlayback>),
     samples: Res<PresentationSamples>,
     world: (Res<WorldMetrics>, Res<TerrainSurface>),
     models: (Res<UnitModelSet>, Res<BuildingModelSet>),
     render_map: Res<RenderMap>,
-    debug: Res<DebugPresentation>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut ui_map: ResMut<HealthBarUiMap>,
-    mut nodes: Query<&mut Node>,
+    params: HealthBarRenderParams<'_, '_>,
 ) {
     let (fixed_time, playback) = clocks;
     let (metrics, terrain) = world;
     let (unit_models, building_models) = models;
-    let (camera, camera_transform) = *camera;
+    let HealthBarRenderParams {
+        debug,
+        camera,
+        mut batch,
+        mut shader_buffers,
+        mut batch_entity,
+    } = params;
+    let (camera, camera_transform, frustum) = *camera;
+    let (batch_transform, batch_visibility) = &mut *batch_entity;
 
-    ui_map.units.retain(|id, entry| {
-        let keep = samples.current.units.contains_key(id);
-        if !keep {
-            commands.entity(entry.root).despawn();
-        }
-        keep
-    });
-    ui_map.buildings.retain(|id, entry| {
-        let keep = samples.current.buildings.contains_key(id);
-        if !keep {
-            commands.entity(entry.root).despawn();
-        }
-        keep
-    });
+    batch.rects.clear();
 
-    if !debug.health_bars {
-        for entry in ui_map.units.values().chain(ui_map.buildings.values()) {
-            if let Ok(mut root) = nodes.get_mut(entry.root) {
-                root.display = Display::None;
+    if debug.health_bars {
+        let Some(viewport) = camera.logical_viewport_rect() else {
+            clear_health_bar_buffer_if_needed(&mut batch, &mut shader_buffers);
+            **batch_visibility = Visibility::Hidden;
+            return;
+        };
+        let alpha = playback.interpolation_alpha(&fixed_time);
+        let rendered_tick = interpolated_sim_tick(&samples, alpha);
+
+        for (id, unit) in &samples.current.units {
+            let Some(entry) = render_map.units.get(id) else {
+                continue;
+            };
+            let previous = samples.previous.units.get(id).unwrap_or(unit);
+            let ground_position = unit_ground_position_lerp(
+                previous.position,
+                unit.position,
+                unit.movement_class,
+                alpha,
+                &terrain,
+            );
+            let overhead_height = unit_bar_overhead_height(unit, entry, &unit_models);
+            let world_width = unit_health_bar_width(unit, entry, &unit_models);
+            let anchor = ground_position + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
+            if !health_bar_world_visible(frustum, anchor, world_width) {
+                continue;
+            }
+            let Some(screen) =
+                health_bar_screen_layout(camera, camera_transform, anchor, world_width, viewport)
+            else {
+                continue;
+            };
+            push_split_bar(
+                &mut batch.rects,
+                screen,
+                HEALTH_BAR_HEIGHT_PIXELS,
+                health_ratio(unit.health, unit.health_max),
+                team_color(unit.team),
+                Color::srgb(0.085, 0.085, 0.095),
+                viewport,
+            );
+        }
+
+        for (id, building) in &samples.current.buildings {
+            let Some(entry) = render_map.buildings.get(id) else {
+                continue;
+            };
+            let (mut center, size) = metrics.footprint_center_size(building.footprint);
+            center.y = terrain.height_at_world(center.xz());
+            let overhead_height = building_bar_overhead_height(building, entry, &building_models);
+            let world_width = building_health_bar_width(size, overhead_height);
+            let anchor = center + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
+            if !health_bar_world_visible(frustum, anchor, world_width) {
+                continue;
+            }
+            let Some(screen) =
+                health_bar_screen_layout(camera, camera_transform, anchor, world_width, viewport)
+            else {
+                continue;
+            };
+            push_split_bar(
+                &mut batch.rects,
+                screen,
+                HEALTH_BAR_HEIGHT_PIXELS,
+                health_ratio(building.health, building.health_max),
+                team_color(building.team),
+                Color::srgb(0.085, 0.085, 0.095),
+                viewport,
+            );
+            if let Some(progress) = production_progress(building, rendered_tick) {
+                let progress_screen = HealthBarScreenLayout {
+                    top: screen.top + HEALTH_BAR_HEIGHT_PIXELS + PRODUCTION_BAR_GAP_PIXELS,
+                    ..screen
+                };
+                push_split_bar(
+                    &mut batch.rects,
+                    progress_screen,
+                    PRODUCTION_BAR_HEIGHT_PIXELS,
+                    progress,
+                    Color::srgb(0.72, 0.72, 0.74),
+                    Color::srgb(0.16, 0.16, 0.17),
+                    viewport,
+                );
             }
         }
+    }
+
+    if batch.rects.is_empty() && batch.last_rect_count == 0 {
+        **batch_visibility = Visibility::Hidden;
+        return;
+    }
+    if batch.rects.is_empty() {
+        **batch_visibility = Visibility::Hidden;
+    } else {
+        **batch_visibility = Visibility::Visible;
+        // Transparent meshes are sorted back-to-front. The shader ignores this transform, but
+        // keeping a non-empty batch at the camera sorts it after ordinary transparent geometry.
+        batch_transform.translation = camera_transform.translation();
+    }
+    upload_health_bar_rects(&mut batch, &mut shader_buffers);
+}
+
+fn clear_health_bar_buffer_if_needed(
+    batch: &mut HealthBarBatch,
+    shader_buffers: &mut Assets<ShaderBuffer>,
+) {
+    if batch.last_rect_count == 0 {
+        return;
+    }
+    batch.rects.clear();
+    upload_health_bar_rects(batch, shader_buffers);
+}
+
+fn health_bar_world_visible(frustum: &Frustum, center: Vec3, width: f32) -> bool {
+    frustum.intersects_sphere(
+        &Sphere {
+            center: center.into(),
+            radius: width * 0.6,
+        },
+        false,
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HealthBarScreenLayout {
+    left: f32,
+    top: f32,
+    width: f32,
+}
+
+fn health_bar_screen_layout(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    world_anchor: Vec3,
+    world_width: f32,
+    viewport: Rect,
+) -> Option<HealthBarScreenLayout> {
+    let camera_right = camera_transform.rotation() * Vec3::X;
+    let half_width = world_width * 0.5;
+    let left = camera
+        .world_to_viewport(camera_transform, world_anchor - camera_right * half_width)
+        .ok()?;
+    let right = camera
+        .world_to_viewport(camera_transform, world_anchor + camera_right * half_width)
+        .ok()?;
+    let center = (left + right) * 0.5;
+    let width = (right.x - left.x).abs();
+    if !width.is_finite() || width <= 0.0 {
+        return None;
+    }
+    let layout = HealthBarScreenLayout {
+        left: center.x - width * 0.5,
+        top: center.y - HEALTH_BAR_HEIGHT_PIXELS * 0.5,
+        width,
+    };
+    let max_bottom = layout.top
+        + HEALTH_BAR_HEIGHT_PIXELS
+        + PRODUCTION_BAR_GAP_PIXELS
+        + PRODUCTION_BAR_HEIGHT_PIXELS;
+    if layout.left + layout.width < viewport.min.x
+        || layout.left > viewport.max.x
+        || max_bottom < viewport.min.y
+        || layout.top > viewport.max.y
+    {
+        return None;
+    }
+    Some(layout)
+}
+
+fn health_ratio(health: i32, max_health: i32) -> f32 {
+    (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0)
+}
+
+fn push_split_bar(
+    rects: &mut Vec<HealthBarRect>,
+    layout: HealthBarScreenLayout,
+    height: f32,
+    ratio: f32,
+    foreground: Color,
+    background: Color,
+    viewport: Rect,
+) {
+    let ratio = ratio.clamp(0.0, 1.0);
+    let fill_width = layout.width * ratio;
+    if fill_width > 0.0 {
+        push_screen_rect(
+            rects,
+            layout.left,
+            layout.top,
+            fill_width,
+            height,
+            foreground,
+            viewport,
+        );
+    }
+    let empty_width = layout.width - fill_width;
+    if empty_width > 0.0 {
+        push_screen_rect(
+            rects,
+            layout.left + fill_width,
+            layout.top,
+            empty_width,
+            height,
+            background,
+            viewport,
+        );
+    }
+}
+
+fn push_screen_rect(
+    rects: &mut Vec<HealthBarRect>,
+    left: f32,
+    top: f32,
+    width: f32,
+    height: f32,
+    color: Color,
+    viewport: Rect,
+) {
+    let right = (left + width).min(viewport.max.x);
+    let bottom = (top + height).min(viewport.max.y);
+    let left = left.max(viewport.min.x);
+    let top = top.max(viewport.min.y);
+    if left >= right || top >= bottom {
         return;
     }
 
-    let alpha = playback.interpolation_alpha(&fixed_time);
-    let rendered_tick = interpolated_sim_tick(&samples, alpha);
-    for (id, unit) in &samples.current.units {
-        let Some(render_entry) = render_map.units.get(id) else {
-            continue;
-        };
-        let previous = samples.previous.units.get(id).unwrap_or(unit);
-        let ground_position = unit_ground_position_lerp(
-            previous.position,
-            unit.position,
-            unit.movement_class,
-            alpha,
-            &terrain,
-        );
-        let overhead_height = unit_bar_overhead_height(unit, render_entry, &unit_models);
-        let world_width = unit_health_bar_width(unit, render_entry, &unit_models);
-        let world_anchor = ground_position + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
-        let Some(layout) =
-            health_bar_screen_layout(camera, camera_transform, world_anchor, world_width)
-        else {
-            hide_health_bar_overlay(ui_map.units.get(id), &mut nodes);
-            continue;
-        };
-        let health_ratio = health_ratio(unit.health, unit.health_max);
-        if let Some(entry) = ui_map.units.get(id).copied() {
-            update_health_bar_overlay(entry, layout, health_ratio, None, &mut nodes);
-        } else {
-            let entry = spawn_health_bar_overlay(
-                &mut commands,
-                layout,
-                health_ratio,
-                unit.team,
-                false,
-                None,
-            );
-            ui_map.units.insert(*id, entry);
-        }
+    let viewport_size = viewport.size();
+    let x0 = ((left - viewport.min.x) / viewport_size.x) * 2.0 - 1.0;
+    let x1 = ((right - viewport.min.x) / viewport_size.x) * 2.0 - 1.0;
+    let y0 = 1.0 - ((bottom - viewport.min.y) / viewport_size.y) * 2.0;
+    let y1 = 1.0 - ((top - viewport.min.y) / viewport_size.y) * 2.0;
+    let linear: LinearRgba = color.into();
+    rects.push(HealthBarRect {
+        min: Vec2::new(x0, y0),
+        max: Vec2::new(x1, y1),
+        color: [linear.red, linear.green, linear.blue, linear.alpha],
+    });
+}
+
+fn health_bar_batch_mesh() -> Mesh {
+    let mut positions = Vec::with_capacity(HEALTH_BAR_BATCH_MAX_RECTS * 6);
+    for rect_index in 0..HEALTH_BAR_BATCH_MAX_RECTS {
+        let index = rect_index as f32;
+        positions.extend_from_slice(&[
+            [0.0, 0.0, index],
+            [1.0, 0.0, index],
+            [1.0, 1.0, index],
+            [0.0, 0.0, index],
+            [1.0, 1.0, index],
+            [0.0, 1.0, index],
+        ]);
     }
 
-    for (id, building) in &samples.current.buildings {
-        let Some(render_entry) = render_map.buildings.get(id) else {
-            continue;
-        };
-        let (mut center, size) = metrics.footprint_center_size(building.footprint);
-        center.y = terrain.height_at_world(center.xz());
-        let overhead_height =
-            building_bar_overhead_height(building, render_entry, &building_models);
-        let world_width = building_health_bar_width(size, overhead_height);
-        let world_anchor = center + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
-        let Some(layout) =
-            health_bar_screen_layout(camera, camera_transform, world_anchor, world_width)
-        else {
-            hide_health_bar_overlay(ui_map.buildings.get(id), &mut nodes);
-            continue;
-        };
-        let health_ratio = health_ratio(building.health, building.health_max);
-        let progress = production_progress(building, rendered_tick);
-        if let Some(entry) = ui_map.buildings.get(id).copied() {
-            update_health_bar_overlay(entry, layout, health_ratio, progress, &mut nodes);
-        } else {
-            let entry = spawn_health_bar_overlay(
-                &mut commands,
-                layout,
-                health_ratio,
-                building.team,
-                true,
-                progress,
-            );
-            ui_map.buildings.insert(*id, entry);
-        }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+}
+
+fn upload_health_bar_rects(batch: &mut HealthBarBatch, shader_buffers: &mut Assets<ShaderBuffer>) {
+    let rect_count = batch.rects.len().min(HEALTH_BAR_BATCH_MAX_RECTS);
+    let required_capacity = rect_count
+        .max(HEALTH_BAR_BATCH_MIN_BUFFER_RECTS)
+        .next_power_of_two()
+        .min(HEALTH_BAR_BATCH_MAX_RECTS);
+    if required_capacity > batch.gpu_capacity_rects {
+        batch.gpu_capacity_rects = required_capacity;
+        batch
+            .gpu_data
+            .resize(1 + batch.gpu_capacity_rects * 2, [0.0; 4]);
     }
+
+    batch.gpu_data[0] = [rect_count as f32, 0.0, 0.0, 0.0];
+    for (index, rect) in batch.rects.iter().take(rect_count).enumerate() {
+        batch.gpu_data[1 + index * 2] = [rect.min.x, rect.min.y, rect.max.x, rect.max.y];
+        batch.gpu_data[2 + index * 2] = rect.color;
+    }
+
+    if let Some(mut buffer) = shader_buffers.get_mut(&batch.buffer) {
+        buffer.set_data(batch.gpu_data.clone());
+    }
+    batch.last_rect_count = rect_count;
 }
 
 fn draw_presentation_gizmos(
@@ -3563,183 +3879,6 @@ fn draw_presentation_gizmos(
                 Color::srgba(1.0, 1.0, 1.0, 0.18),
             );
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct HealthBarScreenLayout {
-    left: f32,
-    top: f32,
-    width: f32,
-}
-
-fn health_bar_screen_layout(
-    camera: &Camera,
-    camera_transform: &GlobalTransform,
-    world_anchor: Vec3,
-    world_width: f32,
-) -> Option<HealthBarScreenLayout> {
-    let center = camera
-        .world_to_viewport(camera_transform, world_anchor)
-        .ok()?;
-    let camera_right = camera_transform.rotation() * Vec3::X;
-    let half_width = world_width * 0.5;
-    let left_world = world_anchor - camera_right * half_width;
-    let right_world = world_anchor + camera_right * half_width;
-    let left = camera
-        .world_to_viewport(camera_transform, left_world)
-        .ok()?;
-    let right = camera
-        .world_to_viewport(camera_transform, right_world)
-        .ok()?;
-    let width = (right.x - left.x).abs();
-    if !width.is_finite() || width <= 0.0 {
-        return None;
-    }
-    Some(HealthBarScreenLayout {
-        left: center.x - width * 0.5,
-        top: center.y - HEALTH_BAR_HEIGHT_PIXELS * 0.5,
-        width,
-    })
-}
-
-fn health_ratio(health: i32, max_health: i32) -> f32 {
-    (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0)
-}
-
-fn spawn_health_bar_overlay(
-    commands: &mut Commands,
-    layout: HealthBarScreenLayout,
-    health_ratio: f32,
-    team: Team,
-    include_progress: bool,
-    progress: Option<f32>,
-) -> HealthBarUiEntry {
-    let health_fill = commands
-        .spawn((
-            Node {
-                width: percent(health_ratio * 100.0),
-                height: percent(100.0),
-                ..default()
-            },
-            BackgroundColor(team_color(team)),
-            Pickable::IGNORE,
-        ))
-        .id();
-    let health_track = commands
-        .spawn((
-            Node {
-                width: percent(100.0),
-                height: px(HEALTH_BAR_HEIGHT_PIXELS),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.085, 0.085, 0.095)),
-            Pickable::IGNORE,
-        ))
-        .add_child(health_fill)
-        .id();
-
-    let (progress_track, progress_fill) = if include_progress {
-        let fill = commands
-            .spawn((
-                Node {
-                    width: percent(progress.unwrap_or(0.0).clamp(0.0, 1.0) * 100.0),
-                    height: percent(100.0),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.72, 0.72, 0.74)),
-                Pickable::IGNORE,
-            ))
-            .id();
-        let track = commands
-            .spawn((
-                Node {
-                    display: if progress.is_some() {
-                        Display::Flex
-                    } else {
-                        Display::None
-                    },
-                    width: percent(100.0),
-                    height: px(PRODUCTION_BAR_HEIGHT_PIXELS),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.16, 0.16, 0.17)),
-                Pickable::IGNORE,
-            ))
-            .add_child(fill)
-            .id();
-        (Some(track), Some(fill))
-    } else {
-        (None, None)
-    };
-
-    let root = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(layout.left),
-                top: px(layout.top),
-                width: px(layout.width),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(PRODUCTION_BAR_GAP_PIXELS),
-                ..default()
-            },
-            GlobalZIndex(-10),
-            Pickable::IGNORE,
-        ))
-        .add_child(health_track)
-        .id();
-    if let Some(track) = progress_track {
-        commands.entity(root).add_child(track);
-    }
-
-    HealthBarUiEntry {
-        root,
-        health_fill,
-        progress_track,
-        progress_fill,
-    }
-}
-
-fn update_health_bar_overlay(
-    entry: HealthBarUiEntry,
-    layout: HealthBarScreenLayout,
-    health_ratio: f32,
-    progress: Option<f32>,
-    nodes: &mut Query<&mut Node>,
-) {
-    if let Ok(mut root) = nodes.get_mut(entry.root) {
-        root.display = Display::Flex;
-        root.left = px(layout.left);
-        root.top = px(layout.top);
-        root.width = px(layout.width);
-    }
-    if let Ok(mut fill) = nodes.get_mut(entry.health_fill) {
-        fill.width = percent(health_ratio.clamp(0.0, 1.0) * 100.0);
-    }
-    if let Some(track_entity) = entry.progress_track
-        && let Ok(mut track) = nodes.get_mut(track_entity)
-    {
-        track.display = if progress.is_some() {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-    if let Some(fill_entity) = entry.progress_fill
-        && let Some(progress) = progress
-        && let Ok(mut fill) = nodes.get_mut(fill_entity)
-    {
-        fill.width = percent(progress.clamp(0.0, 1.0) * 100.0);
-    }
-}
-
-fn hide_health_bar_overlay(entry: Option<&HealthBarUiEntry>, nodes: &mut Query<&mut Node>) {
-    let Some(entry) = entry else {
-        return;
-    };
-    if let Ok(mut root) = nodes.get_mut(entry.root) {
-        root.display = Display::None;
     }
 }
 
@@ -4475,6 +4614,31 @@ mod tests {
 
         building.production_interval_ticks = None;
         assert_eq!(production_progress(&building, 30.0), None);
+    }
+
+    #[test]
+    fn batched_bar_fill_and_background_do_not_overlap() {
+        let viewport = Rect::new(0.0, 0.0, 1_000.0, 800.0);
+        let layout = HealthBarScreenLayout {
+            left: 100.0,
+            top: 50.0,
+            width: 200.0,
+        };
+        let mut rects = Vec::new();
+        push_split_bar(
+            &mut rects,
+            layout,
+            HEALTH_BAR_HEIGHT_PIXELS,
+            0.25,
+            Color::WHITE,
+            Color::BLACK,
+            viewport,
+        );
+
+        assert_eq!(rects.len(), 2);
+        assert!((rects[0].max.x - rects[1].min.x).abs() < 1.0e-6);
+        assert_eq!(rects[0].min.y, rects[1].min.y);
+        assert_eq!(rects[0].max.y, rects[1].max.y);
     }
 
     #[test]
