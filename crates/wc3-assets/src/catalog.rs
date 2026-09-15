@@ -355,6 +355,18 @@ mod tests {
                 && asset.role == "command"
                 && asset.texture_path == r"ReplaceableTextures\CommandButtons\BTNCancel.blp"
         }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "cursors"
+                && asset.owner_rawcode == "human"
+                && asset.role == "atlas"
+                && asset.texture_path == r"UI\Cursor\HumanCursor.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "cursors"
+                && asset.owner_rawcode == "night_elf"
+                && asset.role == "atlas"
+                && asset.texture_path == r"UI\Cursor\NightElfCursor.blp"
+        }));
     }
 
     #[test]

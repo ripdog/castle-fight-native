@@ -69,7 +69,7 @@ The bundle has a canonical hash used for:
 - server/client mismatch detection;
 - diagnostics.
 
-Cosmetic-only assets SHOULD be separable from gameplay content so harmless visual differences do not necessarily alter gameplay compatibility. Versioned presentation bindings therefore live alongside, but outside the authoritative gameplay hash: UI art is addressed by stable semantic keys such as object rawcode plus icon role, stock command identity, or resource identity, and a generated asset manifest resolves those keys to converted files. Gameplay/client callsites MUST NOT embed converted PNG paths. Selecting a different supported Castle Fight version selects that version's presentation bindings, while re-converting identical authored art does not by itself change replay or multiplayer gameplay compatibility.
+Cosmetic-only assets SHOULD be separable from gameplay content so harmless visual differences do not necessarily alter gameplay compatibility. Versioned presentation bindings therefore live alongside, but outside the authoritative gameplay hash: UI art is addressed by stable semantic keys such as object rawcode plus icon role, stock command identity, resource identity, or cursor theme/atlas identity, and a generated asset manifest resolves those keys to converted files. Gameplay/client callsites MUST NOT embed converted PNG paths. Selecting a different supported Castle Fight version selects that version's presentation bindings, while re-converting identical authored art does not by itself change replay or multiplayer gameplay compatibility.
 
 ### 4.1 User-selected map versions and retained history
 

@@ -2,6 +2,7 @@ mod bridge;
 mod build_ui;
 mod builder_controls;
 mod building_models;
+mod cursor;
 mod debug_menu;
 mod demo;
 mod doodads;
@@ -27,6 +28,7 @@ use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, Simulation};
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::BuildUiPlugin;
 use builder_controls::BuilderControlPlugin;
+use cursor::CursorPresentationPlugin;
 use debug_menu::DebugMenuPlugin;
 use demo::create_demo_world;
 use doodads::DoodadPresentationPlugin;
@@ -115,6 +117,7 @@ fn main() {
             CastlePresentationPlugin::new(options.health_bars),
             DoodadPresentationPlugin,
             BuildUiPlugin,
+            CursorPresentationPlugin,
             ResourceUiPlugin,
             InspectionPlugin,
             BuilderControlPlugin,

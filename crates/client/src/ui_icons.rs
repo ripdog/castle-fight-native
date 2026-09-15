@@ -13,7 +13,7 @@ use crate::terrain::client_asset_root;
 
 const UI_ICON_MANIFEST: &str = "wc3/ui/manifest.json";
 const UI_ICON_ASSET_PREFIX: &str = "wc3/ui";
-const UI_ICON_MANIFEST_SCHEMA_VERSION: u32 = 1;
+const UI_ICON_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum UiObjectIconKind {
@@ -48,6 +48,14 @@ pub(crate) enum UiResourceIcon {
     Lumber,
     Supply,
     Upkeep,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum UiCursorTheme {
+    Human,
+    Orc,
+    Undead,
+    NightElf,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -96,6 +104,7 @@ pub(crate) struct CastleFightPresentationCatalog {
     pub(crate) repair_command: UiIconKey,
     pub(crate) repair_turn_off_command: UiIconKey,
     pub(crate) blink_command: UiIconKey,
+    pub(crate) cursor_theme: UiCursorTheme,
 }
 
 impl CastleFightPresentationCatalog {
@@ -116,6 +125,7 @@ impl CastleFightPresentationCatalog {
                 UiIconRole::TurnOff,
             ),
             blink_command: UiIconKey::ability(u32::from_be_bytes(*b"A0-1"), UiIconRole::Normal),
+            cursor_theme: UiCursorTheme::Human,
         })
     }
 }
@@ -124,6 +134,8 @@ impl CastleFightPresentationCatalog {
 pub(crate) struct UiIconAssets {
     paths: BTreeMap<UiIconKey, String>,
     handles: BTreeMap<UiIconKey, Handle<Image>>,
+    cursor_paths: BTreeMap<UiCursorTheme, String>,
+    cursor_handles: BTreeMap<UiCursorTheme, Handle<Image>>,
 }
 
 impl UiIconAssets {
@@ -138,13 +150,16 @@ impl UiIconAssets {
         match load_manifest_entries(&manifest_path, UI_ICON_ASSET_PREFIX) {
             Ok(resolved) if resolved.map_version == CASTLE_FIGHT_DEFAULT_MAP_VERSION => {
                 println!(
-                    "Loaded {} generated WC3 UI icon binding(s) for Castle Fight {}",
+                    "Loaded {} generated WC3 UI icon binding(s) and {} cursor atlas binding(s) for Castle Fight {}",
                     resolved.paths.len(),
+                    resolved.cursor_paths.len(),
                     resolved.map_version
                 );
                 Self {
                     paths: resolved.paths,
                     handles: BTreeMap::new(),
+                    cursor_paths: resolved.cursor_paths,
+                    cursor_handles: BTreeMap::new(),
                 }
             }
             Ok(resolved) => {
@@ -174,6 +189,20 @@ impl UiIconAssets {
         self.handles.insert(key, handle.clone());
         Some(handle)
     }
+
+    pub(crate) fn cursor_atlas(
+        &mut self,
+        theme: UiCursorTheme,
+        asset_server: &AssetServer,
+    ) -> Option<Handle<Image>> {
+        if let Some(handle) = self.cursor_handles.get(&theme) {
+            return Some(handle.clone());
+        }
+        let path = self.cursor_paths.get(&theme)?.clone();
+        let handle = asset_server.load(path);
+        self.cursor_handles.insert(theme, handle.clone());
+        Some(handle)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,6 +224,7 @@ struct UiBindingManifest {
 struct ResolvedUiManifest {
     map_version: MapVersion,
     paths: BTreeMap<UiIconKey, String>,
+    cursor_paths: BTreeMap<UiCursorTheme, String>,
 }
 
 fn load_manifest_entries(path: &Path, asset_prefix: &str) -> Result<ResolvedUiManifest, String> {
@@ -221,14 +251,25 @@ fn resolve_manifest_entries(json: &str, asset_prefix: &str) -> Result<ResolvedUi
         })?;
 
     let mut paths = BTreeMap::new();
+    let mut cursor_paths = BTreeMap::new();
     for entry in manifest.assets {
         let Some(png) = entry.png.as_deref() else {
             continue;
         };
-        let key = parse_icon_key(&entry)?;
         let png = png.replace('\\', "/");
         validate_relative_asset_path(&png)?;
         let asset_path = format!("{}/{}", asset_prefix.trim_end_matches('/'), png);
+        if entry.owner_kind == "cursors" {
+            let theme = parse_cursor_theme(&entry)?;
+            if let Some(previous) = cursor_paths.insert(theme, asset_path.clone()) {
+                return Err(format!(
+                    "duplicate UI cursor atlas binding {theme:?}: {previous:?} and {asset_path:?}"
+                ));
+            }
+            continue;
+        }
+
+        let key = parse_icon_key(&entry)?;
         if let Some(previous) = paths.insert(key, asset_path.clone()) {
             return Err(format!(
                 "duplicate UI icon binding {key:?}: {previous:?} and {asset_path:?}"
@@ -236,7 +277,27 @@ fn resolve_manifest_entries(json: &str, asset_prefix: &str) -> Result<ResolvedUi
         }
     }
 
-    Ok(ResolvedUiManifest { map_version, paths })
+    Ok(ResolvedUiManifest {
+        map_version,
+        paths,
+        cursor_paths,
+    })
+}
+
+fn parse_cursor_theme(entry: &UiBindingManifest) -> Result<UiCursorTheme, String> {
+    if entry.role != "atlas" {
+        return Err(format!(
+            "cursor UI asset {} has unexpected role {:?}",
+            entry.owner_rawcode, entry.role
+        ));
+    }
+    match entry.owner_rawcode.as_str() {
+        "human" => Ok(UiCursorTheme::Human),
+        "orc" => Ok(UiCursorTheme::Orc),
+        "undead" => Ok(UiCursorTheme::Undead),
+        "night_elf" => Ok(UiCursorTheme::NightElf),
+        other => Err(format!("unknown UI cursor theme {other:?}")),
+    }
 }
 
 fn parse_icon_key(entry: &UiBindingManifest) -> Result<UiIconKey, String> {
@@ -335,7 +396,7 @@ mod tests {
     #[test]
     fn resolves_versioned_object_command_and_resource_icons() {
         let json = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "castle_fight_catalog_version": "9.27",
             "assets": [
                 {
@@ -361,6 +422,12 @@ mod tests {
                     "owner_rawcode": "gold",
                     "role": "bar",
                     "png": "textures/gold.png"
+                },
+                {
+                    "owner_kind": "cursors",
+                    "owner_rawcode": "human",
+                    "role": "atlas",
+                    "png": "textures/human_cursor.png"
                 },
                 {
                     "owner_kind": "buffs",
@@ -389,6 +456,10 @@ mod tests {
             resolved.paths[&UiIconKey::Resource(UiResourceIcon::Gold)],
             "wc3/ui/textures/gold.png"
         );
+        assert_eq!(
+            resolved.cursor_paths[&UiCursorTheme::Human],
+            "wc3/ui/textures/human_cursor.png"
+        );
         assert!(!resolved.paths.contains_key(&UiIconKey::Object {
             kind: UiObjectIconKind::Buff,
             rawcode: u32::from_be_bytes(*b"B005"),
@@ -408,13 +479,14 @@ mod tests {
             catalog.repair_command,
             UiIconKey::ability(u32::from_be_bytes(*b"Ahrp"), UiIconRole::Normal)
         );
+        assert_eq!(catalog.cursor_theme, UiCursorTheme::Human);
         assert!(CastleFightPresentationCatalog::for_version(MapVersion::new(9, 28)).is_none());
     }
 
     #[test]
     fn rejects_unsafe_ui_icon_paths() {
         let json = r#"{
-            "schema_version": 1,
+            "schema_version": 2,
             "castle_fight_catalog_version": "9.27",
             "assets": [{
                 "owner_kind": "commands",

@@ -71,7 +71,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         let ui = load_embedded_ui()?;
         println!(
-            "Extracting {} Castle Fight/WC3 UI icon binding(s) from {}",
+            "Extracting {} Castle Fight/WC3 UI binding(s) from {}",
             ui.assets.len(),
             wc3_install.display()
         );

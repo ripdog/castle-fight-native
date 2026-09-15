@@ -703,6 +703,24 @@ fn load_ui_assets(object_fields_path: &std::path::Path) -> Result<UiAssetCatalog
         ));
     }
 
+    // Warcraft cursor art is a fixed-layout sprite sheet. Keep every stock race atlas in the
+    // generated presentation catalog even though Castle Fight 9.27 currently uses the Human
+    // cursor theme. The client selects semantic frames from the atlas rather than embedding
+    // texture paths or copying cursor pixels into source code.
+    for (cursor, texture_path) in [
+        ("human", r"UI\Cursor\HumanCursor.blp"),
+        ("orc", r"UI\Cursor\OrcCursor.blp"),
+        ("undead", r"UI\Cursor\UndeadCursor.blp"),
+        ("night_elf", r"UI\Cursor\NightElfCursor.blp"),
+    ] {
+        assets.insert((
+            "cursors".to_owned(),
+            cursor.to_owned(),
+            "atlas".to_owned(),
+            texture_path.to_owned(),
+        ));
+    }
+
     Ok(UiAssetCatalog {
         assets: assets
             .into_iter()
