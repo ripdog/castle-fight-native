@@ -4247,6 +4247,31 @@ mod tests {
     }
 
     #[test]
+    fn building_placement_cell_preview_reports_individual_blockers() {
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(19, 9),
+            static_blockers: vec![BuildingFootprint::new(3, 3, 1, 1)],
+            build_static_blockers: vec![BuildingFootprint::new(4, 3, 1, 1)],
+            team_build_regions: [
+                vec![BuildingFootprint::new(0, 0, 10, 10)],
+                vec![BuildingFootprint::new(10, 0, 10, 10)],
+            ],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 1);
+        sim.try_spawn_building(passive_building(0, BuildingFootprint::new(5, 3, 1, 1)))
+            .unwrap();
+
+        assert!(sim.can_place_building_cell_for_team(Team(0), NavCell::new(2, 3)));
+        assert!(!sim.can_place_building_cell_for_team(Team(0), NavCell::new(3, 3)));
+        assert!(!sim.can_place_building_cell_for_team(Team(0), NavCell::new(4, 3)));
+        assert!(!sim.can_place_building_cell_for_team(Team(0), NavCell::new(5, 3)));
+        assert!(!sim.can_place_building_cell_for_team(Team(0), NavCell::new(10, 3)));
+        assert!(!sim.can_place_building_cell_for_team(Team(0), NavCell::new(-1, 3)));
+    }
+
+    #[test]
     fn team_build_regions_reject_middle_and_enemy_territory() {
         let config = SimulationConfig {
             navigation_min: NavCell::new(0, 0),

@@ -78,7 +78,9 @@ If buildings are grid-aligned, grid coordinates are strongly preferred because o
 
 ## 6. Placement preview
 
-The client SHOULD show building footprint and relevant constraints before confirmation. Build-menu entries whose current known gold/lumber cost cannot be paid SHOULD be visibly disabled and MUST NOT enter placement mode. Locally queued placements MAY reserve their displayed cost for UI affordability until authoritative processing so rapid clicks do not misleadingly appear affordable.
+The client SHOULD show building footprint and relevant constraints before confirmation. While one building type is armed for placement, the client shows that building's resolved Warcraft model as a translucent placement ghost snapped to the same canonical footprint that confirmation would use. The ghost is green when the currently known whole-footprint placement check succeeds and red when it fails. The footprint grid simultaneously evaluates each covered navigation cell through simulation-owned placement diagnostics: individually legal cells are green and cells blocked by navigation/build-region limits, authored placement blockers, existing buildings, or live ground-unit occupancy are red. These cell colors are explanatory presentation data only; the whole-footprint placement validation remains authoritative and MUST be re-evaluated on confirmation.
+
+Build-menu entries whose current known gold/lumber cost cannot be paid SHOULD be visibly disabled and MUST NOT enter placement mode. Locally queued placements MAY reserve their displayed cost for UI affordability until authoritative processing so rapid clicks do not misleadingly appear affordable.
 
 Preview may display:
 

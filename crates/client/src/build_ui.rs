@@ -1,19 +1,26 @@
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{
+    ecs::system::SystemParam, prelude::*, window::PrimaryWindow,
+    world_serialization::WorldInstanceReady,
+};
 use castle_fight_sim::{
     BuildingConstructionCancelOutcome, BuildingFootprint, CastleFightBuildingKind,
-    CastleFightContentBundle, CommandCardPosition, SimId, Team,
+    CastleFightContentBundle, CommandCardPosition, NavCell, SimId, Team,
 };
 
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples, PresentationSnapshot},
+    building_models::BuildingModelSet,
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::{BuildKind, ProductionKind, order_demo_production_upgrade},
-    inspection::InspectionSelection,
-    presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
+    inspection::{InspectionSelection, cursor_over_inspector_panel},
+    presentation::{
+        WC3_MODEL_FACING_OFFSET, WorldMetrics, draw_footprint_outline, viewport_ground_point,
+    },
     resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey},
+    wc3_effects::Wc3MaterialProcessed,
     wc3_text::{Wc3Color, parse_wc3_text},
 };
 
@@ -48,6 +55,10 @@ const TOOLTIP_BACKGROUND: Color = Color::srgba(0.025, 0.020, 0.015, 0.98);
 const TOOLTIP_BORDER: Color = Color::srgb(0.48, 0.39, 0.22);
 const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
 const TOOLTIP_TEXT_COLOR: Color = Color::srgb(0.95, 0.95, 0.92);
+const BUILD_PREVIEW_VALID_COLOR: Color = Color::srgba(0.18, 1.0, 0.24, 0.82);
+const BUILD_PREVIEW_INVALID_COLOR: Color = Color::srgba(1.0, 0.12, 0.10, 0.88);
+const BUILD_GHOST_VALID_COLOR: Color = Color::srgba(0.12, 0.92, 0.20, 0.38);
+const BUILD_GHOST_INVALID_COLOR: Color = Color::srgba(1.0, 0.08, 0.06, 0.42);
 
 fn command_slot(position: CommandCardPosition) -> usize {
     usize::from(position.y) * GRID_COLUMNS + usize::from(position.x)
@@ -168,6 +179,29 @@ impl ActionTooltipKind {
 #[derive(Resource, Default)]
 struct BuildTooltipState(Option<ActionTooltipKind>);
 
+#[derive(Resource)]
+struct BuildPreviewMaterials {
+    valid: Handle<StandardMaterial>,
+    invalid: Handle<StandardMaterial>,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct BuildPlacementGhost {
+    rawcode: u32,
+    valid: bool,
+}
+
+#[derive(SystemParam)]
+struct BuildPreviewResources<'w> {
+    metrics: Res<'w, WorldMetrics>,
+    terrain: Res<'w, TerrainSurface>,
+    authoritative: Res<'w, AuthoritativeSimulation>,
+    state: Res<'w, ActionPanelState>,
+    debug_menu: Res<'w, DebugMenuState>,
+    selected_match: Res<'w, SelectedMatch>,
+    building_models: Res<'w, BuildingModelSet>,
+}
+
 type ActionInteractions<'w, 's> = Query<
     'w,
     's,
@@ -183,7 +217,7 @@ impl Plugin for BuildUiPlugin {
         app.init_resource::<ActionPanelState>()
             .init_resource::<BuildTooltipState>()
             .insert_resource(UiIconAssets::load_for_version(map_version))
-            .add_systems(Startup, setup_action_panel)
+            .add_systems(Startup, (setup_action_panel, setup_build_preview_materials))
             .add_systems(
                 Update,
                 (
@@ -194,7 +228,8 @@ impl Plugin for BuildUiPlugin {
                     handle_action_panel_right_click,
                     style_action_panel_buttons,
                     update_build_tooltip,
-                    draw_build_preview,
+                    update_build_preview,
+                    refresh_build_preview_ghost_materials,
                 )
                     .chain(),
             );
@@ -908,46 +943,182 @@ fn wc3_text_for_embedded_font(text: &str) -> String {
     text.replace('•', "-")
 }
 
-fn draw_build_preview(
+fn setup_build_preview_materials(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let ghost_material = |color| StandardMaterial {
+        base_color: color,
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    };
+    commands.insert_resource(BuildPreviewMaterials {
+        valid: materials.add(ghost_material(BUILD_GHOST_VALID_COLOR)),
+        invalid: materials.add(ghost_material(BUILD_GHOST_INVALID_COLOR)),
+    });
+}
+
+fn update_build_preview(
+    mut commands: Commands,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    metrics: Res<WorldMetrics>,
-    terrain: Res<TerrainSurface>,
-    authoritative: Res<AuthoritativeSimulation>,
-    ui_state: (
-        Res<ActionPanelState>,
-        Res<DebugMenuState>,
-        Res<SelectedMatch>,
-    ),
+    mut ghosts: Query<(Entity, &mut BuildPlacementGhost, &mut Transform)>,
+    resources: BuildPreviewResources<'_>,
     mut gizmos: Gizmos,
 ) {
-    let (state, debug_menu, selected_match) = ui_state;
-    let Some(TargetingAction::Build(kind)) = state.targeting() else {
+    let Some(TargetingAction::Build(kind)) = resources.state.targeting() else {
+        for (entity, ..) in &mut ghosts {
+            commands.entity(entity).despawn();
+        }
         return;
     };
     let Some(cursor) = window.cursor_position() else {
+        for (entity, ..) in &mut ghosts {
+            commands.entity(entity).despawn();
+        }
         return;
     };
-    if cursor_over_action_panel(cursor, window.height(), state.actor.is_some())
-        || cursor_over_debug_menu(cursor, debug_menu.is_open())
+    if cursor_over_action_panel(cursor, window.height(), resources.state.actor.is_some())
+        || cursor_over_inspector_panel(cursor, window.width())
+        || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
     {
+        for (entity, ..) in &mut ghosts {
+            commands.entity(entity).despawn();
+        }
         return;
     }
     let (camera, camera_transform) = *camera;
-    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
+    let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &resources.terrain)
+    else {
+        for (entity, ..) in &mut ghosts {
+            commands.entity(entity).despawn();
+        }
         return;
     };
-    let footprint = placement_footprint(&metrics, world, kind, selected_match.content);
-    let valid = authoritative
+    let footprint = placement_footprint(
+        &resources.metrics,
+        world,
+        kind,
+        resources.selected_match.content,
+    );
+    let valid = resources
+        .authoritative
         .simulation
-        .can_place_building_for_team(state.team, footprint)
-        && can_afford_build_kind(&authoritative, &state, kind, selected_match.content);
-    let color = if valid {
-        team_ui_color(state.team)
-    } else {
-        Color::srgb(1.0, 0.18, 0.15)
+        .can_place_building_for_team(resources.state.team, footprint)
+        && can_afford_build_kind(
+            &resources.authoritative,
+            &resources.state,
+            kind,
+            resources.selected_match.content,
+        );
+
+    for y in footprint.min_y..=footprint.max_y() {
+        for x in footprint.min_x..=footprint.max_x() {
+            let cell = NavCell::new(x, y);
+            let cell_valid = resources
+                .authoritative
+                .simulation
+                .can_place_building_cell_for_team(resources.state.team, cell);
+            draw_footprint_outline(
+                &mut gizmos,
+                &resources.metrics,
+                &resources.terrain,
+                BuildingFootprint::new(x, y, 1, 1),
+                if cell_valid {
+                    BUILD_PREVIEW_VALID_COLOR
+                } else {
+                    BUILD_PREVIEW_INVALID_COLOR
+                },
+            );
+        }
+    }
+
+    let rawcode = kind.rawcode(resources.selected_match.content);
+    let Some(model) = resources.building_models.get(rawcode) else {
+        for (entity, ..) in &mut ghosts {
+            commands.entity(entity).despawn();
+        }
+        return;
     };
-    draw_footprint_outline(&mut gizmos, &metrics, &terrain, footprint, color);
+    let (mut center, _) = resources.metrics.footprint_center_size(footprint);
+    center.y = resources.terrain.height_at_world(center.xz()) + 0.05;
+    let transform = Transform {
+        translation: center,
+        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+        scale: Vec3::splat(model.scale),
+    };
+
+    let mut found_matching_ghost = false;
+    for (entity, mut ghost, mut ghost_transform) in &mut ghosts {
+        if found_matching_ghost || ghost.rawcode != rawcode {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        found_matching_ghost = true;
+        *ghost_transform = transform;
+        if ghost.valid != valid {
+            ghost.valid = valid;
+        }
+    }
+    if !found_matching_ghost {
+        commands
+            .spawn((
+                Name::new(format!(
+                    "WC3 build placement ghost {}",
+                    String::from_utf8_lossy(&rawcode.to_be_bytes())
+                )),
+                WorldAssetRoot(model.scene.clone()),
+                transform,
+                BuildPlacementGhost { rawcode, valid },
+            ))
+            .observe(apply_build_preview_ghost_materials_when_ready);
+    }
+}
+
+fn apply_build_preview_ghost_materials_when_ready(
+    scene_ready: On<WorldInstanceReady>,
+    mut commands: Commands,
+    ghosts: Query<&BuildPlacementGhost>,
+    children: Query<&Children>,
+    mut mesh_materials: Query<&mut MeshMaterial3d<StandardMaterial>>,
+    preview_materials: Res<BuildPreviewMaterials>,
+) {
+    let Ok(ghost) = ghosts.get(scene_ready.entity) else {
+        return;
+    };
+    let material = if ghost.valid {
+        &preview_materials.valid
+    } else {
+        &preview_materials.invalid
+    };
+    for child in children.iter_descendants(scene_ready.entity) {
+        if let Ok(mut mesh_material) = mesh_materials.get_mut(child) {
+            mesh_material.0 = material.clone();
+            commands.entity(child).insert(Wc3MaterialProcessed);
+        }
+    }
+}
+
+fn refresh_build_preview_ghost_materials(
+    ghosts: Query<(Entity, &BuildPlacementGhost), Changed<BuildPlacementGhost>>,
+    children: Query<&Children>,
+    mut mesh_materials: Query<&mut MeshMaterial3d<StandardMaterial>>,
+    preview_materials: Res<BuildPreviewMaterials>,
+) {
+    for (entity, ghost) in &ghosts {
+        let material = if ghost.valid {
+            &preview_materials.valid
+        } else {
+            &preview_materials.invalid
+        };
+        for child in children.iter_descendants(entity) {
+            if let Ok(mut mesh_material) = mesh_materials.get_mut(child) {
+                mesh_material.0 = material.clone();
+            }
+        }
+    }
 }
 
 pub(crate) fn placement_footprint(
@@ -1143,14 +1314,6 @@ fn building_is_controllable_tower(
                 Some(CastleFightBuildingKind::Tower(_))
             )
         })
-}
-
-fn team_ui_color(team: Team) -> Color {
-    match team.0 {
-        0 => Color::srgb(0.20, 0.58, 1.0),
-        1 => Color::srgb(1.0, 0.28, 0.22),
-        _ => Color::WHITE,
-    }
 }
 
 #[cfg(test)]

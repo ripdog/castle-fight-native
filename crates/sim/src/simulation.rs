@@ -2156,6 +2156,31 @@ impl Simulation {
             && self.footprint_inside_team_build_region(team, footprint)
     }
 
+    /// Returns whether one navigation cell is individually legal for building placement.
+    ///
+    /// This is presentation-facing diagnostic data for footprint previews. Whole-building
+    /// placement must still use [`Self::can_place_building_for_team`], which remains authoritative
+    /// for rules that apply to the footprint as a whole.
+    #[must_use]
+    pub fn can_place_building_cell_for_team(&self, team: Team, cell: NavCell) -> bool {
+        let footprint = BuildingFootprint::new(cell.x, cell.y, 1, 1);
+        self.topology.contains(cell)
+            && self.cell_inside_team_build_region(team, cell)
+            && !self
+                .config
+                .static_blockers
+                .iter()
+                .chain(self.config.build_static_blockers.iter())
+                .copied()
+                .any(|blocker| footprint_contains_cell(blocker, cell))
+            && !self
+                .world
+                .iter_entities()
+                .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
+                .any(|existing| footprint_contains_cell(existing, cell))
+            && !self.footprint_contains_live_unit(footprint)
+    }
+
     fn footprint_inside_team_build_region(&self, team: Team, footprint: BuildingFootprint) -> bool {
         let Some(regions) = self.config.team_build_regions.get(usize::from(team.0)) else {
             return false;
@@ -2167,11 +2192,10 @@ impl Simulation {
                 .any(|region| footprint_contains_footprint(region, footprint))
     }
 
-    fn point_inside_team_build_region(&self, team: Team, point: SimPoint) -> bool {
+    fn cell_inside_team_build_region(&self, team: Team, cell: NavCell) -> bool {
         let Some(regions) = self.config.team_build_regions.get(usize::from(team.0)) else {
             return false;
         };
-        let cell = self.topology.cell_of_point(point);
         if regions.is_empty() {
             self.topology.contains(cell)
         } else {
@@ -2180,6 +2204,10 @@ impl Simulation {
                 .copied()
                 .any(|region| footprint_contains_cell(region, cell))
         }
+    }
+
+    fn point_inside_team_build_region(&self, team: Team, point: SimPoint) -> bool {
+        self.cell_inside_team_build_region(team, self.topology.cell_of_point(point))
     }
 
     fn clamp_builder_blink_destination(
