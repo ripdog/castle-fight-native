@@ -5206,15 +5206,12 @@ impl Simulation {
         let current = unit
             .target
             .filter(|target| self.current_target_retainable_for(unit, *target, units, buildings));
-        if let Some(current) = current
-            && (unit.direct_retaliation_lock
-                || unit.ally_defense_lock
-                || find_building_index(buildings, current).is_none())
-        {
+        if current.is_some_and(|target| find_unit_index(units, target).is_some()) {
             return false;
         }
-        self.recent_retaliation_target(unit, units, buildings)
-            .is_none()
+        !self
+            .recent_retaliation_target(unit, units, buildings)
+            .is_some_and(|attacker| find_unit_index(units, attacker).is_some())
     }
 
     fn select_targets(
@@ -5244,48 +5241,31 @@ impl Simulation {
                         );
                     }
 
-                    if let Some(current) = current {
+                    let retaliation = self.recent_retaliation_target(unit, units, buildings);
+                    if let Some(current) = current
+                        && find_unit_index(units, current).is_some()
+                    {
                         if unit.direct_retaliation_lock {
                             return TargetDecision::without_defense(Some(current), true, false);
                         }
-                        if let Some(attacker) =
-                            self.recent_retaliation_target(unit, units, buildings)
+                        if let Some(attacker) = retaliation
+                            && find_unit_index(units, attacker).is_some()
                         {
                             return TargetDecision::without_defense(Some(attacker), true, false);
                         }
-                        if unit.ally_defense_lock {
-                            return TargetDecision::without_defense(Some(current), false, true);
-                        }
-                        if find_building_index(buildings, current).is_some() {
-                            let defense = self.recent_ally_defense_target(
-                                unit,
-                                units,
-                                buildings,
-                                defense_attacker_grid,
-                                defense_victims,
-                                alert_grid,
-                            );
-                            if let Some(attacker) = defense.target {
-                                return TargetDecision::with_defense(
-                                    Some(attacker),
-                                    false,
-                                    true,
-                                    defense,
-                                );
-                            }
-                            return TargetDecision::with_defense(
-                                Some(current),
-                                false,
-                                false,
-                                defense,
-                            );
-                        }
-                        return TargetDecision::without_defense(Some(current), false, false);
+                        return TargetDecision::without_defense(
+                            Some(current),
+                            false,
+                            unit.ally_defense_lock,
+                        );
                     }
 
-                    if let Some(attacker) = self.recent_retaliation_target(unit, units, buildings) {
+                    if let Some(attacker) = retaliation
+                        && find_unit_index(units, attacker).is_some()
+                    {
                         return TargetDecision::without_defense(Some(attacker), true, false);
                     }
+
                     let defense = self.recent_ally_defense_target(
                         unit,
                         units,
@@ -5294,6 +5274,52 @@ impl Simulation {
                         defense_victims,
                         alert_grid,
                     );
+                    if let Some(attacker) = defense.target
+                        && find_unit_index(units, attacker).is_some()
+                    {
+                        return TargetDecision::with_defense(Some(attacker), false, true, defense);
+                    }
+
+                    if let Some(current) = current {
+                        debug_assert!(find_building_index(buildings, current).is_some());
+                        if unit.direct_retaliation_lock {
+                            return TargetDecision::with_defense(
+                                Some(current),
+                                true,
+                                false,
+                                defense,
+                            );
+                        }
+                        if let Some(attacker) = retaliation {
+                            return TargetDecision::with_defense(
+                                Some(attacker),
+                                true,
+                                false,
+                                defense,
+                            );
+                        }
+                        if unit.ally_defense_lock {
+                            return TargetDecision::with_defense(
+                                Some(current),
+                                false,
+                                true,
+                                defense,
+                            );
+                        }
+                        if let Some(attacker) = defense.target {
+                            return TargetDecision::with_defense(
+                                Some(attacker),
+                                false,
+                                true,
+                                defense,
+                            );
+                        }
+                        return TargetDecision::with_defense(Some(current), false, false, defense);
+                    }
+
+                    if let Some(attacker) = retaliation {
+                        return TargetDecision::with_defense(Some(attacker), true, false, defense);
+                    }
                     if let Some(attacker) = defense.target {
                         return TargetDecision::with_defense(Some(attacker), false, true, defense);
                     }
@@ -5707,6 +5733,9 @@ impl Simulation {
             attacker_grid: defense_attacker_grid,
         };
         let mut rejected_through_distance = None;
+        // Buildings are fallback defense targets. Keep the best one seen, but continue through
+        // farther attacked-allies until we know no valid combat-unit attacker exists.
+        let mut best_building: Option<(u64, u64, SimId, SimId)> = None;
 
         loop {
             let Some((ally_distance_sq, victim_indices)) = self.nearest_defense_victim_layer(
@@ -5717,10 +5746,11 @@ impl Simulation {
                 alert_grid,
                 &mut search.victim_candidates,
             ) else {
+                search.target = best_building.map(|(_, _, attacker, _)| attacker);
                 return search;
             };
 
-            let mut best: Option<(u64, SimId, SimId)> = None;
+            let mut best_unit: Option<(u64, SimId, SimId)> = None;
             for victim_index in victim_indices {
                 let victim = &defense_victims[victim_index];
                 let Some((attacker_distance_sq, attacker_id)) = self
@@ -5734,13 +5764,25 @@ impl Simulation {
                 else {
                     continue;
                 };
-                let key = (attacker_distance_sq, attacker_id, victim.victim_id);
-                if best.is_none_or(|current| key < current) {
-                    best = Some(key);
+                if find_unit_index(units, attacker_id).is_some() {
+                    let key = (attacker_distance_sq, attacker_id, victim.victim_id);
+                    if best_unit.is_none_or(|current| key < current) {
+                        best_unit = Some(key);
+                    }
+                } else {
+                    let key = (
+                        ally_distance_sq,
+                        attacker_distance_sq,
+                        attacker_id,
+                        victim.victim_id,
+                    );
+                    if best_building.is_none_or(|current| key < current) {
+                        best_building = Some(key);
+                    }
                 }
             }
 
-            if let Some((_, attacker, _)) = best {
+            if let Some((_, attacker, _)) = best_unit {
                 search.target = Some(attacker);
                 return search;
             }
@@ -5857,6 +5899,10 @@ impl Simulation {
                     }
                 }
             }
+        }
+
+        if best.is_some() {
+            return best;
         }
 
         for &building_index in &victim.building_attackers {
@@ -8853,7 +8899,14 @@ fn apply_damage_to_target(
             state.unit_health[index] = state.unit_health[index]
                 .checked_sub(adjusted_damage)
                 .expect("unit damage arithmetic overflowed validated bounds");
-            state.attackers_this_tick[index].get_or_insert(source_id);
+            let source_is_unit = find_unit_index(state.units, source_id).is_some();
+            let recorded_attacker_is_building = state.attackers_this_tick[index]
+                .is_some_and(|attacker| find_building_index(state.buildings, attacker).is_some());
+            if state.attackers_this_tick[index].is_none()
+                || (source_is_unit && recorded_attacker_is_building)
+            {
+                state.attackers_this_tick[index] = Some(source_id);
+            }
             state.next_defense_alerts.push(DefenseAlert {
                 victim_id: state.units[index].id,
                 victim_team: state.units[index].team,
@@ -8989,6 +9042,8 @@ fn apply_pending_attack_effects(
                         -100,
                         expires_tick,
                     );
+                    units[index].status.stunned_until_tick =
+                        units[index].status.stunned_until_tick.max(expires_tick);
                     let dot_expires_tick = expires_tick
                         .checked_add(1)
                         .expect("Entangling Roots damage-over-time expiry overflow");

@@ -18,7 +18,10 @@ pub(crate) struct BuilderControlPlugin;
 
 impl Plugin for BuilderControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, handle_selection_commands);
+        app.add_systems(
+            Update,
+            handle_selection_commands.after(crate::inspection::handle_world_selection),
+        );
     }
 }
 

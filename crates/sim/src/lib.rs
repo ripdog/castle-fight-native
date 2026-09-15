@@ -1136,8 +1136,12 @@ mod tests {
 
         sim.step();
         sim.step();
-        let rooted_position = sim.unit(target).unwrap().position;
-        for _ in 0..30 {
+        let rooted = sim.unit(target).unwrap();
+        let rooted_position = rooted.position;
+        assert!(rooted.stunned_until_tick > sim.tick());
+        let frozen_tick = sim.step();
+        assert_eq!(frozen_tick.attacks_resolved, 0);
+        for _ in 0..29 {
             sim.step();
         }
         assert_eq!(sim.unit(target).unwrap().position, rooted_position);
@@ -3619,7 +3623,7 @@ mod tests {
     }
 
     #[test]
-    fn unit_retaliates_against_attack_building_after_resolved_hit() {
+    fn attack_building_does_not_preempt_valid_unit_target() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let defender = sim.spawn_unit(UnitSpawn {
@@ -3661,7 +3665,53 @@ mod tests {
         assert_eq!(sim.unit(defender).unwrap().health, 99);
         assert_eq!(sim.unit(defender).unwrap().last_attacker, Some(tower));
         sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(decoy));
+    }
+
+    #[test]
+    fn unit_retaliates_against_attack_building_when_no_unit_target_exists() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * cell,
+                acquisition_range: 8 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        });
+        let tower = sim.spawn_building(attack_building(
+            1,
+            BuildingFootprint::new(20, 0, 1, 1),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 10 * cell,
+                },
+                damage: 1,
+                range: 12 * cell,
+                acquisition_range: 12 * cell,
+                cooldown_ticks: 30,
+            },
+        ));
+
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, None);
+        sim.step();
+        assert_eq!(sim.projectile_count(), 1);
+        let impact = sim.step();
+        assert_eq!(impact.projectile_impacts, 1);
+        assert_eq!(sim.unit(defender).unwrap().health, 99);
+        assert_eq!(sim.unit(defender).unwrap().last_attacker, Some(tower));
+        sim.step();
         assert_eq!(sim.unit(defender).unwrap().target, Some(tower));
+        assert!(sim.unit(defender).unwrap().direct_retaliation_lock);
     }
 
     #[test]
@@ -5827,8 +5877,42 @@ mod tests {
 
         sim.step();
         assert_eq!(sim.unit(directly_attacked).unwrap().target, Some(tower));
+        assert!(sim.unit(directly_attacked).unwrap().direct_retaliation_lock);
         assert_eq!(sim.unit(nearby_attacker).unwrap().target, Some(tower));
         assert!(sim.unit(nearby_attacker).unwrap().ally_defense_lock);
+
+        let directly_attacked_position = sim.unit(directly_attacked).unwrap().position;
+        let arriving_unit = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(
+                directly_attacked_position.x - cell,
+                directly_attacked_position.y,
+            ),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 2 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.step(); // arriving unit is spawn-tick suppressed
+        sim.step(); // arriving unit attacks the directly tower-locked unit
+        assert_eq!(
+            sim.unit(directly_attacked).unwrap().last_attacker,
+            Some(arriving_unit)
+        );
+        sim.step(); // unit priority peels both direct- and ally-defense tower locks
+        assert_eq!(
+            sim.unit(directly_attacked).unwrap().target,
+            Some(arriving_unit)
+        );
+        assert_eq!(
+            sim.unit(nearby_attacker).unwrap().target,
+            Some(arriving_unit)
+        );
     }
 
     #[test]
@@ -5931,6 +6015,88 @@ mod tests {
     }
 
     #[test]
+    fn ally_defense_prefers_unit_attacker_over_nearer_building_attacker() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let defender = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(10 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * cell,
+                acquisition_range: 4 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: cell / 8,
+            },
+        });
+        let near_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(11 * cell, 0),
+            ..passive_unit(0, 0)
+        });
+        let far_ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(14 * cell, 0),
+            ..passive_unit(0, 0)
+        });
+        let tower = sim.spawn_building(attack_building(
+            1,
+            BuildingFootprint::new(20, 0, 1, 1),
+            AttackProfile {
+                delivery: AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 20 * cell,
+                },
+                damage: 1,
+                range: 12 * cell,
+                acquisition_range: 12 * cell,
+                cooldown_ticks: 1,
+            },
+        ));
+        sim.order_building_attack_target(tower, near_ally).unwrap();
+        let unit_attacker = sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(16 * cell, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 3 * cell,
+                acquisition_range: 3 * cell,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, None);
+
+        let mut simultaneous_alert_tick = None;
+        for _ in 0..4 {
+            sim.step();
+            let near = sim.unit(near_ally).unwrap();
+            let far = sim.unit(far_ally).unwrap();
+            if near.last_attacker == Some(tower)
+                && far.last_attacker == Some(unit_attacker)
+                && near.last_attacked_tick == far.last_attacked_tick
+            {
+                simultaneous_alert_tick = near.last_attacked_tick;
+                break;
+            }
+        }
+        assert!(
+            simultaneous_alert_tick.is_some(),
+            "tower and unit never produced simultaneous ally-defense alerts"
+        );
+
+        sim.step();
+        assert_eq!(sim.unit(defender).unwrap().target, Some(unit_attacker));
+    }
+
+    #[test]
     fn ally_defense_target_stays_sticky_when_other_allies_are_attacked() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let config = SimulationConfig {
@@ -6008,7 +6174,7 @@ mod tests {
     }
 
     #[test]
-    fn ally_defense_lock_ignores_later_defense_requests_until_self_attacked() {
+    fn unit_ally_defense_target_preempts_locked_building_target() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let defender = sim.spawn_unit(UnitSpawn {
@@ -6084,8 +6250,9 @@ mod tests {
         );
         sim.step();
         let defender_view = sim.unit(defender).unwrap();
-        assert_eq!(defender_view.target, Some(first_attacker));
+        assert_eq!(defender_view.target, Some(second_attacker));
         assert!(defender_view.ally_defense_lock);
+        assert!(!defender_view.direct_retaliation_lock);
 
         let self_attacker = sim.spawn_unit(UnitSpawn {
             team: Team(1),

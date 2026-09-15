@@ -94,7 +94,7 @@ fn setup_inspector_ui(mut commands: Commands) {
         });
 }
 
-fn handle_world_selection(
+pub(crate) fn handle_world_selection(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     _keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,

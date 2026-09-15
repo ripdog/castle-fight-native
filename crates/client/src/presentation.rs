@@ -90,8 +90,8 @@ const HEALTH_BAR_SHADER_PATH: &str = "shaders/health_bar_overlay.wgsl";
 const HEALTH_BAR_BATCH_MAX_RECTS: usize = 8_192;
 const HEALTH_BAR_BATCH_MIN_BUFFER_RECTS: usize = 64;
 const HEALTH_BAR_HEIGHT_PIXELS: f32 = 9.0;
-const PRODUCTION_BAR_HEIGHT_PIXELS: f32 = 7.0;
-const PRODUCTION_BAR_GAP_PIXELS: f32 = 4.0;
+const PROGRESS_BAR_HEIGHT_PIXELS: f32 = 7.0;
+const PROGRESS_BAR_GAP_PIXELS: f32 = 4.0;
 const HEALTH_BAR_VERTICAL_GAP: f32 = 16.0;
 const UNIT_HEALTH_BAR_MIN_WIDTH: f32 = 32.0;
 const UNIT_HEALTH_BAR_COLLISION_SCALE: f32 = 4.0;
@@ -3582,15 +3582,15 @@ fn update_health_bar_batch(
                 Color::srgb(0.085, 0.085, 0.095),
                 viewport,
             );
-            if let Some(progress) = production_progress(building, rendered_tick) {
+            if let Some(progress) = building_progress(building, rendered_tick) {
                 let progress_screen = HealthBarScreenLayout {
-                    top: screen.top + HEALTH_BAR_HEIGHT_PIXELS + PRODUCTION_BAR_GAP_PIXELS,
+                    top: screen.top + HEALTH_BAR_HEIGHT_PIXELS + PROGRESS_BAR_GAP_PIXELS,
                     ..screen
                 };
                 push_split_bar(
                     &mut batch.rects,
                     progress_screen,
-                    PRODUCTION_BAR_HEIGHT_PIXELS,
+                    PROGRESS_BAR_HEIGHT_PIXELS,
                     progress,
                     Color::srgb(0.72, 0.72, 0.74),
                     Color::srgb(0.16, 0.16, 0.17),
@@ -3670,8 +3670,8 @@ fn health_bar_screen_layout(
     };
     let max_bottom = layout.top
         + HEALTH_BAR_HEIGHT_PIXELS
-        + PRODUCTION_BAR_GAP_PIXELS
-        + PRODUCTION_BAR_HEIGHT_PIXELS;
+        + PROGRESS_BAR_GAP_PIXELS
+        + PROGRESS_BAR_HEIGHT_PIXELS;
     if layout.left + layout.width < viewport.min.x
         || layout.left > viewport.max.x
         || max_bottom < viewport.min.y
@@ -3887,6 +3887,14 @@ fn interpolated_sim_tick(samples: &PresentationSamples, alpha: f32) -> f64 {
     samples.previous.tick as f64 + elapsed_ticks as f64 * f64::from(alpha.clamp(0.0, 1.0))
 }
 
+fn construction_progress(building: &BuildingSample, rendered_tick: f64) -> Option<f32> {
+    let started_tick = building.construction_started_tick?;
+    let complete_tick = building.construction_complete_tick?;
+    let duration_ticks = complete_tick.saturating_sub(started_tick).max(1) as f64;
+    let elapsed_ticks = (rendered_tick - started_tick as f64).clamp(0.0, duration_ticks);
+    Some((elapsed_ticks / duration_ticks) as f32)
+}
+
 fn production_progress(building: &BuildingSample, rendered_tick: f64) -> Option<f32> {
     let next_spawn_tick = building.next_spawn_tick?;
     let interval_ticks = building.production_interval_ticks?;
@@ -3896,6 +3904,11 @@ fn production_progress(building: &BuildingSample, rendered_tick: f64) -> Option<
     let interval = f64::from(interval_ticks);
     let remaining = (next_spawn_tick as f64 - rendered_tick).clamp(0.0, interval);
     Some((1.0 - remaining / interval) as f32)
+}
+
+fn building_progress(building: &BuildingSample, rendered_tick: f64) -> Option<f32> {
+    construction_progress(building, rendered_tick)
+        .or_else(|| production_progress(building, rendered_tick))
 }
 
 pub(crate) fn draw_footprint_outline(
@@ -4614,6 +4627,35 @@ mod tests {
 
         building.production_interval_ticks = None;
         assert_eq!(production_progress(&building, 30.0), None);
+    }
+
+    #[test]
+    fn construction_progress_uses_the_same_overhead_progress_bar() {
+        let building = BuildingSample {
+            id: SimId(1),
+            content: None,
+            team: Team(0),
+            footprint: BuildingFootprint::new(0, 0, 4, 4),
+            health: 1_000,
+            health_max: 1_000,
+            construction_started_tick: Some(20),
+            construction_complete_tick: Some(80),
+            damage_type: None,
+            armor: castle_fight_sim::ArmorProfile::UNARMORED,
+            target: None,
+            next_spawn_tick: None,
+            production_interval_ticks: None,
+            cooldown_remaining: None,
+            mana_current: None,
+            mana_maximum: None,
+            ability_ready_tick: None,
+            stunned_until_tick: None,
+            visual_kind: BuildingVisualKind::Production,
+        };
+
+        assert_eq!(building_progress(&building, 20.0), Some(0.0));
+        assert_eq!(building_progress(&building, 50.0), Some(0.5));
+        assert_eq!(building_progress(&building, 80.0), Some(1.0));
     }
 
     #[test]
