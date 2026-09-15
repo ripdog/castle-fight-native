@@ -130,6 +130,7 @@ pub struct BuildingSample {
     pub construction_complete_tick: Option<u64>,
     pub target: Option<SimId>,
     pub next_spawn_tick: Option<u64>,
+    pub production_interval_ticks: Option<u16>,
     pub cooldown_remaining: Option<u16>,
     pub mana_current: Option<i32>,
     pub mana_maximum: Option<i32>,
@@ -234,6 +235,9 @@ impl PresentationSnapshot {
                         construction_complete_tick: building.construction_complete_tick,
                         target: building.target,
                         next_spawn_tick: building.next_spawn_tick,
+                        production_interval_ticks: building
+                            .production
+                            .map(|production| production.interval_ticks),
                         cooldown_remaining: building.cooldown_remaining,
                         mana_current: building.mana_current,
                         mana_maximum: building.mana_maximum,
@@ -412,17 +416,13 @@ mod tests {
                 .name,
             "Footman"
         );
+        let building = snapshot.buildings.values().next().unwrap();
+        assert_eq!(building.content.unwrap().name, "Barracks");
         assert_eq!(
-            snapshot
-                .buildings
-                .values()
-                .next()
-                .unwrap()
-                .content
-                .unwrap()
-                .name,
-            "Barracks"
+            building.production_interval_ticks,
+            Some(barracks.spawn_interval_ticks)
         );
+        assert!(building.next_spawn_tick.is_some());
     }
 
     #[test]

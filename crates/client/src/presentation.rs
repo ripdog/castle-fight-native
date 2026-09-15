@@ -76,8 +76,14 @@ const WC3_CHAIN_LIGHTNING_NOISE_SCALE: f32 = 0.05;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const FLESH_DECAY_TICKS: u64 = 2 * CASTLE_FIGHT_SIMULATION_HZ as u64;
 const BONE_DECAY_TICKS: u64 = 25 * CASTLE_FIGHT_SIMULATION_HZ as u64;
-const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
-const HEALTH_BAR_DEPTH: f32 = 6.0;
+const HEALTH_BAR_LINE_WIDTH_PIXELS: f32 = 9.0;
+const HEALTH_BAR_VERTICAL_GAP: f32 = 16.0;
+const PRODUCTION_BAR_VERTICAL_OFFSET: f32 = 10.0;
+const UNIT_HEALTH_BAR_MIN_WIDTH: f32 = 32.0;
+const UNIT_HEALTH_BAR_COLLISION_SCALE: f32 = 4.0;
+const UNIT_HEALTH_BAR_HEIGHT_SCALE: f32 = 0.60;
+const BUILDING_HEALTH_BAR_FOOTPRINT_SCALE: f32 = 1.08;
+const BUILDING_HEALTH_BAR_HEIGHT_SCALE: f32 = 0.60;
 const CORPSE_SIZE: f32 = 7.5;
 const CORPSE_THICKNESS: f32 = 0.8;
 const SWORD_SWING_SECONDS: f32 = 0.24;
@@ -311,7 +317,6 @@ impl PresentationAssets {
 struct PresentedEntry {
     entity: Entity,
     weapon: Option<Entity>,
-    max_health_seen: i32,
     imported_rawcode: Option<u32>,
 }
 
@@ -624,8 +629,9 @@ fn setup_scene(
     *building_models = BuildingModelSet::load_default(&asset_server);
     *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
     let (health_bar_config, _) = gizmo_configs.config_mut::<HealthBarGizmos>();
-    health_bar_config.line.width = 6.0;
+    health_bar_config.line.width = HEALTH_BAR_LINE_WIDTH_PIXELS;
     health_bar_config.line.perspective = false;
+    health_bar_config.depth_bias = -1.0;
     let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
     projectile_effect_config.line.width = 3.0;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
@@ -2374,15 +2380,13 @@ fn sync_render_entities(
             PresentedEntry {
                 entity,
                 weapon: None,
-                max_health_seen: 1,
                 imported_rawcode,
             },
         );
     }
 
     for unit in samples.current.units.values() {
-        if let Some(entry) = render_map.units.get_mut(&unit.id) {
-            entry.max_health_seen = entry.max_health_seen.max(unit.health);
+        if render_map.units.contains_key(&unit.id) {
             continue;
         }
         let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
@@ -2433,7 +2437,6 @@ fn sync_render_entities(
             PresentedEntry {
                 entity,
                 weapon,
-                max_health_seen: unit.health.max(1),
                 imported_rawcode,
             },
         );
@@ -2492,8 +2495,7 @@ fn sync_render_entities(
     }
 
     for building in samples.current.buildings.values() {
-        if let Some(entry) = render_map.buildings.get_mut(&building.id) {
-            entry.max_health_seen = entry.max_health_seen.max(building.health);
+        if render_map.buildings.contains_key(&building.id) {
             continue;
         }
         let (mut center, size) = metrics.footprint_center_size(building.footprint);
@@ -2560,7 +2562,6 @@ fn sync_render_entities(
             PresentedEntry {
                 entity,
                 weapon: None,
-                max_health_seen: building.health.max(1),
                 imported_rawcode,
             },
         );
@@ -3223,6 +3224,7 @@ fn draw_health_bars(
     clocks: (Res<Time<Fixed>>, Res<SimulationPlayback>),
     samples: Res<PresentationSamples>,
     world: (Res<WorldMetrics>, Res<TerrainSurface>),
+    models: (Res<UnitModelSet>, Res<BuildingModelSet>),
     render_map: Res<RenderMap>,
     debug: Res<DebugPresentation>,
     camera_frustum: Single<&Frustum, With<Camera3d>>,
@@ -3230,32 +3232,37 @@ fn draw_health_bars(
 ) {
     let (fixed_time, playback) = clocks;
     let (metrics, terrain) = world;
+    let (unit_models, building_models) = models;
     if !debug.health_bars {
         return;
     }
 
     let alpha = playback.interpolation_alpha(&fixed_time);
+    let rendered_tick = interpolated_sim_tick(&samples, alpha);
     for (id, unit) in &samples.current.units {
         let Some(entry) = render_map.units.get(id) else {
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(unit);
-        let position = unit_ground_position_lerp(
+        let ground_position = unit_ground_position_lerp(
             previous.position,
             unit.position,
             unit.movement_class,
             alpha,
             &terrain,
-        ) + Vec3::Y * (unit_height(unit) + 3.0);
-        if !health_bar_visible(&camera_frustum, position, UNIT_HEALTH_BAR_WIDTH) {
+        );
+        let overhead_height = unit_bar_overhead_height(unit, entry, &unit_models);
+        let width = unit_health_bar_width(unit, entry, &unit_models);
+        let position = ground_position + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
+        if !health_bar_visible(&camera_frustum, position, width) {
             continue;
         }
         draw_health_bar(
             &mut health_gizmos,
             position,
-            UNIT_HEALTH_BAR_WIDTH,
+            width,
             unit.health,
-            entry.max_health_seen,
+            unit.health_max,
             unit.team,
         );
     }
@@ -3265,8 +3272,9 @@ fn draw_health_bars(
         };
         let (mut center, size) = metrics.footprint_center_size(building.footprint);
         center.y = terrain.height_at_world(center.xz());
-        let position = center + Vec3::Y * (building_height(building) + 4.0);
-        let width = size.x.clamp(24.0, 72.0);
+        let overhead_height = building_bar_overhead_height(building, entry, &building_models);
+        let width = building_health_bar_width(size, overhead_height);
+        let position = center + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
         if !health_bar_visible(&camera_frustum, position, width) {
             continue;
         }
@@ -3275,9 +3283,17 @@ fn draw_health_bars(
             position,
             width,
             building.health,
-            entry.max_health_seen,
+            building.health_max,
             building.team,
         );
+        if let Some(progress) = production_progress(building, rendered_tick) {
+            draw_progress_bar(
+                &mut health_gizmos,
+                position - Vec3::Y * PRODUCTION_BAR_VERTICAL_OFFSET,
+                width,
+                progress,
+            );
+        }
     }
 }
 
@@ -3384,21 +3400,71 @@ fn draw_health_bar(
     team: Team,
 ) {
     let ratio = (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0);
+    draw_bar(
+        gizmos,
+        center,
+        width,
+        ratio,
+        Color::srgb(0.085, 0.085, 0.095),
+        team_color(team),
+    );
+}
+
+fn draw_progress_bar(
+    gizmos: &mut Gizmos<HealthBarGizmos>,
+    center: Vec3,
+    width: f32,
+    progress: f32,
+) {
+    draw_bar(
+        gizmos,
+        center,
+        width,
+        progress,
+        Color::srgb(0.16, 0.16, 0.17),
+        Color::srgb(0.72, 0.72, 0.74),
+    );
+}
+
+fn draw_bar(
+    gizmos: &mut Gizmos<HealthBarGizmos>,
+    center: Vec3,
+    width: f32,
+    ratio: f32,
+    background: Color,
+    foreground: Color,
+) {
+    let ratio = ratio.clamp(0.0, 1.0);
     let half = width * 0.5;
     let start = center - Vec3::X * half;
     let end = center + Vec3::X * half;
     let fill_end = start + Vec3::X * width * ratio;
-    let background = Color::srgb(0.085, 0.085, 0.095);
 
     gizmos.line(start, end, background);
     if ratio > 0.0 {
-        let foreground_offset = Vec3::new(0.0, 0.04, HEALTH_BAR_DEPTH * 0.02);
+        let foreground_offset = Vec3::new(0.0, 0.04, 0.12);
         gizmos.line(
             start + foreground_offset,
             fill_end + foreground_offset,
-            team_color(team),
+            foreground,
         );
     }
+}
+
+fn interpolated_sim_tick(samples: &PresentationSamples, alpha: f32) -> f64 {
+    let elapsed_ticks = samples.current.tick.saturating_sub(samples.previous.tick);
+    samples.previous.tick as f64 + elapsed_ticks as f64 * f64::from(alpha.clamp(0.0, 1.0))
+}
+
+fn production_progress(building: &BuildingSample, rendered_tick: f64) -> Option<f32> {
+    let next_spawn_tick = building.next_spawn_tick?;
+    let interval_ticks = building.production_interval_ticks?;
+    if interval_ticks == 0 {
+        return None;
+    }
+    let interval = f64::from(interval_ticks);
+    let remaining = (next_spawn_tick as f64 - rendered_tick).clamp(0.0, interval);
+    Some((1.0 - remaining / interval) as f32)
 }
 
 pub(crate) fn draw_footprint_outline(
@@ -3664,14 +3730,61 @@ pub(crate) fn unit_height(unit: &UnitSample) -> f32 {
     base * unit_render_scale(unit)
 }
 
+fn imported_unit_overhead_height(entry: &PresentedEntry, models: &UnitModelSet) -> Option<f32> {
+    entry
+        .imported_rawcode
+        .and_then(|rawcode| models.get(rawcode))
+        .and_then(|model| model.overhead_height)
+}
+
+fn unit_bar_overhead_height(
+    unit: &UnitSample,
+    entry: &PresentedEntry,
+    models: &UnitModelSet,
+) -> f32 {
+    imported_unit_overhead_height(entry, models).unwrap_or_else(|| unit_height(unit))
+}
+
+fn unit_health_bar_width(unit: &UnitSample, entry: &PresentedEntry, models: &UnitModelSet) -> f32 {
+    let collision_radius_world = unit.collision_radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32;
+    let collision_width = collision_radius_world * UNIT_HEALTH_BAR_COLLISION_SCALE;
+    let model_width = imported_unit_overhead_height(entry, models)
+        .map_or(0.0, |height| height * UNIT_HEALTH_BAR_HEIGHT_SCALE);
+    collision_width
+        .max(model_width)
+        .max(UNIT_HEALTH_BAR_MIN_WIDTH)
+}
+
 fn unit_stun_height(unit: &UnitSample, render_map: &RenderMap, models: &UnitModelSet) -> f32 {
     render_map
         .units
         .get(&unit.id)
-        .and_then(|entry| entry.imported_rawcode)
+        .and_then(|entry| imported_unit_overhead_height(entry, models))
+        .map_or_else(|| unit_height(unit) * 1.15, |height| height * 1.05)
+}
+
+fn imported_building_overhead_height(
+    entry: &PresentedEntry,
+    models: &BuildingModelSet,
+) -> Option<f32> {
+    entry
+        .imported_rawcode
         .and_then(|rawcode| models.get(rawcode))
         .and_then(|model| model.overhead_height)
-        .map_or_else(|| unit_height(unit) * 1.15, |height| height * 1.05)
+}
+
+fn building_bar_overhead_height(
+    building: &BuildingSample,
+    entry: &PresentedEntry,
+    models: &BuildingModelSet,
+) -> f32 {
+    imported_building_overhead_height(entry, models).unwrap_or_else(|| building_height(building))
+}
+
+fn building_health_bar_width(size: Vec2, overhead_height: f32) -> f32 {
+    let footprint_width = size.x.max(size.y) * BUILDING_HEALTH_BAR_FOOTPRINT_SCALE;
+    let model_width = overhead_height * BUILDING_HEALTH_BAR_HEIGHT_SCALE;
+    footprint_width.max(model_width)
 }
 
 fn building_height(building: &BuildingSample) -> f32 {
@@ -4037,6 +4150,37 @@ mod tests {
             metrics.clamp_focus(Vec3::new(6_144.0, 50.0, -3_500.0)),
             Vec3::new(5_888.0, 50.0, -3_328.0)
         );
+    }
+
+    #[test]
+    fn production_progress_fills_toward_the_next_spawn_tick() {
+        let mut building = BuildingSample {
+            id: SimId(1),
+            content: None,
+            team: Team(0),
+            footprint: BuildingFootprint::new(0, 0, 4, 4),
+            health: 1_000,
+            health_max: 1_000,
+            construction_started_tick: None,
+            construction_complete_tick: None,
+            target: None,
+            next_spawn_tick: Some(40),
+            production_interval_ticks: Some(20),
+            cooldown_remaining: None,
+            mana_current: None,
+            mana_maximum: None,
+            ability_ready_tick: None,
+            stunned_until_tick: None,
+            visual_kind: BuildingVisualKind::Production,
+        };
+
+        assert_eq!(production_progress(&building, 20.0), Some(0.0));
+        assert_eq!(production_progress(&building, 30.0), Some(0.5));
+        assert_eq!(production_progress(&building, 40.0), Some(1.0));
+        assert_eq!(production_progress(&building, 45.0), Some(1.0));
+
+        building.production_interval_ticks = None;
+        assert_eq!(production_progress(&building, 30.0), None);
     }
 
     #[test]

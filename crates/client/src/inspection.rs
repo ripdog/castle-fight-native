@@ -807,6 +807,7 @@ mod tests {
                 construction_complete_tick: None,
                 target: None,
                 next_spawn_tick: Some(20),
+                production_interval_ticks: Some(20),
                 cooldown_remaining: None,
                 mana_current: None,
                 mana_maximum: None,

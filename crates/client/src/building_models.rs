@@ -23,6 +23,7 @@ pub struct BuildingModelAsset {
     pub scene: Handle<WorldAsset>,
     gltf: Handle<Gltf>,
     pub scale: f32,
+    pub overhead_height: Option<f32>,
     pub lifecycle_animations: BuildingLifecycleAnimationNames,
     pub emitters: Vec<Wc3ParticleEmitter>,
     animations_prepared: bool,
@@ -72,6 +73,7 @@ struct BuildingAssetManifestEntry {
 #[derive(Debug, Deserialize)]
 struct BuildingModelManifestEntry {
     gltf: String,
+    overhead_position: Option<[f32; 3]>,
     #[serde(default)]
     particle_emitters: Vec<Wc3ParticleEmitter>,
 }
@@ -80,6 +82,7 @@ struct BuildingModelManifestEntry {
 struct ResolvedBuildingAsset {
     rawcode: u32,
     scale: f32,
+    overhead_height: Option<f32>,
     lifecycle_animations: BuildingLifecycleAnimationNames,
     emitters: Vec<Wc3ParticleEmitter>,
     asset_path: String,
@@ -114,6 +117,7 @@ impl BuildingModelSet {
                             scene,
                             gltf,
                             scale: entry.scale,
+                            overhead_height: entry.overhead_height,
                             lifecycle_animations: entry.lifecycle_animations,
                             emitters: entry.emitters,
                             animations_prepared: false,
@@ -286,12 +290,15 @@ fn resolve_manifest_entries(
         ));
     }
 
-    let mut model_emitters = BTreeMap::new();
+    let mut model_metadata = BTreeMap::new();
     for model in manifest.models {
         let gltf = model.gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
-        if model_emitters
-            .insert(gltf.clone(), model.particle_emitters)
+        if model_metadata
+            .insert(
+                gltf.clone(),
+                (model.overhead_position, model.particle_emitters),
+            )
             .is_some()
         {
             return Err(format!("duplicate building model manifest path {gltf}"));
@@ -315,12 +322,16 @@ fn resolve_manifest_entries(
         }
         let gltf = gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
-        let emitters = model_emitters.get(&gltf).cloned().ok_or_else(|| {
-            format!(
-                "building {} references missing model manifest {gltf}",
-                entry.rawcode
-            )
-        })?;
+        let (overhead_position, emitters) =
+            model_metadata.get(&gltf).cloned().ok_or_else(|| {
+                format!(
+                    "building {} references missing model manifest {gltf}",
+                    entry.rawcode
+                )
+            })?;
+        let overhead_height = overhead_position
+            .map(|position| position[1] * entry.scale)
+            .filter(|height| height.is_finite() && *height > 0.0);
         let asset_path = format!("{}/{}", asset_prefix.trim_end_matches('/'), gltf);
         if resolved
             .insert(
@@ -328,6 +339,7 @@ fn resolve_manifest_entries(
                 ResolvedBuildingAsset {
                     rawcode,
                     scale: entry.scale,
+                    overhead_height,
                     lifecycle_animations: entry.lifecycle_animations,
                     emitters,
                     asset_path,
@@ -379,14 +391,15 @@ mod tests {
                 {"rawcode": "xxxx", "scale": 1.0, "animation_properties": [], "fallback_to_base_art": false, "gltf": null}
             ],
             "models": [
-                {"gltf":"models/humanbarracks.gltf","particle_emitters":[]},
-                {"gltf":"models/tower.gltf","particle_emitters":[]}
+                {"gltf":"models/humanbarracks.gltf","overhead_position":[0.0,240.0,0.0],"particle_emitters":[]},
+                {"gltf":"models/tower.gltf","overhead_position":[0.0,180.0,0.0],"particle_emitters":[]}
             ]
         }"#;
         let entries = resolve_manifest_entries(json, "wc3/buildings").expect("manifest resolves");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].rawcode, u32::from_be_bytes(*b"h000"));
         assert_eq!(entries[0].scale, 0.5);
+        assert_eq!(entries[0].overhead_height, Some(120.0));
         assert_eq!(
             entries[0].lifecycle_animations.birth.as_deref(),
             Some("Birth")
