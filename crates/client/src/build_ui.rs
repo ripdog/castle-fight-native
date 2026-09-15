@@ -259,7 +259,7 @@ fn setup_action_panel(mut commands: Commands) {
         .with_children(|tooltip| {
             tooltip.spawn((
                 Text::new(""),
-                TextFont::from_font_size(14.0),
+                TextFont::from_font_size(12.0),
                 TextColor(TOOLTIP_TITLE_COLOR),
                 TextLayout::default(),
                 Node {
@@ -270,7 +270,7 @@ fn setup_action_panel(mut commands: Commands) {
             ));
             tooltip.spawn((
                 Text::new(""),
-                TextFont::from_font_size(12.0),
+                TextFont::from_font_size(10.0),
                 TextColor(TOOLTIP_TEXT_COLOR),
                 TextLayout::default(),
                 Node {
@@ -667,13 +667,24 @@ fn set_wc3_text(commands: &mut Commands, entity: Entity, source: &str, default_c
     commands.entity(entity).with_children(|text| {
         for run in parse_wc3_text(source) {
             let color = run.color.map(wc3_color_to_bevy).unwrap_or(default_color);
-            text.spawn((TextSpan::new(run.text), TextColor(color)));
+            text.spawn((
+                TextSpan::new(wc3_text_for_embedded_font(&run.text)),
+                TextColor(color),
+            ));
         }
     });
 }
 
 fn wc3_color_to_bevy(color: Wc3Color) -> Color {
     Color::srgba_u8(color.red, color.green, color.blue, color.alpha)
+}
+
+fn wc3_text_for_embedded_font(text: &str) -> String {
+    // Bevy's built-in Fira Mono subset contains only ASCII (U+0020..U+007E). The current
+    // extracted building tooltip text otherwise stays inside that range except for WC3's U+2022 bullet.
+    // Keep the original string in versioned content/parser output and substitute only at the final
+    // rendering boundary until the client ships a fuller UI font.
+    text.replace('•', "-")
 }
 
 fn draw_build_preview(
@@ -971,6 +982,15 @@ mod tests {
             Interaction::None,
             Some(PanelAction::Target(TargetingAction::Repair)),
         ));
+    }
+
+    #[test]
+    fn tooltip_rendering_replaces_wc3_bullet_for_ascii_embedded_font() {
+        assert_eq!(
+            wc3_text_for_embedded_font("Charged Hammer • Attacks"),
+            "Charged Hammer - Attacks"
+        );
+        assert_eq!(wc3_text_for_embedded_font("ASCII only"), "ASCII only");
     }
 
     #[test]
