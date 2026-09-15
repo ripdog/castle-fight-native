@@ -1,2 +1,6 @@
 [build]
 jobs = 6
+# sccache cannot cache rustc invocations that use Cargo's incremental mode.
+# Keep per-worktree target directories isolated, and let sccache provide the
+# cross-build cache instead.
+incremental = false

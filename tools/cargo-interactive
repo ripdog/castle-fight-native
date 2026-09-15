@@ -56,6 +56,11 @@ fi
 build_cpus="$(choose_build_cpus)"
 build_nice="${CF_BUILD_NICE:-10}"
 
+# The default 10 GiB sccache store is too small for Bevy plus several active
+# worktrees/profiles and was observed sitting at its eviction ceiling. This is a
+# maximum, not a reservation; callers can override it when disk is constrained.
+export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-32G}"
+
 # sccache is a long-lived daemon and launches rustc itself. Constraining only
 # Cargo is therefore insufficient: pin the daemon as well so current and future
 # rustc children inherit the same CPU affinity.
@@ -65,6 +70,20 @@ if command -v sccache >/dev/null 2>&1; then
         [[ -z "$pid" ]] && continue
         taskset --all-tasks --pid --cpu-list "$build_cpus" "$pid" >/dev/null 2>&1 || true
     done < <(pgrep -u "$(id -u)" -x sccache 2>/dev/null || true)
+fi
+
+# Multiple six-job Cargo builds pinned to the same CPU set just oversubscribe
+# those CPUs and make every build dramatically slower. Serialize compile-heavy
+# invocations across CF Native worktrees by default. Builds are expected to run
+# asynchronously, so waiting here is preferable to several builds timing out
+# while fighting over the same cores. Set CF_BUILD_SERIALIZE=0 to opt out.
+if [[ "${CF_BUILD_SERIALIZE:-1}" != "0" ]] && command -v flock >/dev/null 2>&1; then
+    build_lock="${XDG_RUNTIME_DIR:-/tmp}/castle-fight-native-cargo-${UID}.lock"
+    exec 9>"$build_lock"
+    if ! flock -n 9; then
+        printf 'cargo-interactive: waiting for the active Castle Fight build to finish...\n' >&2
+        flock 9
+    fi
 fi
 
 exec taskset --cpu-list "$build_cpus" nice -n "$build_nice" ionice -c 2 -n 7 cargo "$@"
