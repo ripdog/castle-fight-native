@@ -65,7 +65,7 @@ The initial arithmetic contract is:
 - signed integer/fixed-point division truncates toward zero;
 - fixed-point multiplication uses a widened intermediate before rescaling, then truncates toward zero;
 - code MUST NOT use right-shift as a substitute for signed division where negative values are possible;
-- squared distance/dot-product intermediates use a width proven sufficient for the validated coordinate/range bounds;
+- squared distance/dot-product intermediates use a width proven sufficient for the validated coordinate/range bounds; the public `SimPoint` squared-distance helper uses a wider intermediate and saturates to `u64::MAX` for untrusted coordinates outside those validated bounds so malformed command input cannot trigger debug/release-dependent overflow;
 - normalization uses deterministic integer/fixed-point math with an explicitly specified integer square-root/length routine rather than floating point;
 - content/map loading validates coordinate, velocity, range, and radius bounds so those intermediate-width proofs remain true;
 - conversions between fixed-point scales use explicit documented rounding rather than casts whose intent is unclear.

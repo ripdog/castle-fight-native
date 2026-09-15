@@ -153,10 +153,17 @@ Revision 5 adds the Step 5 player/lifecycle model: stable entity ownership, cano
 
 Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. Checksums from revisions 1 through 5 are mutually incompatible.
 
-## 8. Required additions before step 7 completion
+## 8. Step 6 command-stream state outside `Simulation`
 
-Step 6 introduces the remaining authoritative command-stream concepts that are not present in the current `Simulation` yet. Before snapshot/replay sign-off, this inventory must be extended for:
+Step 6 introduces a `MatchDriver` beside `Simulation`. It owns authoritative scheduling/continuity state that is not ECS gameplay state:
 
-- finalized command-stream position, admitted future commands, client/player sequence tracking, and any scheduler history owned by the match driver.
+- the next monotonic `InputStreamPosition`;
+- admitted commands not yet finalized/executed, including their assigned tick and canonical within-tick order;
+- the next expected `ClientCommandSequence` for each player;
+- admission dispositions retained for idempotent retry/conflicting-duplicate detection;
+- the set/history boundary needed to prevent a finalized client sequence from executing twice;
+- the canonical finalized tick/control history retained by the local driver.
 
-Those additions must be represented in checksum/snapshot coverage before they can be considered restorable.
+The driver's most recent execution-outcome list is UI/protocol feedback and does not affect future gameplay; it need not be persisted if the same acknowledgement can be reconstructed/resupplied from retained canonical history.
+
+`InputStreamPosition` and client transport/admission sequence counters are continuity state, not gameplay checksum inputs; `20-networking.md` deliberately excludes stream position from the simulation checksum. Admitted future commands likewise have not affected the completed gameplay state yet, so ordinary `(tick, state_checksum)` checkpoints continue to hash `Simulation`, not the future-input queue. Step 7 snapshots, however, MUST capture the exact stream/history boundary plus every admitted future command and sufficient sequence/deduplication state so restoration neither loses an accepted command nor executes one twice. A later combined driver/snapshot integrity hash may cover those fields separately without changing the gameplay checksum definition.

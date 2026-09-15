@@ -43,36 +43,31 @@ Players issue explicit validated gameplay commands, never direct state mutations
 
 The protocol deliberately exposes specific game actions rather than a generic RTS unit-order envelope. Ordinary combat units are not commandable.
 
-Examples:
+The current executable development slice uses this explicit vocabulary:
 
 ```rust
 pub enum PlayerCommand {
-    MoveBuilder {
-        destination: SimPoint,
-    },
+    MoveBuilder { builder: SimId, destination: SimPoint },
+    FollowWithBuilder { builder: SimId, target: SimId },
+    StopBuilder { builder: SimId },
+    BlinkBuilder { builder: SimId, destination: SimPoint },
+    RepairWithBuilder { builder: SimId, target: SimId },
+    SetBuilderRepairAutocast { builder: SimId, enabled: bool },
     PlaceBuilding {
-        building: BuildingTypeId,
+        builder: SimId,
+        building: CastleFightBuildingId,
         position: BuildPosition,
-        rotation: BuildRotation,
     },
-    SellBuilding {
+    CancelBuildingConstruction { building: SimId },
+    UpgradeBuilding {
         building: SimId,
+        target: CastleFightBuildingId,
     },
-    PurchaseUpgrade {
-        upgrade: UpgradeId,
-    },
-    UseItem {
-        item_instance: ItemInstanceId,
-        target: AbilityTarget,
-    },
-    ActivateBuildingAbility {
-        building: SimId,
-        ability: AbilityId,
-        target: AbilityTarget,
-    },
-    // additional explicit non-unit-order game actions
+    AttackWithBuilding { building: SimId, target: SimId },
 }
 ```
+
+`BuildPosition` contains canonical integer grid coordinates only. Footprint size, cost, stats, production profile, attack profile, and other building properties are resolved from the selected authoritative content bundle; they are never caller-authored command payload. Discrete rotation may be added later if/when an implemented building requires it. Active items and explicitly manual building abilities extend this same vocabulary when their mechanics are implemented in step 11.
 
 There MUST NOT be a general `MoveUnit`, `AttackUnit`, `StopUnit`, `CastUnitAbility`, or `OrderUnit` command for ordinary combat units in the standard ruleset.
 
@@ -131,12 +126,12 @@ pub struct ScheduledCommand {
     pub tick: Tick,
     pub order: CommandOrder,
     pub player: PlayerId,
-    pub client_sequence: u64,
+    pub client_sequence: ClientCommandSequence,
     pub command: PlayerCommand,
 }
 
 pub enum CommandOutcome {
-    Executed,
+    Executed(CommandExecutionResult),
     Rejected(CommandRejectReason),
 }
 ```

@@ -14,6 +14,8 @@ A click becomes authoritative only after the client constructs a `PlayerCommand`
 
 Local UI may predict expected results, but prediction does not mutate canonical server state.
 
+Until the network server from step 9 exists, the development client uses the shared `MatchDriver` locally: UI handlers submit `PlayerCommand`s, the driver performs admission, assigns client sequence/tick/within-tick order, explicitly finalizes even empty ticks, executes commands through the shared executor, and returns structured outcomes. This is the same simulation-facing path future server-finalized input will use. F8 cheats, local pause/speed, stress population, and synthetic fixtures are explicitly development/bootstrap paths rather than ordinary player commands.
+
 ## 3. Core player command surface
 
 Normal play has exactly one directly controlled unit per player: the builder.
@@ -103,6 +105,8 @@ A final walling building that completes a legal cage must remain placeable if al
 Authored doodad/destructable pathing may contribute **placement-only** no-build cells even when the same object is intentionally walkable or flyable. Those cells participate in ordinary footprint validation without being promoted into unit-navigation blockers. Conversely, purely visual overhang outside the authored no-build footprint does not make a nearby snapped building placement illegal.
 
 The client and server share the same deterministic placement validation code where practical, but server validation remains authoritative.
+
+An accepted pending builder construction order reserves its canonical footprint before construction begins. Later placement commands, including commands finalized in the same tick, test those reservations in canonical command order. A losing contention command is rejected before spending resources; replacing the same builder's own pending order may ignore that builder's existing reservation while still respecting every other builder's reservation. Cancelling or otherwise dropping the pending order releases the reservation. This prevents two players from both being charged for the same future site and makes build contention an immediate deterministic command outcome rather than a later race between builder arrival times.
 
 ## 8. Prediction and reconciliation
 
