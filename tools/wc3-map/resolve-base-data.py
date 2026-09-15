@@ -2381,6 +2381,8 @@ def main() -> None:
                     "player-leave-autobalance-and-team-empty-resolution",
                     "unanimous-draw-round-restart",
                     "round-end-review-countdown",
+                    "team-afk-confirmation-check",
+                    "team-forfeit-vote",
                 }:
                     raise ValueError(f"unrecognized runtime session mechanic: {system_id}")
                 runtime_session_rows.append([
@@ -2415,6 +2417,14 @@ def main() -> None:
                     "glw", "gld", "mp", "emp", "ll", "ban", "rban", "bal", "fow", "fill", "nt", "ht", "mt", "skip", "w3c",
                 ]:
                     raise ValueError("runtime mode registry IDs/order changed")
+                round_limit = parameters.get("round_limit_runtime", {})
+                if (
+                    round_limit.get("warning_cascade_minutes_before_limit") != [5, 3, 1]
+                    or round_limit.get("warning_delays_seconds") != [120, 120, 60]
+                    or round_limit.get("positive_limit_primary_tiebreak") != "remaining Rescue Strike count per team"
+                    or round_limit.get("positive_limit_secondary_tiebreak") != "sum of taxedIncomeRealForPlayer over each team"
+                ):
+                    raise ValueError(f"runtime mode round-limit semantics changed: {round_limit}")
                 runtime_mode_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
                     mechanic["related_objects_json"], stable_json(parameters),
@@ -2439,6 +2449,7 @@ def main() -> None:
                     "campaign-star-restriction-failure-hooks",
                     "campaign-star-periodic-objectives",
                     "campaign-survival-countdown",
+                    "campaign-mission-supply-application",
                 }:
                     raise ValueError(f"unrecognized runtime campaign mechanic: {system_id}")
                 parameters = json.loads(mechanic["parameters_json"])
@@ -2451,6 +2462,14 @@ def main() -> None:
                     raise ValueError(f"campaign challenge polling period changed: {parameters}")
                 elif system_id == "campaign-survival-countdown" and parameters.get("period_seconds") != 1:
                     raise ValueError(f"campaign survival polling period changed: {parameters}")
+                elif system_id == "campaign-mission-supply-application":
+                    if (
+                        parameters.get("retry_interval_seconds") != 0.10
+                        or parameters.get("maximum_retry_attempt_index") != 80
+                        or parameters.get("maximum_retry_horizon_seconds_nominal") != 8.0
+                        or not parameters.get("this_function_does_not_directly_add_accumulated_gold_or_lumber")
+                    ):
+                        raise ValueError(f"campaign supply application semantics changed: {parameters}")
                 runtime_campaign_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
                     mechanic["related_objects_json"], stable_json(parameters),
@@ -3051,6 +3070,29 @@ def main() -> None:
                     parameters["runtime_attack_max"] = numeric(protected["attack1_max"])
                     parameters["runtime_attack_cooldown_seconds"] = numeric(protected["attack1_cooldown"])
                     parameters["runtime_attack_range"] = numeric(protected["attack1_range"])
+                elif system_id == "stasis-totem-global-setup":
+                    stock = static_units.get("otot")
+                    if stock is None or stock["name"] != "Stasis Trap":
+                        raise ValueError(f"Stasis Trap stock unit changed: {stock}")
+                    totems = []
+                    for rawcode, expected_name in (
+                        ("h07X", "Stasis Totem"),
+                        ("h07Y", "Healing Totem"),
+                        ("h07Z", "Endurance Totem"),
+                    ):
+                        unit = static_units.get(rawcode)
+                        if unit is None or unit["name"] != expected_name:
+                            raise ValueError(f"Stasis Totem setup unit changed for {rawcode}: {unit}")
+                        totems.append({
+                            "rawcode": rawcode,
+                            "name": unit["name"],
+                            "tooltip": unit["ubertip"],
+                            "abilities": unit["abilities"],
+                        })
+                    if parameters.get("totem_rawcodes") != ["h07X", "h07Y", "h07Z"]:
+                        raise ValueError(f"Stasis Totem rawcode list changed: {parameters}")
+                    parameters["stock_stasis_trap_name"] = stock["name"]
+                    parameters["totems"] = totems
                 elif system_id == "building-income-synchronization":
                     if (
                         parameters.get("delta_formula")

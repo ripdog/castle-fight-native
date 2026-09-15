@@ -180,22 +180,25 @@
     "delayed-ai-executor-lifecycle-build-timeout-and-one-second-fsm-controller-tick": 1,
     "team-strategic-aura-purchase-state-and-buyer-coordination": 1
   },
-  "runtime_session_mechanic_rows": 4,
+  "runtime_session_mechanic_rows": 6,
   "runtime_session_mechanic_kinds": {
     "fifteen-second-one-second-tick-next-round-review-gate": 1,
     "leave-cleanup-autobalance-and-match-termination": 1,
     "player-inactivity-driven-allied-control-sharing": 1,
-    "round-end-signal-draw-restart-and-round-cleanup": 1
+    "round-end-signal-draw-restart-and-round-cleanup": 1,
+    "team-confirmation-timeout-to-afk-ai-control": 1,
+    "unanimous-eligible-team-vote-kills-own-castle": 1
   },
   "runtime_mode_mechanic_rows": 1,
   "runtime_mode_mechanic_kinds": {
     "host-chat-mode-parser-with-exact-registered-mode-catalog": 1
   },
-  "runtime_campaign_mechanic_rows": 3,
+  "runtime_campaign_mechanic_rows": 4,
   "runtime_campaign_mechanic_kinds": {
     "campaign-active-star-restriction-event-failure": 1,
     "one-second-survival-objective-countdown-and-castle-kill-victory": 1,
-    "quarter-second-fast-win-and-castle-health-star-tracking": 1
+    "quarter-second-fast-win-and-castle-health-star-tracking": 1,
+    "round-start-gated-retrying-party-supply-application": 1
   },
   "runtime_draft_mechanic_rows": 3,
   "runtime_draft_mechanic_kinds": {
@@ -203,7 +206,7 @@
     "round-end-draft-controller-reset-and-warmup-restart": 1,
     "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1
   },
-  "runtime_system_mechanic_rows": 23,
+  "runtime_system_mechanic_rows": 24,
   "runtime_system_mechanic_kinds": {
     "allied-production-queue-synchronization-and-order-reset": 1,
     "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -213,6 +216,7 @@
     "builder-point-teleport-clamped-to-own-castle": 1,
     "building-random-enemy-base-attack-ground-controller": 1,
     "catalog-authoritative-building-income-cache-correction": 1,
+    "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
     "enchantment-marker-driven-half-damage-cleave": 1,
     "first-fifteen-seconds-castle-damage-immunity": 1,
     "per-player-building-count-income-multiplier": 1,

@@ -3665,6 +3665,24 @@ def _extract_building_spell_mechanics(
     _manual_damage_index, manual_damage = one_call(snow_manual, "__wurst_safe_UnitDamageTarget")
     if not any(token.kind == "ident" and token.text == "DAMAGE_TYPE_UNIVERSAL" for token in manual_damage[6]):
         raise ValueError("Snowveil detonation damage type changed")
+    _snow_target_start, snow_target = body(
+        "BuildingSpellClosure_registerBuildingSpellWithTarget_SnowveilFountain_cast_registerBuildingSpellWithTarget_SnowveilFountain"
+    )
+    snow_target_text = [token.text for token in snow_target]
+    if not {"GetSpellTargetX", "GetSpellTargetY", "nullTimer", "explodeSnowInArea"}.issubset(snow_target_text):
+        raise ValueError("Snowveil manual detonation cast flow changed")
+    _snow_cooldown_cb_start, snow_cooldown_cb = body(
+        "CallbackSingle_nullTimer_SnowveilFountain_call_nullTimer_SnowveilFountain"
+    )
+    snow_cooldown_text = [token.text for token in snow_cooldown_cb]
+    if not {"unit_issueImmediateOrder", "__wurst_safe_GroupEnumUnitsOfPlayer", "popCallback"}.issubset(snow_cooldown_text):
+        raise ValueError("Snowveil manual detonation cooldown callback changed")
+    _snow_owner_cb_start, snow_owner_cb = body(
+        "ForGroupCallback_forUnitsOfPlayer_nullTimer_SnowveilFountain_callback_forUnitsOfPlayer_nullTimer_SnowveilFountain"
+    )
+    snow_owner_text = [token.text for token in snow_owner_cb]
+    if not {"aW", "bW", "Pcb", "WV", "VV", "__wurst_safe_BlzStartUnitAbilityCooldown"}.issubset(snow_owner_text):
+        raise ValueError("Snowveil owner-wide manual cooldown propagation changed")
     add(
         "h07W",
         "team-snowfield",
@@ -3687,12 +3705,23 @@ def _extract_building_spell_mechanics(
             "manual_explosion_damage_type": "universal",
             "manual_explosion_normal_cooldown_seconds": _decimal_text(snow_constants["WV"]),
             "manual_explosion_Pcb_cooldown_seconds": _decimal_text(snow_constants["VV"]),
+            "manual_explosion_issues_stop_to_casting_fountain": True,
+            "manual_explosion_cooldown_applies_to_all_owner_snowveil_fountains": True,
+            "manual_explosion_target_point_source": "GetSpellTargetX/GetSpellTargetY",
             "automatic_target_filter_status": "resolved-generated-filter-SX" if snow_filter is not None else "unresolved-generated-filter-SX",
             "automatic_target_filter_function": snow_filter["resolved_function"] if snow_filter is not None else "",
             "automatic_target_filter_predicate": snow_filter["predicate"] if snow_filter is not None else "",
             "round_end_signal_removes_all_snow_without_explosion": True,
         },
-        ("createSnowveilSnow", "vec2_setSnow", "DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain", "damageUnitsOnSnowInArea", "explodeSnowInArea", "Action_watch_SnowveilFountain_run_watch_SnowveilFountain", "FL"),
+        (
+            "createSnowveilSnow", "vec2_setSnow",
+            "DamageListener_addListener_SnowveilFountain_onEvent_addListener_SnowveilFountain",
+            "damageUnitsOnSnowInArea", "explodeSnowInArea", "Action_watch_SnowveilFountain_run_watch_SnowveilFountain",
+            "BuildingSpellClosure_registerBuildingSpellWithTarget_SnowveilFountain_cast_registerBuildingSpellWithTarget_SnowveilFountain",
+            "CallbackSingle_nullTimer_SnowveilFountain_call_nullTimer_SnowveilFountain",
+            "ForGroupCallback_forUnitsOfPlayer_nullTimer_SnowveilFountain_callback_forUnitsOfPlayer_nullTimer_SnowveilFountain",
+            "FL",
+        ),
         evidence_kind=(
             "script-direct-with-resolved-generated-target-filter"
             if snow_filter is not None else "script-direct-with-unresolved-target-filter"
@@ -5457,6 +5486,15 @@ def _extract_runtime_mode_mechanics(
         "Action_watch_ModeRaceRuntime_run_watch_ModeRaceRuntime",
         "Action_watch_UltimateRoll_run_watch_UltimateRoll",
         "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags",
+        "applyRoundLimit", "startRoundTimer", "on5beforeLimitReached", "on3beforeLimitReached",
+        "on1beforeLimitReached", "onTimeLimitReached",
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime1",
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime2",
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime3",
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime4",
+        "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser",
+        "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser1",
+        "CallbackSingle_doAfter_ModeParser_ModeParser_call_doAfter_ModeParser_ModeParser",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5638,6 +5676,52 @@ def _extract_runtime_mode_mechanics(
             if fragment not in periodic_body:
                 raise ValueError(f"mode periodic runtime changed: {periodic_name}: missing {fragment!r}")
 
+    round_limit_sources = {
+        "applyRoundLimit": (
+            b"if(IAbsBJ(RRq)>5)then oX=RRq", b"if(RRq>0)then", b"Round time limit for win",
+            b"Round time limit for draw", b"else oX=0",
+        ),
+        "startRoundTimer": (
+            b"if(not(T9==nil))then CallbackSingle_destroyCallbackSingle(T9)", b"if(not(oX==0))then",
+            b"EYq=(int_toReal((IAbsBJ(oX)-5))*60.)", b"DYq=pq:create656()", b"T9=doAfter(EYq,DYq)",
+        ),
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime4": (b"on5beforeLimitReached()",),
+        "on5beforeLimitReached": (b"5 minutes before round ends!", b"doAfter(120.,gZq)",),
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime3": (b"on3beforeLimitReached()",),
+        "on3beforeLimitReached": (b"3 minutes before round ends!", b"doAfter(120.,fZq)",),
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime2": (b"on1beforeLimitReached()",),
+        "on1beforeLimitReached": (b"1 minute before round ends!", b"doAfter(60.,eZq)",),
+        "CallbackSingle_doAfter_ModeRaceRuntime_call_doAfter_ModeRaceRuntime1": (b"onTimeLimitReached()",),
+        "onTimeLimitReached": (
+            b"kX[__wurst_ensureInt(lGb[player_getId(__wurst_safe_ForcePickRandomPlayer(oGb))])]",
+            b"kX[__wurst_ensureInt(lGb[player_getId(__wurst_safe_ForcePickRandomPlayer(nGb))])]",
+            b"if(oX>0)then", b"if(XYq>YYq)then", b"taxedIncomeRealForPlayer(bZq)",
+            b"if(ZYq>aZq)then", b"Signal_Signal_set(XW",
+        ),
+    }
+    for round_limit_name, fragments in round_limit_sources.items():
+        _start, round_limit_body = body(round_limit_name)
+        for fragment in fragments:
+            if fragment not in round_limit_body:
+                raise ValueError(f"mode round-limit runtime changed: {round_limit_name}: missing {fragment!r}")
+
+    mode_start_sources = {
+        "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser": (
+            b"ModeParser_startSelectedModesOrDefault__w3p_vmProtect()",
+        ),
+        "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser1": (
+            b"ModeParser_startSelectedModesOrDefault__w3p_vmProtect()",
+        ),
+        "CallbackSingle_doAfter_ModeParser_ModeParser_call_doAfter_ModeParser_ModeParser": (
+            b"DestroyTimerDialog", b"ModeParser_startSelectedModesOrDefault__w3p_vmProtect()",
+        ),
+    }
+    for mode_start_name, fragments in mode_start_sources.items():
+        _start, mode_start_body = body(mode_start_name)
+        for fragment in fragments:
+            if fragment not in mode_start_body:
+                raise ValueError(f"mode delayed-start callback changed: {mode_start_name}: missing {fragment!r}")
+
     return [{
         "system_id": "mode-selection-controller-and-registry",
         "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
@@ -5671,6 +5755,20 @@ def _extract_runtime_mode_mechanics(
                 "pick_race_timer_seconds": 15,
                 "pick_race_finishes_when_no_human_choices_remain_or_timer_expires": True,
             },
+            "round_limit_runtime": {
+                "enabled_only_when_absolute_minutes_gt": 5,
+                "positive_value_result": "timed-win",
+                "negative_value_result": "timed-draw",
+                "initial_warning_scheduled_at_minutes_before_limit": 5,
+                "warning_cascade_minutes_before_limit": [5, 3, 1],
+                "warning_delays_seconds": [120, 120, 60],
+                "positive_limit_primary_tiebreak": "remaining Rescue Strike count per team",
+                "positive_limit_secondary_tiebreak": "sum of taxedIncomeRealForPlayer over each team",
+                "positive_limit_final_tie_result": "draw signal XW",
+                "negative_limit_result": "draw signal XW",
+                "end_signal_ZW_is_incremented_at_time_limit": True,
+            },
+            "delayed_mode_start_callbacks_call_protected_start_selected_modes_or_default": True,
         },
         "related_rawcode_ids": [],
         "source_functions": [
@@ -5679,7 +5777,7 @@ def _extract_runtime_mode_mechanics(
             "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
             "StartResourceMode_StartResourceMode_applyChoice", mode_round_watch, ultimate_round_watch,
             "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags",
-            *periodic_mode_sources.keys(), *callback_functions,
+            *periodic_mode_sources.keys(), *round_limit_sources.keys(), *mode_start_sources.keys(), *callback_functions,
         ],
         "evidence_kind": "exact-readable-mode-registry-generated-closure-aliases-and-chat-parser-control-flow",
         "byte_offset": min(initializer_start, listener_start, parse_start),
@@ -5709,6 +5807,11 @@ def _extract_runtime_session_mechanics(
         "Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime", "onAllVotedDraw",
         "beginNextRoundReview", "CallbackPeriodic_doPeriodically_RoundEndRuntime_call_doPeriodically_RoundEndRuntime",
         "queueNextRound",
+        "markAfkCheckConfirmed", "confirmAfkCheck", "startAfkCheck", "togglePlayerAfkInternal",
+        "CallbackSingle_doAfter_AfkCheck_call_doAfter_AfkCheck",
+        "TeamVote_TeamVote_startVote", "TeamVote_TeamVote_addVote", "TeamVote_TeamVote_countEligibleVotes",
+        "TeamVote_TeamVote_checkForfeit", "TeamVote_TeamVote_reset", "initiateForfeitVote",
+        "CallbackSingle_doAfter_TeamVote_Commands_call_doAfter_TeamVote_Commands",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5882,6 +5985,92 @@ def _extract_runtime_session_mechanics(
         "evidence_kind": "exact-readable-round-review-periodic-countdown-control-flow",
         "byte_offset": min(review_offsets),
     })
+
+    afk_check_sources = [
+        ("startAfkCheck", (
+            b"if(aqb or bqb)then", b"AFK check is disabled during campaign.",
+            b"Yvo-UEb)<120.0", b"Yvo-TEb)<120.0", b"Xvo=(player_getId(Wvo)<6)",
+            b"SEb[player_getId(cwo)]=true", b"doAfter(7.5,fwo)",
+        )),
+        ("markAfkCheckConfirmed", (b"SEb[Nvo]=false",)),
+        ("confirmAfkCheck", (
+            b"markAfkCheckConfirmed(Ovo)", b"togglePlayerAfkInternal(Vvo,false)", b"force_forEach(Qvo,Svo)",
+        )),
+        ("CallbackSingle_doAfter_AfkCheck_call_doAfter_AfkCheck", (
+            b"not __wurst_ensureBool(fGb[player_getId(yvk)])", b"__wurst_ensureBool(SEb[player_getId(yvk)])",
+            b"togglePlayerAfkInternal(zvk,false)",
+        )),
+        ("togglePlayerAfkInternal", (
+            b"fGb[nvo]=true", b"fGb[nvo]=false", b"AI took control over their units", b"is no longer AFK",
+        )),
+    ]
+    afk_check_offsets = [source(name, fragments)[0] for name, fragments in afk_check_sources]
+    rows.append({
+        "system_id": "team-afk-confirmation-check",
+        "mechanic_kind": "team-confirmation-timeout-to-afk-ai-control",
+        "trigger": "manual-afk-check-command",
+        "parameters": {
+            "disabled_during_campaign": True,
+            "cooldown_seconds_per_side": 120,
+            "side_selection": "player_id < 6 -> western force; otherwise eastern force",
+            "confirmation_window_seconds": 7.5,
+            "check_marks_each_team_player_pending_confirmation": True,
+            "confirmation_clears_pending_flag": True,
+            "confirmation_clears_existing_afk_state": True,
+            "timeout_only_marks_still_pending_non_afk_players": True,
+            "timeout_effect": "togglePlayerAfkInternal(player_id,false)",
+            "afk_effect_includes_ai_control": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in afk_check_sources],
+        "evidence_kind": "exact-readable-afk-check-cooldown-confirmation-timeout-and-control-transition",
+        "byte_offset": min(afk_check_offsets),
+    })
+
+    forfeit_sources = [
+        ("initiateForfeitVote", (
+            b"not player_isIngame(Wjq)", b"dGb[player_getId(Wjq)]", b"fGb[player_getId(Wjq)]",
+            b"TeamVote_TeamVote_startVote", b"TeamVote_TeamVote_addVote", b"TeamVote_TeamVote_checkForfeit",
+        )),
+        ("TeamVote_TeamVote_startVote", (
+            b"TeamVote_requiredVotes=countNonAwayHumanPlayersInForce(vXl)", b"ForceAddPlayer(yXl,zXl)", b"doAfter(60.,xXl)",
+        )),
+        ("TeamVote_TeamVote_countEligibleVotes", (
+            b"player_isIngame(pXl)", b"not __wurst_ensureBool(dGb[player_getId(pXl)])", b"not __wurst_ensureBool(fGb[player_getId(pXl)])",
+        )),
+        ("TeamVote_TeamVote_checkForfeit", (
+            b"KXl>=JXl", b"if(HXl==nGb)then MXl=1 else MXl=0", b"noteRoundVictoryCondition(SY)",
+            b"KillUnit", b"TeamVote_TeamVote_reset(GXl)",
+        )),
+        ("CallbackSingle_doAfter_TeamVote_Commands_call_doAfter_TeamVote_Commands", (
+            b"TeamVote_cb=nil", b"force_forEach(VXl,UXl)", b"TeamVote_TeamVote_reset(TXl.this)",
+        )),
+        ("TeamVote_TeamVote_reset", (
+            b"ForceClear", b"TeamVote_requiredVotes=0", b"CallbackSingle_destroyCallbackSingle",
+        )),
+    ]
+    forfeit_offsets = [source(name, fragments)[0] for name, fragments in forfeit_sources]
+    rows.append({
+        "system_id": "team-forfeit-vote",
+        "mechanic_kind": "unanimous-eligible-team-vote-kills-own-castle",
+        "trigger": "eligible-player-forfeit-command",
+        "parameters": {
+            "ineligible_voter_states": ["not-in-game", "away", "afk"],
+            "required_votes_snapshot": "countNonAwayHumanPlayersInForce(team) at vote start",
+            "initiator_vote_is_added_immediately": True,
+            "vote_timeout_seconds": 60,
+            "eligible_vote_count_requires_in_game_non_away_non_afk": True,
+            "success_comparison": "eligible_votes >= required_votes and required_votes > 0",
+            "success_victory_condition_symbol": "SY",
+            "success_effect": "kill forfeiting team's own castle",
+            "vote_state_resets_after_success": True,
+            "vote_state_resets_on_timeout": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in forfeit_sources],
+        "evidence_kind": "exact-readable-team-vote-eligibility-timeout-and-castle-kill-control-flow",
+        "byte_offset": min(forfeit_offsets),
+    })
     return rows
 
 
@@ -5898,6 +6087,11 @@ def _extract_runtime_campaign_mechanics(
         "recordCampaignOwnerItemPurchase__w3p_vmProtect",
         "isActiveRestriction",
         "failCampaignChallenge",
+        "canApplyCampaignSupplyEffectsNow", "shouldRetryCampaignSupplyEffects", "shouldAbortCampaignSupplyEffects",
+        "applyCampaignSupplyEffectsWhenReady", "applyCampaignSupplyEffects",
+        "CallbackSingle_doAfter_CampaignSuppliesRuntime_call_doAfter_CampaignSuppliesRuntime",
+        "CampaignSupply_CampaignSupply_isPerkSupply", "CampaignSupply_CampaignSupply_isPlayerAssignedSupply",
+        "giveCampaignSupplyItemToBuilder", "giveCloudStaffToBuilder", "setCampaignAiSpeedBonus",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -6087,6 +6281,77 @@ def _extract_runtime_campaign_mechanics(
         "source_functions": [name for name, _fragments in survival_sources],
         "evidence_kind": "exact-readable-campaign-survival-periodic-control-flow",
         "byte_offset": min(survival_offsets),
+    })
+
+    if data.count(b"cpb=0.10 bpb=80") != 1:
+        raise ValueError("campaign supply retry constants changed")
+    supply_sources = [
+        ("canApplyCampaignSupplyEffectsNow", (
+            b"isModeRoundStarted()", b"not isModeRoundStartInProgress()",
+        )),
+        ("shouldRetryCampaignSupplyEffects", (
+            b"not canApplyCampaignSupplyEffectsNow()", b"V2p<bpb",
+        )),
+        ("shouldAbortCampaignSupplyEffects", (
+            b"not canApplyCampaignSupplyEffectsNow()", b"W2p>=bpb",
+        )),
+        ("CallbackSingle_doAfter_CampaignSuppliesRuntime_call_doAfter_CampaignSuppliesRuntime", (
+            b"applyCampaignSupplyEffectsWhenReady(j3k.owner,j3k.partyPlayers,j3k.ownAdded,j3k.selectedSupplies,j3k.selectedSupplyPartySlots,(j3k.attempt+1))",
+        )),
+        ("applyCampaignSupplyEffectsWhenReady", (
+            b"if shouldRetryCampaignSupplyEffects(c3p)then", b"e3p=cpb", b"doAfter(e3p,d3p)",
+            b"if shouldAbortCampaignSupplyEffects(c3p)then", b"applyCampaignSupplyEffects(X2p,Y2p,Z2p,a3p,b3p)",
+        )),
+        ("CampaignSupply_CampaignSupply_isPerkSupply", (
+            b"not(TXk.CampaignSupply_perkId==\"\")", b"string_length(TXk.CampaignSupply_perkId)>0",
+        )),
+        ("CampaignSupply_CampaignSupply_isPlayerAssignedSupply", (
+            b"CampaignSupply_CampaignSupply_isPerkSupply(UXk)", b"not(UXk.CampaignSupply_itemId==0)",
+        )),
+        ("applyCampaignSupplyEffects", (
+            b"x2p=(x2p+F2p.CampaignSupply_goldBonus)", b"y2p=(y2p+F2p.CampaignSupply_lumberBonus)",
+            b"z2p=(z2p+F2p.CampaignSupply_speedBonus)", b"if(F2p.CampaignSupply_itemId==R2)then A2p=true",
+            b"if A2p then giveCloudStaffToBuilder(H2p)end", b"applyPerkById(N2p,K2p.CampaignSupply_perkId)",
+            b"giveCampaignSupplyItemToBuilder(N2p,K2p.CampaignSupply_itemId)", b"giveCampaignSupplyItemToBuilder(P2p,K2p.CampaignSupply_itemId)",
+            b"setCampaignAiSpeedBonus(player_getId(R2p),z2p)", b"Mission supplies applied:",
+        )),
+        ("giveCampaignSupplyItemToBuilder", (
+            b"if(q2p==R2)then giveCloudStaffToBuilder(p2p)", b"unit_addProtectedItemById(r2p,q2p)",
+        )),
+        ("giveCloudStaffToBuilder", (
+            b"unit_getItemById(xdr,R2)", b"unit_addProtectedItemById(xdr,R2)", b"SetItemCharges(zdr,Adr)",
+        )),
+        ("setCampaignAiSpeedBonus", (b"Crb[BHp]=CHp",)),
+    ]
+    supply_offsets = [source(name, fragments)[0] for name, fragments in supply_sources]
+    rows.append({
+        "system_id": "campaign-mission-supply-application",
+        "mechanic_kind": "round-start-gated-retrying-party-supply-application",
+        "trigger": "campaign-mission-selected-supplies-after-round-start",
+        "parameters": {
+            "requires_round_started": True,
+            "requires_round_start_not_in_progress": True,
+            "retry_interval_seconds": 0.10,
+            "maximum_retry_attempt_index": 80,
+            "maximum_retry_horizon_seconds_nominal": 8.0,
+            "retry_callback_increments_attempt_before_reentry": True,
+            "abort_if_round_never_becomes_ready": True,
+            "cloud_machine_presence_grants_or_refills_cloud_staff_for_every_party_player": True,
+            "player_assigned_supply_definition": "perk id is nonempty OR item id is nonzero",
+            "player_assigned_perk_applies_to_selected_party_slot": True,
+            "player_assigned_item_applies_to_selected_party_slot": True,
+            "unresolved_player_slot_item_falls_back_to_every_party_player": True,
+            "positive_speed_bonus_applies_to_own_added_ai_players": True,
+            "speed_bonus_effect": "setCampaignAiSpeedBonus(player_id,total_speed_bonus)",
+            "gold_bonus_is_accumulated_for_summary_text_in_this_function": True,
+            "lumber_bonus_is_accumulated_for_summary_text_in_this_function": True,
+            "this_function_does_not_directly_add_accumulated_gold_or_lumber": True,
+            "supply_lists_are_destroyed_after_apply_or_terminal_abort": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in supply_sources],
+        "evidence_kind": "exact-readable-campaign-supply-retry-assignment-item-perk-and-ai-speed-control-flow",
+        "byte_offset": min(supply_offsets),
     })
     return rows
 
@@ -8792,6 +9057,7 @@ def _extract_runtime_system_mechanics(
         "code__onLeave_doAfter_ObeliskOfLight",
         "DamageListener_addListener_doAfter_ObeliskOfLight_onEvent_addListener_doAfter_ObeliskOfLight",
         "EE", "rollBody", "randomizeBloodFiend", "onUnitTrained",
+        "BO", "SL", "CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap", "code__onEnter_doAfter_StasisTrap",
         "syncFinishedBuildingIncome", "syncBuildingIncome",
         "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime",
         "CallbackSingle_doAfter_addAction_IncomeRuntime_call_doAfter_addAction_IncomeRuntime1",
@@ -10309,6 +10575,47 @@ def _extract_runtime_system_mechanics(
         "source_functions": ["EE", "rollBody", "randomizeBloodFiend", "onUnitTrained"],
         "evidence_kind": "exact-body-table-roll-thresholds-and-independent-trait-branches",
         "byte_offset": min(body_init_start, body_start, fiend_start, train_start),
+    })
+
+    # Stasis Trap/Totem global setup. The generated library defers setup by
+    # 0.1s, hides the stock Stasis Trap unit on map entry, and caps each custom
+    # Castle Fight totem at one per player.
+    stasis_globals_start, stasis_globals_source, _ = source("BO")
+    stasis_setup_start, stasis_setup_source, _ = source("SL")
+    stasis_callback_start, stasis_callback_source, _ = source(
+        "CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap"
+    )
+    stasis_enter_start, stasis_enter_source, _ = source("code__onEnter_doAfter_StasisTrap")
+    if b"WR=1970497636 VR=1869901684" not in stasis_globals_source:
+        raise ValueError("Stasis Trap stock unit rawcode globals changed")
+    if b"doAfter(.1,sVr)" not in stasis_setup_source:
+        raise ValueError("Stasis Trap delayed setup timing changed")
+    stasis_totem_ids = [1747990360, 1747990361, 1747990362]
+    for unit_id in stasis_totem_ids:
+        if f"SetPlayerTechMaxAllowed(V1[ZOn],{unit_id},1)".encode() not in stasis_callback_source:
+            raise ValueError(f"Stasis Totem tech-cap setup lost unit id {unit_id}")
+    if b"if(unit_getTypeId(tVr)==VR)then" not in stasis_enter_source or b"ShowUnit(vVr,false)" not in stasis_enter_source:
+        raise ValueError("stock Stasis Trap enter-region hiding changed")
+    rows.append({
+        "system_id": "stasis-totem-global-setup",
+        "mechanic_kind": "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps",
+        "trigger": "map-initialization-after-0.1-seconds-plus-unit-enter-region",
+        "parameters": {
+            "setup_delay_seconds": 0.1,
+            "stock_stasis_trap_unit_id": 1869901684,
+            "stock_stasis_trap_rawcode": "otot",
+            "stock_stasis_trap_hidden_on_enter": True,
+            "totem_unit_ids": stasis_totem_ids,
+            "totem_rawcodes": ["h07X", "h07Y", "h07Z"],
+            "maximum_allowed_per_player_each": 1,
+            "player_slot_range": [0, "bj_MAX_PLAYERS-1"],
+        },
+        "related_rawcode_ids": [1869901684, *stasis_totem_ids],
+        "source_functions": [
+            "BO", "SL", "CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap", "code__onEnter_doAfter_StasisTrap",
+        ],
+        "evidence_kind": "exact-delayed-tech-cap-and-enter-region-hide-control-flow",
+        "byte_offset": min(stasis_globals_start, stasis_setup_start, stasis_callback_start, stasis_enter_start),
     })
 
     # Building-income synchronization is delayed from construction/upgrade

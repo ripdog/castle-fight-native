@@ -189,9 +189,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
         self.assertEqual(summary["perk_mechanics"], 19)
         self.assertEqual(summary["runtime_ai_mechanics"], 4)
-        self.assertEqual(summary["runtime_session_mechanics"], 4)
+        self.assertEqual(summary["runtime_session_mechanics"], 6)
         self.assertEqual(summary["runtime_mode_mechanics"], 1)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 3)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 4)
         self.assertEqual(summary["runtime_draft_mechanics"], 3)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -449,7 +449,12 @@ class ResolvedEvidenceTests(unittest.TestCase):
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
         self.assertEqual(
             set(rows),
-            {"campaign-star-restriction-failure-hooks", "campaign-star-periodic-objectives", "campaign-survival-countdown"},
+            {
+                "campaign-star-restriction-failure-hooks",
+                "campaign-star-periodic-objectives",
+                "campaign-survival-countdown",
+                "campaign-mission-supply-application",
+            },
         )
         parameters = json.loads(rows["campaign-star-restriction-failure-hooks"]["parameters_json"])
         self.assertEqual(parameters["active_restriction_scope"], ["second-star", "third-star"])
@@ -475,8 +480,17 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(survival["completion_condition"], "remaining_seconds <= 0")
         self.assertTrue(survival["completion_kills_owner_team_castle"])
 
+        supplies = json.loads(rows["campaign-mission-supply-application"]["parameters_json"])
+        self.assertEqual(supplies["retry_interval_seconds"], 0.1)
+        self.assertEqual(supplies["maximum_retry_attempt_index"], 80)
+        self.assertEqual(supplies["maximum_retry_horizon_seconds_nominal"], 8.0)
+        self.assertTrue(supplies["cloud_machine_presence_grants_or_refills_cloud_staff_for_every_party_player"])
+        self.assertTrue(supplies["player_assigned_perk_applies_to_selected_party_slot"])
+        self.assertTrue(supplies["positive_speed_bonus_applies_to_own_added_ai_players"])
+        self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
+
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 3)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 4)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -517,6 +531,14 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(parameters["round_end_signal_starts_next_round_via_mode_runtime"])
         self.assertEqual(parameters["ultimate_round_end_restores_all_building_availability_for_player_ids"], [0, 11])
         self.assertTrue(parameters["ultimate_round_end_clears_roll_texttags"])
+        round_limit = parameters["round_limit_runtime"]
+        self.assertEqual(round_limit["enabled_only_when_absolute_minutes_gt"], 5)
+        self.assertEqual(round_limit["warning_cascade_minutes_before_limit"], [5, 3, 1])
+        self.assertEqual(round_limit["warning_delays_seconds"], [120, 120, 60])
+        self.assertEqual(round_limit["positive_limit_primary_tiebreak"], "remaining Rescue Strike count per team")
+        self.assertEqual(round_limit["positive_limit_secondary_tiebreak"], "sum of taxedIncomeRealForPlayer over each team")
+        self.assertEqual(round_limit["negative_limit_result"], "draw signal XW")
+        self.assertTrue(parameters["delayed_mode_start_callbacks_call_protected_start_selected_modes_or_default"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["runtime_mode_mechanic_rows"], 1)
@@ -531,6 +553,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "player-leave-autobalance-and-team-empty-resolution",
                 "unanimous-draw-round-restart",
                 "round-end-review-countdown",
+                "team-afk-confirmation-check",
+                "team-forfeit-vote",
             },
         )
 
@@ -579,8 +603,22 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(review["next_round_signal_when_PGb"], "YW")
         self.assertEqual(review["next_round_signal_otherwise"], "bX")
 
+        afk_check = json.loads(rows["team-afk-confirmation-check"]["parameters_json"])
+        self.assertEqual(afk_check["cooldown_seconds_per_side"], 120)
+        self.assertEqual(afk_check["confirmation_window_seconds"], 7.5)
+        self.assertTrue(afk_check["disabled_during_campaign"])
+        self.assertTrue(afk_check["timeout_only_marks_still_pending_non_afk_players"])
+        self.assertTrue(afk_check["afk_effect_includes_ai_control"])
+
+        forfeit = json.loads(rows["team-forfeit-vote"]["parameters_json"])
+        self.assertEqual(forfeit["vote_timeout_seconds"], 60)
+        self.assertEqual(forfeit["ineligible_voter_states"], ["not-in-game", "away", "afk"])
+        self.assertEqual(forfeit["success_effect"], "kill forfeiting team's own castle")
+        self.assertTrue(forfeit["vote_state_resets_after_success"])
+        self.assertTrue(forfeit["vote_state_resets_on_timeout"])
+
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_session_mechanic_rows"], 4)
+        self.assertEqual(summary["runtime_session_mechanic_rows"], 6)
 
     def test_runtime_ai_damage_signals_rescue_strike_and_strategic_aura_observer_are_normalized(self) -> None:
         with (self.resolved / "runtime-ai-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -1213,7 +1251,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 23)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 24)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "allied-production-queue-synchronization-and-order-reset": 1,
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -1238,10 +1276,18 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "team-shrine-independent-clone-rolls-and-train-transformations": 1,
             "team-stacked-one-time-delayed-unit-revival": 1,
             "spawn-area-marker-and-conditional-pathing-release-pulse": 1,
+            "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 23)
+        self.assertEqual(len(rows), 24)
+        stasis = json.loads(rows["stasis-totem-global-setup"]["parameters_json"])
+        self.assertEqual(stasis["setup_delay_seconds"], 0.1)
+        self.assertEqual(stasis["stock_stasis_trap_rawcode"], "otot")
+        self.assertTrue(stasis["stock_stasis_trap_hidden_on_enter"])
+        self.assertEqual(stasis["totem_rawcodes"], ["h07X", "h07Y", "h07Z"])
+        self.assertEqual(stasis["maximum_allowed_per_player_each"], 1)
+        self.assertEqual([totem["name"] for totem in stasis["totems"]], ["Stasis Totem", "Healing Totem", "Endurance Totem"])
 
         power = json.loads(rows["power-plant-power-surge"]["parameters_json"])
         self.assertEqual(power["building_armor_bonus"], 2)
@@ -2150,6 +2196,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(snow["incoming_damage_reduction_percent"], 20)
         self.assertEqual(snow["manual_explosion_radius"], "384")
         self.assertEqual(snow["manual_explosion_damage"], "350")
+        self.assertTrue(snow["manual_explosion_issues_stop_to_casting_fountain"])
+        self.assertTrue(snow["manual_explosion_cooldown_applies_to_all_owner_snowveil_fountains"])
+        self.assertEqual(snow["manual_explosion_target_point_source"], "GetSpellTargetX/GetSpellTargetY")
         self.assertEqual(rows["h07W"]["evidence_kind"], "script-direct-with-resolved-generated-target-filter")
 
         thunder = json.loads(rows["h07R"]["parameters_json"])
