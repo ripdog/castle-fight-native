@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "releases": [
+    {
+      "map_version": "9.27",
+      "revision": "r1",
+      "declared_release": "Castle Fight DE Beta 9.27",
+      "author": "Frotty",
+      "map_info_format_version": 31,
+      "availability": "supported-development-subset",
+      "source_archive": {
+        "path": "docs/original_map/5329_Castle_Fight_DE_beta9.27_w3p.w3x",
+        "sha256": "9e3519bbc2a0fb6145460dd8b5730e9a35b2fd5923d63404eaf31e3618208a88",
+        "bytes": 15934076
+      },
+      "warcraft_base_data": {
+        "map_declared_version": "2.0.4.23745",
+        "resolved_version": "2.0.4.23745",
+        "manifest_path": "docs/original_map/extracted/resolved/base-data-manifest.json",
+        "manifest_sha256": "0b300249cd2eb57c2849439aea974666d2f44d88aacf087a93120348c696bcfe"
+      },
+      "extraction": {
+        "status": "retained",
+        "schema_version": 1,
+        "extractor_revision": "4aed692889395d8db497672ce4b8bac084ca929d",
+        "git_tree": "bb38bb165fcee1371557208f99de6cf69c70ba1e",
+        "working_alias": "docs/original_map/extracted",
+        "summary_path": "docs/original_map/extracted/summary.json"
+      },
+      "runtime_content": {
+        "status": "supported-development-subset",
+        "content_revision": "cf-native-dev-slice-r1",
+        "source_revision": "cb8479cd81bfa3e28cfa002591f6fb98a3a667e5",
+        "path": "crates/sim/data/castle-fight/9.27",
+        "native_effect_tuning_sha256": "f04561806472ccd360f648c62664b786d3e759fc917b91e39fa4c7ea2edd5d60",
+        "binding_registry_path": "crates/sim/data/castle-fight/native-effect-bindings.json",
+        "binding_registry_sha256": "1b57f8866415aa8fc318696f94b43d947669f155adfb6d178952ae8332cb2c5c"
+      }
+    },
+    {
+      "map_version": "9.32",
+      "revision": "r1",
+      "declared_release": "Castle Fight DE Beta 9.32",
+      "author": "Frotty",
+      "map_info_format_version": 31,
+      "availability": "archived",
+      "source_archive": {
+        "path": "docs/original_map/releases/9.32/r1/source.w3x",
+        "sha256": "4181d8aecc3bfe15f66fa071d079ea62deda1f663f5e19f5dc34edd7401b738c",
+        "bytes": 14730934
+      },
+      "warcraft_base_data": {
+        "map_declared_version": "2.0.4.23745",
+        "resolved_version": null,
+        "manifest_path": null,
+        "manifest_sha256": null
+      },
+      "extraction": {
+        "status": "pending",
+        "schema_version": 1,
+        "extractor_revision": null,
+        "git_tree": null,
+        "working_alias": "docs/original_map/releases/9.32/r1/extracted",
+        "summary_path": null
+      },
+      "runtime_content": {
+        "status": "unsupported",
+        "content_revision": null,
+        "source_revision": null,
+        "path": null,
+        "native_effect_tuning_sha256": null,
+        "binding_registry_path": "crates/sim/data/castle-fight/native-effect-bindings.json",
+        "binding_registry_sha256": "1b57f8866415aa8fc318696f94b43d947669f155adfb6d178952ae8332cb2c5c"
+      }
+    }
+  ]
+}

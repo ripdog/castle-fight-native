@@ -1,21 +1,19 @@
 # Original Castle Fight map evidence
 
-This directory keeps the original Warcraft III map used as compatibility evidence and a reproducible plaintext extraction of its gameplay/map data.
+This directory keeps original Warcraft III maps used as compatibility evidence and reproducible plaintext extractions of their gameplay/map data. Exact source/extraction revisions are registered in `releases.json`; a map-version label by itself is not a reproducible identity.
 
-Source map:
+The retained 9.27 baseline source is `5329_Castle_Fight_DE_beta9.27_w3p.w3x` (SHA-256 `9e3519bbc2a0fb6145460dd8b5730e9a35b2fd5923d63404eaf31e3618208a88`). It identifies itself as **Castle Fight DE Beta 9.27**, authored by **Frotty**. Its map-info format is 31 and records Warcraft III version `2.0.4.23745`. The committed `extracted/` tree is the working alias for registered revision `9.27/r1`; the manifest also records its immutable Git tree identity so later corrected extractions cannot silently rewrite that historical revision.
 
-`5329_Castle_Fight_DE_beta9.27_w3p.w3x`
+The 9.32 source archive is retained separately under `releases/9.32/r1/source.w3x` (SHA-256 `4181d8aecc3bfe15f66fa071d079ea62deda1f663f5e19f5dc34edd7401b738c`). Its internal W3I identifies **Castle Fight DE Beta 9.32**, authored by Frotty, with format 31 and declared Warcraft version `2.0.4.23745`. It is registered as **archived only**: no reviewed 9.32 extraction or native runtime-content compatibility is claimed yet.
 
-SHA-256: `9e3519bbc2a0fb6145460dd8b5730e9a35b2fd5923d63404eaf31e3618208a88`
-
-The map identifies itself as **Castle Fight DE Beta 9.27**, authored by **Frotty**. Its map-info format is 31 and records Warcraft III version `2.0.4.23745`.
-
-Do not edit files under `extracted/` by hand. The full inherited-data extraction uses the matching local Warcraft III install and is regenerated with:
+Do not edit generated extraction files by hand. Retained extraction destinations are append-only by default. Resolve and verify an exact registered revision with:
 
 ```sh
-WC3_INSTALL=/mnt/gamessd_linux/Games/Warcraft3 tools/wc3-map/extract-base-data.sh
-tools/wc3-map/extract.sh
+python tools/wc3-map/release_manifest.py list
+python tools/wc3-map/release_manifest.py verify 9.27 r1
 ```
+
+For a registered revision whose extraction status is still pending, run `tools/wc3-map/extract-release.sh <version> <revision>` after preparing the matching Warcraft base-data cache. The underlying extractor refuses to overwrite a non-empty output directory unless `CF_MAP_EXTRACT_OVERWRITE=1` is explicitly set for disposable scratch output. A corrected retained extraction therefore gets a new revision rather than replacing the old one.
 
 See `tools/wc3-map/README.md` for tool provenance, build instructions, archive-protection details, format caveats, and the meaning of each generated file.
 

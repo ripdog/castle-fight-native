@@ -10,6 +10,7 @@ pub struct MapVersion {
 
 impl MapVersion {
     pub const CASTLE_FIGHT_9_27: Self = Self::new(9, 27);
+    pub const CASTLE_FIGHT_9_32: Self = Self::new(9, 32);
 
     #[must_use]
     pub const fn new(major: u16, minor: u16) -> Self {
@@ -77,5 +78,17 @@ impl MapVersionRange {
             || (version.major == self.first.major && version.minor >= self.first.minor))
             && (version.major < self.last.major
                 || (version.major == self.last.major && version.minor <= self.last.minor))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registered_castle_fight_versions_have_stable_numeric_identities() {
+        assert_eq!("9.27".parse(), Ok(MapVersion::CASTLE_FIGHT_9_27));
+        assert_eq!("9.32".parse(), Ok(MapVersion::CASTLE_FIGHT_9_32));
+        assert_ne!(MapVersion::CASTLE_FIGHT_9_27, MapVersion::CASTLE_FIGHT_9_32);
     }
 }

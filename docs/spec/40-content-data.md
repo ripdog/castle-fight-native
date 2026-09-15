@@ -79,6 +79,8 @@ Extracted map data and validated content MUST retain independently addressable s
 
 Storage MAY deduplicate unchanged data or use generated Rust tables, provided each version resolves to a complete, reproducible content snapshot. A single mutable extraction directory or an implicit "latest" lookup is insufficient as the runtime source of historical match content.
 
+The repository registry for retained source/extraction revisions is `docs/original_map/releases.json`. A registered release key is the exact pair `(map_version, revision)`; callers MUST NOT silently substitute another revision. A retained extraction may be stored by immutable Git tree identity plus a working-tree alias, allowing historical revisions to remain addressable without duplicating very large generated trees on disk. `archived` means source evidence is retained but does not imply executable native behavior coverage. `supported-development-subset` is explicitly restricted content for development and MUST NOT be presented as a complete historical ruleset.
+
 Map version, content revision/hash, and simulation compatibility version are distinct identities. A map-version label alone does not establish multiplayer or replay compatibility. The canonical bundle MUST include the resolved native behavior bindings described in section 14.1 as well as numeric data, so changing a selected implementation changes compatibility identity even when its tuning is unchanged.
 
 ## 5. Source format
