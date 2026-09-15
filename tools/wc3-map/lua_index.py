@@ -2731,6 +2731,44 @@ def _extract_building_spell_mechanics(
         evidence_kind="script-direct-with-protected-target-filters",
     )
 
+    # Hex/Banish control effects share one delayed re-engagement chain. After
+    # one second the target is put back on the Castle Fight attack order. A
+    # Defender then has Defend restored 44.5 seconds later, followed by another
+    # attack order after 0.5 seconds, matching the 45-second Hex window.
+    _chaos_control_start, chaos_control = body("chaosControlDummy")
+    _chaos_reengage_index, chaos_reengage = one_call(chaos_control, "doAfter")
+    if decimal_argument(chaos_reengage[0]) != Decimal(1):
+        raise ValueError("shared chaos-control reengage delay changed")
+    reengage_1_name = "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime"
+    _reengage_1_start, reengage_1 = body(reengage_1_name)
+    _reengage_1_delay_index, reengage_1_delay = one_call(reengage_1, "doAfter")
+    if decimal_argument(reengage_1_delay[0]) != Decimal("44.5"):
+        raise ValueError("Defender post-control Defend restore delay changed")
+    if "1747989313" not in {token.text for token in reengage_1} or len(call_sites(reengage_1, "orderCodeAttack")) != 1:
+        raise ValueError("shared control-spell reengage target/Defender branch changed")
+    reengage_2_name = "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime"
+    _reengage_2_start, reengage_2 = body(reengage_2_name)
+    _reengage_defend_index, reengage_defend = one_call(reengage_2, "unit_issueImmediateOrderById")
+    if integer_argument(reengage_defend[1]) != 852055:
+        raise ValueError("Defender post-control Defend order changed")
+    _reengage_2_delay_index, reengage_2_delay = one_call(reengage_2, "doAfter")
+    if decimal_argument(reengage_2_delay[0]) != Decimal("0.5"):
+        raise ValueError("Defender post-control attack-resume delay changed")
+    reengage_3_name = "CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime"
+    _reengage_3_start, reengage_3 = body(reengage_3_name)
+    if len(call_sites(reengage_3, "orderCodeAttack")) != 1:
+        raise ValueError("Defender final post-control attack resume changed")
+    control_reengage = {
+        "initial_reengage_delay_seconds": "1",
+        "initial_reengage_action": "orderCodeAttack",
+        "defender_unit_id": 1747989313,
+        "defender_defend_restore_delay_seconds_after_initial_reengage": "44.5",
+        "defender_defend_order_id": 852055,
+        "defender_attack_resume_delay_seconds_after_defend": "0.5",
+        "defender_final_action": "orderCodeAttack",
+    }
+    control_reengage_sources = (reengage_1_name, reengage_2_name, reengage_3_name)
+
     # Magic Ruin: one random live enemy, shield-gated, followed by a uniform
     # ten-way branch table. Branches 8 and 9 deliberately have no gameplay
     # effect beyond the E2E bookkeeping call.
@@ -2751,6 +2789,7 @@ def _extract_building_spell_mechanics(
         {
             "selection": "uniform-GetRandomInt(0,9)",
             "branch_probability_percent": 10,
+            "control_reengage": control_reengage,
             "branches": [
                 {"roll": 0, "effect": "explode-target", "increments_o0": True},
                 {"roll": 1, "effect": "direct-damage", "damage": 50000, "attack_type": "normal", "damage_type": "death"},
@@ -2764,7 +2803,7 @@ def _extract_building_spell_mechanics(
                 {"roll": 9, "effect": "no-gameplay-effect"},
             ],
         },
-        ("magicRuinSpell", "chaosControlDummy"),
+        ("magicRuinSpell", "chaosControlDummy", *control_reengage_sources),
     )
 
     # Eraser tiers share one implementation. A random live enemy chooses the
@@ -3100,13 +3139,16 @@ def _extract_building_spell_mechanics(
         ("frostSpell", meteor_filter_name),
     )
 
-    # City of Magic: shield-gated random live enemy Hex. The linked A018 object
-    # carries the actual 45-second duration; generated re-engage callbacks are
-    # implementation detail and remain present in building-spell-evidence.tsv.
+    # City of Magic: shield-gated random live enemy Hex. A018 supplies the
+    # 45-second native duration; the shared delayed chain above restores normal
+    # Castle Fight attack/Defend behavior around that control window.
     _hex_start, hex_spell = body("hexSpell")
     _hex_cast_index, hex_cast = one_call(hex_spell, "dummyCastTargetWithVision")
     if integer_argument(hex_cast[1]) != rawcode("A018") or integer_argument(hex_cast[2]) != 852502:
         raise ValueError("City of Magic Hex cast changed")
+    _hex_reengage_index, hex_reengage = one_call(hex_spell, "doAfter")
+    if decimal_argument(hex_reengage[0]) != Decimal(1):
+        raise ValueError("City of Magic Hex reengage delay changed")
     add(
         "h00Z",
         "dummy-target-ability",
@@ -3118,8 +3160,9 @@ def _extract_building_spell_mechanics(
             "order_id": 852502,
             "dummy_lifetime_seconds": "1",
             "effect_parameters_source": "linked-ability-object-data",
+            "control_reengage": control_reengage,
         },
-        ("hexSpell",),
+        ("hexSpell", *control_reengage_sources),
     )
 
     # Blue/Red Shield Generator share the visible randomAllySapper selector.
@@ -3745,6 +3788,11 @@ def _extract_building_spell_mechanics(
                 raise ValueError(f"Thunderpaw listener constant changed: {expected}")
         if len(call_sites(listener, "__wurst_safe_BlzGetUnitWeaponRealField")) != 2:
             raise ValueError("Thunderpaw melee range check changed")
+        _guard_start, guard = body(
+            "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire"
+        )
+        if not {"QS", "procSource"}.issubset({token.text for token in guard}):
+            raise ValueError("Thunderpaw zero-delay proc-source guard changed")
         _splash_start, splash = body(
             "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire"
         )
@@ -3770,8 +3818,17 @@ def _extract_building_spell_mechanics(
                 "damage_type": "universal",
                 "attack_type": "normal",
                 "round_end_signal_resets_all_charge_slots": True,
+                "proc_source_reentrancy_guard": "QS",
+                "proc_source_guard_cleared_after_zero_delay": True,
             },
-            (thunder_handler, listener_name, "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire", "Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire"),
+            (
+                thunder_handler,
+                "CallbackSingle_doAfter_ThunderpawSpire_call_doAfter_ThunderpawSpire",
+                listener_name,
+                "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire",
+                "ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire",
+                "Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire",
+            ),
         )
 
     # Fold the already-validated corpse-dependent building mechanics into this
@@ -5390,6 +5447,67 @@ def _extract_runtime_ai_mechanics(
     )
 
     add(
+        "ai-team-production-sync-targeting",
+        "ai-owned-production-building-target-order-synchronization",
+        "production-building-commit-or-ai-start-resync",
+        {
+            "rewrites_damage": False,
+            "ai_enabled_flag": "aIb[player_id]",
+            "candidate_requires_structure": True,
+            "candidate_rejects_cage_buildings": True,
+            "candidate_requires_catalog_spawn_unit": True,
+            "team_partition": "normal and legendary production buildings are synchronized independently",
+            "team_representative_selection": "highest CFBuilding_spawnTime within each partition",
+            "new_building_sync_rule": "if existing representative spawnTime >= new spawnTime, AI-owned new building targets existing representative; otherwise new building becomes representative and AI-owned old representative targets new building",
+            "ai_start_resync_rule": "refresh both team representatives, then every AI-owned candidate targets the same-partition representative when it is not itself",
+            "target_order_id": 851980,
+            "orders_are_deferred_with_null_timer": True,
+            "team_slots_scanned": [0, 11],
+            "team_indices_used": [0, 1],
+        },
+        [
+            ("updateStatsOnBuild", (
+                b"M8r=(not unit_isCageBuilding(G8r))", b"I8r.CFBuilding_unitId>0", b"handleSync(J8r,I8r.CFBuilding_isLegendary,G8r,I8r)",
+            )),
+            ("handleSync", (
+                b"T8r=qU[P8r]", b"U8r=pU[P8r]", b"V8r.CFBuilding_spawnTime>=S8r.CFBuilding_spawnTime",
+                b"aIb[player_getId(unit_getOwner(R8r))]", b"pU[P8r]=R8r", b"qU[P8r]=R8r", b"nullTimer",
+            )),
+            ("isSyncCandidate", (
+                b"UNIT_TYPE_STRUCTURE", b"unit_isCageBuilding(d9r)", b"CFBuilding_unitId>0",
+            )),
+            ("isTeamParticipant", (b"force_containsPlayer(oGb,f9r)", b"force_containsPlayer(nGb,f9r)")),
+            ("refreshTeamSyncTargets", (
+                b"bj_MAX_PLAYERS-1", b"CFBuilding_isLegendary", b"CFBuilding_spawnTime>m9r.CFBuilding_spawnTime",
+                b"CFBuilding_spawnTime>l9r.CFBuilding_spawnTime", b"qU[i9r]=j9r", b"pU[i9r]=k9r",
+            )),
+            ("resyncAiControlledBuildings", (
+                b"refreshTeamSyncTargets(A9r)", b"GroupEnumUnitsOfPlayer", b"isSyncCandidate(C9r)",
+                b"if D9r.CFBuilding_isLegendary then F9r=pU[A9r]else F9r=qU[A9r]end", b"nullTimer(G9r)",
+            )),
+            ("startAi", (b"aIb[Clq]=true", b"resyncAiControlledBuildings(Blq)")),
+            ("CallbackSingle_doAfter_CustomAI_call_doAfter_CustomAI", (
+                b"AiExecutor_new_AiExecutor(h1l.p)", b"resyncAiControlledBuildings(h1l.p)",
+            )),
+            ("CallbackSingle_nullTimer_TeamCompositionStats_call_nullTimer_TeamCompositionStats", (
+                b"unit_issueTargetOrderById(D5n.newUnit,851980,pU[D5n.team])",
+            )),
+            ("CallbackSingle_nullTimer_TeamCompositionStats_call_nullTimer_TeamCompositionStats1", (
+                b"unit_issueTargetOrderById(F5n.existingLegSync,851980,F5n.newUnit)",
+            )),
+            ("CallbackSingle_nullTimer_TeamCompositionStats_call_nullTimer_TeamCompositionStats2", (
+                b"unit_issueTargetOrderById(H5n.newUnit,851980,H5n.existingNormalSync)",
+            )),
+            ("CallbackSingle_nullTimer_TeamCompositionStats_call_nullTimer_TeamCompositionStats3", (
+                b"unit_issueTargetOrderById(J5n.existingNormalSync,851980,J5n.newUnit)",
+            )),
+            ("CallbackSingle_nullTimer_TeamCompositionStats_call_nullTimer_TeamCompositionStats4", (
+                b"unit_issueTargetOrderById(L5n.u,851980,L5n.target)",
+            )),
+        ],
+    )
+
+    add(
         "ai-rescue-strike-controller",
         "damage-triggered-ai-rescue-strike-targeting-and-throttling",
         "damage-event-on-low-hp-structure",
@@ -5722,7 +5840,7 @@ def _extract_runtime_mode_mechanics(
             if fragment not in mode_start_body:
                 raise ValueError(f"mode delayed-start callback changed: {mode_start_name}: missing {fragment!r}")
 
-    return [{
+    rows = [{
         "system_id": "mode-selection-controller-and-registry",
         "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
         "trigger": "host-player-chat-message-during-mode-selection",
@@ -5783,6 +5901,65 @@ def _extract_runtime_mode_mechanics(
         "byte_offset": min(initializer_start, listener_start, parse_start),
     }]
 
+    w3c_callback = "CallbackSingle_doAfter_W3Champions_call_doAfter_W3Champions"
+    w3c_default_draft_callback = "CallbackSingle_doAfter_doAfter_W3Champions_call_doAfter_doAfter_W3Champions"
+    w3c_start_game_callback = "CallbackSingle_doAfter_doAfter_W3Champions_call_doAfter_doAfter_W3Champions1"
+    for name in (w3c_callback, w3c_default_draft_callback, w3c_start_game_callback, "startGame"):
+        if name not in functions_by_name:
+            raise ValueError(f"W3Champions bootstrap source missing: {name}")
+    w3c_start, w3c_source = body(w3c_callback)
+    w3c_draft_start, w3c_draft_source = body(w3c_default_draft_callback)
+    w3c_game_cb_start, w3c_game_cb_source = body(w3c_start_game_callback)
+    start_game_start, start_game_source = body("startGame")
+    if data.count(b"eks=gC:create1155()doAfter(0.02,eks)") != 1:
+        raise ValueError("W3Champions bootstrap initial delay changed")
+    for fragment in (
+        b'player_getName(V1[23])=="FLO"', b"eY=true", b"WX=3.", b"if OGb then",
+        b"applyW3ChampionsAutoModes__w3p_vmProtect()", b"Ocb=true", b"OGb=false",
+        b"if T8 then", b"doAfter(2.,jao)", b"doAfter(2.,kao)",
+    ):
+        if fragment not in w3c_source:
+            raise ValueError(f"W3Champions bootstrap changed: missing {fragment!r}")
+    if b"startDefaultDraft__w3p_vmProtect()" not in w3c_draft_source:
+        raise ValueError("W3Champions default-draft handoff changed")
+    if b"startGame()" not in w3c_game_cb_source:
+        raise ValueError("W3Champions ordinary game-start handoff changed")
+    for fragment in (b"OGb=false", b"LGb==(-1)", b"setBaseMode(false)", b"TriggerExecute(PFb)"):
+        if fragment not in start_game_source:
+            raise ValueError(f"W3Champions startGame semantics changed: missing {fragment!r}")
+    rows.append({
+        "system_id": "w3champions-ladder-bootstrap",
+        "mechanic_kind": "external-ladder-detection-protected-auto-mode-and-game-start-handoff",
+        "trigger": "startup-after-0.02-seconds",
+        "parameters": {
+            "detection_player_id": 23,
+            "detection_player_name": "FLO",
+            "w3champions_flag_symbol": "eY",
+            "w3champions_flag_set_true": True,
+            "global_draw_player_removal_delay_symbol": "WX",
+            "global_draw_player_removal_delay_seconds": 3,
+            "mode_application_requires_OGb": True,
+            "protected_auto_mode_function": "applyW3ChampionsAutoModes__w3p_vmProtect",
+            "protected_auto_mode_payload_status": "protected-vm-not-normalized-here",
+            "marks_mode_selection_finalized_Ocb": True,
+            "clears_OGb_after_protected_auto_mode_application": True,
+            "post_mode_start_delay_seconds": 2,
+            "T8_true_handoff": "startDefaultDraft__w3p_vmProtect",
+            "T8_false_handoff": "startGame",
+            "protected_default_draft_payload_status": "protected-vm-not-normalized-here",
+            "start_game_requires_selected_mode_LGb_not_minus_one": True,
+            "start_game_sets_base_mode_false": True,
+            "start_game_executes_trigger_symbol": "PFb",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            w3c_callback, w3c_default_draft_callback, w3c_start_game_callback, "startGame",
+        ],
+        "evidence_kind": "exact-readable-w3champions-wrapper-with-protected-mode-and-draft-payloads-explicitly-unresolved",
+        "byte_offset": min(w3c_start, w3c_draft_start, w3c_game_cb_start, start_game_start),
+    })
+    return rows
+
 
 def _extract_runtime_session_mechanics(
     data: bytes,
@@ -5794,6 +5971,9 @@ def _extract_runtime_session_mechanics(
         "applyNoAfkMode", "beginRoundStartModeSection", "completeRoundStart",
         "startIdleDetectionIfEnabled", "stopIdleDetection", "checkPlayerIdle", "recordPlayerAction",
         "togglePlayerAway", "campaignBlocksAwayControl",
+        "gF", "CallbackSingle_doAfter_CameraMovementDetection_call_doAfter_CameraMovementDetection",
+        "code__registerPlayerEvent_doAfter_CameraMovementDetection",
+        "Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection",
         "CallbackPeriodic_doPeriodically_IdleDetectionRuntime_call_doPeriodically_IdleDetectionRuntime",
         "Action_watch_IdleDetectionRuntime_run_watch_IdleDetectionRuntime",
         "EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime",
@@ -5812,6 +5992,11 @@ def _extract_runtime_session_mechanics(
         "TeamVote_TeamVote_startVote", "TeamVote_TeamVote_addVote", "TeamVote_TeamVote_countEligibleVotes",
         "TeamVote_TeamVote_checkForfeit", "TeamVote_TeamVote_reset", "initiateForfeitVote",
         "CallbackSingle_doAfter_TeamVote_Commands_call_doAfter_TeamVote_Commands",
+        "uL", "voteForGameDraw",
+        "CallbackSingle_doAfter_Commands_call_doAfter_Commands2",
+        "CallbackSingle_doAfter_Commands_call_doAfter_Commands3",
+        "ForceCallback_forEach_Commands_run_forEach_Commands",
+        "ForceCallback_forEach_Commands_run_forEach_Commands1",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5840,6 +6025,16 @@ def _extract_runtime_session_mechanics(
         ("EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime", (b"if __wurst_ensureBool(dGb[bDm])then togglePlayerAway(bDm)end", b"recordPlayerAction(aDm)")),
         ("EventListener_add_IdleDetectionRuntime_onEvent_add_IdleDetectionRuntime1", (b"recordPlayerAction(GetTriggerPlayer())",)),
         ("recordPlayerAction", (b"iY[player_getId(wEq)]=getRoundTimeSeconds()",)),
+        ("gF", (b"doAfter(.1,SGp)",)),
+        ("CallbackSingle_doAfter_CameraMovementDetection_call_doAfter_CameraMovementDetection", (
+            b"EVENT_PLAYER_MOUSE_MOVE", b"registerPlayerEvent", b"watch(rVk)",
+        )),
+        ("code__registerPlayerEvent_doAfter_CameraMovementDetection", (
+            b"iY[player_getId(TGp)]=getRoundTimeSeconds()",
+        )),
+        ("Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection", (
+            b"Signal_Signal_get(ZW)", b"if(yVk>12)then break", b"iY[yVk]=0",
+        )),
         ("togglePlayerAway", (b"dGb[vvo]=true", b"dGb[vvo]=false", b"ALLIANCE_SHARED_CONTROL", b"bj_ALLIANCE_ALLIED_ADVUNITS", b"updatePlayerAlliances()")),
         ("campaignBlocksAwayControl", (b"AFK and away control are disabled during campaign.", b"return true")),
     ]
@@ -5858,6 +6053,9 @@ def _extract_runtime_session_mechanics(
             "general_warning_idle_seconds": 60,
             "general_auto_away_idle_seconds": 120,
             "player_activity_clears_away_immediately": True,
+            "mouse_movement_updates_player_activity_timestamp": True,
+            "mouse_movement_listener_install_delay_seconds": 0.1,
+            "round_end_resets_activity_timestamps_for_player_indices": [0, 12],
             "manual_away_blocked_during_campaign": True,
             "away_grants_allied_advanced_unit_control": True,
             "away_restores_prior_shared_control_state_when_cleared": True,
@@ -6071,6 +6269,48 @@ def _extract_runtime_session_mechanics(
         "evidence_kind": "exact-readable-team-vote-eligibility-timeout-and-castle-kill-control-flow",
         "byte_offset": min(forfeit_offsets),
     })
+
+    game_draw_sources = [
+        ("uL", (b"WX=15.",)),
+        ("voteForGameDraw", (
+            b"not player_isIngame(Xjq)", b"dGb[player_getId(Xjq)]", b"fGb[player_getId(Xjq)]",
+            b"countNonAwayHumanPlayersInForce(jib)==0", b"doAfter(60.,Yjq)",
+            b"countNonAwayHumanPlayersInForce(jib)>=(countNonAwayHumanPlayersInForce(nGb)+countNonAwayHumanPlayersInForce(oGb))",
+            b"dY=true", b"doAfter(ekq,bkq)",
+        )),
+        ("CallbackSingle_doAfter_Commands_call_doAfter_Commands2", (
+            b"The draw vote has expired!", b"ForceClear(HRl)",
+        )),
+        ("ForceCallback_forEach_Commands_run_forEach_Commands", (b"MMD_flagPlayer(KRl,0)",)),
+        ("ForceCallback_forEach_Commands_run_forEach_Commands1", (b"MMD_flagPlayer(NRl,0)",)),
+        ("CallbackSingle_doAfter_Commands_call_doAfter_Commands3", (
+            b"if player_isIngame(V1[QRl])then", b"RemovePlayerPreserveUnitsBJ", b"PLAYER_GAME_RESULT_NEUTRAL",
+        )),
+    ]
+    game_draw_offsets = [source(name, fragments)[0] for name, fragments in game_draw_sources]
+    rows.append({
+        "system_id": "global-draw-vote-match-cancel",
+        "mechanic_kind": "all-eligible-human-vote-cancels-match-and-removes-players",
+        "trigger": "eligible-player-global-draw-command",
+        "parameters": {
+            "ineligible_voter_states": ["not-in-game", "away", "afk"],
+            "vote_timeout_seconds": 60,
+            "first_vote_clears_stale_vote_force": True,
+            "success_comparison": "global eligible draw votes >= non-away human players across both teams",
+            "success_sets_match_end_flag_dY": True,
+            "success_clears_vote_force": True,
+            "success_flags_both_team_forces_in_MMD_with_value": 0,
+            "player_removal_delay_symbol": "WX",
+            "default_player_removal_delay_seconds": 15,
+            "player_removal_delay_can_be_overridden_by_other_runtime_modes": True,
+            "removes_all_ingame_players_with_result": "PLAYER_GAME_RESULT_NEUTRAL",
+            "remove_player_preserves_units": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in game_draw_sources],
+        "evidence_kind": "exact-readable-global-draw-vote-expiry-match-end-and-delayed-player-removal",
+        "byte_offset": min(game_draw_offsets),
+    })
     return rows
 
 
@@ -6091,6 +6331,7 @@ def _extract_runtime_campaign_mechanics(
         "applyCampaignSupplyEffectsWhenReady", "applyCampaignSupplyEffects",
         "CallbackSingle_doAfter_CampaignSuppliesRuntime_call_doAfter_CampaignSuppliesRuntime",
         "CampaignSupply_CampaignSupply_isPerkSupply", "CampaignSupply_CampaignSupply_isPlayerAssignedSupply",
+        "pI", "yF", "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData",
         "giveCampaignSupplyItemToBuilder", "giveCloudStaffToBuilder", "setCampaignAiSpeedBonus",
     }
     if not required.issubset(functions_by_name):
@@ -6281,6 +6522,40 @@ def _extract_runtime_campaign_mechanics(
         "source_functions": [name for name, _fragments in survival_sources],
         "evidence_kind": "exact-readable-campaign-survival-periodic-control-flow",
         "byte_offset": min(survival_offsets),
+    })
+
+    result_bridge_sources = [
+        ("yF", (b"eqb=5.0", b"Cpb=_b[")),
+        ("pI", (
+            b"if bqb then", b"fMq=(dMq==YLq)", b"Vpb=(getElapsedGameTime()-Wpb)",
+            b"gMq=Co:create573()", b"gMq.playerWon=fMq", b"doAfter(iMq,gMq)",
+        )),
+        ("CallbackSingle_doAfter_MMDData_call_doAfter_MMDData", (
+            b"wTm=vTm.playerWon", b"stopCampaignSurvivalTimer()", b"Bpb=wTm", b"__wurst_safe_TriggerExecute(Cpb)",
+        )),
+    ]
+    result_bridge_offsets = [source(name, fragments)[0] for name, fragments in result_bridge_sources]
+    rows.append({
+        "system_id": "campaign-match-result-bridge",
+        "mechanic_kind": "delayed-campaign-win-state-and-protected-result-trigger-bridge",
+        "trigger": "match-winner-resolution-while-campaign-active",
+        "parameters": {
+            "campaign_mode_flag_symbol": "bqb",
+            "campaign_player_symbol": "Ypb",
+            "campaign_player_team_formula": "western-force member -> 0; otherwise 1",
+            "player_won_formula": "campaign-player-team == winning-team",
+            "elapsed_campaign_time_symbol": "Vpb",
+            "elapsed_campaign_time_formula": "getElapsedGameTime() - Wpb",
+            "result_bridge_delay_seconds": 5.0,
+            "delayed_callback_stops_survival_timer": True,
+            "delayed_callback_writes_player_won_symbol": "Bpb",
+            "delayed_callback_executes_trigger_symbol": "Cpb",
+            "protected_result_trigger_payload_normalized": False,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [name for name, _fragments in result_bridge_sources],
+        "evidence_kind": "exact-readable-campaign-result-branch-and-delayed-bridge-with-protected-trigger-payload",
+        "byte_offset": min(result_bridge_offsets),
     })
 
     if data.count(b"cpb=0.10 bpb=80") != 1:
@@ -6677,7 +6952,6 @@ def _extract_action_watch_coverage(
         "Action_watch_MultiboardEventHooks_run_watch_MultiboardEventHooks",
         "Action_watch_MultiboardInit_run_watch_MultiboardInit",
         "Action_watch_ReactivePlayerMultiboard_PlayerMultiboard_run_watch_ReactivePlayerMultiboard_PlayerMultiboard",
-        "Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection",
         "Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI",
         "Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI1",
         "Action_watch_doAfter_RoundStatsBoard_run_watch_doAfter_RoundStatsBoard",
@@ -6738,9 +7012,9 @@ def _extract_action_watch_coverage(
     status_counts = Counter(str(row["coverage_status"]) for row in rows)
     expected_status_counts = Counter({
         "normalized-gameplay-semantics": 10,
-        "normalized-session-runtime-semantics": 2,
+        "normalized-session-runtime-semantics": 3,
         "normalized-mode-runtime-semantics": 2,
-        "presentation-only": 18,
+        "presentation-only": 17,
         "e2e-only": 4,
         "telemetry-only": 3,
         "normalized-draft-runtime-semantics": 2,
@@ -6884,6 +7158,272 @@ def _extract_callback_periodic_coverage(
     })
     if status_counts != expected_status_counts:
         raise ValueError(f"CallbackPeriodic coverage classification changed: {dict(sorted(status_counts.items()))}")
+    return rows
+
+
+def _extract_callback_single_coverage(
+    functions: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
+    production_unit_special_mechanics: list[dict[str, object]],
+    building_improvement_spawn_mechanics: list[dict[str, object]],
+    runtime_system_mechanics: list[dict[str, object]],
+    building_spell_mechanics: list[dict[str, object]],
+    perk_mechanics: list[dict[str, object]],
+    runtime_ai_mechanics: list[dict[str, object]],
+    runtime_session_mechanics: list[dict[str, object]],
+    runtime_mode_mechanics: list[dict[str, object]],
+    runtime_campaign_mechanics: list[dict[str, object]],
+    runtime_draft_mechanics: list[dict[str, object]],
+    unit_spell_mechanics: list[dict[str, object]],
+    castle_item_mechanics: dict[str, object],
+    protected_perk_registry_audit: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Strict closure audit over all generated CallbackSingle functions."""
+    if not protected_perk_registry_audit:
+        return []
+
+    function_offsets = {str(row["name"]): int(row["start"]) for row in functions}
+    callback_names = sorted(name for name in function_offsets if name.startswith("CallbackSingle_"))
+    callback_name_set = set(callback_names)
+    if len(callback_names) != 276:
+        raise ValueError(f"CallbackSingle callback inventory changed: {len(callback_names)}")
+
+    normalized_sources: dict[str, set[str]] = defaultdict(set)
+    semantic_entrypoints: dict[str, set[str]] = defaultdict(set)
+
+    def add_sources(domain: str, rows: list[dict[str, object]], identity_key: str) -> None:
+        for row in rows:
+            identity = str(row[identity_key])
+            label = f"{domain}:{identity}"
+            for function_name in row.get("source_functions", []):
+                name = str(function_name)
+                semantic_entrypoints[name].add(label)
+                if name in callback_name_set:
+                    normalized_sources[name].add(label)
+
+    add_sources("production-unit-special-mechanics", production_unit_special_mechanics, "mechanic_kind")
+    add_sources("building-improvement-spawn-mechanics", building_improvement_spawn_mechanics, "mechanic_kind")
+    add_sources("runtime-system-mechanics", runtime_system_mechanics, "system_id")
+    add_sources("building-spell-mechanics", building_spell_mechanics, "mechanic_kind")
+    add_sources("perk-mechanics", perk_mechanics, "perk_id")
+    add_sources("runtime-ai-mechanics", runtime_ai_mechanics, "system_id")
+    add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
+    add_sources("runtime-mode-mechanics", runtime_mode_mechanics, "system_id")
+    add_sources("runtime-campaign-mechanics", runtime_campaign_mechanics, "system_id")
+    add_sources("runtime-draft-mechanics", runtime_draft_mechanics, "system_id")
+    item_spell_rows = castle_item_mechanics.get("item_spell_mechanics", [])
+    if isinstance(item_spell_rows, list):
+        add_sources("item-spell-mechanics", item_spell_rows, "trigger_ability_id")
+
+    for row in unit_spell_mechanics:
+        identity = f"{row['unit_id']}:{row['ability_id']}"
+        label = f"unit-spell-mechanics:{identity}"
+        handler = str(row.get("handler_function", ""))
+        if handler:
+            semantic_entrypoints[handler].add(label)
+        for field in ("delayed_callback_functions", "dynamic_callback_functions"):
+            for function_name in row.get(field, []):
+                name = str(function_name)
+                semantic_entrypoints[name].add(label)
+                if name in callback_name_set:
+                    normalized_sources[name].add(label)
+
+    callees_by_caller: dict[str, set[str]] = defaultdict(set)
+    for (caller, callee), count in call_edges.items():
+        if count > 0:
+            callees_by_caller[str(caller)].add(str(callee))
+
+    def path_to_normalized(callback_name: str) -> tuple[list[str], list[str]]:
+        frontier: list[tuple[str, list[str]]] = [(callback_name, [callback_name])]
+        seen = {callback_name}
+        for _depth in range(3):
+            next_frontier: list[tuple[str, list[str]]] = []
+            for current, path in sorted(frontier):
+                for callee in sorted(callees_by_caller.get(current, ())):
+                    candidate_path = [*path, callee]
+                    if callee in semantic_entrypoints:
+                        return candidate_path, sorted(semantic_entrypoints[callee])
+                    if callee not in seen:
+                        seen.add(callee)
+                        next_frontier.append((callee, candidate_path))
+            frontier = next_frontier
+        return [], []
+
+    callback_framework = {
+        "CallbackSingle_CallbackSingle_start",
+        "CallbackSingle_destroyCallbackSingle",
+    }
+    gameplay_framework = {
+        "CallbackSingle_doAfter_CfCastlePathing_call_doAfter_CfCastlePathing",
+        "CallbackSingle_doAfter_CfCastlePathing_call_doAfter_CfCastlePathing1",
+        "CallbackSingle_doAfter_DummyCaster_DummyCaster_call_doAfter_DummyCaster_DummyCaster",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers1",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers3",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers4",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers5",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers6",
+        "CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers7",
+        "CallbackSingle_doAfter_TaskQueue_TaskQueue_call_doAfter_TaskQueue_TaskQueue",
+        "CallbackSingle_doAfter_TaskQueue_TaskQueue_call_doAfter_TaskQueue_TaskQueue1",
+        "CallbackSingle_doAfter_UnitEnterRuntime_call_doAfter_UnitEnterRuntime1",
+        "CallbackSingle_nullTimer_ClosureEvents_call_nullTimer_ClosureEvents",
+        "CallbackSingle_nullTimer_OnUnitEnterLeave_call_nullTimer_OnUnitEnterLeave",
+        "CallbackSingle_nullTimer_Preloader_call_nullTimer_Preloader",
+        "CallbackSingle_nullTimer_onUnitIndex_PerkUtils_call_nullTimer_onUnitIndex_PerkUtils",
+        "CallbackSingle_nullTimer_nullTimer_onUnitIndex_PerkUtils_call_nullTimer_nullTimer_onUnitIndex_PerkUtils",
+    }
+    sync_framework = {
+        "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem",
+        "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem3",
+    }
+    telemetry_infrastructure = {
+        "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData3",
+        "CallbackSingle_doAfter_add_doAfter_MMDData_call_doAfter_add_doAfter_MMDData",
+        "CallbackSingle_nullTimer_MMD_call_nullTimer_MMD",
+    }
+    ai_runtime_infrastructure = {
+        "CallbackSingle_nullTimer_AiUnitStats_call_nullTimer_AiUnitStats",
+    }
+    integrity_infrastructure = {
+        "CallbackSingle_doAfter_Banlist_call_doAfter_Banlist",
+        "CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat",
+        "CallbackSingle_doAfter_ObjectDataIntegrity_call_doAfter_ObjectDataIntegrity",
+    }
+    presentation_only = {
+        "CallbackSingle_doAfter_AfkCheck_call_doAfter_AfkCheck1",
+        "CallbackSingle_doAfter_AiChatIntent_call_doAfter_AiChatIntent",
+        "CallbackSingle_doAfter_CampaignRuntime_call_doAfter_CampaignRuntime",
+        "CallbackSingle_doAfter_CampaignSurvivalUI_call_doAfter_CampaignSurvivalUI",
+        "CallbackSingle_doAfter_Campaign_call_doAfter_Campaign",
+        "CallbackSingle_doAfter_CheckForCpuSlots_call_doAfter_CheckForCpuSlots",
+        "CallbackSingle_doAfter_Commands_call_doAfter_Commands",
+        "CallbackSingle_doAfter_Commands_call_doAfter_Commands1",
+        "CallbackSingle_doAfter_GameBasics_call_doAfter_GameBasics",
+        "CallbackSingle_doAfter_Grid_call_doAfter_Grid",
+        "CallbackSingle_doAfter_IncomeUI_call_doAfter_IncomeUI",
+        "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData1",
+        "CallbackSingle_doAfter_doAfter_MMDData_call_doAfter_doAfter_MMDData",
+        "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark",
+        "CallbackSingle_doAfter_MapWatermark_call_doAfter_MapWatermark1",
+        "CallbackSingle_doAfter_PSA_call_doAfter_PSA",
+        "CallbackSingle_doAfter_PlayerNamesRuntime_call_doAfter_PlayerNamesRuntime",
+        "CallbackSingle_doAfter_Preview_call_doAfter_Preview",
+        "CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities",
+        "CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities3",
+        "CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities",
+        "CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities1",
+        "CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities",
+        "CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities",
+        "CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1",
+        "CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities2",
+        "CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities3",
+        "CallbackSingle_doAfter_RaceUndeadAbilities_call_doAfter_RaceUndeadAbilities",
+        "CallbackSingle_doAfter_RoundStatsBoard_call_doAfter_RoundStatsBoard",
+        "CallbackSingle_doAfter_SoundDefinition_SoundUtils_call_doAfter_SoundDefinition_SoundUtils",
+        "CallbackSingle_doAfter_TowerRange_call_doAfter_TowerRange",
+        "CallbackSingle_doAfter_W3Champions_call_doAfter_W3Champions1",
+        "CallbackSingle_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_RaceNorthernAbilities",
+        "CallbackSingle_doAfter_doAfter_RaceOrcAbilities_call_doAfter_doAfter_RaceOrcAbilities",
+        "CallbackSingle_doAfter_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_doAfter_RaceNorthernAbilities",
+        "CallbackSingle_nullTimer_SoundDefinition_SoundUtils_call_nullTimer_SoundDefinition_SoundUtils",
+        "CallbackSingle_nullTimer_SoundDefinition_SoundUtils_call_nullTimer_SoundDefinition_SoundUtils1",
+    }
+
+    def normalized_status(sources: list[str], *, dispatch: bool) -> tuple[str, str]:
+        domains = {source.split(":", 1)[0] for source in sources}
+        suffix = "dispatch" if dispatch else "semantics"
+        if any("protected-runtime-ledger-unresolved-reachability" in source for source in sources):
+            return (
+                "normalized-unresolved-reachability-evidence",
+                "exact callback body is normalized, but production scheduling/reachability remains explicitly unproven",
+            )
+        if domains == {"runtime-ai-mechanics"}:
+            return f"normalized-ai-runtime-{suffix}", "callback is covered by normalized AI runtime semantics"
+        if domains == {"runtime-session-mechanics"}:
+            return f"normalized-session-runtime-{suffix}", "callback is covered by normalized player-session semantics"
+        if domains == {"runtime-mode-mechanics"}:
+            return f"normalized-mode-runtime-{suffix}", "callback is covered by normalized mode runtime semantics"
+        if domains == {"runtime-campaign-mechanics"}:
+            return f"normalized-campaign-runtime-{suffix}", "callback is covered by normalized campaign runtime semantics"
+        if domains == {"runtime-draft-mechanics"}:
+            return f"normalized-draft-runtime-{suffix}", "callback is covered by normalized draft runtime semantics"
+        if domains == {"unit-spell-mechanics"}:
+            return f"normalized-unit-spell-{suffix}", "callback is covered by normalized scripted unit-spell semantics"
+        return f"normalized-gameplay-{suffix}", "callback is covered by importer-facing normalized gameplay semantics"
+
+    rows: list[dict[str, object]] = []
+    for callback_name in callback_names:
+        direct = sorted(normalized_sources.get(callback_name, ()))
+        dispatch_path: list[str] = []
+        normalized = direct
+        if "E2E" in callback_name or "CampaignSmokeTest" in callback_name or "CampaignUiE2E" in callback_name or "ModeRuntimeE2E" in callback_name:
+            status = "e2e-only"
+            note = "generated end-to-end/smoke-test callback; not production gameplay semantics"
+            normalized = []
+        elif direct:
+            status, note = normalized_status(direct, dispatch=False)
+        else:
+            dispatch_path, normalized = path_to_normalized(callback_name)
+            if dispatch_path:
+                status, note = normalized_status(normalized, dispatch=True)
+                note += "; reached through an exact named-call path of at most three edges"
+            elif callback_name in callback_framework:
+                status = "callback-framework-infrastructure"
+                note = "generic CallbackSingle timer lifecycle/dispatch infrastructure"
+            elif callback_name in gameplay_framework:
+                status = "gameplay-framework-infrastructure"
+                note = "generic pathing/event/task/dummy/preload or perk-index dispatch infrastructure; concrete mechanics are normalized at handlers"
+            elif callback_name in sync_framework:
+                status = "sync-framework-infrastructure"
+                note = "sync-message delivery/leave-hook infrastructure rather than an independent gameplay rule"
+            elif callback_name in telemetry_infrastructure:
+                status = "telemetry-infrastructure"
+                note = "MMD/statistics initialization or reporting infrastructure"
+            elif callback_name in ai_runtime_infrastructure:
+                status = "ai-runtime-infrastructure"
+                note = "AI catalog/stat capture infrastructure rather than a gameplay mutation rule"
+            elif callback_name in integrity_infrastructure:
+                status = "integrity-infrastructure"
+                note = "anti-cheat/object-integrity/banlist scaffolding; no normalized production gameplay rule"
+            elif callback_name in presentation_only:
+                status = "presentation-only"
+                note = "visual/UI/audio/chat/animation/weather presentation callback without authoritative gameplay mutation"
+            else:
+                raise ValueError(f"unclassified CallbackSingle callback: {callback_name}")
+        rows.append({
+            "callback_function": callback_name,
+            "coverage_status": status,
+            "normalized_sources": normalized,
+            "dispatch_path": dispatch_path,
+            "evidence_note": note,
+            "byte_offset": function_offsets[callback_name],
+        })
+
+    status_counts = Counter(str(row["coverage_status"]) for row in rows)
+    expected_status_counts = Counter({
+        "ai-runtime-infrastructure": 1,
+        "callback-framework-infrastructure": 2,
+        "e2e-only": 98,
+        "gameplay-framework-infrastructure": 19,
+        "integrity-infrastructure": 3,
+        "normalized-ai-runtime-semantics": 11,
+        "normalized-campaign-runtime-semantics": 2,
+        "normalized-draft-runtime-dispatch": 2,
+        "normalized-gameplay-dispatch": 4,
+        "normalized-gameplay-semantics": 41,
+        "normalized-mode-runtime-semantics": 10,
+        "normalized-session-runtime-dispatch": 2,
+        "normalized-session-runtime-semantics": 6,
+        "normalized-unit-spell-semantics": 32,
+        "normalized-unresolved-reachability-evidence": 1,
+        "presentation-only": 37,
+        "sync-framework-infrastructure": 2,
+        "telemetry-infrastructure": 3,
+    })
+    if status_counts != expected_status_counts:
+        raise ValueError(f"CallbackSingle coverage classification changed: {dict(sorted(status_counts.items()))}")
     return rows
 
 
@@ -7823,6 +8363,10 @@ def _extract_production_unit_special_mechanics(
             "__wurst_safe_SetUnitPosition", "orderCodeAttack", "__wurst_safe_BlzStartUnitAbilityCooldown",
         },
     )
+    remnant_cleanup_start, _ = require_tokens(
+        "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire1",
+        {"safeDestroyEffect"},
+    )
     death_start, _ = require_tokens(
         "fJ",
         {
@@ -7866,11 +8410,12 @@ def _extract_production_unit_special_mechanics(
         "related_rawcode_ids": [1093683252, 1848652626, 1093683268],
         "source_functions": [
             "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire",
+            "CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire1",
             "fJ",
             "UC",
         ],
         "evidence_kind": "exact-damage-and-death-handler-with-resolved-filter",
-        "byte_offset": min(echo_start, death_start),
+        "byte_offset": min(echo_start, remnant_cleanup_start, death_start),
     })
 
     retaliation_start, _ = require_tokens(
@@ -8009,7 +8554,15 @@ def _extract_production_unit_special_mechanics(
     # to deal a second 175 universal-damage packet to all alive ground enemy
     # combat sappers in 160 range of the damaged target. The map tooltip says
     # 150 damage; retain the exact script value for importer behavior.
-    whirlwind_init_start, _ = require_tokens("qP", {"1093683271", "0.20", "175.0", "160.0"})
+    whirlwind_init_start, _ = require_tokens("qP", {"1093683271", "0.20", "175.0", "160.0", "doAfter"})
+    whirlwind_init_function = next(function for function in functions if function["name"] == "qP")
+    whirlwind_init_source = data[int(whirlwind_init_function["start"]):int(whirlwind_init_function["end"])]
+    if b"doAfter(.1,gks)" not in whirlwind_init_source:
+        raise ValueError("Ironpaw Whirlwind listener install delay changed")
+    whirlwind_setup_start, _ = require_tokens(
+        "CallbackSingle_doAfter_Whirlwind_call_doAfter_Whirlwind",
+        {"DamageEvent_addListener", "lC", "create1160"},
+    )
     whirlwind_start, _ = require_tokens(
         "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
         {
@@ -8065,14 +8618,16 @@ def _extract_production_unit_special_mechanics(
             "damage_type": "universal",
             "animation": "Attack Walk Stand Spin",
             "queued_animation": "stand",
+            "listener_install_delay_seconds": 0.1,
         },
         "related_rawcode_ids": [1093683271],
         "source_functions": [
-            "qP", "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
+            "qP", "CallbackSingle_doAfter_Whirlwind_call_doAfter_Whirlwind",
+            "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
             "ForGroupCallback_forUnitsInRange_addListener_doAfter_Whirlwind_callback_forUnitsInRange_addListener_doAfter_Whirlwind",
         ],
         "evidence_kind": "exact-marker-damage-listener-proc-and-area-callback",
-        "byte_offset": min(whirlwind_init_start, whirlwind_start, whirlwind_cb_start),
+        "byte_offset": min(whirlwind_init_start, whirlwind_setup_start, whirlwind_start, whirlwind_cb_start),
     })
 
     # Nature attack procs: Dryad and Keeper remove positive magic buffs from
@@ -8573,6 +9128,15 @@ def _extract_production_unit_special_mechanics(
         "onSummonedUnit",
         {"1747989313", "Cy", "create1000", "doAfter"},
     )
+    defender_setup_init_start, _ = require_tokens("fH", {"Sm", "create504", "doAfter"})
+    defender_setup_init_function = next(function for function in functions if function["name"] == "fH")
+    defender_setup_init_source = data[int(defender_setup_init_function["start"]):int(defender_setup_init_function["end"])]
+    if b"doAfter(.1,ezq)" not in defender_setup_init_source:
+        raise ValueError("Defender issued-order listener install delay changed")
+    defender_setup_start, _ = require_tokens(
+        "CallbackSingle_doAfter_FixDefend_call_doAfter_FixDefend",
+        {"EVENT_PLAYER_UNIT_ISSUED_ORDER", "EventListener_construct_EventListener", "EventListener_add", "Tm", "create505"},
+    )
     require_tokens(
         "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1",
         {"852055", "unit_issueImmediateOrderById", "jY", "Dy", "create1001", "doAfter"},
@@ -8612,9 +9176,12 @@ def _extract_production_unit_special_mechanics(
             "resume_attack_delay_after_defend_seconds": 0.1,
             "undefend_reactivation_delay_seconds": 5.5,
             "auto_defend_bypasses_wrong_order_guard": True,
+            "issued_order_listener_install_delay_seconds": 0.1,
         },
         "related_rawcode_ids": [1093677895],
         "source_functions": [
+            "fH",
+            "CallbackSingle_doAfter_FixDefend_call_doAfter_FixDefend",
             "onSummonedUnit",
             "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime1",
             "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime1",
@@ -8622,7 +9189,7 @@ def _extract_production_unit_special_mechanics(
             "CallbackSingle_doAfter_add_doAfter_FixDefend_call_doAfter_add_doAfter_FixDefend",
         ],
         "evidence_kind": "exact-summon-order-and-delayed-callback-chain",
-        "byte_offset": min(defender_spawn_start, defender_order_start),
+        "byte_offset": min(defender_setup_init_start, defender_setup_start, defender_spawn_start, defender_order_start),
     })
 
     # Shared death/kill handler: normalize the exact production-unit branches
@@ -9000,6 +9567,7 @@ def _extract_building_improvement_spawn_mechanics(
 def _extract_runtime_system_mechanics(
     data: bytes,
     functions: list[dict[str, object]],
+    call_edges: Counter[tuple[str, str]],
 ) -> list[dict[str, object]]:
     """Recover gameplay systems whose effects cut across unit/building rows."""
     available = {str(function["name"]) for function in functions}
@@ -9025,7 +9593,8 @@ def _extract_runtime_system_mechanics(
         "lE", "nH", "isSupportOrderUnit", "orderAssassinOrGoboW", "shouldRunPeriodicSupportOrderForState",
         "prepareAssassinTargets", "isValidAssassinTarget", "orderAssassinW", "restoreAssassinTargetOrderW",
         "prepareGobboTargets", "isGobboRepairableTarget", "isGobboRallyTarget", "orderGoboW",
-        "setGobboSpawner", "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
+        "setGobboSpawner", "CallbackSingle_doAfter_GobboController_call_doAfter_GobboController",
+        "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
         "sH", "applyGobboTimedLife", "onSummonedUnit",
         "IL", "CallbackSingle_doAfter_SpamPrevention_call_doAfter_SpamPrevention",
         "EventListener_add_doAfter_SpamPrevention_onEvent_add_doAfter_SpamPrevention",
@@ -9037,6 +9606,11 @@ def _extract_runtime_system_mechanics(
         "restoreExpectedOrderAfterExternalOrder", "KL", "kJ",
         "completeRoundStart", "startIdleAttackTimer", "isIdleAttackUnit", "code__TimerStart_IdleAttackRuntime",
         "ForGroupCallback_forUnitsInRect_IdleAttackRuntime_callback_forUnitsInRect_IdleAttackRuntime",
+        "jJ", "CallbackSingle_doAfter_OrderRects_call_doAfter_OrderRects", "condition6",
+        "code__Condition_addCondition_addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects",
+        "code__addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects",
+        "code__Condition_addCondition_addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects1",
+        "code__addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects1",
         "uL", "CE", "EventListener_add_Blink_onEvent_add_Blink",
         "gL", "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
         "CallbackSingle_doAfter_RescueStrikeRuntime_call_doAfter_RescueStrikeRuntime1",
@@ -9071,6 +9645,8 @@ def _extract_runtime_system_mechanics(
         "CallbackSingle_nullTimer_SyncSystem_call_nullTimer_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2",
+        "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
+        "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
     }
     if not required.issubset(available):
         return []
@@ -9646,6 +10222,9 @@ def _extract_runtime_system_mechanics(
     gobbo_rally_start, gobbo_rally_source, gobbo_rally_tokens = source("isGobboRallyTarget")
     gobbo_order_start, gobbo_order_source, gobbo_order_tokens = source("orderGoboW")
     gobbo_spawner_start, gobbo_spawner_source, gobbo_spawner_tokens = source("setGobboSpawner")
+    gobbo_spawner_cb_start, gobbo_spawner_cb_source, gobbo_spawner_cb_tokens = source(
+        "CallbackSingle_doAfter_GobboController_call_doAfter_GobboController"
+    )
     task_run_start, task_run_source, task_run_tokens = source("SupportOrderTask_SupportOrderTask_run")
     ensure_task_start, ensure_task_source, ensure_task_tokens = source("ensureSupportOrderTask")
     gobbo_life_init_start, gobbo_life_init_source, gobbo_life_init_tokens = source("sH")
@@ -9700,8 +10279,10 @@ def _extract_runtime_system_mechanics(
         raise ValueError("Gobbo spawner rally fallback changed")
     if b"unit_issueTargetOrder(KBq,\"repair\",QBq)" not in gobbo_order_source or b"unit_issueTargetOrder(KBq,\"smart\",QBq)" not in gobbo_order_source:
         raise ValueError("Gobbo repair/smart rally orders changed")
-    if not {"Ccb", "doAfter"}.issubset(gobbo_spawner_tokens):
+    if not {"Ccb", "doAfter"}.issubset(gobbo_spawner_tokens) or b"doAfter(0.0,EBq)" not in gobbo_spawner_source:
         raise ValueError("Gobbo production-building association changed")
+    if not {"Ccb", "unit_getIndex"}.issubset(gobbo_spawner_cb_tokens) or b"if(Gym>0)then Ccb[Gym]=Fym.deferredSpawner end" not in gobbo_spawner_cb_source:
+        raise ValueError("Gobbo deferred production-building association changed")
     if not {"orderAssassinOrGoboW", "TaskQueue_TaskQueue_add"}.issubset(task_run_tokens):
         raise ValueError("Support-order task loop changed")
     if not {"Bcb", "TaskQueue_TaskQueue_add"}.issubset(ensure_task_tokens):
@@ -9757,6 +10338,8 @@ def _extract_runtime_system_mechanics(
             "gobbo_timed_life_buff_id": 1112820806,
             "gobbo_timed_life_applied_once_per_indexed_gobbo": True,
             "gobbo_one_per_target_claim_proven_by_script": False,
+            "gobbo_spawner_association_fallback_delay_seconds": 0.0,
+            "gobbo_spawner_association_retries_unit_index_once": True,
         },
         "related_rawcode_ids": [
             1848652122, 1848652336, 1848652117, 1093678925, 1093679435,
@@ -9766,14 +10349,16 @@ def _extract_runtime_system_mechanics(
             "lE", "nH", "isSupportOrderUnit", "orderAssassinOrGoboW", "shouldRunPeriodicSupportOrderForState",
             "prepareAssassinTargets", "isValidAssassinTarget", "orderAssassinW", "restoreAssassinTargetOrderW",
             "prepareGobboTargets", "isGobboRepairableTarget", "isGobboRallyTarget", "orderGoboW",
-            "setGobboSpawner", "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
+            "setGobboSpawner", "CallbackSingle_doAfter_GobboController_call_doAfter_GobboController",
+            "SupportOrderTask_SupportOrderTask_run", "ensureSupportOrderTask",
             "sH", "applyGobboTimedLife", "onUnitTrained", "onSummonedUnit",
         ],
         "evidence_kind": "exact-shared-task-queue-target-filters-order-state-machine-and-timed-life",
         "byte_offset": min(
             assassin_init_start, support_init_start, support_gate_start, support_dispatch_start,
             assassin_targets_start, assassin_valid_start, assassin_order_start, gobbo_targets_start,
-            gobbo_order_start, task_run_start, gobbo_life_init_start, gobbo_life_start,
+            gobbo_order_start, gobbo_spawner_start, gobbo_spawner_cb_start,
+            task_run_start, gobbo_life_init_start, gobbo_life_start,
         ),
     })
 
@@ -10000,6 +10585,63 @@ def _extract_runtime_system_mechanics(
         ],
         "evidence_kind": "exact-round-start-periodic-global-enumeration-and-unit-predicate",
         "byte_offset": min(round_start_start, idle_timer_start, idle_pred_start, idle_tick_start, idle_cb_start),
+    })
+
+    # Two narrow lane rectangles force ordinary combat sappers back onto their
+    # Castle Fight attack order as they enter. This is separate from the global
+    # four-second idle sweep: the rect triggers react immediately and also skip
+    # cloaked units.
+    order_rect_init_start, order_rect_init_source, _ = source("jJ")
+    order_rect_setup_start, order_rect_setup_source, _ = source(
+        "CallbackSingle_doAfter_OrderRects_call_doAfter_OrderRects"
+    )
+    order_rect_pred_start, order_rect_pred_source, _ = source("condition6")
+    order_rect_action_start, order_rect_action_source, _ = source(
+        "code__addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects"
+    )
+    order_rect_action1_start, order_rect_action1_source, _ = source(
+        "code__addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects1"
+    )
+    if b"doAfter(.1,Q3q)" not in order_rect_init_source:
+        raise ValueError("order-rect delayed initialization changed")
+    for fragment in (
+        b"Rect((-2047.9),(-1536.),(-1024.),1024.)",
+        b"Rect(1536.,(-1024.),2047.9,1024.)",
+        b"TriggerRegisterEnterRectSimple",
+    ):
+        if fragment not in order_rect_setup_source:
+            raise ValueError(f"order-rect geometry/registration changed: missing {fragment!r}")
+    if b"isCombatSapper(R3q)and isVulnerable(R3q)" not in order_rect_pred_source or b"not isCloaked(R3q)" not in order_rect_pred_source:
+        raise ValueError("order-rect unit predicate changed")
+    if b"orderCodeAttack(GetEnteringUnit())" not in order_rect_action_source or b"orderCodeAttack(GetEnteringUnit())" not in order_rect_action1_source:
+        raise ValueError("order-rect attack action changed")
+    rows.append({
+        "system_id": "lane-order-rect-attack-reengage",
+        "mechanic_kind": "enter-rect-combat-sapper-attack-order-recovery",
+        "trigger": "unit-enters-either-lane-order-rect",
+        "parameters": {
+            "setup_delay_seconds": 0.1,
+            "rectangles": [
+                {"min_x": -2047.9, "min_y": -1536.0, "max_x": -1024.0, "max_y": 1024.0},
+                {"min_x": 1536.0, "min_y": -1024.0, "max_x": 2047.9, "max_y": 1024.0},
+            ],
+            "target_predicate": "combat-sapper;vulnerable;not-cloaked",
+            "action": "orderCodeAttack",
+            "reacts_immediately_on_rect_entry": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "jJ", "CallbackSingle_doAfter_OrderRects_call_doAfter_OrderRects", "condition6",
+            "code__Condition_addCondition_addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects",
+            "code__addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects",
+            "code__Condition_addCondition_addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects1",
+            "code__addAction_TriggerRegisterEnterRectSimple_doAfter_OrderRects1",
+        ],
+        "evidence_kind": "exact-delayed-enter-rect-geometry-predicate-and-attack-order-actions",
+        "byte_offset": min(
+            order_rect_init_start, order_rect_setup_start, order_rect_pred_start,
+            order_rect_action_start, order_rect_action1_start,
+        ),
     })
 
     # Builder Blink. Every spawned builder receives A0-1. The cast handler does
@@ -10790,6 +11432,69 @@ def _extract_runtime_system_mechanics(
         ),
     })
 
+    # RuntimeLedger contains exact protected-body resource/item mutations, but
+    # its generated callback object has no readable named constructor caller in
+    # the recovered call graph. Preserve the body as evidence without claiming
+    # that the 9.27 production runtime actually schedules it.
+    ledger_lane_start, ledger_lane_source, _ = source("localLedgerLane")
+    ledger_coord_start, ledger_coord_source, _ = source("ledgerCoord")
+    ledger_settle_start, ledger_settle_source, _ = source("settleLedger__w3p_vmProtect")
+    ledger_callback_start, ledger_callback_source, _ = source(
+        "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger"
+    )
+    source("mz:create1035")
+    for body, fragment in (
+        (ledger_lane_source, b"return __wurst_modInt(CHr,12)"),
+        (ledger_lane_source, b"return __wurst_modInt((player_getId(DHr)+CHr),12)"),
+        (ledger_coord_source, b"((-8192.)+int_toReal(__wurst_modInt(((EHr*73)+__wurst_modInt(FHr,59)),512)))"),
+        (ledger_settle_source, b"JHr=__wurst_modInt((GHr+HHr),3)"),
+        (ledger_settle_source, b"CreateItem(1918989414"),
+        (ledger_settle_source, b"PLAYER_STATE_RESOURCE_GOLD"),
+        (ledger_settle_source, b"player_getState(KHr,LHr)+1"),
+        (ledger_settle_source, b"PLAYER_STATE_RESOURCE_LUMBER"),
+        (ledger_settle_source, b"player_getState(MHr,NHr)+1"),
+        (ledger_callback_source, b"settleLedger__w3p_vmProtect(IW)"),
+    ):
+        if fragment not in body:
+            raise ValueError(f"RuntimeLedger evidence changed: missing {fragment!r}")
+    ledger_constructor_callers = sorted(
+        caller for (caller, callee), count in call_edges.items()
+        if callee == "mz:create1035" and count > 0
+    )
+    if ledger_constructor_callers:
+        raise ValueError(
+            f"RuntimeLedger callback constructor became readably reachable: {ledger_constructor_callers}"
+        )
+    rows.append({
+        "system_id": "protected-runtime-ledger-unresolved-reachability",
+        "mechanic_kind": "exact-resource-or-item-mutation-body-with-unresolved-scheduler",
+        "trigger": "generated-CallbackSingle-body;production-scheduler-not-recovered",
+        "parameters": {
+            "production_reachability_proven": False,
+            "callback_constructor_readable_named_callers": [],
+            "counter_symbol": "IW",
+            "counter_observed_bootstrap_value": 0,
+            "lane_formula_without_local_player": "counter mod 12",
+            "lane_formula_with_local_player": "(local-player-id + counter) mod 12",
+            "branch_formula": "(counter + lane) mod 3",
+            "branch_0_effect": "create-item",
+            "branch_0_item_id": 1918989414,
+            "branch_0_item_rawcode": "ratf",
+            "branch_0_coordinate_formula": "-8192 + ((lane*73 + (counter mod 59)) mod 512)",
+            "branch_0_y_coordinate_inputs": "lane=11-lane;counter=counter+17",
+            "branch_1_effect": "selected-lane-player gold +1",
+            "branch_2_effect": "selected-lane-player lumber +1",
+            "must_not_be_treated_as_live_gameplay_without_scheduler_proof": True,
+        },
+        "related_rawcode_ids": [1918989414],
+        "source_functions": [
+            "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
+            "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
+        ],
+        "evidence_kind": "exact-readable-mutation-body-with-no-readable-callback-constructor-caller",
+        "byte_offset": min(ledger_lane_start, ledger_coord_start, ledger_settle_start, ledger_callback_start),
+    })
+
     return rows
 
 
@@ -10979,7 +11684,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         data, functions, protected_filter_bindings
     )
     building_improvement_spawn_mechanics = _extract_building_improvement_spawn_mechanics(data, functions)
-    runtime_system_mechanics = _extract_runtime_system_mechanics(data, functions)
+    runtime_system_mechanics = _extract_runtime_system_mechanics(data, functions, call_edges)
     castle_item_mechanics = _extract_castle_item_mechanics(data, functions, function_aliases)
     building_spell_registrations = _extract_building_spell_registrations(data, functions, function_aliases)
     unit_spell_registrations = _extract_unit_spell_registrations(data, functions, function_aliases)
@@ -11046,6 +11751,23 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         unit_spell_mechanics,
         protected_perk_registry_audit,
     )
+    callback_single_coverage = _extract_callback_single_coverage(
+        functions,
+        call_edges,
+        production_unit_special_mechanics,
+        building_improvement_spawn_mechanics,
+        runtime_system_mechanics,
+        building_spell_mechanics,
+        perk_mechanics,
+        runtime_ai_mechanics,
+        runtime_session_mechanics,
+        runtime_mode_mechanics,
+        runtime_campaign_mechanics,
+        runtime_draft_mechanics,
+        unit_spell_mechanics,
+        castle_item_mechanics,
+        protected_perk_registry_audit,
+    )
     event_listener_coverage = _extract_event_listener_coverage(
         functions,
         call_edges,
@@ -11108,5 +11830,6 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "damage_listener_coverage": damage_listener_coverage,
         "action_watch_coverage": action_watch_coverage,
         "callback_periodic_coverage": callback_periodic_coverage,
+        "callback_single_coverage": callback_single_coverage,
         "event_listener_coverage": event_listener_coverage,
     }

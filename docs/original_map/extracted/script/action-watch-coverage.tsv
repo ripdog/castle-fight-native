@@ -35,7 +35,7 @@ Action_watch_RoundEndRuntime_run_watch_RoundEndRuntime	normalized-session-runtim
 Action_watch_RoundStatsTracking_run_watch_RoundStatsTracking	telemetry-only		statistics/MMD timeline observer rather than authoritative gameplay semantics	1540105
 Action_watch_SnowveilFountain_run_watch_SnowveilFountain	normalized-gameplay-semantics	building-spell-mechanics:team-snowfield	callback is direct lifecycle evidence for importer-facing normalized gameplay semantics	1556498
 Action_watch_UltimateRoll_run_watch_UltimateRoll	normalized-mode-runtime-semantics	runtime-mode-mechanics:mode-selection-controller-and-registry	callback is direct lifecycle evidence for normalized mode runtime semantics	1651705
-Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	638570
+Action_watch_doAfter_CameraMovementDetection_run_watch_doAfter_CameraMovementDetection	normalized-session-runtime-semantics	runtime-session-mechanics:away-control-and-idle-detection	callback is direct lifecycle evidence for normalized player-session runtime semantics	638570
 Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1231302
 Action_watch_doAfter_IncomeUI_run_watch_doAfter_IncomeUI1	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1232176
 Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData	telemetry-only		statistics/MMD timeline observer rather than authoritative gameplay semantics	1288779

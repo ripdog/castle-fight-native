@@ -188,10 +188,10 @@ class ResolvedEvidenceTests(unittest.TestCase):
         summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
         self.assertEqual(summary["protected_perk_registry_audit_rows"], 19)
         self.assertEqual(summary["perk_mechanics"], 19)
-        self.assertEqual(summary["runtime_ai_mechanics"], 4)
-        self.assertEqual(summary["runtime_session_mechanics"], 6)
-        self.assertEqual(summary["runtime_mode_mechanics"], 1)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 4)
+        self.assertEqual(summary["runtime_ai_mechanics"], 5)
+        self.assertEqual(summary["runtime_session_mechanics"], 7)
+        self.assertEqual(summary["runtime_mode_mechanics"], 2)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 5)
         self.assertEqual(summary["runtime_draft_mechanics"], 3)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -308,8 +308,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "gameplay-framework-infrastructure": 1,
                 "normalized-gameplay-semantics": 10,
                 "normalized-mode-runtime-semantics": 2,
-                "normalized-session-runtime-semantics": 2,
-                "presentation-only": 18,
+                "normalized-session-runtime-semantics": 3,
+                "presentation-only": 17,
                 "telemetry-only": 3,
             },
         )
@@ -408,6 +408,55 @@ class ResolvedEvidenceTests(unittest.TestCase):
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
         )
 
+    def test_callback_single_coverage_is_explicit_and_fail_loud(self) -> None:
+        with (self.script / "callback-single-coverage.tsv").open(encoding="utf-8") as handle:
+            rows = {row["callback_function"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(rows), 276)
+        self.assertEqual(
+            dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
+            {
+                "ai-runtime-infrastructure": 1,
+                "callback-framework-infrastructure": 2,
+                "e2e-only": 98,
+                "gameplay-framework-infrastructure": 19,
+                "integrity-infrastructure": 3,
+                "normalized-ai-runtime-semantics": 11,
+                "normalized-campaign-runtime-semantics": 2,
+                "normalized-draft-runtime-dispatch": 2,
+                "normalized-gameplay-dispatch": 4,
+                "normalized-gameplay-semantics": 41,
+                "normalized-mode-runtime-semantics": 10,
+                "normalized-session-runtime-dispatch": 2,
+                "normalized-session-runtime-semantics": 6,
+                "normalized-unit-spell-semantics": 32,
+                "normalized-unresolved-reachability-evidence": 1,
+                "presentation-only": 37,
+                "sync-framework-infrastructure": 2,
+                "telemetry-infrastructure": 3,
+            },
+        )
+        self.assertEqual(
+            rows["CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger"]["coverage_status"],
+            "normalized-unresolved-reachability-evidence",
+        )
+        self.assertEqual(
+            rows["CallbackSingle_doAfter_MMDData_call_doAfter_MMDData"]["coverage_status"],
+            "normalized-campaign-runtime-semantics",
+        )
+        for callback in (
+            "CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime",
+            "CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime",
+            "CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime",
+        ):
+            self.assertEqual(rows[callback]["coverage_status"], "normalized-gameplay-semantics")
+            self.assertIn("building-spell-mechanics", rows[callback]["normalized_sources"])
+        summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
+        self.assertEqual(summary["callback_single_coverage_rows"], 276)
+        self.assertEqual(
+            summary["callback_single_coverage_status_counts"],
+            dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
+        )
+
     def test_runtime_draft_lifecycle_is_normalized(self) -> None:
         with (self.resolved / "runtime-draft-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -453,6 +502,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "campaign-star-restriction-failure-hooks",
                 "campaign-star-periodic-objectives",
                 "campaign-survival-countdown",
+                "campaign-match-result-bridge",
                 "campaign-mission-supply-application",
             },
         )
@@ -480,6 +530,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(survival["completion_condition"], "remaining_seconds <= 0")
         self.assertTrue(survival["completion_kills_owner_team_castle"])
 
+        result_bridge = json.loads(rows["campaign-match-result-bridge"]["parameters_json"])
+        self.assertEqual(result_bridge["result_bridge_delay_seconds"], 5.0)
+        self.assertTrue(result_bridge["delayed_callback_stops_survival_timer"])
+        self.assertEqual(result_bridge["delayed_callback_writes_player_won_symbol"], "Bpb")
+        self.assertEqual(result_bridge["delayed_callback_executes_trigger_symbol"], "Cpb")
+        self.assertFalse(result_bridge["protected_result_trigger_payload_normalized"])
+
         supplies = json.loads(rows["campaign-mission-supply-application"]["parameters_json"])
         self.assertEqual(supplies["retry_interval_seconds"], 0.1)
         self.assertEqual(supplies["maximum_retry_attempt_index"], 80)
@@ -490,14 +547,13 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 4)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 5)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
-            rows = list(csv.DictReader(handle, delimiter="\t"))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["system_id"], "mode-selection-controller-and-registry")
-        parameters = json.loads(rows[0]["parameters_json"])
+            rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(set(rows), {"mode-selection-controller-and-registry", "w3champions-ladder-bootstrap"})
+        parameters = json.loads(rows["mode-selection-controller-and-registry"]["parameters_json"])
         self.assertEqual(parameters["host_player_id"], 0)
         self.assertTrue(parameters["requires_leading_dash"])
         self.assertTrue(parameters["ultimate_draft_conflict_is_rejected_before_application"])
@@ -540,8 +596,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(round_limit["negative_limit_result"], "draw signal XW")
         self.assertTrue(parameters["delayed_mode_start_callbacks_call_protected_start_selected_modes_or_default"])
 
+        w3c = json.loads(rows["w3champions-ladder-bootstrap"]["parameters_json"])
+        self.assertEqual(w3c["detection_player_id"], 23)
+        self.assertEqual(w3c["detection_player_name"], "FLO")
+        self.assertEqual(w3c["global_draw_player_removal_delay_seconds"], 3)
+        self.assertEqual(w3c["post_mode_start_delay_seconds"], 2)
+        self.assertEqual(w3c["protected_auto_mode_payload_status"], "protected-vm-not-normalized-here")
+        self.assertEqual(w3c["protected_default_draft_payload_status"], "protected-vm-not-normalized-here")
+
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_mode_mechanic_rows"], 1)
+        self.assertEqual(summary["runtime_mode_mechanic_rows"], 2)
 
     def test_runtime_session_away_control_and_leave_autobalance_are_normalized(self) -> None:
         with (self.resolved / "runtime-session-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -555,6 +619,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "round-end-review-countdown",
                 "team-afk-confirmation-check",
                 "team-forfeit-vote",
+                "global-draw-vote-match-cancel",
             },
         )
 
@@ -617,8 +682,16 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(forfeit["vote_state_resets_after_success"])
         self.assertTrue(forfeit["vote_state_resets_on_timeout"])
 
+        game_draw = json.loads(rows["global-draw-vote-match-cancel"]["parameters_json"])
+        self.assertEqual(game_draw["vote_timeout_seconds"], 60)
+        self.assertEqual(game_draw["default_player_removal_delay_seconds"], 15)
+        self.assertTrue(game_draw["success_sets_match_end_flag_dY"])
+        self.assertEqual(game_draw["success_flags_both_team_forces_in_MMD_with_value"], 0)
+        self.assertEqual(game_draw["removes_all_ingame_players_with_result"], "PLAYER_GAME_RESULT_NEUTRAL")
+        self.assertTrue(game_draw["remove_player_preserves_units"])
+
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_session_mechanic_rows"], 6)
+        self.assertEqual(summary["runtime_session_mechanic_rows"], 7)
 
     def test_runtime_ai_damage_signals_rescue_strike_and_strategic_aura_observer_are_normalized(self) -> None:
         with (self.resolved / "runtime-ai-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -628,6 +701,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             {
                 "ai-engagement-damage-signals", "ai-executor-periodic-fsm",
                 "ai-rescue-strike-controller", "ai-strategic-aura-purchase-observer",
+                "ai-team-production-sync-targeting",
             },
         )
 
@@ -690,6 +764,14 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(ability["range"], 1000.0)
         self.assertEqual(ability["area"], 700.0)
 
+        sync = json.loads(rows["ai-team-production-sync-targeting"]["parameters_json"])
+        self.assertEqual(sync["target_order_id"], 851980)
+        self.assertEqual(sync["team_indices_used"], [0, 1])
+        self.assertTrue(sync["orders_are_deferred_with_null_timer"])
+        self.assertEqual(sync["team_representative_selection"], "highest CFBuilding_spawnTime within each partition")
+        self.assertEqual(sync["team_partition"], "normal and legendary production buildings are synchronized independently")
+        self.assertTrue(sync["candidate_rejects_cage_buildings"])
+
         strategic = json.loads(rows["ai-strategic-aura-purchase-observer"]["parameters_json"])
         self.assertFalse(strategic["rewrites_gameplay_event"])
         self.assertTrue(strategic["human_and_ai_purchases_are_observed"])
@@ -704,7 +786,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_ai_mechanic_rows"], 4)
+        self.assertEqual(summary["runtime_ai_mechanic_rows"], 5)
 
     def test_all_proven_live_perk_mechanics_are_importer_ready(self) -> None:
         with (self.resolved / "perk-mechanics.tsv").open(encoding="utf-8") as handle:
@@ -1251,7 +1333,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 24)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 26)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "allied-production-queue-synchronization-and-order-reset": 1,
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -1277,10 +1359,26 @@ class ResolvedEvidenceTests(unittest.TestCase):
             "team-stacked-one-time-delayed-unit-revival": 1,
             "spawn-area-marker-and-conditional-pathing-release-pulse": 1,
             "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
+            "enter-rect-combat-sapper-attack-order-recovery": 1,
+            "exact-resource-or-item-mutation-body-with-unresolved-scheduler": 1,
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 24)
+        self.assertEqual(len(rows), 26)
+        ledger = json.loads(rows["protected-runtime-ledger-unresolved-reachability"]["parameters_json"])
+        self.assertFalse(ledger["production_reachability_proven"])
+        self.assertTrue(ledger["must_not_be_treated_as_live_gameplay_without_scheduler_proof"])
+        self.assertEqual(ledger["branch_formula"], "(counter + lane) mod 3")
+        self.assertEqual(ledger["branch_0_item_rawcode"], "ratf")
+        self.assertEqual(ledger["branch_1_effect"], "selected-lane-player gold +1")
+        self.assertEqual(ledger["branch_2_effect"], "selected-lane-player lumber +1")
+        self.assertEqual(ledger["callback_constructor_readable_named_callers"], [])
+        order_rects = json.loads(rows["lane-order-rect-attack-reengage"]["parameters_json"])
+        self.assertEqual(order_rects["setup_delay_seconds"], 0.1)
+        self.assertEqual(order_rects["target_predicate"], "combat-sapper;vulnerable;not-cloaked")
+        self.assertEqual(order_rects["action"], "orderCodeAttack")
+        self.assertEqual(order_rects["rectangles"][0], {"max_x": -1024.0, "max_y": 1024.0, "min_x": -2047.9, "min_y": -1536.0})
+        self.assertEqual(order_rects["rectangles"][1], {"max_x": 2047.9, "max_y": 1024.0, "min_x": 1536.0, "min_y": -1024.0})
         stasis = json.loads(rows["stasis-totem-global-setup"]["parameters_json"])
         self.assertEqual(stasis["setup_delay_seconds"], 0.1)
         self.assertEqual(stasis["stock_stasis_trap_rawcode"], "otot")
@@ -2091,6 +2189,15 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual([branch["roll"] for branch in ruin_params["branches"]], list(range(10)))
         self.assertEqual(ruin_params["branches"][1]["damage"], 50000)
         self.assertEqual(ruin_params["branches"][7]["unit_id"], int.from_bytes(b"n01S", "big"))
+        ruin_reengage = ruin_params["control_reengage"]
+        self.assertEqual(ruin_reengage["initial_reengage_delay_seconds"], "1")
+        self.assertEqual(ruin_reengage["defender_defend_restore_delay_seconds_after_initial_reengage"], "44.5")
+        self.assertEqual(ruin_reengage["defender_defend_order_id"], 852055)
+        self.assertEqual(ruin_reengage["defender_attack_resume_delay_seconds_after_defend"], "0.5")
+
+        city = json.loads(rows["h00Z"]["parameters_json"])
+        self.assertEqual(city["effect_ability_id"], int.from_bytes(b"A018", "big"))
+        self.assertEqual(city["control_reengage"], ruin_reengage)
 
         replenish = rows["h079"]
         replenish_params = json.loads(replenish["parameters_json"])
@@ -2208,6 +2315,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(thunder["effect_radius"], 300)
         self.assertEqual(thunder["flying_recipient_multiplier"], "0.5")
         self.assertEqual(thunder["special_source_multiplier"], "0.35")
+        self.assertEqual(thunder["proc_source_reentrancy_guard"], "QS")
+        self.assertTrue(thunder["proc_source_guard_cleared_after_zero_delay"])
 
     def test_scripted_corpse_building_mechanics_keep_exact_predicates_and_effects(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))

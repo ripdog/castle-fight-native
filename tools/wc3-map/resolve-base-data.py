@@ -2353,7 +2353,11 @@ def main() -> None:
                         "buffs": ability["buffs"],
                         "object_data": json.loads(ability["data_fields_labeled_json"]),
                     }
-                elif system_id not in {"ai-engagement-damage-signals", "ai-executor-periodic-fsm"}:
+                elif system_id not in {
+                    "ai-engagement-damage-signals",
+                    "ai-executor-periodic-fsm",
+                    "ai-team-production-sync-targeting",
+                }:
                     raise ValueError(f"unrecognized runtime AI mechanic: {system_id}")
 
                 runtime_ai_rows.append([
@@ -2383,6 +2387,7 @@ def main() -> None:
                     "round-end-review-countdown",
                     "team-afk-confirmation-check",
                     "team-forfeit-vote",
+                    "global-draw-vote-match-cancel",
                 }:
                     raise ValueError(f"unrecognized runtime session mechanic: {system_id}")
                 runtime_session_rows.append([
@@ -2405,26 +2410,36 @@ def main() -> None:
         with runtime_mode_path.open(encoding="utf-8", newline="") as handle:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
-                if system_id != "mode-selection-controller-and-registry":
+                if system_id not in {"mode-selection-controller-and-registry", "w3champions-ladder-bootstrap"}:
                     raise ValueError(f"unrecognized runtime mode mechanic: {system_id}")
                 parameters = json.loads(mechanic["parameters_json"])
-                modes = parameters.get("registered_modes", [])
-                if parameters.get("registered_mode_count") != 44 or len(modes) != 44:
-                    raise ValueError(f"runtime mode registry count changed: {parameters.get('registered_mode_count')} / {len(modes)}")
-                if [row.get("mode_id") for row in modes] != [
-                    "r", "p", "m", "d", "cr", "sr", "um", "ud", "na", "ntb", "nb", "ns", "ni", "la", "nrs",
-                    "ur", "norb", "desync", "du", "nch", "co", "cc", "dom", "ult", "nca", "noai", "nfow", "it", "lt",
-                    "glw", "gld", "mp", "emp", "ll", "ban", "rban", "bal", "fow", "fill", "nt", "ht", "mt", "skip", "w3c",
-                ]:
-                    raise ValueError("runtime mode registry IDs/order changed")
-                round_limit = parameters.get("round_limit_runtime", {})
-                if (
-                    round_limit.get("warning_cascade_minutes_before_limit") != [5, 3, 1]
-                    or round_limit.get("warning_delays_seconds") != [120, 120, 60]
-                    or round_limit.get("positive_limit_primary_tiebreak") != "remaining Rescue Strike count per team"
-                    or round_limit.get("positive_limit_secondary_tiebreak") != "sum of taxedIncomeRealForPlayer over each team"
+                if system_id == "mode-selection-controller-and-registry":
+                    modes = parameters.get("registered_modes", [])
+                    if parameters.get("registered_mode_count") != 44 or len(modes) != 44:
+                        raise ValueError(f"runtime mode registry count changed: {parameters.get('registered_mode_count')} / {len(modes)}")
+                    if [row.get("mode_id") for row in modes] != [
+                        "r", "p", "m", "d", "cr", "sr", "um", "ud", "na", "ntb", "nb", "ns", "ni", "la", "nrs",
+                        "ur", "norb", "desync", "du", "nch", "co", "cc", "dom", "ult", "nca", "noai", "nfow", "it", "lt",
+                        "glw", "gld", "mp", "emp", "ll", "ban", "rban", "bal", "fow", "fill", "nt", "ht", "mt", "skip", "w3c",
+                    ]:
+                        raise ValueError("runtime mode registry IDs/order changed")
+                    round_limit = parameters.get("round_limit_runtime", {})
+                    if (
+                        round_limit.get("warning_cascade_minutes_before_limit") != [5, 3, 1]
+                        or round_limit.get("warning_delays_seconds") != [120, 120, 60]
+                        or round_limit.get("positive_limit_primary_tiebreak") != "remaining Rescue Strike count per team"
+                        or round_limit.get("positive_limit_secondary_tiebreak") != "sum of taxedIncomeRealForPlayer over each team"
+                    ):
+                        raise ValueError(f"runtime mode round-limit semantics changed: {round_limit}")
+                elif (
+                    parameters.get("detection_player_id") != 23
+                    or parameters.get("detection_player_name") != "FLO"
+                    or numeric(parameters.get("global_draw_player_removal_delay_seconds")) != 3
+                    or numeric(parameters.get("post_mode_start_delay_seconds")) != 2
+                    or parameters.get("protected_auto_mode_payload_status") != "protected-vm-not-normalized-here"
+                    or parameters.get("protected_default_draft_payload_status") != "protected-vm-not-normalized-here"
                 ):
-                    raise ValueError(f"runtime mode round-limit semantics changed: {round_limit}")
+                    raise ValueError(f"W3Champions ladder bootstrap parameters changed: {parameters}")
                 runtime_mode_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
                     mechanic["related_objects_json"], stable_json(parameters),
@@ -2449,6 +2464,7 @@ def main() -> None:
                     "campaign-star-restriction-failure-hooks",
                     "campaign-star-periodic-objectives",
                     "campaign-survival-countdown",
+                    "campaign-match-result-bridge",
                     "campaign-mission-supply-application",
                 }:
                     raise ValueError(f"unrecognized runtime campaign mechanic: {system_id}")
@@ -2462,6 +2478,15 @@ def main() -> None:
                     raise ValueError(f"campaign challenge polling period changed: {parameters}")
                 elif system_id == "campaign-survival-countdown" and parameters.get("period_seconds") != 1:
                     raise ValueError(f"campaign survival polling period changed: {parameters}")
+                elif system_id == "campaign-match-result-bridge":
+                    if (
+                        parameters.get("result_bridge_delay_seconds") != 5.0
+                        or not parameters.get("delayed_callback_stops_survival_timer")
+                        or parameters.get("delayed_callback_writes_player_won_symbol") != "Bpb"
+                        or parameters.get("delayed_callback_executes_trigger_symbol") != "Cpb"
+                        or parameters.get("protected_result_trigger_payload_normalized") is not False
+                    ):
+                        raise ValueError(f"campaign match-result bridge changed: {parameters}")
                 elif system_id == "campaign-mission-supply-application":
                     if (
                         parameters.get("retry_interval_seconds") != 0.10
@@ -3123,6 +3148,17 @@ def main() -> None:
                     parameters["marker_ability_rawcode"] = "A0BG"
                     parameters["marker_ability_name"] = marker["name"]
                     parameters["marker_ability_base_rawcode"] = marker["base_rawcode"]
+                elif system_id == "lane-order-rect-attack-reengage":
+                    if (
+                        numeric(parameters.get("setup_delay_seconds")) != 0.1
+                        or parameters.get("target_predicate") != "combat-sapper;vulnerable;not-cloaked"
+                        or parameters.get("action") != "orderCodeAttack"
+                        or parameters.get("rectangles") != [
+                            {"max_x": -1024.0, "max_y": 1024.0, "min_x": -2047.9, "min_y": -1536.0},
+                            {"max_x": 2047.9, "max_y": 1024.0, "min_x": 1536.0, "min_y": -1024.0},
+                        ]
+                    ):
+                        raise ValueError(f"lane-order rect attack recovery parameters changed: {parameters}")
                 elif system_id == "building-unit-synchronization":
                     if (
                         int(parameters.get("queue_cancel_order_id", 0)) != 851976
@@ -3133,6 +3169,19 @@ def main() -> None:
                         or parameters.get("post_sync_point_offset_absolute") != [38.0, 68.0]
                     ):
                         raise ValueError(f"building-unit synchronization parameters changed: {parameters}")
+                elif system_id == "protected-runtime-ledger-unresolved-reachability":
+                    if (
+                        parameters.get("production_reachability_proven") is not False
+                        or parameters.get("callback_constructor_readable_named_callers") != []
+                        or int(parameters.get("counter_observed_bootstrap_value", -1)) != 0
+                        or parameters.get("branch_formula") != "(counter + lane) mod 3"
+                        or int(parameters.get("branch_0_item_id", 0)) != 1918989414
+                        or parameters.get("branch_0_item_rawcode") != "ratf"
+                        or parameters.get("branch_1_effect") != "selected-lane-player gold +1"
+                        or parameters.get("branch_2_effect") != "selected-lane-player lumber +1"
+                        or parameters.get("must_not_be_treated_as_live_gameplay_without_scheduler_proof") is not True
+                    ):
+                        raise ValueError(f"protected RuntimeLedger evidence changed: {parameters}")
                 else:
                     raise ValueError(f"unrecognized runtime system mechanic: {system_id}")
 

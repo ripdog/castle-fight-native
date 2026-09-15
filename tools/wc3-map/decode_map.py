@@ -780,6 +780,7 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
     damage_listener_coverage = analysis["damage_listener_coverage"]
     action_watch_coverage = analysis["action_watch_coverage"]
     callback_periodic_coverage = analysis["callback_periodic_coverage"]
+    callback_single_coverage = analysis["callback_single_coverage"]
     event_listener_coverage = analysis["event_listener_coverage"]
     production_unit_special_mechanics = analysis["production_unit_special_mechanics"]
     building_improvement_spawn_mechanics = analysis["building_improvement_spawn_mechanics"]
@@ -1197,6 +1198,20 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
             writer.writerow([
                 row["callback_function"], row["coverage_status"],
                 ",".join(str(value) for value in row["normalized_sources"]),
+                row["evidence_note"], row["byte_offset"],
+            ])
+
+    with (script_dir / "callback-single-coverage.tsv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow([
+            "callback_function", "coverage_status", "normalized_sources", "dispatch_path",
+            "evidence_note", "byte_offset",
+        ])
+        for row in callback_single_coverage:
+            writer.writerow([
+                row["callback_function"], row["coverage_status"],
+                ",".join(str(value) for value in row["normalized_sources"]),
+                " -> ".join(str(value) for value in row["dispatch_path"]),
                 row["evidence_note"], row["byte_offset"],
             ])
 
@@ -2039,6 +2054,10 @@ def write_script_index(lua_path: Path, output: Path) -> dict[str, Any]:
         "callback_periodic_coverage_rows": len(callback_periodic_coverage),
         "callback_periodic_coverage_status_counts": dict(sorted(Counter(
             str(row["coverage_status"]) for row in callback_periodic_coverage
+        ).items())),
+        "callback_single_coverage_rows": len(callback_single_coverage),
+        "callback_single_coverage_status_counts": dict(sorted(Counter(
+            str(row["coverage_status"]) for row in callback_single_coverage
         ).items())),
         "event_listener_coverage_rows": len(event_listener_coverage),
         "event_listener_coverage_status_counts": dict(sorted(Counter(

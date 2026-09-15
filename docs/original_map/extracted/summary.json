@@ -134,15 +134,17 @@
       "spell-building-mana-regeneration-enchantment": 1,
       "toggleable-health-band-attack-damage-stance": 1
     },
-    "runtime_ai_mechanics": 4,
+    "runtime_ai_mechanics": 5,
     "runtime_ai_mechanic_kinds": {
+      "ai-owned-production-building-target-order-synchronization": 1,
       "damage-triggered-ai-rescue-strike-targeting-and-throttling": 1,
       "decayed-damage-weighted-engagement-and-structure-pressure-signals": 1,
       "delayed-ai-executor-lifecycle-build-timeout-and-one-second-fsm-controller-tick": 1,
       "team-strategic-aura-purchase-state-and-buyer-coordination": 1
     },
-    "runtime_session_mechanics": 6,
+    "runtime_session_mechanics": 7,
     "runtime_session_mechanic_kinds": {
+      "all-eligible-human-vote-cancels-match-and-removes-players": 1,
       "fifteen-second-one-second-tick-next-round-review-gate": 1,
       "leave-cleanup-autobalance-and-match-termination": 1,
       "player-inactivity-driven-allied-control-sharing": 1,
@@ -150,13 +152,15 @@
       "team-confirmation-timeout-to-afk-ai-control": 1,
       "unanimous-eligible-team-vote-kills-own-castle": 1
     },
-    "runtime_mode_mechanics": 1,
+    "runtime_mode_mechanics": 2,
     "runtime_mode_mechanic_kinds": {
+      "external-ladder-detection-protected-auto-mode-and-game-start-handoff": 1,
       "host-chat-mode-parser-with-exact-registered-mode-catalog": 1
     },
-    "runtime_campaign_mechanics": 4,
+    "runtime_campaign_mechanics": 5,
     "runtime_campaign_mechanic_kinds": {
       "campaign-active-star-restriction-event-failure": 1,
+      "delayed-campaign-win-state-and-protected-result-trigger-bridge": 1,
       "one-second-survival-objective-countdown-and-castle-kill-victory": 1,
       "quarter-second-fast-win-and-castle-health-star-tracking": 1,
       "round-start-gated-retrying-party-supply-application": 1
@@ -182,8 +186,8 @@
       "normalized-draft-runtime-semantics": 2,
       "normalized-gameplay-semantics": 10,
       "normalized-mode-runtime-semantics": 2,
-      "normalized-session-runtime-semantics": 2,
-      "presentation-only": 18,
+      "normalized-session-runtime-semantics": 3,
+      "presentation-only": 17,
       "telemetry-only": 3
     },
     "callback_periodic_coverage_rows": 29,
@@ -200,6 +204,27 @@
       "normalized-unit-spell-semantics": 1,
       "presentation-only": 5,
       "telemetry-only": 2
+    },
+    "callback_single_coverage_rows": 276,
+    "callback_single_coverage_status_counts": {
+      "ai-runtime-infrastructure": 1,
+      "callback-framework-infrastructure": 2,
+      "e2e-only": 98,
+      "gameplay-framework-infrastructure": 19,
+      "integrity-infrastructure": 3,
+      "normalized-ai-runtime-semantics": 11,
+      "normalized-campaign-runtime-semantics": 2,
+      "normalized-draft-runtime-dispatch": 2,
+      "normalized-gameplay-dispatch": 4,
+      "normalized-gameplay-semantics": 41,
+      "normalized-mode-runtime-semantics": 10,
+      "normalized-session-runtime-dispatch": 2,
+      "normalized-session-runtime-semantics": 6,
+      "normalized-unit-spell-semantics": 32,
+      "normalized-unresolved-reachability-evidence": 1,
+      "presentation-only": 37,
+      "sync-framework-infrastructure": 2,
+      "telemetry-infrastructure": 3
     },
     "event_listener_coverage_rows": 70,
     "event_listener_coverage_status_counts": {
@@ -247,7 +272,7 @@
     "building_improvement_spawn_mechanic_kinds": {
       "unreachable-production-spawn-branch-keyed-by-A0EL": 1
     },
-    "runtime_system_mechanics": 24,
+    "runtime_system_mechanics": 26,
     "runtime_system_mechanic_kinds": {
       "allied-production-queue-synchronization-and-order-reset": 1,
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -259,6 +284,8 @@
       "catalog-authoritative-building-income-cache-correction": 1,
       "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,
       "enchantment-marker-driven-half-damage-cleave": 1,
+      "enter-rect-combat-sapper-attack-order-recovery": 1,
+      "exact-resource-or-item-mutation-body-with-unresolved-scheduler": 1,
       "first-fifteen-seconds-castle-damage-immunity": 1,
       "per-player-building-count-income-multiplier": 1,
       "periodic-assassin-ambush-and-gobbo-repair-order-controller": 1,
