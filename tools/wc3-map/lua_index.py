@@ -5962,6 +5962,12 @@ def _extract_runtime_mode_mechanics(
     w3c_draft_start, w3c_draft_source = body(w3c_default_draft_callback)
     w3c_game_cb_start, w3c_game_cb_source = body(w3c_start_game_callback)
     start_game_start, start_game_source = body("startGame")
+    auto_modes_start, auto_modes_source = body("applyW3ChampionsAutoModes__w3p_vmProtect")
+    default_draft_start, default_draft_source = body("startDefaultDraft__w3p_vmProtect")
+    start_draft_start, start_draft_source = body("startDraft__w3p_vmProtect")
+    draft_init_start, draft_init_source = body("KG")
+    w3c_preset_callback = "VoidClosure_registerMode_ModeParser_ModeParser_call_registerMode_ModeParser_ModeParser23"
+    w3c_preset_start, w3c_preset_source = body(w3c_preset_callback)
     if data.count(b"eks=gC:create1155()doAfter(0.02,eks)") != 1:
         raise ValueError("W3Champions bootstrap initial delay changed")
     for fragment in (
@@ -5973,6 +5979,64 @@ def _extract_runtime_mode_mechanics(
             raise ValueError(f"W3Champions bootstrap changed: missing {fragment!r}")
     if b"startDefaultDraft__w3p_vmProtect()" not in w3c_draft_source:
         raise ValueError("W3Champions default-draft handoff changed")
+    if auto_modes_source != b"function applyW3ChampionsAutoModes__w3p_vmProtect()return _qr(97)end":
+        raise ValueError("W3Champions protected auto-mode wrapper changed")
+    if default_draft_source != b"function startDefaultDraft__w3p_vmProtect()return _qr(43)end":
+        raise ValueError("W3Champions protected default-draft wrapper changed")
+    for fragment in (
+        b"resetPool()", b"initializeDefaultDraftTiers__w3p_vmProtect()", b"initPerks__w3p_vmProtect()",
+        b"assertDraftPerkCount__w3p_vmProtect()", b"assertDraftPerkIdSequence__w3p_vmProtect()",
+        b"setupDefaultRoundOrder__w3p_vmProtect()", b"DraftController_new_DraftController(Atq,ytq,ztq)",
+        b"DraftController_DraftController_setSupplier(Sfb,Btq)", b"DraftController_DraftController_startWithWarmup(Sfb)",
+    ):
+        if fragment not in start_draft_source:
+            raise ValueError(f"W3Champions startDraft semantics changed: missing {fragment!r}")
+    if b"ntq=Ol:create451()Ifb=ntq" not in draft_init_source:
+        raise ValueError("W3Champions default DraftPack supplier initialization changed")
+    for fragment in (
+        b'ModeParser_applyModeString__w3p_vmProtect("ud1-ur-na-it7-mt-glw32")',
+        b'W3Champions ladder preset|r active: |cffFFFF00-ud1-ur-na-it7-mt-glw32|r.',
+        b"if(not a_)then", b"doAfter(0.,wYm)",
+    ):
+        if fragment not in w3c_preset_source:
+            raise ValueError(f"W3Champions registered preset callback changed: missing {fragment!r}")
+
+    auto_mode_static = _w3p_vm_static_strings(data, 97)
+    auto_mode_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 97)
+    ]
+    if auto_mode_static != ["-w3c"] or auto_mode_globals != ["ModeParser_parseMode__w3p_vmProtect"]:
+        raise ValueError(f"W3Champions protected auto-mode payload changed: {auto_mode_static} / {auto_mode_globals}")
+    auto_mode_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 97, expected_opcode_xor_byte=3)["instructions"]
+    ]
+    if auto_mode_program != [(218, (1,)), (46, (1,)), (172, (1,)), (221, ())]:
+        raise ValueError(f"W3Champions protected auto-mode VM changed: {auto_mode_program}")
+
+    default_draft_static = _w3p_vm_static_strings(data, 43)
+    default_draft_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 43)
+    ]
+    if default_draft_static != ["6", "20", "1"] or default_draft_globals != [
+        "initializeDefaultDraftTiers__w3p_vmProtect",
+        "initPerks__w3p_vmProtect",
+        "assertDraftPerkIdSequence__w3p_vmProtect",
+        "startDraft__w3p_vmProtect",
+        "Ifb",
+    ]:
+        raise ValueError(f"W3Champions protected default-draft payload changed: {default_draft_static} / {default_draft_globals}")
+    default_draft_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 43, expected_opcode_xor_byte=145)["instructions"]
+    ]
+    if default_draft_program != [
+        (42, (1, 0)), (42, (2, 0)), (42, (3, 0)), (218, (4,)),
+        (144, (1,)), (144, (2,)), (144, (3,)), (218, (5,)), (98, (64,)), (221, ()),
+    ]:
+        raise ValueError(f"W3Champions protected default-draft VM changed: {default_draft_program}")
     if b"startGame()" not in w3c_game_cb_source:
         raise ValueError("W3Champions ordinary game-start handoff changed")
     for fragment in (b"OGb=false", b"LGb==(-1)", b"setBaseMode(false)", b"TriggerExecute(PFb)"):
@@ -5991,13 +6055,41 @@ def _extract_runtime_mode_mechanics(
             "global_draw_player_removal_delay_seconds": 3,
             "mode_application_requires_OGb": True,
             "protected_auto_mode_function": "applyW3ChampionsAutoModes__w3p_vmProtect",
-            "protected_auto_mode_payload_status": "protected-vm-not-normalized-here",
+            "protected_auto_mode_payload_status": "statically-decoded-vm97",
+            "protected_auto_mode_vm_index": 97,
+            "protected_auto_mode_string": "-w3c",
+            "protected_auto_mode_parser": "ModeParser_parseMode__w3p_vmProtect",
+            "registered_w3c_mode_apply_string": "ud1-ur-na-it7-mt-glw32",
+            "registered_w3c_mode_display_command": "-ud1-ur-na-it7-mt-glw32",
+            "registered_w3c_mode_preset_tokens": ["ud1", "ur", "na", "it7", "mt", "glw32"],
+            "registered_w3c_mode_preset": [
+                {"mode_id": "ud", "name": "Ultimate Draft", "value": 1},
+                {"mode_id": "ur", "name": "Unique Races"},
+                {"mode_id": "na", "name": "No Artillery"},
+                {"mode_id": "it", "name": "Income Timer", "value": 7},
+                {"mode_id": "mt", "name": "Medium Tax"},
+                {"mode_id": "glw", "name": "Game Length Win", "value": 32},
+            ],
+            "registered_w3c_mode_callback_applies_preset_via": "ModeParser_applyModeString__w3p_vmProtect",
+            "registered_w3c_mode_callback_schedules_zero_delay_followup_when_a_is_false": True,
             "marks_mode_selection_finalized_Ocb": True,
             "clears_OGb_after_protected_auto_mode_application": True,
             "post_mode_start_delay_seconds": 2,
             "T8_true_handoff": "startDefaultDraft__w3p_vmProtect",
             "T8_false_handoff": "startGame",
-            "protected_default_draft_payload_status": "protected-vm-not-normalized-here",
+            "protected_default_draft_payload_status": "statically-decoded-vm43",
+            "protected_default_draft_vm_index": 43,
+            "default_draft_preinitializes_tiers": True,
+            "default_draft_preinitializes_perks": True,
+            "default_draft_asserts_perk_id_sequence": True,
+            "default_draft_total_rounds": 6,
+            "default_draft_seconds_per_round": 20,
+            "default_draft_rerolls": 1,
+            "default_draft_supplier_symbol": "Ifb",
+            "default_draft_supplier_type": "DefaultPackSupplier",
+            "start_draft_reinitializes_pool_tiers_perks_and_round_order": True,
+            "start_draft_asserts_perk_count_and_id_sequence": True,
+            "start_draft_starts_with_warmup": True,
             "start_game_requires_selected_mode_LGb_not_minus_one": True,
             "start_game_sets_base_mode_false": True,
             "start_game_executes_trigger_symbol": "PFb",
@@ -6005,9 +6097,14 @@ def _extract_runtime_mode_mechanics(
         "related_rawcode_ids": [],
         "source_functions": [
             w3c_callback, w3c_default_draft_callback, w3c_start_game_callback, "startGame",
+            "applyW3ChampionsAutoModes__w3p_vmProtect", "startDefaultDraft__w3p_vmProtect",
+            "startDraft__w3p_vmProtect", "KG", w3c_preset_callback,
         ],
-        "evidence_kind": "exact-readable-w3champions-wrapper-with-protected-mode-and-draft-payloads-explicitly-unresolved",
-        "byte_offset": min(w3c_start, w3c_draft_start, w3c_game_cb_start, start_game_start),
+        "evidence_kind": "exact-readable-w3champions-wrapper-plus-statically-decoded-auto-mode-vm97-and-default-draft-vm43",
+        "byte_offset": min(
+            w3c_start, w3c_draft_start, w3c_game_cb_start, start_game_start,
+            auto_modes_start, default_draft_start, start_draft_start, draft_init_start, w3c_preset_start,
+        ),
     })
     return rows
 

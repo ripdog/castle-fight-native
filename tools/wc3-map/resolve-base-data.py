@@ -2598,8 +2598,21 @@ def main() -> None:
                     or parameters.get("detection_player_name") != "FLO"
                     or numeric(parameters.get("global_draw_player_removal_delay_seconds")) != 3
                     or numeric(parameters.get("post_mode_start_delay_seconds")) != 2
-                    or parameters.get("protected_auto_mode_payload_status") != "protected-vm-not-normalized-here"
-                    or parameters.get("protected_default_draft_payload_status") != "protected-vm-not-normalized-here"
+                    or parameters.get("protected_auto_mode_payload_status") != "statically-decoded-vm97"
+                    or int(parameters.get("protected_auto_mode_vm_index", -1)) != 97
+                    or parameters.get("protected_auto_mode_string") != "-w3c"
+                    or parameters.get("protected_auto_mode_parser") != "ModeParser_parseMode__w3p_vmProtect"
+                    or parameters.get("registered_w3c_mode_apply_string") != "ud1-ur-na-it7-mt-glw32"
+                    or parameters.get("registered_w3c_mode_display_command") != "-ud1-ur-na-it7-mt-glw32"
+                    or parameters.get("registered_w3c_mode_preset_tokens") != ["ud1", "ur", "na", "it7", "mt", "glw32"]
+                    or parameters.get("protected_default_draft_payload_status") != "statically-decoded-vm43"
+                    or int(parameters.get("protected_default_draft_vm_index", -1)) != 43
+                    or int(parameters.get("default_draft_total_rounds", -1)) != 6
+                    or int(parameters.get("default_draft_seconds_per_round", -1)) != 20
+                    or int(parameters.get("default_draft_rerolls", -1)) != 1
+                    or parameters.get("default_draft_supplier_symbol") != "Ifb"
+                    or parameters.get("default_draft_supplier_type") != "DefaultPackSupplier"
+                    or parameters.get("start_draft_starts_with_warmup") is not True
                 ):
                     raise ValueError(f"W3Champions ladder bootstrap parameters changed: {parameters}")
                 runtime_mode_rows.append([

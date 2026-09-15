@@ -616,8 +616,37 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(w3c["detection_player_name"], "FLO")
         self.assertEqual(w3c["global_draw_player_removal_delay_seconds"], 3)
         self.assertEqual(w3c["post_mode_start_delay_seconds"], 2)
-        self.assertEqual(w3c["protected_auto_mode_payload_status"], "protected-vm-not-normalized-here")
-        self.assertEqual(w3c["protected_default_draft_payload_status"], "protected-vm-not-normalized-here")
+        self.assertEqual(w3c["protected_auto_mode_payload_status"], "statically-decoded-vm97")
+        self.assertEqual(w3c["protected_auto_mode_vm_index"], 97)
+        self.assertEqual(w3c["protected_auto_mode_string"], "-w3c")
+        self.assertEqual(w3c["protected_auto_mode_parser"], "ModeParser_parseMode__w3p_vmProtect")
+        self.assertEqual(w3c["registered_w3c_mode_apply_string"], "ud1-ur-na-it7-mt-glw32")
+        self.assertEqual(w3c["registered_w3c_mode_display_command"], "-ud1-ur-na-it7-mt-glw32")
+        self.assertEqual(w3c["registered_w3c_mode_preset_tokens"], ["ud1", "ur", "na", "it7", "mt", "glw32"])
+        self.assertEqual(
+            w3c["registered_w3c_mode_preset"],
+            [
+                {"mode_id": "ud", "name": "Ultimate Draft", "value": 1},
+                {"mode_id": "ur", "name": "Unique Races"},
+                {"mode_id": "na", "name": "No Artillery"},
+                {"mode_id": "it", "name": "Income Timer", "value": 7},
+                {"mode_id": "mt", "name": "Medium Tax"},
+                {"mode_id": "glw", "name": "Game Length Win", "value": 32},
+            ],
+        )
+        self.assertEqual(w3c["protected_default_draft_payload_status"], "statically-decoded-vm43")
+        self.assertEqual(w3c["protected_default_draft_vm_index"], 43)
+        self.assertTrue(w3c["default_draft_preinitializes_tiers"])
+        self.assertTrue(w3c["default_draft_preinitializes_perks"])
+        self.assertTrue(w3c["default_draft_asserts_perk_id_sequence"])
+        self.assertEqual(w3c["default_draft_total_rounds"], 6)
+        self.assertEqual(w3c["default_draft_seconds_per_round"], 20)
+        self.assertEqual(w3c["default_draft_rerolls"], 1)
+        self.assertEqual(w3c["default_draft_supplier_symbol"], "Ifb")
+        self.assertEqual(w3c["default_draft_supplier_type"], "DefaultPackSupplier")
+        self.assertTrue(w3c["start_draft_reinitializes_pool_tiers_perks_and_round_order"])
+        self.assertTrue(w3c["start_draft_asserts_perk_count_and_id_sequence"])
+        self.assertTrue(w3c["start_draft_starts_with_warmup"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual(summary["runtime_mode_mechanic_rows"], 2)
