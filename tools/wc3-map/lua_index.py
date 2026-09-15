@@ -9646,6 +9646,7 @@ def _extract_runtime_system_mechanics(
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem1",
         "CallbackSingle_doAfter_SyncSystem_call_doAfter_SyncSystem2",
         "iD", "handleSourceDamageEffects", "h05LAttackProc", "boulderAttackProc", "MC",
+        "hasShield", "checkForShield", "Vd", "Ed",
         "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
         "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
     }
@@ -9759,6 +9760,75 @@ def _extract_runtime_system_mechanics(
         ],
         "evidence_kind": "exact-native-aura-object-data-and-cross-runtime-script",
         "byte_offset": min(init_start, register_start, sweep_start, apply_start, exclusion_start, setup_start),
+    })
+
+    # Targeted negative-effect shields. Building spells funnel their shield
+    # checks through hasShield/checkForShield. A09L is a consumable one/two-hit
+    # shield; Goblin Shredder instead has an intrinsic 60% roll and every
+    # successful block advances its attack-speed/death-explosion/visual spellbook
+    # level in lockstep, capped at object level 5. A070 is the non-consuming
+    # anti-hex marker fallback.
+    shield_start, shield_source, shield_tokens = source("hasShield")
+    shield_effect_start, shield_effect_source, shield_effect_tokens = source("checkForShield")
+    shield_consume_start, shield_consume_source, shield_consume_tokens = source("Vd")
+    overheat_start, overheat_source, overheat_tokens = source("Ed")
+    for fragment in (
+        b"GetUnitAbilityLevel(Zdo,1093679436)>0",
+        b"GetUnitTypeId(Zdo)==1848652116",
+        b"GetRandomInt(0,99)<60",
+        b"__wurst_safe_GetUnitAbilityLevel(Zdo,1093678896)>0",
+    ):
+        if fragment not in shield_source:
+            raise ValueError("targeted negative-effect shield precedence changed")
+    if b"if hasShield(aeo)then" not in shield_effect_source or b"DispelMagicTarget.mdl" not in shield_effect_source:
+        raise ValueError("targeted negative-effect shield block effect changed")
+    for fragment in (
+        b"GetUnitAbilityLevel(Xfo,1093679436)",
+        b"if(Yfo==2)then",
+        b"SetUnitAbilityLevel(Xfo,1093679436,1)",
+        b"SetUnitState(Xfo,UNIT_STATE_LIFE,__wurst_safe_GetUnitState(Xfo,UNIT_STATE_MAX_LIFE))",
+        b"UnitRemoveAbility(Xfo,1093679436)",
+    ):
+        if fragment not in shield_consume_source:
+            raise ValueError("A09L shield consumption changed")
+    for fragment in (
+        b"GetUnitAbilityLevel(Zfo,1093679427)+1",
+        b"if(ago>=6)then return end",
+        b"SetUnitAbilityLevel(Zfo,1093679427,ago)",
+        b"SetUnitAbilityLevel(Zfo,1093679426,ago)",
+        b"SetUnitAbilityLevel(Zfo,1093677130,ago)",
+    ):
+        if fragment not in overheat_source:
+            raise ValueError("Goblin Shredder Engine Overheat scaling changed")
+    rows.append({
+        "system_id": "targeted-negative-effect-shields",
+        "mechanic_kind": "consumable-building-spell-shields-and-goblin-shredder-overheat",
+        "trigger": "negative-building-spell-target-shield-check",
+        "parameters": {
+            "active_shield_ability_id": 1093679436,
+            "active_shield_buff_id": 1110454600,
+            "active_shield_level_1_blocks": 1,
+            "active_shield_level_2_blocks": 2,
+            "active_shield_level_2_first_block_heals_to_max_life": True,
+            "anti_hex_marker_ability_id": 1093678896,
+            "anti_hex_marker_blocks_without_consumption": True,
+            "goblin_shredder_unit_id": 1848652116,
+            "goblin_shredder_block_chance_percent": 60,
+            "goblin_shredder_overheat_initial_level": 1,
+            "goblin_shredder_overheat_max_level": 5,
+            "goblin_shredder_overheat_attack_speed_ability_id": 1093679427,
+            "goblin_shredder_overheat_death_explosion_ability_id": 1093679426,
+            "goblin_shredder_overheat_visual_spellbook_ability_id": 1093677130,
+            "successful_shredder_blocks_increment_all_three_levels_together": True,
+            "blocked_effect_returns_before_negative_building_spell_body": True,
+        },
+        "related_rawcode_ids": [
+            1093679436, 1110454600, 1093678896, 1848652116,
+            1093679427, 1093679426, 1093677130,
+        ],
+        "source_functions": ["hasShield", "checkForShield", "Vd", "Ed"],
+        "evidence_kind": "exact-shield-precedence-consumption-roll-and-overheat-level-progression",
+        "byte_offset": min(shield_start, shield_effect_start, shield_consume_start, overheat_start),
     })
 
     # Heroic Shrine / Companion Spawning. The real runtime is 17% per shrine,
@@ -10657,6 +10727,8 @@ def _extract_runtime_system_mechanics(
         raise ValueError("Builder Blink ability rawcode changed")
     if b"EVENT_PLAYER_UNIT_SPELL_CAST" not in blink_register_source or b"Xb:create35()" not in blink_register_source:
         raise ValueError("Builder Blink spell-cast registration changed")
+    if b"unit_removeAbility(UXq,1093677105)" not in round_start_source:
+        raise ValueError("Round-start legacy builder Blink removal changed")
     if b"bYq=kY addProtectedAbility(aYq,bYq)" not in round_start_source:
         raise ValueError("Round-start builder Blink grant changed")
     if b"if(GetSpellAbilityId()==kY)" not in blink_cast_source:
@@ -10682,6 +10754,8 @@ def _extract_runtime_system_mechanics(
         "parameters": {
             "ability_id": 1093676337,
             "ability_rawcode": "A0-1",
+            "legacy_static_blink_ability_id": 1093677105,
+            "legacy_static_blink_removed_before_runtime_grant": True,
             "granted_to_spawned_builders": True,
             "destination_rect": "owner-own-castle-rect",
             "destination_rect_proof": "team0 uses NFb while enemyCastleRect(team0)=MFb; team1 uses MFb while enemyCastleRect(team1)=NFb",
@@ -10692,7 +10766,7 @@ def _extract_runtime_system_mechanics(
             "post_teleport_order_id": 851972,
             "post_teleport_order_symbol": "O6",
         },
-        "related_rawcode_ids": [1093676337],
+        "related_rawcode_ids": [1093676337, 1093677105],
         "source_functions": ["uL", "CE", "completeRoundStart", "EventListener_add_Blink_onEvent_add_Blink", "enemyCastleRect", "kJ"],
         "evidence_kind": "exact-builder-grant-spell-cast-rect-clamp-and-position-set",
         "byte_offset": min(blink_init_start, blink_register_start, round_start_start, blink_cast_start, enemy_rect_start, order_init_start),

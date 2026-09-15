@@ -272,7 +272,7 @@
     "building_improvement_spawn_mechanic_kinds": {
       "unreachable-production-spawn-branch-keyed-by-A0EL": 1
     },
-    "runtime_system_mechanics": 30,
+    "runtime_system_mechanics": 31,
     "runtime_system_mechanic_kinds": {
       "allied-production-queue-synchronization-and-order-reset": 1,
       "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -283,6 +283,7 @@
       "building-random-enemy-base-attack-ground-controller": 1,
       "catalog-authoritative-building-income-cache-correction": 1,
       "construction-finish-hidden-native-ability-grants": 1,
+      "consumable-building-spell-shields-and-goblin-shredder-overheat": 1,
       "damage-event-15-percent-chain-lightning-dummy-proc": 1,
       "damage-event-40-percent-hurl-boulder-dummy-proc": 1,
       "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,

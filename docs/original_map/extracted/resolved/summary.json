@@ -50,6 +50,31 @@
     "static-differs": 16,
     "static-match": 1
   },
+  "ability_runtime_coverage_rows": 723,
+  "ability_runtime_coverage_status_counts": {
+    "control-ui-helper": 32,
+    "e2e-only": 1,
+    "marker-data-only": 21,
+    "native-engine-implicit": 2,
+    "native-object-indirect": 27,
+    "native-object-owned": 244,
+    "native-object-owned+normalized-script": 169,
+    "protected-runtime-overlay": 46,
+    "runtime-granted-normalized": 53,
+    "runtime-preload-only": 1,
+    "scripted-normalized": 83,
+    "unresolved-reachability": 1,
+    "unused-orphaned": 43
+  },
+  "buff_runtime_coverage_rows": 100,
+  "buff_runtime_coverage_status_counts": {
+    "native-ability-linked": 81,
+    "native-ability-linked+normalized-script": 6,
+    "scripted-normalized": 1,
+    "unresolved-reachability": 2,
+    "unused-orphaned": 10
+  },
+  "ability_buff_unresolved_script_semantics": [],
   "protected_unit_stat_rows": 549,
   "protected_unit_stat_override_assignments": 1887,
   "protected_unit_stat_override_counts": {
@@ -210,7 +235,7 @@
     "round-end-draft-controller-reset-and-warmup-restart": 1,
     "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1
   },
-  "runtime_system_mechanic_rows": 30,
+  "runtime_system_mechanic_rows": 31,
   "runtime_system_mechanic_kinds": {
     "allied-production-queue-synchronization-and-order-reset": 1,
     "area-building-buffs-cleanse-and-spawn-augmentation": 1,
@@ -221,6 +246,7 @@
     "building-random-enemy-base-attack-ground-controller": 1,
     "catalog-authoritative-building-income-cache-correction": 1,
     "construction-finish-hidden-native-ability-grants": 1,
+    "consumable-building-spell-shields-and-goblin-shredder-overheat": 1,
     "damage-event-15-percent-chain-lightning-dummy-proc": 1,
     "damage-event-40-percent-hurl-boulder-dummy-proc": 1,
     "delayed-stock-trap-hiding-and-per-player-single-totem-tech-caps": 1,

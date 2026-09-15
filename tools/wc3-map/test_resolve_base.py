@@ -1331,15 +1331,75 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(rows["n03J"]["marker_runtime_hooks"], "ability-marker:A0HG")
         self.assertIn("attack-proc-ground-whirlwind-aoe", rows["n03J"]["special_mechanic_kinds"])
 
+    def test_ability_and_buff_runtime_coverage_is_closed(self) -> None:
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["ability_runtime_coverage_rows"], 723)
+        self.assertEqual(summary["ability_runtime_coverage_status_counts"], {
+            "control-ui-helper": 32,
+            "e2e-only": 1,
+            "marker-data-only": 21,
+            "native-engine-implicit": 2,
+            "native-object-indirect": 27,
+            "native-object-owned": 244,
+            "native-object-owned+normalized-script": 169,
+            "protected-runtime-overlay": 46,
+            "runtime-granted-normalized": 53,
+            "runtime-preload-only": 1,
+            "scripted-normalized": 83,
+            "unresolved-reachability": 1,
+            "unused-orphaned": 43,
+        })
+        self.assertEqual(summary["buff_runtime_coverage_rows"], 100)
+        self.assertEqual(summary["buff_runtime_coverage_status_counts"], {
+            "native-ability-linked": 81,
+            "native-ability-linked+normalized-script": 6,
+            "scripted-normalized": 1,
+            "unresolved-reachability": 2,
+            "unused-orphaned": 10,
+        })
+        self.assertEqual(summary["ability_buff_unresolved_script_semantics"], [])
+
+        with (self.resolved / "ability-runtime-coverage.tsv").open(encoding="utf-8") as handle:
+            abilities = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        with (self.resolved / "buff-runtime-coverage.tsv").open(encoding="utf-8") as handle:
+            buffs = {row["rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(len(abilities), 723)
+        self.assertEqual(len(buffs), 100)
+
+        self.assertEqual(abilities["AUbu"]["coverage_status"], "native-engine-implicit")
+        self.assertEqual(abilities["ARal"]["coverage_status"], "native-engine-implicit")
+        self.assertEqual(abilities["ACrj"]["coverage_status"], "unused-orphaned")
+        self.assertEqual(abilities["Ahsb"]["coverage_status"], "unused-orphaned")
+        self.assertEqual(abilities["A0DA"]["coverage_status"], "runtime-preload-only")
+        self.assertEqual(abilities["A0ES"]["coverage_status"], "unresolved-reachability")
+        self.assertEqual(
+            {rawcode for rawcode, row in abilities.items() if "unresolved" in row["coverage_status"]},
+            {"A0ES"},
+        )
+
+        for rawcode in ("B006", "B00B", "B00O", "B013", "B01A", "B01G", "B01Z", "B027"):
+            self.assertEqual(buffs[rawcode]["coverage_status"], "unused-orphaned")
+        self.assertEqual(buffs["B000"]["script_reference_class"], "none")
+        self.assertEqual(buffs["B001"]["script_reference_class"], "none")
+        self.assertEqual(buffs["Xbdt"]["coverage_status"], "native-ability-linked")
+        self.assertEqual(buffs["Xbdt"]["parent_ability_links"], "A9FS:aeff")
+        self.assertEqual(buffs["B00D"]["coverage_status"], "unresolved-reachability")
+        self.assertEqual(buffs["B029"]["coverage_status"], "unresolved-reachability")
+        self.assertEqual(
+            {rawcode for rawcode, row in buffs.items() if "unresolved" in row["coverage_status"]},
+            {"B00D", "B029"},
+        )
+
     def test_runtime_system_mechanics_are_importer_ready(self) -> None:
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_system_mechanic_rows"], 30)
+        self.assertEqual(summary["runtime_system_mechanic_rows"], 31)
         self.assertEqual(summary["runtime_system_mechanic_kinds"], {
             "allied-production-queue-synchronization-and-order-reset": 1,
             "area-building-buffs-cleanse-and-spawn-augmentation": 1,
             "catalog-authoritative-building-income-cache-correction": 1,
             "buff-marker-non-attack-current-damage-multiplier": 1,
             "body-replacement-plus-independent-random-trait-groups": 1,
+            "consumable-building-spell-shields-and-goblin-shredder-overheat": 1,
             "builder-point-teleport-clamped-to-own-castle": 1,
             "builder-point-cast-team-coordinated-area-execution": 1,
             "tower-damage-impact-batched-temporary-vision": 1,
@@ -1368,7 +1428,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         })
         with (self.resolved / "runtime-system-mechanics.tsv").open(encoding="utf-8") as handle:
             rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
-        self.assertEqual(len(rows), 30)
+        self.assertEqual(len(rows), 31)
         hidden_grants = json.loads(rows["construction-granted-hidden-building-abilities"]["parameters_json"])
         grants = {row["building_rawcode"]: row for row in hidden_grants["resolved_grants"]}
         self.assertEqual([row["rawcode"] for row in grants["h00G"]["runtime_granted_abilities"]], ["A0HY", "A007"])
@@ -1376,6 +1436,22 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(grants["h00G"]["runtime_granted_abilities"][1]["object_data"]["Amount of Hit Points Regenerated"], 7.5)
         self.assertEqual(grants["h01O"]["runtime_granted_abilities"][0]["object_data"]["Armor Bonus"], -3)
         self.assertEqual([row["rawcode"] for row in grants["h061"]["runtime_granted_abilities"]], ["A03Q", "A0EV"])
+
+        shields = json.loads(rows["targeted-negative-effect-shields"]["parameters_json"])
+        self.assertEqual(shields["active_shield_ability_rawcode"], "A09L")
+        self.assertEqual(shields["active_shield_buff_rawcode"], "B01H")
+        self.assertEqual(shields["active_shield_armor_bonus_by_level"], [2, 4])
+        self.assertTrue(shields["active_shield_level_2_first_block_heals_to_max_life"])
+        self.assertEqual(shields["anti_hex_marker_ability_rawcode"], "A070")
+        self.assertEqual(shields["goblin_shredder_rawcode"], "n01T")
+        self.assertEqual(shields["goblin_shredder_block_chance_percent"], 60)
+        self.assertEqual(shields["goblin_shredder_overheat_attack_speed_fraction_by_level"], [0, 0.5, 1, 1.5, 2])
+        self.assertEqual(shields["goblin_shredder_overheat_full_explosion_damage_by_level"], [50, 100, 200, 400, 800])
+        self.assertEqual(
+            shields["goblin_shredder_overheat_visual_spell_list_by_level"],
+            ["", "A027", "A027,A0A1", "A027,A0A1,A0A2", "A027,A0A1,A0A2,A0A4"],
+        )
+        self.assertTrue(shields["successful_shredder_blocks_increment_all_three_levels_together"])
 
         energy = json.loads(rows["energy-tower-energy-burst"]["parameters_json"])
         self.assertEqual(energy["proc_probability_percent"], 15)

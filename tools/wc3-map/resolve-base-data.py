@@ -61,6 +61,91 @@ CANONICAL_ORDER_IDS = {
     "parasite": 852601,
 }
 
+# Whole-map usage closure is version-scoped.  The archive hash is a stronger
+# key than a display-version string because it also protects us against a
+# silently replaced 9.27 source archive.  Status distributions are populated
+# below after classification and deliberately locked for retained releases.
+ABILITY_BUFF_COVERAGE_PROFILES: dict[str, dict[str, Any]] = {
+    "9e3519bbc2a0fb6145460dd8b5730e9a35b2fd5923d63404eaf31e3618208a88": {
+        "label": "9.27/r1",
+        "ability_objects": 723,
+        "buff_objects": 100,
+        "ability_status_counts": {
+            "control-ui-helper": 32,
+            "e2e-only": 1,
+            "marker-data-only": 21,
+            "native-engine-implicit": 2,
+            "native-object-indirect": 27,
+            "native-object-owned": 244,
+            "native-object-owned+normalized-script": 169,
+            "protected-runtime-overlay": 46,
+            "runtime-granted-normalized": 53,
+            "runtime-preload-only": 1,
+            "scripted-normalized": 83,
+            "unresolved-reachability": 1,
+            "unused-orphaned": 43,
+        },
+        "buff_status_counts": {
+            "native-ability-linked": 81,
+            "native-ability-linked+normalized-script": 6,
+            "scripted-normalized": 1,
+            "unresolved-reachability": 2,
+            "unused-orphaned": 10,
+        },
+    },
+}
+
+# These are semantic/importer-facing artifacts, not raw inventories.  A
+# rawcode appearing here has already been promoted beyond mere Lua/object-data
+# mention into normalized evidence.  Keep this list intentionally explicit so
+# adding a new semantic table requires a conscious closure review.
+ABILITY_BUFF_NORMALIZED_ARTIFACTS = (
+    "building-spell-mechanics.tsv",
+    "corpse-building-mechanics.tsv",
+    "item-mechanics.tsv",
+    "perk-mechanics.tsv",
+    "production-unit-special-mechanics.tsv",
+    "runtime-ai-mechanics.tsv",
+    "runtime-campaign-mechanics.tsv",
+    "runtime-draft-mechanics.tsv",
+    "runtime-mode-mechanics.tsv",
+    "runtime-session-mechanics.tsv",
+    "runtime-system-mechanics.tsv",
+    "unit-spell-mechanics.tsv",
+    "unit-spell-semantics.tsv",
+)
+
+ABILITY_RUNTIME_GRANT_CALLS = {
+    "addProtectedAbility",
+    "safeUnitAddAbility",
+}
+
+# These generated functions either materialize static/protected object data or
+# apply a previously decoded protected field overlay.  A rawcode occurrence in
+# one of them is evidence about data, not proof that live gameplay reaches it.
+ABILITY_NON_REACHABILITY_FUNCTIONS = {
+    "H",
+    "xD",
+    "applyProtectedAbilityFieldsForJassAdd",
+}
+
+# Small generated lookup arrays used as UI/control or marker registries.  They
+# are live infrastructure but are not gameplay-effect implementations.
+ABILITY_CONTROL_UI_FUNCTIONS = {
+    "BC",
+    "BD",
+    "ZK",
+    "aN",
+    "completeRoundStart",
+    "gL",
+    "mK",
+    "main",
+    "markBuilderSharedControl",
+    "raceChooserAbilityIdAt",
+    "vN",
+}
+ABILITY_MARKER_FUNCTIONS = {"AJ", "HJ", "LG", "vJ"}
+
 
 @dataclass(frozen=True)
 class GameDataSelection:
@@ -657,6 +742,85 @@ def write_tsv(path: Path, header: list[str], rows: Iterable[Iterable[Any]]) -> N
         writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
         writer.writerow(header)
         writer.writerows(rows)
+
+
+def known_rawcodes_in_text(value: Any, known_rawcodes: set[str]) -> set[str]:
+    if value in (None, ""):
+        return set()
+    return {
+        token
+        for token in re.findall(r"[A-Za-z0-9_-]{4}", str(value))
+        if token in known_rawcodes
+    }
+
+
+def known_rawcodes_in_integer_value(value: Any, rawcode_by_integer: dict[int, str]) -> set[str]:
+    values = value if isinstance(value, list) else [value]
+    found: set[str] = set()
+    for item in values:
+        if isinstance(item, bool):
+            continue
+        if isinstance(item, int):
+            rawcode = rawcode_by_integer.get(item)
+            if rawcode is not None:
+                found.add(rawcode)
+        elif isinstance(item, str):
+            for token in re.findall(r"\d+", item):
+                rawcode = rawcode_by_integer.get(int(token))
+                if rawcode is not None:
+                    found.add(rawcode)
+    return found
+
+
+def json_rawcode_fields(
+    value: Any,
+    known_rawcodes: set[str],
+    rawcode_by_integer: dict[int, str],
+) -> set[str]:
+    """Collect only explicitly named rawcode/id fields from normalized JSON."""
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "rawcode" or key.endswith("_rawcode") or key.endswith("_rawcodes"):
+                found.update(known_rawcodes_in_text(child, known_rawcodes))
+            if key.endswith(("_ability_id", "_ability_ids", "_buff_id", "_buff_ids")):
+                found.update(known_rawcodes_in_integer_value(child, rawcode_by_integer))
+            if isinstance(child, (dict, list)):
+                found.update(json_rawcode_fields(child, known_rawcodes, rawcode_by_integer))
+    elif isinstance(value, list):
+        for child in value:
+            found.update(json_rawcode_fields(child, known_rawcodes, rawcode_by_integer))
+    return found
+
+
+def normalized_rawcode_evidence(
+    output: Path,
+    known_rawcodes: set[str],
+    rawcode_by_integer: dict[int, str],
+) -> dict[str, set[str]]:
+    evidence: dict[str, set[str]] = defaultdict(set)
+    for filename in ABILITY_BUFF_NORMALIZED_ARTIFACTS:
+        path = output / filename
+        if not path.exists():
+            raise ValueError(f"normalized ability/buff coverage source is missing: {path}")
+        with path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                for key, value in row.items():
+                    if not value:
+                        continue
+                    found: set[str] = set()
+                    if "rawcode" in key and "integer" not in key:
+                        found.update(known_rawcodes_in_text(value, known_rawcodes))
+                    if key.endswith(("_ability_id", "_ability_ids", "_buff_id", "_buff_ids")):
+                        found.update(known_rawcodes_in_integer_value(value, rawcode_by_integer))
+                    if key.endswith("_objects_json") or key == "related_objects_json" or key.endswith("parameters_json"):
+                        try:
+                            found.update(json_rawcode_fields(json.loads(value), known_rawcodes, rawcode_by_integer))
+                        except json.JSONDecodeError as exc:
+                            raise ValueError(f"invalid normalized object JSON in {path.name}.{key}: {value!r}") from exc
+                    for rawcode in found:
+                        evidence[rawcode].add(filename)
+    return evidence
 
 
 def main() -> None:
@@ -3166,6 +3330,68 @@ def main() -> None:
                     if corrosion["object_data"].get("Armor Bonus") != -3 or corrosion["area"] != 500:
                         raise ValueError(f"Turret of Souls corrosion aura changed: {corrosion}")
                     parameters["resolved_grants"] = resolved_grants
+                elif system_id == "targeted-negative-effect-shields":
+                    shredder = static_units.get("n01T")
+                    shield_levels = ability_levels.get("A09L", [])
+                    speed_levels = ability_levels.get("A09C", [])
+                    explosion_levels = ability_levels.get("A09B", [])
+                    visual_levels = ability_levels.get("A00J", [])
+                    anti_hex = ability_level_one("A070")
+                    if shredder is None:
+                        raise ValueError("targeted shield mechanics are missing Goblin Shredder n01T")
+                    if rawcode_list(shredder["abilities"]) != ["A00J", "A09C", "A09B", "A094"]:
+                        raise ValueError(f"Goblin Shredder ability set changed: {shredder['abilities']}")
+                    if [row["level"] for row in shield_levels] != ["1", "2"]:
+                        raise ValueError(f"A09L shield levels changed: {[row['level'] for row in shield_levels]}")
+                    for rawcode, levels in (
+                        ("A09C", speed_levels), ("A09B", explosion_levels), ("A00J", visual_levels)
+                    ):
+                        if [row["level"] for row in levels] != ["1", "2", "3", "4", "5"]:
+                            raise ValueError(f"{rawcode} Engine Overheat levels changed: {[row['level'] for row in levels]}")
+                    shield_fields = [json.loads(row["data_fields_labeled_json"]) for row in shield_levels]
+                    speed_fields = [json.loads(row["data_fields_labeled_json"]) for row in speed_levels]
+                    explosion_fields = [json.loads(row["data_fields_labeled_json"]) for row in explosion_levels]
+                    visual_fields = [json.loads(row["data_fields_labeled_json"]) for row in visual_levels]
+                    if (
+                        int(parameters.get("active_shield_ability_id", 0)) != 1093679436
+                        or int(parameters.get("active_shield_buff_id", 0)) != 1110454600
+                        or int(parameters.get("anti_hex_marker_ability_id", 0)) != 1093678896
+                        or int(parameters.get("goblin_shredder_unit_id", 0)) != 1848652116
+                        or int(parameters.get("goblin_shredder_block_chance_percent", 0)) != 60
+                        or int(parameters.get("goblin_shredder_overheat_max_level", 0)) != 5
+                        or parameters.get("successful_shredder_blocks_increment_all_three_levels_together") is not True
+                    ):
+                        raise ValueError(f"targeted negative-effect shield constants changed: {parameters}")
+                    if [numeric(fields.get("Armor Bonus")) for fields in shield_fields] != [2, 4]:
+                        raise ValueError(f"A09L shield armor levels changed: {shield_fields}")
+                    if any(row["buffs"] != "B01H" for row in shield_levels):
+                        raise ValueError(f"A09L shield buff link changed: {shield_levels}")
+                    if [numeric(fields.get("Attack Speed Increase")) for fields in speed_fields] != [0, 0.5, 1, 1.5, 2]:
+                        raise ValueError(f"Goblin Shredder attack-speed progression changed: {speed_fields}")
+                    expected_explosion_damage = [50, 100, 200, 400, 800]
+                    if [numeric(fields.get("Full Damage Amount")) for fields in explosion_fields] != expected_explosion_damage:
+                        raise ValueError(f"Goblin Shredder explosion progression changed: {explosion_fields}")
+                    expected_spell_lists = ["", "A027", "A027,A0A1", "A027,A0A1,A0A2", "A027,A0A1,A0A2,A0A4"]
+                    if [str(fields.get("Spell List", "")) for fields in visual_fields] != expected_spell_lists:
+                        raise ValueError(f"Goblin Shredder visual spellbook progression changed: {visual_fields}")
+                    tooltip = str(shredder["ubertip"])
+                    if "60" not in tooltip or "200" not in tooltip or "50" not in tooltip or "800" not in tooltip:
+                        raise ValueError(f"Goblin Shredder Engine Overheat tooltip changed: {tooltip}")
+                    parameters["active_shield_ability_rawcode"] = "A09L"
+                    parameters["active_shield_ability_name"] = shield_levels[0]["name"]
+                    parameters["active_shield_buff_rawcode"] = "B01H"
+                    parameters["active_shield_armor_bonus_by_level"] = [2, 4]
+                    parameters["anti_hex_marker_ability_rawcode"] = "A070"
+                    parameters["anti_hex_marker_ability_name"] = anti_hex["name"]
+                    parameters["goblin_shredder_rawcode"] = "n01T"
+                    parameters["goblin_shredder_name"] = shredder["name"]
+                    parameters["goblin_shredder_tooltip"] = tooltip
+                    parameters["goblin_shredder_overheat_attack_speed_ability_rawcode"] = "A09C"
+                    parameters["goblin_shredder_overheat_attack_speed_fraction_by_level"] = [0, 0.5, 1, 1.5, 2]
+                    parameters["goblin_shredder_overheat_death_explosion_ability_rawcode"] = "A09B"
+                    parameters["goblin_shredder_overheat_full_explosion_damage_by_level"] = expected_explosion_damage
+                    parameters["goblin_shredder_overheat_visual_spellbook_ability_rawcode"] = "A00J"
+                    parameters["goblin_shredder_overheat_visual_spell_list_by_level"] = expected_spell_lists
                 elif system_id == "energy-tower-energy-burst":
                     tower = static_units.get("h05L")
                     effect = ability_level_one("A09T")
@@ -4919,6 +5145,549 @@ def main() -> None:
         production_corpse_rows,
     )
 
+    # Whole-map ability/buff usage closure.  Keep structural ownership,
+    # normalized semantics, protected overlays and readable script context as
+    # independent evidence axes: none of them is allowed to stand in for the
+    # others.  In particular H/xD are object/protected-data setup, not runtime
+    # reachability proof.
+    ability_records = {
+        str(record["rawcode"]): record for record in object_records if record["category"] == "abilities"
+    }
+    buff_records = {
+        str(record["rawcode"]): record for record in object_records if record["category"] == "buffs"
+    }
+    ability_rawcodes = set(ability_records)
+    buff_rawcodes = set(buff_records)
+    ability_buff_rawcodes = ability_rawcodes | buff_rawcodes
+    rawcode_by_integer = {
+        int.from_bytes(rawcode.encode("ascii"), byteorder="big"): rawcode
+        for rawcode in ability_buff_rawcodes
+    }
+
+    normalized_coverage = normalized_rawcode_evidence(
+        output,
+        ability_buff_rawcodes,
+        rawcode_by_integer,
+    )
+
+    protected_ability_rawcodes: set[str] = set()
+    for filename in ("protected-ability-fields.tsv", "protected-ability-jass-add-restores.tsv"):
+        with (output / filename).open(encoding="utf-8", newline="") as handle:
+            protected_ability_rawcodes.update(
+                row["rawcode"] for row in csv.DictReader(handle, delimiter="\t") if row["rawcode"] in ability_rawcodes
+            )
+
+    script_references: dict[str, list[dict[str, str]]] = defaultdict(list)
+    rawcode_reference_path = map_root / "script" / "rawcode-reference-sites.tsv"
+    with rawcode_reference_path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            rawcode = row["rawcode"]
+            categories = {category for category in row["categories"].split(",") if category}
+            # A Lua integer literal cannot tell us which object namespace was
+            # intended when the same fourcc exists in multiple categories.
+            # Only category-unambiguous references are allowed to prove
+            # ability/buff runtime use; structural links and normalized
+            # semantics can still prove a colliding object independently.
+            if rawcode in ability_rawcodes and categories == {"abilities"}:
+                script_references[rawcode].append(row)
+            elif rawcode in buff_rawcodes and categories == {"buffs"}:
+                script_references[rawcode].append(row)
+
+    ability_owners: dict[str, set[str]] = defaultdict(set)
+    ability_static_associations: dict[str, set[str]] = defaultdict(set)
+    ability_parent_links: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    ability_children: dict[str, set[str]] = defaultdict(set)
+    ability_skin_references: dict[str, set[str]] = defaultdict(set)
+    buff_parent_links: dict[str, set[tuple[str, str]]] = defaultdict(set)
+
+    unit_is_building: dict[str, bool] = {}
+    for record in unit_objects:
+        rawcode = str(record["rawcode"])
+        is_building_value = source_unit(rawcode, str(record["base_rawcode"]), "UnitBalance", "isbldg")
+        unit_is_building[rawcode] = (
+            bool(is_building_value)
+            if isinstance(is_building_value, bool)
+            else numeric(is_building_value) not in (None, 0.0)
+        )
+
+    for row in full_rows:
+        category = str(row["category"])
+        rawcode = str(row["rawcode"])
+        field_id = str(row["field_id"])
+        value_type = str(row["value_type"])
+        value = row["recovered_value"]
+
+        if value_type in {"abilityList", "abilCode"}:
+            referenced_abilities = known_rawcodes_in_text(value, ability_rawcodes)
+            if category == "units":
+                if field_id == "uabi":
+                    kind = "building" if unit_is_building.get(rawcode, False) else "unit"
+                    for ability_rawcode in referenced_abilities:
+                        ability_owners[ability_rawcode].add(f"{kind}:{rawcode}")
+                elif field_id == "udaa":
+                    for ability_rawcode in referenced_abilities:
+                        ability_static_associations[ability_rawcode].add(f"unit-default-active:{rawcode}")
+            elif category == "items":
+                if field_id == "iabi":
+                    for ability_rawcode in referenced_abilities:
+                        ability_owners[ability_rawcode].add(f"item:{rawcode}")
+                elif field_id == "icid":
+                    for ability_rawcode in referenced_abilities:
+                        ability_static_associations[ability_rawcode].add(f"item-cooldown-group:{rawcode}")
+            elif category == "abilities":
+                for ability_rawcode in referenced_abilities:
+                    ability_parent_links[ability_rawcode].add((rawcode, field_id))
+                    ability_children[rawcode].add(ability_rawcode)
+        elif value_type == "abilitySkinList":
+            for ability_rawcode in known_rawcodes_in_text(value, ability_rawcodes):
+                ability_skin_references[ability_rawcode].add(f"{category}:{rawcode}:{field_id}")
+
+        if category == "abilities" and value_type in {"buffList", "effectList"}:
+            for buff_rawcode in known_rawcodes_in_text(value, buff_rawcodes):
+                buff_parent_links[buff_rawcode].add((rawcode, field_id))
+
+    # Engine-implicit command abilities are not present in uabi.  Their native
+    # availability follows other resolved unit fields instead.
+    undead_builder_rawcodes = sorted(
+        str(record["rawcode"])
+        for record in unit_objects
+        if str(field_lookup(rows_by_object, "units", str(record["rawcode"]), "urac") or "").casefold() == "undead"
+        and csv_rawcodes(field_lookup(rows_by_object, "units", str(record["rawcode"]), "ubui"))
+    )
+    training_building_rawcodes = sorted(
+        str(record["rawcode"])
+        for record in unit_objects
+        if csv_rawcodes(field_lookup(rows_by_object, "units", str(record["rawcode"]), "utra"))
+    )
+    engine_implicit_evidence: dict[str, str] = {}
+    if "AUbu" in ability_rawcodes and undead_builder_rawcodes:
+        engine_implicit_evidence["AUbu"] = (
+            f"Build (Undead) native command; {len(undead_builder_rawcodes)} effective undead-race map units "
+            f"have non-empty Structures Built (sample {','.join(undead_builder_rawcodes[:6])})"
+        )
+    if "ARal" in ability_rawcodes and training_building_rawcodes:
+        engine_implicit_evidence["ARal"] = (
+            f"Rally/Sync native command; {len(training_building_rawcodes)} effective map units have non-empty "
+            f"Units Trained (sample {','.join(training_building_rawcodes[:6])})"
+        )
+
+    # Ahsb is a stock research-gated ability.  For 9.27, every map hkni
+    # derivative replaces its base ability list and no effective research list
+    # or readable script literal exposes Rhsb, so the modified stock object is
+    # genuinely disconnected rather than a hidden upgrade dependency.
+    rhsb_researchers = sorted(
+        str(record["rawcode"])
+        for record in unit_objects
+        if "Rhsb" in csv_rawcodes(field_lookup(rows_by_object, "units", str(record["rawcode"]), "ures"))
+    )
+    script_text = (map_root / "script" / "war3map.lua").read_text(encoding="utf-8")
+    rhsb_script_literal_present = "1382576994" in script_text or "Rhsb" in script_text
+
+    def is_e2e_function(rawcode: str, function: str) -> bool:
+        return rawcode == "ZE2E" or "E2E" in function or function.startswith("checkAllMigrated")
+
+    runtime_script_refs: dict[str, list[dict[str, str]]] = defaultdict(list)
+    e2e_script_refs: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for rawcode, references in script_references.items():
+        for reference in references:
+            function = reference["function"]
+            if function in ABILITY_NON_REACHABILITY_FUNCTIONS:
+                continue
+            if is_e2e_function(rawcode, function):
+                e2e_script_refs[rawcode].append(reference)
+            else:
+                runtime_script_refs[rawcode].append(reference)
+
+    control_ui_abilities: set[str] = set()
+    marker_abilities: set[str] = set()
+    for rawcode in ability_rawcodes:
+        functions = {row["function"] for row in runtime_script_refs.get(rawcode, [])}
+        if (
+            rawcode == "A0A5"
+            or rawcode.startswith("IBA")
+            or (functions and functions <= ABILITY_CONTROL_UI_FUNCTIONS)
+        ) and rawcode not in normalized_coverage and rawcode not in ability_owners:
+            control_ui_abilities.add(rawcode)
+        if (
+            rawcode.startswith("AM")
+            or (functions and functions <= ABILITY_MARKER_FUNCTIONS)
+        ) and rawcode not in normalized_coverage and rawcode not in ability_owners:
+            marker_abilities.add(rawcode)
+
+    explicit_helper_functions = {
+        "A02E": {"pL"},
+        "A09A": {"AN"},
+        "A0E5": {"onUnitEnteredMap"},
+        "AM03": {"QG"},
+        "Aall": {"createRoundCastlesAndContinue"},
+    }
+    for rawcode, expected_functions in explicit_helper_functions.items():
+        if rawcode not in ability_rawcodes:
+            raise ValueError(f"expected helper ability disappeared: {rawcode}")
+        actual_functions = {row["function"] for row in runtime_script_refs.get(rawcode, [])}
+        if actual_functions != expected_functions:
+            raise ValueError(
+                f"helper ability {rawcode} runtime references drifted: "
+                f"expected {sorted(expected_functions)}, got {sorted(actual_functions)}"
+            )
+    control_ui_abilities.update({"A09A", "AM03", "Aall"})
+    marker_abilities.update({"A02E", "A0E5"})
+    explicit_helper_notes = {
+        "A02E": "internal Tech Level 1/2/3 Channel marker; pL excludes units carrying it from normal player-unit handling",
+        "A09A": "Tower Range UI/control ability; AN registers its cast listener, whose callback only resolves and displays tower range",
+        "A0E5": "Elemental of Wind presentation marker; onUnitEnteredMap only queries its presence to set vertex alpha from unit level",
+        "AM03": "Permanent Invisibility on the pooled x001 Effect Dummy Unit; QG only initializes the generic dummy-pool helper state",
+        "Aall": "native allied-shop-sharing control ability on round castles; createRoundCastlesAndContinue removes it when shared control is disabled",
+    }
+
+    if {row["function"] for row in runtime_script_refs.get("A0DA", [])} != {"PC"}:
+        raise ValueError("A0DA preload-only runtime reference set changed")
+    if ability_owners.get("A0DA"):
+        raise ValueError(f"A0DA preload-only proof drifted: gained effective owners {sorted(ability_owners['A0DA'])}")
+    if (
+        "function PC()" not in script_text
+        or "safeUnitAddAbility(Mfo,1093682241)__wurst_safe_RemoveUnit(Mfo)" not in script_text
+    ):
+        raise ValueError("A0DA preload-only create/add/remove body changed")
+
+    # Structural reachability starts from effective ownership/association,
+    # importer-normalized semantics and readable live infrastructure.  Follow
+    # ability-to-ability links (Spell Book lists, item effect abilities, etc.)
+    # transitively. Protected overlays and E2E probes are intentionally not
+    # roots by themselves.
+    reachable_abilities = (
+        set(ability_owners)
+        | set(ability_static_associations)
+        | (set(normalized_coverage) & ability_rawcodes)
+        | set(runtime_script_refs)
+        | set(engine_implicit_evidence)
+        | control_ui_abilities
+        | marker_abilities
+    )
+    changed = True
+    while changed:
+        changed = False
+        for parent_rawcode in list(reachable_abilities):
+            for child_rawcode in ability_children.get(parent_rawcode, set()):
+                if child_rawcode not in reachable_abilities:
+                    reachable_abilities.add(child_rawcode)
+                    changed = True
+
+    explicit_unused_notes = {
+        "ACrj": (
+            "stock Rejuvenation delta is not effectively owned or script-referenced; n013 retains ACrj only in "
+            "base ability-skin metadata while its effective uabi replaces it with A05A,A05C"
+        ),
+        "Ahsb": (
+            "stock Sundering Blades requires Rhsb, but 9.27 has no effective Rhsb researcher or readable Rhsb "
+            "script literal and all hkni-derived map units replace the stock ability list"
+        ),
+    }
+    if "Ahsb" in ability_rawcodes and (rhsb_researchers or rhsb_script_literal_present):
+        raise ValueError(
+            "Ahsb unused proof drifted: Rhsb became reachable via "
+            f"researchers={rhsb_researchers}, script_literal={rhsb_script_literal_present}"
+        )
+
+    ability_coverage_rows: list[list[Any]] = []
+    ability_coverage_status: dict[str, str] = {}
+    for rawcode in sorted(ability_rawcodes):
+        record = ability_records[rawcode]
+        owners = sorted(ability_owners.get(rawcode, set()))
+        owner_kinds = sorted({owner.split(":", 1)[0] for owner in owners})
+        associations = sorted(ability_static_associations.get(rawcode, set()))
+        parent_links = sorted(ability_parent_links.get(rawcode, set()))
+        normalized_artifacts = sorted(normalized_coverage.get(rawcode, set()))
+        runtime_refs = runtime_script_refs.get(rawcode, [])
+        e2e_refs = e2e_script_refs.get(rawcode, [])
+        all_refs = script_references.get(rawcode, [])
+        runtime_functions = sorted({row["function"] for row in runtime_refs})
+        script_functions = sorted({row["function"] for row in all_refs})
+        runtime_calls = sorted({row["call"] for row in runtime_refs if row["call"]})
+        runtime_grant_calls = sorted(set(runtime_calls) & ABILITY_RUNTIME_GRANT_CALLS)
+
+        if runtime_refs:
+            script_reference_class = "runtime"
+        elif e2e_refs:
+            script_reference_class = "e2e-only"
+        elif all_refs:
+            script_reference_class = "initializer/protected-data-only"
+        else:
+            script_reference_class = "none"
+
+        notes = ""
+        if rawcode == "A0ES":
+            status = "unresolved-reachability"
+            reachability = "exact-runtime-body-unresolved-production"
+            semantic_coverage = "normalized-script"
+            notes = (
+                "Wisp death branch and A0ES Slow Aura body are exact, but h06B production reachability remains unproven; "
+                "the only readable h06B creation site is MC with no readable named caller"
+            )
+        elif rawcode in control_ui_abilities:
+            status = "control-ui-helper"
+            reachability = "proven-runtime-infrastructure"
+            semantic_coverage = "control-helper"
+            notes = explicit_helper_notes.get(rawcode, "")
+        elif rawcode in marker_abilities:
+            status = "marker-data-only"
+            reachability = "proven-runtime-infrastructure"
+            semantic_coverage = "marker-only"
+            notes = explicit_helper_notes.get(rawcode, "")
+        elif rawcode == "A0DA":
+            status = "runtime-preload-only"
+            reachability = "proven-initializer-preload-only"
+            semantic_coverage = "preload-helper"
+            notes = (
+                "PC creates generic dummy e008, adds protected A0DA, then immediately removes the dummy; "
+                "A0DA has no effective owner or other readable runtime reference, so this proves preload/cache warm-up only"
+            )
+        elif owners and normalized_artifacts:
+            status = "native-object-owned+normalized-script"
+            reachability = "proven-static-owner"
+            semantic_coverage = "native+normalized-script"
+        elif owners and runtime_refs:
+            status = "native-object-owned+unresolved-script"
+            reachability = "proven-static-owner"
+            semantic_coverage = "unresolved-script-semantics"
+        elif owners:
+            status = "native-object-owned"
+            reachability = "proven-static-owner"
+            semantic_coverage = "native-object-data"
+        elif rawcode in engine_implicit_evidence:
+            status = "native-engine-implicit"
+            reachability = "proven-engine-implicit"
+            semantic_coverage = "native-engine-command"
+            notes = engine_implicit_evidence[rawcode]
+        elif normalized_artifacts:
+            if runtime_grant_calls:
+                status = "runtime-granted-normalized"
+            else:
+                status = "scripted-normalized"
+            reachability = "proven-normalized-runtime"
+            semantic_coverage = "normalized-script"
+        elif runtime_refs:
+            status = "script-runtime-unresolved-semantics"
+            reachability = "proven-readable-runtime-reference"
+            semantic_coverage = "unresolved-script-semantics"
+        elif rawcode in reachable_abilities:
+            status = "native-object-indirect"
+            reachability = "proven-structured-indirect"
+            semantic_coverage = "native-object-data"
+        elif e2e_refs:
+            status = "e2e-only"
+            reachability = "verification-only"
+            semantic_coverage = "e2e-only"
+        elif rawcode in protected_ability_rawcodes:
+            status = "protected-runtime-overlay"
+            reachability = "protected-overlay-only"
+            semantic_coverage = "protected-field-overlay"
+        elif rawcode in explicit_unused_notes:
+            status = "unused-orphaned"
+            reachability = "proven-unused"
+            semantic_coverage = "unused"
+            notes = explicit_unused_notes[rawcode]
+        elif record["table"] == "custom":
+            status = "unused-orphaned"
+            reachability = "proven-unused"
+            semantic_coverage = "unused"
+            notes = (
+                "custom ability subgraph has no reachable effective unit/item association, normalized semantic root, "
+                "readable runtime reference, protected overlay, or engine-implicit role"
+            )
+        else:
+            status = "unresolved-reachability"
+            reachability = "unresolved"
+            semantic_coverage = "unresolved"
+            notes = "original ability object has no proven effective owner or runtime path"
+
+        ability_coverage_status[rawcode] = status
+        ability_coverage_rows.append([
+            rawcode,
+            record["name"],
+            record["table"],
+            record["base_rawcode"],
+            status,
+            reachability,
+            semantic_coverage,
+            ",".join(owner_kinds),
+            ",".join(owners),
+            ",".join(associations),
+            ",".join(f"{parent}:{field_id}" for parent, field_id in parent_links),
+            ",".join(sorted(ability_skin_references.get(rawcode, set()))),
+            ",".join(normalized_artifacts),
+            int(rawcode in protected_ability_rawcodes),
+            script_reference_class,
+            ",".join(script_functions),
+            ",".join(runtime_functions),
+            ",".join(runtime_calls),
+            ",".join(runtime_grant_calls),
+            notes,
+        ])
+
+    write_tsv(
+        output / "ability-runtime-coverage.tsv",
+        [
+            "rawcode", "name", "table", "base_rawcode", "coverage_status", "reachability_status",
+            "semantic_coverage", "owner_kinds", "owner_objects", "static_associations", "parent_ability_links",
+            "skin_only_references", "normalized_artifacts", "has_protected_runtime_overlay", "script_reference_class",
+            "script_functions", "runtime_script_functions", "runtime_calls", "runtime_grant_calls", "notes",
+        ],
+        ability_coverage_rows,
+    )
+
+    buff_coverage_rows: list[list[Any]] = []
+    buff_coverage_status: dict[str, str] = {}
+    live_parent_statuses = {
+        "native-object-owned",
+        "native-object-owned+normalized-script",
+        "native-object-owned+unresolved-script",
+        "native-engine-implicit",
+        "native-object-indirect",
+        "runtime-granted-normalized",
+        "scripted-normalized",
+        "script-runtime-unresolved-semantics",
+        "control-ui-helper",
+        "marker-data-only",
+    }
+    uncertain_parent_statuses = {"unresolved-reachability", "protected-runtime-overlay"}
+    for rawcode in sorted(buff_rawcodes):
+        record = buff_records[rawcode]
+        parent_links = sorted(buff_parent_links.get(rawcode, set()))
+        live_parents = sorted(
+            parent for parent, _field_id in parent_links if ability_coverage_status.get(parent) in live_parent_statuses
+        )
+        uncertain_parents = sorted(
+            parent for parent, _field_id in parent_links if ability_coverage_status.get(parent) in uncertain_parent_statuses
+        )
+        normalized_artifacts = sorted(normalized_coverage.get(rawcode, set()))
+        runtime_refs = runtime_script_refs.get(rawcode, [])
+        e2e_refs = e2e_script_refs.get(rawcode, [])
+        all_refs = script_references.get(rawcode, [])
+        runtime_functions = sorted({row["function"] for row in runtime_refs})
+        script_functions = sorted({row["function"] for row in all_refs})
+        runtime_calls = sorted({row["call"] for row in runtime_refs if row["call"]})
+
+        if runtime_refs:
+            script_reference_class = "runtime"
+        elif e2e_refs:
+            script_reference_class = "e2e-only"
+        elif all_refs:
+            script_reference_class = "initializer/protected-data-only"
+        else:
+            script_reference_class = "none"
+
+        notes = ""
+        if live_parents and normalized_artifacts:
+            status = "native-ability-linked+normalized-script"
+            reachability = "proven-live-ability-link"
+            semantic_coverage = "native+normalized-script"
+        elif live_parents:
+            status = "native-ability-linked"
+            reachability = "proven-live-ability-link"
+            semantic_coverage = "native-object-data"
+        elif normalized_artifacts:
+            status = "scripted-normalized"
+            reachability = "proven-normalized-runtime"
+            semantic_coverage = "normalized-script"
+        elif runtime_refs:
+            status = "script-runtime-unresolved-semantics"
+            reachability = "proven-readable-runtime-reference"
+            semantic_coverage = "unresolved-script-semantics"
+        elif uncertain_parents:
+            status = "unresolved-reachability"
+            reachability = "parent-ability-reachability-unresolved"
+            semantic_coverage = "native-object-data"
+            notes = f"only linked parent abilities have unresolved reachability: {','.join(uncertain_parents)}"
+        elif e2e_refs:
+            status = "e2e-only"
+            reachability = "verification-only"
+            semantic_coverage = "e2e-only"
+        elif record["table"] == "custom":
+            status = "unused-orphaned"
+            reachability = "proven-unused"
+            semantic_coverage = "unused"
+            notes = (
+                "custom buff/effect has no link from a reachable ability and no normalized/readable runtime reference"
+            )
+        else:
+            status = "unresolved-reachability"
+            reachability = "unresolved"
+            semantic_coverage = "unresolved"
+            notes = "original buff/effect object has no proven live ability link or runtime path"
+
+        buff_coverage_status[rawcode] = status
+        buff_coverage_rows.append([
+            rawcode,
+            record["name"],
+            record["table"],
+            record["base_rawcode"],
+            status,
+            reachability,
+            semantic_coverage,
+            ",".join(sorted({field_id for _parent, field_id in parent_links})),
+            ",".join(f"{parent}:{field_id}" for parent, field_id in parent_links),
+            ",".join(live_parents),
+            ",".join(uncertain_parents),
+            ",".join(normalized_artifacts),
+            script_reference_class,
+            ",".join(script_functions),
+            ",".join(runtime_functions),
+            ",".join(runtime_calls),
+            notes,
+        ])
+
+    write_tsv(
+        output / "buff-runtime-coverage.tsv",
+        [
+            "rawcode", "name", "table", "base_rawcode", "coverage_status", "reachability_status",
+            "semantic_coverage", "ability_link_fields", "parent_ability_links", "live_parent_abilities",
+            "uncertain_parent_abilities", "normalized_artifacts", "script_reference_class", "script_functions",
+            "runtime_script_functions", "runtime_calls", "notes",
+        ],
+        buff_coverage_rows,
+    )
+
+    ability_coverage_status_counts = dict(sorted(Counter(ability_coverage_status.values()).items()))
+    buff_coverage_status_counts = dict(sorted(Counter(buff_coverage_status.values()).items()))
+    map_decode_summary = json.loads((map_root / "summary.json").read_text(encoding="utf-8"))
+    source_archive_sha256 = str(map_decode_summary.get("archive", {}).get("sha256", ""))
+    coverage_profile = ABILITY_BUFF_COVERAGE_PROFILES.get(source_archive_sha256)
+    if coverage_profile is not None:
+        if len(ability_coverage_rows) != coverage_profile["ability_objects"]:
+            raise ValueError(
+                f"{coverage_profile['label']} ability closure count drifted: "
+                f"expected {coverage_profile['ability_objects']}, got {len(ability_coverage_rows)}"
+            )
+        if len(buff_coverage_rows) != coverage_profile["buff_objects"]:
+            raise ValueError(
+                f"{coverage_profile['label']} buff closure count drifted: "
+                f"expected {coverage_profile['buff_objects']}, got {len(buff_coverage_rows)}"
+            )
+        expected_ability_status_counts = coverage_profile["ability_status_counts"]
+        if expected_ability_status_counts is not None and ability_coverage_status_counts != expected_ability_status_counts:
+            raise ValueError(
+                f"{coverage_profile['label']} ability closure statuses drifted: "
+                f"expected {expected_ability_status_counts}, got {ability_coverage_status_counts}"
+            )
+        expected_buff_status_counts = coverage_profile["buff_status_counts"]
+        if expected_buff_status_counts is not None and buff_coverage_status_counts != expected_buff_status_counts:
+            raise ValueError(
+                f"{coverage_profile['label']} buff closure statuses drifted: "
+                f"expected {expected_buff_status_counts}, got {buff_coverage_status_counts}"
+            )
+
+    unresolved_script_semantics = sorted(
+        rawcode
+        for rawcode, status in ability_coverage_status.items()
+        if status in {"native-object-owned+unresolved-script", "script-runtime-unresolved-semantics"}
+    )
+    unresolved_script_semantics.extend(
+        f"buff:{rawcode}"
+        for rawcode, status in buff_coverage_status.items()
+        if status == "script-runtime-unresolved-semantics"
+    )
+
     # Base source rows for every map object's inheritance anchor. These expose
     # computed/non-editor SLK columns such as realHP, min/max damage and DPS.
     source_rows: list[list[Any]] = []
@@ -5003,6 +5772,11 @@ def main() -> None:
         "protected_ability_runtime_field_comparisons": dict(sorted(protected_comparisons.items())),
         "protected_ability_jass_add_fields": len(protected_jass_rows),
         "protected_ability_jass_add_field_comparisons": dict(sorted(protected_jass_comparisons.items())),
+        "ability_runtime_coverage_rows": len(ability_coverage_rows),
+        "ability_runtime_coverage_status_counts": ability_coverage_status_counts,
+        "buff_runtime_coverage_rows": len(buff_coverage_rows),
+        "buff_runtime_coverage_status_counts": buff_coverage_status_counts,
+        "ability_buff_unresolved_script_semantics": unresolved_script_semantics,
         "protected_unit_stat_rows": len(protected_unit_rows),
         "protected_unit_stat_override_assignments": sum(protected_unit_override_counts.values()),
         "protected_unit_stat_override_counts": dict(sorted(protected_unit_override_counts.items())),
