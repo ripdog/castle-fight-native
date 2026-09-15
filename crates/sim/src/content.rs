@@ -2392,7 +2392,11 @@ fn validate_catalog_source_927() -> Result<(), String> {
 }
 
 fn write_canonical_catalog_text(hash: &mut ContentHash64, contents: &str) {
-    if contents.as_bytes().windows(2).any(|window| window == b"\r\n") {
+    if contents
+        .as_bytes()
+        .windows(2)
+        .any(|window| window == b"\r\n")
+    {
         let normalized = contents.replace("\r\n", "\n");
         hash.write_bytes(normalized.as_bytes());
     } else {
