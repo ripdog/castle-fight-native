@@ -355,11 +355,13 @@ Map/faction content that contains no randomness should not behave differently me
 
 ## 24. Initial state
 
-Before creating the match, the user MUST be able to select a supported Castle Fight map version. Match configuration records that selection and the exact validated content bundle, including its automatically resolved native ability/effect implementations. The authoritative server validates this configuration before accepting gameplay commands; clients, replays, and reconnects use the same version and bundle identity. Selection and historical data retention follow `40-content-data.md`, sections 4.1 and 14.1.
+Before creating the match, the user MUST be able to select a registered Castle Fight release by exact `(map version, release revision)`. Match configuration records that release, the exact validated content revision/bundle identity, an explicit match mode, canonical seed, and participant configuration. It MUST NOT resolve a requested historical revision by silently substituting the newest bundle for that map-version label. A registered `archived` release remains visible to setup/diagnostics but is not playable until it has a supported runtime bundle; `supported-development-subset` is an explicit restricted mode and MUST NOT be presented as a complete historical ruleset. The authoritative server validates this configuration before accepting gameplay commands; clients, replays, and reconnects use the same release and bundle identity. Selection and historical data retention follow `40-content-data.md`, sections 4.1 and 14.1.
+
+The shared deterministic match bootstrap owns authoritative terrain/pathing, build regions, strategic lane/objectives, castles, builder starts/catalogs, economy/combat rules, and preplaced state for the selected release. Headless/server callers and the graphical client MUST construct authoritative state through that same bootstrap; camera bounds and rendering configuration remain client-owned. Equivalent match configuration, including the same release revision and content identity, must produce the same initial canonical checksum regardless of worker count.
 
 Match construction must deterministically establish:
 
-- selected map version and canonical content bundle identity;
+- selected map version, release revision, content revision, and canonical content bundle identity;
 - map and version-specific rules;
 - team/player slots;
 - factions;

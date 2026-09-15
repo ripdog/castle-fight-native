@@ -92,6 +92,8 @@ Presentation height uses the Warcraft terrain-display conversion of the extracte
 
 Imported Warcraft ground atlases are presentation diffuse assets and SHOULD retain their authored color and brightness relationships across terrain slope. The client SHOULD display flat ground at the authored texture brightness and MAY apply a small, smoothly interpolated presentation-only darkening based on slope steepness to reproduce Warcraft's soft ramp shading. It MUST NOT allow generic scene-light direction to drive steep textured ramps/cliff transitions nearly black merely because the presentation mesh normal faces away from a directional light.
 
+The client MUST consume the selected release's validated terrain source and resolved content bundle from shared match setup rather than independently opening an implicit default-version extraction. Generated unit/building models should be loaded only for content promoted into that resolved bundle (plus explicitly required shared objective/presentation assets), so adding another retained archive does not eagerly load or accidentally expose unrelated roster art. Cosmetic camera limits remain client-owned even when authoritative navigation/build bounds come from shared match definitions.
+
 Ground-bound render entities such as units, buildings, corpses, selection markers, and building-placement previews SHOULD sample this same presentation heightfield. Rendered unit positions MUST be clamped to the imported terrain bounds/height so interpolation or cosmetic motion cannot leave a unit visibly below, above, or outside the terrain. This clamping MUST NOT feed presentation Y coordinates back into authoritative movement or combat.
 
 ## 6. Catch-up and discontinuities
