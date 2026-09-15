@@ -186,6 +186,52 @@ Pending:
 
 - Step 5 must separate stable player identity/ownership from team allegiance, move economy from team-indexed slots to player records, and add canonical match lifecycle/outcome state before command/network work builds on top of it.
 
+## Step 5 — Player ownership and match lifecycle
+
+Status: **implemented and verified**
+
+Step commits:
+
+- `e4c03dc` — `sim: separate players from teams`
+- `fc456c5` — `client: respect player ownership and colors`
+- `9db246a` — `assets: resolve team glow by player slot`
+- `885a0a4` — `docs: define player ownership and lifecycle`
+
+Implemented:
+
+- added stable `PlayerId` ownership independently from `Team`; units, builders, production buildings, produced units, construction/refund paths, upgrades, corpses, and presentation samples retain the owning player while team remains the allegiance/objective/build-region axis;
+- mapped Castle Fight 9.27 participants to the authored Warcraft III slots: Western `0/1/2`, Eastern `6/7/8`, with fixed builder starts at Y `+128/0/-128`; supported development rosters are the balanced authored 1v1, 2v2, and 3v3 prefixes;
+- replaced team-indexed economy state with canonical per-player resource/income records and enforced one builder per active player; allied purchases, refunds, income, and production remain charged/credited to the actual owner;
+- separated ownership from control permission: connected owners control their own builders/buildings, a disconnected owner's builder may be delegated to a connected teammate, ownership/resources never transfer, and allied buildings remain non-delegated;
+- registered each side's Main Castle as an explicit authoritative team objective while retaining map ownership by the first authored slot (Western player 0, Eastern player 6);
+- added canonical running, team-disconnect pause, and terminal match lifecycle state; objective loss is evaluated after structural death resolution, simultaneous castle destruction is a draw, terminal state rejects later connection-state mutation and freezes gameplay/tick advancement;
+- advanced the canonical checksum schema to revision 5, covering player records/resources/connections, entity ownership, objective identities, lifecycle/outcome state, and corpse owner provenance;
+- migrated client action permissions/resource display to the selected local `PlayerId`; inspection can still view allies/opponents while normal command surfaces appear only for controllable actors;
+- player colour is now keyed by Warcraft III owner slot rather than `Team` throughout imported model tint, fallback materials, health bars, corpses/remnants, debug presentation, and resource UI;
+- removed the remaining two-colour Team Glow assumption: runtime selects `TeamGlowNN` from owner slot and the WC3 asset exporter emits all 24 modern Team Glow textures for packs containing ReplaceableId 2.
+
+Compatibility/state changes:
+
+- canonical checksum schema: `CANONICAL_CHECKSUM_SCHEMA_VERSION = 5`;
+- default development 1v1 is authored slot `0` versus slot `6`, not a dense native player `0` versus `1`;
+- player colour identity is presentation keyed by `PlayerId`; `Team` no longer doubles as player colour identity.
+
+Executed verification:
+
+- `tools/cargo-interactive test -p castle-fight-client`: **105 passed**;
+- `tools/cargo-interactive test -p castle-fight-sim`: **220 passed**;
+- `tools/cargo-interactive test -p castle-fight-wc3-assets`: **42 passed**;
+- Step 5 match-setup suite: **12 passed**, including 2v2 independent economies/ownership, produced-unit ownership, authored slot validation, disconnected-builder delegation, pause/resume, terminal victory/draw, and final-state freezing;
+- `tools/cargo-interactive clippy -p castle-fight-sim -p castle-fight-client -p castle-fight-wc3-assets --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed;
+- live WC3 CASC integration probe using Catapult (`o001`) exported `TeamGlow00` through `TeamGlow23` with exactly 24 glow textures, including `TeamGlow06` used by the default Eastern player slot;
+- `cargo fmt --all` and `git diff --check`: passed.
+
+Pending:
+
+- actual connection events are still external to the simulation; Step 6/10 will represent their gameplay effects through the canonical control/command stream rather than direct runtime calls;
+- generated local WC3 unit/building packs must be regenerated after this Step 5 code is merged so existing two-colour packs gain the complete Team Glow set.
+
 ## Next action
 
-Step 5: introduce `PlayerId`, propagate ownership independently from `Team`, implement per-player economy/control permissions, and add terminal match lifecycle/objective rules with 2v2 coverage.
+Step 6: define canonical typed player commands and finalized tick inputs, introduce the local match driver, and migrate all ordinary client input away from direct simulation mutation.
