@@ -4033,20 +4033,8 @@ def _w3p_vm_integrity(payloads: Iterable[list[int]]) -> int:
     return accumulator * 257 + rolling
 
 
-def _decode_w3p_string_payload(payload: bytes, multiplier: int, offset: int) -> bytes:
-    """Mirror the visible _T/_L/_r/_j protected-string transform."""
-    if len(payload) < 5:
-        raise ValueError("W3P protected string payload is too short")
-    if payload[0] == 1:
-        key = payload[1] * 256 + payload[2]
-        cipher = payload[3:]
-    else:
-        try:
-            key = int(payload[1:5].decode("ascii"), 16)
-            cipher = bytes.fromhex(payload[5:].decode("ascii"))
-        except ValueError as error:
-            raise ValueError("W3P protected string has invalid hex key/ciphertext") from error
-
+def _decode_w3p_keyed_cipher(key: int, cipher: bytes, multiplier: int, offset: int) -> bytes:
+    """Mirror W3P's keyed stream transform after its key/cipher framing is removed."""
     modulus = 32749
     key %= modulus
     first = ((key * multiplier + offset + 25) % modulus) + 1
@@ -4060,6 +4048,31 @@ def _decode_w3p_string_payload(payload: bytes, multiplier: int, offset: int) -> 
         third = (previous_second * third + previous_first + 17) % modulus
         decoded.append((value - third) & 0xFF)
     return bytes(decoded)
+
+
+def _decode_w3p_keyed_hex_string(key: int, cipher_hex: bytes, multiplier: int, offset: int) -> str:
+    """Decode the two-argument ``_T(key, \"hex\")`` form used by W3P registries."""
+    try:
+        cipher = bytes.fromhex(cipher_hex.decode("ascii"))
+        return _decode_w3p_keyed_cipher(key, cipher, multiplier, offset).decode("utf-8")
+    except (ValueError, UnicodeDecodeError) as error:
+        raise ValueError("W3P keyed protected string is invalid") from error
+
+
+def _decode_w3p_string_payload(payload: bytes, multiplier: int, offset: int) -> bytes:
+    """Mirror the visible _T/_L/_r/_j protected-string transform."""
+    if len(payload) < 5:
+        raise ValueError("W3P protected string payload is too short")
+    if payload[0] == 1:
+        key = payload[1] * 256 + payload[2]
+        cipher = payload[3:]
+    else:
+        try:
+            key = int(payload[1:5].decode("ascii"), 16)
+            cipher = bytes.fromhex(payload[5:].decode("ascii"))
+        except ValueError as error:
+            raise ValueError("W3P protected string has invalid hex key/ciphertext") from error
+    return _decode_w3p_keyed_cipher(key, cipher, multiplier, offset)
 
 
 def _decode_w3p_global_name(expression: bytes, multiplier: int, offset: int) -> str:
@@ -6369,7 +6382,9 @@ def _extract_runtime_campaign_mechanics(
         "applyCampaignSupplyEffectsWhenReady", "applyCampaignSupplyEffects",
         "CallbackSingle_doAfter_CampaignSuppliesRuntime_call_doAfter_CampaignSuppliesRuntime",
         "CampaignSupply_CampaignSupply_isPerkSupply", "CampaignSupply_CampaignSupply_isPlayerAssignedSupply",
-        "pI", "yF", "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData",
+        "pI", "yF", "hF", "nF", "pF", "rF", "RF", "UF", "VF", "WF",
+        "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData",
+        "CampaignSaveData_CampaignSaveData_completeMission__w3p_vmProtect1",
         "giveCampaignSupplyItemToBuilder", "giveCloudStaffToBuilder", "setCampaignAiSpeedBonus",
     }
     if not required.issubset(functions_by_name):
@@ -6392,6 +6407,19 @@ def _extract_runtime_campaign_mechanics(
         if match is None:
             raise ValueError(f"campaign restriction global assignment changed: {symbol.decode('ascii')}")
         return _decode_w3p_global_name(match.group(1), 11351, 1106)
+
+    def decode_cached_keyed_name(cache_index: int) -> str:
+        index = str(cache_index).encode("ascii")
+        match = re.search(
+            rb"_d\[" + index + rb"\]or _y\(" + index
+            + rb',_T\(([0-9]+),"([0-9a-fA-F]+)"\)\)',
+            data,
+        )
+        if match is None:
+            raise ValueError(f"campaign protected registry cache entry changed: {cache_index}")
+        return _decode_w3p_keyed_hex_string(
+            int(match.group(1)), match.group(2), 11351, 1106
+        )
 
     no_buildings_id = decode_restriction_global(b"arb")
     no_items_id = decode_restriction_global(b"crb")
@@ -6564,35 +6592,183 @@ def _extract_runtime_campaign_mechanics(
 
     result_bridge_sources = [
         ("yF", (b"eqb=5.0", b"Cpb=_b[")),
+        ("hF", (b"__wurst_safe_TriggerAddAction(Cpb", b"_d[5149]")),
         ("pI", (
             b"if bqb then", b"fMq=(dMq==YLq)", b"Vpb=(getElapsedGameTime()-Wpb)",
-            b"gMq=Co:create573()", b"gMq.playerWon=fMq", b"doAfter(iMq,gMq)",
+            b"_d[6071]", b"_d[6072]", b"gMq=Co:create573()", b"gMq.playerWon=fMq", b"doAfter(iMq,gMq)",
+        )),
+        ("rF", (
+            b"wqb=__wurst_ensureBool(Signal_Signal_peek(Gqb))",
+            b"vqb=__wurst_ensureBool(Signal_Signal_peek(Fqb))", b"xqb=true",
+            b"CallbackPeriodic_destroyCallbackPeriodic(Aqb)",
         )),
         ("CallbackSingle_doAfter_MMDData_call_doAfter_MMDData", (
             b"wTm=vTm.playerWon", b"stopCampaignSurvivalTimer()", b"Bpb=wTm", b"__wurst_safe_TriggerExecute(Cpb)",
         )),
+        ("WF", (b"_d[5339]",)),
+        ("VF", (
+            b"d_p=Bpb e_p=Zpb f_p=Ypb g_p=Xpb",
+            b"if(Vpb>0.0)then i_p=Vpb else i_p=(getElapsedGameTime()-Wpb)end",
+            b"if o_p then q_p=0 else q_p=_I[(_d[5333]",
+            b"bqb=false Zpb=nil Ypb=nil Xpb=nil Wpb=0.0 Vpb=0.0 clearCampaignMissionChallenge__w3p_vmProtect()",
+            b"if((d_p and(not(e_p==nil)))and(not o_p))then r_p=_I[(_d[5334]",
+            b"_I[(_d[5338]", b"LinkedList_destroyLinkedList(g_p)",
+        )),
+        ("nF", (
+            b"BKp and(not CKp)", b"not(zKp==nil)", b"not DKp", b"_d[5275]", b"CampaignChapter_CampaignChapter_isComplete(zKp)",
+        )),
+        ("pF", (
+            b"if((JLp==nil)or(not KLp))then return 0 end", b"PLp=1",
+            b"CampaignMission_secondStar", b"PLp=3", b"CampaignMission_thirdStar", b"PLp=(PLp+4)",
+        )),
+        ("UF", (
+            b"return completeCampaignMission__w3p_vmProtect(T8p,U8p,V8p,W8p",
+            b"_d[5324]", b"_d[5325]", b"_d[5326]", b"_d[5327]", b"_d[5328]", b"_d[5329]",
+        )),
+        ("CampaignSaveData_CampaignSaveData_completeMission__w3p_vmProtect1", (
+            b"CampaignSaveData_lastCompletionUpdatedBestTime=false",
+            b"if((HZk==nil)or(IZk<=0))then return 0 end",
+            b"RZk=max1(0,real_toInt(JZk))", b"SZk=max1(1,min(3,KZk))",
+            b"MissionProgressData_MissionProgressData_getRecordBestTimeSeconds(QZk,SZk)",
+            b"MissionProgressData_MissionProgressData_setRecordDraftSnapshot(QZk,SZk,LZk,MZk,NZk,OZk,PZk)",
+            b"if(UZk<=0)then return 0 end", b"MissionProgressData_starMask=WZk",
+            b"MissionProgressData_pointsEarned=(QZk.MissionProgressData_pointsEarned+UZk)",
+            b"CampaignSaveData_points=(GZk.CampaignSaveData_points+UZk)", b"return UZk",
+        )),
+        ("RF", (b"CampaignUI_CampaignUI_showResultScreen",)),
     ]
     result_bridge_offsets = [source(name, fragments)[0] for name, fragments in result_bridge_sources]
+
+    expected_cached_names = {
+        5149: "code__TriggerAddAction_Campaign",
+        5275: "isCampaignChapterFinalMission",
+        5276: "isCampaignStarChallengePassed",
+        5277: "isCampaignStarChallengePassed",
+        5279: "CreateTrigger",
+        5324: "getLastCampaignDraftPartySizeForRecord",
+        5325: "getLastCampaignDraftStarBudgetForRecord",
+        5326: "getLastCampaignDraftRaceIdsForRecord",
+        5327: "getLastCampaignDraftRecruitIdsForRecord",
+        5328: "getLastCampaignDraftSupplyIdsForRecord",
+        5329: "getLastCampaignDraftSupplyPartySlotsForRecord",
+        5330: "isActiveCampaignSecondStarRestrictionCompleted",
+        5331: "isActiveCampaignThirdStarRestrictionCompleted",
+        5332: "getCampaignHumansSharedRace",
+        5333: "getCampaignMissionEarnedStarMask",
+        5334: "completeCampaignMissionResult__w3p_vmProtect",
+        5335: "didCampaignChapterCompleteNow",
+        5336: "hideCampaignMissionControls",
+        5337: "hideCampaignMissionControls",
+        5338: "showCampaignResultUI",
+        5339: "handleCampaignMissionResult__w3p_vmProtect",
+        6070: "shouldFinalizeMatchAfterRound",
+        6071: "lockCampaignMissionChallengeResult__w3p_vmProtect",
+        6072: "showCampaignResultCountdown",
+    }
+    for cache_index, expected_name in expected_cached_names.items():
+        actual_name = decode_cached_keyed_name(cache_index)
+        if actual_name != expected_name:
+            raise ValueError(
+                f"campaign result protected registry entry {cache_index} changed: {actual_name!r} != {expected_name!r}"
+            )
+
+    completion_static = _w3p_vm_static_strings(data, 36)
+    completion_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 36)
+    ]
+    if completion_static != ["0", "CampaignSaveData_lastCompletionUpdatedBestTime"]:
+        raise ValueError(f"campaign completion VM static table changed: {completion_static}")
+    if completion_globals != [
+        "getCampaignProfile",
+        "CampaignSaveData_CampaignSaveData_completeMission__w3p_vmProtect1",
+        "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+        "publishCampaignAvailablePoints",
+        "saveCampaignProfile__w3p_vmProtect",
+    ]:
+        raise ValueError(f"campaign completion VM global table changed: {completion_globals}")
+    completion_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 36)["instructions"]
+    ]
+    expected_completion_program = [
+        (224, ()), (24, (11,)), (224, ()), (24, (12,)),
+        (253, (1,)), (42, (1, 17)), (24, (11,)),
+        (253, (11,)), (224, ()), (18, (16,)), (10, (0, 4)), (144, (1,)), (243, (1,)),
+        (253, (11,)), (253, (2,)), (253, (3,)), (253, (4,)), (253, (5,)), (253, (6,)),
+        (253, (7,)), (253, (8,)), (253, (9,)), (253, (10,)), (42, (2, 161)), (24, (12,)),
+        (253, (11,)), (42, (3, 16)), (253, (11,)), (42, (4, 16)),
+        (253, (12,)), (144, (1,)), (184, ()), (8, (16,)), (24, (13,)),
+        (253, (13,)), (124, (0, 6)), (241, (11, 2)), (240, (0, 2)), (253, (13,)),
+        (10, (0, 5)), (253, (1,)), (42, (5, 16)), (253, (12,)), (243, (1,)), (221, ()),
+    ]
+    if completion_program != expected_completion_program:
+        raise ValueError("campaign mission completion protected VM changed")
+
     rows.append({
         "system_id": "campaign-match-result-bridge",
-        "mechanic_kind": "delayed-campaign-win-state-and-protected-result-trigger-bridge",
+        "mechanic_kind": "delayed-campaign-result-lock-star-award-persistence-and-ui",
         "trigger": "match-winner-resolution-while-campaign-active",
         "parameters": {
             "campaign_mode_flag_symbol": "bqb",
             "campaign_player_symbol": "Ypb",
+            "campaign_mission_symbol": "Zpb",
+            "campaign_party_symbol": "Xpb",
             "campaign_player_team_formula": "western-force member -> 0; otherwise 1",
             "player_won_formula": "campaign-player-team == winning-team",
             "elapsed_campaign_time_symbol": "Vpb",
             "elapsed_campaign_time_formula": "getElapsedGameTime() - Wpb",
+            "challenge_result_locked_before_delay": True,
+            "challenge_lock_snapshots_second_star_signal_into": "wqb",
+            "challenge_lock_snapshots_third_star_signal_into": "vqb",
+            "challenge_lock_sets_locked_symbol": "xqb",
+            "challenge_lock_stops_periodic_callback_symbol": "Aqb",
             "result_bridge_delay_seconds": 5.0,
             "delayed_callback_stops_survival_timer": True,
             "delayed_callback_writes_player_won_symbol": "Bpb",
             "delayed_callback_executes_trigger_symbol": "Cpb",
-            "protected_result_trigger_payload_normalized": False,
+            "result_trigger_constructor": "CreateTrigger",
+            "result_trigger_action_logical_name": "code__TriggerAddAction_Campaign",
+            "result_trigger_action_function": "WF",
+            "result_trigger_payload_logical_name": "handleCampaignMissionResult__w3p_vmProtect",
+            "result_trigger_payload_function": "VF",
+            "protected_result_trigger_payload_normalized": True,
+            "earned_star_mask_loss_or_missing_mission": 0,
+            "earned_star_mask_win_base": 1,
+            "earned_star_mask_with_second_star": 3,
+            "earned_star_mask_with_third_star_only": 5,
+            "earned_star_mask_with_second_and_third_star": 7,
+            "cheat_tainted_run_forces_earned_star_mask_zero": True,
+            "cheat_tainted_run_skips_persistent_completion": True,
+            "persistent_completion_requires_player_won": True,
+            "persistent_completion_requires_non_null_mission": True,
+            "completion_wrapper_vm_index": 36,
+            "completion_wrapper_uses_last_draft_record_fields": [
+                "party-size", "star-budget", "race-ids", "recruit-ids", "supply-ids", "supply-party-slots",
+            ],
+            "completion_profile_missing_returns_new_points": 0,
+            "completion_elapsed_seconds_conversion": "max(0, real_toInt(elapsed_seconds))",
+            "completion_party_size_clamp": [1, 3],
+            "completion_records_best_time_per_party_size": True,
+            "completion_records_draft_snapshot_only_when_party_size_record_time_improves": True,
+            "completion_updates_overall_best_time_when_improved": True,
+            "completion_new_star_points_per_new_star": 1,
+            "completion_updates_mission_points_earned": True,
+            "completion_updates_profile_points": True,
+            "completion_returns_newly_earned_star_count": True,
+            "completion_reapplies_profile_to_campaign_missions": True,
+            "completion_publishes_available_points": True,
+            "completion_saves_profile_if_new_stars_or_best_time_changed": True,
+            "chapter_completion_requires_final_mission": True,
+            "chapter_completion_requires_win": True,
+            "chapter_completion_rejected_for_cheat_tainted_run": True,
+            "result_ui_receives_new_points_available_points_star_mask_elapsed_and_newly_completed_chapter": True,
+            "campaign_runtime_state_cleared_before_persistent_completion": True,
+            "party_list_destroyed_after_result_handling": True,
         },
         "related_rawcode_ids": [],
         "source_functions": [name for name, _fragments in result_bridge_sources],
-        "evidence_kind": "exact-readable-campaign-result-branch-and-delayed-bridge-with-protected-trigger-payload",
+        "evidence_kind": "exact-readable-result-handler-plus-decoded-protected-trigger-registry-and-vm36-persistence-wrapper",
         "byte_offset": min(result_bridge_offsets),
     })
 

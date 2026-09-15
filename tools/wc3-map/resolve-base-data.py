@@ -2643,10 +2643,25 @@ def main() -> None:
                 elif system_id == "campaign-match-result-bridge":
                     if (
                         parameters.get("result_bridge_delay_seconds") != 5.0
+                        or not parameters.get("challenge_result_locked_before_delay")
                         or not parameters.get("delayed_callback_stops_survival_timer")
                         or parameters.get("delayed_callback_writes_player_won_symbol") != "Bpb"
                         or parameters.get("delayed_callback_executes_trigger_symbol") != "Cpb"
-                        or parameters.get("protected_result_trigger_payload_normalized") is not False
+                        or parameters.get("result_trigger_constructor") != "CreateTrigger"
+                        or parameters.get("result_trigger_action_logical_name") != "code__TriggerAddAction_Campaign"
+                        or parameters.get("result_trigger_payload_logical_name") != "handleCampaignMissionResult__w3p_vmProtect"
+                        or parameters.get("protected_result_trigger_payload_normalized") is not True
+                        or int(parameters.get("earned_star_mask_win_base", -1)) != 1
+                        or int(parameters.get("earned_star_mask_with_second_star", -1)) != 3
+                        or int(parameters.get("earned_star_mask_with_third_star_only", -1)) != 5
+                        or int(parameters.get("earned_star_mask_with_second_and_third_star", -1)) != 7
+                        or parameters.get("cheat_tainted_run_forces_earned_star_mask_zero") is not True
+                        or parameters.get("cheat_tainted_run_skips_persistent_completion") is not True
+                        or int(parameters.get("completion_wrapper_vm_index", -1)) != 36
+                        or int(parameters.get("completion_new_star_points_per_new_star", -1)) != 1
+                        or parameters.get("completion_saves_profile_if_new_stars_or_best_time_changed") is not True
+                        or parameters.get("completion_records_best_time_per_party_size") is not True
+                        or parameters.get("chapter_completion_requires_final_mission") is not True
                     ):
                         raise ValueError(f"campaign match-result bridge changed: {parameters}")
                 elif system_id == "campaign-mission-supply-application":

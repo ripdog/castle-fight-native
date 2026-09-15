@@ -160,7 +160,7 @@
     "runtime_campaign_mechanics": 5,
     "runtime_campaign_mechanic_kinds": {
       "campaign-active-star-restriction-event-failure": 1,
-      "delayed-campaign-win-state-and-protected-result-trigger-bridge": 1,
+      "delayed-campaign-result-lock-star-award-persistence-and-ui": 1,
       "one-second-survival-objective-countdown-and-castle-kill-victory": 1,
       "quarter-second-fast-win-and-castle-health-star-tracking": 1,
       "round-start-gated-retrying-party-supply-application": 1
