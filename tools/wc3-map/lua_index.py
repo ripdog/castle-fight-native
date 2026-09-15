@@ -5753,6 +5753,9 @@ def _extract_runtime_mode_mechanics(
         "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser",
         "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser1",
         "CallbackSingle_doAfter_ModeParser_ModeParser_call_doAfter_ModeParser_ModeParser",
+        "ModeParser_startSelectedModesOrDefault__w3p_vmProtect",
+        "ModeParser_startModeSelectionTimerInternal", "ModeParser_cancelModeSelectionTimer",
+        "syncArtilleryModeAvailability", "startDefaultDraft__w3p_vmProtect", "startGame",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5980,6 +5983,65 @@ def _extract_runtime_mode_mechanics(
             if fragment not in mode_start_body:
                 raise ValueError(f"mode delayed-start callback changed: {mode_start_name}: missing {fragment!r}")
 
+    start_selected_name = "ModeParser_startSelectedModesOrDefault__w3p_vmProtect"
+    start_selected_start, start_selected_source = body(start_selected_name)
+    if start_selected_source != b"function ModeParser_startSelectedModesOrDefault__w3p_vmProtect()return _qr(77)end":
+        raise ValueError("ModeParser protected selected/default start wrapper changed")
+    timer_internal_start, timer_internal_source = body("ModeParser_startModeSelectionTimerInternal")
+    for fragment in (
+        b"ModeParser_cancelModeSelectionTimer()", b"LinkedList_LinkedList_clear(Y9)",
+        b"U9=QUq", b"V9=PUq", b"Custom mode selection active.", b"30 seconds",
+    ):
+        if fragment not in timer_internal_source:
+            raise ValueError(f"ModeParser selection timer state changed: missing {fragment!r}")
+
+    start_selected_static = _w3p_vm_static_strings(data, 77)
+    start_selected_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 77)
+    ]
+    if start_selected_static != [
+        "0", "-w3c",
+        "Mode selection needs a base mode before it can start, e.g. -rr1, -pr1, -mr1, or -um1.",
+        "10.", "ModeParser_manualModeEntryRequired", "GameBasics_gameStarted", "Jr", "U9", "Ocb", "OGb",
+    ]:
+        raise ValueError(f"ModeParser VM77 static values changed: {start_selected_static}")
+    if start_selected_globals != [
+        "Ocb", "ModeParser_hasSufficientBaseMode", "LinkedList_LinkedList_size", "Y9", "U9",
+        "ModeParser_parseMode__w3p_vmProtect", "a_", "ClearTextMessages", "V9", "V1", "player_print",
+        "ModeParser_startModeSelectionTimerInternal", "ModeParser_cancelModeSelectionTimer",
+        "syncArtilleryModeAvailability", "T8", "PGb", "startDefaultDraft__w3p_vmProtect", "startGame",
+    ]:
+        raise ValueError(f"ModeParser VM77 globals changed: {start_selected_globals}")
+    start_selected_vm = _decode_w3p_vm_program(data, 77, expected_opcode_xor_byte=228)
+    if start_selected_vm["operand_mode"] != 5:
+        raise ValueError(f"ModeParser VM77 operand mode changed: {start_selected_vm['operand_mode']}")
+    vm77_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in start_selected_vm["instructions"]
+    }
+    expected_vm77 = {
+        7: (218, (1,)), 9: (10, (0, 1)), 12: (221, ()),
+        13: (42, (2, 1)), 16: (236, ()), 17: (10, (0, 100)),
+        20: (218, (3,)), 22: (218, (4,)), 24: (98, (17,)), 26: (144, (1,)), 28: (18, (16,)), 30: (24, (3,)),
+        32: (253, (3,)), 34: (10, (0, 6)), 37: (218, (5,)), 39: (236, ()), 40: (240, (0, 2)),
+        43: (253, (3,)), 45: (10, (0, 17)), 48: (46, (2,)), 50: (42, (6, 16)),
+        53: (218, (7,)), 55: (236, ()), 56: (10, (0, 3)), 59: (42, (8, 0)), 62: (240, (0, 55)),
+        65: (218, (9,)), 67: (224, ()), 68: (18, (16,)), 70: (236, ()), 71: (10, (0, 7)),
+        74: (218, (9,)), 76: (24, (2,)), 78: (240, (0, 7)), 81: (218, (10,)), 83: (144, (1,)),
+        85: (162, ()), 86: (24, (2,)), 88: (253, (2,)), 90: (24, (1,)),
+        92: (218, (7,)), 94: (236, ()), 95: (10, (0, 21)), 98: (253, (1,)), 100: (46, (3,)),
+        102: (144, (4,)), 104: (42, (11, 48)), 107: (218, (5,)), 109: (10, (0, 7)),
+        112: (253, (1,)), 114: (156, (1,)), 116: (42, (12, 32)), 119: (221, ()),
+        120: (42, (13, 0)), 123: (156, (0,)), 125: (251, (8,)), 127: (42, (14, 0)),
+        130: (156, (1,)), 132: (251, (9,)), 134: (156, (0,)), 136: (251, (10,)),
+        138: (218, (15,)), 140: (24, (4,)), 142: (253, (4,)), 144: (124, (0, 5)),
+        147: (218, (16,)), 149: (240, (0, 2)), 152: (253, (4,)), 154: (10, (0, 6)),
+        157: (42, (17, 0)), 160: (240, (0, 3)), 163: (42, (18, 0)), 166: (221, ()),
+    }
+    if any(vm77_by_pc.get(pc) != instruction for pc, instruction in expected_vm77.items()):
+        raise ValueError("ModeParser VM77 selected/default start control flow changed")
+
     rows = [{
         "system_id": "mode-selection-controller-and-registry",
         "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
@@ -6027,6 +6089,24 @@ def _extract_runtime_mode_mechanics(
                 "end_signal_ZW_is_incremented_at_time_limit": True,
             },
             "delayed_mode_start_callbacks_call_protected_start_selected_modes_or_default": True,
+            "protected_start_selected_modes_vm": 77,
+            "protected_start_returns_immediately_if_selection_finalized_Ocb": True,
+            "protected_start_requires_sufficient_base_mode_before_finalization": True,
+            "protected_start_empty_selection_non_manual_fallback": "-w3c",
+            "protected_start_empty_selection_fallback_parser": "ModeParser_parseMode__w3p_vmProtect",
+            "manual_mode_entry_flag_symbol": "U9",
+            "selection_owner_symbol": "V9",
+            "selection_owner_fallback": "V1[0]",
+            "missing_base_mode_message_seconds": 10,
+            "manual_missing_base_mode_restarts_selection_timer": True,
+            "finalization_cancels_selection_timer": True,
+            "finalization_clears_manual_mode_entry_U9": True,
+            "finalization_syncs_artillery_availability": True,
+            "finalization_sets_selection_finalized_Ocb": True,
+            "finalization_clears_auto_mode_pending_OGb": True,
+            "default_draft_handoff_condition": "T8 or PGb",
+            "default_draft_handoff": "startDefaultDraft__w3p_vmProtect",
+            "ordinary_game_handoff": "startGame",
         },
         "related_rawcode_ids": [],
         "source_functions": [
@@ -6035,10 +6115,11 @@ def _extract_runtime_mode_mechanics(
             "StartResourceMode_StartResourceMode_isValidChoice", "StartResourceMode_StartResourceMode_minForChoice",
             "StartResourceMode_StartResourceMode_applyChoice", mode_round_watch, ultimate_round_watch,
             "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags",
-            *periodic_mode_sources.keys(), *round_limit_sources.keys(), *mode_start_sources.keys(), *callback_functions,
+            *periodic_mode_sources.keys(), *round_limit_sources.keys(), *mode_start_sources.keys(),
+            start_selected_name, "ModeParser_startModeSelectionTimerInternal", *callback_functions,
         ],
-        "evidence_kind": "exact-readable-mode-registry-generated-closure-aliases-and-chat-parser-control-flow",
-        "byte_offset": min(initializer_start, listener_start, parse_start),
+        "evidence_kind": "exact-readable-mode-registry-chat-parser-plus-statically-decoded-vm77-start-finalization",
+        "byte_offset": min(initializer_start, listener_start, parse_start, start_selected_start, timer_internal_start),
     }]
 
     w3c_callback = "CallbackSingle_doAfter_W3Champions_call_doAfter_W3Champions"

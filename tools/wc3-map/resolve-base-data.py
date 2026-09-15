@@ -2593,6 +2593,20 @@ def main() -> None:
                         or round_limit.get("positive_limit_secondary_tiebreak") != "sum of taxedIncomeRealForPlayer over each team"
                     ):
                         raise ValueError(f"runtime mode round-limit semantics changed: {round_limit}")
+                    if (
+                        parameters.get("protected_start_selected_modes_vm") != 77
+                        or parameters.get("protected_start_returns_immediately_if_selection_finalized_Ocb") is not True
+                        or parameters.get("protected_start_empty_selection_non_manual_fallback") != "-w3c"
+                        or parameters.get("manual_mode_entry_flag_symbol") != "U9"
+                        or parameters.get("manual_missing_base_mode_restarts_selection_timer") is not True
+                        or parameters.get("finalization_cancels_selection_timer") is not True
+                        or parameters.get("finalization_sets_selection_finalized_Ocb") is not True
+                        or parameters.get("finalization_clears_auto_mode_pending_OGb") is not True
+                        or parameters.get("default_draft_handoff_condition") != "T8 or PGb"
+                        or parameters.get("default_draft_handoff") != "startDefaultDraft__w3p_vmProtect"
+                        or parameters.get("ordinary_game_handoff") != "startGame"
+                    ):
+                        raise ValueError(f"runtime mode protected start/finalization semantics changed: {parameters}")
                 elif (
                     parameters.get("detection_player_id") != 23
                     or parameters.get("detection_player_name") != "FLO"
