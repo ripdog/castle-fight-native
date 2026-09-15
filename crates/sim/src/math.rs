@@ -13,9 +13,10 @@ impl SimPoint {
 
     #[must_use]
     pub fn distance_sq(self, other: Self) -> u64 {
-        let dx = i64::from(self.x) - i64::from(other.x);
-        let dy = i64::from(self.y) - i64::from(other.y);
-        (dx * dx + dy * dy) as u64
+        let dx = u128::from((i64::from(self.x) - i64::from(other.x)).unsigned_abs());
+        let dy = u128::from((i64::from(self.y) - i64::from(other.y)).unsigned_abs());
+        let squared = dx * dx + dy * dy;
+        u64::try_from(squared).unwrap_or(u64::MAX)
     }
 
     #[must_use]
@@ -53,6 +54,11 @@ mod tests {
         let a = SimPoint::new(-1_000_000, 2_000_000);
         let b = SimPoint::new(1_000_000, -2_000_000);
         assert_eq!(a.distance_sq(b), 20_000_000_000_000);
+        assert_eq!(
+            SimPoint::new(i32::MIN, i32::MIN).distance_sq(SimPoint::new(i32::MAX, i32::MAX)),
+            u64::MAX,
+            "untrusted coordinates outside validated map bounds saturate instead of overflowing"
+        );
     }
 
     #[test]

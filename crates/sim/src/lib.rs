@@ -1,7 +1,9 @@
+mod commands;
 mod components;
 mod content;
 mod damage;
 mod economy;
+mod match_driver;
 mod match_setup;
 mod math;
 mod native_effects;
@@ -11,6 +13,10 @@ mod terrain;
 mod topology;
 mod version;
 
+pub use commands::{
+    BuildPosition, CommandAdmissionError, CommandExecutionResult, CommandOutcome,
+    CommandRejectReason, PlayerCommand, admit_player_command,
+};
 pub use components::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
     AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
@@ -45,6 +51,11 @@ pub use damage::{
 pub use economy::{
     BuildingEconomyProfile, EconomyRules, PlayerEconomyView, PlayerResources, RESOURCE_FIXED_SCALE,
     ResourcePurchaseError,
+};
+pub use match_driver::{
+    BoundaryControlRecord, CanonicalStreamError, CanonicalStreamRecord, ClientCommandSequence,
+    CommandExecution, CommandOrder, CommandSequenceError, CommandSubmission, DriverTickResult,
+    FinalizedTickInputs, InputStreamPosition, MatchControlEvent, MatchDriver, ScheduledCommand,
 };
 pub use match_setup::{
     CASTLE_FIGHT_REGISTERED_RELEASES, CastleFightMatch, CastleFightMatchConfig,

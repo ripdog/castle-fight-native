@@ -195,6 +195,20 @@ impl CastleFightContentBundle {
     }
 
     #[must_use]
+    pub fn building_kind(&self, id: CastleFightBuildingId) -> Option<CastleFightBuildingKind> {
+        CastleFightProductionKind::ALL
+            .into_iter()
+            .find(|kind| kind.stable_id() == id && self.production_building(*kind).is_some())
+            .map(CastleFightBuildingKind::Production)
+            .or_else(|| {
+                CastleFightTowerKind::ALL
+                    .into_iter()
+                    .find(|kind| kind.stable_id() == id && self.tower(*kind).is_some())
+                    .map(CastleFightBuildingKind::Tower)
+            })
+    }
+
+    #[must_use]
     pub fn building_kind_for_rawcode(&self, rawcode: u32) -> Option<CastleFightBuildingKind> {
         CastleFightProductionKind::ALL
             .into_iter()
@@ -347,6 +361,14 @@ pub enum CastleFightBuildingKind {
 }
 
 impl CastleFightBuildingKind {
+    #[must_use]
+    pub const fn stable_id(self) -> CastleFightBuildingId {
+        match self {
+            Self::Production(kind) => kind.stable_id(),
+            Self::Tower(kind) => kind.stable_id(),
+        }
+    }
+
     #[must_use]
     pub fn rawcode(self, bundle: &CastleFightContentBundle) -> Option<u32> {
         match self {

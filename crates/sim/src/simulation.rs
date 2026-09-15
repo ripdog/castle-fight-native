@@ -417,6 +417,7 @@ pub enum BuildingPlacementError {
     OutsideBuildRegion,
     StaticObstacle,
     BuildingOverlap,
+    BuildingReserved,
     UnitOccupied,
 }
 
@@ -699,7 +700,7 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn set_player_connection_status(
+    pub(crate) fn set_player_connection_status(
         &mut self,
         player: PlayerId,
         connection: PlayerConnectionStatus,
@@ -712,6 +713,17 @@ impl Simulation {
         };
         state.connection = connection;
         self.refresh_disconnect_pause();
+        true
+    }
+
+    pub(crate) fn finish_match_from_control(&mut self, outcome: MatchOutcome) -> bool {
+        if matches!(self.lifecycle, MatchLifecycle::Finished { .. }) {
+            return false;
+        }
+        self.lifecycle = MatchLifecycle::Finished {
+            outcome,
+            finished_tick: self.next_tick.saturating_sub(1),
+        };
         true
     }
 
@@ -761,7 +773,7 @@ impl Simulation {
         })
     }
 
-    pub fn order_builder_move_as(
+    pub(crate) fn order_builder_move_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -773,7 +785,7 @@ impl Simulation {
         self.order_builder_move(builder, destination)
     }
 
-    pub fn order_builder_follow_as(
+    pub(crate) fn order_builder_follow_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -785,7 +797,7 @@ impl Simulation {
         self.order_builder_follow(builder, target)
     }
 
-    pub fn order_builder_blink_as(
+    pub(crate) fn order_builder_blink_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -797,7 +809,7 @@ impl Simulation {
         self.order_builder_blink(builder, destination)
     }
 
-    pub fn order_builder_repair_as(
+    pub(crate) fn order_builder_repair_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -809,7 +821,7 @@ impl Simulation {
         self.order_builder_repair(builder, target)
     }
 
-    pub fn set_builder_repair_autocast_as(
+    pub(crate) fn set_builder_repair_autocast_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -821,7 +833,7 @@ impl Simulation {
         self.set_builder_repair_autocast(builder, enabled)
     }
 
-    pub fn stop_builder_as(
+    pub(crate) fn stop_builder_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -832,7 +844,7 @@ impl Simulation {
         self.stop_builder(builder)
     }
 
-    pub fn order_building_attack_target_as(
+    pub(crate) fn order_building_attack_target_as(
         &mut self,
         controller: PlayerId,
         source: SimId,
@@ -1171,7 +1183,7 @@ impl Simulation {
         available_gold >= economy.gold_cost && available_lumber >= economy.lumber_cost
     }
 
-    pub fn order_building_attack_target(
+    pub(crate) fn order_building_attack_target(
         &mut self,
         source: SimId,
         target: SimId,
@@ -1365,7 +1377,7 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn order_builder_move(
+    pub(crate) fn order_builder_move(
         &mut self,
         builder: SimId,
         destination: SimPoint,
@@ -1400,7 +1412,7 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn order_builder_follow(
+    pub(crate) fn order_builder_follow(
         &mut self,
         builder: SimId,
         target: SimId,
@@ -1430,7 +1442,7 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn order_builder_blink(
+    pub(crate) fn order_builder_blink(
         &mut self,
         builder: SimId,
         destination: SimPoint,
@@ -1480,7 +1492,7 @@ impl Simulation {
         Ok(destination)
     }
 
-    pub fn order_builder_repair(
+    pub(crate) fn order_builder_repair(
         &mut self,
         builder: SimId,
         target: SimId,
@@ -1535,7 +1547,7 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn set_builder_repair_autocast(
+    pub(crate) fn set_builder_repair_autocast(
         &mut self,
         builder: SimId,
         enabled: bool,
@@ -1557,7 +1569,7 @@ impl Simulation {
         Ok(())
     }
 
-    pub fn stop_builder(&mut self, builder: SimId) -> Result<(), BuilderCommandError> {
+    pub(crate) fn stop_builder(&mut self, builder: SimId) -> Result<(), BuilderCommandError> {
         let entity = self
             .world
             .iter_entities()
@@ -1639,7 +1651,7 @@ impl Simulation {
         Ok(id)
     }
 
-    pub fn order_builder_purchase_building_with_properties_as(
+    pub(crate) fn order_builder_purchase_building_with_properties_as(
         &mut self,
         controller: PlayerId,
         builder: SimId,
@@ -1654,7 +1666,7 @@ impl Simulation {
         self.order_builder_purchase_building_with_properties(builder, building, properties)
     }
 
-    pub fn order_builder_purchase_building_with_properties(
+    pub(crate) fn order_builder_purchase_building_with_properties(
         &mut self,
         builder: SimId,
         building: BuildingSpawn,
@@ -1664,6 +1676,11 @@ impl Simulation {
             self.validate_builder_summon(builder, building, properties)?;
         self.validate_building_placement(building.team, building.footprint)
             .map_err(BuilderBuildError::Placement)?;
+        if self.footprint_overlaps_pending_build_order(building.footprint, Some(builder_entity)) {
+            return Err(BuilderBuildError::Placement(
+                BuildingPlacementError::BuildingReserved,
+            ));
+        }
         let economy = properties
             .economy
             .ok_or(BuilderBuildError::MissingEconomyProfile)?;
@@ -2406,7 +2423,7 @@ impl Simulation {
         }
     }
 
-    pub fn start_building_upgrade_as(
+    pub(crate) fn start_building_upgrade_as(
         &mut self,
         controller: PlayerId,
         source_id: SimId,
@@ -2427,7 +2444,7 @@ impl Simulation {
         )
     }
 
-    pub fn start_building_upgrade(
+    pub(crate) fn start_building_upgrade(
         &mut self,
         source_id: SimId,
         source_building: BuildingSpawn,
@@ -2589,7 +2606,8 @@ impl Simulation {
         true
     }
 
-    pub fn cancel_building_construction(
+    #[cfg(test)]
+    pub(crate) fn cancel_building_construction(
         &mut self,
         team: Team,
         id: SimId,
@@ -2600,7 +2618,7 @@ impl Simulation {
         self.cancel_building_construction_for_player(player, id)
     }
 
-    pub fn cancel_building_construction_for_player(
+    pub(crate) fn cancel_building_construction_for_player(
         &mut self,
         player: PlayerId,
         id: SimId,
@@ -2767,6 +2785,7 @@ impl Simulation {
                 .iter_entities()
                 .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
                 .any(|existing| footprints_overlap(existing, footprint))
+            && !self.footprint_overlaps_pending_build_order(footprint, None)
             && !self.footprint_contains_live_unit(footprint)
     }
 
@@ -2798,7 +2817,27 @@ impl Simulation {
                 .iter_entities()
                 .filter_map(|entity| entity.get::<BuildingFootprint>().copied())
                 .any(|existing| footprint_contains_cell(existing, cell))
+            && !self
+                .world
+                .iter_entities()
+                .filter_map(|entity| entity.get::<BuilderBuildOrder>())
+                .any(|order| footprint_contains_cell(order.building.footprint, cell))
             && !self.footprint_contains_live_unit(footprint)
+    }
+
+    fn footprint_overlaps_pending_build_order(
+        &self,
+        footprint: BuildingFootprint,
+        ignore_builder_entity: Option<Entity>,
+    ) -> bool {
+        self.world.iter_entities().any(|entity| {
+            if ignore_builder_entity == Some(entity.id()) {
+                return false;
+            }
+            entity
+                .get::<BuilderBuildOrder>()
+                .is_some_and(|order| footprints_overlap(order.building.footprint, footprint))
+        })
     }
 
     fn footprint_inside_team_build_region(&self, team: Team, footprint: BuildingFootprint) -> bool {
