@@ -13,6 +13,7 @@ use crate::{
     presentation::{WorldMetrics, draw_footprint_outline, viewport_ground_point},
     resource_ui::TOP_BAR_HEIGHT,
     terrain::TerrainSurface,
+    ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey},
     wc3_text::{Wc3Color, parse_wc3_text},
 };
 
@@ -39,6 +40,8 @@ const BUTTON_DISABLED: Color = Color::srgb(0.045, 0.043, 0.040);
 const BUTTON_DISABLED_BORDER: Color = Color::srgb(0.18, 0.17, 0.16);
 const BUTTON_TEXT: Color = Color::srgb(0.92, 0.90, 0.84);
 const BUTTON_TEXT_DISABLED: Color = Color::srgb(0.42, 0.40, 0.37);
+const BUTTON_ICON_DISABLED: Color = Color::srgb(0.38, 0.38, 0.38);
+const BUTTON_LABEL_BACKGROUND: Color = Color::srgba(0.02, 0.015, 0.01, 0.72);
 const TOOLTIP_WIDTH: f32 = 500.0;
 const TOOLTIP_GAP: f32 = 8.0;
 const TOOLTIP_BACKGROUND: Color = Color::srgba(0.025, 0.020, 0.015, 0.98);
@@ -142,6 +145,9 @@ struct SlotAction(Option<PanelAction>);
 struct SlotLabel;
 
 #[derive(Component)]
+struct SlotIcon;
+
+#[derive(Component)]
 struct BuildTooltip;
 
 #[derive(Component)]
@@ -184,6 +190,7 @@ impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ActionPanelState>()
             .init_resource::<BuildTooltipState>()
+            .insert_resource(UiIconAssets::load_default())
             .add_systems(Startup, setup_action_panel)
             .add_systems(
                 Update,
@@ -251,13 +258,42 @@ fn setup_action_panel(mut commands: Commands) {
                                 CommandSlot(slot),
                                 SlotAction::default(),
                             ))
-                            .with_child((
-                                Text::new(""),
-                                TextFont::from_font_size(10.0),
-                                TextColor(BUTTON_TEXT),
-                                TextLayout::justify(Justify::Center),
-                                SlotLabel,
-                            ));
+                            .with_children(|button| {
+                                button.spawn((
+                                    ImageNode::default(),
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        left: px(2.0),
+                                        right: px(2.0),
+                                        top: px(2.0),
+                                        bottom: px(2.0),
+                                        ..default()
+                                    },
+                                    Pickable::IGNORE,
+                                    CommandSlot(slot),
+                                    SlotIcon,
+                                ));
+                                button.spawn((
+                                    Text::new(""),
+                                    TextFont::from_font_size(9.0),
+                                    TextColor(BUTTON_TEXT),
+                                    TextLayout::justify(Justify::Center),
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        left: px(1.0),
+                                        right: px(1.0),
+                                        bottom: px(1.0),
+                                        padding: UiRect::axes(px(2.0), px(1.0)),
+                                        justify_content: JustifyContent::Center,
+                                        ..default()
+                                    },
+                                    BackgroundColor(BUTTON_LABEL_BACKGROUND),
+                                    GlobalZIndex(1),
+                                    Pickable::IGNORE,
+                                    CommandSlot(slot),
+                                    SlotLabel,
+                                ));
+                            });
                         }
                     });
             }
@@ -401,21 +437,66 @@ fn cancel_selected_construction(
 fn populate_action_panel(
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
-    mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility, &Children)>,
-    mut labels: Query<&mut Text, With<SlotLabel>>,
+    asset_server: Res<AssetServer>,
+    mut icon_assets: ResMut<UiIconAssets>,
+    mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility)>,
+    mut labels: Query<(&CommandSlot, &mut Text), With<SlotLabel>>,
+    mut icons: Query<(&CommandSlot, &mut ImageNode), With<SlotIcon>>,
 ) {
     let layout = action_layout(&state, &authoritative);
-    for (slot, mut action, mut visibility, children) in &mut buttons {
+    let command_card = castle_fight_command_card_layout();
+    let presentation = CastleFightPresentationCatalog::for_version(command_card.map_version)
+        .expect("active Castle Fight version must have presentation bindings");
+
+    for (slot, mut action, mut visibility) in &mut buttons {
         action.0 = layout[slot.0];
         *visibility = if action.0.is_some() {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
-        if let Some(child) = children.first()
-            && let Ok(mut text) = labels.get_mut(*child)
-        {
-            text.0 = action.0.map_or_else(String::new, action_label);
+    }
+    for (slot, mut text) in &mut labels {
+        text.0 = layout[slot.0].map_or_else(String::new, action_label);
+    }
+    for (slot, mut image) in &mut icons {
+        *image = layout[slot.0]
+            .map(|action| action_icon_key(action, &state, &authoritative, presentation))
+            .and_then(|key| icon_assets.image(key, &asset_server))
+            .map_or_else(ImageNode::default, ImageNode::new);
+    }
+}
+
+fn action_icon_key(
+    action: PanelAction,
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+    presentation: CastleFightPresentationCatalog,
+) -> UiIconKey {
+    match action {
+        PanelAction::OpenBuildMenu => presentation.build_command,
+        PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
+            UiIconKey::unit_game_interface(target.definition().rawcode)
+        }
+        PanelAction::CancelConstruction | PanelAction::Cancel => presentation.cancel_command,
+        PanelAction::Target(TargetingAction::Move) => presentation.move_command,
+        PanelAction::Target(TargetingAction::Repair) => {
+            let autocast_active = state.actor.is_some_and(|actor| {
+                authoritative
+                    .simulation
+                    .builder(actor)
+                    .is_some_and(|builder| builder.repair_autocast_enabled)
+            });
+            if autocast_active {
+                presentation.repair_turn_off_command
+            } else {
+                presentation.repair_command
+            }
+        }
+        PanelAction::Target(TargetingAction::Blink) => presentation.blink_command,
+        PanelAction::Target(TargetingAction::Attack) => presentation.attack_command,
+        PanelAction::Target(TargetingAction::Build(kind)) => {
+            UiIconKey::unit_game_interface(kind.rawcode())
         }
     }
 }
@@ -647,15 +728,17 @@ fn style_action_panel_buttons(
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
     mut buttons: Query<(
+        &CommandSlot,
         &SlotAction,
         &Interaction,
         &mut BackgroundColor,
         &mut BorderColor,
-        &Children,
     )>,
-    mut labels: Query<&mut TextColor, With<SlotLabel>>,
+    mut labels: Query<(&CommandSlot, &mut TextColor), With<SlotLabel>>,
+    mut icons: Query<(&CommandSlot, &mut ImageNode), With<SlotIcon>>,
 ) {
-    for (action, interaction, mut background, mut border, children) in &mut buttons {
+    let mut disabled_slots = [false; SLOT_COUNT];
+    for (slot, action, interaction, mut background, mut border) in &mut buttons {
         let disabled = action.0.is_some_and(|action| match action {
             PanelAction::Target(TargetingAction::Build(kind)) => {
                 !can_afford_build_kind(&authoritative, &state, kind)
@@ -665,6 +748,7 @@ fn style_action_panel_buttons(
             }
             _ => false,
         });
+        disabled_slots[slot.0] = disabled;
         *background = BackgroundColor(if disabled {
             BUTTON_DISABLED
         } else if *interaction == Interaction::Hovered {
@@ -686,15 +770,20 @@ fn style_action_panel_buttons(
         } else {
             SLOT_BORDER
         });
-        if let Some(child) = children.first()
-            && let Ok(mut color) = labels.get_mut(*child)
-        {
-            color.0 = if disabled {
-                BUTTON_TEXT_DISABLED
-            } else {
-                BUTTON_TEXT
-            };
-        }
+    }
+    for (slot, mut color) in &mut labels {
+        color.0 = if disabled_slots[slot.0] {
+            BUTTON_TEXT_DISABLED
+        } else {
+            BUTTON_TEXT
+        };
+    }
+    for (slot, mut image) in &mut icons {
+        image.color = if disabled_slots[slot.0] {
+            BUTTON_ICON_DISABLED
+        } else {
+            Color::WHITE
+        };
     }
 }
 

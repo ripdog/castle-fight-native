@@ -9,6 +9,7 @@ mod inspection;
 mod presentation;
 mod resource_ui;
 mod terrain;
+mod ui_icons;
 mod unit_models;
 mod wc3_effects;
 mod wc3_text;

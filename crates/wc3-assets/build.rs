@@ -677,6 +677,32 @@ fn load_ui_assets(object_fields_path: &std::path::Path) -> Result<UiAssetCatalog
         ));
     }
 
+    // Stock engine commands are not object-editor rows, but they are still part of the
+    // Warcraft command card presentation. Keep them in the same generated UI catalog so
+    // clients do not grow a second set of handwritten asset paths.
+    for (command, texture_path) in [
+        ("move", r"ReplaceableTextures\CommandButtons\BTNMove.blp"),
+        (
+            "attack",
+            r"ReplaceableTextures\CommandButtons\BTNAttack.blp",
+        ),
+        (
+            "build_human",
+            r"ReplaceableTextures\CommandButtons\BTNHumanBuild.blp",
+        ),
+        (
+            "cancel",
+            r"ReplaceableTextures\CommandButtons\BTNCancel.blp",
+        ),
+    ] {
+        assets.insert((
+            "commands".to_owned(),
+            command.to_owned(),
+            "command".to_owned(),
+            texture_path.to_owned(),
+        ));
+    }
+
     Ok(UiAssetCatalog {
         assets: assets
             .into_iter()

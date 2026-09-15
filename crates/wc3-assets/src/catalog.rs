@@ -343,6 +343,18 @@ mod tests {
                 && asset.role == "bar"
                 && asset.texture_path == r"UI\Feedback\Resources\ResourceLumber.blp"
         }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "commands"
+                && asset.owner_rawcode == "move"
+                && asset.role == "command"
+                && asset.texture_path == r"ReplaceableTextures\CommandButtons\BTNMove.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "commands"
+                && asset.owner_rawcode == "cancel"
+                && asset.role == "command"
+                && asset.texture_path == r"ReplaceableTextures\CommandButtons\BTNCancel.blp"
+        }));
     }
 
     #[test]
