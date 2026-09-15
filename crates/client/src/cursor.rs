@@ -20,9 +20,10 @@ const WC3_REFERENCE_FRAME_SIZE: u32 = 32;
 
 /// Stock Warcraft cursor sprite-sheet cells used by the cursor model's static sequences.
 ///
-/// The model also animates the upper rows for hover/select feedback. Native only needs the
-/// ordinary pointer plus point-target/invalid-target cells for now; the extracted atlas remains
-/// complete so those animated states can be added without changing the asset pipeline.
+/// Warcraft keeps animated hand/crosshair sequences in rows 0 and 2. Row 3 contains the static
+/// Normal, Target, and InvalidTarget cells used while no cursor animation is playing. Native only
+/// needs those static states for now; the extracted atlas remains complete so animated feedback
+/// can be added later without changing the asset pipeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Wc3CursorState {
     Normal,
@@ -33,9 +34,9 @@ enum Wc3CursorState {
 impl Wc3CursorState {
     const fn atlas_cell(self) -> UVec2 {
         match self {
-            Self::Normal => UVec2::new(0, 2),
-            Self::Target => UVec2::new(1, 2),
-            Self::InvalidTarget => UVec2::new(2, 2),
+            Self::Normal => UVec2::new(0, 3),
+            Self::Target => UVec2::new(1, 3),
+            Self::InvalidTarget => UVec2::new(2, 3),
         }
     }
 
@@ -272,21 +273,21 @@ mod tests {
         assert_eq!(
             cursor_frame(UVec2::new(256, 128), Wc3CursorState::Normal),
             Some(Wc3CursorFrame {
-                rect: URect::from_corners(UVec2::new(0, 64), UVec2::new(32, 96)),
+                rect: URect::from_corners(UVec2::new(0, 96), UVec2::new(32, 128)),
                 hotspot: (5, 0),
             })
         );
         assert_eq!(
             cursor_frame(UVec2::new(256, 128), Wc3CursorState::Target),
             Some(Wc3CursorFrame {
-                rect: URect::from_corners(UVec2::new(32, 64), UVec2::new(64, 96)),
+                rect: URect::from_corners(UVec2::new(32, 96), UVec2::new(64, 128)),
                 hotspot: (16, 16),
             })
         );
         assert_eq!(
             cursor_frame(UVec2::new(256, 128), Wc3CursorState::InvalidTarget),
             Some(Wc3CursorFrame {
-                rect: URect::from_corners(UVec2::new(64, 64), UVec2::new(96, 96)),
+                rect: URect::from_corners(UVec2::new(64, 96), UVec2::new(96, 128)),
                 hotspot: (16, 16),
             })
         );
@@ -297,7 +298,7 @@ mod tests {
         assert_eq!(
             cursor_frame(UVec2::new(1024, 512), Wc3CursorState::Target),
             Some(Wc3CursorFrame {
-                rect: URect::from_corners(UVec2::new(128, 256), UVec2::new(256, 384)),
+                rect: URect::from_corners(UVec2::new(128, 384), UVec2::new(256, 512)),
                 hotspot: (64, 64),
             })
         );
