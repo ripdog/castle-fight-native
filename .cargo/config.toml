@@ -4,3 +4,8 @@ jobs = 6
 # Keep per-worktree target directories isolated, and let sccache provide the
 # cross-build cache instead.
 incremental = false
+
+[env]
+# Cargo exports this to rustc wrappers as well, so manually-invoked Cargo gets
+# the same cache budget as tools/cargo-interactive. This is only a size ceiling.
+SCCACHE_CACHE_SIZE = { value = "32G", force = false }
