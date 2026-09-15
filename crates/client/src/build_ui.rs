@@ -427,18 +427,22 @@ fn cancel_selected_construction(
 }
 
 fn populate_action_panel(
-    state: Res<ActionPanelState>,
-    authoritative: Res<AuthoritativeSimulation>,
-    selected_match: Res<SelectedMatch>,
+    match_state: (
+        Res<ActionPanelState>,
+        Res<AuthoritativeSimulation>,
+        Res<SelectedMatch>,
+    ),
     asset_server: Res<AssetServer>,
     mut icon_assets: ResMut<UiIconAssets>,
     mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility)>,
     mut labels: Query<(&CommandSlot, &mut Text), With<SlotLabel>>,
     mut icons: Query<(&CommandSlot, &mut ImageNode), With<SlotIcon>>,
 ) {
+    let (state, authoritative, selected_match) = match_state;
     let layout = action_layout(&state, &authoritative, &selected_match);
-    let presentation = CastleFightPresentationCatalog::for_version(selected_match.content.map_version)
-        .expect("selected Castle Fight version must have presentation bindings");
+    let presentation =
+        CastleFightPresentationCatalog::for_version(selected_match.content.map_version)
+            .expect("selected Castle Fight version must have presentation bindings");
 
     for (slot, mut action, mut visibility) in &mut buttons {
         action.0 = layout[slot.0];
