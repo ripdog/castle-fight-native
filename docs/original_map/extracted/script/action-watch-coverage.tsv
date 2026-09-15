@@ -8,8 +8,8 @@ Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI1	presentation
 Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI2	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942493
 Action_watch_CampaignUI_CampaignUI_run_watch_CampaignUI_CampaignUI3	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	942744
 Action_watch_Campaign_run_watch_Campaign	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	952753
-Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator	draft-runtime-unmodeled		live draft orchestration/reminder lifecycle; tracked separately from individual perk mechanics	1111276
-Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry	draft-runtime-unmodeled		live draft orchestration/reminder lifecycle; tracked separately from individual perk mechanics	1114205
+Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator	normalized-draft-runtime-semantics	runtime-draft-mechanics:draft-round-restart-lifecycle	callback is direct lifecycle evidence for normalized draft runtime semantics	1111276
+Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry	normalized-draft-runtime-semantics	runtime-draft-mechanics:draft-perk-reminder-reapply	callback is direct lifecycle evidence for normalized draft runtime semantics	1114205
 Action_watch_DraftUIScreen_DraftUI_run_watch_DraftUIScreen_DraftUI	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1152410
 Action_watch_DraftUIScreen_DraftUI_run_watch_DraftUIScreen_DraftUI1	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1154927
 Action_watch_DraftWindow_DraftWindow_run_watch_DraftWindow_DraftWindow	presentation-only		reactive UI/camera/multiboard callback; no authoritative gameplay mechanic mutation	1186225

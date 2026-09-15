@@ -5806,6 +5806,99 @@ def _extract_runtime_campaign_mechanics(
     }]
 
 
+def _extract_runtime_draft_mechanics(
+    data: bytes,
+    functions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Normalize readable draft lifecycle callbacks outside individual perk semantics."""
+    functions_by_name = {str(row["name"]): row for row in functions}
+    required = {
+        "Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator", "restartDraftAfterRoundEnd",
+        "Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry", "ensureAppliedList", "addPerkReminderToBuilder",
+        "initPerks__w3p_vmProtect", "initializeDefaultDraftTiers__w3p_vmProtect",
+        "setupDefaultRoundOrder__w3p_vmProtect", "syncDraftPlayersFromForces",
+    }
+    if not required.issubset(functions_by_name):
+        return []
+
+    def source(name: str, fragments: Iterable[bytes]) -> tuple[int, bytes]:
+        row = functions_by_name[name]
+        body = data[int(row["start"]):int(row["end"])]
+        for fragment in fragments:
+            if fragment not in body:
+                raise ValueError(f"runtime draft mechanic source changed: {name}: missing {fragment!r}")
+        return int(row["start"]), body
+
+    restart_sources = [
+        ("Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator", (b"Signal_Signal_get(YW)", b"restartDraftAfterRoundEnd()")),
+        ("restartDraftAfterRoundEnd", (
+            b"if(Sfb==nil)then return", b"Mcb=true", b"resetPool()", b"initializeDefaultDraftTiers__w3p_vmProtect()",
+            b"initPerks__w3p_vmProtect()", b"assertDraftPerkIdHash__w3p_vmProtect()", b"setupDefaultRoundOrder__w3p_vmProtect()",
+            b"syncDraftPlayersFromForces()", b"DraftController_DraftController_reset(Sfb)",
+            b"IterableMap_IterableMap_forEach(Vdb,xtq)", b"DraftController_DraftController_startWithWarmup(Sfb)",
+        )),
+        ("initPerks__w3p_vmProtect", (b"return _qr(65)",)),
+    ]
+    restart_offsets = [source(name, fragments)[0] for name, fragments in restart_sources]
+
+    reminder_sources = [
+        ("Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry", (
+            b"Signal_Signal_get(aX)", b"if(Khm>11)then break", b"ensureAppliedList(Khm)",
+            b"LinkedList_LinkedList_iterator(Oeb[Khm])", b"addPerkReminderToBuilder(Lhm,Nhm)",
+        )),
+        ("ensureAppliedList", (b"if(Oeb[Itq]==nil)then Oeb[Itq]=LinkedList_new_LinkedList()end",)),
+        ("addPerkReminderToBuilder", (
+            b"DraftPerk_reminderAbilityId==0", b"jX[player_getId(fuq)]", b"addProtectedAbility",
+            b"unit_makeAbilityPermanent", b"ABILITY_RLF_CHANCE_TO_CRITICAL_STRIKE", b"BlzSetAbilityRealLevelField",
+        )),
+    ]
+    reminder_offsets = [source(name, fragments)[0] for name, fragments in reminder_sources]
+
+    return [
+        {
+            "system_id": "draft-round-restart-lifecycle",
+            "mechanic_kind": "round-end-draft-controller-reset-and-warmup-restart",
+            "trigger": "draft-round-end-signal",
+            "parameters": {
+                "requires_existing_draft_controller": True,
+                "resets_unit_pool": True,
+                "reinitializes_default_draft_tiers": True,
+                "reinitializes_proven_19_perk_registry": True,
+                "asserts_perk_id_hash": True,
+                "rebuilds_default_round_order": True,
+                "resyncs_draft_players_from_team_forces": True,
+                "resets_existing_draft_controller": True,
+                "reapplies_registered_draft_state_over_registry_map": True,
+                "restarts_controller_with_warmup": True,
+            },
+            "related_rawcode_ids": [],
+            "source_functions": [name for name, _fragments in restart_sources],
+            "evidence_kind": "exact-readable-draft-restart-control-flow-plus-proven-protected-perk-registry-entrypoint",
+            "byte_offset": min(restart_offsets),
+        },
+        {
+            "system_id": "draft-perk-reminder-reapply",
+            "mechanic_kind": "round-start-reapply-applied-perk-reminder-abilities-to-current-builders",
+            "trigger": "round-start-signal",
+            "parameters": {
+                "player_ids_scanned": [0, 11],
+                "applied_perk_list_symbol": "Oeb[player_id]",
+                "current_builder_symbol": "jX[player_id]",
+                "skips_perks_with_zero_reminder_ability_id": True,
+                "adds_missing_reminder_ability_only": True,
+                "makes_reminder_ability_permanent": True,
+                "sets_ability_real_level_field": "ABILITY_RLF_CHANCE_TO_CRITICAL_STRIKE",
+                "sets_field_level_index": 0,
+                "sets_field_value": 0.0,
+            },
+            "related_rawcode_ids": [],
+            "source_functions": [name for name, _fragments in reminder_sources],
+            "evidence_kind": "exact-readable-applied-perk-list-builder-reminder-reapply-control-flow",
+            "byte_offset": min(reminder_offsets),
+        },
+    ]
+
+
 def _extract_damage_listener_coverage(
     functions: list[dict[str, object]],
     production_unit_special_mechanics: list[dict[str, object]],
@@ -5917,6 +6010,7 @@ def _extract_action_watch_coverage(
     runtime_session_mechanics: list[dict[str, object]],
     runtime_mode_mechanics: list[dict[str, object]],
     runtime_campaign_mechanics: list[dict[str, object]],
+    runtime_draft_mechanics: list[dict[str, object]],
     protected_perk_registry_audit: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Strict closure audit over generated Action_watch callbacks."""
@@ -5944,6 +6038,7 @@ def _extract_action_watch_coverage(
     add_sources("runtime-session-mechanics", runtime_session_mechanics, "system_id")
     add_sources("runtime-mode-mechanics", runtime_mode_mechanics, "system_id")
     add_sources("runtime-campaign-mechanics", runtime_campaign_mechanics, "system_id")
+    add_sources("runtime-draft-mechanics", runtime_draft_mechanics, "system_id")
 
     e2e_only = {
         "Action_watch_AiFullGameE2E_run_watch_AiFullGameE2E",
@@ -5976,10 +6071,6 @@ def _extract_action_watch_coverage(
         "Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData",
         "Action_watch_doAfter_MMDData_run_watch_doAfter_MMDData1",
     }
-    draft_runtime_unmodeled = {
-        "Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator",
-        "Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry",
-    }
     campaign_protected_unmodeled = {
         "Action_watch_CampaignRuntime_run_watch_CampaignRuntime",
     }
@@ -6000,6 +6091,9 @@ def _extract_action_watch_coverage(
             elif all(source.startswith("runtime-campaign-mechanics:") for source in normalized):
                 status = "normalized-campaign-runtime-semantics"
                 note = "callback is direct lifecycle evidence for normalized campaign runtime semantics"
+            elif all(source.startswith("runtime-draft-mechanics:") for source in normalized):
+                status = "normalized-draft-runtime-semantics"
+                note = "callback is direct lifecycle evidence for normalized draft runtime semantics"
             elif all(source.startswith("runtime-ai-mechanics:") for source in normalized):
                 status = "normalized-ai-runtime-semantics"
                 note = "callback is direct lifecycle evidence for normalized AI runtime semantics"
@@ -6015,9 +6109,6 @@ def _extract_action_watch_coverage(
         elif callback_name in telemetry_only:
             status = "telemetry-only"
             note = "statistics/MMD timeline observer rather than authoritative gameplay semantics"
-        elif callback_name in draft_runtime_unmodeled:
-            status = "draft-runtime-unmodeled"
-            note = "live draft orchestration/reminder lifecycle; tracked separately from individual perk mechanics"
         elif callback_name in campaign_protected_unmodeled:
             status = "campaign-protected-runtime-unmodeled"
             note = "live campaign mission-start callback enters a protected implementation whose target semantics are not yet decoded"
@@ -6042,7 +6133,7 @@ def _extract_action_watch_coverage(
         "presentation-only": 18,
         "e2e-only": 4,
         "telemetry-only": 3,
-        "draft-runtime-unmodeled": 2,
+        "normalized-draft-runtime-semantics": 2,
         "campaign-protected-runtime-unmodeled": 1,
         "gameplay-framework-infrastructure": 1,
     })
@@ -9914,6 +10005,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
     runtime_session_mechanics = _extract_runtime_session_mechanics(data, functions)
     runtime_mode_mechanics = _extract_runtime_mode_mechanics(data, functions, function_aliases, call_edges)
     runtime_campaign_mechanics = _extract_runtime_campaign_mechanics(data, functions)
+    runtime_draft_mechanics = _extract_runtime_draft_mechanics(data, functions)
     damage_listener_coverage = _extract_damage_listener_coverage(
         functions,
         production_unit_special_mechanics,
@@ -9933,6 +10025,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         runtime_session_mechanics,
         runtime_mode_mechanics,
         runtime_campaign_mechanics,
+        runtime_draft_mechanics,
         protected_perk_registry_audit,
     )
     event_listener_coverage = _extract_event_listener_coverage(
@@ -9993,6 +10086,7 @@ def analyze_lua(data: bytes, known_rawcodes: set[int]) -> dict[str, object]:
         "runtime_session_mechanics": runtime_session_mechanics,
         "runtime_mode_mechanics": runtime_mode_mechanics,
         "runtime_campaign_mechanics": runtime_campaign_mechanics,
+        "runtime_draft_mechanics": runtime_draft_mechanics,
         "damage_listener_coverage": damage_listener_coverage,
         "action_watch_coverage": action_watch_coverage,
         "event_listener_coverage": event_listener_coverage,

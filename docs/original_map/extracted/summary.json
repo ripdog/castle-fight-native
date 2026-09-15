@@ -154,6 +154,11 @@
     "runtime_campaign_mechanic_kinds": {
       "campaign-active-star-restriction-event-failure": 1
     },
+    "runtime_draft_mechanics": 2,
+    "runtime_draft_mechanic_kinds": {
+      "round-end-draft-controller-reset-and-warmup-restart": 1,
+      "round-start-reapply-applied-perk-reminder-abilities-to-current-builders": 1
+    },
     "damage_listener_coverage_rows": 20,
     "damage_listener_coverage_status_counts": {
       "e2e-only": 1,
@@ -164,9 +169,9 @@
     "action_watch_coverage_rows": 43,
     "action_watch_coverage_status_counts": {
       "campaign-protected-runtime-unmodeled": 1,
-      "draft-runtime-unmodeled": 2,
       "e2e-only": 4,
       "gameplay-framework-infrastructure": 1,
+      "normalized-draft-runtime-semantics": 2,
       "normalized-gameplay-semantics": 10,
       "normalized-mode-runtime-semantics": 2,
       "normalized-session-runtime-semantics": 2,

@@ -192,6 +192,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_session_mechanics"], 3)
         self.assertEqual(summary["runtime_mode_mechanics"], 1)
         self.assertEqual(summary["runtime_campaign_mechanics"], 1)
+        self.assertEqual(summary["runtime_draft_mechanics"], 2)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
         self.assertEqual(summary["event_listener_coverage_rows"], 70)
@@ -301,8 +302,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
             {
                 "campaign-protected-runtime-unmodeled": 1,
-                "draft-runtime-unmodeled": 2,
                 "e2e-only": 4,
+                "normalized-draft-runtime-semantics": 2,
                 "gameplay-framework-infrastructure": 1,
                 "normalized-gameplay-semantics": 10,
                 "normalized-mode-runtime-semantics": 2,
@@ -345,7 +346,11 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             rows["Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator"]["coverage_status"],
-            "draft-runtime-unmodeled",
+            "normalized-draft-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry"]["coverage_status"],
+            "normalized-draft-runtime-semantics",
         )
         summary = json.loads((self.extracted / "summary.json").read_text(encoding="utf-8"))["script"]
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -353,6 +358,31 @@ class ResolvedEvidenceTests(unittest.TestCase):
             summary["action_watch_coverage_status_counts"],
             dict(sorted(Counter(row["coverage_status"] for row in rows.values()).items())),
         )
+
+    def test_runtime_draft_lifecycle_is_normalized(self) -> None:
+        with (self.resolved / "runtime-draft-mechanics.tsv").open(encoding="utf-8") as handle:
+            rows = {row["system_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(set(rows), {"draft-round-restart-lifecycle", "draft-perk-reminder-reapply"})
+
+        restart = json.loads(rows["draft-round-restart-lifecycle"]["parameters_json"])
+        self.assertTrue(restart["requires_existing_draft_controller"])
+        self.assertTrue(restart["resets_unit_pool"])
+        self.assertTrue(restart["reinitializes_default_draft_tiers"])
+        self.assertTrue(restart["reinitializes_proven_19_perk_registry"])
+        self.assertTrue(restart["resets_existing_draft_controller"])
+        self.assertTrue(restart["restarts_controller_with_warmup"])
+
+        reminder = json.loads(rows["draft-perk-reminder-reapply"]["parameters_json"])
+        self.assertEqual(reminder["player_ids_scanned"], [0, 11])
+        self.assertTrue(reminder["skips_perks_with_zero_reminder_ability_id"])
+        self.assertTrue(reminder["adds_missing_reminder_ability_only"])
+        self.assertTrue(reminder["makes_reminder_ability_permanent"])
+        self.assertEqual(reminder["sets_ability_real_level_field"], "ABILITY_RLF_CHANCE_TO_CRITICAL_STRIKE")
+        self.assertEqual(reminder["sets_field_level_index"], 0)
+        self.assertEqual(reminder["sets_field_value"], 0.0)
+
+        summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["runtime_draft_mechanic_rows"], 2)
 
     def test_runtime_campaign_restriction_hooks_are_normalized(self) -> None:
         with (self.resolved / "runtime-campaign-mechanics.tsv").open(encoding="utf-8") as handle:
