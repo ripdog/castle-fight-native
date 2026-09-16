@@ -401,9 +401,17 @@ Pending:
 
 ## Step 9 — Minimal authoritative server and multiplayer protocol
 
-Status: **in progress**
+Status: **complete**
 
-Implemented so far:
+Completed Step 9 commits:
+
+- `6e44165` — `feat(protocol): add bounded multiplayer handshake`
+- `c793ebe` — `feat(server): add authoritative match session loop`
+- `74b4ba4` — `feat(server): add tcp transport runner`
+- `60c4e60` — `feat(client): add authoritative tcp multiplayer mode`
+- `d518671` — `test(server): fault inject authoritative tcp stream`
+
+Implemented:
 
 - protocol/handshake boundary `6e44165` adds a rendering-independent `castle-fight-protocol` crate with schema-versioned client/server envelopes and stable wire forms for the current command vocabulary, canonical stream records, execution outcomes, admission failures, boundary controls, and checkpoints;
 - compatibility handshakes reuse snapshot/checksum/content/configuration identity plus the resolved match's exact map release `(version, revision)`; the handshake deliberately does not derive map release identity from the current replay header because that legacy field presently stores the runtime content revision;
@@ -421,7 +429,9 @@ Implemented so far:
 - added an opt-in TCP mode to the Bevy game client while preserving local/offline mode as the default; network clients construct the same selected roster/seed as the server, handshake before play, and reject unsupported late-join/history handoffs in Step 9;
 - network client commands are queued as protocol requests with monotonically increasing client sequence numbers and no client-authored player identity; local simulation state is not mutated at submission time;
 - network clients advance only by applying server `CanonicalStreamRecord`s, independently recompute command execution outcomes, compare them against the server's execution batch, verify checkpoint checksums, and report their checksum back to the server;
-- socket reader/writer threads exchange only protocol messages through channels and never touch Bevy ECS or authoritative simulation state directly.
+- socket reader/writer threads exchange only protocol messages through channels and never touch Bevy ECS or authoritative simulation state directly;
+- added a real localhost TCP replica scenario where two independent simulations consume framed authoritative records, verify deterministic execution batches/checkpoints, and remain checksum-equal while delivery is deliberately delayed across a finalized tick, a finalized command is duplicated, a player attempts to command the opponent's builder, one peer disconnects, and a replacement connection attempts to claim the reserved slot;
+- the fault-injection scenario proves already-finalized tick/order history is unchanged by later delivery/retry/disconnect events and that a surviving peer receives an explicit finalized empty tick rather than advancing from transport silence.
 
 Compatibility/state changes:
 
@@ -432,17 +442,19 @@ Executed verification:
 
 - `tools/cargo-interactive test -p castle-fight-protocol`: **8 passed**;
 - `tools/cargo-interactive clippy -p castle-fight-protocol --all-targets -- -D warnings`: passed;
-- `tools/cargo-interactive test -p castle-fight-server`: **12 passed** (11 library/TCP tests plus the binary configuration test), including two independent 1v1 clients, a four-player/2v2 replication scenario, localhost TCP handshake/start gating, socket-path duplicate submission, unauthorized foreign-builder commands, explicit empty finalized ticks, checkpoint reporting, and disconnect slot retention;
+- `tools/cargo-interactive test -p castle-fight-server`: **13 passed** (12 library/TCP tests plus the binary configuration test), including two independent 1v1 clients, a four-player/2v2 replication scenario, localhost TCP handshake/start gating, socket-path duplicate submission, explicit empty finalized ticks, checkpoint reporting, disconnect slot retention, and the combined delayed/duplicate/unauthorized/disconnect replica scenario;
 - `tools/cargo-interactive clippy -p castle-fight-server --all-targets -- -D warnings`: passed;
 - `tools/cargo-interactive test -p castle-fight-client`: **109 passed** after network-client integration;
 - `tools/cargo-interactive clippy -p castle-fight-client --all-targets -- -D warnings`: passed;
-- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed** after the protocol boundary;
+- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
+- combined final matrix `tools/cargo-interactive test -p castle-fight-protocol -p castle-fight-server -p castle-fight-sim -p castle-fight-client`: protocol **8**, server **13**, sim **240**, client **109**, all passed;
+- `tools/cargo-interactive check -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed;
 - `cargo fmt --all` and `git diff --check`: passed.
 
 Pending:
 
-- end-to-end socket-level delay/duplication/disconnect fault injection across independent clients; the server session/TCP layers already cover duplicate sequencing, disconnect slot retention, and unauthorized-command rejection.
+- none for Step 9. Reconnect identity restoration, canonical disconnect/delegation controls, team-wide pause/timeout, snapshot/history handoff, and desync replacement remain Step 10 work.
 
 ## Next action
 
-Add end-to-end socket-level multiplayer scenarios using independent protocol clients, including delayed command delivery, duplicate retries, unauthorized commands, and disconnects; then run the full Step 9 compatibility matrix and close the step.
+Begin Step 10 by translating transport disconnect/reconnect into canonical boundary controls, then add authenticated reconnect/session restoration and bounded snapshot/history catch-up using the Step 7 persistence boundary.
