@@ -39,6 +39,12 @@ It includes, directly or transitively:
 
 Derived caches SHOULD be excluded if safely reconstructable.
 
+`castle-fight-sim` currently exposes logical authoritative snapshot schema revision 1 through `SimulationSnapshot`. The schema is deliberately independent of Bevy entity handles and storage order. It records the completed boundary as `None` for the initial pre-tick state or `Some(T)` for a completed tick, stores allocator/player/lifecycle/objective/defense-alert state plus the complete canonical entity projection, and carries the authoritative state checksum. Restoration occurs into an already constructed compatible match instance: the immutable configuration/content identity must match, while execution-only settings such as worker count may differ. Restoration replaces the ECS world, preserves stable `SimId`s, rebuilds derived topology/caches, clears presentation-only event buffers, and verifies the stored checksum before accepting the state. The in-memory logical schema is not yet the network/disk encoding; bounded serialization belongs to the protocol/replay layer.
+
+The checksum and snapshot capture paths MUST share the same canonical entity projection so adding an authoritative entity field cannot silently update one persistence mechanism without the other. Snapshot loading is intentionally valid under a different ECS insertion order than capture.
+
+`MatchDriverSnapshot` schema revision 1 layers stream continuity on top of `SimulationSnapshot`. It captures the exact next canonical stream position, admitted pending commands, per-player admission sequence cursors, submission/deduplication records, applied canonical command sequences, canonical history, and replay-recording checkpoints. Restoring the driver validates the selected content identity, history positions, pending command tick/order, deduplication invariants, and simulation snapshot before replacing state. This is what prevents an accepted paid command from being lost or executed twice across reconnect/restore. Presentation-only command execution feedback is cleared rather than persisted.
+
 `22-authoritative-state-inventory.md` is the field-level coverage checklist for the current implementation. Snapshot work MUST reconcile that inventory against the implementation before declaring restore complete, and MUST extend it for content-bundle, player/lifecycle, and command-stream state introduced by steps 3–6.
 
 ## 3. Snapshot loading
@@ -178,6 +184,8 @@ Optional metadata/chat/events not affecting simulation
 The ordered canonical stream of finalized tick bundles plus between-tick control records is canonical gameplay history.
 
 A replay player runs the same deterministic simulation code rather than storing every entity transform for every frame.
+
+The current logical implementation is `MatchReplay` schema revision 1. `MatchDriver` retains its creation-time `SimulationSnapshot`, every canonical tick/control record, and a checksum checkpoint after each record; `export_replay()` packages those with explicit replay/snapshot/checksum schema revisions, map/release identity, content gameplay identity, and configuration identity. Playback restores the initial state and feeds the canonical stream back through `MatchDriver`, verifying checkpoints as it advances. Optional `MatchDriverSnapshot` seek points can be attached only at command-free canonical boundaries; playback chooses the nearest one not beyond the requested stream position and resumes from there. This remains an in-memory logical replay model: bounded file decoding, byte encoding, compression, and storage retention are intentionally deferred.
 
 ## 12. Replay seeking
 

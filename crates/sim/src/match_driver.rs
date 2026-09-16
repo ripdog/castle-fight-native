@@ -1,5 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+mod replay;
+mod snapshot;
+
+pub use replay::{
+    MATCH_REPLAY_SCHEMA_VERSION, MatchReplay, ReplayCheckpoint, ReplayError, ReplayHeader,
+    ReplaySeekSnapshot,
+};
+pub use snapshot::{
+    MATCH_DRIVER_SNAPSHOT_SCHEMA_VERSION, MatchDriverSnapshot, MatchSnapshotRestoreError,
+};
+
 use crate::CastleFightContentBundle;
 use crate::{
     CommandAdmissionError, CommandOutcome, MatchLifecycle, MatchOutcome, PlayerCommand,
@@ -169,6 +180,8 @@ pub struct MatchDriver {
     submissions: BTreeMap<(PlayerId, ClientCommandSequence), SubmissionRecord>,
     applied_sequences: BTreeSet<(PlayerId, ClientCommandSequence)>,
     history: Vec<CanonicalStreamRecord>,
+    replay_initial_state: crate::SimulationSnapshot,
+    replay_checkpoints: Vec<ReplayCheckpoint>,
     last_executions: Vec<CommandExecution>,
 }
 
@@ -180,6 +193,7 @@ impl MatchDriver {
             .into_iter()
             .map(|player| (player.id, ClientCommandSequence(0)))
             .collect();
+        let replay_initial_state = simulation.capture_snapshot();
         Self {
             content,
             next_stream_position: InputStreamPosition(0),
@@ -188,6 +202,8 @@ impl MatchDriver {
             submissions: BTreeMap::new(),
             applied_sequences: BTreeSet::new(),
             history: Vec::new(),
+            replay_initial_state,
+            replay_checkpoints: Vec::new(),
             last_executions: Vec::new(),
         }
     }
@@ -431,6 +447,11 @@ impl MatchDriver {
         }
         let tick_result = simulation.step();
         self.last_executions.clone_from(&executions);
+        self.replay_checkpoints.push(ReplayCheckpoint {
+            stream_position: finalized.stream_position,
+            completed_tick: Some(tick_result.completed_tick),
+            checksum: tick_result.checksum,
+        });
         self.history.push(CanonicalStreamRecord::Tick(finalized));
         self.advance_stream_position()?;
         Ok((executions, tick_result))
@@ -480,6 +501,11 @@ impl MatchDriver {
             }
         }
         self.last_executions.clear();
+        self.replay_checkpoints.push(ReplayCheckpoint {
+            stream_position: control.stream_position,
+            completed_tick: expected_boundary,
+            checksum: simulation.checksum(),
+        });
         self.history.push(CanonicalStreamRecord::Control(control));
         self.advance_stream_position()?;
         Ok(())

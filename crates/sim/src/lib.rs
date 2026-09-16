@@ -55,7 +55,10 @@ pub use economy::{
 pub use match_driver::{
     BoundaryControlRecord, CanonicalStreamError, CanonicalStreamRecord, ClientCommandSequence,
     CommandExecution, CommandOrder, CommandSequenceError, CommandSubmission, DriverTickResult,
-    FinalizedTickInputs, InputStreamPosition, MatchControlEvent, MatchDriver, ScheduledCommand,
+    FinalizedTickInputs, InputStreamPosition, MATCH_DRIVER_SNAPSHOT_SCHEMA_VERSION,
+    MATCH_REPLAY_SCHEMA_VERSION, MatchControlEvent, MatchDriver, MatchDriverSnapshot, MatchReplay,
+    MatchSnapshotRestoreError, ReplayCheckpoint, ReplayError, ReplayHeader, ReplaySeekSnapshot,
+    ScheduledCommand,
 };
 pub use match_setup::{
     CASTLE_FIGHT_REGISTERED_RELEASES, CastleFightMatch, CastleFightMatchConfig,
@@ -70,13 +73,14 @@ pub use native_effects::{
     resolve_native_effect_requirements,
 };
 pub use simulation::{
-    AbilityCastEvent, AbilityCastTarget, AttackEvent, BuilderBuildError, BuilderCommandError,
-    BuilderSpawnError, BuilderView, BuildingCommandError, BuildingConstructionCancelError,
-    BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingUpgradeError, BuildingView,
-    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView,
-    MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus, PlayerView, ProjectileView,
-    ProjectileViewKind, Simulation, SimulationConfig, TargetlessLane, TeamObjectiveError,
-    TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, AbilityCastEvent, AbilityCastTarget, AttackEvent,
+    BuilderBuildError, BuilderCommandError, BuilderSpawnError, BuilderView, BuildingCommandError,
+    BuildingConstructionCancelError, BuildingConstructionCancelOutcome, BuildingPlacementError,
+    BuildingUpgradeError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
+    CombatRules, CorpseView, MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus,
+    PlayerView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
+    SimulationSnapshot, SnapshotRestoreError, TargetlessLane, TeamObjectiveError, TickResult,
+    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,

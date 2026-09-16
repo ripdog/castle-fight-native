@@ -278,6 +278,48 @@ Pending:
 
 - Step 7 must snapshot/restore the driver continuity boundary (stream position, per-player sequence state, admitted future commands, and the required history/dedup boundary) together with logical simulation state so restore cannot lose or double-apply an already scheduled command.
 
+## Step 7 — Logical snapshots, deterministic restore, and replay
+
+Status: **implemented and verified**
+
+Step commits:
+
+- `15bac64` — `sim: add authoritative snapshots and replay`
+
+Implemented:
+
+- added logical `SimulationSnapshot` schema revision 1, independent of Bevy entity handles/archetype order, carrying the completed-tick boundary, immutable configuration identity, allocator state, players/resources/connections, lifecycle/objectives, defense alerts, the complete canonical entity projection, and an integrity checksum;
+- unified snapshot and checksum entity projection so authoritative component coverage cannot silently diverge between persistence and determinism checks;
+- restoration replaces the mutable ECS world while retaining immutable match configuration and the destination worker pool, recreates stable `SimId`s in deliberately reversed insertion order, restores exact persistent state, rebuilds topology/pathing caches, and rejects schema/config/player/allocator/checksum mismatches;
+- in-progress construction retains its full target definition and precursor runtime instead of only the checksum's derived definition hash, preserving completion/cancellation behavior after restore;
+- added `MatchDriverSnapshot` schema revision 1 covering canonical stream position/history, accepted future commands, client-sequence admission/deduplication state, applied sequences, replay initial state, and checkpoint continuity; restoring a paid pending command neither loses it nor charges/executes it twice;
+- added replay schema revision 1 with explicit map/release/content/configuration/checksum/snapshot identities, canonical finalized tick/control records, per-record checksum checkpoints, optional validated seek snapshots, and deterministic playback to a requested stream boundary;
+- replay/restore supports initial pre-tick state, paused connection state, terminal controls, and different worker counts without changing future authoritative results;
+- made presentation-event buffers explicitly resettable and clear them after restore/replay fast-forward so historical attack/spell/lightning VFX are not presented as fresh live events;
+- kept wire/disk serialization deliberately separate from the in-memory logical schema. The later protocol layer must add bounded decoding and transport framing rather than serializing Bevy internals or Rust memory layout.
+
+Compatibility/state changes:
+
+- `AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION = 1`;
+- `MATCH_DRIVER_SNAPSHOT_SCHEMA_VERSION = 1`;
+- `MATCH_REPLAY_SCHEMA_VERSION = 1`;
+- canonical gameplay checksum schema remains `CANONICAL_CHECKSUM_SCHEMA_VERSION = 5`;
+- Castle Fight 9.27 content revision/gameplay identity are unchanged.
+
+Executed verification:
+
+- focused snapshot suite: **5 passed**, covering initial pre-tick restore, cross-worker restore, reversed ECS insertion order, in-flight guaranteed-hit projectiles, construction, allocator continuity, timed status state, fractional mana state, builder repair remainder, bounce hit history, staged Chain Lightning history, Burning Oil pulse state, paused stream boundaries, and accepted future command/deduplication state;
+- focused replay suite: **1 passed**, covering initial replay, pause/resume controls, terminal state, checksum history, different worker count, and seek-snapshot playback;
+- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
+- `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-client -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed after the final snapshot/replay changes;
+- `cargo fmt --all` and `git diff --check`: passed.
+
+Pending:
+
+- network/on-disk bounded encoding remains intentionally deferred to the protocol/server work; Step 7 establishes the logical state and replay boundary it will encode;
+- snapshot transfer/history retention and live-subscription handoff are Step 10 reconnect/resynchronization responsibilities.
+
 ## Next action
 
-Step 7: implement logical authoritative snapshots, deterministic restore, replay history/checkpoints, and continuation equivalence using the completed Step 1 inventory and Step 6 canonical stream.
+Step 8: split `simulation.rs` incrementally without changing phase semantics, beginning with a narrow cohesive subsystem extraction and using the Step 7 restore/replay fixtures as equivalence guards.
