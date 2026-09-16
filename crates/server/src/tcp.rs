@@ -134,7 +134,7 @@ impl TcpAuthoritativeServer {
         self.accept_pending_connections()?;
         loop {
             match self.inbound_rx.try_recv() {
-                Ok(event) => self.process_inbound(event),
+                Ok(event) => self.process_inbound(event)?,
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => break,
             }
@@ -147,8 +147,7 @@ impl TcpAuthoritativeServer {
 
     pub fn finalize_next_tick(&mut self) -> Result<(), TcpServerError> {
         let outbound = self.authoritative.finalize_next_tick()?;
-        self.dispatch_all(outbound);
-        Ok(())
+        self.dispatch_all(outbound)
     }
 
     pub fn run_until_match_end(mut self) -> Result<(), TcpServerError> {
@@ -158,10 +157,18 @@ impl TcpAuthoritativeServer {
 
         loop {
             self.poll_network()?;
-            if self.authoritative.simulation().lifecycle() != MatchLifecycle::Running {
+            if matches!(
+                self.authoritative.simulation().lifecycle(),
+                MatchLifecycle::Finished { .. }
+            ) {
                 return Ok(());
             }
-            if !self.started {
+            if !self.started
+                || matches!(
+                    self.authoritative.simulation().lifecycle(),
+                    MatchLifecycle::PausedForDisconnect { .. }
+                )
+            {
                 thread::sleep(IDLE_POLL_INTERVAL);
                 next_tick_deadline = Instant::now() + tick_period;
                 continue;
@@ -212,13 +219,13 @@ impl TcpAuthoritativeServer {
         Ok(())
     }
 
-    fn process_inbound(&mut self, event: InboundEvent) {
+    fn process_inbound(&mut self, event: InboundEvent) -> Result<(), TcpServerError> {
         match event {
             InboundEvent::Frame(connection_id, envelope) => {
-                self.process_frame(connection_id, envelope);
+                self.process_frame(connection_id, envelope)
             }
             InboundEvent::Malformed(connection_id) | InboundEvent::Disconnected(connection_id) => {
-                self.disconnect_connection(connection_id);
+                self.disconnect_connection(connection_id)
             }
         }
     }
@@ -227,14 +234,13 @@ impl TcpAuthoritativeServer {
         &mut self,
         connection_id: ConnectionId,
         envelope: ProtocolEnvelope<ClientMessage>,
-    ) {
+    ) -> Result<(), TcpServerError> {
         let Some(session_id) = self
             .connections
             .get(&connection_id)
             .and_then(|connection| connection.session_id)
         else {
-            self.process_unbound_frame(connection_id, envelope);
-            return;
+            return self.process_unbound_frame(connection_id, envelope);
         };
 
         let message = match envelope.into_current() {
@@ -245,21 +251,21 @@ impl TcpAuthoritativeServer {
                     ServerMessage::ProtocolError {
                         code: ProtocolErrorCode::MalformedMessage,
                     },
-                );
-                return;
+                )?;
+                return Ok(());
             }
         };
         let outbound = self
             .authoritative
             .handle_client_message(session_id, message);
-        self.dispatch_all(outbound);
+        self.dispatch_all(outbound)
     }
 
     fn process_unbound_frame(
         &mut self,
         connection_id: ConnectionId,
         envelope: ProtocolEnvelope<ClientMessage>,
-    ) {
+    ) -> Result<(), TcpServerError> {
         let message = match envelope.into_current() {
             Ok(message) => message,
             Err(ProtocolSchemaError { expected, actual }) => {
@@ -268,8 +274,8 @@ impl TcpAuthoritativeServer {
                     ServerMessage::HelloRejected {
                         reason: HandshakeRejectReason::ProtocolSchema { expected, actual },
                     },
-                );
-                return;
+                )?;
+                return Ok(());
             }
         };
         let ClientMessage::Hello { hello } = message else {
@@ -278,8 +284,8 @@ impl TcpAuthoritativeServer {
                 ServerMessage::ProtocolError {
                     code: ProtocolErrorCode::ExpectedHello,
                 },
-            );
-            return;
+            )?;
+            return Ok(());
         };
 
         let result = self.authoritative.accept_hello(hello);
@@ -289,16 +295,16 @@ impl TcpAuthoritativeServer {
             }
             self.session_connections.insert(*session_id, connection_id);
         }
-        self.send_to_connection(connection_id, result.message());
+        self.send_to_connection(connection_id, result.message())
     }
 
-    fn dispatch_all(&mut self, outbound: Vec<OutboundMessage>) {
+    fn dispatch_all(&mut self, outbound: Vec<OutboundMessage>) -> Result<(), TcpServerError> {
         for outbound in outbound {
             match outbound.target {
                 OutboundTarget::Session(session_id) => {
                     if let Some(connection_id) = self.session_connections.get(&session_id).copied()
                     {
-                        self.send_to_connection(connection_id, outbound.message);
+                        self.send_to_connection(connection_id, outbound.message)?;
                     }
                 }
                 OutboundTarget::Broadcast => {
@@ -308,14 +314,19 @@ impl TcpAuthoritativeServer {
                         .copied()
                         .collect::<Vec<_>>();
                     for connection_id in connection_ids {
-                        self.send_to_connection(connection_id, outbound.message.clone());
+                        self.send_to_connection(connection_id, outbound.message.clone())?;
                     }
                 }
             }
         }
+        Ok(())
     }
 
-    fn send_to_connection(&mut self, connection_id: ConnectionId, message: ServerMessage) {
+    fn send_to_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        message: ServerMessage,
+    ) -> Result<(), TcpServerError> {
         let send_result = self
             .connections
             .get(&connection_id)
@@ -324,19 +335,22 @@ impl TcpAuthoritativeServer {
             send_result,
             Some(Err(TrySendError::Full(_) | TrySendError::Disconnected(_)))
         ) {
-            self.disconnect_connection(connection_id);
+            self.disconnect_connection(connection_id)?;
         }
+        Ok(())
     }
 
-    fn disconnect_connection(&mut self, connection_id: ConnectionId) {
+    fn disconnect_connection(&mut self, connection_id: ConnectionId) -> Result<(), TcpServerError> {
         let Some(connection) = self.connections.remove(&connection_id) else {
-            return;
+            return Ok(());
         };
         let _ = connection.shutdown.shutdown(Shutdown::Both);
         if let Some(session_id) = connection.session_id {
             self.session_connections.remove(&session_id);
-            self.authoritative.disconnect_session(session_id);
+            let outbound = self.authoritative.disconnect_session(session_id)?;
+            self.dispatch_all(outbound)?;
         }
+        Ok(())
     }
 }
 
@@ -558,6 +572,20 @@ mod tests {
                 }
                 message => panic!("expected authoritative checkpoint, got {message:?}"),
             }
+            record
+        }
+
+        fn apply_control(&mut self) -> CanonicalStreamRecord {
+            let record = match receive_server(&mut self.stream) {
+                ServerMessage::StreamRecord { record } => CanonicalStreamRecord::from(record),
+                message => panic!("expected canonical control record, got {message:?}"),
+            };
+            assert!(matches!(record, CanonicalStreamRecord::Control(_)));
+            let result = self
+                .driver
+                .apply_stream_record(&mut self.simulation, record.clone())
+                .unwrap();
+            assert!(result.is_none());
             record
         }
     }
@@ -843,12 +871,42 @@ mod tests {
         );
         pump_network(&mut server);
 
-        // Dropping player 6 cannot mutate either finalized record. Step 9 keeps the slot claimed,
-        // and the remaining peer receives an explicit empty tick rather than inferring one from
-        // transport silence.
+        // Dropping player 6 cannot mutate either finalized record. Because this is a 1v1, the
+        // server first finalizes the currently open tick 2, then emits the canonical disconnect at
+        // that completed boundary. The surviving peer applies both records and enters the same
+        // team-disconnect pause without ever inferring an empty tick from transport silence.
         second.stream.shutdown(Shutdown::Both).unwrap();
         drop(second);
         pump_until(&mut server, |view| view.authenticated == 1);
+
+        let tick_two_record = first.apply_finalized_tick();
+        let CanonicalStreamRecord::Tick(tick_two) = &tick_two_record else {
+            panic!("expected finalized tick 2")
+        };
+        assert_eq!(tick_two.tick, 2);
+        assert!(tick_two.commands.is_empty());
+        let disconnect_record = first.apply_control();
+        assert!(matches!(
+            disconnect_record,
+            CanonicalStreamRecord::Control(control)
+                if matches!(
+                    control.event,
+                    castle_fight_sim::MatchControlEvent::SetPlayerConnection {
+                        player: PlayerId(6),
+                        connection: castle_fight_sim::PlayerConnectionStatus::Disconnected,
+                    }
+                )
+        ));
+        assert_eq!(
+            first.simulation.lifecycle(),
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask: 2,
+            }
+        );
+        assert_eq!(
+            first.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
 
         let mut hijack = connect(&server);
         server.poll_network().unwrap();
@@ -861,24 +919,10 @@ mod tests {
             }
         ));
 
-        server.finalize_next_tick().unwrap();
-        let tick_two = first.apply_finalized_tick();
-        let CanonicalStreamRecord::Tick(tick_two) = &tick_two else {
-            panic!("expected finalized tick 2")
-        };
-        assert_eq!(tick_two.tick, 2);
-        assert!(tick_two.commands.is_empty());
-        assert_eq!(
-            first.simulation.checksum(),
-            server.authoritative().simulation().checksum()
-        );
-        assert_eq!(
-            server.authoritative().driver().history().first(),
-            Some(&tick_zero_first)
-        );
-        assert_eq!(
-            server.authoritative().driver().history().get(1),
-            Some(&tick_one_first)
-        );
+        let history = server.authoritative().driver().history();
+        assert_eq!(history.first(), Some(&tick_zero_first));
+        assert_eq!(history.get(1), Some(&tick_one_first));
+        assert_eq!(history.get(2), Some(&tick_two_record));
+        assert_eq!(history.get(3), Some(&disconnect_record));
     }
 }

@@ -10,7 +10,8 @@ use castle_fight_protocol::{
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION, CanonicalStreamError,
     CanonicalStreamRecord, CastleFightMatch, CastleFightMatchConfig, CastleFightMatchSetupError,
-    ClientCommandSequence, MatchDriver, PlayerId, Simulation, create_castle_fight_match,
+    ClientCommandSequence, MatchControlEvent, MatchDriver, MatchLifecycle, PlayerConnectionStatus,
+    PlayerId, Simulation, Team, create_castle_fight_match,
 };
 
 pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 30;
@@ -302,15 +303,115 @@ impl AuthoritativeMatch {
         }
     }
 
-    /// Marks a transport/session as unavailable without changing canonical gameplay state.
+    /// Records a transport disconnect as a canonical between-tick control.
     ///
-    /// Step 10 is responsible for translating disconnect/reconnect into canonical delegation and
-    /// pause controls. Step 9 intentionally keeps the claimed player slot reserved so a fresh
-    /// unauthenticated connection cannot hijack it after a socket drop.
-    pub fn disconnect_session(&mut self, session_id: SessionId) {
-        if let Some(session) = self.sessions.get_mut(&session_id) {
-            session.connected = false;
+    /// If this is the last connected player on one team after the initial roster has been claimed,
+    /// the currently open tick is finalized first. The disconnect control then lands at that
+    /// completed boundary, which makes the resulting team-wide pause replayable without discarding
+    /// commands that were already admitted to the open tick.
+    pub fn disconnect_session(
+        &mut self,
+        session_id: SessionId,
+    ) -> Result<Vec<OutboundMessage>, ServerMatchError> {
+        let Some(session) = self.sessions.get(&session_id).copied() else {
+            return Ok(Vec::new());
+        };
+        if !session.connected {
+            return Ok(Vec::new());
         }
+        let team = self
+            .game
+            .simulation
+            .player(session.player)
+            .expect("session player must belong to the authoritative match")
+            .team;
+        let full_roster_claimed =
+            self.player_claims.len() == self.game.match_config.participants.len();
+        let disconnects_last_team_player =
+            full_roster_claimed && self.connected_session_count_for_team(team) == 1;
+
+        let mut outbound = Vec::new();
+        if disconnects_last_team_player
+            && self.game.simulation.lifecycle() == MatchLifecycle::Running
+        {
+            outbound.extend(self.finalize_next_tick()?);
+        }
+
+        self.sessions
+            .get_mut(&session_id)
+            .expect("validated session must remain present")
+            .connected = false;
+        if matches!(
+            self.game.simulation.lifecycle(),
+            MatchLifecycle::Finished { .. }
+        ) {
+            return Ok(outbound);
+        }
+        outbound.extend(self.emit_control(MatchControlEvent::SetPlayerConnection {
+            player: session.player,
+            connection: PlayerConnectionStatus::Disconnected,
+        })?);
+        Ok(outbound)
+    }
+
+    /// Restores an already-authenticated session after its transport has been rebound.
+    ///
+    /// The TCP layer does not call this until reconnect credentials have been validated. Keeping
+    /// this transition on the authoritative match ensures delegated builder permission and a
+    /// team-wide pause/resume are driven by the same canonical record used by replay and clients.
+    pub fn reconnect_session(
+        &mut self,
+        session_id: SessionId,
+    ) -> Result<Vec<OutboundMessage>, ServerMatchError> {
+        let Some(session) = self.sessions.get(&session_id).copied() else {
+            return Ok(Vec::new());
+        };
+        if session.connected {
+            return Ok(Vec::new());
+        }
+        self.sessions
+            .get_mut(&session_id)
+            .expect("validated session must remain present")
+            .connected = true;
+        if matches!(
+            self.game.simulation.lifecycle(),
+            MatchLifecycle::Finished { .. }
+        ) {
+            return Ok(Vec::new());
+        }
+        self.emit_control(MatchControlEvent::SetPlayerConnection {
+            player: session.player,
+            connection: PlayerConnectionStatus::Connected,
+        })
+    }
+
+    fn connected_session_count_for_team(&self, team: Team) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| {
+                session.connected
+                    && self
+                        .game
+                        .simulation
+                        .player(session.player)
+                        .is_some_and(|player| player.team == team)
+            })
+            .count()
+    }
+
+    fn emit_control(
+        &mut self,
+        event: MatchControlEvent,
+    ) -> Result<Vec<OutboundMessage>, ServerMatchError> {
+        let control = self
+            .driver
+            .emit_local_control(&mut self.game.simulation, event)?;
+        let record = CanonicalStreamRecord::Control(control);
+        Ok(vec![OutboundMessage::broadcast(
+            ServerMessage::StreamRecord {
+                record: WireCanonicalStreamRecord::from(&record),
+            },
+        )])
     }
 
     pub fn handle_client_message(
@@ -437,8 +538,8 @@ mod tests {
         CommandRequest, CompatibilityMismatch, WireAdmissionError, WirePlayerCommand,
     };
     use castle_fight_sim::{
-        CastleFightBuilderRace, CastleFightParticipantConfig, MapVersion, MatchDriver,
-        PlayerCommand, SimPoint, Team,
+        BoundaryControlRecord, CastleFightBuilderRace, CastleFightParticipantConfig, MapVersion,
+        MatchDriver, PlayerCommand, SimPoint, Team,
     };
 
     fn config(seed: u64) -> CastleFightMatchConfig {
@@ -508,7 +609,17 @@ mod tests {
                 ServerMessage::StreamRecord { record } => Some(record.clone().into()),
                 _ => None,
             })
-            .expect("tick finalization must broadcast a stream record")
+            .expect("operation must broadcast a stream record")
+    }
+
+    fn stream_records(messages: &[OutboundMessage]) -> Vec<CanonicalStreamRecord> {
+        messages
+            .iter()
+            .filter_map(|outbound| match &outbound.message {
+                ServerMessage::StreamRecord { record } => Some(record.clone().into()),
+                _ => None,
+            })
+            .collect()
     }
 
     #[test]
@@ -764,9 +875,11 @@ mod tests {
     }
 
     #[test]
-    fn disconnect_keeps_slot_claimed_and_cannot_change_finalized_order() {
+    fn team_wide_disconnect_finalizes_open_tick_then_pauses_and_reconnect_resumes() {
+        let match_config = config(17);
         let mut server =
-            AuthoritativeMatch::new(config(17), 1, ServerMatchOptions::default()).unwrap();
+            AuthoritativeMatch::new(match_config.clone(), 1, ServerMatchOptions::default())
+                .unwrap();
         let session_a = accepted_session(server.accept_hello(hello(&server, 1)));
         let _session_b = accepted_session(server.accept_hello(hello(&server, 2)));
         let builder = server
@@ -778,10 +891,52 @@ mod tests {
             session_a,
             command_message(0, PlayerCommand::StopBuilder { builder }),
         );
-        let first_tick = server.finalize_next_tick().unwrap();
-        let first_record = stream_record(&first_tick);
 
-        server.disconnect_session(session_a);
+        let mut client = create_castle_fight_match(match_config, 2).unwrap();
+        let mut client_driver = MatchDriver::new(&client.simulation, client.content);
+        let disconnect_outbound = server.disconnect_session(session_a).unwrap();
+        let disconnect_records = stream_records(&disconnect_outbound);
+        assert_eq!(disconnect_records.len(), 2);
+        let CanonicalStreamRecord::Tick(finalized) = &disconnect_records[0] else {
+            panic!("last-player disconnect must finalize the open tick first")
+        };
+        assert_eq!(finalized.tick, 0);
+        assert_eq!(finalized.commands.len(), 1);
+        assert_eq!(finalized.commands[0].player, PlayerId(0));
+        assert!(matches!(
+            disconnect_records[1],
+            CanonicalStreamRecord::Control(BoundaryControlRecord {
+                after_completed_tick: Some(0),
+                event: MatchControlEvent::SetPlayerConnection {
+                    player: PlayerId(0),
+                    connection: PlayerConnectionStatus::Disconnected,
+                },
+                ..
+            })
+        ));
+        for record in disconnect_records.iter().cloned() {
+            client_driver
+                .apply_stream_record(&mut client.simulation, record)
+                .unwrap();
+        }
+        assert_eq!(
+            server.simulation().lifecycle(),
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask: 1,
+            }
+        );
+        assert_eq!(
+            client.simulation.lifecycle(),
+            server.simulation().lifecycle()
+        );
+        assert_eq!(client.simulation.checksum(), server.simulation().checksum());
+        assert!(matches!(
+            server.finalize_next_tick(),
+            Err(ServerMatchError::CanonicalStream(
+                CanonicalStreamError::MatchNotRunning(MatchLifecycle::PausedForDisconnect { .. })
+            ))
+        ));
+
         let response = server.handle_client_message(
             session_a,
             command_message(1, PlayerCommand::StopBuilder { builder }),
@@ -798,7 +953,161 @@ mod tests {
                 reason: HandshakeRejectReason::MatchFull
             }
         ));
-        assert_eq!(first_record, stream_record(&first_tick));
+
+        let reconnect_outbound = server.reconnect_session(session_a).unwrap();
+        let reconnect_record = stream_record(&reconnect_outbound);
+        assert!(matches!(
+            reconnect_record,
+            CanonicalStreamRecord::Control(BoundaryControlRecord {
+                after_completed_tick: Some(0),
+                event: MatchControlEvent::SetPlayerConnection {
+                    player: PlayerId(0),
+                    connection: PlayerConnectionStatus::Connected,
+                },
+                ..
+            })
+        ));
+        client_driver
+            .apply_stream_record(&mut client.simulation, reconnect_record)
+            .unwrap();
+        assert_eq!(server.simulation().lifecycle(), MatchLifecycle::Running);
+        assert_eq!(client.simulation.checksum(), server.simulation().checksum());
+
+        let next_tick = server.finalize_next_tick().unwrap();
+        client_driver
+            .apply_stream_record(&mut client.simulation, stream_record(&next_tick))
+            .unwrap();
+        assert_eq!(client.simulation.checksum(), server.simulation().checksum());
+    }
+
+    #[test]
+    fn single_player_disconnect_delegates_only_builder_control_until_reconnect() {
+        let match_config = config_2v2(19);
+        let mut server =
+            AuthoritativeMatch::new(match_config.clone(), 1, ServerMatchOptions::default())
+                .unwrap();
+        let session_0 = accepted_session(server.accept_hello(hello(&server, 0)));
+        let session_1 = accepted_session(server.accept_hello(hello(&server, 1)));
+        let session_6 = accepted_session(server.accept_hello(hello(&server, 6)));
+        let _session_7 = accepted_session(server.accept_hello(hello(&server, 7)));
+        assert_eq!(server.session_player(session_0), Some(PlayerId(0)));
+        assert_eq!(server.session_player(session_1), Some(PlayerId(1)));
+        assert_eq!(server.session_player(session_6), Some(PlayerId(6)));
+
+        let delegated_builder = server
+            .simulation()
+            .builder_for_player(PlayerId(0))
+            .unwrap()
+            .id;
+        let mut client = create_castle_fight_match(match_config, 2).unwrap();
+        let mut client_driver = MatchDriver::new(&client.simulation, client.content);
+
+        let disconnect_outbound = server.disconnect_session(session_0).unwrap();
+        let disconnect_record = stream_record(&disconnect_outbound);
+        assert!(matches!(
+            disconnect_record,
+            CanonicalStreamRecord::Control(_)
+        ));
+        client_driver
+            .apply_stream_record(&mut client.simulation, disconnect_record)
+            .unwrap();
+        assert_eq!(server.simulation().lifecycle(), MatchLifecycle::Running);
+        assert!(
+            server
+                .simulation()
+                .can_player_control_builder(PlayerId(1), delegated_builder)
+        );
+
+        let teammate_response = server.handle_client_message(
+            session_1,
+            command_message(
+                0,
+                PlayerCommand::StopBuilder {
+                    builder: delegated_builder,
+                },
+            ),
+        );
+        assert!(matches!(
+            teammate_response[0].message,
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Scheduled { .. }
+            }
+        ));
+        let opponent_response = server.handle_client_message(
+            session_6,
+            command_message(
+                0,
+                PlayerCommand::StopBuilder {
+                    builder: delegated_builder,
+                },
+            ),
+        );
+        assert!(matches!(
+            opponent_response[0].message,
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Rejected {
+                    reason: WireAdmissionError::BuilderNotControllable { builder },
+                    ..
+                }
+            } if builder == delegated_builder.0
+        ));
+
+        let tick_zero = server.finalize_next_tick().unwrap();
+        client_driver
+            .apply_stream_record(&mut client.simulation, stream_record(&tick_zero))
+            .unwrap();
+        assert_eq!(client.simulation.checksum(), server.simulation().checksum());
+
+        let reconnect_outbound = server.reconnect_session(session_0).unwrap();
+        let reconnect_record = stream_record(&reconnect_outbound);
+        client_driver
+            .apply_stream_record(&mut client.simulation, reconnect_record)
+            .unwrap();
+        assert!(
+            !server
+                .simulation()
+                .can_player_control_builder(PlayerId(1), delegated_builder)
+        );
+        assert!(
+            server
+                .simulation()
+                .can_player_control_builder(PlayerId(0), delegated_builder)
+        );
+        assert_eq!(client.simulation.checksum(), server.simulation().checksum());
+
+        let teammate_after_reconnect = server.handle_client_message(
+            session_1,
+            command_message(
+                1,
+                PlayerCommand::StopBuilder {
+                    builder: delegated_builder,
+                },
+            ),
+        );
+        assert!(matches!(
+            teammate_after_reconnect[0].message,
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Rejected {
+                    reason: WireAdmissionError::BuilderNotControllable { .. },
+                    ..
+                }
+            }
+        ));
+        let owner_response = server.handle_client_message(
+            session_0,
+            command_message(
+                0,
+                PlayerCommand::StopBuilder {
+                    builder: delegated_builder,
+                },
+            ),
+        );
+        assert!(matches!(
+            owner_response[0].message,
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Scheduled { .. }
+            }
+        ));
     }
 
     #[test]

@@ -455,6 +455,36 @@ Pending:
 
 - none for Step 9. Reconnect identity restoration, canonical disconnect/delegation controls, team-wide pause/timeout, snapshot/history handoff, and desync replacement remain Step 10 work.
 
+## Step 10 — Reconnect, delegated control, and resynchronization
+
+Status: **in progress**
+
+Implemented so far:
+
+- transport disconnects are translated into canonical `MatchDriver` connection controls rather than remaining server-only session flags; single-player disconnects immediately update replayable connection state while a connected teammate remains;
+- existing simulation permission rules now become network-reachable: a connected teammate may command only the disconnected owner's builder, while ownership/resources/buildings remain unchanged, and a canonical reconnect control revokes that delegation;
+- if the last connected player on a team drops after the initial roster has joined, the server finalizes the currently open tick before recording the disconnect control, preserving already-admitted command order before the canonical lifecycle enters `PausedForDisconnect`;
+- the TCP runner no longer exits merely because the simulation is paused for disconnect; it continues servicing transport/session events without advancing simulation ticks;
+- an authenticated-session reconnect transition is available at the authoritative-match boundary and emits the same canonical `Connected` control used by replay/client replicas; secure wire credentials are intentionally the next substep rather than accepting a caller-supplied player identity.
+
+Compatibility/state changes:
+
+- none; connection state/lifecycle were already canonical checksum/snapshot state and `MatchControlEvent` was already replayable;
+- protocol schema remains revision 1 in this substep.
+
+Executed verification:
+
+- `tools/cargo-interactive test -p castle-fight-server`: **14 passed** (13 library/TCP tests plus binary test), including single-player 2v2 delegated builder control/revocation, team-wide 1v1 finalize-before-pause/resume, and the updated TCP fault-injection path;
+- `tools/cargo-interactive clippy -p castle-fight-server --all-targets -- -D warnings`: passed;
+- `cargo fmt --all` and `git diff --check`: passed.
+
+Pending:
+
+- secure reconnect/session credentials and TCP rebinding;
+- wall-clock team-disconnect timeout translated into canonical terminal controls;
+- bounded snapshot/history handoff and reconnect catch-up;
+- checkpoint/desync-triggered authoritative state replacement and client presentation reset.
+
 ## Next action
 
-Begin Step 10 by translating transport disconnect/reconnect into canonical boundary controls, then add authenticated reconnect/session restoration and bounded snapshot/history catch-up using the Step 7 persistence boundary.
+Add authenticated reconnect credentials and TCP session rebinding without exposing player identity as a claim, then layer bounded snapshot/history catch-up on that authenticated reconnect path.

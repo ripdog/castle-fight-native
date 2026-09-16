@@ -121,7 +121,7 @@ This policy must balance:
 
 The initial Step 9 server uses a zero-extra-delay **open-tick** policy. `Simulation::tick()` is the one currently unfinalized authoritative tick. Commands admitted before that tick is finalized are assigned to it in canonical server arrival order; once finalization occurs, that tick/order is immutable and later arrivals can only enter the next open tick. Clients do not predict authoritative advancement in this prototype: they wait for the explicit finalized tick record. A future measured input-delay policy may deliberately schedule farther ahead, but it must preserve the same canonical-order guarantees.
 
-The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because Step 9 does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection; reconnect identity and canonical disconnect/delegation controls are completed in Step 10.
+The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because the initial multiplayer prototype does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection. The Step 10 connection-lifecycle path records disconnect/reconnect permission changes through `MatchDriver` boundary controls; secure reconnect credentials and snapshot/history handoff remain separate session-transport work.
 
 The result is explicit:
 
@@ -236,9 +236,9 @@ Repeated mismatch after resync is an implementation/version integrity fault and 
 
 ## 12. Disconnect behavior
 
-A single client disconnect does not stop the match. The server continues simulating that player's autonomous state, and a canonical disconnect event grants temporary builder-control permission to still-connected teammates as defined by `41-match-gameplay.md` and `42-builder-items.md`.
+A single client disconnect does not stop the match. The server records a canonical `SetPlayerConnection(Disconnected)` boundary control, continues simulating that player's autonomous state, and the resulting canonical permission state grants temporary builder-control authority to still-connected teammates as defined by `41-match-gameplay.md` and `42-builder-items.md`. Reconnecting records the matching `Connected` control, which revokes delegated builder authority.
 
-If every player on one team is disconnected, the server finalizes the current tick, records a canonical team-disconnected pause event, and stops advancing simulation ticks while a configured wall-clock reconnect timeout runs. A reconnect before expiry records a canonical resume event; expiry records a canonical match-end/forfeit event.
+If every player on one team becomes disconnected, the server first finalizes the currently open tick so already-admitted commands are not discarded or reordered, then records the last disconnect at that completed boundary. Applying the control transitions the authoritative lifecycle to the team-disconnected pause and stops further simulation ticks. A reconnect records a canonical connection control at the same completed boundary and resumes when at least one player on each team is connected. A configured wall-clock reconnect timeout then determines whether the server instead emits a canonical terminal control; that timeout mechanism is operational server state and is implemented separately from the canonical connection transition itself.
 
 The paused wall-clock interval itself is operational time, not simulation time. Replay applies the recorded control events at their stream positions without waiting.
 
