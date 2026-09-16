@@ -472,7 +472,8 @@ Implemented so far:
 - post-start team-wide pauses now have independent operational monotonic deadlines (60 seconds by default, configurable with `--disconnect-timeout-seconds`); reconnect clears only that team's deadline, one expired team canonically forfeits to the opponent, simultaneous observed expiries canonically draw, and the wall-clock instants themselves never enter snapshot/checksum/replay state;
 - protocol revision 3 adds bounded authoritative snapshot transfer: logical `SimulationSnapshot` state serializes without ECS handles, presentation-only static names are omitted from wire identity and rehydrated from the selected versioned content bundle, each transfer is capped at 8 MiB and split into 48 KiB chunks, and the reconnect history suffix is independently capped;
 - authenticated reconnect captures a fresh snapshot while the session is still canonically disconnected, then emits the canonical `Connected` record, queues the snapshot plus the exact pinned history suffix through that record, verifies the completion boundary/checksum, and only afterward binds the replacement socket into live broadcasts; the serialized server loop therefore cannot create a live-record race across the handoff boundary;
-- clients reconnect on a background transport thread using the retained session credential, ignore stale socket-generation events, disable gameplay command submission during catch-up, replace rather than merge authoritative state, resume the `MatchDriver` at the supplied stream position, suppress historical presentation events, verify the handoff checksum, reset interpolation/presentation samples, and only then resume normal command submission.
+- clients reconnect on a background transport thread using the retained session credential, ignore stale socket-generation events, disable gameplay command submission during catch-up, replace rather than merge authoritative state, resume the `MatchDriver` at the supplied stream position, suppress historical presentation events, verify the handoff checksum, reset interpolation/presentation samples, and only then resume normal command submission;
+- live checkpoint divergence now invokes that same replacement machinery: a client reports the observed checksum and disables command submission when it differs from the server checkpoint; only after the server independently proves the mismatch does it capture a fresh current-boundary snapshot and queue a bounded replacement on the same authenticated socket. The current fresh-snapshot desync path needs no history suffix, does not mutate canonical history, and resumes commands only after the completion checksum matches.
 
 Compatibility/state changes:
 
@@ -491,15 +492,15 @@ Executed verification:
 - authenticated TCP reconnect handoff: passed, including disconnected-state snapshot capture, exactly-once canonical `Connected` history delivery, completion checksum equality, and bind-after-handoff ordering;
 - background client reconnect transport test: passed, including credential reuse and reconnect event ordering before snapshot messages;
 - deliberately divergent client replacement test: passed, restoring the authoritative checksum/stream boundary and resetting presentation samples without replaying historical cosmetic events;
+- live checkpoint-mismatch trigger test: passed, proving a bad client checksum causes a bounded same-session replacement snapshot while canonical history length and authenticated-session count remain unchanged;
 - `tools/cargo-interactive check -p castle-fight-protocol -p castle-fight-server -p castle-fight-sim` and `tools/cargo-interactive check -p castle-fight-client`: passed;
 - full client regression and strict combined Clippy remain pending until the remaining Step 10 desync-trigger path is complete;
 - `cargo fmt --all` and `git diff --check`: passed at the reconnect-handoff boundary.
 
 Pending:
 
-- checkpoint/desync-triggered invocation of the authoritative replacement path (the client-side replacement/presentation-reset machinery is already implemented and focused-tested);
 - final Step 10 full-suite/strict-Clippy verification and merge cleanup.
 
 ## Next action
 
-Trigger the existing bounded snapshot replacement path automatically when a live checkpoint report proves client divergence.
+Run the complete Step 10 regression/Clippy matrix, record final counts, merge the completed step to master, and delete its large worktree.

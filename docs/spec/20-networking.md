@@ -216,21 +216,20 @@ The server may broadcast:
 
 Clients compare once they have reached the same tick.
 
-A mismatch triggers a desync recovery path rather than allowing divergent simulations to continue indefinitely.
+A mismatch triggers the authoritative snapshot replacement path rather than allowing divergent simulations to continue indefinitely. The client still sends its observed checksum to the server; a mismatching report disables further local command submission until replacement completes.
 
 ## 11. Desync recovery
 
 The server wins all state disputes.
 
-On mismatch, protocol behavior SHOULD support:
+On mismatch, the current protocol behavior is:
 
-1. client reports/recognizes mismatch;
-2. client pauses presentation of speculative future authoritative state as needed;
-3. server selects an appropriate canonical snapshot/checkpoint;
-4. client loads the snapshot;
-5. client replays canonical stream records to the live boundary;
-6. checksum is revalidated;
-7. normal pacing resumes.
+1. client reports its checksum for the server-issued checkpoint and disables gameplay command submission after detecting inequality;
+2. server verifies that report against its latest authoritative checkpoint before taking recovery action;
+3. on proven mismatch, server captures a fresh canonical snapshot at the current stream boundary and sends it over the same authenticated connection using the bounded snapshot-transfer messages;
+4. because the fresh snapshot is captured at the handoff boundary, the initial live-desync transfer has an empty history suffix; any later implementation using an older retained snapshot must preserve the same pinned suffix rules;
+5. client replaces divergent state, clears historical presentation events, resets interpolation samples, and verifies the transfer completion boundary/checksum;
+6. gameplay command submission and normal live-stream processing resume only after equality is restored.
 
 Repeated mismatch after resync is an implementation/version integrity fault and should be reported with diagnostics.
 

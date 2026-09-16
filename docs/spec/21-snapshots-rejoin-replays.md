@@ -162,9 +162,9 @@ The choice is operational and MUST NOT affect final state. The initial Step 10 i
 
 ## 10. Desync resynchronization
 
-Desync recovery uses the same snapshot/chunk/history/completion machinery as reconnect. The client-side replacement path accepts an authenticated snapshot transfer while already connected, temporarily disables command submission, replaces divergent state, clears historical presentation events, verifies the supplied authoritative boundary/checksum, and then resumes live processing.
+Desync recovery uses the same snapshot/chunk/history/completion machinery as reconnect. The client-side replacement path accepts an authenticated snapshot transfer while already connected, disables command submission after detecting/reporting a checkpoint mismatch, replaces divergent state, clears historical presentation events, verifies the supplied authoritative boundary/checksum, and then resumes live processing.
 
-The server identifies a trusted canonical snapshot/checkpoint and instructs the client to replace divergent state and replay forward. A client MUST NOT attempt to merge arbitrary divergent entity state into the server snapshot.
+The TCP server initiates replacement only after comparing the client's checkpoint report to the latest authoritative checkpoint and proving a checksum mismatch. It then captures a fresh snapshot at the current canonical stream boundary and sends a bounded transfer on that same authenticated socket; the current implementation therefore uses an empty history suffix for live desync recovery. The socket remains the same live session, and subsequent canonical messages queue after `CatchUpComplete` in FIFO order. A client MUST NOT attempt to merge arbitrary divergent entity state into the server snapshot.
 
 ## 11. Replay file model
 

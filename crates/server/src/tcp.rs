@@ -17,23 +17,24 @@ use castle_fight_sim::{
 };
 
 use crate::{
-    AuthoritativeMatch, HandshakeResult, OutboundMessage, OutboundTarget, ServerMatchError,
-    SessionId,
+    AuthoritativeMatch, CheckpointReportStatus, HandshakeResult, OutboundMessage, OutboundTarget,
+    ServerMatchError, SessionId,
 };
 
 const OUTBOUND_QUEUE_CAPACITY: usize = 256;
 const IDLE_POLL_INTERVAL: Duration = Duration::from_millis(1);
-const MAX_RECONNECT_SNAPSHOT_CHUNKS: usize = MAX_SNAPSHOT_BYTES.div_ceil(SNAPSHOT_CHUNK_BYTES);
-const MAX_RECONNECT_HISTORY_RECORDS: usize = 8;
-const MAX_RECONNECT_HANDOFF_MESSAGES: usize =
-    3 + MAX_RECONNECT_SNAPSHOT_CHUNKS + MAX_RECONNECT_HISTORY_RECORDS;
-const _: () = assert!(MAX_RECONNECT_HANDOFF_MESSAGES <= OUTBOUND_QUEUE_CAPACITY);
+const MAX_SNAPSHOT_TRANSFER_CHUNKS: usize = MAX_SNAPSHOT_BYTES.div_ceil(SNAPSHOT_CHUNK_BYTES);
+const MAX_SNAPSHOT_HISTORY_RECORDS: usize = 8;
+const MAX_SNAPSHOT_HANDOFF_MESSAGES: usize =
+    3 + MAX_SNAPSHOT_TRANSFER_CHUNKS + MAX_SNAPSHOT_HISTORY_RECORDS;
+const _: () = assert!(MAX_SNAPSHOT_HANDOFF_MESSAGES <= OUTBOUND_QUEUE_CAPACITY);
 
 #[derive(Debug)]
 pub enum TcpServerError {
     Io(io::Error),
     Match(ServerMatchError),
     ConnectionIdExhausted,
+    TransferIdExhausted,
     ReconnectHistoryUnavailable,
     ReconnectHistoryOverflow,
 }
@@ -44,6 +45,9 @@ impl fmt::Display for TcpServerError {
             Self::Io(error) => write!(formatter, "TCP server I/O error: {error}"),
             Self::Match(error) => error.fmt(formatter),
             Self::ConnectionIdExhausted => formatter.write_str("TCP connection ID space exhausted"),
+            Self::TransferIdExhausted => {
+                formatter.write_str("snapshot transfer ID space exhausted")
+            }
             Self::ReconnectHistoryUnavailable => formatter
                 .write_str("reconnect snapshot boundary is no longer present in canonical history"),
             Self::ReconnectHistoryOverflow => {
@@ -59,6 +63,7 @@ impl std::error::Error for TcpServerError {
             Self::Io(error) => Some(error),
             Self::Match(error) => Some(error),
             Self::ConnectionIdExhausted
+            | Self::TransferIdExhausted
             | Self::ReconnectHistoryUnavailable
             | Self::ReconnectHistoryOverflow => None,
         }
@@ -92,6 +97,15 @@ enum InboundEvent {
     Disconnected(ConnectionId),
 }
 
+struct SnapshotHandoff<'a> {
+    snapshot_stream_position: InputStreamPosition,
+    snapshot_completed_tick: Option<u64>,
+    snapshot_checksum: u64,
+    handoff_stream_position: InputStreamPosition,
+    snapshot_bytes: &'a [u8],
+    history_tail: &'a [WireCanonicalStreamRecord],
+}
+
 /// TCP transport shell around one authoritative match.
 ///
 /// Socket reader/writer threads only decode/encode protocol frames and move messages through
@@ -105,6 +119,7 @@ pub struct TcpAuthoritativeServer {
     connections: BTreeMap<ConnectionId, ConnectionState>,
     session_connections: BTreeMap<SessionId, ConnectionId>,
     next_connection_id: u64,
+    next_transfer_id: u64,
     started: bool,
     team_disconnect_since: [Option<Instant>; 2],
 }
@@ -125,6 +140,7 @@ impl TcpAuthoritativeServer {
             connections: BTreeMap::new(),
             session_connections: BTreeMap::new(),
             next_connection_id: 1,
+            next_transfer_id: 1,
             started: false,
             team_disconnect_since: [None; 2],
         })
@@ -328,10 +344,20 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
         };
+        let checkpoint_reported = matches!(&message, ClientMessage::CheckpointReport { .. });
         let outbound = self
             .authoritative
             .handle_client_message(session_id, message);
-        self.dispatch_all(outbound)
+        self.dispatch_all(outbound)?;
+        if checkpoint_reported
+            && matches!(
+                self.authoritative.checkpoint_report_status(session_id),
+                Some(CheckpointReportStatus::Mismatch { .. })
+            )
+        {
+            self.send_live_state_replacement(connection_id)?;
+        }
+        Ok(())
     }
 
     fn process_unbound_frame(
@@ -406,7 +432,7 @@ impl TcpAuthoritativeServer {
                 .iter()
                 .map(WireCanonicalStreamRecord::from)
                 .collect::<Vec<_>>();
-                if history_tail.len() > MAX_RECONNECT_HISTORY_RECORDS {
+                if history_tail.len() > MAX_SNAPSHOT_HISTORY_RECORDS {
                     return Err(TcpServerError::ReconnectHistoryOverflow);
                 }
 
@@ -414,51 +440,19 @@ impl TcpAuthoritativeServer {
                     .authoritative
                     .session_assignment(session_id)
                     .expect("authenticated reconnect session must still exist");
-                let chunk_count = snapshot_bytes.len().div_ceil(SNAPSHOT_CHUNK_BYTES);
-                let chunk_count = u32::try_from(chunk_count)
-                    .expect("bounded reconnect snapshot chunk count fits u32");
-                let begin = SnapshotTransferBegin {
-                    transfer_id: connection_id.0,
-                    snapshot_stream_position: snapshot_stream_position.0,
-                    snapshot_completed_tick,
-                    snapshot_checksum,
-                    snapshot_bytes: u32::try_from(snapshot_bytes.len())
-                        .expect("bounded reconnect snapshot length fits u32"),
-                    chunk_count,
-                    handoff_stream_position: handoff_stream_position.0,
-                };
-
                 self.send_to_connection(
                     connection_id,
                     ServerMessage::HelloAccepted { assignment },
                 )?;
-                self.send_to_connection(connection_id, ServerMessage::SnapshotBegin { begin })?;
-                for (chunk_index, bytes) in snapshot_bytes.chunks(SNAPSHOT_CHUNK_BYTES).enumerate()
-                {
-                    self.send_to_connection(
-                        connection_id,
-                        ServerMessage::SnapshotChunk {
-                            chunk: SnapshotChunk {
-                                transfer_id: connection_id.0,
-                                chunk_index: u32::try_from(chunk_index)
-                                    .expect("bounded reconnect chunk index fits u32"),
-                                bytes: bytes.to_vec(),
-                            },
-                        },
-                    )?;
-                }
-                for record in history_tail {
-                    self.send_to_connection(connection_id, ServerMessage::StreamRecord { record })?;
-                }
-                self.send_to_connection(
+                self.send_snapshot_handoff(
                     connection_id,
-                    ServerMessage::CatchUpComplete {
-                        complete: CatchUpComplete {
-                            transfer_id: connection_id.0,
-                            handoff_stream_position: handoff_stream_position.0,
-                            completed_tick: self.authoritative.simulation().tick().checked_sub(1),
-                            checksum: self.authoritative.simulation().checksum(),
-                        },
+                    SnapshotHandoff {
+                        snapshot_stream_position,
+                        snapshot_completed_tick,
+                        snapshot_checksum,
+                        handoff_stream_position,
+                        snapshot_bytes: &snapshot_bytes,
+                        history_tail: &history_tail,
                     },
                 )?;
 
@@ -476,6 +470,107 @@ impl TcpAuthoritativeServer {
                     },
                 ),
         }
+    }
+
+    fn send_live_state_replacement(
+        &mut self,
+        connection_id: ConnectionId,
+    ) -> Result<(), TcpServerError> {
+        let snapshot_stream_position = self.authoritative.driver().next_stream_position();
+        let snapshot = self.authoritative.simulation().capture_snapshot();
+        let snapshot_completed_tick = snapshot.completed_tick();
+        let snapshot_checksum = snapshot.checksum();
+        let snapshot_bytes = match snapshot.encode_wire() {
+            Ok(bytes) if bytes.len() <= MAX_SNAPSHOT_BYTES => bytes,
+            Ok(_) | Err(_) => {
+                // A client that cannot be repaired within the bounded transfer contract is dropped;
+                // its normal authenticated reconnect path may retry from a fresh connection.
+                self.disconnect_connection(connection_id)?;
+                return Ok(());
+            }
+        };
+        self.send_snapshot_handoff(
+            connection_id,
+            SnapshotHandoff {
+                snapshot_stream_position,
+                snapshot_completed_tick,
+                snapshot_checksum,
+                handoff_stream_position: snapshot_stream_position,
+                snapshot_bytes: &snapshot_bytes,
+                history_tail: &[],
+            },
+        )
+    }
+
+    fn send_snapshot_handoff(
+        &mut self,
+        connection_id: ConnectionId,
+        handoff: SnapshotHandoff<'_>,
+    ) -> Result<(), TcpServerError> {
+        let SnapshotHandoff {
+            snapshot_stream_position,
+            snapshot_completed_tick,
+            snapshot_checksum,
+            handoff_stream_position,
+            snapshot_bytes,
+            history_tail,
+        } = handoff;
+        debug_assert!(snapshot_bytes.len() <= MAX_SNAPSHOT_BYTES);
+        if history_tail.len() > MAX_SNAPSHOT_HISTORY_RECORDS {
+            return Err(TcpServerError::ReconnectHistoryOverflow);
+        }
+        let transfer_id = self.next_transfer_id;
+        self.next_transfer_id = self
+            .next_transfer_id
+            .checked_add(1)
+            .ok_or(TcpServerError::TransferIdExhausted)?;
+        let chunk_count = snapshot_bytes.len().div_ceil(SNAPSHOT_CHUNK_BYTES);
+        let chunk_count =
+            u32::try_from(chunk_count).expect("bounded snapshot transfer chunk count fits u32");
+        let begin = SnapshotTransferBegin {
+            transfer_id,
+            snapshot_stream_position: snapshot_stream_position.0,
+            snapshot_completed_tick,
+            snapshot_checksum,
+            snapshot_bytes: u32::try_from(snapshot_bytes.len())
+                .expect("bounded snapshot transfer length fits u32"),
+            chunk_count,
+            handoff_stream_position: handoff_stream_position.0,
+        };
+
+        self.send_to_connection(connection_id, ServerMessage::SnapshotBegin { begin })?;
+        for (chunk_index, bytes) in snapshot_bytes.chunks(SNAPSHOT_CHUNK_BYTES).enumerate() {
+            self.send_to_connection(
+                connection_id,
+                ServerMessage::SnapshotChunk {
+                    chunk: SnapshotChunk {
+                        transfer_id,
+                        chunk_index: u32::try_from(chunk_index)
+                            .expect("bounded snapshot transfer chunk index fits u32"),
+                        bytes: bytes.to_vec(),
+                    },
+                },
+            )?;
+        }
+        for record in history_tail {
+            self.send_to_connection(
+                connection_id,
+                ServerMessage::StreamRecord {
+                    record: record.clone(),
+                },
+            )?;
+        }
+        self.send_to_connection(
+            connection_id,
+            ServerMessage::CatchUpComplete {
+                complete: CatchUpComplete {
+                    transfer_id,
+                    handoff_stream_position: handoff_stream_position.0,
+                    completed_tick: self.authoritative.simulation().tick().checked_sub(1),
+                    checksum: self.authoritative.simulation().checksum(),
+                },
+            },
+        )
     }
 
     fn bind_session_connection(&mut self, connection_id: ConnectionId, session_id: SessionId) {
@@ -620,7 +715,7 @@ mod tests {
     };
     use castle_fight_sim::{
         CanonicalStreamRecord, CastleFightMatchConfig, ClientCommandSequence, MapVersion,
-        MatchDriver, PlayerId, Simulation, create_castle_fight_match,
+        MatchDriver, PlayerId, Simulation, SimulationSnapshot, create_castle_fight_match,
     };
 
     use crate::ServerMatchOptions;
@@ -820,6 +915,90 @@ mod tests {
                 assignment: SessionAssignment { player_id: 6, .. }
             }
         ));
+    }
+
+    #[test]
+    fn tcp_checkpoint_mismatch_triggers_bounded_live_state_replacement() {
+        let mut server = server_with_options(ServerMatchOptions {
+            checkpoint_interval_ticks: 1,
+            ..ServerMatchOptions::default()
+        });
+        let mut first = connect(&server);
+        let mut second = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut first, hello(&server, 1));
+        send_client(&mut second, hello(&server, 2));
+        pump_until(&mut server, |view| view.started);
+        let _ = receive_server(&mut first);
+        let _ = receive_server(&mut second);
+
+        server.finalize_next_tick().unwrap();
+        assert!(matches!(
+            receive_server(&mut first),
+            ServerMessage::StreamRecord { .. }
+        ));
+        assert!(matches!(
+            receive_server(&mut first),
+            ServerMessage::TickExecutions { .. }
+        ));
+        let checkpoint = match receive_server(&mut first) {
+            ServerMessage::Checkpoint { checkpoint } => checkpoint,
+            message => panic!("expected checkpoint, got {message:?}"),
+        };
+        let history_len = server.authoritative().driver().history().len();
+        let expected_stream_position = server.authoritative().driver().next_stream_position().0;
+        let expected_checksum = server.authoritative().simulation().checksum();
+
+        send_client(
+            &mut first,
+            ClientMessage::CheckpointReport {
+                report: CheckpointReport {
+                    completed_tick: checkpoint.completed_tick,
+                    checksum: checkpoint.checksum ^ 1,
+                },
+            },
+        );
+        pump_network(&mut server);
+        assert_eq!(server.authoritative().driver().history().len(), history_len);
+        assert_eq!(server.authenticated_connection_count(), 2);
+
+        let begin = match receive_server(&mut first) {
+            ServerMessage::SnapshotBegin { begin } => begin,
+            message => panic!("expected live replacement snapshot header, got {message:?}"),
+        };
+        assert_eq!(begin.snapshot_stream_position, expected_stream_position);
+        assert_eq!(begin.handoff_stream_position, expected_stream_position);
+        assert_eq!(begin.snapshot_checksum, expected_checksum);
+
+        let mut snapshot_bytes = Vec::new();
+        for expected_chunk in 0..begin.chunk_count {
+            let chunk = match receive_server(&mut first) {
+                ServerMessage::SnapshotChunk { chunk } => chunk,
+                message => panic!("expected live replacement snapshot chunk, got {message:?}"),
+            };
+            assert_eq!(chunk.transfer_id, begin.transfer_id);
+            assert_eq!(chunk.chunk_index, expected_chunk);
+            snapshot_bytes.extend_from_slice(&chunk.bytes);
+        }
+        assert_eq!(
+            snapshot_bytes.len(),
+            usize::try_from(begin.snapshot_bytes).unwrap()
+        );
+        let snapshot = SimulationSnapshot::decode_wire(
+            &snapshot_bytes,
+            server.authoritative().driver().content(),
+        )
+        .unwrap();
+        assert_eq!(snapshot.checksum(), expected_checksum);
+
+        let complete = match receive_server(&mut first) {
+            ServerMessage::CatchUpComplete { complete } => complete,
+            message => panic!("expected live replacement completion, got {message:?}"),
+        };
+        assert_eq!(complete.transfer_id, begin.transfer_id);
+        assert_eq!(complete.handoff_stream_position, expected_stream_position);
+        assert_eq!(complete.completed_tick, Some(checkpoint.completed_tick));
+        assert_eq!(complete.checksum, expected_checksum);
     }
 
     #[test]

@@ -873,9 +873,14 @@ fn process_network_events(
                         return Err(format!("could not report checkpoint: {error}"));
                     }
                     if local_checksum != checkpoint.checksum {
-                        return Err(format!(
-                            "authoritative checksum mismatch at tick {}: server {:#018x}, client {:#018x}",
-                            checkpoint.completed_tick, checkpoint.checksum, local_checksum
+                        if let AuthorityMode::Network { connected, .. } =
+                            &mut authoritative.authority
+                        {
+                            *connected = false;
+                        }
+                        authoritative.pending_status.push(format!(
+                            "Checksum mismatch at tick {}; requesting authoritative state replacement.",
+                            checkpoint.completed_tick
                         ));
                     }
                 }
@@ -939,15 +944,11 @@ fn begin_snapshot_catch_up(
                 ));
             }
             Some(_) => {}
-            None if *connected => {
-                // The same transfer path is also valid for an authoritative desync replacement.
+            None => {
+                // An already-connected client enters this state after reporting a checksum mismatch;
+                // command submission is disabled before the server's replacement header arrives.
                 *connected = false;
                 *pending_handoff_position = Some(begin.handoff_stream_position);
-            }
-            None => {
-                return Err(
-                    "received snapshot transfer without an authenticated handoff".to_owned(),
-                );
             }
         },
         AuthorityMode::Local => return Err("snapshot transfer arrived in local mode".to_owned()),
