@@ -1,6 +1,267 @@
 use super::*;
 
+pub(super) struct AttackResolutionContext<'a> {
+    pub(super) units: &'a mut [UnitSnapshot],
+    pub(super) buildings: &'a [BuildingSnapshot],
+    pub(super) unit_health: &'a mut [i32],
+    pub(super) building_health: &'a mut [i32],
+    pub(super) cooldowns: &'a mut [u16],
+    pub(super) attack_sequences: &'a mut [u64],
+    pub(super) building_cooldowns: &'a mut [u16],
+    pub(super) positions: &'a [SimPoint],
+    pub(super) attackers_this_tick: &'a mut [Option<SimId>],
+    pub(super) next_defense_alerts: &'a mut Vec<DefenseAlert>,
+    pub(super) completed_tick: u64,
+}
+
+pub(super) struct AttackResolution {
+    pub(super) attacks_resolved: usize,
+    pub(super) projectile_launches: Vec<ProjectileLaunch>,
+    pub(super) ballistic_projectile_launches: Vec<BallisticProjectileLaunch>,
+    pub(super) bounce_projectile_launches: Vec<BounceProjectileLaunch>,
+    pub(super) chain_lightning_launches: Vec<ChainLightningState>,
+}
+
 impl Simulation {
+    pub(super) fn resolve_attacks(
+        &mut self,
+        context: AttackResolutionContext<'_>,
+    ) -> AttackResolution {
+        let AttackResolutionContext {
+            units,
+            buildings,
+            unit_health,
+            building_health,
+            cooldowns,
+            attack_sequences,
+            building_cooldowns,
+            positions,
+            attackers_this_tick,
+            next_defense_alerts,
+            completed_tick,
+        } = context;
+        let mut intents = self.attack_intents(units, buildings);
+        intents.sort_unstable_by_key(|intent| (intent.source_id, intent.target_id));
+
+        let mut attacks_resolved = 0;
+        let mut projectile_launches = Vec::new();
+        let mut ballistic_projectile_launches = Vec::new();
+        let mut bounce_projectile_launches = Vec::new();
+        let mut chain_lightning_launches = Vec::new();
+        for intent in intents {
+            let source_alive = match intent.source {
+                AttackSourceIndex::Unit(index) => unit_health[index] > 0,
+                AttackSourceIndex::Building(index) => building_health[index] > 0,
+            };
+            if !source_alive {
+                continue;
+            }
+            let Some(target_position) = live_target_position(
+                intent.target,
+                units,
+                buildings,
+                unit_health,
+                building_health,
+                self.config.navigation_cell_size,
+            ) else {
+                continue;
+            };
+
+            let missed = self.uphill_attack_misses(&intent, target_position, completed_tick, units)
+                || self.attack_is_evaded(&intent, units, completed_tick);
+            if !missed {
+                let (bonus_damage, on_hit) =
+                    self.resolve_passive_attack_effects(&intent, units, completed_tick);
+                let damage = intent
+                    .attack
+                    .damage
+                    .checked_add(bonus_damage)
+                    .expect("attack plus passive bonus damage overflowed");
+                match intent.attack.delivery {
+                    AttackDelivery::Melee => {
+                        let applied = apply_damage_to_target(
+                            intent.target,
+                            intent.source_id,
+                            damage,
+                            intent.damage_type,
+                            completed_tick,
+                            DamageTargetState {
+                                damage_rules: self.combat_rules.damage_rules,
+                                units,
+                                buildings,
+                                unit_positions: positions,
+                                unit_health,
+                                building_health,
+                                attackers_this_tick,
+                                next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        );
+                        debug_assert!(applied.is_some());
+                        let pending = apply_pending_attack_effects(
+                            intent.target,
+                            on_hit,
+                            PendingAttackEffectSource {
+                                id: intent.source_id,
+                                position: intent.source_position,
+                                team: intent.source_team,
+                            },
+                            PendingAttackEffectState {
+                                completed_tick,
+                                units,
+                                unit_health,
+                                damage_rules: self.combat_rules.damage_rules,
+                            },
+                        );
+                        if let Some(event) = pending.chain_event {
+                            self.last_chain_lightnings.push(event);
+                        }
+                        if let Some(state) = pending.chain_state {
+                            chain_lightning_launches.push(state);
+                        }
+                        if let (
+                            AttackSourceIndex::Unit(source_index),
+                            TargetIndex::Unit(target_index),
+                        ) = (intent.source, intent.target)
+                        {
+                            apply_melee_reactive_armor_effects(
+                                source_index,
+                                target_index,
+                                completed_tick,
+                                units,
+                                unit_health,
+                            );
+                        }
+                    }
+                    AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
+                        let travel_ticks =
+                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                        let impact_tick = completed_tick
+                            .checked_add(travel_ticks)
+                            .expect("projectile impact tick overflow");
+                        projectile_launches.push(ProjectileLaunch {
+                            source: intent.source_id,
+                            source_team: intent.source_team,
+                            source_is_building: matches!(
+                                intent.source,
+                                AttackSourceIndex::Building(_)
+                            ),
+                            target: intent.target_id,
+                            damage,
+                            on_hit,
+                            damage_type: intent.damage_type,
+                            speed_per_tick,
+                            launch_position: intent.source_position,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                        });
+                    }
+                    AttackDelivery::RangedBallistic {
+                        speed_per_tick,
+                        impact_radius,
+                    } => {
+                        assert_eq!(
+                            bonus_damage, 0,
+                            "ballistic passive bonus damage is unsupported"
+                        );
+                        assert_eq!(
+                            (on_hit.stun_duration_ticks, on_hit.triggered_spell),
+                            (0, None),
+                            "ballistic stun/triggered-spell passives are unsupported"
+                        );
+                        let travel_ticks =
+                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                        let impact_tick = completed_tick
+                            .checked_add(travel_ticks)
+                            .expect("projectile impact tick overflow");
+                        ballistic_projectile_launches.push(BallisticProjectileLaunch {
+                            source: intent.source_id,
+                            source_team: intent.source_team,
+                            target_mask: intent.attack_targets,
+                            damage: intent.attack.damage,
+                            burning_oil: on_hit.burning_oil,
+                            damage_type: intent.damage_type,
+                            launch_position: intent.source_position,
+                            destination: target_position,
+                            impact_radius,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                        });
+                    }
+                    AttackDelivery::Bounce {
+                        speed_per_tick,
+                        bounce_range,
+                        max_bounces,
+                        damage_percent_per_bounce,
+                        allow_repeat_targets,
+                    } => {
+                        assert_eq!(
+                            (bonus_damage, on_hit),
+                            (0, PendingAttackEffects::default()),
+                            "passive on-hit effects are not yet defined for bounce attacks"
+                        );
+                        let travel_ticks =
+                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                        let impact_tick = completed_tick
+                            .checked_add(travel_ticks)
+                            .expect("projectile impact tick overflow");
+                        bounce_projectile_launches.push(BounceProjectileLaunch {
+                            source: intent.source_id,
+                            source_team: intent.source_team,
+                            source_is_building: matches!(
+                                intent.source,
+                                AttackSourceIndex::Building(_)
+                            ),
+                            target_mask: intent.attack_targets,
+                            target: intent.target_id,
+                            damage: intent.attack.damage,
+                            damage_type: intent.damage_type,
+                            launch_position: intent.source_position,
+                            launch_tick: completed_tick,
+                            impact_tick,
+                            speed_per_tick,
+                            bounce_range,
+                            max_bounces,
+                            damage_percent_per_bounce,
+                            allow_repeat_targets,
+                        });
+                    }
+                }
+            }
+            match intent.source {
+                AttackSourceIndex::Unit(index) => {
+                    cooldowns[index] = effective_attack_cooldown_ticks(
+                        intent.attack.cooldown_ticks,
+                        units[index].status,
+                    );
+                    attack_sequences[index] = attack_sequences[index]
+                        .checked_add(1)
+                        .expect("unit attack sequence overflow");
+                }
+                AttackSourceIndex::Building(index) => {
+                    building_cooldowns[index] = intent.attack.cooldown_ticks;
+                }
+            }
+            self.last_attacks.push(AttackEvent {
+                source: intent.source_id,
+                target: intent.target_id,
+                source_position: intent.source_position,
+                target_position,
+                delivery: intent.attack.delivery,
+                missed,
+            });
+            attacks_resolved += 1;
+        }
+
+        AttackResolution {
+            attacks_resolved,
+            projectile_launches,
+            ballistic_projectile_launches,
+            bounce_projectile_launches,
+            chain_lightning_launches,
+        }
+    }
+
     pub(super) fn uphill_attack_misses(
         &self,
         intent: &AttackIntent,
