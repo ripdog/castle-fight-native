@@ -2698,6 +2698,7 @@ def main() -> None:
     runtime_campaign_rows: list[list[Any]] = []
     campaign_unit_names = {str(row[1]): str(row[3]) for row in unit_rows}
     campaign_building_names = {str(row[1]): str(row[3]) for row in building_rows}
+    campaign_item_names = {str(row[1]): str(row[3]) for row in item_rows}
     runtime_campaign_path = map_root / "script" / "runtime-campaign-mechanics.tsv"
     if runtime_campaign_path.exists():
         with runtime_campaign_path.open(encoding="utf-8", newline="") as handle:
@@ -2706,6 +2707,7 @@ def main() -> None:
                 if system_id not in {
                     "campaign-chapter-i-ii-content-catalog",
                     "campaign-chapter-i-ii-enemy-bot-catalog",
+                    "campaign-friendly-bot-supply-and-placeholder-content-catalog",
                     "campaign-star-restriction-failure-hooks",
                     "campaign-round-start-state-reset",
                     "campaign-quit-and-replay-control",
@@ -2860,6 +2862,104 @@ def main() -> None:
                         ]
                     ):
                         raise ValueError(f"campaign Chapter I/II enemy bot semantics changed: {parameters}")
+                elif system_id == "campaign-friendly-bot-supply-and-placeholder-content-catalog":
+                    friendly_bots = parameters.get("friendly_bots", [])
+                    supplies = parameters.get("supplies", [])
+                    placeholder_chapters = parameters.get("placeholder_chapters", [])
+                    if (
+                        parameters.get("protected_campaign_content_vm") != 22
+                        or parameters.get("friendly_bot_count") != 16
+                        or parameters.get("supply_count") != 5
+                        or parameters.get("placeholder_chapter_count") != 2
+                        or parameters.get("placeholder_mission_count") != 12
+                        or parameters.get("mission_initial_unlock_rule") != "first mission in a non-secret chapter"
+                        or len(friendly_bots) != 16
+                        or len(supplies) != 5
+                        or len(placeholder_chapters) != 2
+                    ):
+                        raise ValueError(f"campaign VM22 auxiliary catalog header changed: {parameters}")
+                    friendly_by_id = {str(bot.get("bot_id")): bot for bot in friendly_bots}
+                    if len(friendly_by_id) != 16:
+                        raise ValueError(f"campaign friendly bot ids changed: {sorted(friendly_by_id)}")
+                    for bot in friendly_bots:
+                        builder_object_id = str(bot.get("builder_object_id", ""))
+                        builder_name = campaign_unit_names.get(builder_object_id)
+                        if not builder_name:
+                            raise ValueError(
+                                f"campaign friendly bot builder cannot be resolved: {bot.get('bot_id')}: {builder_object_id}"
+                            )
+                        bot["builder_name"] = builder_name
+                        for preference in bot.get("building_preferences", []):
+                            building_object_id = str(preference.get("building_object_id", ""))
+                            building_name = campaign_building_names.get(building_object_id)
+                            if not building_name:
+                                raise ValueError(
+                                    f"campaign friendly bot preference cannot be resolved: "
+                                    f"{bot.get('bot_id')}: {building_object_id}"
+                                )
+                            preference["building_name"] = building_name
+                    for supply in supplies:
+                        item_object_id = supply.get("item_object_id")
+                        if item_object_id:
+                            item_name = campaign_item_names.get(str(item_object_id))
+                            if not item_name:
+                                raise ValueError(
+                                    f"campaign supply item cannot be resolved: {supply.get('supply_id')}: {item_object_id}"
+                                )
+                            supply["item_name"] = item_name
+                        else:
+                            supply["item_name"] = None
+                    for chapter in placeholder_chapters:
+                        chapter["races_unlocked_on_complete_names"] = [
+                            campaign_unit_names.get(str(object_id), "")
+                            for object_id in chapter.get("races_unlocked_on_complete_object_ids", [])
+                        ]
+                        if any(not name for name in chapter["races_unlocked_on_complete_names"]):
+                            raise ValueError(f"campaign placeholder chapter race unlock cannot be resolved: {chapter}")
+                    jester = friendly_by_id.get("bot_jester", {})
+                    bruiser = friendly_by_id.get("bot_bruiser", {})
+                    maverick = friendly_by_id.get("bot_maverick", {})
+                    paragon = friendly_by_id.get("bot_paragon", {})
+                    supply_by_id = {str(supply.get("supply_id")): supply for supply in supplies}
+                    chapters_by_id = {str(chapter.get("chapter_id")): chapter for chapter in placeholder_chapters}
+                    chapter_three = chapters_by_id.get("chapter_3", {})
+                    chapter_four = chapters_by_id.get("chapter_4", {})
+                    if (
+                        jester.get("builder_object_id") != "X00C"
+                        or jester.get("cost") != 0
+                        or jester.get("skill") != 0.18
+                        or jester.get("cooperation") != 0.1
+                        or jester.get("speed") != 0.28
+                        or bruiser.get("builder_object_id") != "X078"
+                        or [
+                            (preference.get("building_object_id"), preference.get("modifier"))
+                            for preference in bruiser.get("building_preferences", [])
+                            if preference.get("building_object_id") == "n02O"
+                        ] != [("n02O", 1.1), ("n02O", 0.9)]
+                        or maverick.get("builder_object_id") != "X07P"
+                        or maverick.get("cooperation") != 0
+                        or maverick.get("speed") != 0.88
+                        or paragon.get("cost") != 15
+                        or supply_by_id.get("supply_build_drills", {}).get("speed_bonus") != 0.1
+                        or supply_by_id.get("supply_lumber_cache", {}).get("lumber_bonus") != 300
+                        or supply_by_id.get("supply_cloud_machine", {}).get("perk_id") != "perk_02"
+                        or supply_by_id.get("supply_tiny_tower", {}).get("perk_id") != "perk_04"
+                        or supply_by_id.get("supply_bassline", {}).get("item_object_id") != "I00A"
+                        or supply_by_id.get("supply_bassline", {}).get("item_name") != "Drum'n'Bass Bassline Generator"
+                        or chapter_three.get("secret") is not False
+                        or chapter_three.get("races_unlocked_on_complete_object_ids") != ["X051", "X01A", "X078", "X07P"]
+                        or chapter_three.get("races_unlocked_on_complete_names")
+                        != ["Elemental Builder", "Nature Builder", "Desert Builder", "Pandaren Builder"]
+                        or [mission.get("mission_id") for mission in chapter_three.get("missions", [])]
+                        != [f"mission_ch3_{index}" for index in range(1, 7)]
+                        or chapter_three.get("missions", [{}])[0].get("initially_unlocked") is not True
+                        or chapter_four.get("secret") is not True
+                        or chapter_four.get("races_unlocked_on_complete_object_ids") != []
+                        or [mission.get("mission_id") for mission in chapter_four.get("missions", [])]
+                        != [f"mission_ch4_{index}" for index in range(1, 7)]
+                        or any(mission.get("initially_unlocked") for mission in chapter_four.get("missions", []))
+                    ):
+                        raise ValueError(f"campaign VM22 auxiliary catalog semantics changed: {parameters}")
                 elif system_id == "campaign-star-restriction-failure-hooks":
                     if parameters.get("tracked_building_loss", {}).get("restriction_id") != "challenge_no_buildings_lost":
                         raise ValueError(f"campaign building-loss restriction changed: {parameters}")

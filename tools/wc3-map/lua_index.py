@@ -7125,8 +7125,9 @@ def _extract_runtime_campaign_mechanics(
         "CampaignStarChallenge_CampaignStarChallenge_fastWin", "CampaignStarChallenge_CampaignStarChallenge_castleNeverBelow",
         "CampaignStarChallenge_CampaignStarChallenge_banRace", "CampaignStarChallenge_CampaignStarChallenge_restriction",
         "ensureCampaignContent__w3p_vmProtect", "registerCampaignChapterIEnemyBots__w3p_vmProtect", "registerCampaignChapterIIEnemyBots__w3p_vmProtect",
-        "addEnemyBot__w3p_vmProtect", "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
-        "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_builder", "CampaignBot_CampaignBot_skill",
+        "addEnemyBot__w3p_vmProtect", "addFriendlyBot__w3p_vmProtect", "addSupply__w3p_vmProtect",
+        "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
+        "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_cost", "CampaignBot_CampaignBot_builder", "CampaignBot_CampaignBot_skill",
         "CampaignBot_CampaignBot_coop", "CampaignBot_CampaignBot_speed", "CampaignBot_CampaignBot_style",
         "CampaignBot_CampaignBot_preferBuilding",
     }
@@ -7584,7 +7585,7 @@ def _extract_runtime_campaign_mechanics(
             return value
         return value
 
-    def trace_campaign_base_enemy_bot_vm() -> list[dict[str, object]]:
+    def trace_campaign_vm22_catalog() -> list[dict[str, object]]:
         vm_index = 22
         static_values = _w3p_vm_static_strings(data, vm_index)
         global_names = [
@@ -7609,7 +7610,7 @@ def _extract_runtime_campaign_mechanics(
 
         for instruction in program["instructions"]:
             pc = int(instruction["pc"])
-            if pc >= 9946:
+            if pc >= 10579:
                 break
             opcode = int(instruction["opcode"])
             operands = [int(value) for value in instruction["operands"]]
@@ -7617,17 +7618,17 @@ def _extract_runtime_campaign_mechanics(
                 stack.append({})
             elif opcode == 24:
                 if not stack:
-                    raise ValueError(f"campaign base bot VM22 local store underflow at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 local store underflow at pc {pc}")
                 locals_by_index[operands[0]] = stack.pop()
             elif opcode == 253:
                 if operands[0] not in locals_by_index:
-                    raise ValueError(f"campaign base bot VM22 reads unset local {operands[0]} at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 reads unset local {operands[0]} at pc {pc}")
                 stack.append(locals_by_index[operands[0]])
             elif opcode in (144, 12):
                 static_index = operands[0] if opcode == 144 else ((operands[0] << 8) + operands[1])
                 converted = numeric_static(static_at(static_index))
                 if converted is None:
-                    raise ValueError(f"campaign base bot VM22 numeric static changed at pc {pc}: {static_at(static_index)!r}")
+                    raise ValueError(f"campaign catalog VM22 numeric static changed at pc {pc}: {static_at(static_index)!r}")
                 stack.append(converted)
             elif opcode == 230:
                 stack.append(static_at((operands[0] << 8) + operands[1]))
@@ -7637,45 +7638,45 @@ def _extract_runtime_campaign_mechanics(
                 stack.append(("global", global_names[operands[0] - 1]))
             elif opcode == 66:
                 if len(stack) < 3:
-                    raise ValueError(f"campaign base bot VM22 table store underflow at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 table store underflow at pc {pc}")
                 value = stack.pop()
                 key = stack.pop()
                 table = stack[-1]
                 if not isinstance(table, dict):
-                    raise ValueError(f"campaign base bot VM22 table store target changed at pc {pc}: {table!r}")
+                    raise ValueError(f"campaign catalog VM22 table store target changed at pc {pc}: {table!r}")
                 table[key] = value
             elif opcode == 162:
                 if len(stack) < 2:
-                    raise ValueError(f"campaign base bot VM22 table read underflow at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 table read underflow at pc {pc}")
                 key = stack.pop()
                 table = stack.pop()
                 if not isinstance(table, dict):
-                    raise ValueError(f"campaign base bot VM22 table read target changed at pc {pc}: {table!r}")
+                    raise ValueError(f"campaign catalog VM22 table read target changed at pc {pc}: {table!r}")
                 stack.append(table.get(key))
             elif opcode == 248:
                 if not stack or not isinstance(stack[-1], (int, float)):
-                    raise ValueError(f"campaign base bot VM22 unary minus shape changed at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 unary minus shape changed at pc {pc}")
                 stack[-1] = -stack[-1]
             elif opcode == 156:
                 stack.append(operands[0] != 0)
             elif opcode == 67:
                 if pc != 2123 or ((operands[0] << 8) + operands[1]) != 578 or static_at(578) != "Kqb":
-                    raise ValueError(f"campaign base bot VM22 global write changed at pc {pc}: {operands}")
+                    raise ValueError(f"campaign catalog VM22 global write changed at pc {pc}: {operands}")
                 if not stack or stack.pop() is not True:
-                    raise ValueError("campaign base bot VM22 initialization guard no longer sets Kqb true")
+                    raise ValueError("campaign catalog VM22 initialization guard no longer sets Kqb true")
             elif opcode == 10:
                 if pc != 2117 or not stack or stack.pop() != ("global", "Kqb"):
-                    raise ValueError(f"campaign base bot VM22 initialization guard changed at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 initialization guard changed at pc {pc}")
             elif opcode == 221:
                 if pc != 2120:
-                    raise ValueError(f"campaign base bot VM22 gained unexpected return before bot catalog: {pc}")
+                    raise ValueError(f"campaign catalog VM22 gained unexpected return before authored catalog end: {pc}")
                 continue
             elif opcode == 42:
                 signature = operands[1]
                 argument_count = signature >> 4
                 return_count = signature & 15
                 if len(stack) < argument_count:
-                    raise ValueError(f"campaign base bot VM22 direct-call stack underflow at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 direct-call stack underflow at pc {pc}")
                 args = stack[-argument_count:] if argument_count else []
                 if argument_count:
                     del stack[-argument_count:]
@@ -7686,7 +7687,7 @@ def _extract_runtime_campaign_mechanics(
                 return_count = signature & 15
                 function_index = len(stack) - argument_count - 1
                 if function_index < 0:
-                    raise ValueError(f"campaign base bot VM22 indirect-call stack underflow at pc {pc}")
+                    raise ValueError(f"campaign catalog VM22 indirect-call stack underflow at pc {pc}")
                 function_value = stack[function_index]
                 args = stack[function_index + 1:]
                 del stack[function_index:]
@@ -7696,11 +7697,11 @@ def _extract_runtime_campaign_mechanics(
                     and function_value[0] == "global"
                 ):
                     raise ValueError(
-                        f"campaign base bot VM22 indirect callee stopped being a global at pc {pc}: {function_value!r}"
+                        f"campaign catalog VM22 indirect callee stopped being a global at pc {pc}: {function_value!r}"
                     )
                 finish_call(pc, str(function_value[1]), args, return_count)
             else:
-                raise ValueError(f"campaign base bot VM22 unsupported opcode before supplies at pc {pc}: {opcode}")
+                raise ValueError(f"campaign catalog VM22 unsupported opcode before final sort at pc {pc}: {opcode}")
         return calls
 
     def parse_campaign_enemy_bots(
@@ -7801,8 +7802,160 @@ def _extract_runtime_campaign_mechanics(
             bot["builder_object_id"] = builder_rawcode.to_bytes(4, "big").decode("latin1")
         return bots
 
+    vm22_catalog_calls = trace_campaign_vm22_catalog()
+
+    def parse_campaign_friendly_bots() -> list[dict[str, object]]:
+        bots: list[dict[str, object]] = []
+        bot_by_ref: dict[object, dict[str, object]] = {}
+        setter_fields = {
+            "CampaignBot_CampaignBot_displayName": "name",
+            "CampaignBot_CampaignBot_description": "description",
+            "CampaignBot_CampaignBot_icon": "icon_path",
+            "CampaignBot_CampaignBot_cost": "cost",
+            "CampaignBot_CampaignBot_builder": "builder_rawcode",
+            "CampaignBot_CampaignBot_skill": "skill",
+            "CampaignBot_CampaignBot_coop": "cooperation",
+            "CampaignBot_CampaignBot_speed": "speed",
+            "CampaignBot_CampaignBot_style": "style",
+        }
+        for call in vm22_catalog_calls:
+            callee = str(call["callee"])
+            args = list(call["args"])
+            result_ref = call["result"]
+            if callee == "addFriendlyBot__w3p_vmProtect":
+                if len(args) != 1 or not isinstance(args[0], str):
+                    raise ValueError(f"campaign friendly bot VM22 constructor shape changed: {args}")
+                bot = {
+                    "bot_id": args[0], "name": args[0], "description": "", "icon_path": "",
+                    "cost": 0, "builder_rawcode": 0, "skill": 1.0, "cooperation": 1.0,
+                    "speed": 1.0, "style": "Balanced", "building_preferences": [],
+                }
+                bots.append(bot)
+                if result_ref is None:
+                    raise ValueError("campaign friendly bot VM22 constructor stopped returning bot")
+                bot_by_ref[result_ref] = bot
+                continue
+            if callee in setter_fields:
+                if len(args) != 2 or args[0] not in bot_by_ref:
+                    continue
+                value = args[1]
+                if isinstance(value, tuple) and len(value) == 2 and value[0] == "global":
+                    symbol = str(value[1])
+                    if callee == "CampaignBot_CampaignBot_icon":
+                        value = decode_protected_string_global(symbol.encode("ascii"))
+                    elif callee == "CampaignBot_CampaignBot_builder":
+                        value = decode_numeric_global(symbol)
+                    else:
+                        raise ValueError(f"campaign friendly bot VM22 retained unresolved setter global: {callee}: {symbol}")
+                bot = bot_by_ref[args[0]]
+                bot[setter_fields[callee]] = value
+                if result_ref is not None:
+                    bot_by_ref[result_ref] = bot
+                continue
+            if callee == "CampaignBot_CampaignBot_preferBuilding":
+                if len(args) != 3 or args[0] not in bot_by_ref:
+                    continue
+                building_value = args[1]
+                if isinstance(building_value, tuple) and len(building_value) == 2 and building_value[0] == "global":
+                    building_value = decode_numeric_global(str(building_value[1]))
+                building_rawcode = int(building_value)
+                bot = bot_by_ref[args[0]]
+                bot["building_preferences"].append({
+                    "building_rawcode": building_rawcode,
+                    "building_object_id": building_rawcode.to_bytes(4, "big").decode("latin1"),
+                    "modifier": args[2],
+                })
+                if result_ref is not None:
+                    bot_by_ref[result_ref] = bot
+        if len(bots) != 16:
+            raise ValueError(f"campaign friendly bot VM22 count changed: {len(bots)}")
+        if len({str(bot["bot_id"]) for bot in bots}) != len(bots):
+            raise ValueError("campaign friendly bot VM22 contains duplicate ids")
+        for bot in bots:
+            builder_rawcode = int(bot["builder_rawcode"])
+            if builder_rawcode == 0:
+                raise ValueError(f"campaign friendly bot VM22 missing builder: {bot['bot_id']}")
+            bot["builder_object_id"] = builder_rawcode.to_bytes(4, "big").decode("latin1")
+        return bots
+
+    def resolve_vm22_string(value: object, context: str) -> object:
+        if isinstance(value, tuple) and len(value) == 2 and value[0] == "global":
+            return decode_protected_string_global(str(value[1]).encode("ascii"))
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        raise ValueError(f"campaign VM22 {context} retained unsupported value: {value!r}")
+
+    def parse_campaign_supplies() -> list[dict[str, object]]:
+        supplies: list[dict[str, object]] = []
+        for call in vm22_catalog_calls:
+            if call["callee"] != "addSupply__w3p_vmProtect":
+                continue
+            args = [resolve_vm22_string(value, "supply") for value in call["args"]]
+            if len(args) != 10:
+                raise ValueError(f"campaign supply VM22 constructor arity changed: {args}")
+            item_rawcode = int(args[8])
+            supplies.append({
+                "supply_id": args[0], "name": args[1], "description": args[2], "icon_path": args[3],
+                "cost": int(args[4]), "gold_bonus": int(args[5]), "lumber_bonus": int(args[6]),
+                "speed_bonus": args[7], "item_rawcode": item_rawcode,
+                "item_object_id": item_rawcode.to_bytes(4, "big").decode("latin1") if item_rawcode else None,
+                "perk_id": args[9],
+            })
+        if [supply["supply_id"] for supply in supplies] != [
+            "supply_build_drills", "supply_lumber_cache", "supply_cloud_machine",
+            "supply_tiny_tower", "supply_bassline",
+        ]:
+            raise ValueError(f"campaign VM22 supply catalog changed: {supplies}")
+        return supplies
+
+    def parse_campaign_placeholder_chapters() -> list[dict[str, object]]:
+        chapters: list[dict[str, object]] = []
+        chapters_by_ref: dict[object, dict[str, object]] = {}
+        for call in vm22_catalog_calls:
+            if int(call["pc"]) < 10109:
+                continue
+            callee = str(call["callee"])
+            args = list(call["args"])
+            if callee == "addChapter__w3p_vmProtect":
+                if len(args) != 5:
+                    raise ValueError(f"campaign placeholder chapter constructor changed: {args}")
+                chapter = {
+                    "chapter_id": args[0], "name": args[1], "description": args[2],
+                    "icon_path": resolve_vm22_string(args[3], "chapter icon"), "secret": bool(args[4]),
+                    "environment_theme": "", "races_unlocked_on_complete": [], "missions": [],
+                }
+                chapters.append(chapter)
+                chapters_by_ref[call["result"]] = chapter
+            elif callee == "CampaignChapter_CampaignChapter_unlocksRace":
+                if len(args) != 2 or args[0] not in chapters_by_ref:
+                    raise ValueError(f"campaign placeholder chapter race-unlock shape changed: {args}")
+                chapters_by_ref[args[0]]["races_unlocked_on_complete"].append(int(args[1]))
+            elif callee == "addMission__w3p_vmProtect":
+                if len(args) != 7 or args[0] not in chapters_by_ref:
+                    raise ValueError(f"campaign placeholder mission constructor changed: {args}")
+                chapter = chapters_by_ref[args[0]]
+                chapter["missions"].append({
+                    "mission_id": args[1], "name": args[2], "description": args[3],
+                    "icon_path": resolve_vm22_string(args[4], "placeholder mission icon"),
+                    "mode_string": args[5], "enemy_roster_ids": str(args[6]).split(",") if args[6] else [],
+                    "initially_unlocked": len(chapter["missions"]) == 0 and not bool(chapter["secret"]),
+                })
+        if [chapter["chapter_id"] for chapter in chapters] != ["chapter_3", "chapter_4"]:
+            raise ValueError(f"campaign placeholder chapter ids changed: {chapters}")
+        if any(len(chapter["missions"]) != 6 for chapter in chapters):
+            raise ValueError(f"campaign placeholder mission count changed: {chapters}")
+        for chapter in chapters:
+            chapter["races_unlocked_on_complete_object_ids"] = [
+                value.to_bytes(4, "big").decode("latin1")
+                for value in chapter["races_unlocked_on_complete"]
+            ]
+        return chapters
+
+    friendly_bots = parse_campaign_friendly_bots()
+    campaign_supplies = parse_campaign_supplies()
+    placeholder_chapters = parse_campaign_placeholder_chapters()
     base_enemy_bots = parse_campaign_enemy_bots(
-        22, 26, 14, calls_override=trace_campaign_base_enemy_bot_vm()
+        22, 26, 14, calls_override=vm22_catalog_calls
     )
     chapter_one_enemy_bots = parse_campaign_enemy_bots(30, 216, 22)
     chapter_two_enemy_bots = parse_campaign_enemy_bots(28, 188, 15)
@@ -7915,6 +8068,48 @@ def _extract_runtime_campaign_mechanics(
         "byte_offset": min(data.find(b"_fr(28,"), data.find(b"_fr(30,")),
     }
 
+    campaign_auxiliary_content_rawcodes: set[int] = set()
+    for bot in friendly_bots:
+        campaign_auxiliary_content_rawcodes.add(int(bot["builder_rawcode"]))
+        campaign_auxiliary_content_rawcodes.update(
+            int(preference["building_rawcode"])
+            for preference in bot["building_preferences"]
+        )
+    for supply in campaign_supplies:
+        if int(supply["item_rawcode"]):
+            campaign_auxiliary_content_rawcodes.add(int(supply["item_rawcode"]))
+    for chapter in placeholder_chapters:
+        campaign_auxiliary_content_rawcodes.update(int(value) for value in chapter["races_unlocked_on_complete"])
+
+    campaign_auxiliary_content_row: dict[str, object] = {
+        "system_id": "campaign-friendly-bot-supply-and-placeholder-content-catalog",
+        "mechanic_kind": "protected-versioned-campaign-friendly-bot-supply-and-placeholder-chapter-catalog",
+        "trigger": "campaign-content-initialization-vm22",
+        "parameters": {
+            "protected_campaign_content_vm": 22,
+            "friendly_bot_count": len(friendly_bots),
+            "supply_count": len(campaign_supplies),
+            "placeholder_chapter_count": len(placeholder_chapters),
+            "placeholder_mission_count": sum(len(chapter["missions"]) for chapter in placeholder_chapters),
+            "mission_initial_unlock_rule": "first mission in a non-secret chapter",
+            "friendly_bots": friendly_bots,
+            "supplies": campaign_supplies,
+            "placeholder_chapters": placeholder_chapters,
+        },
+        "related_rawcode_ids": sorted(campaign_auxiliary_content_rawcodes),
+        "source_functions": [
+            "ensureCampaignContent__w3p_vmProtect", "addFriendlyBot__w3p_vmProtect",
+            "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
+            "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_cost", "CampaignBot_CampaignBot_builder",
+            "CampaignBot_CampaignBot_skill", "CampaignBot_CampaignBot_coop", "CampaignBot_CampaignBot_speed",
+            "CampaignBot_CampaignBot_style", "CampaignBot_CampaignBot_preferBuilding",
+            "addSupply__w3p_vmProtect", "addChapter__w3p_vmProtect", "addMission__w3p_vmProtect",
+            "CampaignChapter_CampaignChapter_unlocksRace",
+        ],
+        "evidence_kind": "statically-symbolically-executed-fingerprinted-vm22-campaign-friendly-bots-supplies-and-placeholder-chapters",
+        "byte_offset": data.find(b"_fr(22,"),
+    }
+
     rescue_strike_wrapper = "recordCampaignRescueStrike__w3p_vmProtect"
     rescue_strike_static = _w3p_vm_static_strings(data, 27)
     rescue_strike_globals = [
@@ -7966,7 +8161,7 @@ def _extract_runtime_campaign_mechanics(
     ]
     offsets = [source(name, fragments)[0] for name, fragments in sources]
 
-    rows = [campaign_content_row, campaign_enemy_bot_row, {
+    rows = [campaign_content_row, campaign_enemy_bot_row, campaign_auxiliary_content_row, {
         "system_id": "campaign-star-restriction-failure-hooks",
         "mechanic_kind": "campaign-active-star-restriction-event-failure",
         "trigger": "tracked-building-death-challenge-bound-player-item-purchase-or-rescue-strike-use",

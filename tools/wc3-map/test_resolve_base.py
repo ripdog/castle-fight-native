@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 10)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 11)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -564,6 +564,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             {
                 "campaign-chapter-i-ii-content-catalog",
                 "campaign-chapter-i-ii-enemy-bot-catalog",
+                "campaign-friendly-bot-supply-and-placeholder-content-catalog",
                 "campaign-star-restriction-failure-hooks",
                 "campaign-round-start-state-reset",
                 "campaign-quit-and-replay-control",
@@ -635,6 +636,72 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(bots_by_id["enemy_hard_gale"]["building_preferences"][2]["modifier"], -0.55)
         self.assertEqual(bots_by_id["enemy_full_forge"]["building_preferences"][4]["building_name"], "Rocket Lab")
         self.assertEqual(bots_by_id["enemy_full_forge"]["building_preferences"][4]["modifier"], -0.8)
+
+        catalog = json.loads(rows["campaign-friendly-bot-supply-and-placeholder-content-catalog"]["parameters_json"])
+        self.assertEqual(catalog["protected_campaign_content_vm"], 22)
+        self.assertEqual(catalog["friendly_bot_count"], 16)
+        self.assertEqual(catalog["supply_count"], 5)
+        self.assertEqual(catalog["placeholder_chapter_count"], 2)
+        self.assertEqual(catalog["placeholder_mission_count"], 12)
+        friendly_by_id = {bot["bot_id"]: bot for bot in catalog["friendly_bots"]}
+        self.assertEqual(len(friendly_by_id), 16)
+        self.assertEqual(friendly_by_id["bot_jester"]["builder_name"], "Human Builder")
+        self.assertEqual(friendly_by_id["bot_maverick"]["builder_object_id"], "X07P")
+        self.assertEqual(friendly_by_id["bot_maverick"]["cooperation"], 0)
+        self.assertEqual(friendly_by_id["bot_paragon"]["cost"], 15)
+        bruiser_ogre_lord = [
+            preference
+            for preference in friendly_by_id["bot_bruiser"]["building_preferences"]
+            if preference["building_object_id"] == "n02O"
+        ]
+        self.assertEqual(
+            bruiser_ogre_lord,
+            [
+                {
+                    "building_rawcode": 1848652367,
+                    "building_object_id": "n02O",
+                    "modifier": 1.1,
+                    "building_name": "Den of the Ogre Lord",
+                },
+                {
+                    "building_rawcode": 1848652367,
+                    "building_object_id": "n02O",
+                    "modifier": 0.9,
+                    "building_name": "Den of the Ogre Lord",
+                },
+            ],
+        )
+        supplies_by_id = {supply["supply_id"]: supply for supply in catalog["supplies"]}
+        self.assertEqual(set(supplies_by_id), {
+            "supply_build_drills", "supply_lumber_cache", "supply_cloud_machine",
+            "supply_tiny_tower", "supply_bassline",
+        })
+        self.assertEqual(supplies_by_id["supply_build_drills"]["speed_bonus"], 0.1)
+        self.assertEqual(supplies_by_id["supply_lumber_cache"]["lumber_bonus"], 300)
+        self.assertEqual(supplies_by_id["supply_cloud_machine"]["perk_id"], "perk_02")
+        self.assertEqual(supplies_by_id["supply_tiny_tower"]["perk_id"], "perk_04")
+        self.assertEqual(supplies_by_id["supply_bassline"]["item_object_id"], "I00A")
+        self.assertEqual(supplies_by_id["supply_bassline"]["item_name"], "Drum'n'Bass Bassline Generator")
+        placeholder_by_id = {chapter["chapter_id"]: chapter for chapter in catalog["placeholder_chapters"]}
+        chapter_three = placeholder_by_id["chapter_3"]
+        chapter_four = placeholder_by_id["chapter_4"]
+        self.assertFalse(chapter_three["secret"])
+        self.assertEqual(
+            chapter_three["races_unlocked_on_complete_object_ids"],
+            ["X051", "X01A", "X078", "X07P"],
+        )
+        self.assertEqual(
+            chapter_three["races_unlocked_on_complete_names"],
+            ["Elemental Builder", "Nature Builder", "Desert Builder", "Pandaren Builder"],
+        )
+        self.assertTrue(chapter_three["missions"][0]["initially_unlocked"])
+        self.assertEqual(chapter_three["missions"][0]["name"], "Placeholder 3-1")
+        self.assertTrue(chapter_four["secret"])
+        self.assertTrue(all(not mission["initially_unlocked"] for mission in chapter_four["missions"]))
+        self.assertEqual(
+            {tuple(mission["enemy_roster_ids"]) for chapter in catalog["placeholder_chapters"] for mission in chapter["missions"]},
+            {("enemy_full_steel", "enemy_full_viper", "enemy_full_oracle")},
+        )
 
         parameters = json.loads(rows["campaign-star-restriction-failure-hooks"]["parameters_json"])
         self.assertEqual(parameters["active_restriction_scope"], ["second-star", "third-star"])
@@ -742,7 +809,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 10)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 11)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
