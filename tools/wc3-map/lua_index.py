@@ -731,6 +731,39 @@ def _extract_race_buildings(
     rows: list[dict[str, object]] = []
     seen_buildings: set[int] = set()
 
+    protected_sequences: dict[int, list[int]] = {}
+    if data.find(b"_fr(10,") >= 0:
+        protected_static = _w3p_vm_static_strings(data, 10)
+        if len(protected_static) != 31 or protected_static[-1] != "":
+            raise ValueError(f"protected CF race-building sequence table changed: {protected_static}")
+        for index in range(0, 30, 2):
+            try:
+                builder_id = int(protected_static[index])
+            except ValueError as error:
+                raise ValueError(f"protected CF race builder id is not numeric: {protected_static[index]!r}") from error
+            rawcodes = [rawcode for rawcode in protected_static[index + 1].split("|") if rawcode]
+            sequence: list[int] = []
+            for rawcode in rawcodes:
+                if len(rawcode) != 4:
+                    raise ValueError(f"protected CF race building rawcode is not four bytes: {rawcode!r}")
+                sequence.append(int.from_bytes(rawcode.encode("latin1"), "big"))
+            if builder_id in protected_sequences:
+                raise ValueError(f"duplicate builder in protected CF race-building sequence table: {builder_id}")
+            protected_sequences[builder_id] = sequence
+        expected_vm10_program: list[tuple[int, tuple[int, ...]]] = []
+        for pair_index in range(15):
+            expected_vm10_program.extend([
+                (253, (1,)), (144, ((pair_index * 2) + 1,)), (18, (16,)),
+                (10, (0, 4)), (46, ((pair_index * 2) + 2,)), (243, (1,)),
+            ])
+        expected_vm10_program.extend([(46, (31,)), (243, (1,)), (221, ())])
+        vm10_program = [
+            (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+            for instruction in _decode_w3p_vm_program(data, 10, expected_opcode_xor_byte=82)["instructions"]
+        ]
+        if vm10_program != expected_vm10_program:
+            raise ValueError("protected CF race-building sequence VM10 control flow changed")
+
     for race_index, function_name in enumerate(sorted(callers, key=lambda name: function_order.get(name, 1 << 62))):
         body = _function_body_tokens(data, functions, function_name)
         if body is None:
@@ -757,7 +790,7 @@ def _extract_race_buildings(
         if builder_id is None:
             raise ValueError(f"race initializer {function_name} has no positive builder rawcode")
 
-        building_order = 0
+        constructed: dict[int, tuple[int, int]] = {}
         for index, token in enumerate(tokens):
             if token.kind != "ident" or token.text != "_I":
                 continue
@@ -771,9 +804,79 @@ def _extract_race_buildings(
                 continue
             if building_id <= 0:
                 continue
+            if building_id in constructed:
+                raise ValueError(f"building {building_id} is constructed multiple times in race initializer {function_name}")
+            constructed[building_id] = (unit_id, function_start + token.start)
+
+        variable_buildings: dict[str, int] = {}
+        for index in range(len(tokens) - 2):
+            if tokens[index].kind != "ident" or tokens[index + 1].text != "=":
+                continue
+            expression_start = index + 2
+            try:
+                if tokens[expression_start].kind == "ident" and tokens[expression_start].text == "_I":
+                    _args, expression_end = _wurst_registry_call_arguments(tokens, expression_start)
+                elif (
+                    tokens[expression_start].kind == "ident"
+                    and expression_start + 1 < len(tokens)
+                    and tokens[expression_start + 1].text == "("
+                ):
+                    _args, expression_end = _call_arguments(tokens, expression_start)
+                else:
+                    continue
+            except ValueError:
+                continue
+            building_id = _building_id_from_expression(tokens[expression_start:expression_end])
+            if building_id is not None and building_id in constructed:
+                variable_buildings[tokens[index].text] = building_id
+
+        registrar_calls: list[list[list[LuaToken]]] = []
+        for index, token in enumerate(tokens):
+            if token.kind == "ident" and token.text == registrar:
+                args, _next = _call_arguments(tokens, index)
+                registrar_calls.append(args)
+        if len(registrar_calls) != 1:
+            raise ValueError(f"race initializer {function_name} has {len(registrar_calls)} registrar calls")
+        registrar_args = registrar_calls[0]
+        if len(registrar_args) < 2:
+            raise ValueError(f"race initializer {function_name} registrar has no building arguments")
+
+        registered_buildings: list[int] = []
+        for argument in registrar_args[1:]:
+            building_id = _building_id_from_expression(argument)
+            if building_id is None and len(argument) == 1 and argument[0].kind == "ident":
+                building_id = variable_buildings.get(argument[0].text)
+            if building_id is None or building_id not in constructed:
+                expression = "".join(token.text for token in argument)
+                raise ValueError(
+                    f"race initializer {function_name} registrar argument does not resolve to a constructed building: {expression!r}"
+                )
+            if building_id in registered_buildings:
+                raise ValueError(f"race initializer {function_name} registers building {building_id} more than once")
+            registered_buildings.append(building_id)
+
+        if set(registered_buildings) != set(constructed):
+            missing = sorted(set(constructed) - set(registered_buildings))
+            extra = sorted(set(registered_buildings) - set(constructed))
+            raise ValueError(
+                f"race initializer {function_name} constructed/registered building sets differ: missing={missing} extra={extra}"
+            )
+        if protected_sequences:
+            protected_sequence = protected_sequences.get(builder_id)
+            if protected_sequence is None:
+                raise ValueError(f"race initializer {function_name} builder is absent from protected VM10: {builder_id}")
+            if registered_buildings != protected_sequence:
+                actual = [value.to_bytes(4, "big").decode("latin1") for value in registered_buildings]
+                expected = [value.to_bytes(4, "big").decode("latin1") for value in protected_sequence]
+                raise ValueError(
+                    f"race initializer {function_name} registration order disagrees with protected VM10: {actual} != {expected}"
+                )
+
+        for building_order, building_id in enumerate(registered_buildings):
             if building_id in seen_buildings:
                 raise ValueError(f"building {building_id} appears in multiple generated race catalogs")
             seen_buildings.add(building_id)
+            unit_id, byte_offset = constructed[building_id]
             rows.append({
                 "race_index": race_index,
                 "race_function": function_name,
@@ -782,10 +885,13 @@ def _extract_race_buildings(
                 "building_order": building_order,
                 "building_id": building_id,
                 "unit_id": unit_id,
-                "byte_offset": function_start + token.start,
+                "byte_offset": byte_offset,
             })
-            building_order += 1
 
+    if protected_sequences and set(protected_sequences) != {
+        int(row["builder_id"]) for row in rows
+    }:
+        raise ValueError("protected VM10 builders do not exactly match generated race catalogs")
     return rows
 
 

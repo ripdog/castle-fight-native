@@ -2401,6 +2401,32 @@ class ResolvedEvidenceTests(unittest.TestCase):
             ],
         )
 
+        with (self.script / "race-buildings.tsv").open(encoding="utf-8") as handle:
+            race_rows = list(csv.DictReader(handle, delimiter="\t"))
+        registration_order: dict[str, list[str]] = {}
+        for row in race_rows:
+            registration_order.setdefault(row["builder_rawcode"], []).append(row["building_rawcode"])
+        self.assertEqual(
+            registration_order["X00O"],
+            ["h01I", "h026", "h06O", "h01D", "h03G", "h01M", "h01W", "h01X", "h01C", "h025", "h009", "h007", "h01F", "h05I", "h01E"],
+        )
+        self.assertEqual(
+            registration_order["X00P"],
+            ["h08X", "h08Y", "h00T", "h03F", "h00V", "h06Y", "h070", "h09X", "h00X", "h00Z", "h005", "h014", "h059"],
+        )
+        self.assertEqual(
+            registration_order["X06P"],
+            ["h05J", "h09L", "h05X", "h09J", "h09I", "h09B", "h09H", "h05M", "h077", "h05T", "h09P", "h05V", "h097", "h05U", "h06Z", "h09T", "h069", "h05L", "h06J", "h05R"],
+        )
+        self.assertEqual(
+            registration_order["X01A"],
+            ["h002", "h00Q", "h00R", "h00Y", "h012", "h013", "h01H", "h01J", "h023", "h024", "h027", "h028", "h02C", "h02A", "n02D", "h02D", "h071"],
+        )
+        self.assertEqual(
+            registration_order["X018"],
+            ["h01R", "h04Z", "h03M", "h01K", "h04B", "h055", "h01N", "h054", "h01L", "h01T", "h01S", "h00A", "h01P", "h056", "h01O", "h01Q"],
+        )
+
         with (self.resolved / "production-buildings.tsv").open(encoding="utf-8") as handle:
             rows = {row["building_rawcode"]: row for row in csv.DictReader(handle, delimiter="\t")}
         self.assertEqual(len(rows), 240)
