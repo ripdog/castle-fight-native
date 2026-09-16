@@ -5,6 +5,7 @@ use crate::{
     AuthoritativeSimulation, SelectedMatch,
     bridge::PresentationSamples,
     build_ui::{ActionPanelMode, ActionPanelState},
+    debug_menu::DebugMenuState,
     inspection::InspectionSelection,
     presentation::{CameraFocusRequest, FpsDisplay, player_color},
     ui_icons::{UiIconAssets, UiIconKey},
@@ -288,12 +289,15 @@ fn controllable_builder_shortcuts(
     simulation: &Simulation,
     local_player: PlayerId,
     presentation: &PresentationSamples,
+    control_all_players: bool,
 ) -> Vec<BuilderShortcutSpec> {
     let mut shortcuts = presentation
         .current
         .builders
         .values()
-        .filter(|builder| simulation.can_player_control_builder(local_player, builder.id))
+        .filter(|builder| {
+            control_all_players || simulation.can_player_control_builder(local_player, builder.id)
+        })
         .map(|builder| BuilderShortcutSpec {
             id: builder.id,
             owner: builder.owner,
@@ -319,6 +323,7 @@ struct BuilderShortcutSyncResources<'w> {
     authoritative: Res<'w, AuthoritativeSimulation>,
     selected_match: Res<'w, SelectedMatch>,
     presentation: Res<'w, PresentationSamples>,
+    debug_menu: Option<Res<'w, DebugMenuState>>,
     asset_server: Option<Res<'w, AssetServer>>,
     icon_assets: Option<ResMut<'w, UiIconAssets>>,
     state: ResMut<'w, BuilderShortcutState>,
@@ -333,6 +338,10 @@ fn sync_builder_shortcuts(
         &resources.authoritative.simulation,
         resources.selected_match.local_player,
         &resources.presentation,
+        resources
+            .debug_menu
+            .as_deref()
+            .is_some_and(DebugMenuState::controls_all_players),
     );
     if next == resources.state.entries {
         return;
@@ -651,11 +660,18 @@ mod tests {
         );
         let presentation = PresentationSamples::new(PresentationSnapshot::capture(&simulation));
 
-        let shortcuts = controllable_builder_shortcuts(&simulation, PlayerId(0), &presentation);
+        let shortcuts =
+            controllable_builder_shortcuts(&simulation, PlayerId(0), &presentation, false);
         assert_eq!(shortcuts.len(), 1);
         assert_eq!(shortcuts[0].id, own);
         assert_eq!(shortcuts[0].owner, PlayerId(0));
         assert_eq!(shortcuts[0].rawcode, u32::from_be_bytes(*b"X00C"));
+
+        let all_shortcuts =
+            controllable_builder_shortcuts(&simulation, PlayerId(0), &presentation, true);
+        assert_eq!(all_shortcuts.len(), 2);
+        assert_eq!(all_shortcuts[0].owner, PlayerId(0));
+        assert_eq!(all_shortcuts[1].owner, PlayerId(1));
     }
 
     #[test]

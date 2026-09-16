@@ -78,8 +78,13 @@ fn handle_selection_commands(
         && let Some(builder) = resources.presentation.current.builders.get(&actor).copied()
     {
         let enabled = !builder.repair_autocast_enabled;
-        let submission = resources.authoritative.submit_local_command(
+        let controller = resources.debug_menu.controller_for_actor(
+            &resources.authoritative.simulation,
             resources.selected_match.local_player,
+            actor,
+        );
+        let submission = resources.authoritative.submit_local_command(
+            controller,
             PlayerCommand::SetBuilderRepairAutocast {
                 builder: actor,
                 enabled,
@@ -146,8 +151,13 @@ fn handle_modal_left_click(
                 return;
             };
             let destination = world_to_sim_point(world);
-            let submission = resources.authoritative.submit_local_command(
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
                 resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
                 PlayerCommand::MoveBuilder {
                     builder: actor,
                     destination,
@@ -168,8 +178,13 @@ fn handle_modal_left_click(
                 return;
             };
             let destination = world_to_sim_point(world);
-            let submission = resources.authoritative.submit_local_command(
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
                 resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
                 PlayerCommand::BlinkBuilder {
                     builder: actor,
                     destination,
@@ -228,8 +243,13 @@ fn handle_modal_left_click(
                     "Repair requires a friendly building or mechanical unit.".into();
                 return;
             };
-            let submission = resources.authoritative.submit_local_command(
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
                 resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
                 PlayerCommand::RepairWithBuilder {
                     builder: actor,
                     target,
@@ -293,8 +313,13 @@ fn handle_modal_left_click(
                 resources.action_panel.status = "Attack requires an enemy target.".into();
                 return;
             };
-            let submission = resources.authoritative.submit_local_command(
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
                 resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
                 PlayerCommand::AttackWithBuilding {
                     building: actor,
                     target,
@@ -331,8 +356,13 @@ fn handle_modal_left_click(
                         .into();
                 return;
             }
-            let submission = resources.authoritative.submit_local_command(
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
                 resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
                 PlayerCommand::PlaceBuilding {
                     builder: actor,
                     building: kind.shared().stable_id(),
@@ -477,9 +507,14 @@ fn handle_smart_right_click(
         ),
         SmartRightClickAction::None => return,
     };
+    let controller = resources.debug_menu.controller_for_actor(
+        &resources.authoritative.simulation,
+        resources.selected_match.local_player,
+        actor,
+    );
     let submission = resources
         .authoritative
-        .submit_local_command(resources.selected_match.local_player, command);
+        .submit_local_command(controller, command);
     resources.action_panel.status =
         match command_submission_status(submission, accepted, rejected_prefix) {
             Ok(status) | Err(status) => status,

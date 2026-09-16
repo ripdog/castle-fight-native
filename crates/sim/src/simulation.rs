@@ -537,6 +537,7 @@ pub struct Simulation {
     next_tick: u64,
     next_id: u64,
     configuration_identity: u64,
+    debug_buildings_invulnerable: bool,
 }
 
 impl Simulation {
@@ -672,6 +673,7 @@ impl Simulation {
             next_tick: 0,
             next_id: 1,
             configuration_identity,
+            debug_buildings_invulnerable: false,
         }
     }
 
@@ -776,6 +778,20 @@ impl Simulation {
             resources: player.resources,
             connection: player.connection,
         })
+    }
+
+    /// Enables or disables developer-tool building damage immunity.
+    ///
+    /// This is intentionally a non-match-config runtime flag for offline debugging. It suppresses
+    /// health loss only: buildings remain targetable, attacks still resolve, and projectile/on-hit
+    /// behavior continues normally.
+    pub fn debug_set_buildings_invulnerable(&mut self, enabled: bool) {
+        self.debug_buildings_invulnerable = enabled;
+    }
+
+    #[must_use]
+    pub const fn debug_buildings_invulnerable(&self) -> bool {
+        self.debug_buildings_invulnerable
     }
 
     /// Applies direct developer-tool damage to every live combat unit.
@@ -3580,6 +3596,7 @@ fn apply_damage_to_target(
     damage: i32,
     damage_type: DamageType,
     completed_tick: u64,
+    buildings_invulnerable: bool,
     state: DamageTargetState<'_>,
 ) -> Option<SimPoint> {
     match target {
@@ -3617,13 +3634,16 @@ fn apply_damage_to_target(
             if state.building_health[index] <= 0 {
                 return None;
             }
-            let adjusted_damage =
-                state
-                    .damage_rules
-                    .apply_attack(damage, damage_type, state.buildings[index].armor);
-            state.building_health[index] = state.building_health[index]
-                .checked_sub(adjusted_damage)
-                .expect("building damage arithmetic overflowed validated bounds");
+            if !buildings_invulnerable {
+                let adjusted_damage = state.damage_rules.apply_attack(
+                    damage,
+                    damage_type,
+                    state.buildings[index].armor,
+                );
+                state.building_health[index] = state.building_health[index]
+                    .checked_sub(adjusted_damage)
+                    .expect("building damage arithmetic overflowed validated bounds");
+            }
             Some(footprint_center_point(
                 state.buildings[index].footprint,
                 state.navigation_cell_size,

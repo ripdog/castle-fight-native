@@ -85,6 +85,7 @@ impl Simulation {
                             damage,
                             intent.damage_type,
                             completed_tick,
+                            self.debug_buildings_invulnerable,
                             DamageTargetState {
                                 damage_rules: self.combat_rules.damage_rules,
                                 units,

@@ -296,6 +296,7 @@ impl Simulation {
                         defense.damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
+                        self.debug_buildings_invulnerable,
                         DamageTargetState {
                             damage_rules: self.combat_rules.damage_rules,
                             units,
@@ -352,6 +353,7 @@ impl Simulation {
                         snapshot.projectile.damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
+                        self.debug_buildings_invulnerable,
                         DamageTargetState {
                             damage_rules: self.combat_rules.damage_rules,
                             units,
@@ -440,6 +442,7 @@ impl Simulation {
                         defense.damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
+                        self.debug_buildings_invulnerable,
                         DamageTargetState {
                             damage_rules: self.combat_rules.damage_rules,
                             units,
@@ -630,6 +633,7 @@ impl Simulation {
                         damage,
                         snapshot.projectile.damage_type,
                         completed_tick,
+                        self.debug_buildings_invulnerable,
                         DamageTargetState {
                             damage_rules: self.combat_rules.damage_rules,
                             units,
@@ -865,7 +869,7 @@ impl Simulation {
                             .expect("Burning Oil unit damage overflow");
                     }
                 }
-                if zone.profile.target_buildings {
+                if zone.profile.target_buildings && !self.debug_buildings_invulnerable {
                     for building in buildings.iter_mut() {
                         if building.health <= 0 || building.team == zone.source_team {
                             continue;

@@ -1344,6 +1344,55 @@ mod tests {
     }
 
     #[test]
+    fn debug_building_invulnerability_preserves_attacks_but_blocks_damage() {
+        let mut sim = Simulation::new_with_combat_rules(
+            SimulationConfig::default(),
+            2,
+            CombatRules {
+                damage_rules: castle_fight_damage_rules(),
+                ..CombatRules::default()
+            },
+        );
+        let catapult = CastleFightUnitKind::Catapult.definition();
+        sim.spawn_unit_with_properties(
+            UnitSpawn::from_template(
+                Team(0),
+                SimPoint::new(40 * SUBUNITS_PER_WORLD_UNIT, 0),
+                catapult.template(),
+            ),
+            catapult.gameplay_properties(),
+        );
+        let tower = CastleFightTowerKind::WatchTower.definition();
+        let target = sim.spawn_building_with_properties(
+            tower.spawn(Team(1), BuildingFootprint::new(80, 0, 4, 4)),
+            tower.gameplay_properties(),
+        );
+
+        sim.debug_set_buildings_invulnerable(true);
+        assert!(sim.debug_buildings_invulnerable());
+        let mut attacked_while_invulnerable = false;
+        for _ in 0..20 {
+            sim.step();
+            attacked_while_invulnerable |= sim
+                .attacks_last_tick()
+                .iter()
+                .any(|event| event.target == target);
+        }
+        assert!(attacked_while_invulnerable);
+        assert_eq!(sim.building(target).unwrap().health, tower.health);
+
+        sim.debug_set_buildings_invulnerable(false);
+        assert!(!sim.debug_buildings_invulnerable());
+        for _ in 0..100 {
+            sim.step();
+            if sim.building(target).unwrap().health < tower.health {
+                break;
+            }
+        }
+        assert!(sim.building(target).unwrap().health < tower.health);
+    }
+
+    #[test]
     fn castle_fight_spell_damage_uses_spell_row_but_ignores_numeric_armor() {
         let mut sim = Simulation::new_with_combat_rules(
             SimulationConfig::default(),

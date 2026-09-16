@@ -1103,6 +1103,7 @@ fn finish_snapshot_catch_up(
 
 fn sync_local_command_feedback(
     selected_match: Res<SelectedMatch>,
+    debug_menu: Res<debug_menu::DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut action_panel: ResMut<ActionPanelState>,
 ) {
@@ -1111,7 +1112,9 @@ fn sync_local_command_feedback(
     }
     let feedback = std::mem::take(&mut authoritative.pending_feedback);
     for execution in feedback {
-        if execution.scheduled.player != selected_match.local_player {
+        if execution.scheduled.player != selected_match.local_player
+            && !debug_menu.controls_all_players()
+        {
             continue;
         }
         action_panel.status = local_command_feedback_text(execution);

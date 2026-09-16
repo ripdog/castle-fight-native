@@ -454,24 +454,25 @@ fn sync_action_panel_to_selection(
     samples: Res<PresentationSamples>,
     authoritative: Res<AuthoritativeSimulation>,
     selected_match: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
     mut state: ResMut<ActionPanelState>,
     mut panel: Single<&mut Visibility, With<ActionPanel>>,
 ) {
     let selected = inspection.selected;
     let relevant = selected.and_then(|id| {
         if let Some(builder) = samples.current.builders.get(&id) {
-            return authoritative
-                .simulation
-                .can_player_control_builder(selected_match.local_player, id)
+            return debug_menu
+                .can_control_builder(&authoritative.simulation, selected_match.local_player, id)
                 .then_some((id, builder.team));
         }
         samples.current.buildings.get(&id).and_then(|building| {
-            (authoritative
-                .simulation
-                .can_player_control_building(selected_match.local_player, id)
-                && (building.construction_complete_tick.is_some()
-                    || building_is_controllable_production(building, selected_match.content)
-                    || building_is_controllable_tower(building, selected_match.content)))
+            (debug_menu.can_control_building(
+                &authoritative.simulation,
+                selected_match.local_player,
+                id,
+            ) && (building.construction_complete_tick.is_some()
+                || building_is_controllable_production(building, selected_match.content)
+                || building_is_controllable_tower(building, selected_match.content)))
             .then_some((id, building.team))
         })
     });
@@ -499,6 +500,7 @@ fn sync_action_panel_to_selection(
 fn handle_escape(
     keys: Res<ButtonInput<KeyCode>>,
     selected_match: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut state: ResMut<ActionPanelState>,
 ) {
@@ -517,12 +519,12 @@ fn handle_escape(
         .building(actor)
         .is_some_and(|building| building.construction_complete_tick.is_some())
     {
-        cancel_selected_construction(
-            &mut authoritative,
-            &mut state,
+        let controller = debug_menu.controller_for_actor(
+            &authoritative.simulation,
             selected_match.local_player,
             actor,
         );
+        cancel_selected_construction(&mut authoritative, &mut state, controller, actor);
     }
 }
 
@@ -758,6 +760,7 @@ fn action_layout(
 fn handle_action_panel_buttons(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     selected_match: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut state: ResMut<ActionPanelState>,
     actions: ActionInteractions,
@@ -799,8 +802,13 @@ fn handle_action_panel_buttons(
                     .content
                     .production_building(target)
                     .expect("upgrade target must belong to selected bundle");
-                let submission = authoritative.submit_local_command(
+                let controller = debug_menu.controller_for_actor(
+                    &authoritative.simulation,
                     selected_match.local_player,
+                    actor,
+                );
+                let submission = authoritative.submit_local_command(
+                    controller,
                     PlayerCommand::UpgradeBuilding {
                         building: actor,
                         target: target.stable_id(),
@@ -854,12 +862,12 @@ fn handle_action_panel_buttons(
                 let Some(actor) = state.actor else {
                     continue;
                 };
-                cancel_selected_construction(
-                    &mut authoritative,
-                    &mut state,
+                let controller = debug_menu.controller_for_actor(
+                    &authoritative.simulation,
                     selected_match.local_player,
                     actor,
                 );
+                cancel_selected_construction(&mut authoritative, &mut state, controller, actor);
             }
             PanelAction::Cancel => state.cancel_modal(),
         }
@@ -869,6 +877,7 @@ fn handle_action_panel_buttons(
 fn handle_action_panel_right_click(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     selected_match: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
     mut state: ResMut<ActionPanelState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     presentation: Res<PresentationSamples>,
@@ -891,8 +900,13 @@ fn handle_action_panel_right_click(
     };
 
     let enabled = !builder.repair_autocast_enabled;
-    let submission = authoritative.submit_local_command(
+    let controller = debug_menu.controller_for_actor(
+        &authoritative.simulation,
         selected_match.local_player,
+        actor,
+    );
+    let submission = authoritative.submit_local_command(
+        controller,
         PlayerCommand::SetBuilderRepairAutocast {
             builder: actor,
             enabled,

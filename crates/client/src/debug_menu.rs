@@ -1,5 +1,5 @@
 use bevy::{prelude::*, time::Fixed};
-use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, Team};
+use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, PlayerId, SimId, Simulation};
 
 use crate::{
     AuthoritativeSimulation, SimulationPlayback, advance_authoritative_simulation_once,
@@ -10,7 +10,7 @@ use crate::{
 const PANEL_LEFT: f32 = 12.0;
 const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
 const PANEL_WIDTH: f32 = 360.0;
-const PANEL_HEIGHT: f32 = 364.0;
+const PANEL_HEIGHT: f32 = 452.0;
 const PANEL_PADDING: f32 = 12.0;
 const BUTTON_HEIGHT: f32 = 38.0;
 const BUTTON_GAP: f32 = 6.0;
@@ -73,6 +73,8 @@ impl DebugSpeed {
 pub(crate) struct DebugMenuState {
     open: bool,
     speed: DebugSpeed,
+    control_all_players: bool,
+    buildings_invulnerable: bool,
     status: String,
 }
 
@@ -81,6 +83,8 @@ impl Default for DebugMenuState {
         Self {
             open: false,
             speed: DebugSpeed::Normal,
+            control_all_players: false,
+            buildings_invulnerable: false,
             status: "F8 closes this menu.".into(),
         }
     }
@@ -90,6 +94,8 @@ impl Default for DebugMenuState {
 enum DebugAction {
     GrantResources,
     KillAllUnits,
+    ToggleControlAllPlayers,
+    ToggleBuildingsInvulnerable,
     TogglePause,
     StepOneTick,
     SetSpeed(DebugSpeed),
@@ -165,6 +171,18 @@ fn setup_debug_menu(mut commands: Commands) {
                 panel,
                 DebugAction::KillAllUnits,
                 "Kill all units (9999 damage)",
+                percent(100.0),
+            );
+            spawn_debug_button(
+                panel,
+                DebugAction::ToggleControlAllPlayers,
+                "Control all players: OFF",
+                percent(100.0),
+            );
+            spawn_debug_button(
+                panel,
+                DebugAction::ToggleBuildingsInvulnerable,
+                "Buildings invulnerable: OFF",
                 percent(100.0),
             );
             spawn_debug_button(
@@ -283,16 +301,20 @@ fn handle_debug_buttons(
         }
         match button.0 {
             DebugAction::GrantResources => {
-                for team in [Team(0), Team(1)] {
-                    let granted = authoritative.simulation.debug_grant_player_resources(
-                        team,
+                let players = authoritative.simulation.players();
+                for player in &players {
+                    let granted = authoritative.simulation.debug_grant_player_resources_for(
+                        player.id,
                         DEBUG_RESOURCE_GRANT,
                         DEBUG_RESOURCE_GRANT,
                     );
-                    debug_assert!(granted, "the debug client expects two valid player teams");
+                    debug_assert!(granted, "listed debug player must have economy state");
                 }
                 presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
-                state.status = "Granted every player +1,000,000 gold and +1,000,000 lumber.".into();
+                state.status = format!(
+                    "Granted all {} players +1,000,000 gold and +1,000,000 lumber.",
+                    players.len()
+                );
             }
             DebugAction::KillAllUnits => {
                 let affected = authoritative
@@ -301,6 +323,37 @@ fn handle_debug_buttons(
                 presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
                 state.status =
                     format!("Dealt {DEBUG_KILL_DAMAGE} damage to {affected} combat units.");
+            }
+            DebugAction::ToggleControlAllPlayers => {
+                if authoritative.is_networked() {
+                    state.status =
+                        "Control-all-players is offline-only; the server owns network authority."
+                            .into();
+                    continue;
+                }
+                state.control_all_players = !state.control_all_players;
+                state.status = if state.control_all_players {
+                    "Debug control enabled for every player-owned builder and building.".into()
+                } else {
+                    "Debug control restored to normal player authority.".into()
+                };
+            }
+            DebugAction::ToggleBuildingsInvulnerable => {
+                if authoritative.is_networked() {
+                    state.status =
+                        "Building invulnerability is offline-only; the server owns network state."
+                            .into();
+                    continue;
+                }
+                state.buildings_invulnerable = !state.buildings_invulnerable;
+                authoritative
+                    .simulation
+                    .debug_set_buildings_invulnerable(state.buildings_invulnerable);
+                state.status = if state.buildings_invulnerable {
+                    "All buildings are targetable but take zero damage.".into()
+                } else {
+                    "Building damage restored to normal.".into()
+                };
             }
             DebugAction::TogglePause => {
                 playback.paused = !playback.paused;
@@ -355,20 +408,32 @@ fn update_debug_menu(
     }
 
     for (button, children) in &buttons {
-        if button.0 != DebugAction::TogglePause {
-            continue;
-        }
-        if let Some(child) = children.first()
-            && let Ok(mut label) = labels.get_mut(*child)
-        {
-            let desired = if playback.paused {
+        let desired = match button.0 {
+            DebugAction::TogglePause => Some(if playback.paused {
                 "Resume simulation"
             } else {
                 "Pause simulation"
-            };
-            if label.0 != desired {
-                label.0 = desired.into();
-            }
+            }),
+            DebugAction::ToggleControlAllPlayers => Some(if state.control_all_players {
+                "Control all players: ON"
+            } else {
+                "Control all players: OFF"
+            }),
+            DebugAction::ToggleBuildingsInvulnerable => Some(if state.buildings_invulnerable {
+                "Buildings invulnerable: ON"
+            } else {
+                "Buildings invulnerable: OFF"
+            }),
+            _ => None,
+        };
+        let Some(desired) = desired else {
+            continue;
+        };
+        if let Some(child) = children.first()
+            && let Ok(mut label) = labels.get_mut(*child)
+            && label.0 != desired
+        {
+            label.0 = desired.into();
         }
     }
 
@@ -395,7 +460,10 @@ fn style_debug_buttons(
 
     for (button, interaction, mut background, mut border, children) in &mut buttons {
         let disabled = button.0 == DebugAction::StepOneTick && !playback.paused;
-        let selected = matches!(button.0, DebugAction::SetSpeed(speed) if speed == state.speed);
+        let selected = matches!(button.0, DebugAction::SetSpeed(speed) if speed == state.speed)
+            || (button.0 == DebugAction::ToggleControlAllPlayers && state.control_all_players)
+            || (button.0 == DebugAction::ToggleBuildingsInvulnerable
+                && state.buildings_invulnerable);
         background.0 = if disabled {
             BUTTON_DISABLED
         } else if selected {
@@ -430,6 +498,53 @@ pub(crate) fn cursor_over_debug_menu(cursor: Vec2, menu_open: bool) -> bool {
 impl DebugMenuState {
     pub(crate) const fn is_open(&self) -> bool {
         self.open
+    }
+
+    pub(crate) const fn controls_all_players(&self) -> bool {
+        self.control_all_players
+    }
+
+    pub(crate) fn can_control_builder(
+        &self,
+        simulation: &Simulation,
+        local_player: PlayerId,
+        builder: SimId,
+    ) -> bool {
+        self.control_all_players && simulation.builder(builder).is_some()
+            || simulation.can_player_control_builder(local_player, builder)
+    }
+
+    pub(crate) fn can_control_building(
+        &self,
+        simulation: &Simulation,
+        local_player: PlayerId,
+        building: SimId,
+    ) -> bool {
+        self.control_all_players
+            && simulation
+                .building(building)
+                .is_some_and(|building| building.owner.is_some())
+            || simulation.can_player_control_building(local_player, building)
+    }
+
+    pub(crate) fn controller_for_actor(
+        &self,
+        simulation: &Simulation,
+        local_player: PlayerId,
+        actor: SimId,
+    ) -> PlayerId {
+        if !self.control_all_players {
+            return local_player;
+        }
+        simulation
+            .builder(actor)
+            .map(|builder| builder.owner)
+            .or_else(|| {
+                simulation
+                    .building(actor)
+                    .and_then(|building| building.owner)
+            })
+            .unwrap_or(local_player)
     }
 }
 
