@@ -1922,6 +1922,7 @@ name = "castle-fight-client"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "castle-fight-protocol",
  "castle-fight-sim",
  "serde",
  "serde_json",
@@ -1932,6 +1933,23 @@ name = "castle-fight-debug-viewer"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "castle-fight-sim",
+]
+
+[[package]]
+name = "castle-fight-protocol"
+version = "0.1.0"
+dependencies = [
+ "castle-fight-sim",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "castle-fight-server"
+version = "0.1.0"
+dependencies = [
+ "castle-fight-protocol",
  "castle-fight-sim",
 ]
 

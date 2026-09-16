@@ -3,7 +3,7 @@ use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWin
 use castle_fight_sim::{BuildPosition, CommandSubmission, PlayerCommand};
 
 use crate::{
-    AuthoritativeSimulation, SelectedMatch, SimulationPlayback,
+    AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
     build_ui::{
         ActionPanelMode, ActionPanelState, TargetingAction, cursor_over_action_panel,
@@ -598,19 +598,24 @@ fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
 }
 
 fn command_submission_status(
-    submission: CommandSubmission,
+    submission: ClientCommandSubmission,
     accepted: String,
     rejected_prefix: &str,
 ) -> Result<String, String> {
     match submission {
-        CommandSubmission::Scheduled(command) => Ok(format!("{accepted} [tick {}]", command.tick)),
-        CommandSubmission::DuplicateScheduled(command) => Ok(format!(
-            "{accepted} [already scheduled for tick {}]",
-            command.tick
-        )),
-        CommandSubmission::Rejected(error) | CommandSubmission::DuplicateRejected(error) => {
-            Err(format!("{rejected_prefix}: {error:?}."))
+        ClientCommandSubmission::Local(CommandSubmission::Scheduled(command)) => {
+            Ok(format!("{accepted} [tick {}]", command.tick))
         }
+        ClientCommandSubmission::Local(CommandSubmission::DuplicateScheduled(command)) => Ok(
+            format!("{accepted} [already scheduled for tick {}]", command.tick),
+        ),
+        ClientCommandSubmission::Local(
+            CommandSubmission::Rejected(error) | CommandSubmission::DuplicateRejected(error),
+        ) => Err(format!("{rejected_prefix}: {error:?}.")),
+        ClientCommandSubmission::Submitted { client_sequence } => {
+            Ok(format!("{accepted} [submitted #{client_sequence}]"))
+        }
+        ClientCommandSubmission::Failed => Err(format!("{rejected_prefix}: network unavailable.")),
     }
 }
 

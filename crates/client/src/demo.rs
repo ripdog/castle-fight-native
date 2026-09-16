@@ -1,10 +1,12 @@
 use castle_fight_sim::{
     BuildingEconomyProfile, CastleFightBuildingKind, CastleFightContentBundle,
     CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightProductionKind,
-    CastleFightTowerKind, CastleFightUnitKind, CommandCardPosition, MapVersion,
-    SUBUNITS_PER_WORLD_UNIT, SimPoint, Simulation, Team, TerrainElevationMap,
-    create_castle_fight_match,
+    CastleFightTowerKind, CastleFightUnitKind, CommandCardPosition, SUBUNITS_PER_WORLD_UNIT,
+    SimPoint, Simulation, Team, TerrainElevationMap, create_castle_fight_match,
 };
+
+#[cfg(test)]
+use castle_fight_sim::MapVersion;
 
 use crate::presentation::WorldMetrics;
 
@@ -12,7 +14,7 @@ const CAMERA_MIN_X_WORLD: i32 = -5_888;
 const CAMERA_MAX_X_WORLD: i32 = 5_888;
 const CAMERA_MIN_Y_WORLD: i32 = -3_328;
 const CAMERA_MAX_Y_WORLD: i32 = 3_328;
-const DEVELOPMENT_MATCH_SEED: u64 = 0x4341_5354_4c45;
+pub const DEVELOPMENT_MATCH_SEED: u64 = 0x4341_5354_4c45;
 
 pub struct DemoWorld {
     pub simulation: Simulation,
@@ -31,6 +33,7 @@ pub fn create_demo_world(workers: usize, stress_units: Option<usize>) -> DemoWor
         .expect("default development release must remain playable")
 }
 
+#[cfg(test)]
 pub fn create_demo_world_for_version(
     workers: usize,
     stress_units: Option<usize>,
@@ -42,6 +45,14 @@ pub fn create_demo_world_for_version(
         release_revision,
         DEVELOPMENT_MATCH_SEED,
     )?;
+    create_demo_world_for_match_config(workers, stress_units, match_config)
+}
+
+pub fn create_demo_world_for_match_config(
+    workers: usize,
+    stress_units: Option<usize>,
+    match_config: CastleFightMatchConfig,
+) -> Result<DemoWorld, CastleFightMatchSetupError> {
     let mut game = create_castle_fight_match(match_config, workers)?;
     let metrics = WorldMetrics::from_simulation_config(&game.simulation_config)
         .with_camera_focus_bounds_world(

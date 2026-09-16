@@ -119,7 +119,11 @@ This policy must balance:
 - deterministic replication;
 - ability for all clients to receive commands before execution when practical.
 
-The exact input-delay policy is open, but the result must be explicit:
+The initial Step 9 server uses a zero-extra-delay **open-tick** policy. `Simulation::tick()` is the one currently unfinalized authoritative tick. Commands admitted before that tick is finalized are assigned to it in canonical server arrival order; once finalization occurs, that tick/order is immutable and later arrivals can only enter the next open tick. Clients do not predict authoritative advancement in this prototype: they wait for the explicit finalized tick record. A future measured input-delay policy may deliberately schedule farther ahead, but it must preserve the same canonical-order guarantees.
+
+The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because Step 9 does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection; reconnect identity and canonical disconnect/delegation controls are completed in Step 10.
+
+The result is explicit:
 
 ```rust
 pub struct ScheduledCommand {
@@ -248,16 +252,21 @@ Server-issued reconnect/session credentials should be separate from deterministi
 
 ## 14. Transport
 
-Transport selection is provisional.
+The initial native multiplayer prototype uses **TCP** as its reliable ordered transport. This is an operational transport choice, not part of canonical gameplay identity: protocol messages and canonical stream semantics remain transport-independent so a later QUIC or other transport can replace TCP without changing authoritative simulation ordering.
 
-Potential choices include:
+Each TCP connection carries a sequence of bounded protocol frames:
 
-- QUIC;
-- reliable UDP-based game transport;
-- TCP/WebSocket for an early prototype;
-- separate reliable/unreliable channels if future presentation data needs them.
+```text
+[u32 payload length, big-endian][payload bytes]
+```
 
-Because authoritative gameplay mostly transmits low-rate commands/checkpoints/snapshots rather than frame-by-frame unit transforms, correctness and reconnect semantics matter more initially than extremely low per-packet latency.
+Step 9 payloads use the protocol crate's schema-versioned JSON encoding and are limited to 1 MiB per frame. The decoder MUST reject zero-length and oversized frames before allocating the declared body. Snapshot/reconnect transfer introduced in Step 10 may define a separate bounded bulk-transfer/chunking policy rather than increasing ordinary command/control message limits without review.
+
+TCP's byte-stream ordering does not replace canonical logical ordering. Every finalized tick/control record still carries `InputStreamPosition`, and clients MUST NOT infer an empty tick from transport silence, connection liveness, or lack of immediately available bytes. A missing/disconnected TCP stream therefore never means "advance with no commands"; only an explicit finalized tick record proves that input set complete.
+
+Server implementations SHOULD enable `TCP_NODELAY` for latency-sensitive command/control traffic. Large reconnect snapshots MUST NOT be allowed to indefinitely head-of-line block live canonical traffic; Step 10 must address this through bounded chunking, a separate bulk channel/connection, or a transport revision such as QUIC streams.
+
+Because authoritative gameplay mostly transmits low-rate commands, finalized-input records, outcomes, and checkpoints rather than frame-by-frame unit transforms, correctness and reconnect semantics matter more initially than minimizing every packet's transport latency. QUIC/reliable-UDP remain valid future choices if measured behavior justifies the extra transport complexity.
 
 The simulation/protocol types MUST not be tightly coupled to one transport library.
 

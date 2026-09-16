@@ -21,7 +21,7 @@ use castle_fight_sim::{
 use castle_fight_sim::PlayerId;
 
 use crate::{
-    AuthoritativeSimulation, SelectedMatch,
+    AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
     building_models::BuildingModelSet,
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
@@ -543,20 +543,24 @@ fn cancel_selected_construction(
 }
 
 fn submission_status(
-    submission: CommandSubmission,
+    submission: ClientCommandSubmission,
     accepted: &str,
     rejected_prefix: &str,
 ) -> String {
     match submission {
-        CommandSubmission::Scheduled(command) => {
+        ClientCommandSubmission::Local(CommandSubmission::Scheduled(command)) => {
             format!("{accepted} [tick {}]", command.tick)
         }
-        CommandSubmission::DuplicateScheduled(command) => {
+        ClientCommandSubmission::Local(CommandSubmission::DuplicateScheduled(command)) => {
             format!("{accepted} [already scheduled for tick {}]", command.tick)
         }
-        CommandSubmission::Rejected(error) | CommandSubmission::DuplicateRejected(error) => {
-            format!("{rejected_prefix}: {error:?}.")
+        ClientCommandSubmission::Local(
+            CommandSubmission::Rejected(error) | CommandSubmission::DuplicateRejected(error),
+        ) => format!("{rejected_prefix}: {error:?}."),
+        ClientCommandSubmission::Submitted { client_sequence } => {
+            format!("{accepted} [submitted #{client_sequence}]")
         }
+        ClientCommandSubmission::Failed => format!("{rejected_prefix}: network unavailable."),
     }
 }
 
