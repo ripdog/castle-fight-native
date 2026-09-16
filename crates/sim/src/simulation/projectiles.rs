@@ -165,4 +165,57 @@ impl Simulation {
         projectiles.sort_unstable_by_key(|projectile| projectile.id);
         projectiles
     }
+
+    pub(super) fn select_bounce_target(
+        &self,
+        projectile_id: SimId,
+        projectile: &BounceProjectile,
+        impact_position: SimPoint,
+        context: &BounceSearchContext<'_>,
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let enemy_team = 1u8
+            .checked_sub(projectile.source_team.0)
+            .expect("verification slice supports teams 0 and 1 only");
+        let range_sq = square_i32(projectile.bounce_range);
+        let hit_count = usize::from(projectile.hit_count);
+        let hit_targets = &projectile.hit_targets[..hit_count];
+        let next_bounce_index = u32::from(projectile.bounce_index) + 1;
+        let mut best: Option<(u64, SimId, usize)> = None;
+        context.grid.for_each_candidate(
+            SpatialPartition::global(enemy_team),
+            impact_position,
+            projectile.bounce_range,
+            |unit_index| {
+                *candidate_checks += 1;
+                if context.unit_health[unit_index] <= 0 {
+                    return;
+                }
+                let candidate = &context.units[unit_index];
+                if !projectile
+                    .target_mask
+                    .can_target_unit(candidate.movement_class)
+                    || candidate.id == projectile.target
+                    || impact_position.distance_sq(candidate.position) > range_sq
+                {
+                    return;
+                }
+                if !projectile.allow_repeat_targets && hit_targets.contains(&candidate.id) {
+                    return;
+                }
+                let rank = deterministic_random(
+                    self.config.match_seed,
+                    context.completed_tick,
+                    projectile_id,
+                    RANDOM_PURPOSE_BOUNCE_TARGET ^ candidate.id.0,
+                    u64::from(next_bounce_index),
+                );
+                let key = (rank, candidate.id, unit_index);
+                if best.is_none_or(|current| key < current) {
+                    best = Some(key);
+                }
+            },
+        );
+        best.map(|(_, _, unit_index)| unit_index)
+    }
 }
