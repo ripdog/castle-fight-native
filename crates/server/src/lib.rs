@@ -357,6 +357,11 @@ impl AuthoritativeMatch {
             player_id: session.player.0,
             team: player.team.0,
             next_stream_position: self.driver.next_stream_position().0,
+            next_client_sequence: self
+                .driver
+                .next_client_sequence(session.player)
+                .expect("session player must have a command-sequence cursor")
+                .0,
             completed_tick: self.game.simulation.tick().checked_sub(1),
         })
     }

@@ -39,7 +39,9 @@ It includes, directly or transitively:
 
 Derived caches SHOULD be excluded if safely reconstructable.
 
-`castle-fight-sim` currently exposes logical authoritative snapshot schema revision 1 through `SimulationSnapshot`. The schema is deliberately independent of Bevy entity handles and storage order. It records the completed boundary as `None` for the initial pre-tick state or `Some(T)` for a completed tick, stores allocator/player/lifecycle/objective/defense-alert state plus the complete canonical entity projection, and carries the authoritative state checksum. Restoration occurs into an already constructed compatible match instance: the immutable configuration/content identity must match, while execution-only settings such as worker count may differ. Restoration replaces the ECS world, preserves stable `SimId`s, rebuilds derived topology/caches, clears presentation-only event buffers, and verifies the stored checksum before accepting the state. The in-memory logical schema is not yet the network/disk encoding; bounded serialization belongs to the protocol/replay layer.
+`castle-fight-sim` currently exposes logical authoritative snapshot schema revision 1 through `SimulationSnapshot`. The schema is deliberately independent of Bevy entity handles and storage order. It records the completed boundary as `None` for the initial pre-tick state or `Some(T)` for a completed tick, stores allocator/player/lifecycle/objective/defense-alert state plus the complete canonical entity projection, and carries the authoritative state checksum. Restoration occurs into an already constructed compatible match instance: the immutable configuration/content identity must match, while execution-only settings such as worker count may differ. Restoration replaces the ECS world, preserves stable `SimId`s, rebuilds derived topology/caches, clears presentation-only event buffers, and verifies the stored checksum before accepting the state.
+
+Step 10 adds a bounded JSON wire encoding of that same logical revision rather than a second authoritative-state schema. Static presentation names attached to content identities are omitted from the encoded state; rawcodes remain canonical and names are re-resolved from the already selected/version-checked content bundle before restoration. Unknown rawcodes or malformed/beyond-bound snapshot data are rejected. Replay-file encoding remains separate/provisional.
 
 The checksum and snapshot capture paths MUST share the same canonical entity projection so adding an authoritative entity field cannot silently update one persistence mechanism without the other. Snapshot loading is intentionally valid under a different ECS insertion order than capture.
 
@@ -68,7 +70,7 @@ No new gameplay RNG values or IDs may be consumed merely because a snapshot was 
 
 ## 4. Snapshot cadence
 
-The server SHOULD retain periodic snapshots during a live match.
+The server SHOULD retain periodic snapshots during a live match once measurements justify reuse. The current Step 10 TCP path instead captures a fresh snapshot at each reconnect/resynchronization handoff, minimizing required history suffix length and avoiding an unbounded retained-snapshot cache.
 
 Cadence is provisional and should be selected from measurements balancing:
 
@@ -95,7 +97,7 @@ Compression and disk/network encoding may run asynchronously because encoded byt
 
 ## 6. Live command history
 
-The server retains canonical stream records with monotonic input-stream positions for at least the period needed to advance from the oldest reconnect/desync snapshot to the live boundary.
+The server retains canonical stream records with monotonic input-stream positions. Any snapshot/history handoff MUST pin a finite suffix from the snapshot stream position to a recorded handoff position before transfer starts. The current fresh-snapshot reconnect path normally needs only the canonical reconnect control after the captured boundary, and enforces an explicit maximum history-record count rather than growing a transfer backlog without bound.
 
 Every snapshot records the exact input-stream position through which its state is complete. Inputs after that boundary are replayed exactly once.
 
@@ -116,20 +118,18 @@ History MUST be complete and ordered, including logically empty finalized ticks 
 
 A reconnecting player does not reconstitute the world from their stale local process state.
 
-Recommended flow:
+Current protocol revision 3 flow:
 
-1. client reconnects/authenticates to the existing player/session slot;
-2. server records a live subscription boundary and pins all required history after the chosen snapshot boundary for the duration of transfer;
-3. server reports canonical current finalized tick/version and input-stream position;
-4. server selects a suitable snapshot `S <= current`; the snapshot contains its completed tick and exact input-stream boundary `P_s`;
-5. server sends snapshot plus every finalized input record after `P_s`, including commands already scheduled for future ticks that fall within the subscribed stream;
-6. live finalized input records continue to queue after the recorded subscription boundary rather than racing the snapshot transfer;
-7. client replaces its authoritative local world with the snapshot;
-8. client disables or minimizes presentation work;
-9. client consumes finalized input records strictly by stream position, suppressing duplicates by identity/position and refusing to cross gaps;
-10. client advances as fast as possible until it reaches a server-defined near-live tick/checkpoint;
-11. checksum is verified;
-12. queued live input delivery and normal real-time pacing/presentation continue without changing stream identity.
+1. client reconnects/authenticates to the existing player/session slot using the server-issued session/token pair;
+2. while that session is still canonically disconnected, the server captures a fresh snapshot and records its exact next-stream position `P_s`;
+3. server emits the canonical `Connected` control and records the resulting handoff position `P_h`;
+4. server queues the accepted session assignment, bounded snapshot metadata/chunks, and every canonical record in `[P_s, P_h)` to the replacement socket;
+5. server queues `CatchUpComplete(P_h, completed_tick, checksum)` and only then adds the socket to live broadcast recipients;
+6. client disables gameplay command submission while handoff is incomplete, replaces its local authoritative world with the snapshot, and creates a replica driver starting exactly at `P_s`;
+7. client consumes the pinned canonical suffix strictly by stream position and rejects gaps, duplicate/overflowing chunks, or records beyond `P_h`;
+8. presentation events generated by historical catch-up are cleared instead of replayed;
+9. client verifies the completion tick/checksum at `P_h`, resets presentation/interpolation samples to the restored current state, and reenables gameplay command submission using the server-supplied next client sequence;
+10. subsequent FIFO live records continue from `P_h` without changing canonical stream identity.
 
 The handoff MUST have neither a gap nor an ambiguous overlap between snapshot history and live subscription. Required retained history MUST NOT be discarded while a reconnect transfer depends on it.
 
@@ -139,11 +139,13 @@ The player's units/buildings continued running on the server throughout disconne
 
 During catch-up, the client SHOULD:
 
-- skip rendering frames;
+- skip or minimize rendering work where practical;
 - suppress most audio/cosmetic event playback;
 - avoid replaying historical UI notifications unless relevant;
 - retain authoritative simulation behavior exactly;
-- process ticks as quickly as CPU allows.
+- process authoritative history as quickly as CPU allows.
+
+The current client clears simulation presentation-event buffers after each catch-up record and publishes no intermediate presentation snapshots; completion replaces the interpolation sample pair with one snapshot of the recovered authoritative state. Thus historical attacks/spells do not become duplicate cosmetic effects after reconnect.
 
 The client MAY join presentation slightly behind the newest server tick with a normal input-delay buffer rather than repeatedly chasing a moving exact tick.
 
@@ -156,17 +158,13 @@ The server MAY choose between:
 - sending a recent/current snapshot with minimal replay;
 - reusing an older cached snapshot plus more command history.
 
-The choice is operational and MUST NOT affect final state.
-
-A freshly encoded current snapshot may be beneficial for very long disconnects.
+The choice is operational and MUST NOT affect final state. The initial Step 10 implementation deliberately chooses a freshly encoded current snapshot for every replacement, so catch-up work is bounded by snapshot size plus a small pinned history suffix rather than disconnection duration. Snapshot caching can be added later if measurement shows encoding cost dominates.
 
 ## 10. Desync resynchronization
 
-Desync recovery uses the same machinery as reconnect.
+Desync recovery uses the same snapshot/chunk/history/completion machinery as reconnect. The client-side replacement path accepts an authenticated snapshot transfer while already connected, temporarily disables command submission, replaces divergent state, clears historical presentation events, verifies the supplied authoritative boundary/checksum, and then resumes live processing.
 
-The server identifies a trusted canonical snapshot/checkpoint and instructs the client to replace divergent state and replay forward.
-
-A client MUST NOT attempt to merge arbitrary divergent entity state into the server snapshot.
+The server identifies a trusted canonical snapshot/checkpoint and instructs the client to replace divergent state and replay forward. A client MUST NOT attempt to merge arbitrary divergent entity state into the server snapshot.
 
 ## 11. Replay file model
 
@@ -216,7 +214,7 @@ The first implementation only needs strict same-compatible-version playback.
 
 ## 14. Snapshot format
 
-The on-wire/on-disk encoding is provisional.
+The on-disk encoding remains provisional. The current on-wire reconnect/resynchronization encoding is schema-versioned JSON over the existing bounded protocol frames: one logical snapshot is capped at 8 MiB and split into 48 KiB chunks, with explicit transfer ID, byte/chunk counts, snapshot stream/checksum metadata, and a separately bounded canonical history suffix.
 
 Requirements:
 

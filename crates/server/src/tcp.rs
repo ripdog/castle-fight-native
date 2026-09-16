@@ -8,10 +8,13 @@ use std::{
 };
 
 use castle_fight_protocol::{
-    ClientMessage, FrameError, HandshakeRejectReason, ProtocolEnvelope, ProtocolErrorCode,
-    ProtocolSchemaError, ServerMessage, read_frame, write_frame,
+    CatchUpComplete, ClientMessage, FrameError, HandshakeRejectReason, MAX_SNAPSHOT_BYTES,
+    ProtocolEnvelope, ProtocolErrorCode, ProtocolSchemaError, SNAPSHOT_CHUNK_BYTES, ServerMessage,
+    SnapshotChunk, SnapshotTransferBegin, WireCanonicalStreamRecord, read_frame, write_frame,
 };
-use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, MatchLifecycle};
+use castle_fight_sim::{
+    CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamRecord, InputStreamPosition, MatchLifecycle,
+};
 
 use crate::{
     AuthoritativeMatch, HandshakeResult, OutboundMessage, OutboundTarget, ServerMatchError,
@@ -20,12 +23,19 @@ use crate::{
 
 const OUTBOUND_QUEUE_CAPACITY: usize = 256;
 const IDLE_POLL_INTERVAL: Duration = Duration::from_millis(1);
+const MAX_RECONNECT_SNAPSHOT_CHUNKS: usize = MAX_SNAPSHOT_BYTES.div_ceil(SNAPSHOT_CHUNK_BYTES);
+const MAX_RECONNECT_HISTORY_RECORDS: usize = 8;
+const MAX_RECONNECT_HANDOFF_MESSAGES: usize =
+    3 + MAX_RECONNECT_SNAPSHOT_CHUNKS + MAX_RECONNECT_HISTORY_RECORDS;
+const _: () = assert!(MAX_RECONNECT_HANDOFF_MESSAGES <= OUTBOUND_QUEUE_CAPACITY);
 
 #[derive(Debug)]
 pub enum TcpServerError {
     Io(io::Error),
     Match(ServerMatchError),
     ConnectionIdExhausted,
+    ReconnectHistoryUnavailable,
+    ReconnectHistoryOverflow,
 }
 
 impl fmt::Display for TcpServerError {
@@ -34,6 +44,11 @@ impl fmt::Display for TcpServerError {
             Self::Io(error) => write!(formatter, "TCP server I/O error: {error}"),
             Self::Match(error) => error.fmt(formatter),
             Self::ConnectionIdExhausted => formatter.write_str("TCP connection ID space exhausted"),
+            Self::ReconnectHistoryUnavailable => formatter
+                .write_str("reconnect snapshot boundary is no longer present in canonical history"),
+            Self::ReconnectHistoryOverflow => {
+                formatter.write_str("reconnect history tail exceeds the bounded handoff allowance")
+            }
         }
     }
 }
@@ -43,7 +58,9 @@ impl std::error::Error for TcpServerError {
         match self {
             Self::Io(error) => Some(error),
             Self::Match(error) => Some(error),
-            Self::ConnectionIdExhausted => None,
+            Self::ConnectionIdExhausted
+            | Self::ReconnectHistoryUnavailable
+            | Self::ReconnectHistoryOverflow => None,
         }
     }
 }
@@ -354,18 +371,102 @@ impl TcpAuthoritativeServer {
                     }
                 };
 
-                // The reconnect control must enter canonical history before this replacement
-                // socket joins live broadcasts. The reconnecting client will receive that record
-                // exactly once through the pinned history/catch-up handoff rather than racing a
-                // live broadcast against its handshake.
+                // Pin a fresh authoritative snapshot while this session is still canonically
+                // disconnected. The Connected control is then the first history record after the
+                // snapshot boundary and is delivered exactly once through this catch-up tail.
+                let snapshot_stream_position = self.authoritative.driver().next_stream_position();
+                let snapshot = self.authoritative.simulation().capture_snapshot();
+                let snapshot_completed_tick = snapshot.completed_tick();
+                let snapshot_checksum = snapshot.checksum();
+                let snapshot_bytes = match snapshot.encode_wire() {
+                    Ok(bytes) if bytes.len() <= MAX_SNAPSHOT_BYTES => bytes,
+                    Ok(_) | Err(_) => {
+                        self.send_to_connection(
+                            connection_id,
+                            ServerMessage::HelloRejected {
+                                reason: HandshakeRejectReason::MatchUnavailable,
+                            },
+                        )?;
+                        return Ok(());
+                    }
+                };
+
+                // The replacement socket is deliberately still unbound here, so this canonical
+                // reconnect record broadcasts only to already-live peers. Subsequent live records
+                // cannot race the handoff because all authoritative mutation is serialized on this
+                // server-loop thread.
                 let outbound = self.authoritative.reconnect_session(session_id)?;
                 self.dispatch_all(outbound)?;
+                let handoff_stream_position = self.authoritative.driver().next_stream_position();
+                let history_tail = reconnect_history_tail(
+                    self.authoritative.driver().history(),
+                    snapshot_stream_position,
+                    handoff_stream_position,
+                )?
+                .iter()
+                .map(WireCanonicalStreamRecord::from)
+                .collect::<Vec<_>>();
+                if history_tail.len() > MAX_RECONNECT_HISTORY_RECORDS {
+                    return Err(TcpServerError::ReconnectHistoryOverflow);
+                }
+
                 let assignment = self
                     .authoritative
                     .session_assignment(session_id)
                     .expect("authenticated reconnect session must still exist");
+                let chunk_count = snapshot_bytes.len().div_ceil(SNAPSHOT_CHUNK_BYTES);
+                let chunk_count = u32::try_from(chunk_count)
+                    .expect("bounded reconnect snapshot chunk count fits u32");
+                let begin = SnapshotTransferBegin {
+                    transfer_id: connection_id.0,
+                    snapshot_stream_position: snapshot_stream_position.0,
+                    snapshot_completed_tick,
+                    snapshot_checksum,
+                    snapshot_bytes: u32::try_from(snapshot_bytes.len())
+                        .expect("bounded reconnect snapshot length fits u32"),
+                    chunk_count,
+                    handoff_stream_position: handoff_stream_position.0,
+                };
+
+                self.send_to_connection(
+                    connection_id,
+                    ServerMessage::HelloAccepted { assignment },
+                )?;
+                self.send_to_connection(connection_id, ServerMessage::SnapshotBegin { begin })?;
+                for (chunk_index, bytes) in snapshot_bytes.chunks(SNAPSHOT_CHUNK_BYTES).enumerate()
+                {
+                    self.send_to_connection(
+                        connection_id,
+                        ServerMessage::SnapshotChunk {
+                            chunk: SnapshotChunk {
+                                transfer_id: connection_id.0,
+                                chunk_index: u32::try_from(chunk_index)
+                                    .expect("bounded reconnect chunk index fits u32"),
+                                bytes: bytes.to_vec(),
+                            },
+                        },
+                    )?;
+                }
+                for record in history_tail {
+                    self.send_to_connection(connection_id, ServerMessage::StreamRecord { record })?;
+                }
+                self.send_to_connection(
+                    connection_id,
+                    ServerMessage::CatchUpComplete {
+                        complete: CatchUpComplete {
+                            transfer_id: connection_id.0,
+                            handoff_stream_position: handoff_stream_position.0,
+                            completed_tick: self.authoritative.simulation().tick().checked_sub(1),
+                            checksum: self.authoritative.simulation().checksum(),
+                        },
+                    },
+                )?;
+
+                // Every handoff message is already queued on this connection before it becomes a
+                // live broadcast target. FIFO channel/socket ordering makes later canonical records
+                // follow the catch-up completion marker without overlap or a gap.
                 self.bind_session_connection(connection_id, session_id);
-                self.send_to_connection(connection_id, ServerMessage::HelloAccepted { assignment })
+                Ok(())
             }
             ClientMessage::SubmitCommand { .. } | ClientMessage::CheckpointReport { .. } => self
                 .send_to_connection(
@@ -438,6 +539,20 @@ impl TcpAuthoritativeServer {
         }
         Ok(())
     }
+}
+
+fn reconnect_history_tail(
+    history: &[CanonicalStreamRecord],
+    start: InputStreamPosition,
+    end: InputStreamPosition,
+) -> Result<&[CanonicalStreamRecord], TcpServerError> {
+    let start =
+        usize::try_from(start.0).map_err(|_| TcpServerError::ReconnectHistoryUnavailable)?;
+    let end = usize::try_from(end.0).map_err(|_| TcpServerError::ReconnectHistoryUnavailable)?;
+    if start > end || end > history.len() {
+        return Err(TcpServerError::ReconnectHistoryUnavailable);
+    }
+    Ok(&history[start..end])
 }
 
 fn spawn_reader(
@@ -1205,6 +1320,87 @@ mod tests {
             reassignment.next_stream_position,
             server.authoritative().driver().next_stream_position().0
         );
+
+        let begin = match receive_server(&mut replacement) {
+            ServerMessage::SnapshotBegin { begin } => begin,
+            message => panic!("expected reconnect snapshot header, got {message:?}"),
+        };
+        let reconnect_position = match &reconnect_record {
+            CanonicalStreamRecord::Control(control) => control.stream_position,
+            CanonicalStreamRecord::Tick(_) => unreachable!(),
+        };
+        assert_eq!(begin.snapshot_stream_position, reconnect_position.0);
+        assert_eq!(begin.handoff_stream_position, reconnect_position.0 + 1);
+        assert!(begin.snapshot_bytes as usize <= MAX_SNAPSHOT_BYTES);
+        assert!(begin.chunk_count > 0);
+
+        let mut snapshot_bytes = Vec::with_capacity(begin.snapshot_bytes as usize);
+        for expected_index in 0..begin.chunk_count {
+            let chunk = match receive_server(&mut replacement) {
+                ServerMessage::SnapshotChunk { chunk } => chunk,
+                message => panic!("expected reconnect snapshot chunk, got {message:?}"),
+            };
+            assert_eq!(chunk.transfer_id, begin.transfer_id);
+            assert_eq!(chunk.chunk_index, expected_index);
+            assert!(chunk.bytes.len() <= SNAPSHOT_CHUNK_BYTES);
+            snapshot_bytes.extend_from_slice(&chunk.bytes);
+        }
+        assert_eq!(snapshot_bytes.len(), begin.snapshot_bytes as usize);
+        let snapshot = castle_fight_sim::SimulationSnapshot::decode_wire(
+            &snapshot_bytes,
+            server.authoritative().driver().content(),
+        )
+        .unwrap();
+        assert_eq!(snapshot.completed_tick(), begin.snapshot_completed_tick);
+        assert_eq!(snapshot.checksum(), begin.snapshot_checksum);
+
+        let replica_config =
+            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 0x1234)
+                .unwrap();
+        let mut replica = create_castle_fight_match(replica_config, 2).unwrap();
+        replica.simulation.restore_snapshot(&snapshot).unwrap();
+        assert!(matches!(
+            replica.simulation.lifecycle(),
+            MatchLifecycle::PausedForDisconnect { .. }
+        ));
+        let mut replica_driver = MatchDriver::new_replica_from_snapshot(
+            &replica.simulation,
+            replica.content,
+            InputStreamPosition(begin.snapshot_stream_position),
+        );
+
+        let handed_off_reconnect = match receive_server(&mut replacement) {
+            ServerMessage::StreamRecord { record } => CanonicalStreamRecord::from(record),
+            message => panic!("expected reconnect history record, got {message:?}"),
+        };
+        assert_eq!(handed_off_reconnect, reconnect_record);
+        replica_driver
+            .apply_stream_record(&mut replica.simulation, handed_off_reconnect)
+            .unwrap();
+
+        let complete = match receive_server(&mut replacement) {
+            ServerMessage::CatchUpComplete { complete } => complete,
+            message => panic!("expected reconnect completion marker, got {message:?}"),
+        };
+        assert_eq!(complete.transfer_id, begin.transfer_id);
+        assert_eq!(
+            complete.handoff_stream_position,
+            begin.handoff_stream_position
+        );
+        assert_eq!(
+            replica_driver.next_stream_position().0,
+            complete.handoff_stream_position
+        );
+        assert_eq!(
+            replica.simulation.tick().checked_sub(1),
+            complete.completed_tick
+        );
+        assert_eq!(replica.simulation.checksum(), complete.checksum);
+        assert_eq!(
+            replica.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
+        assert_eq!(replica.simulation.lifecycle(), MatchLifecycle::Running);
         assert_eq!(
             server.authoritative().simulation().lifecycle(),
             MatchLifecycle::Running

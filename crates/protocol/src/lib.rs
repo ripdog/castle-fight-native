@@ -14,10 +14,12 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 2;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 3;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
+pub const MAX_SNAPSHOT_BYTES: usize = 8 * 1024 * 1024;
+pub const SNAPSHOT_CHUNK_BYTES: usize = 48 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -336,7 +338,37 @@ pub struct SessionAssignment {
     pub player_id: u8,
     pub team: u8,
     pub next_stream_position: u64,
+    pub next_client_sequence: u64,
     pub completed_tick: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SnapshotTransferBegin {
+    pub transfer_id: u64,
+    pub snapshot_stream_position: u64,
+    pub snapshot_completed_tick: Option<u64>,
+    pub snapshot_checksum: u64,
+    pub snapshot_bytes: u32,
+    pub chunk_count: u32,
+    pub handoff_stream_position: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SnapshotChunk {
+    pub transfer_id: u64,
+    pub chunk_index: u32,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatchUpComplete {
+    pub transfer_id: u64,
+    pub handoff_stream_position: u64,
+    pub completed_tick: Option<u64>,
+    pub checksum: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -379,6 +411,15 @@ pub enum ServerMessage {
     },
     Checkpoint {
         checkpoint: Checkpoint,
+    },
+    SnapshotBegin {
+        begin: SnapshotTransferBegin,
+    },
+    SnapshotChunk {
+        chunk: SnapshotChunk,
+    },
+    CatchUpComplete {
+        complete: CatchUpComplete,
     },
     ProtocolError {
         code: ProtocolErrorCode,

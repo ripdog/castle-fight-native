@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::Component;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     damage::{ArmorProfile, DamageType},
@@ -10,13 +11,15 @@ pub(crate) const MAX_BOUNCE_COUNT: u8 = 8;
 pub(crate) const MAX_BOUNCE_HITS: usize = MAX_BOUNCE_COUNT as usize + 1;
 pub(crate) const MAX_TIMED_MOVEMENT_MODIFIERS: usize = 8;
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct SimId(pub u64);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Team(pub u8);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct PlayerId(pub u8);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,13 +28,13 @@ pub struct Owner(pub PlayerId);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position(pub SimPoint);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Health {
     pub current: i32,
     pub max: i32,
 }
 
-#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct HealthRegeneration {
     /// Hit points regenerated per second in 1/10,000 HP units.
     pub per_second_per_10k: u32,
@@ -40,7 +43,7 @@ pub(crate) struct HealthRegeneration {
     pub remainder_per_10k_hz: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AttackDelivery {
     Melee,
     RangedGuaranteedHit {
@@ -71,7 +74,7 @@ impl AttackDelivery {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttackProfile {
     pub delivery: AttackDelivery,
     pub damage: i32,
@@ -94,14 +97,14 @@ impl AttackProfile {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct PendingAttackEffects {
     pub stun_duration_ticks: u16,
     pub triggered_spell: Option<TriggeredAttackEffect>,
     pub burning_oil: Option<BurningOilEffectProfile>,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct GuaranteedHitProjectile {
     pub source: SimId,
     pub source_team: Team,
@@ -116,7 +119,7 @@ pub(crate) struct GuaranteedHitProjectile {
     pub impact_tick: u64,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ReflectedProjectile {
     /// Original attacker. Kept as the visual source so the reflected missile retains its art.
     pub original_source: SimId,
@@ -131,7 +134,7 @@ pub(crate) struct ReflectedProjectile {
     pub impact_tick: u64,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BallisticProjectile {
     pub source: SimId,
     pub source_team: Team,
@@ -146,7 +149,7 @@ pub(crate) struct BallisticProjectile {
     pub impact_tick: u64,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BounceProjectile {
     pub source: SimId,
     pub source_team: Team,
@@ -168,13 +171,13 @@ pub(crate) struct BounceProjectile {
     pub hit_count: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AbilityId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct CorpseDefinitionId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorpseProfile {
     pub definition: CorpseDefinitionId,
     pub lifetime_ticks: Option<u32>,
@@ -186,17 +189,17 @@ pub(crate) struct CorpseProducer(pub CorpseProfile);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionCorpseProfile(pub CorpseProfile);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CollisionRadius(pub i32);
 
-#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MovementClass {
     #[default]
     Ground,
     Air,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AttackTargetMask(u8);
 
 impl AttackTargetMask {
@@ -252,15 +255,16 @@ pub struct GameplayBundleIdentity {
     pub gameplay_hash: u64,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentIdentity {
     pub rawcode: u32,
+    #[serde(skip, default)]
     pub name: &'static str,
 }
 
 pub const MAX_PASSIVE_UNIT_EFFECTS: usize = 8;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BashEffectProfile {
     pub ability: AbilityId,
     pub chance_per_10k: u16,
@@ -269,13 +273,13 @@ pub struct BashEffectProfile {
     pub targets: AttackTargetMask,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EvasionEffectProfile {
     pub ability: AbilityId,
     pub chance_per_10k: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefendEffectProfile {
     pub ability: AbilityId,
     /// Fraction of ordinary ranged attack damage retained while Defend is active.
@@ -290,7 +294,7 @@ pub struct DefendEffectProfile {
     pub activation_delay_ticks: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChainLightningEffectProfile {
     pub ability: AbilityId,
     pub initial_damage: i32,
@@ -300,7 +304,7 @@ pub struct ChainLightningEffectProfile {
     pub targets: AttackTargetMask,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntanglingRootsEffectProfile {
     pub ability: AbilityId,
     pub damage_per_second: i32,
@@ -308,13 +312,13 @@ pub struct EntanglingRootsEffectProfile {
     pub targets: AttackTargetMask,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredAttackEffect {
     ChainLightning(ChainLightningEffectProfile),
     EntanglingRoots(EntanglingRootsEffectProfile),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggeredSpellProcProfile {
     pub ability: AbilityId,
     pub chance_per_10k: u16,
@@ -322,7 +326,7 @@ pub struct TriggeredSpellProcProfile {
     pub effect: TriggeredAttackEffect,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BurningOilEffectProfile {
     pub ability: AbilityId,
     pub radius: i32,
@@ -336,7 +340,7 @@ pub struct BurningOilEffectProfile {
     pub target_buildings: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
     Bash(BashEffectProfile),
     Evasion(EvasionEffectProfile),
@@ -345,7 +349,7 @@ pub enum PassiveUnitEffect {
     BurningOil(BurningOilEffectProfile),
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PassiveUnitEffects {
     effects: [Option<PassiveUnitEffect>; MAX_PASSIVE_UNIT_EFFECTS],
     count: u8,
@@ -398,7 +402,7 @@ impl Default for PassiveUnitEffects {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitGameplayProperties {
     pub content: Option<ContentIdentity>,
     pub health_regen_per_second_per_10k: u32,
@@ -414,7 +418,7 @@ pub struct UnitGameplayProperties {
     pub passive_effects: PassiveUnitEffects,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildingGameplayProperties {
     pub content: Option<ContentIdentity>,
     /// Authoritative construction duration. `None` keeps generic/synthetic building spawns
@@ -438,7 +442,7 @@ pub(crate) struct ProductionCollisionRadius(pub CollisionRadius);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionMovementClass(pub MovementClass);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ProductionUnitRepairMetadata {
     pub mechanical: bool,
     pub build_time_ticks: Option<u32>,
@@ -463,7 +467,7 @@ pub(crate) struct ProductionHealthRegeneration(pub u32);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Corpse {
     pub source_unit: SimId,
     pub source_owner: PlayerId,
@@ -473,28 +477,28 @@ pub(crate) struct Corpse {
     pub expires_tick: Option<u64>,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AttackCooldown {
     pub remaining: u16,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct AttackSequence(pub u64);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct TargetState {
     pub current: Option<SimId>,
     pub direct_retaliation_lock: bool,
     pub ally_defense_lock: bool,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RetaliationState {
     pub attacker: Option<SimId>,
     pub attacked_tick: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) enum NavigationGoal {
     #[default]
     None,
@@ -502,19 +506,19 @@ pub(crate) enum NavigationGoal {
     Target(SimId),
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct NavigationState {
     pub avoidance_goal: NavigationGoal,
     pub bypass_side: i8,
     pub clear_ticks: u8,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MovementProfile {
     pub speed_per_tick: i32,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuilderProfile {
     pub speed_per_tick: i32,
     pub build_range: i32,
@@ -527,13 +531,13 @@ pub struct BuilderProfile {
     pub blink_boundary_inset: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BuilderLocomotion {
     Foot,
     Hover,
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuilderConfiguration {
     pub appearance: ContentIdentity,
     pub locomotion: BuilderLocomotion,
@@ -559,7 +563,7 @@ pub struct BuilderSpawn {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Builder;
 
-#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BuilderState {
     pub destination: Option<SimPoint>,
     pub follow_target: Option<SimId>,
@@ -568,13 +572,13 @@ pub(crate) struct BuilderState {
     pub repair_autocast_enabled: bool,
 }
 
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct BuilderBuildOrder {
     pub building: BuildingSpawn,
     pub properties: BuildingGameplayProperties,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub(crate) struct BuildingRuntimeState {
     pub production: Option<ProductionState>,
     pub attack_cooldown: Option<AttackCooldown>,
@@ -585,7 +589,7 @@ pub(crate) struct BuildingRuntimeState {
     pub status: Option<StatusState>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct BuildingUpgradeSource {
     pub building: BuildingSpawn,
     pub properties: BuildingGameplayProperties,
@@ -593,7 +597,7 @@ pub(crate) struct BuildingUpgradeSource {
     pub runtime: BuildingRuntimeState,
 }
 
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct BuildingConstruction {
     pub started_tick: u64,
     pub complete_tick: u64,
@@ -611,10 +615,10 @@ pub(crate) struct BuildTimeTicks(pub u32);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RepairTimeTicks(pub u32);
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpawnTick(pub u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitTemplate {
     pub health: i32,
     pub attack: AttackProfile,
@@ -650,7 +654,7 @@ impl UnitSpawn {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildingFootprint {
     pub min_x: i32,
     pub min_y: i32,
@@ -680,7 +684,7 @@ impl BuildingFootprint {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductionProfile {
     pub initial_delay_ticks: u16,
     pub interval_ticks: u16,
@@ -688,15 +692,17 @@ pub struct ProductionProfile {
     pub unit: UnitTemplate,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductionState {
     pub next_spawn_tick: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct ModifierId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityTargetPolicy {
     RandomEnemyUnit,
     AllEnemyUnits,
@@ -716,7 +722,7 @@ impl AbilityTargetPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
     Damage {
         amount: i32,
@@ -756,7 +762,7 @@ impl AbilityEffect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManaProfile {
     pub maximum: i32,
     pub starting: i32,
@@ -764,7 +770,7 @@ pub struct ManaProfile {
     pub regen_per_tick_per_10k: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AutomaticAbilityProfile {
     pub id: AbilityId,
     pub mana_cost: i32,
@@ -774,39 +780,39 @@ pub struct AutomaticAbilityProfile {
     pub effect: AbilityEffect,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpellcastingProfile {
     pub mana: ManaProfile,
     pub ability: AutomaticAbilityProfile,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManaState {
     pub current: i32,
     pub regen_remainder_per_10k: u16,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AutomaticAbilityState {
     pub ready_tick: u64,
     pub cast_sequence: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedMovementModifier {
     pub id: ModifierId,
     pub percent_delta: i16,
     pub expires_tick: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedAttackSpeedModifier {
     pub id: ModifierId,
     pub percent_delta: i16,
     pub expires_tick: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
     pub id: ModifierId,
     pub armor_bonus_per_100: i16,
@@ -816,7 +822,7 @@ pub struct TimedArmorModifier {
     pub reactive_attack_speed_percent_delta: i16,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedDamageOverTime {
     pub id: ModifierId,
     pub damage_per_pulse: i32,
@@ -825,7 +831,7 @@ pub struct TimedDamageOverTime {
     pub expires_tick: u64,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BurningOilZone {
     pub source: SimId,
     pub source_team: Team,
@@ -835,7 +841,7 @@ pub(crate) struct BurningOilZone {
     pub pulse_index: u16,
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ChainLightningState {
     pub source: SimId,
     pub source_team: Team,
@@ -853,7 +859,7 @@ pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 8;
 pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
-#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
@@ -887,7 +893,7 @@ impl StatusState {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BuildingSpawn {
     pub team: Team,
     pub footprint: BuildingFootprint,

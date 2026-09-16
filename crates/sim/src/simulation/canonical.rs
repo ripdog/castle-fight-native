@@ -1,4 +1,5 @@
 use super::*;
+use serde::{Deserialize, Serialize};
 
 pub(super) fn canonical_configuration_identity(
     config: &SimulationConfig,
@@ -688,7 +689,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.finish()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) enum CanonicalEntity {
     Unit(CanonicalUnit),
     Building(CanonicalBuilding),
@@ -719,7 +720,7 @@ impl CanonicalEntity {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct CanonicalBuilder {
     pub(super) id: SimId,
     pub(super) owner: PlayerId,
@@ -731,7 +732,7 @@ pub(super) struct CanonicalBuilder {
     pub(super) build_order: Option<BuilderBuildOrder>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalUnit {
     pub(super) id: SimId,
     pub(super) content: Option<ContentIdentity>,
@@ -764,7 +765,7 @@ pub(super) struct CanonicalUnit {
     pub(super) ability_state: Option<AutomaticAbilityState>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct CanonicalBuilding {
     pub(super) id: SimId,
     pub(super) content: Option<ContentIdentity>,
@@ -801,44 +802,44 @@ pub(super) struct CanonicalBuilding {
     pub(super) status: Option<StatusState>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalProjectile {
     pub(super) id: SimId,
     pub(super) projectile: GuaranteedHitProjectile,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalReflectedProjectile {
     pub(super) id: SimId,
     pub(super) projectile: ReflectedProjectile,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalBallisticProjectile {
     pub(super) id: SimId,
     pub(super) projectile: BallisticProjectile,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalBounceProjectile {
     pub(super) id: SimId,
     pub(super) projectile: BounceProjectile,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalCorpse {
     pub(super) id: SimId,
     pub(super) position: SimPoint,
     pub(super) corpse: Corpse,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalBurningOil {
     pub(super) id: SimId,
     pub(super) zone: BurningOilZone,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(super) struct CanonicalChainLightning {
     pub(super) id: SimId,
     pub(super) state: ChainLightningState,

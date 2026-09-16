@@ -25,8 +25,9 @@ use bevy::{
     window::PresentMode,
 };
 use castle_fight_protocol::{
-    CheckpointReport, ClientMessage, CommandAcknowledgement, CommandRequest, CompatibilityIdentity,
-    ProtocolErrorCode, ServerMessage, WireCommandExecution,
+    CatchUpComplete, CheckpointReport, ClientMessage, CommandAcknowledgement, CommandRequest,
+    CompatibilityIdentity, MAX_SNAPSHOT_BYTES, ProtocolErrorCode, SNAPSHOT_CHUNK_BYTES,
+    ServerMessage, SnapshotChunk, SnapshotTransferBegin, WireCommandExecution,
 };
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION,
@@ -34,8 +35,8 @@ use castle_fight_sim::{
     CastleFightBuilderRace, CastleFightContentAvailability, CastleFightContentBundle,
     CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightParticipantConfig,
     CommandExecution, CommandExecutionResult, CommandOutcome, CommandSubmission, DriverTickResult,
-    MapVersion, MatchDriver, PlayerCommand, PlayerId, Simulation, Team,
-    castle_fight_registered_releases,
+    InputStreamPosition, MapVersion, MatchDriver, PlayerCommand, PlayerId, Simulation,
+    SimulationSnapshot, Team, castle_fight_registered_releases,
 };
 
 #[cfg(test)]
@@ -59,10 +60,11 @@ const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 enum AuthorityMode {
     Local,
     Network {
-        client: NetworkClient,
+        client: Box<NetworkClient>,
         assigned_player: PlayerId,
         next_sequence: u64,
         connected: bool,
+        pending_handoff_position: Option<u64>,
     },
 }
 
@@ -73,6 +75,13 @@ pub(crate) enum ClientCommandSubmission {
     Failed,
 }
 
+struct SnapshotCatchUp {
+    begin: SnapshotTransferBegin,
+    bytes: Vec<u8>,
+    next_chunk_index: u32,
+    snapshot_loaded: bool,
+}
+
 #[derive(Resource)]
 pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
@@ -80,6 +89,7 @@ pub(crate) struct AuthoritativeSimulation {
     pending_feedback: Vec<CommandExecution>,
     pending_status: Vec<String>,
     expected_execution_batch: Option<(u64, Vec<WireCommandExecution>)>,
+    catch_up: Option<SnapshotCatchUp>,
     authority: AuthorityMode,
 }
 
@@ -92,6 +102,7 @@ impl AuthoritativeSimulation {
             pending_feedback: Vec::new(),
             pending_status: Vec::new(),
             expected_execution_batch: None,
+            catch_up: None,
             authority: AuthorityMode::Local,
         }
     }
@@ -101,6 +112,7 @@ impl AuthoritativeSimulation {
         content: &'static CastleFightContentBundle,
         client: NetworkClient,
         assigned_player: PlayerId,
+        next_sequence: u64,
     ) -> Self {
         let driver = MatchDriver::new(&simulation, content);
         Self {
@@ -109,11 +121,13 @@ impl AuthoritativeSimulation {
             pending_feedback: Vec::new(),
             pending_status: Vec::new(),
             expected_execution_batch: None,
+            catch_up: None,
             authority: AuthorityMode::Network {
-                client,
+                client: Box::new(client),
                 assigned_player,
-                next_sequence: 0,
+                next_sequence,
                 connected: true,
+                pending_handoff_position: None,
             },
         }
     }
@@ -138,6 +152,7 @@ impl AuthoritativeSimulation {
                 assigned_player,
                 next_sequence,
                 connected,
+                ..
             } => {
                 if !*connected || player != *assigned_player {
                     self.pending_status
@@ -239,10 +254,11 @@ fn main() {
                     eprintln!("cannot join Castle Fight server {server_address}: {error}");
                     std::process::exit(2);
                 });
-        if assignment.next_stream_position != 0 || assignment.completed_tick.is_some() {
-            eprintln!(
-                "server attempted a late-join handoff that Step 9 clients do not support yet"
-            );
+        if assignment.next_stream_position != 0
+            || assignment.next_client_sequence != 0
+            || assignment.completed_tick.is_some()
+        {
+            eprintln!("server attempted an unsupported late initial join handoff");
             std::process::exit(2);
         }
         let local_player = PlayerId(assignment.player_id);
@@ -259,7 +275,10 @@ fn main() {
             );
             std::process::exit(2);
         }
-        (local_player, Some(client))
+        (
+            local_player,
+            Some((client, assignment.next_client_sequence)),
+        )
     } else {
         let local_player = demo
             .match_config
@@ -294,8 +313,14 @@ fn main() {
             .expect("selected Warcraft terrain texture layout must be valid");
     let terrain_textures = TerrainTextureSet::load_default();
 
-    let authoritative = if let Some(client) = network_client {
-        AuthoritativeSimulation::new_networked(demo.simulation, demo.content, client, local_player)
+    let authoritative = if let Some((client, next_sequence)) = network_client {
+        AuthoritativeSimulation::new_networked(
+            demo.simulation,
+            demo.content,
+            client,
+            local_player,
+            next_sequence,
+        )
     } else {
         AuthoritativeSimulation::new(demo.simulation, demo.content)
     };
@@ -646,21 +671,84 @@ fn process_network_events(
     authoritative: &mut AuthoritativeSimulation,
     presentation: &mut PresentationSamples,
 ) -> Result<(), String> {
-    let events = match &authoritative.authority {
+    let events = match &mut authoritative.authority {
         AuthorityMode::Local => return Ok(()),
-        AuthorityMode::Network { client, .. } => client.drain_events(),
+        AuthorityMode::Network { client, .. } => {
+            client.poll_reconnect();
+            client.drain_events()
+        }
     };
     for event in events {
         match event {
             NetworkEvent::Disconnected(reason) => {
-                if let AuthorityMode::Network { connected, .. } = &mut authoritative.authority {
+                authoritative.catch_up = None;
+                authoritative.expected_execution_batch = None;
+                if let AuthorityMode::Network {
+                    connected,
+                    pending_handoff_position,
+                    ..
+                } = &mut authoritative.authority
+                {
                     *connected = false;
+                    *pending_handoff_position = None;
                 }
                 authoritative
                     .pending_status
                     .push(format!("Disconnected from server: {reason}"));
             }
+            NetworkEvent::Reconnected(assignment) => {
+                let (assigned_player, expected_team) = match &authoritative.authority {
+                    AuthorityMode::Network {
+                        assigned_player, ..
+                    } => {
+                        let expected_team = authoritative
+                            .simulation
+                            .player(*assigned_player)
+                            .ok_or_else(|| {
+                                "assigned network player disappeared locally".to_owned()
+                            })?
+                            .team
+                            .0;
+                        (*assigned_player, expected_team)
+                    }
+                    AuthorityMode::Local => unreachable!("network event in local mode"),
+                };
+                if assignment.player_id != assigned_player.0 || assignment.team != expected_team {
+                    return Err("server reconnect assignment changed player identity".to_owned());
+                }
+                authoritative.catch_up = None;
+                authoritative.expected_execution_batch = None;
+                authoritative.pending_feedback.clear();
+                if let AuthorityMode::Network {
+                    next_sequence,
+                    connected,
+                    pending_handoff_position,
+                    ..
+                } = &mut authoritative.authority
+                {
+                    *next_sequence = assignment.next_client_sequence;
+                    *connected = false;
+                    *pending_handoff_position = Some(assignment.next_stream_position);
+                }
+                authoritative
+                    .pending_status
+                    .push("Reconnected; synchronizing authoritative state.".to_owned());
+            }
+            NetworkEvent::ReconnectFailed(reason) => {
+                authoritative
+                    .pending_status
+                    .push(format!("Reconnect attempt failed: {reason}"));
+            }
             NetworkEvent::Message(message) => match message {
+                ServerMessage::SnapshotBegin { begin } => {
+                    begin_snapshot_catch_up(authoritative, begin)?;
+                }
+                ServerMessage::SnapshotChunk { chunk } => {
+                    append_snapshot_chunk(authoritative, chunk)?;
+                }
+                ServerMessage::CatchUpComplete { complete } => {
+                    finish_snapshot_catch_up(authoritative, presentation, complete)?;
+                }
                 ServerMessage::CommandAcknowledged { acknowledgement } => {
                     let status = match acknowledgement {
                         CommandAcknowledgement::Scheduled {
@@ -692,24 +780,59 @@ fn process_network_events(
                 }
                 ServerMessage::StreamRecord { record } => {
                     let canonical: CanonicalStreamRecord = record.into();
-                    let applied = authoritative
-                        .driver
-                        .apply_stream_record(&mut authoritative.simulation, canonical)
-                        .map_err(|error| format!("canonical stream error: {error:?}"))?;
-                    if let Some(result) = applied {
-                        let expected = result
-                            .executions
-                            .iter()
-                            .copied()
-                            .map(WireCommandExecution::from)
-                            .collect();
-                        authoritative.expected_execution_batch =
-                            Some((result.finalized.tick, expected));
+                    if let Some((snapshot_loaded, handoff_stream_position)) =
+                        authoritative.catch_up.as_ref().map(|catch_up| {
+                            (
+                                catch_up.snapshot_loaded,
+                                catch_up.begin.handoff_stream_position,
+                            )
+                        })
+                    {
+                        if !snapshot_loaded {
+                            return Err(
+                                "received reconnect history before snapshot completion".to_owned()
+                            );
+                        }
+                        if authoritative.driver.next_stream_position().0 >= handoff_stream_position
+                        {
+                            return Err(
+                                "received reconnect history beyond pinned handoff boundary"
+                                    .to_owned(),
+                            );
+                        }
                         authoritative
-                            .pending_feedback
-                            .extend(result.executions.iter().copied());
+                            .driver
+                            .apply_stream_record(&mut authoritative.simulation, canonical)
+                            .map_err(|error| {
+                                format!("canonical catch-up stream error: {error:?}")
+                            })?;
+                        authoritative.simulation.clear_presentation_events();
+                        if authoritative.driver.next_stream_position().0 > handoff_stream_position {
+                            return Err(
+                                "reconnect history crossed pinned handoff boundary".to_owned()
+                            );
+                        }
+                    } else {
+                        let applied = authoritative
+                            .driver
+                            .apply_stream_record(&mut authoritative.simulation, canonical)
+                            .map_err(|error| format!("canonical stream error: {error:?}"))?;
+                        if let Some(result) = applied {
+                            let expected = result
+                                .executions
+                                .iter()
+                                .copied()
+                                .map(WireCommandExecution::from)
+                                .collect();
+                            authoritative.expected_execution_batch =
+                                Some((result.finalized.tick, expected));
+                            authoritative
+                                .pending_feedback
+                                .extend(result.executions.iter().copied());
+                        }
+                        presentation
+                            .publish(PresentationSnapshot::capture(&authoritative.simulation));
                     }
-                    presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
                 }
                 ServerMessage::TickExecutions { batch } => {
                     let Some((expected_tick, expected_executions)) =
@@ -773,6 +896,207 @@ fn process_network_events(
             },
         }
     }
+    Ok(())
+}
+
+fn begin_snapshot_catch_up(
+    authoritative: &mut AuthoritativeSimulation,
+    begin: SnapshotTransferBegin,
+) -> Result<(), String> {
+    if authoritative.catch_up.is_some() {
+        return Err(
+            "server started a second snapshot transfer before the first completed".to_owned(),
+        );
+    }
+    let snapshot_bytes = usize::try_from(begin.snapshot_bytes)
+        .map_err(|_| "snapshot byte length does not fit this client".to_owned())?;
+    if snapshot_bytes == 0 || snapshot_bytes > MAX_SNAPSHOT_BYTES {
+        return Err(format!(
+            "server snapshot length {snapshot_bytes} exceeds reconnect bound {MAX_SNAPSHOT_BYTES}"
+        ));
+    }
+    let expected_chunks = snapshot_bytes.div_ceil(SNAPSHOT_CHUNK_BYTES);
+    if usize::try_from(begin.chunk_count).ok() != Some(expected_chunks) {
+        return Err(format!(
+            "server snapshot chunk count {} does not match byte length {snapshot_bytes}",
+            begin.chunk_count
+        ));
+    }
+    if begin.snapshot_stream_position > begin.handoff_stream_position {
+        return Err("snapshot stream boundary lies beyond handoff boundary".to_owned());
+    }
+
+    match &mut authoritative.authority {
+        AuthorityMode::Network {
+            connected,
+            pending_handoff_position,
+            ..
+        } => match *pending_handoff_position {
+            Some(expected) if expected != begin.handoff_stream_position => {
+                return Err(format!(
+                    "snapshot handoff position {} disagrees with reconnect assignment {expected}",
+                    begin.handoff_stream_position
+                ));
+            }
+            Some(_) => {}
+            None if *connected => {
+                // The same transfer path is also valid for an authoritative desync replacement.
+                *connected = false;
+                *pending_handoff_position = Some(begin.handoff_stream_position);
+            }
+            None => {
+                return Err(
+                    "received snapshot transfer without an authenticated handoff".to_owned(),
+                );
+            }
+        },
+        AuthorityMode::Local => return Err("snapshot transfer arrived in local mode".to_owned()),
+    }
+
+    authoritative.expected_execution_batch = None;
+    authoritative.pending_feedback.clear();
+    authoritative.catch_up = Some(SnapshotCatchUp {
+        begin,
+        bytes: Vec::with_capacity(snapshot_bytes),
+        next_chunk_index: 0,
+        snapshot_loaded: false,
+    });
+    Ok(())
+}
+
+fn append_snapshot_chunk(
+    authoritative: &mut AuthoritativeSimulation,
+    chunk: SnapshotChunk,
+) -> Result<(), String> {
+    let mut catch_up = authoritative
+        .catch_up
+        .take()
+        .ok_or_else(|| "received snapshot chunk without snapshot header".to_owned())?;
+    if catch_up.snapshot_loaded {
+        return Err("received snapshot chunk after snapshot was already loaded".to_owned());
+    }
+    if chunk.transfer_id != catch_up.begin.transfer_id {
+        return Err("snapshot chunk belongs to a different transfer".to_owned());
+    }
+    if chunk.chunk_index != catch_up.next_chunk_index {
+        return Err(format!(
+            "snapshot chunk gap: expected {}, got {}",
+            catch_up.next_chunk_index, chunk.chunk_index
+        ));
+    }
+    if chunk.bytes.is_empty() || chunk.bytes.len() > SNAPSHOT_CHUNK_BYTES {
+        return Err(format!(
+            "invalid snapshot chunk length {}",
+            chunk.bytes.len()
+        ));
+    }
+    let declared_bytes = usize::try_from(catch_up.begin.snapshot_bytes)
+        .map_err(|_| "snapshot byte length does not fit this client".to_owned())?;
+    let new_length = catch_up
+        .bytes
+        .len()
+        .checked_add(chunk.bytes.len())
+        .ok_or_else(|| "snapshot transfer length overflow".to_owned())?;
+    if new_length > declared_bytes || new_length > MAX_SNAPSHOT_BYTES {
+        return Err("snapshot chunks exceed declared bounded transfer length".to_owned());
+    }
+    catch_up.bytes.extend_from_slice(&chunk.bytes);
+    catch_up.next_chunk_index = catch_up
+        .next_chunk_index
+        .checked_add(1)
+        .ok_or_else(|| "snapshot chunk index exhausted".to_owned())?;
+
+    if catch_up.next_chunk_index == catch_up.begin.chunk_count {
+        if catch_up.bytes.len() != declared_bytes {
+            return Err(format!(
+                "snapshot completed with {} bytes, expected {declared_bytes}",
+                catch_up.bytes.len()
+            ));
+        }
+        let content = authoritative.driver.content();
+        let snapshot = SimulationSnapshot::decode_wire(&catch_up.bytes, content)
+            .map_err(|error| format!("invalid authoritative snapshot: {error}"))?;
+        if snapshot.completed_tick() != catch_up.begin.snapshot_completed_tick
+            || snapshot.checksum() != catch_up.begin.snapshot_checksum
+        {
+            return Err("snapshot metadata disagrees with transferred snapshot body".to_owned());
+        }
+        authoritative
+            .simulation
+            .restore_snapshot(&snapshot)
+            .map_err(|error| format!("could not restore authoritative snapshot: {error:?}"))?;
+        authoritative.driver = MatchDriver::new_replica_from_snapshot(
+            &authoritative.simulation,
+            content,
+            InputStreamPosition(catch_up.begin.snapshot_stream_position),
+        );
+        authoritative.simulation.clear_presentation_events();
+        authoritative.expected_execution_batch = None;
+        authoritative.pending_feedback.clear();
+        catch_up.bytes.clear();
+        catch_up.snapshot_loaded = true;
+    }
+
+    authoritative.catch_up = Some(catch_up);
+    Ok(())
+}
+
+fn finish_snapshot_catch_up(
+    authoritative: &mut AuthoritativeSimulation,
+    presentation: &mut PresentationSamples,
+    complete: CatchUpComplete,
+) -> Result<(), String> {
+    let catch_up = authoritative
+        .catch_up
+        .take()
+        .ok_or_else(|| "received catch-up completion without snapshot transfer".to_owned())?;
+    if !catch_up.snapshot_loaded {
+        return Err("server completed catch-up before the snapshot was loaded".to_owned());
+    }
+    if complete.transfer_id != catch_up.begin.transfer_id
+        || complete.handoff_stream_position != catch_up.begin.handoff_stream_position
+    {
+        return Err("catch-up completion disagrees with pinned snapshot handoff".to_owned());
+    }
+    if authoritative.driver.next_stream_position().0 != complete.handoff_stream_position {
+        return Err(format!(
+            "catch-up stream ended at {}, expected {}",
+            authoritative.driver.next_stream_position().0,
+            complete.handoff_stream_position
+        ));
+    }
+    let completed_tick = authoritative.simulation.tick().checked_sub(1);
+    let checksum = authoritative.simulation.checksum();
+    if completed_tick != complete.completed_tick || checksum != complete.checksum {
+        return Err(format!(
+            "catch-up state mismatch at {completed_tick:?}: local {checksum:#018x}, server {:#018x}",
+            complete.checksum
+        ));
+    }
+
+    match &mut authoritative.authority {
+        AuthorityMode::Network {
+            connected,
+            pending_handoff_position,
+            ..
+        } => {
+            if *pending_handoff_position != Some(complete.handoff_stream_position) {
+                return Err("catch-up completion does not match pending handoff".to_owned());
+            }
+            *pending_handoff_position = None;
+            *connected = true;
+        }
+        AuthorityMode::Local => return Err("catch-up completed in local mode".to_owned()),
+    }
+
+    authoritative.simulation.clear_presentation_events();
+    authoritative.expected_execution_batch = None;
+    authoritative.pending_feedback.clear();
+    *presentation =
+        PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
+    authoritative
+        .pending_status
+        .push("Authoritative state synchronized.".to_owned());
     Ok(())
 }
 
@@ -920,6 +1244,90 @@ mod tests {
             "the queued command must begin affecting gameplay only when its canonical tick executes"
         );
         assert_eq!(authoritative.simulation.tick(), 1);
+    }
+
+    #[test]
+    fn network_snapshot_handoff_replaces_divergent_state_and_resets_presentation() {
+        let mut source = crate::demo::create_demo_world(1, Some(0));
+        let mut source_driver = MatchDriver::new(&source.simulation, source.content);
+        for _ in 0..3 {
+            source_driver
+                .advance_local_tick(&mut source.simulation)
+                .unwrap();
+        }
+        let snapshot_stream_position = source_driver.next_stream_position().0;
+        let snapshot = source.simulation.capture_snapshot();
+        let bytes = snapshot.encode_wire().unwrap();
+        let chunk_count = bytes.len().div_ceil(SNAPSHOT_CHUNK_BYTES);
+        let begin = SnapshotTransferBegin {
+            transfer_id: 77,
+            snapshot_stream_position,
+            snapshot_completed_tick: snapshot.completed_tick(),
+            snapshot_checksum: snapshot.checksum(),
+            snapshot_bytes: u32::try_from(bytes.len()).unwrap(),
+            chunk_count: u32::try_from(chunk_count).unwrap(),
+            handoff_stream_position: snapshot_stream_position,
+        };
+        let complete = CatchUpComplete {
+            transfer_id: begin.transfer_id,
+            handoff_stream_position: begin.handoff_stream_position,
+            completed_tick: snapshot.completed_tick(),
+            checksum: snapshot.checksum(),
+        };
+
+        let mut replica = crate::demo::create_demo_world(1, Some(0));
+        replica.simulation.step();
+        assert_ne!(replica.simulation.checksum(), source.simulation.checksum());
+        let initial_presentation = PresentationSnapshot::capture(&replica.simulation);
+        let compatibility = compatibility_identity_for_demo(&replica);
+        let client = NetworkClient::connected_test_fixture(compatibility);
+        let mut authoritative = AuthoritativeSimulation::new_networked(
+            replica.simulation,
+            replica.content,
+            client,
+            PlayerId(0),
+            0,
+        );
+        let mut presentation = PresentationSamples::new(initial_presentation);
+
+        let network = match &authoritative.authority {
+            AuthorityMode::Network { client, .. } => client,
+            AuthorityMode::Local => unreachable!(),
+        };
+        network.inject_server_message_for_test(ServerMessage::SnapshotBegin { begin });
+        for (chunk_index, chunk) in bytes.chunks(SNAPSHOT_CHUNK_BYTES).enumerate() {
+            network.inject_server_message_for_test(ServerMessage::SnapshotChunk {
+                chunk: SnapshotChunk {
+                    transfer_id: begin.transfer_id,
+                    chunk_index: u32::try_from(chunk_index).unwrap(),
+                    bytes: chunk.to_vec(),
+                },
+            });
+        }
+        network.inject_server_message_for_test(ServerMessage::CatchUpComplete { complete });
+
+        process_network_events(&mut authoritative, &mut presentation).unwrap();
+        assert_eq!(
+            authoritative.simulation.checksum(),
+            source.simulation.checksum()
+        );
+        assert_eq!(
+            authoritative.driver.next_stream_position().0,
+            snapshot_stream_position
+        );
+        assert!(authoritative.catch_up.is_none());
+        assert_eq!(
+            presentation.current.tick,
+            PresentationSnapshot::capture(&source.simulation).tick
+        );
+        assert!(matches!(
+            authoritative.authority,
+            AuthorityMode::Network {
+                connected: true,
+                pending_handoff_position: None,
+                ..
+            }
+        ));
     }
 
     #[test]

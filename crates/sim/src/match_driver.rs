@@ -208,6 +208,21 @@ impl MatchDriver {
         }
     }
 
+    /// Creates a non-recording replica driver at an already-restored authoritative snapshot
+    /// boundary. This is intended for reconnect/desync clients that receive only the canonical
+    /// suffix after the snapshot; authoritative server/replay drivers should continue using
+    /// [`MatchDriver::new`].
+    #[must_use]
+    pub fn new_replica_from_snapshot(
+        simulation: &Simulation,
+        content: &'static CastleFightContentBundle,
+        next_stream_position: InputStreamPosition,
+    ) -> Self {
+        let mut driver = Self::new(simulation, content);
+        driver.next_stream_position = next_stream_position;
+        driver
+    }
+
     #[must_use]
     pub const fn content(&self) -> &'static CastleFightContentBundle {
         self.content
