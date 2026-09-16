@@ -465,26 +465,30 @@ Implemented so far:
 - existing simulation permission rules now become network-reachable: a connected teammate may command only the disconnected owner's builder, while ownership/resources/buildings remain unchanged, and a canonical reconnect control revokes that delegation;
 - if the last connected player on a team drops after the initial roster has joined, the server finalizes the currently open tick before recording the disconnect control, preserving already-admitted command order before the canonical lifecycle enters `PausedForDisconnect`;
 - the TCP runner no longer exits merely because the simulation is paused for disconnect; it continues servicing transport/session events without advancing simulation ticks;
-- an authenticated-session reconnect transition is available at the authoritative-match boundary and emits the same canonical `Connected` control used by replay/client replicas; secure wire credentials are intentionally the next substep rather than accepting a caller-supplied player identity.
+- an authenticated-session reconnect transition is available at the authoritative-match boundary and emits the same canonical `Connected` control used by replay/client replicas;
+- protocol revision 2 now assigns each new session a server-generated 256-bit random reconnect bearer token bound to a server-created session ID; reconnect requests present only that credential pair plus compatibility identity and contain no caller-supplied `PlayerId` claim;
+- reconnect authentication rejects unknown sessions, incorrect tokens, compatibility mismatches, and already-connected sessions; bearer-token comparison is constant-time and token debug formatting is redacted;
+- TCP replacement sockets are bound only after the canonical `Connected` control has been emitted into history and delivered to existing live peers, establishing the ordering needed for the reconnecting client to receive that control exactly once through subsequent catch-up rather than racing the live broadcast against its handshake.
 
 Compatibility/state changes:
 
-- none; connection state/lifecycle were already canonical checksum/snapshot state and `MatchControlEvent` was already replayable;
-- protocol schema remains revision 1 in this substep.
+- connection state/lifecycle remain the existing canonical checksum/snapshot state and `MatchControlEvent` remains replayable;
+- protocol schema advanced to `PROTOCOL_SCHEMA_VERSION = 2` because session assignments and client handshake vocabulary now carry reconnect credentials.
 
 Executed verification:
 
-- `tools/cargo-interactive test -p castle-fight-server`: **14 passed** (13 library/TCP tests plus binary test), including single-player 2v2 delegated builder control/revocation, team-wide 1v1 finalize-before-pause/resume, and the updated TCP fault-injection path;
-- `tools/cargo-interactive clippy -p castle-fight-server --all-targets -- -D warnings`: passed;
-- `cargo fmt --all` and `git diff --check`: passed.
+- lifecycle/delegation substep: `tools/cargo-interactive test -p castle-fight-server`: **14 passed** (13 library/TCP tests plus binary test), including single-player 2v2 delegated builder control/revocation, team-wide 1v1 finalize-before-pause/resume, and the updated TCP fault-injection path;
+- secure reconnect substep: `tools/cargo-interactive test -p castle-fight-protocol -p castle-fight-server`: protocol **9 passed**, server **16 passed** (15 library/TCP tests plus binary test), including wrong-token/unknown-session rejection, token-replay rejection while connected, distinct per-session credentials, successful TCP rebinding, and canonical reconnect-before-live-binding ordering;
+- `tools/cargo-interactive check -p castle-fight-protocol -p castle-fight-server`: passed;
+- client regression and strict combined Clippy are pending completion of the first Bevy compile in this worktree;
+- `cargo fmt --all`: passed.
 
 Pending:
 
-- secure reconnect/session credentials and TCP rebinding;
 - wall-clock team-disconnect timeout translated into canonical terminal controls;
 - bounded snapshot/history handoff and reconnect catch-up;
 - checkpoint/desync-triggered authoritative state replacement and client presentation reset.
 
 ## Next action
 
-Add authenticated reconnect credentials and TCP session rebinding without exposing player identity as a claim, then layer bounded snapshot/history catch-up on that authenticated reconnect path.
+Implement the configured wall-clock team-disconnect timeout as operational server timing that emits a canonical terminal control, then layer bounded snapshot/history catch-up on the authenticated reconnect path.

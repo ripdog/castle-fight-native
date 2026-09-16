@@ -14,9 +14,10 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 1;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 2;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
+pub const RECONNECT_TOKEN_BYTES: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -307,10 +308,31 @@ pub struct ClientHello {
     pub client_nonce: u64,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReconnectToken {
+    pub bytes: [u8; RECONNECT_TOKEN_BYTES],
+}
+
+impl std::fmt::Debug for ReconnectToken {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("ReconnectToken([REDACTED])")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReconnectHello {
+    pub compatibility: CompatibilityIdentity,
+    pub session_id: u64,
+    pub reconnect_token: ReconnectToken,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionAssignment {
     pub session_id: u64,
+    pub reconnect_token: ReconnectToken,
     pub player_id: u8,
     pub team: u8,
     pub next_stream_position: u64,
@@ -323,6 +345,7 @@ pub enum HandshakeRejectReason {
     ProtocolSchema { expected: u32, actual: u32 },
     Incompatible { mismatch: CompatibilityMismatch },
     InvalidHello,
+    InvalidReconnect,
     MatchFull,
     MatchUnavailable,
 }
@@ -331,6 +354,7 @@ pub enum HandshakeRejectReason {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
     Hello { hello: ClientHello },
+    Reconnect { reconnect: ReconnectHello },
     SubmitCommand { request: CommandRequest },
     CheckpointReport { report: CheckpointReport },
 }
@@ -1235,6 +1259,29 @@ mod tests {
             actual.mismatch(&expected),
             Some(CompatibilityMismatch::Content { .. })
         ));
+    }
+
+    #[test]
+    fn reconnect_credentials_round_trip_without_claiming_player_identity() {
+        let token = ReconnectToken {
+            bytes: [0x5a; RECONNECT_TOKEN_BYTES],
+        };
+        let value = ProtocolEnvelope::new(ClientMessage::Reconnect {
+            reconnect: ReconnectHello {
+                compatibility: compatibility(),
+                session_id: 42,
+                reconnect_token: token,
+            },
+        });
+        let frame = encode_frame(&value).unwrap();
+        let decoded: ProtocolEnvelope<ClientMessage> = decode_frame(&frame).unwrap();
+        assert_eq!(decoded, value);
+
+        let json = String::from_utf8(frame[4..].to_vec()).unwrap();
+        assert!(json.contains("\"session_id\":42"));
+        assert!(!json.contains("player_id"));
+        assert!(!json.contains("\"player\""));
+        assert_eq!(format!("{token:?}"), "ReconnectToken([REDACTED])");
     }
 
     #[test]

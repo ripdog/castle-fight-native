@@ -4,8 +4,9 @@ pub mod tcp;
 
 use castle_fight_protocol::{
     Checkpoint, CheckpointReport, ClientHello, ClientMessage, CommandAcknowledgement,
-    CompatibilityIdentity, HandshakeRejectReason, ProtocolErrorCode, ServerMessage,
-    SessionAssignment, WireCanonicalStreamRecord, WireCommandExecution, WireExecutionBatch,
+    CompatibilityIdentity, HandshakeRejectReason, ProtocolErrorCode, ReconnectHello,
+    ReconnectToken, ServerMessage, SessionAssignment, WireCanonicalStreamRecord,
+    WireCommandExecution, WireExecutionBatch,
 };
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION, CanonicalStreamError,
@@ -13,6 +14,7 @@ use castle_fight_sim::{
     ClientCommandSequence, MatchControlEvent, MatchDriver, MatchLifecycle, PlayerConnectionStatus,
     PlayerId, Simulation, Team, create_castle_fight_match,
 };
+use constant_time_eq::constant_time_eq_32;
 
 pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 30;
 
@@ -143,6 +145,7 @@ pub enum CheckpointReportStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SessionState {
     player: PlayerId,
+    reconnect_token: ReconnectToken,
     connected: bool,
     checkpoint_status: Option<CheckpointReportStatus>,
 }
@@ -279,28 +282,75 @@ impl AuthoritativeMatch {
                 reason: HandshakeRejectReason::MatchUnavailable,
             };
         };
+        let Some(reconnect_token) = Self::generate_reconnect_token() else {
+            return HandshakeResult::Rejected {
+                reason: HandshakeRejectReason::MatchUnavailable,
+            };
+        };
         let session_id = SessionId(self.next_session_id);
         self.next_session_id = next_session_id;
-        let assignment = SessionAssignment {
-            session_id: session_id.0,
-            player_id: participant.id.0,
-            team: participant.team.0,
-            next_stream_position: self.driver.next_stream_position().0,
-            completed_tick: self.game.simulation.tick().checked_sub(1),
-        };
         self.sessions.insert(
             session_id,
             SessionState {
                 player: participant.id,
+                reconnect_token,
                 connected: true,
                 checkpoint_status: None,
             },
         );
         self.player_claims.insert(participant.id, session_id);
+        let assignment = self
+            .session_assignment(session_id)
+            .expect("newly inserted session must have an assignment");
         HandshakeResult::Accepted {
             session_id,
             assignment,
         }
+    }
+
+    fn generate_reconnect_token() -> Option<ReconnectToken> {
+        let mut bytes = [0_u8; castle_fight_protocol::RECONNECT_TOKEN_BYTES];
+        getrandom::fill(&mut bytes).ok()?;
+        Some(ReconnectToken { bytes })
+    }
+
+    pub(crate) fn authenticate_reconnect(
+        &self,
+        reconnect: &ReconnectHello,
+    ) -> Result<SessionId, HandshakeRejectReason> {
+        if reconnect.compatibility.validate_shape().is_err() {
+            return Err(HandshakeRejectReason::InvalidReconnect);
+        }
+        if let Some(mismatch) = reconnect.compatibility.mismatch(&self.compatibility) {
+            return Err(HandshakeRejectReason::Incompatible { mismatch });
+        }
+
+        let session_id = SessionId(reconnect.session_id);
+        let Some(session) = self.sessions.get(&session_id) else {
+            return Err(HandshakeRejectReason::InvalidReconnect);
+        };
+        if session.connected
+            || !constant_time_eq_32(
+                &session.reconnect_token.bytes,
+                &reconnect.reconnect_token.bytes,
+            )
+        {
+            return Err(HandshakeRejectReason::InvalidReconnect);
+        }
+        Ok(session_id)
+    }
+
+    pub(crate) fn session_assignment(&self, session_id: SessionId) -> Option<SessionAssignment> {
+        let session = self.sessions.get(&session_id)?;
+        let player = self.game.simulation.player(session.player)?;
+        Some(SessionAssignment {
+            session_id: session_id.0,
+            reconnect_token: session.reconnect_token,
+            player_id: session.player.0,
+            team: player.team.0,
+            next_stream_position: self.driver.next_stream_position().0,
+            completed_tick: self.game.simulation.tick().checked_sub(1),
+        })
     }
 
     /// Records a transport disconnect as a canonical between-tick control.
@@ -359,7 +409,7 @@ impl AuthoritativeMatch {
     /// The TCP layer does not call this until reconnect credentials have been validated. Keeping
     /// this transition on the authoritative match ensures delegated builder permission and a
     /// team-wide pause/resume are driven by the same canonical record used by replay and clients.
-    pub fn reconnect_session(
+    pub(crate) fn reconnect_session(
         &mut self,
         session_id: SessionId,
     ) -> Result<Vec<OutboundMessage>, ServerMatchError> {
@@ -437,12 +487,14 @@ impl AuthoritativeMatch {
         }
 
         match message {
-            ClientMessage::Hello { .. } => vec![OutboundMessage::to_session(
-                session_id,
-                ServerMessage::ProtocolError {
-                    code: ProtocolErrorCode::AlreadyAuthenticated,
-                },
-            )],
+            ClientMessage::Hello { .. } | ClientMessage::Reconnect { .. } => {
+                vec![OutboundMessage::to_session(
+                    session_id,
+                    ServerMessage::ProtocolError {
+                        code: ProtocolErrorCode::AlreadyAuthenticated,
+                    },
+                )]
+            }
             ClientMessage::SubmitCommand { request } => {
                 let client_sequence = request.client_sequence;
                 match self.driver.submit_command(
@@ -665,6 +717,47 @@ mod tests {
                 }
             }
         ));
+    }
+
+    #[test]
+    fn reconnect_authentication_requires_the_server_issued_session_token() {
+        let mut server =
+            AuthoritativeMatch::new(config(20), 1, ServerMatchOptions::default()).unwrap();
+        let (session_id, assignment) = match server.accept_hello(hello(&server, 1)) {
+            HandshakeResult::Accepted {
+                session_id,
+                assignment,
+            } => (session_id, assignment),
+            HandshakeResult::Rejected { reason } => panic!("handshake rejected: {reason:?}"),
+        };
+        server.disconnect_session(session_id).unwrap();
+
+        let reconnect = ReconnectHello {
+            compatibility: server.compatibility().clone(),
+            session_id: assignment.session_id,
+            reconnect_token: assignment.reconnect_token,
+        };
+        let mut wrong_token = reconnect.clone();
+        wrong_token.reconnect_token.bytes[0] ^= 1;
+        assert_eq!(
+            server.authenticate_reconnect(&wrong_token),
+            Err(HandshakeRejectReason::InvalidReconnect)
+        );
+
+        let mut wrong_session = reconnect.clone();
+        wrong_session.session_id = u64::MAX;
+        assert_eq!(
+            server.authenticate_reconnect(&wrong_session),
+            Err(HandshakeRejectReason::InvalidReconnect)
+        );
+        assert_eq!(server.authenticate_reconnect(&reconnect), Ok(session_id));
+
+        server.reconnect_session(session_id).unwrap();
+        assert_eq!(
+            server.authenticate_reconnect(&reconnect),
+            Err(HandshakeRejectReason::InvalidReconnect),
+            "an already-connected session cannot be rebound by replaying its bearer token"
+        );
     }
 
     #[test]

@@ -8,3 +8,5 @@ license.workspace = true
 [dependencies]
 castle-fight-protocol = { path = "../protocol" }
 castle-fight-sim = { path = "../sim" }
+constant_time_eq.workspace = true
+getrandom.workspace = true

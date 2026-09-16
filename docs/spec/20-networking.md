@@ -121,7 +121,7 @@ This policy must balance:
 
 The initial Step 9 server uses a zero-extra-delay **open-tick** policy. `Simulation::tick()` is the one currently unfinalized authoritative tick. Commands admitted before that tick is finalized are assigned to it in canonical server arrival order; once finalization occurs, that tick/order is immutable and later arrivals can only enter the next open tick. Clients do not predict authoritative advancement in this prototype: they wait for the explicit finalized tick record. A future measured input-delay policy may deliberately schedule farther ahead, but it must preserve the same canonical-order guarantees.
 
-The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because the initial multiplayer prototype does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection. The Step 10 connection-lifecycle path records disconnect/reconnect permission changes through `MatchDriver` boundary controls; secure reconnect credentials and snapshot/history handoff remain separate session-transport work.
+The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because the initial multiplayer prototype does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection. The Step 10 connection-lifecycle path records disconnect/reconnect permission changes through `MatchDriver` boundary controls. Protocol revision 2 adds server-issued reconnect credentials; snapshot/history handoff remains separate session-transport work.
 
 The result is explicit:
 
@@ -246,9 +246,9 @@ The paused wall-clock interval itself is operational time, not simulation time. 
 
 Reconnect requires secure restoration of the correct player/session identity.
 
-Authentication/session details are outside the simulation crate, but the protocol must prevent a reconnecting client from claiming another player's slot merely by sending a `PlayerId`.
+Authentication/session details are outside the simulation crate. Protocol revision 2 assigns each newly created server session a server-generated 256-bit random reconnect bearer token and returns the pair `(session_id, reconnect_token)` to that client. A reconnect request presents that pair plus the normal compatibility identity; it contains no `PlayerId` claim. The server rejects unknown sessions, incorrect tokens, compatibility mismatches, and attempts to rebind an already-connected session. Token comparison is constant-time and token `Debug` output is redacted.
 
-Server-issued reconnect/session credentials should be separate from deterministic gameplay state.
+Reconnect/session credentials are operational server state, not deterministic gameplay state. A successful TCP reconnect emits the canonical `Connected` boundary control before the replacement socket is added to live broadcast recipients. Consequently that control is already present in canonical history when the reconnect handoff boundary is established, and the reconnecting client receives it through history/catch-up exactly once rather than racing a live broadcast against its handshake.
 
 ## 14. Transport
 

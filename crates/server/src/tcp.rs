@@ -278,24 +278,54 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
         };
-        let ClientMessage::Hello { hello } = message else {
-            self.send_to_connection(
-                connection_id,
-                ServerMessage::ProtocolError {
-                    code: ProtocolErrorCode::ExpectedHello,
-                },
-            )?;
-            return Ok(());
-        };
-
-        let result = self.authoritative.accept_hello(hello);
-        if let HandshakeResult::Accepted { session_id, .. } = &result {
-            if let Some(connection) = self.connections.get_mut(&connection_id) {
-                connection.session_id = Some(*session_id);
+        match message {
+            ClientMessage::Hello { hello } => {
+                let result = self.authoritative.accept_hello(hello);
+                if let HandshakeResult::Accepted { session_id, .. } = &result {
+                    self.bind_session_connection(connection_id, *session_id);
+                }
+                self.send_to_connection(connection_id, result.message())
             }
-            self.session_connections.insert(*session_id, connection_id);
+            ClientMessage::Reconnect { reconnect } => {
+                let session_id = match self.authoritative.authenticate_reconnect(&reconnect) {
+                    Ok(session_id) => session_id,
+                    Err(reason) => {
+                        self.send_to_connection(
+                            connection_id,
+                            ServerMessage::HelloRejected { reason },
+                        )?;
+                        return Ok(());
+                    }
+                };
+
+                // The reconnect control must enter canonical history before this replacement
+                // socket joins live broadcasts. The reconnecting client will receive that record
+                // exactly once through the pinned history/catch-up handoff rather than racing a
+                // live broadcast against its handshake.
+                let outbound = self.authoritative.reconnect_session(session_id)?;
+                self.dispatch_all(outbound)?;
+                let assignment = self
+                    .authoritative
+                    .session_assignment(session_id)
+                    .expect("authenticated reconnect session must still exist");
+                self.bind_session_connection(connection_id, session_id);
+                self.send_to_connection(connection_id, ServerMessage::HelloAccepted { assignment })
+            }
+            ClientMessage::SubmitCommand { .. } | ClientMessage::CheckpointReport { .. } => self
+                .send_to_connection(
+                    connection_id,
+                    ServerMessage::ProtocolError {
+                        code: ProtocolErrorCode::ExpectedHello,
+                    },
+                ),
         }
-        self.send_to_connection(connection_id, result.message())
+    }
+
+    fn bind_session_connection(&mut self, connection_id: ConnectionId, session_id: SessionId) {
+        if let Some(connection) = self.connections.get_mut(&connection_id) {
+            connection.session_id = Some(session_id);
+        }
+        self.session_connections.insert(session_id, connection_id);
     }
 
     fn dispatch_all(&mut self, outbound: Vec<OutboundMessage>) -> Result<(), TcpServerError> {
@@ -413,8 +443,9 @@ fn spawn_writer(mut stream: TcpStream, outbound: Receiver<ServerMessage>) {
 mod tests {
     use super::*;
     use castle_fight_protocol::{
-        CheckpointReport, ClientHello, CommandAcknowledgement, CommandRequest, SessionAssignment,
-        WireAdmissionError, WireCanonicalStreamRecord, WireCommandExecution, WirePlayerCommand,
+        CheckpointReport, ClientHello, CommandAcknowledgement, CommandRequest, ReconnectHello,
+        SessionAssignment, WireAdmissionError, WireCanonicalStreamRecord, WireCommandExecution,
+        WirePlayerCommand,
     };
     use castle_fight_sim::{
         CanonicalStreamRecord, CastleFightMatchConfig, ClientCommandSequence, MapVersion,
@@ -924,5 +955,132 @@ mod tests {
         assert_eq!(history.get(1), Some(&tick_one_first));
         assert_eq!(history.get(2), Some(&tick_two_record));
         assert_eq!(history.get(3), Some(&disconnect_record));
+    }
+
+    #[test]
+    fn tcp_reconnect_requires_bearer_token_and_binds_after_canonical_connect() {
+        let mut server = server();
+        let mut first = connect(&server);
+        let mut second = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut first, hello(&server, 1));
+        send_client(&mut second, hello(&server, 2));
+        pump_until(&mut server, |view| view.started);
+        let first_assignment = match receive_server(&mut first) {
+            ServerMessage::HelloAccepted { assignment } => assignment,
+            message => panic!("expected first handshake, got {message:?}"),
+        };
+        let second_assignment = match receive_server(&mut second) {
+            ServerMessage::HelloAccepted { assignment } => assignment,
+            message => panic!("expected second handshake, got {message:?}"),
+        };
+        assert_ne!(
+            first_assignment.reconnect_token, second_assignment.reconnect_token,
+            "independent sessions must not share reconnect credentials"
+        );
+
+        second.shutdown(Shutdown::Both).unwrap();
+        drop(second);
+        pump_until(&mut server, |view| view.authenticated == 1);
+
+        let mut disconnect_record = None;
+        for _ in 0..3 {
+            if let ServerMessage::StreamRecord { record } = receive_server(&mut first) {
+                let record = CanonicalStreamRecord::from(record);
+                if matches!(record, CanonicalStreamRecord::Control(_)) {
+                    disconnect_record = Some(record);
+                }
+            }
+        }
+        assert!(matches!(
+            disconnect_record,
+            Some(CanonicalStreamRecord::Control(ref control))
+                if matches!(
+                    control.event,
+                    castle_fight_sim::MatchControlEvent::SetPlayerConnection {
+                        player: PlayerId(6),
+                        connection: castle_fight_sim::PlayerConnectionStatus::Disconnected,
+                    }
+                )
+        ));
+
+        let reconnect = ReconnectHello {
+            compatibility: server.authoritative().compatibility().clone(),
+            session_id: second_assignment.session_id,
+            reconnect_token: second_assignment.reconnect_token,
+        };
+        let mut invalid = reconnect.clone();
+        invalid.reconnect_token.bytes[0] ^= 1;
+        let mut hijack = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut hijack, ClientMessage::Reconnect { reconnect: invalid });
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut hijack),
+            ServerMessage::HelloRejected {
+                reason: HandshakeRejectReason::InvalidReconnect
+            }
+        ));
+        assert_eq!(server.authenticated_connection_count(), 1);
+        assert!(
+            !server
+                .authoritative()
+                .session_is_connected(SessionId(second_assignment.session_id))
+        );
+        hijack.shutdown(Shutdown::Both).unwrap();
+        drop(hijack);
+        pump_network(&mut server);
+
+        let mut replacement = connect(&server);
+        server.poll_network().unwrap();
+        send_client(
+            &mut replacement,
+            ClientMessage::Reconnect {
+                reconnect: reconnect.clone(),
+            },
+        );
+        pump_until(&mut server, |view| view.authenticated == 2);
+
+        let reconnect_record = match receive_server(&mut first) {
+            ServerMessage::StreamRecord { record } => CanonicalStreamRecord::from(record),
+            message => panic!("expected canonical reconnect record, got {message:?}"),
+        };
+        assert!(matches!(
+            reconnect_record,
+            CanonicalStreamRecord::Control(ref control)
+                if matches!(
+                    control.event,
+                    castle_fight_sim::MatchControlEvent::SetPlayerConnection {
+                        player: PlayerId(6),
+                        connection: castle_fight_sim::PlayerConnectionStatus::Connected,
+                    }
+                )
+        ));
+        assert_eq!(
+            server.authoritative().driver().history().last(),
+            Some(&reconnect_record),
+            "the canonical reconnect must already be retained before the replacement joins live broadcasts"
+        );
+
+        let reassignment = match receive_server(&mut replacement) {
+            ServerMessage::HelloAccepted { assignment } => assignment,
+            message => {
+                panic!("replacement must receive its handshake before live records: {message:?}")
+            }
+        };
+        assert_eq!(reassignment.session_id, second_assignment.session_id);
+        assert_eq!(
+            reassignment.reconnect_token,
+            second_assignment.reconnect_token
+        );
+        assert_eq!(reassignment.player_id, second_assignment.player_id);
+        assert_eq!(
+            reassignment.next_stream_position,
+            server.authoritative().driver().next_stream_position().0
+        );
+        assert_eq!(
+            server.authoritative().simulation().lifecycle(),
+            MatchLifecycle::Running
+        );
     }
 }
