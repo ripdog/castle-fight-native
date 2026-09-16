@@ -13731,6 +13731,12 @@ def _extract_runtime_system_mechanics(
         "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
         "recordCFBuildingCatalogDrift__w3p_vmProtect",
         "CFRace_CFRace_registerBuildings__w3p_vmProtect",
+        "cF", "CFBuilding_CFBuilding_setup", "beginCFRaceBuildingRegistration__w3p_vmProtect",
+        "recordCFRaceBuilding__w3p_vmProtect", "getExpectedCFRaceBuildingSequence__w3p_vmProtect",
+        "finishCFRaceBuildingRegistration__w3p_vmProtect", "noteCFBuildingConstructed__w3p_vmProtect",
+        "assertCFBuildingAllowedInPool__w3p_vmProtect", "assertCFBuildingPoolTier__w3p_vmProtect",
+        "assertCFBuildingCatalogIntegrity__w3p_vmProtect", "assertBuildingPoolsIntegrity__w3p_vmProtect",
+        "resetPool", "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools1",
         "noteLedgerVariance__w3p_vmProtect", "noteLedgerHint__w3p_vmProtect",
         "BI", "reviewMapLabel__w3p_vmProtect", "createWatermark__w3p_vmProtect",
         "reviewWatermark__w3p_vmProtect", "scheduleWatermarkReview__w3p_vmProtect",
@@ -15858,6 +15864,21 @@ def _extract_runtime_system_mechanics(
     ledger_constructor_start, ledger_constructor_source, _ = source("mz:create1035")
     cf_drift_start, cf_drift_source, _ = source("recordCFBuildingCatalogDrift__w3p_vmProtect")
     cf_registrar_start, cf_registrar_source, _ = source("CFRace_CFRace_registerBuildings__w3p_vmProtect")
+    cf_initializer_start, cf_initializer_source, _ = source("cF")
+    cf_setup_start, cf_setup_source, _ = source("CFBuilding_CFBuilding_setup")
+    cf_begin_start, cf_begin_source, _ = source("beginCFRaceBuildingRegistration__w3p_vmProtect")
+    cf_record_start, cf_record_source, _ = source("recordCFRaceBuilding__w3p_vmProtect")
+    cf_expected_start, cf_expected_source, _ = source("getExpectedCFRaceBuildingSequence__w3p_vmProtect")
+    cf_finish_start, cf_finish_source, _ = source("finishCFRaceBuildingRegistration__w3p_vmProtect")
+    cf_constructed_start, cf_constructed_source, _ = source("noteCFBuildingConstructed__w3p_vmProtect")
+    cf_pool_allowed_start, cf_pool_allowed_source, _ = source("assertCFBuildingAllowedInPool__w3p_vmProtect")
+    cf_pool_tier_start, cf_pool_tier_source, _ = source("assertCFBuildingPoolTier__w3p_vmProtect")
+    cf_catalog_assert_start, cf_catalog_assert_source, _ = source("assertCFBuildingCatalogIntegrity__w3p_vmProtect")
+    cf_pools_assert_start, cf_pools_assert_source, _ = source("assertBuildingPoolsIntegrity__w3p_vmProtect")
+    cf_reset_pool_start, cf_reset_pool_source, _ = source("resetPool")
+    cf_pool_tier_callback_start, cf_pool_tier_callback_source, _ = source(
+        "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools1"
+    )
     variance_start, variance_source, _ = source("noteLedgerVariance__w3p_vmProtect")
     hint_start, hint_source, _ = source("noteLedgerHint__w3p_vmProtect")
     watermark_init_start, watermark_init_source, _ = source("BI")
@@ -15948,6 +15969,132 @@ def _extract_runtime_system_mechanics(
     require_vm_subsequence(1, registrar_program, [(218, (1,)), (241, (1, 1)), (98, (16,))], "begin-registration call")
     require_vm_subsequence(1, registrar_program, [(253, (3,)), (42, (2, 16))], "record-building call")
     require_vm_subsequence(1, registrar_program, [(218, (11,)), (241, (1, 1)), (98, (16,))], "finish-registration call")
+
+    # The same catalog is guarded by a second protected integrity layer. The
+    # readable registration helpers collect the actual sequence/counts; VMs
+    # 10-14 compare those observations against the authored catalog and feed
+    # any drift through VM9. VM7 walks every authored tier pool and delegates
+    # per-entry validation to VM13. VM8 catches CFBuilding objects constructed
+    # after VM14 has sealed the catalog. These are anti-tamper assertions, not
+    # extra gameplay rules.
+    for body, fragment in (
+        (cf_initializer_source, b"Rrb=1479554869 Qrb=240 Prb=15"),
+        (cf_initializer_source, b"Mrb="),
+        (cf_setup_source, b"noteCFBuildingConstructed__w3p_vmProtect()"),
+        (cf_begin_source, b"if Krb then recordCFBuildingCatalogDrift__w3p_vmProtect(1201)end"),
+        (cf_begin_source, b"Nrb=(Nrb+1)Mrb=\"\"Lrb=0"),
+        (cf_begin_source, b"recordCFBuildingCatalogDrift__w3p_vmProtect(1213)"),
+        (cf_record_source, b"recordCFBuildingCatalogDrift__w3p_vmProtect(1223)"),
+        (cf_record_source, b"if Krb then recordCFBuildingCatalogDrift__w3p_vmProtect(1231)end"),
+        (cf_record_source, b"CFBuilding_registeredViaCatalog=true Orb=(Orb+1)Lrb=(Lrb+1)"),
+        (cf_record_source, b"int_toRawCode(FGp.CFBuilding_buildingId),\"|\""),
+        (cf_expected_source, b"return _qr(10,DGp)"),
+        (cf_finish_source, b"return _qr(11,GGp)"),
+        (cf_constructed_source, b"return _qr(8)"),
+        (cf_pool_allowed_source, b"return _qr(12,HGp)"),
+        (cf_pool_tier_source, b"return _qr(13,IGp,JGp)"),
+        (cf_catalog_assert_source, b"return _qr(14)"),
+        (cf_pools_assert_source, b"return _qr(7)"),
+        (cf_reset_pool_source, b"assertCFBuildingCatalogIntegrity__w3p_vmProtect()assertBuildingPoolsIntegrity__w3p_vmProtect()Wsb=Jcb"),
+        (cf_pool_tier_callback_source, b"assertCFBuildingPoolTier__w3p_vmProtect(LMk,KMk.tier)"),
+    ):
+        if fragment not in body:
+            raise ValueError(f"CF building catalog/pool integrity evidence changed: missing {fragment!r}")
+    if cf_setup_source.find(b"noteCFBuildingConstructed__w3p_vmProtect()") > cf_setup_source.find(b"CFBuilding_buildingId=aTk"):
+        raise ValueError("CF building construction integrity hook moved after building-id initialization")
+
+    expected_sequences = _w3p_vm_static_strings(data, 10)
+    if len(expected_sequences) != 31 or expected_sequences[-1] != "":
+        raise ValueError(f"CF building expected race-sequence VM10 table changed: {expected_sequences}")
+    if len(expected_sequences[:-1]) // 2 != 15:
+        raise ValueError("CF building expected race-sequence VM10 race count changed")
+    vm10_program = _decode_w3p_vm_program(data, 10, expected_opcode_xor_byte=82)
+    if vm10_program["operand_mode"] != 6:
+        raise ValueError(f"CF building expected race-sequence VM10 operand mode changed: {vm10_program['operand_mode']}")
+
+    if _w3p_vm_static_strings(data, 7) != ["create136", "tier", "BuildingTier_index"]:
+        raise ValueError("CF building pool-integrity VM7 static table changed")
+    if vm_global_names(7) != [
+        "LinkedList_LinkedList_iterator", "Srb", "LLIterator_LLIterator_hasNext", "LLIterator_LLIterator_next",
+        "me", "LinkedList_LinkedList_forEach", "btb", "LLIterator_LLIterator_close",
+    ]:
+        raise ValueError("CF building pool-integrity VM7 global table changed")
+    expected_vm7 = [
+        (224, ()), (24, (1,)), (224, ()), (24, (2,)), (224, ()), (24, (3,)),
+        (218, (1,)), (218, (2,)), (98, (17,)), (24, (1,)), (156, (1,)), (10, (0, 48)),
+        (253, (1,)), (42, (3, 17)), (236, ()), (10, (0, 3)), (240, (0, 36)),
+        (253, (1,)), (42, (4, 17)), (24, (2,)), (218, (5,)), (90, (1,)), (87, (1,)),
+        (24, (3,)), (253, (3,)), (253, (2,)), (174, (2,)), (218, (6,)), (218, (7,)),
+        (241, (2, 3)), (162, ()), (253, (3,)), (98, (32,)), (240, (255, 203)),
+        (253, (1,)), (42, (8, 16)), (221, ()),
+    ]
+    if vm_ops(7, 158) != expected_vm7:
+        raise ValueError("CF building pool-integrity protected VM7 changed")
+
+    if _w3p_vm_static_strings(data, 8) != ["1361"] or vm_global_names(8) != [
+        "Krb", "recordCFBuildingCatalogDrift__w3p_vmProtect",
+    ]:
+        raise ValueError("CF building constructed-after-seal VM8 table changed")
+    if vm_ops(8, 188) != [
+        (218, (1,)), (10, (0, 5)), (144, (1,)), (42, (2, 16)), (221, ()),
+    ]:
+        raise ValueError("CF building constructed-after-seal protected VM8 changed")
+
+    if _w3p_vm_static_strings(data, 11) != ["1249", "0", "1277", "1283"]:
+        raise ValueError("CF building finish-registration VM11 static table changed")
+    if vm_global_names(11) != [
+        "getExpectedCFRaceBuildingSequence__w3p_vmProtect", "Mrb", "recordCFBuildingCatalogDrift__w3p_vmProtect",
+        "string_length", "string_getHash", "Lrb",
+    ]:
+        raise ValueError("CF building finish-registration VM11 global table changed")
+    expected_vm11 = [
+        (224, ()), (24, (2,)), (253, (1,)), (42, (1, 17)), (24, (2,)),
+        (218, (2,)), (253, (2,)), (18, (16,)), (236, ()), (10, (0, 5)), (144, (1,)), (42, (3, 16)),
+        (253, (2,)), (42, (4, 17)), (144, (2,)), (18, (16,)), (24, (3,)), (253, (3,)), (124, (0, 17)),
+        (218, (5,)), (218, (2,)), (98, (17,)), (253, (2,)), (42, (5, 17)), (18, (16,)), (236, ()),
+        (240, (0, 2)), (253, (3,)), (10, (0, 5)), (144, (3,)), (42, (3, 16)),
+        (218, (6,)), (144, (2,)), (153, (16,)), (10, (0, 5)), (144, (4,)), (42, (3, 16)), (221, ()),
+    ]
+    if vm_ops(11, 239) != expected_vm11:
+        raise ValueError("CF building finish-registration protected VM11 changed")
+
+    if _w3p_vm_static_strings(data, 12) != [
+        "1301", "CFBuilding_registeredViaCatalog", "CFBuilding_buildingId", "1747988536", "1319",
+    ] or vm_global_names(12) != ["recordCFBuildingCatalogDrift__w3p_vmProtect"]:
+        raise ValueError("CF building pool-entry VM12 table changed")
+    expected_vm12 = [
+        (253, (1,)), (224, ()), (18, (16,)), (10, (0, 6)), (144, (1,)), (42, (1, 16)), (221, ()),
+        (241, (1, 2)), (236, ()), (24, (2,)), (253, (2,)), (10, (0, 11)),
+        (241, (1, 3)), (144, (4,)), (18, (16,)), (236, ()), (240, (0, 2)),
+        (253, (2,)), (10, (0, 5)), (144, (5,)), (42, (1, 16)), (221, ()),
+    ]
+    if vm_ops(12, 247) != expected_vm12:
+        raise ValueError("CF building pool-entry protected VM12 changed")
+
+    if _w3p_vm_static_strings(data, 13) != ["CFBuilding_tier_field", "1321"] or vm_global_names(13) != [
+        "assertCFBuildingAllowedInPool__w3p_vmProtect", "recordCFBuildingCatalogDrift__w3p_vmProtect",
+    ]:
+        raise ValueError("CF building pool-tier VM13 table changed")
+    expected_vm13 = [
+        (253, (1,)), (42, (1, 16)), (253, (1,)), (224, ()), (18, (16,)), (24, (3,)),
+        (253, (3,)), (124, (0, 8)), (253, (2,)), (224, ()), (18, (16,)), (240, (0, 2)),
+        (253, (3,)), (10, (0, 1)), (221, ()), (241, (1, 1)), (253, (2,)), (18, (16,)),
+        (236, ()), (10, (0, 5)), (144, (2,)), (42, (2, 16)), (221, ()),
+    ]
+    if vm_ops(13, 153) != expected_vm13:
+        raise ValueError("CF building pool-tier protected VM13 changed")
+
+    if _w3p_vm_static_strings(data, 14) != ["CFBuilding_cfBuildingCatalogSealed", "1327", "1337", "Krb"]:
+        raise ValueError("CF building catalog-integrity VM14 static table changed")
+    if vm_global_names(14) != ["Orb", "Qrb", "recordCFBuildingCatalogDrift__w3p_vmProtect", "Nrb", "Prb"]:
+        raise ValueError("CF building catalog-integrity VM14 global table changed")
+    expected_vm14 = [
+        (156, (1,)), (251, (4,)), (218, (1,)), (218, (2,)), (18, (16,)), (236, ()),
+        (10, (0, 5)), (144, (2,)), (42, (3, 16)), (218, (4,)), (218, (5,)),
+        (18, (16,)), (236, ()), (10, (0, 5)), (144, (3,)), (42, (3, 16)), (221, ()),
+    ]
+    if vm_ops(14, 96) != expected_vm14:
+        raise ValueError("CF building catalog-integrity protected VM14 changed")
 
     # recordCFBuildingCatalogDrift is a tiny protected bridge: pass its drift
     # salt straight to noteLedgerVariance.
@@ -16072,6 +16219,55 @@ def _extract_runtime_system_mechanics(
             "race_registrar_live_callers": race_registrar_callers,
             "race_registrar_vm_index": 1,
             "cf_building_catalog_drift_vm_index": 9,
+            "cf_building_catalog_integrity": {
+                "expected_total_registered_buildings": 240,
+                "expected_total_registered_buildings_symbol": "Qrb",
+                "observed_total_registered_buildings_symbol": "Orb",
+                "expected_race_catalog_count": 15,
+                "expected_race_catalog_count_symbol": "Prb",
+                "observed_race_catalog_count_symbol": "Nrb",
+                "catalog_sealed_symbol": "Krb",
+                "catalog_sealed_initial_state": False,
+                "ultimate_builder_rawcode": "X075",
+                "ultimate_builder_rawcode_integer": 1479554869,
+                "race_registration_begin_post_seal_drift_salt": 1201,
+                "race_registration_missing_expected_sequence_drift_salt": 1213,
+                "race_registration_null_building_drift_salt": 1223,
+                "race_registration_record_post_seal_drift_salt": 1231,
+                "race_registration_expected_sequence_vm_index": 10,
+                "race_registration_expected_sequence_count": 15,
+                "race_registration_expected_sequences_independently_locked_by_race_extractor": True,
+                "race_registration_finish_vm_index": 11,
+                "race_registration_finish_validates_accumulated_rawcode_sequence": True,
+                "race_registration_finish_validates_accumulated_count": True,
+                "race_registration_finish_uses_string_length_and_hash": True,
+                "race_registration_finish_drift_salts": [1249, 1277, 1283],
+                "record_marks_building_registered_via_catalog": True,
+                "record_increments_total_and_current_race_counts": True,
+                "record_appends_building_rawcode_to_current_race_sequence": True,
+                "constructed_after_seal_vm_index": 8,
+                "constructed_after_seal_drift_salt": 1361,
+                "construction_hook_runs_before_building_id_initialization": True,
+                "pool_integrity_vm_index": 7,
+                "pool_integrity_iterates_all_authored_building_tiers": True,
+                "pool_integrity_iterates_each_authored_tier_pool": True,
+                "pool_entry_validation_vm_index": 12,
+                "pool_entry_null_drift_salt": 1301,
+                "pool_entry_unregistered_drift_salt": 1319,
+                "pool_entry_treasure_box_exception_rawcode": "h008",
+                "pool_entry_treasure_box_exception_rawcode_integer": 1747988536,
+                "pool_tier_validation_vm_index": 13,
+                "pool_tier_validation_delegates_entry_validation": True,
+                "pool_tier_mismatch_drift_salt": 1321,
+                "catalog_integrity_vm_index": 14,
+                "catalog_integrity_seals_catalog": True,
+                "catalog_total_building_count_mismatch_drift_salt": 1327,
+                "catalog_race_count_mismatch_drift_salt": 1337,
+                "catalog_and_pool_integrity_run_before_each_active_pool_reset": True,
+                "all_catalog_drift_routes_through_vm9_to_runtime_ledger": True,
+                "classification": "anti-tamper-integrity-infrastructure",
+                "import_policy": "validation only; do not model as Castle Fight gameplay mechanics",
+            },
             "integrity_variance_vm_sources": integrity_vm_sources,
             "variance_counter_symbol": "HW",
             "variance_last_salt_symbol": "GW",
@@ -16112,6 +16308,12 @@ def _extract_runtime_system_mechanics(
         "related_rawcode_ids": [1918989414],
         "source_functions": [
             "CFRace_CFRace_registerBuildings__w3p_vmProtect", "recordCFBuildingCatalogDrift__w3p_vmProtect",
+            "cF", "CFBuilding_CFBuilding_setup", "beginCFRaceBuildingRegistration__w3p_vmProtect",
+            "recordCFRaceBuilding__w3p_vmProtect", "getExpectedCFRaceBuildingSequence__w3p_vmProtect",
+            "finishCFRaceBuildingRegistration__w3p_vmProtect", "noteCFBuildingConstructed__w3p_vmProtect",
+            "assertCFBuildingAllowedInPool__w3p_vmProtect", "assertCFBuildingPoolTier__w3p_vmProtect",
+            "assertCFBuildingCatalogIntegrity__w3p_vmProtect", "assertBuildingPoolsIntegrity__w3p_vmProtect",
+            "resetPool", "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools1",
             "noteLedgerVariance__w3p_vmProtect", "noteLedgerHint__w3p_vmProtect",
             "BI", "reviewMapLabel__w3p_vmProtect", "reviewWatermark__w3p_vmProtect",
             "scheduleWatermarkReview__w3p_vmProtect",
@@ -16120,10 +16322,14 @@ def _extract_runtime_system_mechanics(
             "localLedgerLane", "ledgerCoord", "settleLedger__w3p_vmProtect",
             "CallbackSingle_doAfter_RuntimeLedger_call_doAfter_RuntimeLedger", "mz:create1035",
         ],
-        "evidence_kind": "exact-readable-settlement-plus-statically-decoded-protected-integrity-scheduler",
+        "evidence_kind": "exact-readable-settlement-plus-statically-decoded-protected-building-catalog-pool-and-integrity-scheduler",
         "byte_offset": min(
             ledger_lane_start, ledger_coord_start, ledger_settle_start, ledger_callback_start,
-            ledger_constructor_start, cf_drift_start, cf_registrar_start, variance_start, hint_start,
+            ledger_constructor_start, cf_drift_start, cf_registrar_start,
+            cf_initializer_start, cf_setup_start, cf_begin_start, cf_record_start, cf_expected_start,
+            cf_finish_start, cf_constructed_start, cf_pool_allowed_start, cf_pool_tier_start,
+            cf_catalog_assert_start, cf_pools_assert_start, cf_reset_pool_start, cf_pool_tier_callback_start,
+            variance_start, hint_start,
             watermark_init_start, map_label_start, review_start, schedule_start,
             watermark_callback_start, watermark_create_callback_start,
         ),

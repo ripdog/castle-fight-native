@@ -4262,6 +4262,7 @@ def main() -> None:
                     ):
                         raise ValueError(f"building-unit synchronization parameters changed: {parameters}")
                 elif system_id == "protected-runtime-ledger-integrity-penalty":
+                    catalog_integrity = parameters.get("cf_building_catalog_integrity", {})
                     expected_integrity_sources = [
                         {"vm_index": 5, "source": "ability-field-source-integrity"},
                         {"vm_index": 9, "source": "cf-building-catalog-drift"},
@@ -4289,6 +4290,41 @@ def main() -> None:
                         or parameters.get("race_registrar_live_callers") != [
                             "AK", "CK", "EK", "GK", "IK", "KK", "QK", "UK", "WK", "aL", "kK", "nK", "pK", "qK", "wK"
                         ]
+                        or catalog_integrity.get("expected_total_registered_buildings") != 240
+                        or catalog_integrity.get("expected_total_registered_buildings_symbol") != "Qrb"
+                        or catalog_integrity.get("observed_total_registered_buildings_symbol") != "Orb"
+                        or catalog_integrity.get("expected_race_catalog_count") != 15
+                        or catalog_integrity.get("expected_race_catalog_count_symbol") != "Prb"
+                        or catalog_integrity.get("observed_race_catalog_count_symbol") != "Nrb"
+                        or catalog_integrity.get("catalog_sealed_symbol") != "Krb"
+                        or catalog_integrity.get("catalog_sealed_initial_state") is not False
+                        or catalog_integrity.get("ultimate_builder_rawcode") != "X075"
+                        or catalog_integrity.get("race_registration_expected_sequence_vm_index") != 10
+                        or catalog_integrity.get("race_registration_expected_sequence_count") != 15
+                        or catalog_integrity.get("race_registration_expected_sequences_independently_locked_by_race_extractor") is not True
+                        or catalog_integrity.get("race_registration_finish_vm_index") != 11
+                        or catalog_integrity.get("race_registration_finish_validates_accumulated_rawcode_sequence") is not True
+                        or catalog_integrity.get("race_registration_finish_validates_accumulated_count") is not True
+                        or catalog_integrity.get("race_registration_finish_drift_salts") != [1249, 1277, 1283]
+                        or catalog_integrity.get("constructed_after_seal_vm_index") != 8
+                        or catalog_integrity.get("constructed_after_seal_drift_salt") != 1361
+                        or catalog_integrity.get("construction_hook_runs_before_building_id_initialization") is not True
+                        or catalog_integrity.get("pool_integrity_vm_index") != 7
+                        or catalog_integrity.get("pool_entry_validation_vm_index") != 12
+                        or catalog_integrity.get("pool_entry_null_drift_salt") != 1301
+                        or catalog_integrity.get("pool_entry_unregistered_drift_salt") != 1319
+                        or catalog_integrity.get("pool_entry_treasure_box_exception_rawcode") != "h008"
+                        or catalog_integrity.get("pool_tier_validation_vm_index") != 13
+                        or catalog_integrity.get("pool_tier_mismatch_drift_salt") != 1321
+                        or catalog_integrity.get("catalog_integrity_vm_index") != 14
+                        or catalog_integrity.get("catalog_integrity_seals_catalog") is not True
+                        or catalog_integrity.get("catalog_total_building_count_mismatch_drift_salt") != 1327
+                        or catalog_integrity.get("catalog_race_count_mismatch_drift_salt") != 1337
+                        or catalog_integrity.get("catalog_and_pool_integrity_run_before_each_active_pool_reset") is not True
+                        or catalog_integrity.get("all_catalog_drift_routes_through_vm9_to_runtime_ledger") is not True
+                        or catalog_integrity.get("classification") != "anti-tamper-integrity-infrastructure"
+                        or catalog_integrity.get("import_policy")
+                        != "validation only; do not model as Castle Fight gameplay mechanics"
                         or parameters.get("integrity_variance_vm_sources") != expected_integrity_sources
                         or parameters.get("variance_signal_increment_formula") != "IW += drift_salt + 31"
                         or parameters.get("hint_signal_increment_formula") != "IW += hint + 17"
@@ -6705,7 +6741,7 @@ def main() -> None:
             "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, the full Ultimate Roll pool lifecycle (VM1/VM6 campaign-only and legendary-pool gates, ten V-tier Treasure Box entries, mode-filtered active pools, legendary-first no-replacement draws, and Ultimate Draft upgrade closure), the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
             "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry, and VM39's unlockmissions Chapter-I progress seeder is explicitly classified as developer/test-only because normal init_GameBasics sets Pcb=true before init_Campaign reaches its if-not-Pcb command-registration block",
             "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout and exact readable pack lifecycle: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, per-tier without-replacement draw pools with separate returned-pack recycling, reroll replacement-before-return ordering, immediate building/perk pick application, AI/AWAY/AFK and timeout random autopicks, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
-            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
+            "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. The separately classified RuntimeLedger anti-tamper row now also closes CF-building VMs 7-14: 240 registered buildings across 15 exact race catalogs, catalog sealing/post-seal construction checks, and authored pool registration/tier validation with the h008 Treasure Box exception. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",
             "unit-spell-mechanics.tsv gives every scripted unit spell a complete static implementation-evidence profile: direct primitives/helper calls, exact generated doAfter/ForGroupCallback/CallbackPeriodic dispatch, calls made by lexically contained anonymous timer callbacks, semantic effect-call arguments, source numeric literals and bounded reachable map-object paths enriched with resolved ability/unit data; callback edges are followed only when statically exact and the map Lua is never executed",
