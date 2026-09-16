@@ -1,0 +1,498 @@
+use super::*;
+
+impl Simulation {
+    pub(super) fn resolve_automatic_abilities(
+        &mut self,
+        buildings: &mut [BuildingSnapshot],
+        units: &mut [UnitSnapshot],
+        grid: &SpatialGrid,
+    ) -> AbilityMetrics {
+        let building_evaluations: Vec<_> = self.pool.install(|| {
+            buildings
+                .par_iter()
+                .enumerate()
+                .map(|(source_index, source)| {
+                    self.evaluate_automatic_ability(
+                        AbilitySourceSnapshot {
+                            source: AbilitySourceIndex::Building(source_index),
+                            id: source.id,
+                            team: source.team,
+                            origin: AbilitySourceOrigin::Building(source.footprint),
+                            health: source.health,
+                            stunned_until_tick: source
+                                .status
+                                .map_or(0, |status| status.stunned_until_tick),
+                            spellcasting: source.spellcasting,
+                            mana_current: source.mana_current,
+                            ability_state: source.ability_state,
+                        },
+                        units,
+                        grid,
+                    )
+                })
+                .collect()
+        });
+        let unit_evaluations: Vec<_> = self.pool.install(|| {
+            units
+                .par_iter()
+                .enumerate()
+                .map(|(source_index, source)| {
+                    self.evaluate_automatic_ability(
+                        AbilitySourceSnapshot {
+                            source: AbilitySourceIndex::Unit(source_index),
+                            id: source.id,
+                            team: source.team,
+                            origin: AbilitySourceOrigin::Unit(source.position),
+                            health: source.health,
+                            stunned_until_tick: source.status.stunned_until_tick,
+                            spellcasting: source.spellcasting,
+                            mana_current: source.mana_current,
+                            ability_state: source.ability_state,
+                        },
+                        units,
+                        grid,
+                    )
+                })
+                .collect()
+        });
+        let mut metrics = AbilityMetrics {
+            evaluations: buildings
+                .iter()
+                .filter(|building| building.spellcasting.is_some())
+                .count()
+                + units
+                    .iter()
+                    .filter(|unit| unit.spellcasting.is_some())
+                    .count(),
+            candidate_checks: building_evaluations
+                .iter()
+                .chain(&unit_evaluations)
+                .map(|evaluation| evaluation.candidate_checks)
+                .sum(),
+            ..AbilityMetrics::default()
+        };
+        let mut intents: Vec<_> = building_evaluations
+            .into_iter()
+            .chain(unit_evaluations)
+            .filter_map(|evaluation| evaluation.intent)
+            .collect();
+        intents.sort_unstable_by_key(|intent| {
+            let (target_kind, target_id) = intent.target.sort_key();
+            (
+                intent.source_id,
+                intent.ability.id,
+                intent.cast_sequence,
+                target_kind,
+                target_id,
+            )
+        });
+
+        for intent in intents {
+            let source = match intent.source {
+                AbilitySourceIndex::Unit(index) => {
+                    let source = &units[index];
+                    AbilitySourceSnapshot {
+                        source: intent.source,
+                        id: source.id,
+                        team: source.team,
+                        origin: AbilitySourceOrigin::Unit(source.position),
+                        health: source.health,
+                        stunned_until_tick: source.status.stunned_until_tick,
+                        spellcasting: source.spellcasting,
+                        mana_current: source.mana_current,
+                        ability_state: source.ability_state,
+                    }
+                }
+                AbilitySourceIndex::Building(index) => {
+                    let source = &buildings[index];
+                    AbilitySourceSnapshot {
+                        source: intent.source,
+                        id: source.id,
+                        team: source.team,
+                        origin: AbilitySourceOrigin::Building(source.footprint),
+                        health: source.health,
+                        stunned_until_tick: source
+                            .status
+                            .map_or(0, |status| status.stunned_until_tick),
+                        spellcasting: source.spellcasting,
+                        mana_current: source.mana_current,
+                        ability_state: source.ability_state,
+                    }
+                }
+            };
+            if source.health <= 0
+                || source.id != intent.source_id
+                || self.next_tick < source.stunned_until_tick
+            {
+                continue;
+            }
+            let Some(spellcasting) = source.spellcasting else {
+                continue;
+            };
+            if spellcasting.ability != intent.ability {
+                continue;
+            }
+            let Some(mut state) = source.ability_state else {
+                continue;
+            };
+            let Some(mana) = source.mana_current else {
+                continue;
+            };
+            if state.cast_sequence != intent.cast_sequence
+                || state.ready_tick > self.next_tick
+                || mana < intent.ability.mana_cost
+                || !self.ability_target_is_valid(source, intent.target, intent.ability, units)
+            {
+                continue;
+            }
+
+            let remaining_mana = mana
+                .checked_sub(intent.ability.mana_cost)
+                .expect("ability mana cost exceeded validated current mana");
+            state.ready_tick = self
+                .next_tick
+                .checked_add(u64::from(intent.ability.cooldown_ticks))
+                .expect("ability cooldown tick overflow");
+            state.cast_sequence = state
+                .cast_sequence
+                .checked_add(1)
+                .expect("ability cast sequence exhausted");
+            match intent.source {
+                AbilitySourceIndex::Unit(index) => {
+                    units[index].mana_current = Some(remaining_mana);
+                    units[index].ability_state = Some(state);
+                }
+                AbilitySourceIndex::Building(index) => {
+                    buildings[index].mana_current = Some(remaining_mana);
+                    buildings[index].ability_state = Some(state);
+                }
+            }
+
+            let target_position = match intent.target {
+                AbilityIntentTarget::Unit { index, .. } => Some(units[index].position),
+                AbilityIntentTarget::AllEnemyUnits => None,
+            };
+
+            match intent.target {
+                AbilityIntentTarget::Unit { index, .. } => {
+                    if let AbilityEffect::AreaDamage { radius, .. } = intent.ability.effect {
+                        let center = units[index].position;
+                        let radius_sq = square_i32(radius);
+                        for target in units.iter_mut() {
+                            if target.health <= 0
+                                || target.team == source.team
+                                || center.distance_sq(target.position) > radius_sq
+                            {
+                                continue;
+                            }
+                            if apply_ability_effect_to_unit(
+                                target,
+                                intent.ability.effect,
+                                self.next_tick,
+                                self.combat_rules.damage_rules,
+                            ) {
+                                metrics.effects += 1;
+                            }
+                        }
+                    } else if apply_ability_effect_to_unit(
+                        &mut units[index],
+                        intent.ability.effect,
+                        self.next_tick,
+                        self.combat_rules.damage_rules,
+                    ) {
+                        metrics.effects += 1;
+                    }
+                }
+                AbilityIntentTarget::AllEnemyUnits => {
+                    for target in units.iter_mut() {
+                        if target.health <= 0 || target.team == source.team {
+                            continue;
+                        }
+                        if apply_ability_effect_to_unit(
+                            target,
+                            intent.ability.effect,
+                            self.next_tick,
+                            self.combat_rules.damage_rules,
+                        ) {
+                            metrics.effects += 1;
+                        }
+                    }
+                }
+            }
+            self.last_ability_casts.push(AbilityCastEvent {
+                source: intent.source_id,
+                ability: intent.ability.id,
+                target: intent.target.cast_target(),
+                target_position,
+                effect: intent.ability.effect,
+            });
+            metrics.casts += 1;
+        }
+
+        metrics
+    }
+
+    fn evaluate_automatic_ability(
+        &self,
+        source: AbilitySourceSnapshot,
+        units: &[UnitSnapshot],
+        grid: &SpatialGrid,
+    ) -> AbilityEvaluation {
+        let Some(spellcasting) = source.spellcasting else {
+            return AbilityEvaluation::default();
+        };
+        if source.health <= 0 || self.next_tick < source.stunned_until_tick {
+            return AbilityEvaluation::default();
+        }
+        let Some(state) = source.ability_state else {
+            return AbilityEvaluation::default();
+        };
+        let Some(mana) = source.mana_current else {
+            return AbilityEvaluation::default();
+        };
+        if state.ready_tick > self.next_tick || mana < spellcasting.ability.mana_cost {
+            return AbilityEvaluation::default();
+        }
+
+        let mut candidate_checks = 0usize;
+        let target = match spellcasting.ability.target_policy {
+            AbilityTargetPolicy::RandomEnemyUnit => self
+                .random_enemy_ability_target(
+                    source,
+                    spellcasting.ability,
+                    state.cast_sequence,
+                    units,
+                    grid,
+                    &mut candidate_checks,
+                )
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
+            AbilityTargetPolicy::RandomEnemyUnitGlobal => self
+                .random_enemy_ability_target_global(
+                    source,
+                    spellcasting.ability,
+                    state.cast_sequence,
+                    units,
+                    &mut candidate_checks,
+                )
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
+            AbilityTargetPolicy::AllEnemyUnits => {
+                candidate_checks = units.len();
+                units
+                    .iter()
+                    .any(|unit| unit.health > 0 && unit.team != source.team)
+                    .then_some(AbilityIntentTarget::AllEnemyUnits)
+            }
+            AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => self
+                .recently_attacked_friendly_ability_target(
+                    source,
+                    spellcasting.ability,
+                    units,
+                    &mut candidate_checks,
+                )
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
+        };
+        AbilityEvaluation {
+            intent: target.map(|target| AbilityIntent {
+                source: source.source,
+                source_id: source.id,
+                target,
+                ability: spellcasting.ability,
+                cast_sequence: state.cast_sequence,
+            }),
+            candidate_checks,
+        }
+    }
+
+    fn random_enemy_ability_target(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        cast_sequence: u64,
+        units: &[UnitSnapshot],
+        grid: &SpatialGrid,
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let enemy_team = 1u8
+            .checked_sub(source.team.0)
+            .expect("verification slice supports teams 0 and 1 only");
+        let (center, query_radius) = match source.origin {
+            AbilitySourceOrigin::Unit(position) => (position, ability.range),
+            AbilitySourceOrigin::Building(footprint) => (
+                footprint_center_point(footprint, self.config.navigation_cell_size),
+                building_source_query_radius(
+                    footprint,
+                    ability.range,
+                    self.config.navigation_cell_size,
+                ),
+            ),
+        };
+        let range_sq = square_i32(ability.range);
+        let mut best: Option<(u64, SimId, usize)> = None;
+        grid.for_each_candidate(
+            SpatialPartition::global(enemy_team),
+            center,
+            query_radius,
+            |unit_index| {
+                *candidate_checks += 1;
+                let candidate = &units[unit_index];
+                if candidate.health <= 0
+                    || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
+                {
+                    return;
+                }
+                let rank = deterministic_ability_target_rank(
+                    self.config.match_seed,
+                    source.id,
+                    ability.id,
+                    cast_sequence,
+                    candidate.id,
+                );
+                let key = (rank, candidate.id, unit_index);
+                if best.is_none_or(|current| key < current) {
+                    best = Some(key);
+                }
+            },
+        );
+        best.map(|(_, _, unit_index)| unit_index)
+    }
+
+    fn recently_attacked_friendly_ability_target(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        units: &[UnitSnapshot],
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let previous_tick = self.next_tick.saturating_sub(1);
+        let modifier = match ability.effect {
+            AbilityEffect::FrostArmor { modifier, .. } => Some(modifier),
+            _ => None,
+        };
+        let range_sq = square_i32(ability.range);
+        units
+            .iter()
+            .enumerate()
+            .filter_map(|(index, candidate)| {
+                *candidate_checks += 1;
+                if candidate.health <= 0
+                    || candidate.team != source.team
+                    || candidate.retaliation.attacked_tick != Some(previous_tick)
+                    || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
+                {
+                    return None;
+                }
+                if modifier.is_some_and(|modifier| {
+                    candidate.status.armor_modifiers
+                        [..usize::from(candidate.status.armor_modifier_count)]
+                        .iter()
+                        .any(|active| active.id == modifier && self.next_tick < active.expires_tick)
+                }) {
+                    return None;
+                }
+                Some((
+                    self.ability_source_distance_sq(source.origin, candidate.position),
+                    candidate.id,
+                    index,
+                ))
+            })
+            .min()
+            .map(|(_, _, index)| index)
+    }
+
+    fn random_enemy_ability_target_global(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        cast_sequence: u64,
+        units: &[UnitSnapshot],
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let mut best: Option<(u64, SimId, usize)> = None;
+        for (unit_index, candidate) in units.iter().enumerate() {
+            *candidate_checks += 1;
+            if candidate.health <= 0 || candidate.team == source.team {
+                continue;
+            }
+            let rank = deterministic_ability_target_rank(
+                self.config.match_seed,
+                source.id,
+                ability.id,
+                cast_sequence,
+                candidate.id,
+            );
+            let key = (rank, candidate.id, unit_index);
+            if best.is_none_or(|current| key < current) {
+                best = Some(key);
+            }
+        }
+        best.map(|(_, _, unit_index)| unit_index)
+    }
+
+    fn ability_source_distance_sq(&self, source: AbilitySourceOrigin, target: SimPoint) -> u64 {
+        match source {
+            AbilitySourceOrigin::Unit(position) => position.distance_sq(target),
+            AbilitySourceOrigin::Building(footprint) => {
+                point_to_footprint_distance_sq(target, footprint, self.config.navigation_cell_size)
+            }
+        }
+    }
+
+    fn ability_target_is_valid(
+        &self,
+        source: AbilitySourceSnapshot,
+        target: AbilityIntentTarget,
+        ability: AutomaticAbilityProfile,
+        units: &[UnitSnapshot],
+    ) -> bool {
+        match target {
+            AbilityIntentTarget::Unit { index, id } => {
+                let target = &units[index];
+                target.id == id
+                    && target.health > 0
+                    && match ability.target_policy {
+                        AbilityTargetPolicy::RandomEnemyUnit => {
+                            target.team != source.team
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
+                        }
+                        AbilityTargetPolicy::RandomEnemyUnitGlobal => target.team != source.team,
+                        AbilityTargetPolicy::AllEnemyUnits => false,
+                        AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => {
+                            target.team == source.team
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
+                                && target.retaliation.attacked_tick
+                                    == Some(self.next_tick.saturating_sub(1))
+                                && match ability.effect {
+                                    AbilityEffect::FrostArmor { modifier, .. } => {
+                                        !target.status.armor_modifiers
+                                            [..usize::from(target.status.armor_modifier_count)]
+                                            .iter()
+                                            .any(|active| {
+                                                active.id == modifier
+                                                    && self.next_tick < active.expires_tick
+                                            })
+                                    }
+                                    _ => true,
+                                }
+                        }
+                    }
+            }
+            AbilityIntentTarget::AllEnemyUnits => {
+                ability.target_policy == AbilityTargetPolicy::AllEnemyUnits
+                    && units
+                        .iter()
+                        .any(|target| target.health > 0 && target.team != source.team)
+            }
+        }
+    }
+}
