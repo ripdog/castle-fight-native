@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 11)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 12)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -566,6 +566,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "campaign-chapter-i-ii-enemy-bot-catalog",
                 "campaign-friendly-bot-supply-and-placeholder-content-catalog",
                 "campaign-star-restriction-failure-hooks",
+                "campaign-challenge-active-state-clear",
                 "campaign-round-start-state-reset",
                 "campaign-quit-and-replay-control",
                 "campaign-profile-apply-and-save",
@@ -726,6 +727,30 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(rescue_strike["requires_restriction_is_active"])
         self.assertEqual(rescue_strike["failure_reason"], "a player used Rescue Strike.")
         self.assertTrue(rescue_strike["sets_hard_failure_flag"])
+
+        challenge_clear = json.loads(rows["campaign-challenge-active-state-clear"]["parameters_json"])
+        self.assertEqual(challenge_clear["protected_clear_vm_index"], 24)
+        self.assertTrue(challenge_clear["caller_clears_campaign_active_flag_before_challenge_reset"])
+        self.assertTrue(challenge_clear["caller_clears_pending_mission_before_challenge_reset"])
+        self.assertEqual(challenge_clear["active_challenge_owner_symbol"], "Hqb")
+        self.assertIsNone(challenge_clear["active_challenge_owner_reset"])
+        self.assertEqual(challenge_clear["active_challenge_mission_symbol"], "Iqb")
+        self.assertIsNone(challenge_clear["active_challenge_mission_reset"])
+        self.assertTrue(challenge_clear["second_star_available_signal_reset"])
+        self.assertTrue(challenge_clear["third_star_available_signal_reset"])
+        self.assertFalse(challenge_clear["second_star_hard_failure_signal_reset"])
+        self.assertFalse(challenge_clear["third_star_hard_failure_signal_reset"])
+        self.assertTrue(challenge_clear["tracked_building_group_cleared"])
+        self.assertFalse(challenge_clear["challenge_result_locked_reset"])
+        self.assertTrue(challenge_clear["locked_second_star_completed_reset"])
+        self.assertTrue(challenge_clear["locked_third_star_completed_reset"])
+        self.assertEqual(challenge_clear["challenge_failure_announcement_count_reset"], 0)
+        self.assertEqual(challenge_clear["challenge_started_at_reset"], 0.0)
+        self.assertTrue(challenge_clear["destroys_existing_castle_health_periodic_callback"])
+        self.assertIsNone(challenge_clear["castle_health_periodic_callback_reset"])
+        self.assertEqual(challenge_clear["challenge_bound_player_reset_range"], "0..bj_MAX_PLAYERS-1")
+        self.assertFalse(challenge_clear["challenge_bound_player_reset"])
+
         round_reset = json.loads(rows["campaign-round-start-state-reset"]["parameters_json"])
         self.assertEqual(round_reset["protected_reset_vm_index"], 83)
         self.assertTrue(round_reset["cancels_pending_round_start_timers"])
@@ -809,7 +834,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 11)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 12)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:

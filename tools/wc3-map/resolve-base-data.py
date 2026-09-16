@@ -2709,6 +2709,7 @@ def main() -> None:
                     "campaign-chapter-i-ii-enemy-bot-catalog",
                     "campaign-friendly-bot-supply-and-placeholder-content-catalog",
                     "campaign-star-restriction-failure-hooks",
+                    "campaign-challenge-active-state-clear",
                     "campaign-round-start-state-reset",
                     "campaign-quit-and-replay-control",
                     "campaign-profile-apply-and-save",
@@ -2977,6 +2978,36 @@ def main() -> None:
                         or rescue.get("sets_hard_failure_flag") is not True
                     ):
                         raise ValueError(f"campaign no-rescue-strike restriction changed: {parameters}")
+                elif system_id == "campaign-challenge-active-state-clear":
+                    if (
+                        parameters.get("protected_clear_vm_index") != 24
+                        or parameters.get("caller_clears_campaign_active_flag_before_challenge_reset") is not True
+                        or parameters.get("caller_clears_pending_mission_before_challenge_reset") is not True
+                        or parameters.get("caller_clears_pending_owner_before_challenge_reset") is not True
+                        or parameters.get("caller_resets_pending_start_timestamp_before_challenge_reset") is not True
+                        or parameters.get("active_challenge_owner_symbol") != "Hqb"
+                        or parameters.get("active_challenge_owner_reset") is not None
+                        or parameters.get("active_challenge_mission_symbol") != "Iqb"
+                        or parameters.get("active_challenge_mission_reset") is not None
+                        or parameters.get("second_star_available_signal_reset") is not True
+                        or parameters.get("third_star_available_signal_reset") is not True
+                        or parameters.get("second_star_hard_failure_signal_reset") is not False
+                        or parameters.get("third_star_hard_failure_signal_reset") is not False
+                        or parameters.get("tracked_building_group_cleared") is not True
+                        or parameters.get("tracked_castle_reset") is not None
+                        or parameters.get("castle_health_baseline_ready_reset") is not False
+                        or parameters.get("challenge_result_locked_reset") is not False
+                        or parameters.get("locked_second_star_completed_reset") is not True
+                        or parameters.get("locked_third_star_completed_reset") is not True
+                        or parameters.get("challenge_failure_announcement_count_reset") != 0
+                        or parameters.get("challenge_started_at_reset") != 0.0
+                        or parameters.get("destroys_existing_castle_health_periodic_callback") is not True
+                        or parameters.get("castle_health_periodic_callback_reset") is not None
+                        or parameters.get("challenge_bound_player_reset_range") != "0..bj_MAX_PLAYERS-1"
+                        or parameters.get("challenge_bound_player_reset") is not False
+                        or parameters.get("readable_begin_path_uses_same_state_fields") is not True
+                    ):
+                        raise ValueError(f"campaign challenge active-state clear changed: {parameters}")
                 elif system_id == "campaign-round-start-state-reset":
                     if (
                         parameters.get("protected_reset_vm_index") != 83

@@ -7124,6 +7124,8 @@ def _extract_runtime_campaign_mechanics(
         "CampaignMission_CampaignMission_teamResources", "CampaignMission_CampaignMission_enemyOpening",
         "CampaignStarChallenge_CampaignStarChallenge_fastWin", "CampaignStarChallenge_CampaignStarChallenge_castleNeverBelow",
         "CampaignStarChallenge_CampaignStarChallenge_banRace", "CampaignStarChallenge_CampaignStarChallenge_restriction",
+        "beginCampaignMissionChallenge__w3p_vmProtect", "clearCampaignMissionChallenge__w3p_vmProtect",
+        "failPendingCampaignMissionStart",
         "ensureCampaignContent__w3p_vmProtect", "registerCampaignChapterIEnemyBots__w3p_vmProtect", "registerCampaignChapterIIEnemyBots__w3p_vmProtect",
         "addEnemyBot__w3p_vmProtect", "addFriendlyBot__w3p_vmProtect", "addSupply__w3p_vmProtect",
         "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
@@ -8198,6 +8200,136 @@ def _extract_runtime_campaign_mechanics(
         "evidence_kind": "exact-readable-campaign-listeners-plus-statically-decoded-protected-restriction-ids-and-vm27-rescue-strike-hook",
         "byte_offset": min(offsets),
     }]
+
+    challenge_clear_wrapper = "clearCampaignMissionChallenge__w3p_vmProtect"
+    challenge_clear_wrapper_offset, _challenge_clear_wrapper_source = source(
+        challenge_clear_wrapper,
+        (b"function clearCampaignMissionChallenge__w3p_vmProtect()return _qr(24)end",),
+    )
+    challenge_begin_offset, _challenge_begin_source = source(
+        "beginCampaignMissionChallenge__w3p_vmProtect",
+        (
+            b"Hqb=AMp Iqb=BMp",
+            b"Signal_Signal_set(Gqb,true)Signal_Signal_set(Fqb,true)",
+            b"Signal_Signal_set(Eqb,false)Signal_Signal_set(Dqb,false)",
+            b"__wurst_safe_GroupClear(Bqb)",
+            b"zqb=nil yqb=false xqb=false wqb=true vqb=true uqb=0 tqb=getElapsedGameTime()",
+            b"CallbackPeriodic_destroyCallbackPeriodic(Aqb)Aqb=nil",
+            b"Cqb[GMp]=false",
+        ),
+    )
+    challenge_fail_start_offset, _challenge_fail_start_source = source(
+        "failPendingCampaignMissionStart",
+        (
+            b"bqb=false", b"Zpb=nil", b"Ypb=nil", b"Wpb=0.0",
+            b"clearCampaignMissionChallenge__w3p_vmProtect()",
+        ),
+    )
+    challenge_clear_static = _w3p_vm_static_strings(data, 24)
+    challenge_clear_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 24)
+    ]
+    if challenge_clear_static != [
+        "CampaignChallenges_activeCampaignChallengeOwner",
+        "CampaignChallenges_activeCampaignChallengeMission",
+        "CampaignChallenges_campaignTrackedCastle",
+        "CampaignChallenges_campaignCastleHealthBaselineReady",
+        "CampaignChallenges_campaignChallengeResultLocked",
+        "CampaignChallenges_campaignLockedSecondStarCompleted",
+        "CampaignChallenges_campaignLockedThirdStarCompleted",
+        "0",
+        "CampaignChallenges_campaignChallengeFailureAnnouncementCount",
+        "0.0",
+        "CampaignChallenges_campaignChallengeStartedAt",
+        "CampaignChallenges_campaignCastleHealthCallback",
+        "1",
+        "Hqb", "Iqb", "zqb", "yqb", "xqb", "wqb", "vqb", "uqb", "tqb", "Aqb",
+    ]:
+        raise ValueError(f"campaign challenge clear VM24 static values changed: {challenge_clear_static}")
+    if challenge_clear_globals != [
+        "Signal_Signal_set", "Gqb", "Fqb", "Eqb", "Dqb", "__wurst_safe_GroupClear", "Bqb",
+        "Aqb", "CallbackPeriodic_destroyCallbackPeriodic", "bj_MAX_PLAYERS", "Cqb",
+    ]:
+        raise ValueError(f"campaign challenge clear VM24 globals changed: {challenge_clear_globals}")
+    challenge_clear_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 24, expected_opcode_xor_byte=198)["instructions"]
+    ]
+    if challenge_clear_program != [
+        (224, ()), (24, (1,)), (224, ()), (24, (2,)), (224, ()), (251, (14,)),
+        (224, ()), (251, (15,)),
+        (218, (1,)), (218, (2,)), (156, (1,)), (98, (32,)),
+        (218, (1,)), (218, (3,)), (156, (1,)), (98, (32,)),
+        (218, (1,)), (218, (4,)), (156, (0,)), (98, (32,)),
+        (218, (1,)), (218, (5,)), (156, (0,)), (98, (32,)),
+        (218, (6,)), (218, (7,)), (98, (16,)),
+        (224, ()), (251, (16,)), (156, (0,)), (251, (17,)), (156, (0,)), (251, (18,)),
+        (156, (1,)), (251, (19,)), (156, (1,)), (251, (20,)),
+        (144, (8,)), (251, (21,)), (144, (10,)), (251, (22,)),
+        (218, (8,)), (224, ()), (18, (16,)), (236, ()), (10, (0, 9)),
+        (218, (9,)), (218, (8,)), (98, (16,)), (224, ()), (251, (23,)),
+        (144, (8,)), (24, (1,)), (218, (10,)), (144, (13,)), (198, (16,)), (24, (2,)),
+        (156, (1,)), (10, (0, 26)),
+        (253, (1,)), (253, (2,)), (184, ()), (8, (16,)), (10, (0, 3)), (240, (0, 13)),
+        (218, (11,)), (253, (1,)), (156, (0,)), (66, ()),
+        (63, (1, 13)), (240, (255, 225)), (221, ()),
+    ]:
+        raise ValueError("campaign challenge clear protected VM24 changed")
+    rows.append({
+        "system_id": "campaign-challenge-active-state-clear",
+        "mechanic_kind": "campaign-active-challenge-state-reset-after-pending-start-failure",
+        "trigger": "pending-campaign-mission-start-failure",
+        "parameters": {
+            "protected_clear_vm_index": 24,
+            "caller_clears_campaign_active_flag_before_challenge_reset": True,
+            "caller_clears_pending_mission_before_challenge_reset": True,
+            "caller_clears_pending_owner_before_challenge_reset": True,
+            "caller_resets_pending_start_timestamp_before_challenge_reset": True,
+            "active_challenge_owner_symbol": "Hqb",
+            "active_challenge_owner_reset": None,
+            "active_challenge_mission_symbol": "Iqb",
+            "active_challenge_mission_reset": None,
+            "second_star_available_signal_symbol": "Gqb",
+            "second_star_available_signal_reset": True,
+            "third_star_available_signal_symbol": "Fqb",
+            "third_star_available_signal_reset": True,
+            "second_star_hard_failure_signal_symbol": "Eqb",
+            "second_star_hard_failure_signal_reset": False,
+            "third_star_hard_failure_signal_symbol": "Dqb",
+            "third_star_hard_failure_signal_reset": False,
+            "tracked_building_group_symbol": "Bqb",
+            "tracked_building_group_cleared": True,
+            "tracked_castle_symbol": "zqb",
+            "tracked_castle_reset": None,
+            "castle_health_baseline_ready_symbol": "yqb",
+            "castle_health_baseline_ready_reset": False,
+            "challenge_result_locked_symbol": "xqb",
+            "challenge_result_locked_reset": False,
+            "locked_second_star_completed_symbol": "wqb",
+            "locked_second_star_completed_reset": True,
+            "locked_third_star_completed_symbol": "vqb",
+            "locked_third_star_completed_reset": True,
+            "challenge_failure_announcement_count_symbol": "uqb",
+            "challenge_failure_announcement_count_reset": 0,
+            "challenge_started_at_symbol": "tqb",
+            "challenge_started_at_reset": 0.0,
+            "castle_health_periodic_callback_symbol": "Aqb",
+            "destroys_existing_castle_health_periodic_callback": True,
+            "castle_health_periodic_callback_reset": None,
+            "challenge_bound_player_flags_symbol": "Cqb",
+            "challenge_bound_player_reset_range": "0..bj_MAX_PLAYERS-1",
+            "challenge_bound_player_reset": False,
+            "readable_begin_path_uses_same_state_fields": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "beginCampaignMissionChallenge__w3p_vmProtect", challenge_clear_wrapper,
+            "failPendingCampaignMissionStart",
+        ],
+        "evidence_kind": "statically-decoded-vm24-clear-plus-readable-challenge-begin-and-pending-start-failure-call-order",
+        "byte_offset": min(challenge_clear_wrapper_offset, challenge_begin_offset, challenge_fail_start_offset),
+    })
 
     campaign_reset_wrapper = "resetCampaignRoundStartState__w3p_vmProtect"
     campaign_reset_wrapper_offset, campaign_reset_wrapper_source = source(

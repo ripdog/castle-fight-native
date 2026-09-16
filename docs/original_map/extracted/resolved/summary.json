@@ -219,9 +219,10 @@
     "external-ladder-detection-protected-auto-mode-and-game-start-handoff": 1,
     "host-chat-mode-parser-with-exact-registered-mode-catalog": 1
   },
-  "runtime_campaign_mechanic_rows": 11,
+  "runtime_campaign_mechanic_rows": 12,
   "runtime_campaign_mechanic_kinds": {
     "active-mission-abandonment-and-last-draft-relaunch": 1,
+    "campaign-active-challenge-state-reset-after-pending-start-failure": 1,
     "campaign-active-star-restriction-event-failure": 1,
     "campaign-launch-clean-round-and-player-runtime-state": 1,
     "delayed-campaign-result-lock-star-award-persistence-and-ui": 1,
