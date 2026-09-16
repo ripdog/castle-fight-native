@@ -10164,6 +10164,17 @@ def _extract_runtime_draft_mechanics(
         "Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry", "ensureAppliedList", "addPerkReminderToBuilder",
         "initPerks__w3p_vmProtect", "copyAllPerksIntoDrawPool__w3p_vmProtect",
         "installReminderRoundStartHookOnce__w3p_vmProtect", "drawPerk", "returnPerk",
+        "expectedPerkIdByIndex__w3p_vmProtect", "expectedPerkNameByIndex__w3p_vmProtect",
+        "expectedPerkReminderByIndex__w3p_vmProtect", "expectedPerkSignatureByIndex__w3p_vmProtect",
+        "isPerkManifestSlot__w3p_vmProtect", "isPerkRegistryTokenValid__w3p_vmProtect",
+        "addRegisteredPerk__w3p_vmProtect", "getRegisteredPerkIdSequence__w3p_vmProtect",
+        "validateRegisteredPerkCount__w3p_vmProtect", "validateRegisteredPerkIds__w3p_vmProtect",
+        "validateRegisteredPerkEntries__w3p_vmProtect", "validateRegisteredPerkToken__w3p_vmProtect",
+        "validateRegisteredPerkSeal__w3p_vmProtect", "validateRegisteredPerks__w3p_vmProtect",
+        "assertDraftPerkCount__w3p_vmProtect", "assertDraftPerkIdSequence__w3p_vmProtect",
+        "assertDraftPerkIdHash__w3p_vmProtect", "assertDraftPerkEntries__w3p_vmProtect",
+        "assertDraftPerkRegistrySealed__w3p_vmProtect", "isRegisteredPerk", "findPerkById",
+        "getPerkCount", "applyAllPerks", "getPerkQuestTexts", "LG", "mixPerkRegistryToken",
         "initializeDefaultDraftTiers__w3p_vmProtect",
         "setupDefaultRoundOrder__w3p_vmProtect", "syncDraftPlayersFromForces",
         "CFBuilding_CFBuilding_tier", "hotkeyToTier", "LinkedList_LinkedList_shuffle",
@@ -10435,7 +10446,9 @@ def _extract_runtime_draft_mechanics(
         58: (42, (1, 0)),
         82: (218, (9,)), 84: (218, (10,)), 86: (98, (16,)),
         88: (218, (9,)), 90: (218, (11,)), 92: (98, (16,)),
+        563: (156, (1,)), 565: (251, (25,)), 567: (156, (1,)), 569: (251, (26,)),
         574: (42, (70, 0)), 577: (42, (75, 0)),
+        580: (218, (71,)), 582: (218, (72,)), 584: (98, (17,)), 586: (251, (27,)),
     }
     if any(vm65_by_pc.get(pc) != instruction for pc, instruction in expected_vm65_lifecycle.items()):
         raise ValueError("protected perk initializer VM65 pool/hook lifecycle changed")
@@ -10505,12 +10518,193 @@ def _extract_runtime_draft_mechanics(
     ]:
         raise ValueError("protected perk reminder-hook VM71 program changed")
 
+    # The protected perk registry has a second integrity layer around the
+    # already-proven VM65 registration calls. VMs 44-47 are exact indexed
+    # manifest lookups (id/name/reminder/signature), VM48 validates one slot,
+    # VM49 compares the rolling token with its expected terminal token, VMs
+    # 58-63 validate the complete registry, and VMs 64/66-69 are live draft
+    # assertion entrypoints. Drift reporters 51-57 feed RuntimeLedger through
+    # noteLedgerVariance; these checks are validation/anti-tamper semantics,
+    # not additional perk gameplay effects.
+    perk_registry_init_offset, _perk_registry_init = source(
+        "LG",
+        (
+            b"Hfb=19", b"Seb=__wurst_ensureInt((-800890499))", b"Reb=ArrayList_new_ArrayList(Hfb)",
+            b"seb=(-152113429)", b"Ydb=__wurst_ensureInt((-1700414075))", b"Xdb=seb",
+        ),
+    )
+    token_mix_offset, _token_mix = source(
+        "mixPerkRegistryToken",
+        (b'"cf-draft-perk-roll:v2|"', b'"|north-gate"', b"string_getHash"),
+    )
+    id_sequence_offset, _id_sequence = source(
+        "getRegisteredPerkIdSequence__w3p_vmProtect",
+        (
+            b"ArrayList_ArrayList_size(Reb)-1", b"ArrayList_ArrayList_get(Reb,Ttq)",
+            b"Vtq.DraftPerk_id", b'"|"',
+        ),
+    )
+    registry_consumer_offsets: list[int] = []
+    for consumer, fragments in (
+        ("isRegisteredPerk", (b"validateRegisteredPerks__w3p_vmProtect()", b"isPerkManifestSlot__w3p_vmProtect", b"isPerkRegistryTokenValid__w3p_vmProtect")),
+        ("findPerkById", (b"validateRegisteredPerks__w3p_vmProtect()", b"isPerkManifestSlot__w3p_vmProtect", b"isPerkRegistryTokenValid__w3p_vmProtect")),
+        ("getPerkCount", (b"validateRegisteredPerks__w3p_vmProtect()", b"return Neb")),
+        ("applyAllPerks", (b"validateRegisteredPerks__w3p_vmProtect()", b"isPerkManifestSlot__w3p_vmProtect", b"isPerkRegistryTokenValid__w3p_vmProtect")),
+        ("getPerkQuestTexts", (b"validateRegisteredPerks__w3p_vmProtect()", b"isPerkManifestSlot__w3p_vmProtect", b"isPerkRegistryTokenValid__w3p_vmProtect")),
+    ):
+        registry_consumer_offsets.append(source(consumer, fragments)[0])
+
+    protected_registry_wrappers = {
+        44: "expectedPerkIdByIndex__w3p_vmProtect",
+        45: "expectedPerkNameByIndex__w3p_vmProtect",
+        46: "expectedPerkReminderByIndex__w3p_vmProtect",
+        47: "expectedPerkSignatureByIndex__w3p_vmProtect",
+        48: "isPerkManifestSlot__w3p_vmProtect",
+        49: "isPerkRegistryTokenValid__w3p_vmProtect",
+        50: "addRegisteredPerk__w3p_vmProtect",
+        51: "recordPerkCatalogSizeDrift__w3p_vmProtect",
+        52: "recordPerkCatalogOrderDrift__w3p_vmProtect",
+        53: "recordPerkCatalogFingerprintDrift__w3p_vmProtect",
+        54: "recordPerkCatalogEntryDrift__w3p_vmProtect",
+        55: "recordPerkCatalogSealDrift__w3p_vmProtect",
+        56: "recordPerkCatalogSignatureDrift__w3p_vmProtect",
+        57: "recordPerkCatalogTokenDrift__w3p_vmProtect",
+        58: "validateRegisteredPerkCount__w3p_vmProtect",
+        59: "validateRegisteredPerkIds__w3p_vmProtect",
+        60: "validateRegisteredPerkEntries__w3p_vmProtect",
+        61: "validateRegisteredPerkToken__w3p_vmProtect",
+        62: "validateRegisteredPerkSeal__w3p_vmProtect",
+        63: "validateRegisteredPerks__w3p_vmProtect",
+        64: "assertDraftPerkCount__w3p_vmProtect",
+        66: "assertDraftPerkIdSequence__w3p_vmProtect",
+        67: "assertDraftPerkIdHash__w3p_vmProtect",
+        68: "assertDraftPerkEntries__w3p_vmProtect",
+        69: "assertDraftPerkRegistrySealed__w3p_vmProtect",
+    }
+    protected_registry_offsets: list[int] = []
+    for vm_index, wrapper_name in protected_registry_wrappers.items():
+        wrapper_offset, wrapper_source = source(wrapper_name, (f"_qr({vm_index}".encode("ascii"),))
+        protected_registry_offsets.append(wrapper_offset)
+        if wrapper_source.count(f"_qr({vm_index}".encode("ascii")) != 1:
+            raise ValueError(f"protected perk registry VM{vm_index} wrapper call multiplicity changed")
+
+    manifest_indices = [str(index) for index in range(19)]
+    if _w3p_vm_static_strings(data, 44) != manifest_indices + [""]:
+        raise ValueError("protected perk id-manifest VM44 static table changed")
+    if _w3p_vm_static_strings(data, 45) != manifest_indices + [""]:
+        raise ValueError("protected perk name-manifest VM45 static table changed")
+    if _w3p_vm_static_strings(data, 46) != manifest_indices:
+        raise ValueError("protected perk reminder-manifest VM46 static table changed")
+    if _w3p_vm_static_strings(data, 47) != manifest_indices:
+        raise ValueError("protected perk signature-manifest VM47 static table changed")
+
+    expected_manifest_globals = {
+        44: ["Gfb", "Ffb", "Efb", "Dfb", "Cfb", "Bfb", "Afb", "zfb", "yfb", "xfb", "wfb", "vfb", "ufb", "tfb", "sfb", "rfb", "qfb", "pfb", "ofb"],
+        45: ["nfb", "mfb", "lfb", "kfb", "jfb", "ifb", "hfb", "gfb", "ffb", "efb", "dfb", "bfb", "afb", "Zeb", "Yeb", "Xeb", "Web", "Veb", "Ueb"],
+        46: ["Ieb", "Heb", "Geb", "Feb", "Eeb", "Deb", "Ceb", "Beb", "Aeb", "zeb", "yeb", "xeb", "web", "veb", "ueb", "teb"],
+        47: ["reb", "qeb", "peb", "oeb", "neb", "meb", "leb", "keb", "jeb", "ieb", "heb", "geb", "feb", "eeb", "deb", "ceb", "beb", "aeb", "Zdb"],
+    }
+    for vm_index, expected_globals in expected_manifest_globals.items():
+        actual_globals = [
+            _decode_w3p_global_name(expression, 11351, 1106)
+            for expression in _w3p_vm_global_expressions(data, vm_index)
+        ]
+        if actual_globals != expected_globals:
+            raise ValueError(f"protected perk manifest VM{vm_index} globals changed: {actual_globals}")
+
+    expected_registry_tables = {
+        48: (["0", "DraftPerk_id", "DraftPerk_perkName", "DraftPerk_reminderAbilityId"], ["Hfb", "expectedPerkIdByIndex__w3p_vmProtect", "expectedPerkNameByIndex__w3p_vmProtect", "expectedPerkReminderByIndex__w3p_vmProtect"]),
+        49: ([], ["Xdb", "Ydb"]),
+        50: (["103", "107", "173", "DraftPerkRegistry_perkRegistryRollingToken", "Xdb"], ["Keb", "noteLedgerVariance__w3p_vmProtect", "ArrayList_ArrayList_size", "Reb", "expectedPerkSignatureByIndex__w3p_vmProtect", "isPerkManifestSlot__w3p_vmProtect", "mixPerkRegistryToken", "Xdb", "ArrayList_ArrayList_add"]),
+        58: ([], ["ArrayList_ArrayList_size", "Reb", "Hfb", "recordPerkCatalogSizeDrift__w3p_vmProtect"]),
+        59: ([], ["getRegisteredPerkIdSequence__w3p_vmProtect", "Teb", "recordPerkCatalogOrderDrift__w3p_vmProtect", "string_getHash", "Seb", "recordPerkCatalogFingerprintDrift__w3p_vmProtect"]),
+        60: (["0", "1", "DraftPerk_id", "", "DraftPerk_perkName"], ["ArrayList_ArrayList_size", "Reb", "ArrayList_ArrayList_get", "recordPerkCatalogEntryDrift__w3p_vmProtect", "isPerkManifestSlot__w3p_vmProtect", "recordPerkCatalogSignatureDrift__w3p_vmProtect"]),
+        61: ([], ["isPerkRegistryTokenValid__w3p_vmProtect", "recordPerkCatalogTokenDrift__w3p_vmProtect"]),
+        62: ([], ["Leb", "Keb", "recordPerkCatalogSealDrift__w3p_vmProtect"]),
+        63: ([], ["validateRegisteredPerkCount__w3p_vmProtect", "validateRegisteredPerkIds__w3p_vmProtect", "validateRegisteredPerkEntries__w3p_vmProtect", "validateRegisteredPerkSeal__w3p_vmProtect", "validateRegisteredPerkToken__w3p_vmProtect"]),
+        64: (["0"], ["ArrayList_ArrayList_size", "Reb", "initPerks__w3p_vmProtect", "validateRegisteredPerkCount__w3p_vmProtect"]),
+        66: (["0"], ["ArrayList_ArrayList_size", "Reb", "initPerks__w3p_vmProtect", "validateRegisteredPerkIds__w3p_vmProtect"]),
+        67: (["0"], ["ArrayList_ArrayList_size", "Reb", "initPerks__w3p_vmProtect", "validateRegisteredPerkIds__w3p_vmProtect"]),
+        68: (["0"], ["ArrayList_ArrayList_size", "Reb", "initPerks__w3p_vmProtect", "validateRegisteredPerkEntries__w3p_vmProtect", "validateRegisteredPerkToken__w3p_vmProtect"]),
+        69: (["0"], ["ArrayList_ArrayList_size", "Reb", "initPerks__w3p_vmProtect", "validateRegisteredPerkSeal__w3p_vmProtect"]),
+    }
+    for vm_index, (expected_static, expected_globals) in expected_registry_tables.items():
+        actual_static = _w3p_vm_static_strings(data, vm_index)
+        actual_globals = [
+            _decode_w3p_global_name(expression, 11351, 1106)
+            for expression in _w3p_vm_global_expressions(data, vm_index)
+        ]
+        if actual_static != expected_static or actual_globals != expected_globals:
+            raise ValueError(
+                f"protected perk registry VM{vm_index} table changed: {actual_static} / {actual_globals}"
+            )
+
+    drift_salts = {51: 211, 52: 307, 53: 401, 54: 509, 55: 601, 56: 709, 57: 811}
+    for vm_index, salt in drift_salts.items():
+        if _w3p_vm_static_strings(data, vm_index) != [str(salt)]:
+            raise ValueError(f"protected perk registry drift VM{vm_index} salt changed")
+        globals_for_vm = [
+            _decode_w3p_global_name(expression, 11351, 1106)
+            for expression in _w3p_vm_global_expressions(data, vm_index)
+        ]
+        if globals_for_vm != ["noteLedgerVariance__w3p_vmProtect"]:
+            raise ValueError(f"protected perk registry drift VM{vm_index} lost RuntimeLedger bridge")
+
+    def perk_vm_fingerprint(vm_index: int, xor_byte: int) -> tuple[int, int, str]:
+        program = _decode_w3p_vm_program(data, vm_index, expected_opcode_xor_byte=xor_byte)
+        normalized = ";".join(
+            f"{int(instruction['opcode'])}:"
+            + ",".join(str(int(value)) for value in instruction["operands"])
+            for instruction in program["instructions"]
+        )
+        return (
+            int(program["operand_mode"]),
+            len(program["instructions"]),
+            hashlib.sha256(normalized.encode("ascii")).hexdigest(),
+        )
+
+    expected_registry_fingerprints = {
+        44: (43, 2, 117, "0fb2d02da340b8749c32b04961802207879cd6e011d7f7bb3de29cf79f5a103a"),
+        45: (105, 2, 117, "0fb2d02da340b8749c32b04961802207879cd6e011d7f7bb3de29cf79f5a103a"),
+        46: (80, 5, 117, "9215582781817e5109189ddef50058f3344ca5260313f4907c0c29df00d1194e"),
+        47: (199, 3, 117, "d47e0d3163fe4ced36045597b0f734e43ed694d1e2680d20c49be83d969b03b9"),
+        48: (17, 2, 47, "71f7a7ccde38c809a32a540dd90b904c6fd2f80b5a61611e8cda3522ef06c000"),
+        49: (84, 3, 5, "6d49650a65d1c240d2c3f3ddef539f26fc5dcf566e3f16bddf0c6bd52518979b"),
+        50: (206, 3, 54, "ff1bb23fd0218a73d6a8c0a308a64b58b5bb6741bc8a1ee7efee4daa6ab63681"),
+        51: (229, 5, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        52: (110, 2, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        53: (142, 6, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        54: (68, 2, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        55: (27, 4, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        56: (68, 3, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        57: (132, 2, 3, "e33cdd702537cc2b902e09b1d49ce8065ceaab68db48f3bb20a0b631346cbadf"),
+        58: (134, 3, 9, "ecff726308d6cec9fdb8fcfe7318163d06879af6ccc2c81330d0e4860eff6771"),
+        59: (76, 4, 18, "2c1d057271201cf49a7e720dbc23b79afafe29a957973002274704a7738b8a20"),
+        60: (94, 4, 58, "12570d333c40ccb89561e283d5b4ee90dc9a406fbae8babac83549af2e1d16d0"),
+        61: (242, 3, 5, "ee145d33675700af14e7e61d37fbfb77750ef60890b6eddd071d890493fee32a"),
+        62: (249, 4, 11, "1c0a49e1920cfd49056613d6437eb203575c3b7a756e21a2143ffe1e2383e306"),
+        63: (205, 0, 6, "1df7f9dc2d7f7f313515d562243cb0b07d77332b0b8037dc415594076d702828"),
+        64: (245, 4, 9, "027d8045f90a583a9e3f6defc665808da280ce30ba5981129fee2dbc1d4abae5"),
+        66: (3, 2, 9, "027d8045f90a583a9e3f6defc665808da280ce30ba5981129fee2dbc1d4abae5"),
+        67: (53, 1, 9, "027d8045f90a583a9e3f6defc665808da280ce30ba5981129fee2dbc1d4abae5"),
+        68: (145, 5, 10, "8de263942bf9bfaef35cd733135f6e3ea1e82c9a48d21bad054d8ed6d7d8b04f"),
+        69: (237, 6, 9, "027d8045f90a583a9e3f6defc665808da280ce30ba5981129fee2dbc1d4abae5"),
+    }
+    for vm_index, (xor_byte, expected_mode, expected_count, expected_fingerprint) in expected_registry_fingerprints.items():
+        mode, count, fingerprint = perk_vm_fingerprint(vm_index, xor_byte)
+        if (mode, count, fingerprint) != (expected_mode, expected_count, expected_fingerprint):
+            raise ValueError(
+                f"protected perk registry VM{vm_index} instruction stream changed: {mode}/{count}/{fingerprint}"
+            )
+
     pack_lifecycle_offsets = [
         pool_filter_offset, reset_pool_offset, random_tier_offset, put_back_offset,
         make_pair_offset, offer_offset, return_unpicked_offset, pick_pack_offset,
         player_pick_offset, request_pick_offset, request_reroll_offset, reroll_offset,
         use_reroll_offset, ai_away_pick_offset, timeout_pick_offset,
         perk_draw_offset, perk_return_offset, perk_copy_wrapper_offset,
+        perk_registry_init_offset, token_mix_offset, id_sequence_offset,
+        *registry_consumer_offsets, *protected_registry_offsets,
     ]
 
     vm41_static = _w3p_vm_static_strings(data, 41)
@@ -10735,6 +10929,66 @@ def _extract_runtime_draft_mechanics(
                 "perk_active_draw_pool_symbol": "Qeb",
                 "perk_returned_pool_symbol": "Peb",
                 "perk_initializer_vm": 65,
+                "perk_registry_integrity": {
+                    "manifest_slot_count": 19,
+                    "manifest_slot_count_symbol": "Hfb",
+                    "manifest_id_lookup_vm": 44,
+                    "manifest_name_lookup_vm": 45,
+                    "manifest_reminder_lookup_vm": 46,
+                    "manifest_signature_lookup_vm": 47,
+                    "manifest_slot_validator_vm": 48,
+                    "manifest_slot_validator_checks_id_name_and_reminder": True,
+                    "manifest_slots_without_reminder_ability_use_zero": [8, 13, 16],
+                    "registry_token_validator_vm": 49,
+                    "registry_token_validation": "Xdb == Ydb",
+                    "registry_token_seed_symbol": "seb",
+                    "registry_token_seed_value": -152113429,
+                    "registry_token_current_symbol": "Xdb",
+                    "registry_token_expected_symbol": "Ydb",
+                    "registry_token_expected_value": -1700414075,
+                    "registry_token_mix_function": "mixPerkRegistryToken",
+                    "registry_token_mix_prefix": "cf-draft-perk-roll:v2|",
+                    "registry_token_mix_suffix": "|north-gate",
+                    "expected_id_sequence_symbol": "Teb",
+                    "expected_id_sequence_hash_symbol": "Seb",
+                    "expected_id_sequence_hash": -800890499,
+                    "registration_vm": 50,
+                    "registration_rejects_post_seal_insertions": True,
+                    "registration_updates_rolling_token": True,
+                    "registration_appends_to_registry": True,
+                    "registration_drift_salts": [103, 107, 173],
+                    "full_validator_vms": [58, 59, 60, 61, 62, 63],
+                    "full_validator_order": ["count", "id-sequence-and-hash", "entries-and-signatures", "seal", "token"],
+                    "count_validator_vm": 58,
+                    "id_sequence_and_hash_validator_vm": 59,
+                    "entry_and_signature_validator_vm": 60,
+                    "token_validator_vm": 61,
+                    "seal_validator_vm": 62,
+                    "composite_validator_vm": 63,
+                    "seal_symbols": ["Leb", "Keb"],
+                    "initializer_sets_registry_sealed_and_initialized_true": True,
+                    "initializer_records_total_perk_count_symbol": "Neb",
+                    "drift_reporter_vms": [51, 52, 53, 54, 55, 56, 57],
+                    "drift_reporter_salts": {
+                        "size": 211, "order": 307, "fingerprint": 401, "entry": 509,
+                        "seal": 601, "signature": 709, "token": 811,
+                    },
+                    "all_drift_reporters_feed_runtime_ledger": True,
+                    "live_assertion_vms": [64, 66, 67, 68, 69],
+                    "live_assertions_lazily_initialize_empty_registry": True,
+                    "live_assertion_targets": {
+                        "64": ["count"],
+                        "66": ["id-sequence-and-hash"],
+                        "67": ["id-sequence-and-hash"],
+                        "68": ["entries-and-signatures", "token"],
+                        "69": ["seal"],
+                    },
+                    "general_consumers_validate_registry_before_use": [
+                        "isRegisteredPerk", "findPerkById", "getPerkCount", "applyAllPerks", "getPerkQuestTexts",
+                    ],
+                    "classification": "registry-validation-and-anti-tamper-infrastructure",
+                    "import_policy": "validate extracted perk catalog; do not model these checks as perk gameplay effects",
+                },
                 "perk_initializer_clears_active_pool_Qeb": True,
                 "perk_initializer_clears_returned_pool_Peb": True,
                 "perk_initializer_validates_registry_before_pool_copy": True,
@@ -10782,9 +11036,12 @@ def _extract_runtime_draft_mechanics(
                 "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData4",
                 "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData5",
                 "initPerks__w3p_vmProtect", "copyAllPerksIntoDrawPool__w3p_vmProtect",
-                "drawPerk", "returnPerk",
+                "drawPerk", "returnPerk", "LG", "mixPerkRegistryToken",
+                "getRegisteredPerkIdSequence__w3p_vmProtect", "isRegisteredPerk", "findPerkById",
+                "getPerkCount", "applyAllPerks", "getPerkQuestTexts",
+                *protected_registry_wrappers.values(),
             ],
-            "evidence_kind": "exact-readable-default-draft-pool-offer-pick-reroll-and-autopick-control-flow-plus-statically-decoded-vm65-vm70-perk-pool-reset-copy",
+            "evidence_kind": "exact-readable-default-draft-pool-offer-pick-reroll-and-autopick-control-flow-plus-statically-decoded-vm44-71-perk-registry-validation-initialization-and-pool-copy",
             "byte_offset": min(pack_lifecycle_offsets),
         },
         {

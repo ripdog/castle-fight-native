@@ -3332,6 +3332,42 @@ def main() -> None:
                     ):
                         raise ValueError(f"default draft protected layout semantics changed: {parameters}")
                 elif system_id == "draft-pack-pool-pick-and-reroll-lifecycle":
+                    perk_registry_integrity = parameters.get("perk_registry_integrity", {})
+                    if (
+                        perk_registry_integrity.get("manifest_slot_count") != 19
+                        or perk_registry_integrity.get("manifest_slot_count_symbol") != "Hfb"
+                        or perk_registry_integrity.get("manifest_id_lookup_vm") != 44
+                        or perk_registry_integrity.get("manifest_name_lookup_vm") != 45
+                        or perk_registry_integrity.get("manifest_reminder_lookup_vm") != 46
+                        or perk_registry_integrity.get("manifest_signature_lookup_vm") != 47
+                        or perk_registry_integrity.get("manifest_slot_validator_vm") != 48
+                        or perk_registry_integrity.get("manifest_slot_validator_checks_id_name_and_reminder") is not True
+                        or perk_registry_integrity.get("manifest_slots_without_reminder_ability_use_zero") != [8, 13, 16]
+                        or perk_registry_integrity.get("registry_token_validator_vm") != 49
+                        or perk_registry_integrity.get("registry_token_validation") != "Xdb == Ydb"
+                        or perk_registry_integrity.get("registry_token_seed_value") != -152113429
+                        or perk_registry_integrity.get("registry_token_expected_value") != -1700414075
+                        or perk_registry_integrity.get("expected_id_sequence_hash") != -800890499
+                        or perk_registry_integrity.get("registration_vm") != 50
+                        or perk_registry_integrity.get("registration_rejects_post_seal_insertions") is not True
+                        or perk_registry_integrity.get("registration_updates_rolling_token") is not True
+                        or perk_registry_integrity.get("registration_appends_to_registry") is not True
+                        or perk_registry_integrity.get("registration_drift_salts") != [103, 107, 173]
+                        or perk_registry_integrity.get("full_validator_vms") != [58, 59, 60, 61, 62, 63]
+                        or perk_registry_integrity.get("full_validator_order")
+                        != ["count", "id-sequence-and-hash", "entries-and-signatures", "seal", "token"]
+                        or perk_registry_integrity.get("initializer_sets_registry_sealed_and_initialized_true") is not True
+                        or perk_registry_integrity.get("drift_reporter_vms") != [51, 52, 53, 54, 55, 56, 57]
+                        or perk_registry_integrity.get("drift_reporter_salts") != {
+                            "size": 211, "order": 307, "fingerprint": 401, "entry": 509,
+                            "seal": 601, "signature": 709, "token": 811,
+                        }
+                        or perk_registry_integrity.get("all_drift_reporters_feed_runtime_ledger") is not True
+                        or perk_registry_integrity.get("live_assertion_vms") != [64, 66, 67, 68, 69]
+                        or perk_registry_integrity.get("live_assertions_lazily_initialize_empty_registry") is not True
+                        or perk_registry_integrity.get("classification") != "registry-validation-and-anti-tamper-infrastructure"
+                    ):
+                        raise ValueError(f"protected perk registry integrity semantics changed: {perk_registry_integrity}")
                     if (
                         parameters.get("authored_tier_pool_symbol") != "btb[tier_index]"
                         or parameters.get("active_draw_pool_symbol") != "atb[tier_index]"
@@ -6740,7 +6776,7 @@ def main() -> None:
             "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; unanimous-draw round cleanup/restart without setting a match winner; and the exact 15-second one-second-tick round-review gate before next-round dispatch",
             "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, the full Ultimate Roll pool lifecycle (VM1/VM6 campaign-only and legendary-pool gates, ten V-tier Treasure Box entries, mode-filtered active pools, legendary-first no-replacement draws, and Ultimate Draft upgrade closure), the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
             "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry, and VM39's unlockmissions Chapter-I progress seeder is explicitly classified as developer/test-only because normal init_GameBasics sets Pcb=true before init_Campaign reaches its if-not-Pcb command-registration block",
-            "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout and exact readable pack lifecycle: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, per-tier without-replacement draw pools with separate returned-pack recycling, reroll replacement-before-return ordering, immediate building/perk pick application, AI/AWAY/AFK and timeout random autopicks, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
+            "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout and exact readable pack lifecycle: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, per-tier without-replacement draw pools with separate returned-pack recycling, reroll replacement-before-return ordering, immediate building/perk pick application, AI/AWAY/AFK and timeout random autopicks, the complete protected VM44-69 19-slot perk manifest/rolling-token/seal validation chain with RuntimeLedger drift salts, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. The separately classified RuntimeLedger anti-tamper row now also closes CF-building VMs 7-14: 240 registered buildings across 15 exact race catalogs, catalog sealing/post-seal construction checks, and authored pool registration/tier validation with the h008 Treasure Box exception. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",
             "unit-spells.tsv cross-links the generated scripted unit-spell registry to resolved unit/ability definitions, target-mode semantics, production source buildings and effective protected cooldown/mana; all 37 numeric order IDs are resolved independently from the abilities' canonical Warcraft base-order strings while the original protected registry expression is retained as provenance",

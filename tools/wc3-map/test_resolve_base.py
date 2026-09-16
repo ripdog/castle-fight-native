@@ -503,6 +503,37 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(pool["perk_active_draw_pool_symbol"], "Qeb")
         self.assertEqual(pool["perk_returned_pool_symbol"], "Peb")
         self.assertEqual(pool["perk_initializer_vm"], 65)
+        integrity = pool["perk_registry_integrity"]
+        self.assertEqual(integrity["manifest_slot_count"], 19)
+        self.assertEqual(integrity["manifest_slot_count_symbol"], "Hfb")
+        self.assertEqual(
+            [
+                integrity["manifest_id_lookup_vm"], integrity["manifest_name_lookup_vm"],
+                integrity["manifest_reminder_lookup_vm"], integrity["manifest_signature_lookup_vm"],
+            ],
+            [44, 45, 46, 47],
+        )
+        self.assertEqual(integrity["manifest_slot_validator_vm"], 48)
+        self.assertTrue(integrity["manifest_slot_validator_checks_id_name_and_reminder"])
+        self.assertEqual(integrity["manifest_slots_without_reminder_ability_use_zero"], [8, 13, 16])
+        self.assertEqual(integrity["registry_token_validator_vm"], 49)
+        self.assertEqual(integrity["registry_token_validation"], "Xdb == Ydb")
+        self.assertEqual(integrity["registry_token_seed_value"], -152113429)
+        self.assertEqual(integrity["registry_token_expected_value"], -1700414075)
+        self.assertEqual(integrity["expected_id_sequence_hash"], -800890499)
+        self.assertEqual(integrity["registration_vm"], 50)
+        self.assertTrue(integrity["registration_rejects_post_seal_insertions"])
+        self.assertTrue(integrity["registration_updates_rolling_token"])
+        self.assertEqual(integrity["registration_drift_salts"], [103, 107, 173])
+        self.assertEqual(integrity["full_validator_vms"], [58, 59, 60, 61, 62, 63])
+        self.assertEqual(integrity["live_assertion_vms"], [64, 66, 67, 68, 69])
+        self.assertTrue(integrity["live_assertions_lazily_initialize_empty_registry"])
+        self.assertEqual(
+            integrity["drift_reporter_salts"],
+            {"size": 211, "order": 307, "fingerprint": 401, "entry": 509, "seal": 601, "signature": 709, "token": 811},
+        )
+        self.assertTrue(integrity["all_drift_reporters_feed_runtime_ledger"])
+        self.assertEqual(integrity["classification"], "registry-validation-and-anti-tamper-infrastructure")
         self.assertTrue(pool["perk_initializer_clears_active_pool_Qeb"])
         self.assertTrue(pool["perk_initializer_clears_returned_pool_Peb"])
         self.assertEqual(pool["perk_pool_copy_vm"], 70)
