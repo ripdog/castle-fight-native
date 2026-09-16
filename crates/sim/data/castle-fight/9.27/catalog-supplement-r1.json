@@ -2,7 +2,7 @@
   "schema_version": 1,
   "map_version": "9.27",
   "release_revision": "r1",
-  "extraction_git_tree": "bb38bb165fcee1371557208f99de6cf69c70ba1e",
+  "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
   "source_object_fields_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
   "objects": [
     {"rawcode":"e003","repair_time_seconds":20,"button_x":0,"button_y":0},

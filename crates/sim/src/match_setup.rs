@@ -39,7 +39,7 @@ const WALL_DOODAD_RAWCODES: [&str; 6] = ["B002", "B003", "D000", "D001", "D002",
 const ENTRANCE_ARCH_RAWCODE: &str = "ZSas";
 const PATHING_UNFLYABLE_BIT: u8 = 0x02;
 const PATHING_UNBUILDABLE_BIT: u8 = 0x04;
-const EXTRACTION_TREE_927_R1: &str = "bb38bb165fcee1371557208f99de6cf69c70ba1e";
+const EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 const TERRAIN_927: &str = include_str!("../../../docs/original_map/extracted/terrain.json");
 const PLACED_DOODADS_927: &str =
     include_str!("../../../docs/original_map/extracted/resolved/placed-doodads.tsv");

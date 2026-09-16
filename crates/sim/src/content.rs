@@ -27,8 +27,8 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r2";
-const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "bb38bb165fcee1371557208f99de6cf69c70ba1e";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r3";
+const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
 const CASTLE_FIGHT_BUILDER_BUILD_RANGE_WORLD_UNITS: i32 = 50;
@@ -3337,7 +3337,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 0x4ff9_3f04_c180_3f1e);
+        assert_eq!(bundle.identity.gameplay_hash, 0x3d12_9327_3bbe_5eb9);
         assert_eq!(bundle.behaviors().len(), 12);
         assert!(
             bundle

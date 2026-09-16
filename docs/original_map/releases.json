@@ -22,14 +22,14 @@
       "extraction": {
         "status": "retained",
         "schema_version": 1,
-        "extractor_revision": "4aed692889395d8db497672ce4b8bac084ca929d",
-        "git_tree": "bb38bb165fcee1371557208f99de6cf69c70ba1e",
+        "extractor_revision": "d10f75384c70a90bbb368e5f5216f380cf4f44b0",
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "working_alias": "docs/original_map/extracted",
         "summary_path": "docs/original_map/extracted/summary.json"
       },
       "runtime_content": {
         "status": "supported-development-subset",
-        "content_revision": "cf-native-dev-slice-r2",
+        "content_revision": "cf-native-dev-slice-r3",
         "source_revision": "9392643b53ed988bd65df31fd21f6912e6e65926",
         "path": "crates/sim/data/castle-fight/9.27",
         "native_effect_tuning_sha256": "0bf1e9716b9ba69daee16c6fb3269ffde1c9fbd8234039105123c8fcac19cff0",

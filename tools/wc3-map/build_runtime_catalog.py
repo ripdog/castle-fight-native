@@ -10,7 +10,7 @@ import io
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RELEASES = REPO_ROOT / "docs/original_map/releases.json"
@@ -180,16 +180,12 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     }
 
 
-def build_source_manifest(
-    release: dict[str, Any], repo_root: Path, content_revision: str
-) -> dict[str, Any]:
-    extraction = release["extraction"]
-    if extraction.get("status") != "retained":
-        raise SystemExit(
-            f"release {release['map_version']}/{release['revision']} has no retained extraction"
-        )
-    git_tree = extraction["git_tree"]
-    working_alias = extraction.get("working_alias")
+def _source_evidence_fnv64(
+    release: dict[str, Any],
+    repo_root: Path,
+    extraction_file_bytes: Callable[[str], bytes],
+) -> int:
+    working_alias = release["extraction"].get("working_alias")
     if not working_alias:
         raise SystemExit("retained extraction has no working alias")
 
@@ -197,7 +193,7 @@ def build_source_manifest(
     for relative_path in RUNTIME_EXTRACTION_FILES:
         label = f"{working_alias}/{relative_path}".encode("utf-8")
         contents = _runtime_evidence_bytes(
-            relative_path, _retained_file_bytes(repo_root, git_tree, relative_path)
+            relative_path, extraction_file_bytes(relative_path)
         )
         value = _fnv64_write_bytes(value, label)
         value = _fnv64_write_bytes(value, contents)
@@ -210,8 +206,46 @@ def build_source_manifest(
     if not supplement_path.is_file():
         raise SystemExit(f"missing runtime catalog supplement: {supplement_path}")
     value = _fnv64_write_bytes(value, supplement_relative.encode("utf-8"))
-    value = _fnv64_write_bytes(
+    return _fnv64_write_bytes(
         value, _canonical_text_bytes(supplement_path.read_bytes())
+    )
+
+
+def working_alias_source_evidence_fnv64(
+    release: dict[str, Any], repo_root: Path
+) -> int:
+    extraction = release["extraction"]
+    if extraction.get("status") != "retained":
+        raise SystemExit(
+            f"release {release['map_version']}/{release['revision']} has no retained extraction"
+        )
+    working_alias = extraction.get("working_alias")
+    if not working_alias:
+        raise SystemExit("retained extraction has no working alias")
+    extraction_root = repo_root / working_alias
+
+    def read_working_file(relative_path: str) -> bytes:
+        path = extraction_root / relative_path
+        if not path.is_file():
+            raise SystemExit(f"working extraction file is missing: {path}")
+        return path.read_bytes()
+
+    return _source_evidence_fnv64(release, repo_root, read_working_file)
+
+
+def build_source_manifest(
+    release: dict[str, Any], repo_root: Path, content_revision: str
+) -> dict[str, Any]:
+    extraction = release["extraction"]
+    if extraction.get("status") != "retained":
+        raise SystemExit(
+            f"release {release['map_version']}/{release['revision']} has no retained extraction"
+        )
+    git_tree = extraction["git_tree"]
+    value = _source_evidence_fnv64(
+        release,
+        repo_root,
+        lambda relative_path: _retained_file_bytes(repo_root, git_tree, relative_path),
     )
 
     return {
@@ -237,7 +271,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--content-revision",
-        help="required with --kind source-manifest (for example cf-native-dev-slice-r2)",
+        help="required with --kind source-manifest (for example cf-native-dev-slice-r3)",
     )
     args = parser.parse_args()
 

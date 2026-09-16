@@ -98,6 +98,20 @@ class RuntimeCatalogTest(unittest.TestCase):
         )
         self.assertEqual(committed, generated)
 
+    def test_working_927_alias_matches_retained_runtime_evidence(self) -> None:
+        release = MODULE._load_release(
+            REPO_ROOT / "docs/original_map/releases.json", "9.27", "r1"
+        )
+        committed = json.loads(
+            (
+                REPO_ROOT / "crates/sim/data/castle-fight/9.27/catalog-source-r1.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            committed["source_evidence_fnv64"],
+            MODULE.working_alias_source_evidence_fnv64(release, REPO_ROOT),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
