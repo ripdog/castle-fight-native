@@ -71,6 +71,51 @@ def _canonical_text_bytes(data: bytes) -> bytes:
     return data.replace(b"\r\n", b"\n")
 
 
+def _project_tsv_rows(
+    data: bytes,
+    fields: tuple[str, ...],
+    *,
+    predicate: tuple[str, str] | None = None,
+    sort_field: str,
+) -> bytes:
+    with io.StringIO(_canonical_text_bytes(data).decode("utf-8"), newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = reader.fieldnames or []
+        missing = [field for field in (*fields, sort_field) if field not in fieldnames]
+        if predicate is not None and predicate[0] not in fieldnames:
+            missing.append(predicate[0])
+        if missing:
+            raise SystemExit(
+                f"runtime catalog evidence is missing TSV columns: {sorted(set(missing))}"
+            )
+        rows = []
+        for row in reader:
+            if predicate is not None and row[predicate[0]] != predicate[1]:
+                continue
+            rows.append(tuple(row[field] for field in fields))
+        sort_index = fields.index(sort_field)
+        rows.sort(key=lambda row: row[sort_index])
+    lines = ["\t".join(fields), *("\t".join(row) for row in rows)]
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def _runtime_evidence_bytes(relative_path: str, data: bytes) -> bytes:
+    if relative_path == "script/race-building-semantics.tsv":
+        return _project_tsv_rows(
+            data,
+            ("building_rawcode", "income_factor", "precursor_rawcode", "is_siege"),
+            sort_field="building_rawcode",
+        )
+    if relative_path == "resolved/production-buildings.tsv":
+        return _project_tsv_rows(
+            data,
+            ("building_rawcode", "unit_rawcode", "spawn_time"),
+            predicate=("building_kind", "production"),
+            sort_field="building_rawcode",
+        )
+    return _canonical_text_bytes(data)
+
+
 def _fnv64_write_raw(value: int, data: bytes) -> int:
     for byte in data:
         value ^= byte
@@ -151,8 +196,8 @@ def build_source_manifest(
     value = FNV64_OFFSET
     for relative_path in RUNTIME_EXTRACTION_FILES:
         label = f"{working_alias}/{relative_path}".encode("utf-8")
-        contents = _canonical_text_bytes(
-            _retained_file_bytes(repo_root, git_tree, relative_path)
+        contents = _runtime_evidence_bytes(
+            relative_path, _retained_file_bytes(repo_root, git_tree, relative_path)
         )
         value = _fnv64_write_bytes(value, label)
         value = _fnv64_write_bytes(value, contents)
@@ -170,7 +215,7 @@ def build_source_manifest(
     )
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "map_version": release["map_version"],
         "release_revision": release["revision"],
         "content_revision": content_revision,

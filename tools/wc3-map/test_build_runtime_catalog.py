@@ -21,6 +21,43 @@ class RuntimeCatalogTest(unittest.TestCase):
         )
         self.assertEqual(MODULE._canonical_text_bytes(b"a\nb\n"), b"a\nb\n")
 
+    def test_runtime_evidence_projection_ignores_unconsumed_report_columns(self) -> None:
+        retained_income = (
+            b"building_rawcode\tincome_factor\tprecursor_rawcode\tis_siege\n"
+            b"h000\t0.2\t\t0\n"
+        )
+        expanded_income = (
+            b"building_rawcode\tincome_factor\tprecursor_rawcode\ttier_symbol\tis_siege\n"
+            b"h000\t0.2\t\tQ\t0\n"
+        )
+        self.assertEqual(
+            MODULE._runtime_evidence_bytes(
+                "script/race-building-semantics.tsv", retained_income
+            ),
+            MODULE._runtime_evidence_bytes(
+                "script/race-building-semantics.tsv", expanded_income
+            ),
+        )
+
+        retained_production = (
+            b"building_rawcode\tbuilding_kind\tunit_rawcode\tspawn_time\n"
+            b"h000\tproduction\thfoo\t20\n"
+            b"h006\tnon-production\t\t0\n"
+        )
+        expanded_production = (
+            b"building_rawcode\tbuilding_kind\tunit_rawcode\tspawn_time\ttier_symbol\n"
+            b"h006\tnon-production\t\t0\tY\n"
+            b"h000\tproduction\thfoo\t20\tQ\n"
+        )
+        self.assertEqual(
+            MODULE._runtime_evidence_bytes(
+                "resolved/production-buildings.tsv", retained_production
+            ),
+            MODULE._runtime_evidence_bytes(
+                "resolved/production-buildings.tsv", expanded_production
+            ),
+        )
+
     def test_committed_927_supplement_is_generated_from_retained_object_fields(self) -> None:
         release = MODULE._load_release(
             REPO_ROOT / "docs/original_map/releases.json", "9.27", "r1"

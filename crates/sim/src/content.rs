@@ -2076,15 +2076,38 @@ impl ExtractedContent927 {
             }
         }
 
+        let production_header = PRODUCTION_BUILDINGS_927_TSV
+            .lines()
+            .next()
+            .ok_or_else(|| "9.27 production-buildings.tsv is empty".to_owned())?;
+        let production_building_rawcode =
+            tsv_column_index_927(production_header, "building_rawcode")?;
+        let production_kind = tsv_column_index_927(production_header, "building_kind")?;
+        let production_unit_rawcode = tsv_column_index_927(production_header, "unit_rawcode")?;
+        let production_spawn_time = tsv_column_index_927(production_header, "spawn_time")?;
+        let production_required_max = [
+            production_building_rawcode,
+            production_kind,
+            production_unit_rawcode,
+            production_spawn_time,
+        ]
+        .into_iter()
+        .max()
+        .expect("production field list must not be empty");
+
         let mut production = BTreeMap::new();
         for line in PRODUCTION_BUILDINGS_927_TSV.lines().skip(1) {
             let columns = line.split('\t').collect::<Vec<_>>();
-            if columns.len() <= 20 || columns[8] != "production" {
+            if columns.len() <= production_required_max {
+                return Err("9.27 production-buildings row is missing required columns".to_owned());
+            }
+            if columns[production_kind] != "production" {
                 continue;
             }
-            let building_rawcode = parse_rawcode(columns[6]);
-            let unit_rawcode = parse_rawcode(columns[9]);
-            let spawn_interval_ticks = parse_seconds_to_ticks_u16_927(columns[20])?;
+            let building_rawcode = parse_rawcode(columns[production_building_rawcode]);
+            let unit_rawcode = parse_rawcode(columns[production_unit_rawcode]);
+            let spawn_interval_ticks =
+                parse_seconds_to_ticks_u16_927(columns[production_spawn_time])?;
             let row = ExtractedProduction927 {
                 unit_rawcode,
                 spawn_interval_ticks,
@@ -2148,19 +2171,38 @@ impl ExtractedContent927 {
             links.targets.dedup();
         }
 
+        let income_header = BUILDING_INCOME_927_TSV
+            .lines()
+            .next()
+            .ok_or_else(|| "9.27 race-building-semantics.tsv is empty".to_owned())?;
+        let income_rawcode = tsv_column_index_927(income_header, "building_rawcode")?;
+        let income_factor = tsv_column_index_927(income_header, "income_factor")?;
+        let income_precursor = tsv_column_index_927(income_header, "precursor_rawcode")?;
+        let income_is_siege = tsv_column_index_927(income_header, "is_siege")?;
+        let income_required_max = [
+            income_rawcode,
+            income_factor,
+            income_precursor,
+            income_is_siege,
+        ]
+        .into_iter()
+        .max()
+        .expect("income field list must not be empty");
+
         let mut income_semantics = BTreeMap::new();
         for line in BUILDING_INCOME_927_TSV.lines().skip(1) {
             let columns = line.split('\t').collect::<Vec<_>>();
-            if columns.len() <= 11 {
+            if columns.len() <= income_required_max {
                 return Err(
                     "9.27 race-building-semantics row is missing required columns".to_owned(),
                 );
             }
-            let rawcode = parse_rawcode(columns[0]);
-            let precursor = (!columns[5].is_empty()).then(|| parse_rawcode(columns[5]));
+            let rawcode = parse_rawcode(columns[income_rawcode]);
+            let precursor = (!columns[income_precursor].is_empty())
+                .then(|| parse_rawcode(columns[income_precursor]));
             let semantics = ExtractedIncomeSemantics927 {
-                factor_per_1000: parse_decimal_per_1000(columns[4]),
-                is_siege: columns[11] == "1",
+                factor_per_1000: parse_decimal_per_1000(columns[income_factor]),
+                is_siege: columns[income_is_siege] == "1",
                 precursor,
             };
             if income_semantics.insert(rawcode, semantics).is_some() {
@@ -2327,7 +2369,7 @@ fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
 fn validate_catalog_source_927() -> Result<(), String> {
     let manifest: CatalogSourceManifest927 = serde_json::from_str(CATALOG_SOURCE_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog-source manifest: {error}"))?;
-    if manifest.schema_version != 1 {
+    if manifest.schema_version != 2 {
         return Err(format!(
             "unsupported 9.27 catalog-source schema {}",
             manifest.schema_version
@@ -2401,7 +2443,7 @@ fn validate_catalog_source_927() -> Result<(), String> {
     let mut hash = ContentHash64::new();
     for (path, contents) in sources {
         hash.write_bytes(path.as_bytes());
-        write_canonical_catalog_text(&mut hash, contents);
+        write_catalog_source_evidence_927(&mut hash, path, contents)?;
     }
     let actual = hash.finish();
     if actual != manifest.source_evidence_fnv64 {
@@ -2411,6 +2453,101 @@ fn validate_catalog_source_927() -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn write_catalog_source_evidence_927(
+    hash: &mut ContentHash64,
+    path: &str,
+    contents: &str,
+) -> Result<(), String> {
+    let projection = match path {
+        "docs/original_map/extracted/script/race-building-semantics.tsv" => {
+            Some(project_tsv_fields_927(
+                contents,
+                &[
+                    "building_rawcode",
+                    "income_factor",
+                    "precursor_rawcode",
+                    "is_siege",
+                ],
+                None,
+                "building_rawcode",
+            )?)
+        }
+        "docs/original_map/extracted/resolved/production-buildings.tsv" => {
+            Some(project_tsv_fields_927(
+                contents,
+                &["building_rawcode", "unit_rawcode", "spawn_time"],
+                Some(("building_kind", "production")),
+                "building_rawcode",
+            )?)
+        }
+        _ => None,
+    };
+    if let Some(projection) = projection {
+        hash.write_bytes(projection.as_bytes());
+    } else {
+        write_canonical_catalog_text(hash, contents);
+    }
+    Ok(())
+}
+
+fn project_tsv_fields_927(
+    contents: &str,
+    fields: &[&str],
+    predicate: Option<(&str, &str)>,
+    sort_field: &str,
+) -> Result<String, String> {
+    let mut lines = contents.lines();
+    let header = lines
+        .next()
+        .ok_or_else(|| "runtime catalog evidence TSV is empty".to_owned())?;
+    let field_indices = fields
+        .iter()
+        .map(|field| tsv_column_index_927(header, field))
+        .collect::<Result<Vec<_>, _>>()?;
+    let predicate_index = predicate
+        .map(|(field, value)| tsv_column_index_927(header, field).map(|index| (index, value)))
+        .transpose()?;
+    let sort_index = fields
+        .iter()
+        .position(|field| *field == sort_field)
+        .ok_or_else(|| format!("sort field {sort_field:?} is not projected"))?;
+
+    let mut rows = Vec::new();
+    for line in lines.filter(|line| !line.is_empty()) {
+        let columns = line.split('\t').collect::<Vec<_>>();
+        if let Some((index, expected)) = predicate_index
+            && columns.get(index).copied() != Some(expected)
+        {
+            continue;
+        }
+        let row = field_indices
+            .iter()
+            .map(|index| {
+                columns.get(*index).copied().ok_or_else(|| {
+                    "runtime catalog evidence TSV row is missing a projected column".to_owned()
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.push(row);
+    }
+    rows.sort_unstable_by(|left, right| left[sort_index].cmp(right[sort_index]));
+
+    let mut projected = fields.join("\t");
+    projected.push('\n');
+    for row in rows {
+        projected.push_str(&row.join("\t"));
+        projected.push('\n');
+    }
+    Ok(projected)
+}
+
+fn tsv_column_index_927(header: &str, field: &str) -> Result<usize, String> {
+    header
+        .split('\t')
+        .position(|column| column == field)
+        .ok_or_else(|| format!("runtime catalog evidence TSV is missing column {field:?}"))
 }
 
 fn write_canonical_catalog_text(hash: &mut ContentHash64, contents: &str) {
