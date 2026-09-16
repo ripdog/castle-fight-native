@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 9)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 10)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -563,6 +563,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             set(rows),
             {
                 "campaign-chapter-i-ii-content-catalog",
+                "campaign-chapter-i-ii-enemy-bot-catalog",
                 "campaign-star-restriction-failure-hooks",
                 "campaign-round-start-state-reset",
                 "campaign-quit-and-replay-control",
@@ -609,6 +610,31 @@ class ResolvedEvidenceTests(unittest.TestCase):
             chapter_two["mission_no_more_warmups"]["third_star"]["restriction_id"],
             "challenge_no_mission_supplies",
         )
+
+        bots = json.loads(rows["campaign-chapter-i-ii-enemy-bot-catalog"]["parameters_json"])
+        self.assertEqual(bots["protected_base_campaign_content_vm"], 22)
+        self.assertEqual(bots["protected_chapter_i_enemy_bot_vm"], 30)
+        self.assertEqual(bots["protected_chapter_ii_enemy_bot_vm"], 28)
+        self.assertEqual(bots["base_enemy_bot_count"], 14)
+        self.assertEqual(bots["chapter_i_enemy_bot_count"], 22)
+        self.assertEqual(bots["chapter_ii_enemy_bot_count"], 15)
+        self.assertEqual(bots["total_enemy_bot_count"], 51)
+        self.assertTrue(bots["all_chapter_i_ii_mission_bot_references_resolve_exactly_once"])
+        bots_by_id = {
+            bot["bot_id"]: bot
+            for bot in bots["base_enemy_bots"] + bots["chapter_i_enemy_bots"] + bots["chapter_ii_enemy_bots"]
+        }
+        self.assertEqual(len(bots_by_id), 51)
+        self.assertEqual(bots_by_id["enemy_mid_mako"]["builder_object_id"], "X00C")
+        self.assertEqual(bots_by_id["enemy_mid_mako"]["builder_name"], "Human Builder")
+        self.assertEqual(bots_by_id["enemy_mid_mako"]["skill"], 0.38)
+        self.assertEqual(bots_by_id["enemy_hard_fang"]["builder_object_id"], "X019")
+        self.assertEqual(bots_by_id["enemy_hard_fang"]["skill"], 0.64)
+        self.assertEqual(bots_by_id["enemy_hard_vex"]["building_preferences"][0]["building_name"], "City of Magic")
+        self.assertEqual(bots_by_id["enemy_hard_gale"]["building_preferences"][0]["building_name"], "Azure Nest")
+        self.assertEqual(bots_by_id["enemy_hard_gale"]["building_preferences"][2]["modifier"], -0.55)
+        self.assertEqual(bots_by_id["enemy_full_forge"]["building_preferences"][4]["building_name"], "Rocket Lab")
+        self.assertEqual(bots_by_id["enemy_full_forge"]["building_preferences"][4]["modifier"], -0.8)
 
         parameters = json.loads(rows["campaign-star-restriction-failure-hooks"]["parameters_json"])
         self.assertEqual(parameters["active_restriction_scope"], ["second-star", "third-star"])
@@ -716,7 +742,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 9)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 10)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:

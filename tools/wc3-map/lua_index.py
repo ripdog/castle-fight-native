@@ -7124,6 +7124,11 @@ def _extract_runtime_campaign_mechanics(
         "CampaignMission_CampaignMission_teamResources", "CampaignMission_CampaignMission_enemyOpening",
         "CampaignStarChallenge_CampaignStarChallenge_fastWin", "CampaignStarChallenge_CampaignStarChallenge_castleNeverBelow",
         "CampaignStarChallenge_CampaignStarChallenge_banRace", "CampaignStarChallenge_CampaignStarChallenge_restriction",
+        "ensureCampaignContent__w3p_vmProtect", "registerCampaignChapterIEnemyBots__w3p_vmProtect", "registerCampaignChapterIIEnemyBots__w3p_vmProtect",
+        "addEnemyBot__w3p_vmProtect", "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
+        "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_builder", "CampaignBot_CampaignBot_skill",
+        "CampaignBot_CampaignBot_coop", "CampaignBot_CampaignBot_speed", "CampaignBot_CampaignBot_style",
+        "CampaignBot_CampaignBot_preferBuilding",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -7185,7 +7190,10 @@ def _extract_runtime_campaign_mechanics(
 
     expected_campaign_content_vm_fingerprints = {
         19: (140, 36, "15ffbc9ad8da202882164b274a4f9d6b9c56103ecf5dba8fe0c63b74705733e0"),
+        22: (26, 5735, "a733c79a5428ed68d18728e13f4fbcd6713360a2a801f2f05953f83dd9242044"),
+        28: (188, 1306, "c00195d0c89083840a599aa060adddfdd9b9cb93ff96e8d2f20a37d98a1403dc"),
         29: (56, 303, "e961d0dd842b84592312732a08af0e904c154947fdbcf4a5d44fcd88db30593a"),
+        30: (216, 1377, "6ad0d6c7e6027c9e014554ee89393f60926e1db9ff13ecf0466f03f423f5b559"),
         31: (202, 298, "5ce83ce163ee4dcb5ae91ff6779ee3a0409a7d312df83570e4c8274e30ef585f"),
     }
     for vm_index, (xor_byte, expected_count, expected_fingerprint) in expected_campaign_content_vm_fingerprints.items():
@@ -7367,6 +7375,62 @@ def _extract_runtime_campaign_mechanics(
     if opening_building_rawcode != 1747988570:
         raise ValueError(f"campaign enemy opening building changed: {opening_building_rawcode}")
 
+    bot_icon_symbols = {
+        "kbb", "Sab", "bbb", "obb", "Kbb", "kcb", "Tbb", "Ybb", "wbb", "dbb",
+        "jcb", "Xbb", "vbb", "Wab", "Hbb", "qbb", "ubb", "Ubb", "Zbb", "cbb",
+        "icb", "Qbb", "Obb",
+    }
+    decoded_bot_icons = {
+        symbol: decode_protected_string_global(symbol.encode("ascii"))
+        for symbol in sorted(bot_icon_symbols)
+    }
+    expected_bot_icons = {
+        "Hbb": "ReplaceableTextures\\CommandButtons\\BTNHeroBloodElfPrince.blp",
+        "Kbb": "ReplaceableTextures\\CommandButtons\\BTNGrunt.blp",
+        "Obb": "ReplaceableTextures\\CommandButtons\\BTNFootman.blp",
+        "Qbb": "ReplaceableTextures\\CommandButtons\\BTNFelHound.blp",
+        "Sab": "ReplaceableTextures\\CommandButtons\\BTNVillagerMan.blp",
+        "Tbb": "ReplaceableTextures\\CommandButtons\\BTNElfVillager.blp",
+        "Ubb": "ReplaceableTextures\\CommandButtons\\BTNDragonHawk.blp",
+        "Wab": "ReplaceableTextures\\CommandButtons\\BTNTheCaptain.blp",
+        "Xbb": "ReplaceableTextures\\CommandButtons\\BTNCorruptedMoonWell.blp",
+        "Ybb": "ReplaceableTextures\\CommandButtons\\BTNCorruptedEnt.blp",
+        "Zbb": "ReplaceableTextures\\CommandButtons\\BTNCorruptedAncientOfWar.blp",
+        "bbb": "ReplaceableTextures\\CommandButtons\\BTNSorceressAdept.blp",
+        "cbb": "ReplaceableTextures\\CommandButtons\\BTNSnapDragon.blp",
+        "dbb": "ReplaceableTextures\\CommandButtons\\BTNShade.blp",
+        "icb": "ReplaceableTextures\\CommandButtons\\BTNBlueDragonSpawn.blp",
+        "jcb": "ReplaceableTextures\\CommandButtons\\BTNBloodElfPeasant.blp",
+        "kbb": "ReplaceableTextures\\CommandButtons\\BTNPhoenixEgg.blp",
+        "kcb": "ReplaceableTextures\\CommandButtons\\BTNAcolyte.blp",
+        "obb": "ReplaceableTextures\\CommandButtons\\BTNOrbOfLightning.blp",
+        "qbb": "ReplaceableTextures\\CommandButtons\\BTNOrbOfCorruption.blp",
+        "ubb": "ReplaceableTextures\\CommandButtons\\BTNNagaSeaWitch.blp",
+        "vbb": "ReplaceableTextures\\CommandButtons\\BTNNagaMyrmidon.blp",
+        "wbb": "ReplaceableTextures\\CommandButtons\\BTNMurgalSlave.blp",
+    }
+    if decoded_bot_icons != expected_bot_icons:
+        raise ValueError(f"campaign Chapter I/II enemy bot icon globals changed: {decoded_bot_icons}")
+
+    expected_bot_preference_rawcodes = {
+        "Aub": 1747989837, "Cub": 1747989848, "Eub": 1747988529, "Gub": 1747988789,
+        "Iub": 1747988531, "Jub": 1747989305, "Kub": 1747988528, "Mub": 1747988570,
+        "Oub": 1747990085, "Pub": 1747990086, "Vtb": 1747989297, "Wtb": 1747989077,
+        "Ztb": 1747990344, "aub": 1747990608, "hqb": 1747988813, "iqb": 1747988537,
+        "jqb": 1747988803, "kqb": 1747988809, "lqb": 1747988804, "mqb": 1747988546,
+        "nqb": 1747989583, "oqb": 1747989321, "pqb": 1747989560, "qqb": 1747990092,
+        "qub": 1747988557, "rqb": 1747989561, "sqb": 1747989329, "uub": 1747990868,
+        "vub": 1747989836, "xub": 1747989845, "zub": 1747990327,
+    }
+    decoded_bot_preference_rawcodes = {
+        symbol: decode_numeric_global(symbol)
+        for symbol in sorted(expected_bot_preference_rawcodes)
+    }
+    if decoded_bot_preference_rawcodes != expected_bot_preference_rawcodes:
+        raise ValueError(
+            f"campaign Chapter I/II enemy bot preference rawcodes changed: {decoded_bot_preference_rawcodes}"
+        )
+
     def resolve_campaign_value(value: object) -> object:
         if isinstance(value, tuple) and len(value) == 2 and value[0] == "global":
             symbol = str(value[1])
@@ -7508,6 +7572,255 @@ def _extract_runtime_campaign_mechanics(
     if chapter_one["chapter_id"] != "chapter_1" or chapter_two["chapter_id"] != "chapter_2":
         raise ValueError("campaign Chapter I/II protected chapter ids changed")
 
+    def resolve_campaign_bot_value(value: object) -> object:
+        if isinstance(value, tuple) and len(value) == 2 and value[0] == "global":
+            symbol = str(value[1])
+            if symbol in decoded_bot_icons:
+                return decoded_bot_icons[symbol]
+            if symbol in decoded_campaign_globals:
+                return decoded_campaign_globals[symbol]
+            if symbol in decoded_bot_preference_rawcodes:
+                return decoded_bot_preference_rawcodes[symbol]
+            return value
+        return value
+
+    def trace_campaign_base_enemy_bot_vm() -> list[dict[str, object]]:
+        vm_index = 22
+        static_values = _w3p_vm_static_strings(data, vm_index)
+        global_names = [
+            _decode_w3p_global_name(expression, 11351, 1106)
+            for expression in _w3p_vm_global_expressions(data, vm_index)
+        ]
+        program = _decode_w3p_vm_program(data, vm_index, expected_opcode_xor_byte=26)
+        stack: list[object] = []
+        locals_by_index: dict[int, object] = {}
+        calls: list[dict[str, object]] = []
+
+        def static_at(index: int) -> str:
+            if index < 1 or index > len(static_values):
+                raise ValueError(f"campaign base bot VM22 static index changed: {index}")
+            return static_values[index - 1]
+
+        def finish_call(pc: int, callee: str, args: list[object], return_count: int) -> None:
+            call_ref = ("call", vm_index, pc, callee)
+            calls.append({"pc": pc, "callee": callee, "args": list(args), "result": call_ref if return_count else None})
+            for return_index in range(return_count):
+                stack.append(call_ref if return_index == 0 else ("call-result", call_ref, return_index + 1))
+
+        for instruction in program["instructions"]:
+            pc = int(instruction["pc"])
+            if pc >= 9946:
+                break
+            opcode = int(instruction["opcode"])
+            operands = [int(value) for value in instruction["operands"]]
+            if opcode == 209:
+                stack.append({})
+            elif opcode == 24:
+                if not stack:
+                    raise ValueError(f"campaign base bot VM22 local store underflow at pc {pc}")
+                locals_by_index[operands[0]] = stack.pop()
+            elif opcode == 253:
+                if operands[0] not in locals_by_index:
+                    raise ValueError(f"campaign base bot VM22 reads unset local {operands[0]} at pc {pc}")
+                stack.append(locals_by_index[operands[0]])
+            elif opcode in (144, 12):
+                static_index = operands[0] if opcode == 144 else ((operands[0] << 8) + operands[1])
+                converted = numeric_static(static_at(static_index))
+                if converted is None:
+                    raise ValueError(f"campaign base bot VM22 numeric static changed at pc {pc}: {static_at(static_index)!r}")
+                stack.append(converted)
+            elif opcode == 230:
+                stack.append(static_at((operands[0] << 8) + operands[1]))
+            elif opcode == 224:
+                stack.append(None)
+            elif opcode == 218:
+                stack.append(("global", global_names[operands[0] - 1]))
+            elif opcode == 66:
+                if len(stack) < 3:
+                    raise ValueError(f"campaign base bot VM22 table store underflow at pc {pc}")
+                value = stack.pop()
+                key = stack.pop()
+                table = stack[-1]
+                if not isinstance(table, dict):
+                    raise ValueError(f"campaign base bot VM22 table store target changed at pc {pc}: {table!r}")
+                table[key] = value
+            elif opcode == 162:
+                if len(stack) < 2:
+                    raise ValueError(f"campaign base bot VM22 table read underflow at pc {pc}")
+                key = stack.pop()
+                table = stack.pop()
+                if not isinstance(table, dict):
+                    raise ValueError(f"campaign base bot VM22 table read target changed at pc {pc}: {table!r}")
+                stack.append(table.get(key))
+            elif opcode == 248:
+                if not stack or not isinstance(stack[-1], (int, float)):
+                    raise ValueError(f"campaign base bot VM22 unary minus shape changed at pc {pc}")
+                stack[-1] = -stack[-1]
+            elif opcode == 156:
+                stack.append(operands[0] != 0)
+            elif opcode == 67:
+                if pc != 2123 or ((operands[0] << 8) + operands[1]) != 578 or static_at(578) != "Kqb":
+                    raise ValueError(f"campaign base bot VM22 global write changed at pc {pc}: {operands}")
+                if not stack or stack.pop() is not True:
+                    raise ValueError("campaign base bot VM22 initialization guard no longer sets Kqb true")
+            elif opcode == 10:
+                if pc != 2117 or not stack or stack.pop() != ("global", "Kqb"):
+                    raise ValueError(f"campaign base bot VM22 initialization guard changed at pc {pc}")
+            elif opcode == 221:
+                if pc != 2120:
+                    raise ValueError(f"campaign base bot VM22 gained unexpected return before bot catalog: {pc}")
+                continue
+            elif opcode == 42:
+                signature = operands[1]
+                argument_count = signature >> 4
+                return_count = signature & 15
+                if len(stack) < argument_count:
+                    raise ValueError(f"campaign base bot VM22 direct-call stack underflow at pc {pc}")
+                args = stack[-argument_count:] if argument_count else []
+                if argument_count:
+                    del stack[-argument_count:]
+                finish_call(pc, global_names[operands[0] - 1], args, return_count)
+            elif opcode == 98:
+                signature = operands[0]
+                argument_count = signature >> 4
+                return_count = signature & 15
+                function_index = len(stack) - argument_count - 1
+                if function_index < 0:
+                    raise ValueError(f"campaign base bot VM22 indirect-call stack underflow at pc {pc}")
+                function_value = stack[function_index]
+                args = stack[function_index + 1:]
+                del stack[function_index:]
+                if not (
+                    isinstance(function_value, tuple)
+                    and len(function_value) == 2
+                    and function_value[0] == "global"
+                ):
+                    raise ValueError(
+                        f"campaign base bot VM22 indirect callee stopped being a global at pc {pc}: {function_value!r}"
+                    )
+                finish_call(pc, str(function_value[1]), args, return_count)
+            else:
+                raise ValueError(f"campaign base bot VM22 unsupported opcode before supplies at pc {pc}: {opcode}")
+        return calls
+
+    def parse_campaign_enemy_bots(
+        vm_index: int,
+        xor_byte: int,
+        expected_count: int,
+        calls_override: list[dict[str, object]] | None = None,
+    ) -> list[dict[str, object]]:
+        calls = calls_override if calls_override is not None else trace_campaign_content_vm(vm_index, xor_byte)
+        bots: list[dict[str, object]] = []
+        bot_by_ref: dict[object, dict[str, object]] = {}
+        setter_fields = {
+            "CampaignBot_CampaignBot_displayName": "name",
+            "CampaignBot_CampaignBot_description": "description",
+            "CampaignBot_CampaignBot_icon": "icon_path",
+            "CampaignBot_CampaignBot_builder": "builder_rawcode",
+            "CampaignBot_CampaignBot_skill": "skill",
+            "CampaignBot_CampaignBot_coop": "cooperation",
+            "CampaignBot_CampaignBot_speed": "speed",
+            "CampaignBot_CampaignBot_style": "style",
+        }
+        for call in calls:
+            callee = str(call["callee"])
+            args = [resolve_campaign_bot_value(value) for value in call["args"]]
+            result_ref = call["result"]
+            if callee == "addEnemyBot__w3p_vmProtect":
+                if len(args) != 1 or not isinstance(args[0], str):
+                    raise ValueError(f"campaign enemy bot VM{vm_index} constructor shape changed: {args}")
+                bot = {
+                    "bot_id": args[0],
+                    "name": args[0],
+                    "description": "",
+                    "icon_path": "",
+                    "builder_rawcode": 0,
+                    "skill": 1.0,
+                    "cooperation": 1.0,
+                    "speed": 1.0,
+                    "style": "Balanced",
+                    "building_preferences": [],
+                }
+                bots.append(bot)
+                if result_ref is None:
+                    raise ValueError(f"campaign enemy bot VM{vm_index} constructor stopped returning bot")
+                bot_by_ref[result_ref] = bot
+                continue
+            if callee in setter_fields:
+                if len(args) != 2:
+                    raise ValueError(f"campaign enemy bot VM{vm_index} setter shape changed: {callee}: {args}")
+                if args[0] not in bot_by_ref:
+                    if vm_index == 22:
+                        continue
+                    raise ValueError(f"campaign enemy bot VM{vm_index} setter target changed: {callee}: {args}")
+                bot = bot_by_ref[args[0]]
+                setter_value = args[1]
+                if isinstance(setter_value, tuple) and len(setter_value) == 2 and setter_value[0] == "global":
+                    symbol = str(setter_value[1])
+                    if callee == "CampaignBot_CampaignBot_icon":
+                        setter_value = decode_protected_string_global(symbol.encode("ascii"))
+                    elif callee == "CampaignBot_CampaignBot_builder":
+                        setter_value = decode_numeric_global(symbol)
+                    else:
+                        raise ValueError(
+                            f"campaign enemy bot VM{vm_index} setter retained unresolved global: {callee}: {symbol}"
+                        )
+                bot[setter_fields[callee]] = setter_value
+                if result_ref is not None:
+                    bot_by_ref[result_ref] = bot
+                continue
+            if callee == "CampaignBot_CampaignBot_preferBuilding":
+                if len(args) != 3:
+                    raise ValueError(f"campaign enemy bot VM{vm_index} preference shape changed: {args}")
+                if args[0] not in bot_by_ref:
+                    if vm_index == 22:
+                        continue
+                    raise ValueError(f"campaign enemy bot VM{vm_index} preference target changed: {args}")
+                building_value = args[1]
+                if isinstance(building_value, tuple) and len(building_value) == 2 and building_value[0] == "global":
+                    building_value = decode_numeric_global(str(building_value[1]))
+                building_rawcode = int(building_value)
+                bot = bot_by_ref[args[0]]
+                bot["building_preferences"].append({
+                    "building_rawcode": building_rawcode,
+                    "building_object_id": building_rawcode.to_bytes(4, "big").decode("latin1"),
+                    "modifier": args[2],
+                })
+                if result_ref is not None:
+                    bot_by_ref[result_ref] = bot
+
+        if len(bots) != expected_count:
+            raise ValueError(f"campaign enemy bot VM{vm_index} count changed: {len(bots)}")
+        bot_ids = [str(bot["bot_id"]) for bot in bots]
+        if len(set(bot_ids)) != len(bot_ids):
+            raise ValueError(f"campaign enemy bot VM{vm_index} contains duplicate ids: {bot_ids}")
+        for bot in bots:
+            builder_rawcode = int(bot["builder_rawcode"])
+            if builder_rawcode == 0:
+                raise ValueError(f"campaign enemy bot VM{vm_index} missing builder: {bot['bot_id']}")
+            bot["builder_object_id"] = builder_rawcode.to_bytes(4, "big").decode("latin1")
+        return bots
+
+    base_enemy_bots = parse_campaign_enemy_bots(
+        22, 26, 14, calls_override=trace_campaign_base_enemy_bot_vm()
+    )
+    chapter_one_enemy_bots = parse_campaign_enemy_bots(30, 216, 22)
+    chapter_two_enemy_bots = parse_campaign_enemy_bots(28, 188, 15)
+    all_enemy_bots = base_enemy_bots + chapter_one_enemy_bots + chapter_two_enemy_bots
+    all_enemy_bot_ids = [str(bot["bot_id"]) for bot in all_enemy_bots]
+    if len(set(all_enemy_bot_ids)) != len(all_enemy_bot_ids):
+        raise ValueError("campaign Chapter I/II enemy bot ids overlap")
+    referenced_enemy_bot_ids: set[str] = set()
+    for chapter in (chapter_one, chapter_two):
+        for mission in chapter["missions"]:
+            referenced_enemy_bot_ids.update(str(value) for value in mission["enemy_roster_ids"])
+            opening_bot_id = str(mission["enemy_opening_bot_id"])
+            if opening_bot_id:
+                referenced_enemy_bot_ids.add(opening_bot_id)
+    missing_enemy_bots = sorted(referenced_enemy_bot_ids - set(all_enemy_bot_ids))
+    if missing_enemy_bots:
+        raise ValueError(f"campaign Chapter I/II mission roster references unknown enemy bots: {missing_enemy_bots}")
+
     campaign_content_rawcodes: set[int] = set()
     for chapter in (chapter_one, chapter_two):
         campaign_content_rawcodes.update(int(value) for value in chapter["races_unlocked_on_complete"])
@@ -7552,6 +7865,54 @@ def _extract_runtime_campaign_mechanics(
         "byte_offset": min(
             data.find(b"_fr(29,"), data.find(b"_fr(31,"), chapter_two_mode_offset,
         ),
+    }
+
+    campaign_enemy_bot_rawcodes: set[int] = set()
+    for bot in all_enemy_bots:
+        campaign_enemy_bot_rawcodes.add(int(bot["builder_rawcode"]))
+        campaign_enemy_bot_rawcodes.update(
+            int(preference["building_rawcode"])
+            for preference in bot["building_preferences"]
+        )
+    campaign_enemy_bot_row: dict[str, object] = {
+        "system_id": "campaign-chapter-i-ii-enemy-bot-catalog",
+        "mechanic_kind": "protected-versioned-campaign-enemy-bot-ai-profile-catalog",
+        "trigger": "campaign-content-initialization-register-chapter-i-and-ii-enemy-bots",
+        "parameters": {
+            "protected_base_campaign_content_vm": 22,
+            "protected_chapter_i_enemy_bot_vm": 30,
+            "protected_chapter_ii_enemy_bot_vm": 28,
+            "base_enemy_bot_count": len(base_enemy_bots),
+            "chapter_i_enemy_bot_count": len(chapter_one_enemy_bots),
+            "chapter_ii_enemy_bot_count": len(chapter_two_enemy_bots),
+            "total_enemy_bot_count": len(all_enemy_bots),
+            "constructor_defaults": {
+                "skill": 1.0,
+                "cooperation": 1.0,
+                "speed": 1.0,
+                "style": "Balanced",
+                "building_preferences": [],
+            },
+            "mission_referenced_bot_ids": sorted(referenced_enemy_bot_ids),
+            "all_chapter_i_ii_mission_bot_references_resolve_exactly_once": True,
+            "base_enemy_bots": base_enemy_bots,
+            "chapter_i_enemy_bots": chapter_one_enemy_bots,
+            "chapter_ii_enemy_bots": chapter_two_enemy_bots,
+        },
+        "related_rawcode_ids": sorted(campaign_enemy_bot_rawcodes),
+        "source_functions": [
+            "ensureCampaignContent__w3p_vmProtect",
+            "registerCampaignChapterIEnemyBots__w3p_vmProtect",
+            "registerCampaignChapterIIEnemyBots__w3p_vmProtect",
+            "addEnemyBot__w3p_vmProtect",
+            "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
+            "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_builder",
+            "CampaignBot_CampaignBot_skill", "CampaignBot_CampaignBot_coop",
+            "CampaignBot_CampaignBot_speed", "CampaignBot_CampaignBot_style",
+            "CampaignBot_CampaignBot_preferBuilding",
+        ],
+        "evidence_kind": "statically-symbolically-executed-vm22-base-plus-straight-line-vm28-vm30-campaign-bots-with-readable-field-mutators-and-rawcode-initializers",
+        "byte_offset": min(data.find(b"_fr(28,"), data.find(b"_fr(30,")),
     }
 
     rescue_strike_wrapper = "recordCampaignRescueStrike__w3p_vmProtect"
@@ -7605,7 +7966,7 @@ def _extract_runtime_campaign_mechanics(
     ]
     offsets = [source(name, fragments)[0] for name, fragments in sources]
 
-    rows = [campaign_content_row, {
+    rows = [campaign_content_row, campaign_enemy_bot_row, {
         "system_id": "campaign-star-restriction-failure-hooks",
         "mechanic_kind": "campaign-active-star-restriction-event-failure",
         "trigger": "tracked-building-death-challenge-bound-player-item-purchase-or-rescue-strike-use",

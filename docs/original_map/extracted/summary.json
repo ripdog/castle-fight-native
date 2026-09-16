@@ -157,7 +157,7 @@
       "external-ladder-detection-protected-auto-mode-and-game-start-handoff": 1,
       "host-chat-mode-parser-with-exact-registered-mode-catalog": 1
     },
-    "runtime_campaign_mechanics": 9,
+    "runtime_campaign_mechanics": 10,
     "runtime_campaign_mechanic_kinds": {
       "active-mission-abandonment-and-last-draft-relaunch": 1,
       "campaign-active-star-restriction-event-failure": 1,
@@ -166,6 +166,7 @@
       "lazy-profile-application-and-cheat-aware-persistent-save": 1,
       "one-second-survival-objective-countdown-and-castle-kill-victory": 1,
       "protected-versioned-campaign-chapter-mission-and-star-definition-catalog": 1,
+      "protected-versioned-campaign-enemy-bot-ai-profile-catalog": 1,
       "quarter-second-fast-win-and-castle-health-star-tracking": 1,
       "round-start-gated-retrying-party-supply-application": 1
     },

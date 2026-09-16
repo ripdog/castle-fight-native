@@ -2696,6 +2696,8 @@ def main() -> None:
     )
 
     runtime_campaign_rows: list[list[Any]] = []
+    campaign_unit_names = {str(row[1]): str(row[3]) for row in unit_rows}
+    campaign_building_names = {str(row[1]): str(row[3]) for row in building_rows}
     runtime_campaign_path = map_root / "script" / "runtime-campaign-mechanics.tsv"
     if runtime_campaign_path.exists():
         with runtime_campaign_path.open(encoding="utf-8", newline="") as handle:
@@ -2703,6 +2705,7 @@ def main() -> None:
                 system_id = mechanic["system_id"]
                 if system_id not in {
                     "campaign-chapter-i-ii-content-catalog",
+                    "campaign-chapter-i-ii-enemy-bot-catalog",
                     "campaign-star-restriction-failure-hooks",
                     "campaign-round-start-state-reset",
                     "campaign-quit-and-replay-control",
@@ -2770,6 +2773,93 @@ def main() -> None:
                         or chapter_two_finale.get("third_star", {}).get("restriction_id") != "challenge_no_mission_supplies"
                     ):
                         raise ValueError(f"campaign Chapter I/II catalog semantics changed: {parameters}")
+                elif system_id == "campaign-chapter-i-ii-enemy-bot-catalog":
+                    base_bots = parameters.get("base_enemy_bots", [])
+                    chapter_one_bots = parameters.get("chapter_i_enemy_bots", [])
+                    chapter_two_bots = parameters.get("chapter_ii_enemy_bots", [])
+                    if (
+                        parameters.get("protected_base_campaign_content_vm") != 22
+                        or parameters.get("protected_chapter_i_enemy_bot_vm") != 30
+                        or parameters.get("protected_chapter_ii_enemy_bot_vm") != 28
+                        or parameters.get("base_enemy_bot_count") != 14
+                        or parameters.get("chapter_i_enemy_bot_count") != 22
+                        or parameters.get("chapter_ii_enemy_bot_count") != 15
+                        or parameters.get("total_enemy_bot_count") != 51
+                        or parameters.get("all_chapter_i_ii_mission_bot_references_resolve_exactly_once") is not True
+                        or len(base_bots) != 14
+                        or len(chapter_one_bots) != 22
+                        or len(chapter_two_bots) != 15
+                    ):
+                        raise ValueError(f"campaign Chapter I/II enemy bot catalog header changed: {parameters}")
+                    bots_by_id = {
+                        str(bot.get("bot_id")): bot
+                        for bot in base_bots + chapter_one_bots + chapter_two_bots
+                    }
+                    if len(bots_by_id) != 51:
+                        raise ValueError(f"campaign Chapter I/II enemy bot ids changed: {sorted(bots_by_id)}")
+                    for bot in bots_by_id.values():
+                        builder_object_id = str(bot.get("builder_object_id", ""))
+                        builder_name = campaign_unit_names.get(builder_object_id)
+                        if not builder_name:
+                            raise ValueError(
+                                f"campaign enemy bot builder cannot be resolved: {bot.get('bot_id')}: {builder_object_id}"
+                            )
+                        bot["builder_name"] = builder_name
+                        for preference in bot.get("building_preferences", []):
+                            building_object_id = str(preference.get("building_object_id", ""))
+                            building_name = campaign_building_names.get(building_object_id)
+                            if not building_name:
+                                raise ValueError(
+                                    f"campaign enemy bot preference cannot be resolved: "
+                                    f"{bot.get('bot_id')}: {building_object_id}"
+                                )
+                            preference["building_name"] = building_name
+                    mako = bots_by_id.get("enemy_mid_mako", {})
+                    fang = bots_by_id.get("enemy_hard_fang", {})
+                    hard_vex = bots_by_id.get("enemy_hard_vex", {})
+                    gale = bots_by_id.get("enemy_hard_gale", {})
+                    forge = bots_by_id.get("enemy_full_forge", {})
+                    sable = bots_by_id.get("enemy_easy_sable", {})
+                    if (
+                        mako.get("builder_object_id") != "X00C"
+                        or mako.get("skill") != 0.38
+                        or mako.get("cooperation") != 0.22
+                        or mako.get("speed") != 0.44
+                        or mako.get("style") != "Balanced"
+                        or fang.get("builder_object_id") != "X019"
+                        or fang.get("skill") != 0.64
+                        or fang.get("cooperation") != 0.18
+                        or fang.get("speed") != 0.7
+                        or fang.get("style") != "Offense"
+                        or sable.get("builder_object_id") != "X018"
+                        or sable.get("skill") != 0.1
+                        or sable.get("cooperation") != 0.04
+                        or sable.get("speed") != 0.1
+                        or sable.get("style") != "Defense"
+                        or hard_vex.get("builder_object_id") != "X00P"
+                        or hard_vex.get("skill") != 0.74
+                        or hard_vex.get("building_preferences") != [{
+                            "building_rawcode": 1747988570,
+                            "building_object_id": "h00Z",
+                            "modifier": 1.1,
+                            "building_name": "City of Magic",
+                        }]
+                        or gale.get("builder_object_id") != "X017"
+                        or gale.get("building_preferences") != [
+                            {"building_rawcode": 1747989321, "building_object_id": "h03I", "modifier": 1.6, "building_name": "Azure Nest"},
+                            {"building_rawcode": 1747989561, "building_object_id": "h049", "modifier": 0.15, "building_name": "Snowy Rocks"},
+                            {"building_rawcode": 1747989329, "building_object_id": "h03Q", "modifier": -0.55, "building_name": "Icy Tower"},
+                        ]
+                        or forge.get("builder_object_id") != "X06P"
+                        or forge.get("building_preferences") != [
+                            {"building_rawcode": 1747989848, "building_object_id": "h05X", "modifier": 1.2, "building_name": "Tank Factory"},
+                            {"building_rawcode": 1747989836, "building_object_id": "h05L", "modifier": 0.9, "building_name": "Energy Tower"},
+                            {"building_rawcode": 1747990868, "building_object_id": "h09T", "modifier": 0.8, "building_name": "Power Plant"},
+                            {"building_rawcode": 1747989837, "building_object_id": "h05M", "modifier": -0.25, "building_name": "Demolition Lab"},
+                            {"building_rawcode": 1747990327, "building_object_id": "h077", "modifier": -0.8, "building_name": "Rocket Lab"},
+                        ]
+                    ):
+                        raise ValueError(f"campaign Chapter I/II enemy bot semantics changed: {parameters}")
                 elif system_id == "campaign-star-restriction-failure-hooks":
                     if parameters.get("tracked_building_loss", {}).get("restriction_id") != "challenge_no_buildings_lost":
                         raise ValueError(f"campaign building-loss restriction changed: {parameters}")
