@@ -6947,6 +6947,8 @@ def _extract_runtime_campaign_mechanics(
         "CallbackSingle_doAfter_MMDData_call_doAfter_MMDData",
         "CampaignSaveData_CampaignSaveData_completeMission__w3p_vmProtect1",
         "giveCampaignSupplyItemToBuilder", "giveCloudStaffToBuilder", "setCampaignAiSpeedBonus",
+        "launchCampaignMission__w3p_vmProtect", "resetCampaignRoundStartState__w3p_vmProtect",
+        "cancelPendingRoundStartTimers", "setTeamWins", "clearRememberedRaceBans__w3p_vmProtect",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -7041,6 +7043,116 @@ def _extract_runtime_campaign_mechanics(
         "evidence_kind": "exact-readable-campaign-listeners-plus-statically-decoded-protected-restriction-ids",
         "byte_offset": min(offsets),
     }]
+
+    campaign_reset_wrapper = "resetCampaignRoundStartState__w3p_vmProtect"
+    campaign_reset_wrapper_offset, campaign_reset_wrapper_source = source(
+        campaign_reset_wrapper,
+        (b"function resetCampaignRoundStartState__w3p_vmProtect()return _qr(83)end",),
+    )
+    campaign_launch_offset, _campaign_launch = source(
+        "launchCampaignMission__w3p_vmProtect",
+        (
+            b"applyCampaignMissionEnvironment(eUp)",
+            b"resetCampaignRoundStartState__w3p_vmProtect()",
+            b"clearPendingRoundStartResourceBonuses()",
+            b"stageCampaignTeamResourceAdjustment(eUp,Xpb,pUp)",
+            b"startGame()",
+        ),
+    )
+    cancel_round_timers_offset, _cancel_round_timers = source(
+        "cancelPendingRoundStartTimers",
+        (
+            b"stopManualBanPoll()", b"stopDraftRacePoll()", b"stopPickRacePoll()",
+            b"CallbackSingle_destroyCallbackSingle", b"__wurst_safe_DestroyTimerDialog", b"__wurst_safe_DestroyTimer",
+        ),
+    )
+    team_wins_offset, _team_wins = source(
+        "setTeamWins",
+        (b"getTeamWinsSignal(vHr)", b"Signal_Signal_set(xHr,wHr)"),
+    )
+    campaign_reset_static = _w3p_vm_static_strings(data, 83)
+    campaign_reset_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 83)
+    ]
+    if campaign_reset_static != [
+        "ModeRaceRuntime_roundStartInProgress", "0", "RuntimeGlobals_currentRound",
+        "RuntimeGlobals_matchWinnerResultCodeValue", "RuntimeGlobals_roundStarted", "1", "P9", "NX", "aY", "bY",
+    ]:
+        raise ValueError(f"campaign round-state reset VM83 static values changed: {campaign_reset_static}")
+    if campaign_reset_globals != [
+        "cancelPendingRoundStartTimers", "setTeamWins", "kX", "eX", "clearRememberedRaceBans__w3p_vmProtect",
+        "C2", "tGb", "dX", "iX", "jX",
+    ]:
+        raise ValueError(f"campaign round-state reset VM83 globals changed: {campaign_reset_globals}")
+    campaign_reset_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 83, expected_opcode_xor_byte=35)["instructions"]
+    ]
+    expected_campaign_reset_program = [
+        (224, ()), (24, (1,)), (224, ()), (24, (2,)), (224, ()), (24, (3,)), (42, (1, 0)),
+        (156, (0,)), (251, (7,)), (144, (2,)), (251, (8,)), (144, (2,)), (251, (9,)),
+        (156, (0,)), (251, (10,)), (144, (2,)), (144, (2,)), (42, (2, 32)),
+        (144, (6,)), (144, (2,)), (42, (2, 32)),
+        (218, (3,)), (144, (2,)), (144, (2,)), (66, ()),
+        (218, (3,)), (144, (6,)), (144, (2,)), (66, ()),
+        (218, (4,)), (144, (2,)), (144, (2,)), (66, ()),
+        (218, (4,)), (144, (6,)), (144, (2,)), (66, ()),
+        (42, (5, 0)), (144, (2,)), (24, (1,)), (218, (6,)), (24, (2,)),
+        (156, (1,)), (10, (0, 50)), (253, (1,)), (253, (2,)), (184, ()), (8, (16,)),
+        (10, (0, 3)), (240, (0, 37)), (253, (1,)), (24, (3,)),
+        (218, (7,)), (253, (3,)), (144, (2,)), (66, ()),
+        (218, (8,)), (253, (1,)), (144, (2,)), (66, ()),
+        (218, (9,)), (253, (1,)), (156, (0,)), (66, ()),
+        (218, (10,)), (253, (1,)), (224, ()), (66, ()),
+        (63, (1, 6)), (240, (255, 201)), (221, ()),
+    ]
+    if campaign_reset_program != expected_campaign_reset_program:
+        raise ValueError("campaign round-state reset protected VM83 changed")
+    rows.append({
+        "system_id": "campaign-round-start-state-reset",
+        "mechanic_kind": "campaign-launch-clean-round-and-player-runtime-state",
+        "trigger": "campaign-launch-after-mode-and-environment-application-before-resource-staging",
+        "parameters": {
+            "protected_reset_vm_index": 83,
+            "called_after_campaign_mode_parse_and_environment_apply": True,
+            "called_before_campaign_resource_staging_and_start_game": True,
+            "cancels_pending_round_start_timers": True,
+            "cancelled_mode_selection_subsystems": ["manual-race-ban", "draft-race", "pick-race"],
+            "round_start_in_progress_symbol": "P9",
+            "round_start_in_progress_reset": False,
+            "current_round_symbol": "NX",
+            "current_round_reset": 0,
+            "match_winner_result_code_symbol": "aY",
+            "match_winner_result_code_reset": 0,
+            "round_started_symbol": "bY",
+            "round_started_reset": False,
+            "team_wins_reset": {"team_0": 0, "team_1": 0},
+            "team_rescue_strike_count_symbol": "kX",
+            "team_rescue_strike_counts_reset": {"team_0": 0, "team_1": 0},
+            "team_castle_kill_count_symbol": "eX",
+            "team_castle_kill_counts_reset": {"team_0": 0, "team_1": 0},
+            "clears_remembered_race_bans": True,
+            "game_player_last_index_symbol": "C2",
+            "game_player_last_index_value": 11,
+            "per_player_reset_inclusive_ids": [0, 11],
+            "assigned_builder_id_symbol": "tGb",
+            "assigned_builder_id_reset": 0,
+            "remembered_builder_id_symbol": "dX",
+            "remembered_builder_id_reset": 0,
+            "rescue_strike_available_symbol": "iX",
+            "rescue_strike_available_reset": False,
+            "builder_unit_symbol": "jX",
+            "builder_unit_reset": None,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "launchCampaignMission__w3p_vmProtect", campaign_reset_wrapper,
+            "cancelPendingRoundStartTimers", "setTeamWins", "clearRememberedRaceBans__w3p_vmProtect",
+        ],
+        "evidence_kind": "statically-decoded-vm83-campaign-launch-round-player-state-reset-plus-readable-call-order",
+        "byte_offset": min(campaign_reset_wrapper_offset, campaign_launch_offset, cancel_round_timers_offset, team_wins_offset),
+    })
 
     challenge_wrapper = "startCampaignCastleHealthChallenge__w3p_vmProtect"
     challenge_callback = "CallbackPeriodic_doPeriodically_CampaignChallenges_call_doPeriodically_CampaignChallenges"

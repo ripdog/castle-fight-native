@@ -2683,6 +2683,7 @@ def main() -> None:
                 system_id = mechanic["system_id"]
                 if system_id not in {
                     "campaign-star-restriction-failure-hooks",
+                    "campaign-round-start-state-reset",
                     "campaign-star-periodic-objectives",
                     "campaign-survival-countdown",
                     "campaign-match-result-bridge",
@@ -2695,6 +2696,27 @@ def main() -> None:
                         raise ValueError(f"campaign building-loss restriction changed: {parameters}")
                     if parameters.get("challenge_bound_item_purchase", {}).get("restriction_id") != "challenge_no_items":
                         raise ValueError(f"campaign no-items restriction changed: {parameters}")
+                elif system_id == "campaign-round-start-state-reset":
+                    if (
+                        parameters.get("protected_reset_vm_index") != 83
+                        or parameters.get("round_start_in_progress_symbol") != "P9"
+                        or parameters.get("round_start_in_progress_reset") is not False
+                        or parameters.get("current_round_symbol") != "NX"
+                        or parameters.get("current_round_reset") != 0
+                        or parameters.get("match_winner_result_code_symbol") != "aY"
+                        or parameters.get("match_winner_result_code_reset") != 0
+                        or parameters.get("round_started_symbol") != "bY"
+                        or parameters.get("round_started_reset") is not False
+                        or parameters.get("team_wins_reset") != {"team_0": 0, "team_1": 0}
+                        or parameters.get("team_rescue_strike_counts_reset") != {"team_0": 0, "team_1": 0}
+                        or parameters.get("team_castle_kill_counts_reset") != {"team_0": 0, "team_1": 0}
+                        or parameters.get("per_player_reset_inclusive_ids") != [0, 11]
+                        or parameters.get("assigned_builder_id_reset") != 0
+                        or parameters.get("remembered_builder_id_reset") != 0
+                        or parameters.get("rescue_strike_available_reset") is not False
+                        or parameters.get("builder_unit_reset") is not None
+                    ):
+                        raise ValueError(f"campaign round-start state reset changed: {parameters}")
                 elif system_id == "campaign-star-periodic-objectives" and parameters.get("period_seconds") != 0.25:
                     raise ValueError(f"campaign challenge polling period changed: {parameters}")
                 elif system_id == "campaign-survival-countdown" and parameters.get("period_seconds") != 1:

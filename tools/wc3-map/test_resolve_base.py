@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 5)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 6)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -544,6 +544,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
             set(rows),
             {
                 "campaign-star-restriction-failure-hooks",
+                "campaign-round-start-state-reset",
                 "campaign-star-periodic-objectives",
                 "campaign-survival-countdown",
                 "campaign-match-result-bridge",
@@ -561,6 +562,23 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(item_purchase["restriction_id"], "challenge_no_items")
         self.assertTrue(item_purchase["requires_buying_unit_owner_is_challenge_bound_player"])
         self.assertTrue(item_purchase["sets_hard_failure_flag"])
+        round_reset = json.loads(rows["campaign-round-start-state-reset"]["parameters_json"])
+        self.assertEqual(round_reset["protected_reset_vm_index"], 83)
+        self.assertTrue(round_reset["cancels_pending_round_start_timers"])
+        self.assertEqual(round_reset["current_round_symbol"], "NX")
+        self.assertEqual(round_reset["current_round_reset"], 0)
+        self.assertEqual(round_reset["match_winner_result_code_symbol"], "aY")
+        self.assertEqual(round_reset["match_winner_result_code_reset"], 0)
+        self.assertEqual(round_reset["team_wins_reset"], {"team_0": 0, "team_1": 0})
+        self.assertEqual(round_reset["team_rescue_strike_counts_reset"], {"team_0": 0, "team_1": 0})
+        self.assertEqual(round_reset["team_castle_kill_counts_reset"], {"team_0": 0, "team_1": 0})
+        self.assertEqual(round_reset["per_player_reset_inclusive_ids"], [0, 11])
+        self.assertEqual(round_reset["assigned_builder_id_symbol"], "tGb")
+        self.assertEqual(round_reset["remembered_builder_id_symbol"], "dX")
+        self.assertEqual(round_reset["rescue_strike_available_symbol"], "iX")
+        self.assertEqual(round_reset["builder_unit_symbol"], "jX")
+        self.assertIsNone(round_reset["builder_unit_reset"])
+
         periodic = json.loads(rows["campaign-star-periodic-objectives"]["parameters_json"])
         self.assertEqual(periodic["period_seconds"], 0.25)
         self.assertEqual(periodic["protected_setup_vm_index"], 23)
@@ -606,7 +624,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 5)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 6)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
