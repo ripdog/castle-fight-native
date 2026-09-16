@@ -6937,6 +6937,8 @@ def _extract_runtime_campaign_mechanics(
         "recordCampaignTrackedBuildingLost",
         "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements",
         "recordCampaignOwnerItemPurchase__w3p_vmProtect",
+        "recordCampaignRescueStrike__w3p_vmProtect",
+        "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
         "isActiveRestriction",
         "failCampaignChallenge",
         "canApplyCampaignSupplyEffectsNow", "shouldRetryCampaignSupplyEffects", "shouldAbortCampaignSupplyEffects",
@@ -6986,10 +6988,34 @@ def _extract_runtime_campaign_mechanics(
 
     no_buildings_id = decode_restriction_global(b"arb")
     no_items_id = decode_restriction_global(b"crb")
+    no_rescue_strike_id = decode_restriction_global(b"brb")
     if no_buildings_id != "challenge_no_buildings_lost":
         raise ValueError(f"campaign no-buildings restriction id changed: {no_buildings_id!r}")
     if no_items_id != "challenge_no_items":
         raise ValueError(f"campaign no-items restriction id changed: {no_items_id!r}")
+    if no_rescue_strike_id != "challenge_no_rescue_strike":
+        raise ValueError(f"campaign no-rescue-strike restriction id changed: {no_rescue_strike_id!r}")
+
+    rescue_strike_wrapper = "recordCampaignRescueStrike__w3p_vmProtect"
+    rescue_strike_static = _w3p_vm_static_strings(data, 27)
+    rescue_strike_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 27)
+    ]
+    if rescue_strike_static != ["a player used Rescue Strike."]:
+        raise ValueError(f"campaign Rescue Strike restriction VM static values changed: {rescue_strike_static}")
+    if rescue_strike_globals != ["isChallengeBoundPlayer", "isActiveRestriction", "brb", "failCampaignChallenge"]:
+        raise ValueError(f"campaign Rescue Strike restriction VM globals changed: {rescue_strike_globals}")
+    rescue_strike_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 27, expected_opcode_xor_byte=235)["instructions"]
+    ]
+    if rescue_strike_program != [
+        (253, (1,)), (42, (1, 17)), (236, ()), (10, (0, 1)), (221, ()),
+        (218, (2,)), (218, (3,)), (98, (17,)), (10, (0, 10)),
+        (218, (4,)), (218, (3,)), (46, (1,)), (156, (1,)), (98, (48,)), (221, ()),
+    ]:
+        raise ValueError("campaign Rescue Strike restriction VM control flow changed")
 
     tracked_listener = "EventListener_add_CampaignChallenges_onEvent_add_CampaignChallenges"
     shop_listener = "EventListener_add_ShopAnnouncements_onEvent_add_ShopAnnouncements"
@@ -7007,6 +7033,11 @@ def _extract_runtime_campaign_mechanics(
             b"isChallengeBoundPlayer(unit_getOwner(fNp))", b"isActiveRestriction(crb)",
             b"failCampaignChallenge(crb", b"a player bought an item.", b"true",
         )),
+        ("OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime", (
+            b"VBn=unit_getOwner(TBn)", b"recordCampaignRescueStrike__w3p_vmProtect(VBn)",
+            b"unit_removeAbility(TBn,1093677109)",
+        )),
+        (rescue_strike_wrapper, (b"return _qr(27,gNp)",)),
         ("isActiveRestriction", (
             b"CampaignMission_secondStar", b"CampaignMission_thirdStar", b"starRestrictionId",
         )),
@@ -7019,7 +7050,7 @@ def _extract_runtime_campaign_mechanics(
     rows = [{
         "system_id": "campaign-star-restriction-failure-hooks",
         "mechanic_kind": "campaign-active-star-restriction-event-failure",
-        "trigger": "tracked-building-death-or-challenge-bound-player-item-purchase",
+        "trigger": "tracked-building-death-challenge-bound-player-item-purchase-or-rescue-strike-use",
         "parameters": {
             "active_restriction_scope": ["second-star", "third-star"],
             "tracked_building_loss": {
@@ -7037,10 +7068,20 @@ def _extract_runtime_campaign_mechanics(
                 "failure_reason": "a player bought an item.",
                 "sets_hard_failure_flag": True,
             },
+            "challenge_bound_rescue_strike_use": {
+                "restriction_id": no_rescue_strike_id,
+                "protected_wrapper_vm_index": 27,
+                "live_caller_function": "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
+                "records_before_rescue_strike_marker_creation": True,
+                "requires_casting_player_is_challenge_bound_player": True,
+                "requires_restriction_is_active": True,
+                "failure_reason": "a player used Rescue Strike.",
+                "sets_hard_failure_flag": True,
+            },
         },
         "related_rawcode_ids": [],
         "source_functions": [name for name, _fragments in sources],
-        "evidence_kind": "exact-readable-campaign-listeners-plus-statically-decoded-protected-restriction-ids",
+        "evidence_kind": "exact-readable-campaign-listeners-plus-statically-decoded-protected-restriction-ids-and-vm27-rescue-strike-hook",
         "byte_offset": min(offsets),
     }]
 

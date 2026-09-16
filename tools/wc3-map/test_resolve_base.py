@@ -562,6 +562,18 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(item_purchase["restriction_id"], "challenge_no_items")
         self.assertTrue(item_purchase["requires_buying_unit_owner_is_challenge_bound_player"])
         self.assertTrue(item_purchase["sets_hard_failure_flag"])
+        rescue_strike = parameters["challenge_bound_rescue_strike_use"]
+        self.assertEqual(rescue_strike["restriction_id"], "challenge_no_rescue_strike")
+        self.assertEqual(rescue_strike["protected_wrapper_vm_index"], 27)
+        self.assertEqual(
+            rescue_strike["live_caller_function"],
+            "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime",
+        )
+        self.assertTrue(rescue_strike["records_before_rescue_strike_marker_creation"])
+        self.assertTrue(rescue_strike["requires_casting_player_is_challenge_bound_player"])
+        self.assertTrue(rescue_strike["requires_restriction_is_active"])
+        self.assertEqual(rescue_strike["failure_reason"], "a player used Rescue Strike.")
+        self.assertTrue(rescue_strike["sets_hard_failure_flag"])
         round_reset = json.loads(rows["campaign-round-start-state-reset"]["parameters_json"])
         self.assertEqual(round_reset["protected_reset_vm_index"], 83)
         self.assertTrue(round_reset["cancels_pending_round_start_timers"])

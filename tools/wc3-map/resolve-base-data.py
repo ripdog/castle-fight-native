@@ -2696,6 +2696,18 @@ def main() -> None:
                         raise ValueError(f"campaign building-loss restriction changed: {parameters}")
                     if parameters.get("challenge_bound_item_purchase", {}).get("restriction_id") != "challenge_no_items":
                         raise ValueError(f"campaign no-items restriction changed: {parameters}")
+                    rescue = parameters.get("challenge_bound_rescue_strike_use", {})
+                    if (
+                        rescue.get("restriction_id") != "challenge_no_rescue_strike"
+                        or rescue.get("protected_wrapper_vm_index") != 27
+                        or rescue.get("live_caller_function")
+                        != "OnPointCast_onPointCast_RescueStrikeRuntime_fireEx_onPointCast_RescueStrikeRuntime"
+                        or rescue.get("records_before_rescue_strike_marker_creation") is not True
+                        or rescue.get("requires_casting_player_is_challenge_bound_player") is not True
+                        or rescue.get("requires_restriction_is_active") is not True
+                        or rescue.get("sets_hard_failure_flag") is not True
+                    ):
+                        raise ValueError(f"campaign no-rescue-strike restriction changed: {parameters}")
                 elif system_id == "campaign-round-start-state-reset":
                     if (
                         parameters.get("protected_reset_vm_index") != 83
