@@ -399,10 +399,13 @@ fn spawn_writer(mut stream: TcpStream, outbound: Receiver<ServerMessage>) {
 mod tests {
     use super::*;
     use castle_fight_protocol::{
-        ClientHello, CommandAcknowledgement, CommandRequest, SessionAssignment,
-        WireCanonicalStreamRecord, WirePlayerCommand,
+        CheckpointReport, ClientHello, CommandAcknowledgement, CommandRequest, SessionAssignment,
+        WireAdmissionError, WireCanonicalStreamRecord, WireCommandExecution, WirePlayerCommand,
     };
-    use castle_fight_sim::{CastleFightMatchConfig, MapVersion, PlayerId};
+    use castle_fight_sim::{
+        CanonicalStreamRecord, CastleFightMatchConfig, ClientCommandSequence, MapVersion,
+        MatchDriver, PlayerId, Simulation, create_castle_fight_match,
+    };
 
     use crate::ServerMatchOptions;
 
@@ -460,6 +463,102 @@ mod tests {
                 compatibility: server.authoritative().compatibility().clone(),
                 client_nonce: nonce,
             },
+        }
+    }
+
+    fn pump_network(server: &mut TcpAuthoritativeServer) {
+        for _ in 0..20 {
+            server.poll_network().unwrap();
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    struct ReplicaPeer {
+        stream: TcpStream,
+        simulation: Simulation,
+        driver: MatchDriver,
+        player: PlayerId,
+    }
+
+    impl ReplicaPeer {
+        fn connect(
+            server: &mut TcpAuthoritativeServer,
+            config: CastleFightMatchConfig,
+            nonce: u64,
+            workers: usize,
+            expected_connections: usize,
+        ) -> Self {
+            let mut stream = connect(server);
+            server.poll_network().unwrap();
+            send_client(&mut stream, hello(server, nonce));
+            pump_until(server, |view| view.authenticated >= expected_connections);
+            let assignment = match receive_server(&mut stream) {
+                ServerMessage::HelloAccepted { assignment } => assignment,
+                message => panic!("expected accepted replica handshake, got {message:?}"),
+            };
+            let game = create_castle_fight_match(config, workers).unwrap();
+            let driver = MatchDriver::new(&game.simulation, game.content);
+            Self {
+                stream,
+                simulation: game.simulation,
+                driver,
+                player: PlayerId(assignment.player_id),
+            }
+        }
+
+        fn send_command(&mut self, sequence: u64, command: WirePlayerCommand) {
+            send_client(
+                &mut self.stream,
+                ClientMessage::SubmitCommand {
+                    request: CommandRequest {
+                        client_sequence: sequence,
+                        observed_completed_tick: self.simulation.tick().checked_sub(1),
+                        command,
+                    },
+                },
+            );
+        }
+
+        fn apply_finalized_tick(&mut self) -> CanonicalStreamRecord {
+            let record = match receive_server(&mut self.stream) {
+                ServerMessage::StreamRecord { record } => CanonicalStreamRecord::from(record),
+                message => panic!("expected canonical stream record, got {message:?}"),
+            };
+            let result = self
+                .driver
+                .apply_stream_record(&mut self.simulation, record.clone())
+                .unwrap()
+                .expect("test server finalizes a simulation tick");
+            let expected_executions = result
+                .executions
+                .iter()
+                .copied()
+                .map(WireCommandExecution::from)
+                .collect::<Vec<_>>();
+            match receive_server(&mut self.stream) {
+                ServerMessage::TickExecutions { batch } => {
+                    assert_eq!(batch.tick, result.finalized.tick);
+                    assert_eq!(batch.executions, expected_executions);
+                }
+                message => panic!("expected deterministic execution batch, got {message:?}"),
+            }
+            match receive_server(&mut self.stream) {
+                ServerMessage::Checkpoint { checkpoint } => {
+                    assert_eq!(checkpoint.completed_tick, result.finalized.tick);
+                    assert_eq!(checkpoint.checksum, self.simulation.checksum());
+                    send_client(
+                        &mut self.stream,
+                        ClientMessage::CheckpointReport {
+                            report: CheckpointReport {
+                                completed_tick: checkpoint.completed_tick,
+                                checksum: self.simulation.checksum(),
+                            },
+                        },
+                    );
+                }
+                message => panic!("expected authoritative checkpoint, got {message:?}"),
+            }
+            record
         }
     }
 
@@ -569,5 +668,217 @@ mod tests {
             }
         }
         assert!(saw_tick);
+    }
+
+    #[test]
+    fn tcp_fault_injection_preserves_finalized_order_and_replica_checksums() {
+        let config = CastleFightMatchConfig::development_subset(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x5eed_900d,
+        )
+        .unwrap();
+        let authoritative = AuthoritativeMatch::new(
+            config.clone(),
+            1,
+            ServerMatchOptions {
+                checkpoint_interval_ticks: 1,
+            },
+        )
+        .unwrap();
+        let mut server = TcpAuthoritativeServer::bind("127.0.0.1:0", authoritative).unwrap();
+        let mut first = ReplicaPeer::connect(&mut server, config.clone(), 11, 1, 1);
+        let mut second = ReplicaPeer::connect(&mut server, config, 12, 2, 2);
+        assert!(server.is_started());
+        assert_eq!(first.player, PlayerId(0));
+        assert_eq!(second.player, PlayerId(6));
+
+        let first_builder = server
+            .authoritative()
+            .simulation()
+            .builder_for_player(first.player)
+            .unwrap()
+            .id;
+        let second_builder = server
+            .authoritative()
+            .simulation()
+            .builder_for_player(second.player)
+            .unwrap()
+            .id;
+
+        // Player 0 arrives during tick 0. Player 6 is deliberately delayed until tick 0 has
+        // already been finalized, so it must not be retroactively inserted into that tick.
+        first.send_command(
+            0,
+            WirePlayerCommand::StopBuilder {
+                builder: first_builder.0,
+            },
+        );
+        pump_until(&mut server, |view| view.pending_commands == 1);
+        assert!(matches!(
+            receive_server(&mut first.stream),
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Scheduled {
+                    client_sequence: 0,
+                    tick: 0,
+                    order: 0,
+                    duplicate: false,
+                }
+            }
+        ));
+
+        server.finalize_next_tick().unwrap();
+        let tick_zero_first = first.apply_finalized_tick();
+        let tick_zero_second = second.apply_finalized_tick();
+        assert_eq!(tick_zero_first, tick_zero_second);
+        let CanonicalStreamRecord::Tick(tick_zero) = &tick_zero_first else {
+            panic!("expected finalized tick 0")
+        };
+        assert_eq!(tick_zero.tick, 0);
+        assert_eq!(tick_zero.commands.len(), 1);
+        assert_eq!(tick_zero.commands[0].player, first.player);
+        assert_eq!(
+            first.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
+        assert_eq!(
+            second.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
+        pump_network(&mut server);
+
+        // Retry the already-finalized command. It must acknowledge the original schedule and must
+        // not reopen tick 0 or enter the current pending set.
+        first.send_command(
+            0,
+            WirePlayerCommand::StopBuilder {
+                builder: first_builder.0,
+            },
+        );
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut first.stream),
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Scheduled {
+                    client_sequence: 0,
+                    tick: 0,
+                    order: 0,
+                    duplicate: true,
+                }
+            }
+        ));
+        assert!(
+            server
+                .authoritative()
+                .driver()
+                .pending_commands()
+                .is_empty()
+        );
+
+        // The delayed player-6 command now arrives in the only open tick, tick 1.
+        second.send_command(
+            0,
+            WirePlayerCommand::StopBuilder {
+                builder: second_builder.0,
+            },
+        );
+        pump_until(&mut server, |view| view.pending_commands == 1);
+        assert!(matches!(
+            receive_server(&mut second.stream),
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Scheduled {
+                    client_sequence: 0,
+                    tick: 1,
+                    order: 0,
+                    duplicate: false,
+                }
+            }
+        ));
+
+        // Player 0 cannot use its next sequence to control player 6's builder. The rejected
+        // request consumes the sequence but does not enter the canonical pending command set.
+        first.send_command(
+            1,
+            WirePlayerCommand::StopBuilder {
+                builder: second_builder.0,
+            },
+        );
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut first.stream),
+            ServerMessage::CommandAcknowledged {
+                acknowledgement: CommandAcknowledgement::Rejected {
+                    client_sequence: 1,
+                    reason: WireAdmissionError::BuilderNotControllable { builder },
+                    duplicate: false,
+                }
+            } if builder == second_builder.0
+        ));
+        assert_eq!(
+            server
+                .authoritative()
+                .driver()
+                .next_client_sequence(first.player),
+            Some(ClientCommandSequence(2))
+        );
+        assert_eq!(server.authoritative().driver().pending_commands().len(), 1);
+
+        server.finalize_next_tick().unwrap();
+        let tick_one_first = first.apply_finalized_tick();
+        let tick_one_second = second.apply_finalized_tick();
+        assert_eq!(tick_one_first, tick_one_second);
+        let CanonicalStreamRecord::Tick(tick_one) = &tick_one_first else {
+            panic!("expected finalized tick 1")
+        };
+        assert_eq!(tick_one.tick, 1);
+        assert_eq!(tick_one.commands.len(), 1);
+        assert_eq!(tick_one.commands[0].player, second.player);
+        assert_eq!(
+            first.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
+        assert_eq!(
+            second.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
+        pump_network(&mut server);
+
+        // Dropping player 6 cannot mutate either finalized record. Step 9 keeps the slot claimed,
+        // and the remaining peer receives an explicit empty tick rather than inferring one from
+        // transport silence.
+        second.stream.shutdown(Shutdown::Both).unwrap();
+        drop(second);
+        pump_until(&mut server, |view| view.authenticated == 1);
+
+        let mut hijack = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut hijack, hello(&server, 99));
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut hijack),
+            ServerMessage::HelloRejected {
+                reason: HandshakeRejectReason::MatchFull
+            }
+        ));
+
+        server.finalize_next_tick().unwrap();
+        let tick_two = first.apply_finalized_tick();
+        let CanonicalStreamRecord::Tick(tick_two) = &tick_two else {
+            panic!("expected finalized tick 2")
+        };
+        assert_eq!(tick_two.tick, 2);
+        assert!(tick_two.commands.is_empty());
+        assert_eq!(
+            first.simulation.checksum(),
+            server.authoritative().simulation().checksum()
+        );
+        assert_eq!(
+            server.authoritative().driver().history().first(),
+            Some(&tick_zero_first)
+        );
+        assert_eq!(
+            server.authoritative().driver().history().get(1),
+            Some(&tick_one_first)
+        );
     }
 }
