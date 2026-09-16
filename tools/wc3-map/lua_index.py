@@ -7116,6 +7116,12 @@ def _extract_runtime_campaign_mechanics(
         "applyCampaignProfileToMissions__w3p_vmProtect", "saveCampaignProfile__w3p_vmProtect",
         "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
         "CampaignSaveData_CampaignSaveData_serializeForCampaignSave", "player_saveData",
+        "announceCheatProgressionDisabled__w3p_vmProtect", "markCampaignRunCheatTainted__w3p_vmProtect",
+        "isCampaignRunCheatTainted", "findCheatInText",
+        "FrameHandleListener_onEditboxChange_CampaignAntiCheat_onEvent_onEditboxChange_CampaignAntiCheat",
+        "FrameHandleListener_onEditboxEnter_CampaignAntiCheat_onEvent_onEditboxEnter_CampaignAntiCheat",
+        "CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat",
+        "onEditBoxEnter", "armEditBoxEvents", "kF", "jF", "iK",
         "registerCampaignChapterI__w3p_vmProtect", "registerCampaignChapterII__w3p_vmProtect",
         "addChapter__w3p_vmProtect", "addMission__w3p_vmProtect", "chapterTwoModeString", "challenge",
         "CampaignChapter_CampaignChapter_environment", "CampaignChapter_CampaignChapter_unlocksRace",
@@ -7156,6 +7162,24 @@ def _extract_runtime_campaign_mechanics(
         if not expression.startswith((b"_T(", b"_r(", b"_a(", b"_j(", b"_L(")):
             raise ValueError(
                 f"campaign protected string global expression changed: {symbol.decode('ascii')}: {expression[:40]!r}"
+            )
+        return _decode_w3p_global_name(expression, 11351, 1106)
+
+    def decode_protected_indexed_string(symbol: bytes, index: int) -> str:
+        match = re.search(
+            rb"(?<![A-Za-z0-9_])" + symbol + rb"\[" + str(index).encode("ascii")
+            + rb"\]=\(_d\[\d+\]or _y\(\d+,(.{1,700}?)\)\)",
+            data,
+        )
+        if match is None:
+            raise ValueError(
+                f"campaign protected indexed string assignment changed: {symbol.decode('ascii')}[{index}]"
+            )
+        expression = match.group(1)
+        if not expression.startswith((b"_T(", b"_r(", b"_a(", b"_j(", b"_L(")):
+            raise ValueError(
+                f"campaign protected indexed string expression changed: "
+                f"{symbol.decode('ascii')}[{index}]: {expression[:40]!r}"
             )
         return _decode_w3p_global_name(expression, 11351, 1106)
 
@@ -8329,6 +8353,191 @@ def _extract_runtime_campaign_mechanics(
         ],
         "evidence_kind": "statically-decoded-vm24-clear-plus-readable-challenge-begin-and-pending-start-failure-call-order",
         "byte_offset": min(challenge_clear_wrapper_offset, challenge_begin_offset, challenge_fail_start_offset),
+    })
+
+    anti_cheat_init_offset, _anti_cheat_init_source = source(
+        "jF",
+        (
+            b"wrb[0]=", b"wrb[21]=", b"trb=", b"srb=", b"if(Lcb==2)then",
+            b"doAfter(0.5,UIp)", b"EVENT_GAME_LOADED",
+        ),
+    )
+    anti_cheat_find_offset, _anti_cheat_find_source = source(
+        "findCheatInText",
+        (
+            b"if((XIp==\"\")or(string_length(XIp)==0))then return\"\"end",
+            b"YIp=string_toLowerCase(XIp)", b"ZIp=0 aJp=21",
+            b"string_contains(YIp,__wurst_ensureStr(wrb[ZIp]))",
+            b"return __wurst_ensureStr(wrb[ZIp])",
+        ),
+    )
+    anti_cheat_change_offset, _anti_cheat_change_source = source(
+        "FrameHandleListener_onEditboxChange_CampaignAntiCheat_onEvent_onEditboxChange_CampaignAntiCheat",
+        (b"srb=trb", b"trb=BlzGetTriggerFrameText()"),
+    )
+    anti_cheat_enter_listener_offset, _anti_cheat_enter_listener_source = source(
+        "FrameHandleListener_onEditboxEnter_CampaignAntiCheat_onEvent_onEditboxEnter_CampaignAntiCheat",
+        (b"onEditBoxEnter()",),
+    )
+    anti_cheat_enter_offset, _anti_cheat_enter_source = source(
+        "onEditBoxEnter",
+        (
+            b"fJp=findCheatInText(srb)", b"if(fJp==\"\")then fJp=findCheatInText(trb)end",
+            b"if(not(fJp==\"\"))then markCampaignRunCheatTainted__w3p_vmProtect(fJp)end",
+            b"srb=\"\"trb=\"\"",
+        ),
+    )
+    anti_cheat_arm_offset, _anti_cheat_arm_source = source(
+        "armEditBoxEvents",
+        (
+            b"if urb then return end", b"gJp=getChatEditBox()if(gJp==nil)then return end",
+            b"framehandle_onEditboxChange(gJp,hJp)", b"framehandle_onEditboxEnter(gJp,iJp)", b"urb=true",
+        ),
+    )
+    anti_cheat_callback_offset, _anti_cheat_callback_source = source(
+        "CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat",
+        (b"armEditBoxEvents()",),
+    )
+    anti_cheat_rearm_offset, _anti_cheat_rearm_source = source(
+        "kF", (b"urb=false", b"doAfter(0.5,nJp)"),
+    )
+    anti_cheat_state_offset, _anti_cheat_state_source = source(
+        "isCampaignRunCheatTainted", (b"return vrb",),
+    )
+    anti_cheat_duration_offset, _anti_cheat_duration_source = source(
+        "iK", (b"H1=10.",),
+    )
+    anti_cheat_announce_wrapper = "announceCheatProgressionDisabled__w3p_vmProtect"
+    anti_cheat_announce_offset, _anti_cheat_announce_source = source(
+        anti_cheat_announce_wrapper,
+        (b"function announceCheatProgressionDisabled__w3p_vmProtect()return _qr(15)end",),
+    )
+    anti_cheat_mark_wrapper = "markCampaignRunCheatTainted__w3p_vmProtect"
+    anti_cheat_mark_offset, _anti_cheat_mark_source = source(
+        anti_cheat_mark_wrapper,
+        (b"function markCampaignRunCheatTainted__w3p_vmProtect(bJp)return _qr(16,bJp)end",),
+    )
+    if data.count(b"vrb=false") != 1:
+        raise ValueError("campaign anti-cheat taint initial state changed")
+    cheat_tokens = [decode_protected_indexed_string(b"wrb", index) for index in range(22)]
+    expected_cheat_tokens = [
+        "allyourbasearebelongtous", "daylightsavings", "greedisgood", "iocanepowder",
+        "iseedeadpeople", "itvexesme", "keysersoze", "leafittome", "lightsout", "motherland",
+        "pointbreak", "riseandshine", "sharpandshiny", "somebodysetupthebomb", "strengthandhonor",
+        "synergy", "tenthleveltaurenchieftan", "thedudeabides", "thereisnospoon", "warpten",
+        "whoisjohngalt", "whosyourdaddy",
+    ]
+    if cheat_tokens != expected_cheat_tokens:
+        raise ValueError(f"campaign anti-cheat token list changed: {cheat_tokens}")
+    anti_cheat_announce_static = _w3p_vm_static_strings(data, 15)
+    anti_cheat_announce_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 15)
+    ]
+    if anti_cheat_announce_static != [
+        "|cffff3030", "Cheat codes detected — ", "campaign progression and ",
+        "save data have been ", "disabled for this game.", "|r", "0.", "45.",
+    ]:
+        raise ValueError(f"campaign anti-cheat announcement VM15 static values changed: {anti_cheat_announce_static}")
+    if anti_cheat_announce_globals != [
+        "__wurst_stringConcat", "__wurst_safe_DisplayTimedTextToPlayer", "U1",
+    ]:
+        raise ValueError(f"campaign anti-cheat announcement VM15 globals changed: {anti_cheat_announce_globals}")
+    anti_cheat_announce_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 15, expected_opcode_xor_byte=81)["instructions"]
+    ]
+    if anti_cheat_announce_program != [
+        (224, ()), (24, (1,)), (224, ()), (24, (2,)), (224, ()), (24, (3,)),
+        (218, (1,)), (218, (1,)), (218, (1,)), (218, (1,)),
+        (46, (1,)), (46, (2,)), (42, (1, 33)), (46, (3,)), (98, (33,)),
+        (46, (4,)), (98, (33,)), (46, (5,)), (98, (33,)), (46, (6,)), (98, (33,)),
+        (24, (1,)), (253, (1,)), (24, (2,)), (253, (2,)), (24, (3,)),
+        (218, (2,)), (218, (3,)), (144, (7,)), (144, (7,)), (144, (8,)), (253, (3,)),
+        (98, (80,)), (221, ()),
+    ]:
+        raise ValueError("campaign anti-cheat announcement protected VM15 changed")
+    anti_cheat_mark_static = _w3p_vm_static_strings(data, 16)
+    anti_cheat_mark_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 16)
+    ]
+    if anti_cheat_mark_static != [
+        "CampaignAntiCheat_campaignRunCheatTainted", "anti-cheat: cheat detected #", "0.", "vrb",
+    ]:
+        raise ValueError(f"campaign anti-cheat mark VM16 static values changed: {anti_cheat_mark_static}")
+    if anti_cheat_mark_globals != [
+        "vrb", anti_cheat_announce_wrapper, "Pcb", "__wurst_stringConcat",
+        "__wurst_safe_DisplayTimedTextToPlayer", "U1", "H1",
+    ]:
+        raise ValueError(f"campaign anti-cheat mark VM16 globals changed: {anti_cheat_mark_globals}")
+    anti_cheat_mark_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 16, expected_opcode_xor_byte=146)["instructions"]
+    ]
+    if anti_cheat_mark_program != [
+        (224, ()), (24, (2,)), (218, (1,)), (10, (0, 1)), (221, ()),
+        (156, (1,)), (251, (4,)), (42, (2, 0)), (218, (3,)), (236, ()), (10, (0, 23)),
+        (46, (2,)), (253, (1,)), (42, (4, 33)), (24, (2,)),
+        (218, (5,)), (218, (6,)), (144, (3,)), (144, (3,)), (218, (7,)), (253, (2,)),
+        (98, (80,)), (221, ()),
+    ]:
+        raise ValueError("campaign anti-cheat taint protected VM16 changed")
+    rows.append({
+        "system_id": "campaign-cheat-detection-and-persistence-taint",
+        "mechanic_kind": "campaign-chat-editbox-cheat-token-detection-one-shot-taint-and-progress-save-suppression",
+        "trigger": "campaign-anti-cheat-editbox-enter-with-known-warcraft-cheat-token",
+        "parameters": {
+            "protected_announcement_vm_index": 15,
+            "protected_mark_tainted_vm_index": 16,
+            "taint_symbol": "vrb",
+            "initial_taint_state": False,
+            "mark_is_idempotent_after_first_detection": True,
+            "listener_initialization_condition": "Lcb == 2",
+            "listener_initial_arm_delay_seconds": 0.5,
+            "listener_arm_guard_symbol": "urb",
+            "listener_change_previous_text_symbol": "srb",
+            "listener_change_current_text_symbol": "trb",
+            "listener_change_behavior": "srb = trb; trb = BlzGetTriggerFrameText()",
+            "enter_checks_previous_buffer_before_current_buffer": True,
+            "enter_clears_both_text_buffers_after_check": True,
+            "match_input_normalization": "string_toLowerCase",
+            "match_mode": "substring",
+            "match_scan_inclusive_indices": [0, 21],
+            "first_matching_token_is_returned": True,
+            "cheat_tokens": cheat_tokens,
+            "warning_text": "|cffff3030Cheat codes detected — campaign progression and save data have been disabled for this game.|r",
+            "warning_display_player_symbol": "U1",
+            "warning_duration_seconds": 45.0,
+            "technical_diagnostic_prefix": "anti-cheat: cheat detected #",
+            "technical_diagnostic_emitted_only_when_Pcb_is_false": True,
+            "technical_diagnostic_display_player_symbol": "U1",
+            "technical_diagnostic_duration_symbol": "H1",
+            "technical_diagnostic_duration_seconds": 10.0,
+            "rearm_helper_clears_guard_and_retries_after_seconds": 0.5,
+            "taint_query_function": "isCampaignRunCheatTainted",
+            "profile_save_vm35_returns_without_saving_when_tainted": True,
+            "campaign_result_forces_earned_star_mask_zero_when_tainted": True,
+            "campaign_result_skips_persistent_completion_when_tainted": True,
+            "campaign_result_rejects_chapter_completion_when_tainted": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "jF", "findCheatInText",
+            "FrameHandleListener_onEditboxChange_CampaignAntiCheat_onEvent_onEditboxChange_CampaignAntiCheat",
+            "FrameHandleListener_onEditboxEnter_CampaignAntiCheat_onEvent_onEditboxEnter_CampaignAntiCheat",
+            "onEditBoxEnter", "armEditBoxEvents",
+            "CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat", "kF", "iK",
+            anti_cheat_announce_wrapper, anti_cheat_mark_wrapper, "isCampaignRunCheatTainted",
+            "saveCampaignProfile__w3p_vmProtect", "VF", "nF",
+        ],
+        "evidence_kind": "exact-readable-editbox-detection-plus-statically-decoded-vm15-vm16-taint-and-cross-checked-persistence-result-gates",
+        "byte_offset": min(
+            anti_cheat_init_offset, anti_cheat_find_offset, anti_cheat_change_offset,
+            anti_cheat_enter_listener_offset, anti_cheat_enter_offset, anti_cheat_arm_offset,
+            anti_cheat_callback_offset, anti_cheat_rearm_offset, anti_cheat_state_offset,
+            anti_cheat_duration_offset, anti_cheat_announce_offset, anti_cheat_mark_offset,
+        ),
     })
 
     campaign_reset_wrapper = "resetCampaignRoundStartState__w3p_vmProtect"
@@ -10287,7 +10496,6 @@ def _extract_callback_single_coverage(
     }
     integrity_infrastructure = {
         "CallbackSingle_doAfter_Banlist_call_doAfter_Banlist",
-        "CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat",
         "CallbackSingle_doAfter_ObjectDataIntegrity_call_doAfter_ObjectDataIntegrity",
     }
     presentation_only = {
@@ -10406,9 +10614,9 @@ def _extract_callback_single_coverage(
         "callback-framework-infrastructure": 2,
         "e2e-only": 98,
         "gameplay-framework-infrastructure": 19,
-        "integrity-infrastructure": 3,
+        "integrity-infrastructure": 2,
         "normalized-ai-runtime-semantics": 11,
-        "normalized-campaign-runtime-semantics": 2,
+        "normalized-campaign-runtime-semantics": 3,
         "normalized-draft-runtime-dispatch": 2,
         "normalized-gameplay-dispatch": 4,
         "normalized-gameplay-semantics": 41,

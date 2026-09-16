@@ -2710,6 +2710,7 @@ def main() -> None:
                     "campaign-friendly-bot-supply-and-placeholder-content-catalog",
                     "campaign-star-restriction-failure-hooks",
                     "campaign-challenge-active-state-clear",
+                    "campaign-cheat-detection-and-persistence-taint",
                     "campaign-round-start-state-reset",
                     "campaign-quit-and-replay-control",
                     "campaign-profile-apply-and-save",
@@ -3008,6 +3009,48 @@ def main() -> None:
                         or parameters.get("readable_begin_path_uses_same_state_fields") is not True
                     ):
                         raise ValueError(f"campaign challenge active-state clear changed: {parameters}")
+                elif system_id == "campaign-cheat-detection-and-persistence-taint":
+                    expected_cheat_tokens = [
+                        "allyourbasearebelongtous", "daylightsavings", "greedisgood", "iocanepowder",
+                        "iseedeadpeople", "itvexesme", "keysersoze", "leafittome", "lightsout", "motherland",
+                        "pointbreak", "riseandshine", "sharpandshiny", "somebodysetupthebomb", "strengthandhonor",
+                        "synergy", "tenthleveltaurenchieftan", "thedudeabides", "thereisnospoon", "warpten",
+                        "whoisjohngalt", "whosyourdaddy",
+                    ]
+                    if (
+                        parameters.get("protected_announcement_vm_index") != 15
+                        or parameters.get("protected_mark_tainted_vm_index") != 16
+                        or parameters.get("taint_symbol") != "vrb"
+                        or parameters.get("initial_taint_state") is not False
+                        or parameters.get("mark_is_idempotent_after_first_detection") is not True
+                        or parameters.get("listener_initialization_condition") != "Lcb == 2"
+                        or parameters.get("listener_initial_arm_delay_seconds") != 0.5
+                        or parameters.get("listener_arm_guard_symbol") != "urb"
+                        or parameters.get("listener_change_previous_text_symbol") != "srb"
+                        or parameters.get("listener_change_current_text_symbol") != "trb"
+                        or parameters.get("enter_checks_previous_buffer_before_current_buffer") is not True
+                        or parameters.get("enter_clears_both_text_buffers_after_check") is not True
+                        or parameters.get("match_input_normalization") != "string_toLowerCase"
+                        or parameters.get("match_mode") != "substring"
+                        or parameters.get("match_scan_inclusive_indices") != [0, 21]
+                        or parameters.get("first_matching_token_is_returned") is not True
+                        or parameters.get("cheat_tokens") != expected_cheat_tokens
+                        or parameters.get("warning_text")
+                        != "|cffff3030Cheat codes detected — campaign progression and save data have been disabled for this game.|r"
+                        or parameters.get("warning_display_player_symbol") != "U1"
+                        or parameters.get("warning_duration_seconds") != 45.0
+                        or parameters.get("technical_diagnostic_prefix") != "anti-cheat: cheat detected #"
+                        or parameters.get("technical_diagnostic_emitted_only_when_Pcb_is_false") is not True
+                        or parameters.get("technical_diagnostic_duration_symbol") != "H1"
+                        or parameters.get("technical_diagnostic_duration_seconds") != 10.0
+                        or parameters.get("rearm_helper_clears_guard_and_retries_after_seconds") != 0.5
+                        or parameters.get("taint_query_function") != "isCampaignRunCheatTainted"
+                        or parameters.get("profile_save_vm35_returns_without_saving_when_tainted") is not True
+                        or parameters.get("campaign_result_forces_earned_star_mask_zero_when_tainted") is not True
+                        or parameters.get("campaign_result_skips_persistent_completion_when_tainted") is not True
+                        or parameters.get("campaign_result_rejects_chapter_completion_when_tainted") is not True
+                    ):
+                        raise ValueError(f"campaign anti-cheat detection/taint semantics changed: {parameters}")
                 elif system_id == "campaign-round-start-state-reset":
                     if (
                         parameters.get("protected_reset_vm_index") != 83

@@ -58,7 +58,7 @@ CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E7	e2e-o
 CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E8	e2e-only			generated end-to-end/smoke-test callback; not production gameplay semantics	531434
 CallbackSingle_doAfter_BuildingCatalogE2E_call_doAfter_BuildingCatalogE2E9	e2e-only			generated end-to-end/smoke-test callback; not production gameplay semantics	533176
 CallbackSingle_doAfter_CameraMovementDetection_call_doAfter_CameraMovementDetection	normalized-session-runtime-semantics	runtime-session-mechanics:away-control-and-idle-detection		callback is covered by normalized player-session semantics	637830
-CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat	integrity-infrastructure			anti-cheat/object-integrity/banlist scaffolding; no normalized production gameplay rule	639583
+CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat	normalized-campaign-runtime-semantics	runtime-campaign-mechanics:campaign-cheat-detection-and-persistence-taint		callback is covered by normalized campaign runtime semantics	639583
 CallbackSingle_doAfter_CampaignRuntime_call_doAfter_CampaignRuntime	presentation-only			visual/UI/audio/chat/animation/weather presentation callback without authoritative gameplay mutation	656167
 CallbackSingle_doAfter_CampaignSmokeTest_call_doAfter_CampaignSmokeTest	e2e-only			generated end-to-end/smoke-test callback; not production gameplay semantics	690250
 CallbackSingle_doAfter_CampaignSmokeTest_call_doAfter_CampaignSmokeTest1	e2e-only			generated end-to-end/smoke-test callback; not production gameplay semantics	695444

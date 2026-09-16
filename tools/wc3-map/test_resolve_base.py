@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 12)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 13)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -419,9 +419,9 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "callback-framework-infrastructure": 2,
                 "e2e-only": 98,
                 "gameplay-framework-infrastructure": 19,
-                "integrity-infrastructure": 3,
+                "integrity-infrastructure": 2,
                 "normalized-ai-runtime-semantics": 11,
-                "normalized-campaign-runtime-semantics": 2,
+                "normalized-campaign-runtime-semantics": 3,
                 "normalized-draft-runtime-dispatch": 2,
                 "normalized-gameplay-dispatch": 4,
                 "normalized-gameplay-semantics": 41,
@@ -441,6 +441,10 @@ class ResolvedEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             rows["CallbackSingle_doAfter_MMDData_call_doAfter_MMDData"]["coverage_status"],
+            "normalized-campaign-runtime-semantics",
+        )
+        self.assertEqual(
+            rows["CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat"]["coverage_status"],
             "normalized-campaign-runtime-semantics",
         )
         for callback in (
@@ -567,6 +571,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "campaign-friendly-bot-supply-and-placeholder-content-catalog",
                 "campaign-star-restriction-failure-hooks",
                 "campaign-challenge-active-state-clear",
+                "campaign-cheat-detection-and-persistence-taint",
                 "campaign-round-start-state-reset",
                 "campaign-quit-and-replay-control",
                 "campaign-profile-apply-and-save",
@@ -751,6 +756,32 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(challenge_clear["challenge_bound_player_reset_range"], "0..bj_MAX_PLAYERS-1")
         self.assertFalse(challenge_clear["challenge_bound_player_reset"])
 
+        anti_cheat = json.loads(rows["campaign-cheat-detection-and-persistence-taint"]["parameters_json"])
+        self.assertEqual(anti_cheat["protected_announcement_vm_index"], 15)
+        self.assertEqual(anti_cheat["protected_mark_tainted_vm_index"], 16)
+        self.assertEqual(anti_cheat["taint_symbol"], "vrb")
+        self.assertFalse(anti_cheat["initial_taint_state"])
+        self.assertTrue(anti_cheat["mark_is_idempotent_after_first_detection"])
+        self.assertEqual(anti_cheat["listener_initialization_condition"], "Lcb == 2")
+        self.assertEqual(anti_cheat["listener_initial_arm_delay_seconds"], 0.5)
+        self.assertTrue(anti_cheat["enter_checks_previous_buffer_before_current_buffer"])
+        self.assertEqual(anti_cheat["match_input_normalization"], "string_toLowerCase")
+        self.assertEqual(anti_cheat["match_mode"], "substring")
+        self.assertEqual(anti_cheat["match_scan_inclusive_indices"], [0, 21])
+        self.assertEqual(len(anti_cheat["cheat_tokens"]), 22)
+        self.assertEqual(anti_cheat["cheat_tokens"][0], "allyourbasearebelongtous")
+        self.assertEqual(anti_cheat["cheat_tokens"][-1], "whosyourdaddy")
+        self.assertEqual(anti_cheat["warning_duration_seconds"], 45.0)
+        self.assertIn("campaign progression", anti_cheat["warning_text"])
+        self.assertIn("save data", anti_cheat["warning_text"])
+        self.assertEqual(anti_cheat["technical_diagnostic_prefix"], "anti-cheat: cheat detected #")
+        self.assertTrue(anti_cheat["technical_diagnostic_emitted_only_when_Pcb_is_false"])
+        self.assertEqual(anti_cheat["technical_diagnostic_duration_seconds"], 10.0)
+        self.assertTrue(anti_cheat["profile_save_vm35_returns_without_saving_when_tainted"])
+        self.assertTrue(anti_cheat["campaign_result_forces_earned_star_mask_zero_when_tainted"])
+        self.assertTrue(anti_cheat["campaign_result_skips_persistent_completion_when_tainted"])
+        self.assertTrue(anti_cheat["campaign_result_rejects_chapter_completion_when_tainted"])
+
         round_reset = json.loads(rows["campaign-round-start-state-reset"]["parameters_json"])
         self.assertEqual(round_reset["protected_reset_vm_index"], 83)
         self.assertTrue(round_reset["cancels_pending_round_start_timers"])
@@ -834,7 +865,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 12)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 13)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
