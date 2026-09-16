@@ -1153,4 +1153,194 @@ impl Simulation {
         }
         None
     }
+
+    pub(super) fn nearest_reachable_unit_attack_cell(
+        &self,
+        source_cell: NavCell,
+        current: SimPoint,
+        target: SimPoint,
+        attack_range: i32,
+        collision_radius: Option<i32>,
+    ) -> Option<NavCell> {
+        let cell_size = self.config.navigation_cell_size;
+        let radius_cells = attack_range
+            .saturating_add(cell_size - 1)
+            .div_euclid(cell_size)
+            .saturating_add(1);
+        let target_cell = self.topology.cell_of_point(target);
+        let range_sq = square_i32(attack_range);
+        let mut best: Option<(u64, i32, i32, NavCell)> = None;
+
+        for y in target_cell.y - radius_cells..=target_cell.y + radius_cells {
+            for x in target_cell.x - radius_cells..=target_cell.x + radius_cells {
+                let cell = NavCell::new(x, y);
+                if !self.topology.contains(cell) {
+                    continue;
+                }
+                let position = self.topology.center_of_cell(cell);
+                if position.distance_sq(target) > range_sq
+                    || !self.position_is_traversable_from(source_cell, position, collision_radius)
+                {
+                    continue;
+                }
+                let key = (current.distance_sq(position), y, x, cell);
+                if best.is_none_or(|existing| key < existing) {
+                    best = Some(key);
+                }
+            }
+        }
+        best.map(|(_, _, _, cell)| cell)
+    }
+
+    fn nearest_reachable_building_attack_cell(
+        &self,
+        source_cell: NavCell,
+        current: SimPoint,
+        footprint: BuildingFootprint,
+        attack_range: i32,
+        collision_radius: Option<i32>,
+    ) -> Option<NavCell> {
+        let cell_size = self.config.navigation_cell_size;
+        let radius_cells = attack_range
+            .saturating_add(cell_size - 1)
+            .div_euclid(cell_size)
+            .saturating_add(1);
+        let range_sq = square_i32(attack_range);
+        let mut best: Option<(u64, i32, i32, NavCell)> = None;
+        let min_x = footprint.min_x.saturating_sub(radius_cells);
+        let max_x = footprint.max_x().saturating_add(radius_cells);
+        let min_y = footprint.min_y.saturating_sub(radius_cells);
+        let max_y = footprint.max_y().saturating_add(radius_cells);
+
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let cell = NavCell::new(x, y);
+                if !self.topology.contains(cell) {
+                    continue;
+                }
+                let position = self.topology.center_of_cell(cell);
+                if point_to_footprint_distance_sq(position, footprint, cell_size) > range_sq
+                    || !self.position_is_traversable_from(source_cell, position, collision_radius)
+                {
+                    continue;
+                }
+                let key = (current.distance_sq(position), y, x, cell);
+                if best.is_none_or(|existing| key < existing) {
+                    best = Some(key);
+                }
+            }
+        }
+        best.map(|(_, _, _, cell)| cell)
+    }
+
+    pub(super) fn navigation_world_bounds(&self) -> (SimPoint, SimPoint) {
+        let cell_size = i64::from(self.config.navigation_cell_size);
+        let min_x = i64::from(self.config.navigation_min.x) * cell_size;
+        let min_y = i64::from(self.config.navigation_min.y) * cell_size;
+        let max_x = (i64::from(self.config.navigation_max.x) + 1) * cell_size - 1;
+        let max_y = (i64::from(self.config.navigation_max.y) + 1) * cell_size - 1;
+        (
+            SimPoint::new(
+                i32::try_from(min_x).expect("navigation minimum x overflow"),
+                i32::try_from(min_y).expect("navigation minimum y overflow"),
+            ),
+            SimPoint::new(
+                i32::try_from(max_x).expect("navigation maximum x overflow"),
+                i32::try_from(max_y).expect("navigation maximum y overflow"),
+            ),
+        )
+    }
+
+    fn position_is_legal_for_unit(
+        &self,
+        unit: &UnitSnapshot,
+        original_cell: NavCell,
+        candidate: SimPoint,
+    ) -> bool {
+        match unit.movement_class {
+            MovementClass::Ground => self.position_is_traversable_from(
+                original_cell,
+                candidate,
+                unit.collision_radius_override,
+            ),
+            MovementClass::Air => self.air_position_is_traversable_from(
+                self.air_topology.cell_of_point(unit.position),
+                candidate,
+                unit.collision_radius,
+            ),
+        }
+    }
+
+    fn position_is_traversable_from(
+        &self,
+        original_cell: NavCell,
+        candidate: SimPoint,
+        collision_radius: Option<i32>,
+    ) -> bool {
+        let Some(component) = self.topology.component_id(original_cell) else {
+            return false;
+        };
+        if let Some(collision_radius) = collision_radius {
+            self.topology
+                .circle_is_traversable_in_component(candidate, collision_radius, component)
+        } else {
+            self.topology
+                .component_id(self.topology.cell_of_point(candidate))
+                == Some(component)
+        }
+    }
+
+    pub(super) fn air_position_is_traversable_from(
+        &self,
+        original_cell: NavCell,
+        candidate: SimPoint,
+        collision_radius: i32,
+    ) -> bool {
+        let Some(component) = self.air_topology.component_id(original_cell) else {
+            return false;
+        };
+        self.air_topology
+            .circle_is_traversable_in_component(candidate, collision_radius, component)
+    }
+
+    fn valid_separated_position(
+        &self,
+        original_cell: NavCell,
+        desired: SimPoint,
+        offset: SimPoint,
+        unit: &UnitSnapshot,
+    ) -> SimPoint {
+        let candidates = [
+            SimPoint::new(
+                desired
+                    .x
+                    .checked_add(offset.x)
+                    .expect("separation x overflow"),
+                desired
+                    .y
+                    .checked_add(offset.y)
+                    .expect("separation y overflow"),
+            ),
+            SimPoint::new(
+                desired
+                    .x
+                    .checked_add(offset.x)
+                    .expect("separation x overflow"),
+                desired.y,
+            ),
+            SimPoint::new(
+                desired.x,
+                desired
+                    .y
+                    .checked_add(offset.y)
+                    .expect("separation y overflow"),
+            ),
+            desired,
+        ];
+
+        candidates
+            .into_iter()
+            .find(|candidate| self.position_is_legal_for_unit(unit, original_cell, *candidate))
+            .unwrap_or(desired)
+    }
 }
