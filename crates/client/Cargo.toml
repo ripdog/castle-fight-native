@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 bevy = { workspace = true, features = ["3d", "png", "ui", "custom_cursor"] }
+castle-fight-protocol = { path = "../protocol" }
 castle-fight-sim = { path = "../sim" }
 serde.workspace = true
 serde_json.workspace = true

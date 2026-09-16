@@ -1922,6 +1922,7 @@ name = "castle-fight-client"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "castle-fight-protocol",
  "castle-fight-sim",
  "serde",
  "serde_json",

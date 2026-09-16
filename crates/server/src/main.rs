@@ -24,7 +24,7 @@ impl ServerOptions {
                 .expect("valid default bind address"),
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
-            seed: 0,
+            seed: 0x4341_5354_4c45,
             team_size: 1,
             workers: default_worker_count(),
         };

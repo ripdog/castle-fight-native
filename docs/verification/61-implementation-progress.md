@@ -417,7 +417,11 @@ Implemented so far:
 - duplicate command sequences receive duplicate acknowledgements without duplicate scheduling, sequence violations are rejected, and ownership admission still runs under the bound session player;
 - added the real TCP transport shell: nonblocking listener, `TCP_NODELAY`, bounded per-connection outbound queues, reader/writer I/O threads, schema/handshake dispatch, authenticated session routing, and explicit connection teardown while all authoritative mutation remains on the single server-loop thread;
 - added fixed-rate headless pacing at the selected simulation rate and gate tick `0` until the full initial roster has handshaken, avoiding an unsupported late-join/history gap before Step 10;
-- added a runnable `castle-fight-server` binary with exact map revision, seed, 1v1/2v2/3v3 authored-slot selection, worker count, and bind-address options.
+- added a runnable `castle-fight-server` binary with exact map revision, seed, 1v1/2v2/3v3 authored-slot selection, worker count, and bind-address options;
+- added an opt-in TCP mode to the Bevy game client while preserving local/offline mode as the default; network clients construct the same selected roster/seed as the server, handshake before play, and reject unsupported late-join/history handoffs in Step 9;
+- network client commands are queued as protocol requests with monotonically increasing client sequence numbers and no client-authored player identity; local simulation state is not mutated at submission time;
+- network clients advance only by applying server `CanonicalStreamRecord`s, independently recompute command execution outcomes, compare them against the server's execution batch, verify checkpoint checksums, and report their checksum back to the server;
+- socket reader/writer threads exchange only protocol messages through channels and never touch Bevy ECS or authoritative simulation state directly.
 
 Compatibility/state changes:
 
@@ -430,14 +434,15 @@ Executed verification:
 - `tools/cargo-interactive clippy -p castle-fight-protocol --all-targets -- -D warnings`: passed;
 - `tools/cargo-interactive test -p castle-fight-server`: **12 passed** (11 library/TCP tests plus the binary configuration test), including two independent 1v1 clients, a four-player/2v2 replication scenario, localhost TCP handshake/start gating, socket-path duplicate submission, unauthorized foreign-builder commands, explicit empty finalized ticks, checkpoint reporting, and disconnect slot retention;
 - `tools/cargo-interactive clippy -p castle-fight-server --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive test -p castle-fight-client`: **109 passed** after network-client integration;
+- `tools/cargo-interactive clippy -p castle-fight-client --all-targets -- -D warnings`: passed;
 - `tools/cargo-interactive test -p castle-fight-sim`: **240 passed** after the protocol boundary;
 - `cargo fmt --all` and `git diff --check`: passed.
 
 Pending:
 
-- network client integration consuming finalized records rather than advancing from silence;
 - end-to-end socket-level delay/duplication/disconnect fault injection across independent clients; the server session/TCP layers already cover duplicate sequencing, disconnect slot retention, and unauthorized-command rejection.
 
 ## Next action
 
-Integrate a TCP network mode into the game client: submit local commands as protocol requests, advance only from authoritative finalized stream records, surface execution outcomes/checkpoints, and preserve the existing local mode for offline development.
+Add end-to-end socket-level multiplayer scenarios using independent protocol clients, including delayed command delivery, duplicate retries, unauthorized commands, and disconnects; then run the full Step 9 compatibility matrix and close the step.

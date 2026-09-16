@@ -7,6 +7,7 @@ mod debug_menu;
 mod demo;
 mod doodads;
 mod inspection;
+mod network;
 mod presentation;
 mod resource_ui;
 mod terrain;
@@ -23,11 +24,18 @@ use bevy::{
     time::Fixed,
     window::PresentMode,
 };
+use castle_fight_protocol::{
+    CheckpointReport, ClientMessage, CommandAcknowledgement, CommandRequest, CompatibilityIdentity,
+    ProtocolErrorCode, ServerMessage, WireCommandExecution,
+};
 use castle_fight_sim::{
-    CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamError, CastleFightContentAvailability,
-    CastleFightContentBundle, CommandExecution, CommandExecutionResult, CommandOutcome,
-    CommandSubmission, DriverTickResult, MapVersion, MatchDriver, PlayerCommand, PlayerId,
-    Simulation, castle_fight_registered_releases,
+    AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION,
+    CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamError, CanonicalStreamRecord,
+    CastleFightBuilderRace, CastleFightContentAvailability, CastleFightContentBundle,
+    CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightParticipantConfig,
+    CommandExecution, CommandExecutionResult, CommandOutcome, CommandSubmission, DriverTickResult,
+    MapVersion, MatchDriver, PlayerCommand, PlayerId, Simulation, Team,
+    castle_fight_registered_releases,
 };
 
 #[cfg(test)]
@@ -38,20 +46,41 @@ use build_ui::{ActionPanelState, BuildUiPlugin};
 use builder_controls::BuilderControlPlugin;
 use cursor::CursorPresentationPlugin;
 use debug_menu::DebugMenuPlugin;
-use demo::{BuildKind, create_demo_world_for_version};
+use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config};
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
+use network::{NetworkClient, NetworkEvent};
 use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 
 const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 
+enum AuthorityMode {
+    Local,
+    Network {
+        client: NetworkClient,
+        assigned_player: PlayerId,
+        next_sequence: u64,
+        connected: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClientCommandSubmission {
+    Local(CommandSubmission),
+    Submitted { client_sequence: u64 },
+    Failed,
+}
+
 #[derive(Resource)]
 pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
     driver: MatchDriver,
     pending_feedback: Vec<CommandExecution>,
+    pending_status: Vec<String>,
+    expected_execution_batch: Option<(u64, Vec<WireCommandExecution>)>,
+    authority: AuthorityMode,
 }
 
 impl AuthoritativeSimulation {
@@ -61,18 +90,84 @@ impl AuthoritativeSimulation {
             simulation,
             driver,
             pending_feedback: Vec::new(),
+            pending_status: Vec::new(),
+            expected_execution_batch: None,
+            authority: AuthorityMode::Local,
         }
+    }
+
+    fn new_networked(
+        simulation: Simulation,
+        content: &'static CastleFightContentBundle,
+        client: NetworkClient,
+        assigned_player: PlayerId,
+    ) -> Self {
+        let driver = MatchDriver::new(&simulation, content);
+        Self {
+            simulation,
+            driver,
+            pending_feedback: Vec::new(),
+            pending_status: Vec::new(),
+            expected_execution_batch: None,
+            authority: AuthorityMode::Network {
+                client,
+                assigned_player,
+                next_sequence: 0,
+                connected: true,
+            },
+        }
+    }
+
+    #[must_use]
+    fn is_networked(&self) -> bool {
+        matches!(self.authority, AuthorityMode::Network { .. })
     }
 
     pub(crate) fn submit_local_command(
         &mut self,
         player: PlayerId,
         command: PlayerCommand,
-    ) -> CommandSubmission {
-        let Self {
-            simulation, driver, ..
-        } = self;
-        driver.submit_local_command(simulation, player, command)
+    ) -> ClientCommandSubmission {
+        match &mut self.authority {
+            AuthorityMode::Local => ClientCommandSubmission::Local(
+                self.driver
+                    .submit_local_command(&self.simulation, player, command),
+            ),
+            AuthorityMode::Network {
+                client,
+                assigned_player,
+                next_sequence,
+                connected,
+            } => {
+                if !*connected || player != *assigned_player {
+                    self.pending_status
+                        .push("Command not sent: network session is unavailable.".to_owned());
+                    return ClientCommandSubmission::Failed;
+                }
+                let client_sequence = *next_sequence;
+                let request = ClientMessage::SubmitCommand {
+                    request: CommandRequest {
+                        client_sequence,
+                        observed_completed_tick: self.simulation.tick().checked_sub(1),
+                        command: command.into(),
+                    },
+                };
+                match client.send(request) {
+                    Ok(()) => {
+                        *next_sequence = next_sequence
+                            .checked_add(1)
+                            .expect("client command sequence exhausted");
+                        ClientCommandSubmission::Submitted { client_sequence }
+                    }
+                    Err(error) => {
+                        *connected = false;
+                        self.pending_status
+                            .push(format!("Command not sent: {error}."));
+                        ClientCommandSubmission::Failed
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -111,11 +206,23 @@ fn main() {
         print_registered_map_versions();
         return;
     }
-    let demo = create_demo_world_for_version(
+    if options.server.is_some() && options.stress_units.is_some() {
+        eprintln!(
+            "--stress-units is an offline presentation fixture and cannot be used with --server"
+        );
+        std::process::exit(2);
+    }
+    let match_config = client_match_config(&options).unwrap_or_else(|error| {
+        eprintln!(
+            "cannot configure Castle Fight {}/{}: {error}",
+            options.map_version, options.release_revision
+        );
+        std::process::exit(2);
+    });
+    let demo = create_demo_world_for_match_config(
         default_worker_count(),
         options.stress_units,
-        options.map_version,
-        &options.release_revision,
+        match_config,
     )
     .unwrap_or_else(|error| {
         eprintln!(
@@ -124,32 +231,74 @@ fn main() {
         );
         std::process::exit(2);
     });
-    let local_player = demo
-        .match_config
-        .participants
-        .first()
-        .expect("playable Castle Fight match must contain a local participant")
-        .id;
+    let (local_player, network_client) = if let Some(server_address) = options.server {
+        let compatibility = compatibility_identity_for_demo(&demo);
+        let (client, assignment) =
+            NetworkClient::connect(server_address, compatibility, u64::from(std::process::id()))
+                .unwrap_or_else(|error| {
+                    eprintln!("cannot join Castle Fight server {server_address}: {error}");
+                    std::process::exit(2);
+                });
+        if assignment.next_stream_position != 0 || assignment.completed_tick.is_some() {
+            eprintln!(
+                "server attempted a late-join handoff that Step 9 clients do not support yet"
+            );
+            std::process::exit(2);
+        }
+        let local_player = PlayerId(assignment.player_id);
+        let expected_team = demo
+            .match_config
+            .participants
+            .iter()
+            .find(|participant| participant.id == local_player)
+            .map(|participant| participant.team.0);
+        if expected_team != Some(assignment.team) {
+            eprintln!(
+                "server assigned player {} to unexpected team {}",
+                assignment.player_id, assignment.team
+            );
+            std::process::exit(2);
+        }
+        (local_player, Some(client))
+    } else {
+        let local_player = demo
+            .match_config
+            .participants
+            .first()
+            .expect("playable Castle Fight match must contain a local participant")
+            .id;
+        (local_player, None)
+    };
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
     let present_mode = if options.stress_units.is_some() {
         PresentMode::AutoNoVsync
     } else {
         PresentMode::AutoVsync
     };
+    let network_suffix = options
+        .server
+        .map_or(String::new(), |server| format!(" — server {server}"));
     let window_title = format!(
-        "Castle Fight Native 3D — CF {}/{} ({})",
+        "Castle Fight Native 3D — CF {}/{} ({}){}",
         demo.match_config.release.map_version,
         demo.match_config.release.release_revision,
         demo.match_config
             .release
             .content_revision
             .unwrap_or("archived-only"),
+        network_suffix,
     );
 
     let terrain_texture_layout =
         TerrainTextureLayout::from_wc3_terrain_json(demo.terrain_source_json)
             .expect("selected Warcraft terrain texture layout must be valid");
     let terrain_textures = TerrainTextureSet::load_default();
+
+    let authoritative = if let Some(client) = network_client {
+        AuthoritativeSimulation::new_networked(demo.simulation, demo.content, client, local_player)
+    } else {
+        AuthoritativeSimulation::new(demo.simulation, demo.content)
+    };
 
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
@@ -161,7 +310,7 @@ fn main() {
             direct_buildings: demo.direct_buildings,
             local_player,
         })
-        .insert_resource(AuthoritativeSimulation::new(demo.simulation, demo.content))
+        .insert_resource(authoritative)
         .init_resource::<SimulationPlayback>()
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
@@ -255,6 +404,9 @@ struct ClientOptions {
     perf_log: bool,
     map_version: MapVersion,
     release_revision: String,
+    match_seed: u64,
+    team_size: usize,
+    server: Option<std::net::SocketAddr>,
     list_map_versions: bool,
 }
 
@@ -266,6 +418,9 @@ impl ClientOptions {
             perf_log: false,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
+            match_seed: DEVELOPMENT_MATCH_SEED,
+            team_size: 1,
+            server: None,
             list_map_versions: false,
         };
         let mut args = std::env::args().skip(1);
@@ -296,10 +451,36 @@ impl ClientOptions {
                         .next()
                         .expect("--map-revision requires an exact revision such as r1");
                 }
+                "--seed" => {
+                    options.match_seed = args
+                        .next()
+                        .expect("--seed requires an unsigned integer")
+                        .parse()
+                        .expect("--seed requires an unsigned integer");
+                }
+                "--team-size" => {
+                    options.team_size = args
+                        .next()
+                        .expect("--team-size requires 1, 2, or 3")
+                        .parse()
+                        .expect("--team-size requires 1, 2, or 3");
+                    assert!(
+                        (1..=3).contains(&options.team_size),
+                        "--team-size requires 1, 2, or 3"
+                    );
+                }
+                "--server" => {
+                    options.server = Some(
+                        args.next()
+                            .expect("--server requires an address such as 127.0.0.1:6112")
+                            .parse()
+                            .expect("--server requires a valid socket address"),
+                    );
+                }
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--map-version 9.27] [--map-revision r1] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log]"
                     );
                     std::process::exit(0);
                 }
@@ -307,6 +488,49 @@ impl ClientOptions {
             }
         }
         options
+    }
+}
+
+fn client_match_config(
+    options: &ClientOptions,
+) -> Result<CastleFightMatchConfig, CastleFightMatchSetupError> {
+    let western = [0u8, 1, 2];
+    let eastern = [6u8, 7, 8];
+    let participants =
+        western
+            .iter()
+            .take(options.team_size)
+            .map(|slot| CastleFightParticipantConfig {
+                id: PlayerId(*slot),
+                team: Team(0),
+                builder_race: CastleFightBuilderRace::Human,
+            })
+            .chain(eastern.iter().take(options.team_size).map(|slot| {
+                CastleFightParticipantConfig {
+                    id: PlayerId(*slot),
+                    team: Team(1),
+                    builder_race: CastleFightBuilderRace::Human,
+                }
+            }))
+            .collect();
+    CastleFightMatchConfig::development_subset_with_participants(
+        options.map_version,
+        &options.release_revision,
+        options.match_seed,
+        participants,
+    )
+}
+
+fn compatibility_identity_for_demo(demo: &demo::DemoWorld) -> CompatibilityIdentity {
+    let snapshot = demo.simulation.capture_snapshot();
+    CompatibilityIdentity {
+        snapshot_schema_version: AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION,
+        checksum_schema_version: CANONICAL_CHECKSUM_SCHEMA_VERSION,
+        map_version: demo.match_config.release.map_version,
+        release_revision: demo.match_config.release.release_revision.to_owned(),
+        content_schema_version: demo.content.identity.schema_version,
+        content_gameplay_hash: demo.content.identity.gameplay_hash,
+        configuration_identity: snapshot.configuration_identity(),
     }
 }
 
@@ -359,8 +583,13 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
 
 fn toggle_simulation_pause(
     keys: Res<ButtonInput<KeyCode>>,
+    authoritative: Res<AuthoritativeSimulation>,
     mut playback: ResMut<SimulationPlayback>,
 ) {
+    if authoritative.is_networked() {
+        playback.paused = false;
+        return;
+    }
     if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyP) {
         playback.paused = !playback.paused;
     }
@@ -382,6 +611,12 @@ fn advance_authoritative_simulation(
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
+    if authoritative.is_networked() {
+        if let Err(error) = process_network_events(&mut authoritative, &mut presentation) {
+            panic!("network canonical stream invariant failed: {error}");
+        }
+        return;
+    }
     if playback.paused {
         return;
     }
@@ -399,6 +634,7 @@ pub(crate) fn advance_authoritative_simulation_once(
         simulation,
         driver,
         pending_feedback,
+        ..
     } = authoritative;
     let result = driver.advance_local_tick(simulation)?;
     pending_feedback.extend(result.executions.iter().copied());
@@ -406,11 +642,148 @@ pub(crate) fn advance_authoritative_simulation_once(
     Ok(result)
 }
 
+fn process_network_events(
+    authoritative: &mut AuthoritativeSimulation,
+    presentation: &mut PresentationSamples,
+) -> Result<(), String> {
+    let events = match &authoritative.authority {
+        AuthorityMode::Local => return Ok(()),
+        AuthorityMode::Network { client, .. } => client.drain_events(),
+    };
+    for event in events {
+        match event {
+            NetworkEvent::Disconnected(reason) => {
+                if let AuthorityMode::Network { connected, .. } = &mut authoritative.authority {
+                    *connected = false;
+                }
+                authoritative
+                    .pending_status
+                    .push(format!("Disconnected from server: {reason}"));
+            }
+            NetworkEvent::Message(message) => match message {
+                ServerMessage::CommandAcknowledged { acknowledgement } => {
+                    let status = match acknowledgement {
+                        CommandAcknowledgement::Scheduled {
+                            client_sequence,
+                            tick,
+                            duplicate,
+                            ..
+                        } => {
+                            if duplicate {
+                                format!(
+                                    "Command #{client_sequence} already scheduled for tick {tick}."
+                                )
+                            } else {
+                                format!("Command #{client_sequence} accepted for tick {tick}.")
+                            }
+                        }
+                        CommandAcknowledgement::Rejected {
+                            client_sequence,
+                            reason,
+                            duplicate,
+                        } => {
+                            let duplicate = if duplicate { " duplicate" } else { "" };
+                            format!(
+                                "Command #{client_sequence}{duplicate} rejected by server: {reason:?}."
+                            )
+                        }
+                    };
+                    authoritative.pending_status.push(status);
+                }
+                ServerMessage::StreamRecord { record } => {
+                    let canonical: CanonicalStreamRecord = record.into();
+                    let applied = authoritative
+                        .driver
+                        .apply_stream_record(&mut authoritative.simulation, canonical)
+                        .map_err(|error| format!("canonical stream error: {error:?}"))?;
+                    if let Some(result) = applied {
+                        let expected = result
+                            .executions
+                            .iter()
+                            .copied()
+                            .map(WireCommandExecution::from)
+                            .collect();
+                        authoritative.expected_execution_batch =
+                            Some((result.finalized.tick, expected));
+                        authoritative
+                            .pending_feedback
+                            .extend(result.executions.iter().copied());
+                    }
+                    presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
+                }
+                ServerMessage::TickExecutions { batch } => {
+                    let Some((expected_tick, expected_executions)) =
+                        authoritative.expected_execution_batch.take()
+                    else {
+                        return Err(format!(
+                            "received execution batch for tick {} before its finalized input record",
+                            batch.tick
+                        ));
+                    };
+                    if expected_tick != batch.tick || expected_executions != batch.executions {
+                        return Err(format!(
+                            "server execution batch disagrees with deterministic local execution for tick {}",
+                            batch.tick
+                        ));
+                    }
+                }
+                ServerMessage::Checkpoint { checkpoint } => {
+                    let completed_tick = authoritative.simulation.tick().checked_sub(1);
+                    if completed_tick != Some(checkpoint.completed_tick) {
+                        return Err(format!(
+                            "checkpoint for tick {} arrived while local completed tick is {completed_tick:?}",
+                            checkpoint.completed_tick
+                        ));
+                    }
+                    let local_checksum = authoritative.simulation.checksum();
+                    let report = ClientMessage::CheckpointReport {
+                        report: CheckpointReport {
+                            completed_tick: checkpoint.completed_tick,
+                            checksum: local_checksum,
+                        },
+                    };
+                    let send_result = match &authoritative.authority {
+                        AuthorityMode::Network { client, .. } => client.send(report),
+                        AuthorityMode::Local => unreachable!("network event in local mode"),
+                    };
+                    if let Err(error) = send_result {
+                        return Err(format!("could not report checkpoint: {error}"));
+                    }
+                    if local_checksum != checkpoint.checksum {
+                        return Err(format!(
+                            "authoritative checksum mismatch at tick {}: server {:#018x}, client {:#018x}",
+                            checkpoint.completed_tick, checkpoint.checksum, local_checksum
+                        ));
+                    }
+                }
+                ServerMessage::ProtocolError { code } => {
+                    authoritative
+                        .pending_status
+                        .push(format!("Server protocol error: {code:?}."));
+                    if matches!(
+                        code,
+                        ProtocolErrorCode::MalformedMessage | ProtocolErrorCode::Unauthorized
+                    ) {
+                        return Err(format!("fatal server protocol error: {code:?}"));
+                    }
+                }
+                ServerMessage::HelloAccepted { .. } | ServerMessage::HelloRejected { .. } => {
+                    return Err("received handshake response after session startup".to_owned());
+                }
+            },
+        }
+    }
+    Ok(())
+}
+
 fn sync_local_command_feedback(
     selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut action_panel: ResMut<ActionPanelState>,
 ) {
+    for status in std::mem::take(&mut authoritative.pending_status) {
+        action_panel.status = status;
+    }
     let feedback = std::mem::take(&mut authoritative.pending_feedback);
     for execution in feedback {
         if execution.scheduled.player != selected_match.local_player {
@@ -513,6 +886,9 @@ mod tests {
                 destination,
             },
         );
+        let ClientCommandSubmission::Local(submission) = submission else {
+            panic!("offline command submission must remain local")
+        };
         let scheduled = submission.scheduled().expect("move must be admitted");
         assert_eq!(scheduled.tick, 0);
         assert_eq!(
