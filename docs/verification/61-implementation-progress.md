@@ -457,9 +457,17 @@ Pending:
 
 ## Step 10 — Reconnect, delegated control, and resynchronization
 
-Status: **in progress**
+Status: **implemented and verified**
 
-Implemented so far:
+Step commits:
+
+- `13585fb` — `feat(server): canonicalize connection lifecycle`
+- `c05a337` — `feat(server): authenticate reconnect sessions`
+- `45073e0` — `feat(server): enforce disconnect timeout`
+- `b81dcd2` — `feat(network): synchronize reconnect snapshots`
+- `e839525` — `feat(network): recover checkpoint desync`
+
+Implemented:
 
 - transport disconnects are translated into canonical `MatchDriver` connection controls rather than remaining server-only session flags; single-player disconnects immediately update replayable connection state while a connected teammate remains;
 - existing simulation permission rules now become network-reachable: a connected teammate may command only the disconnected owner's builder, while ownership/resources/buildings remain unchanged, and a canonical reconnect control revokes that delegation;
@@ -493,14 +501,15 @@ Executed verification:
 - background client reconnect transport test: passed, including credential reuse and reconnect event ordering before snapshot messages;
 - deliberately divergent client replacement test: passed, restoring the authoritative checksum/stream boundary and resetting presentation samples without replaying historical cosmetic events;
 - live checkpoint-mismatch trigger test: passed, proving a bad client checksum causes a bounded same-session replacement snapshot while canonical history length and authenticated-session count remain unchanged;
-- `tools/cargo-interactive check -p castle-fight-protocol -p castle-fight-server -p castle-fight-sim` and `tools/cargo-interactive check -p castle-fight-client`: passed;
-- full client regression and strict combined Clippy remain pending until the remaining Step 10 desync-trigger path is complete;
-- `cargo fmt --all` and `git diff --check`: passed at the reconnect-handoff boundary.
+- final full regression matrix: protocol **9 passed**, server **19 passed** (18 library/TCP tests plus binary test), simulation **241 passed**, client **111 passed**;
+- `tools/cargo-interactive clippy -p castle-fight-sim -p castle-fight-protocol -p castle-fight-server -p castle-fight-client --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed;
+- `tools/cargo-interactive fmt --all -- --check` and `git diff --check`: passed.
 
 Pending:
 
-- final Step 10 full-suite/strict-Clippy verification and merge cleanup.
+- none for Step 10. Step 11 begins the roster-breadth simulation abstractions, starting with evidence-backed multiple-attack support.
 
 ## Next action
 
-Run the complete Step 10 regression/Clippy matrix, record final counts, merge the completed step to master, and delete its large worktree.
+Begin Step 11 by selecting a verified 9.27 multi-attack representative and extending attack state/checksum/snapshot handling without regressing the existing single-attack path.
