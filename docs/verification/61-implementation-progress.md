@@ -399,6 +399,38 @@ Pending:
 
 - none for Step 8; speculative indexing/performance changes remain intentionally separate from this mechanical ownership refactor.
 
+## Step 9 — Minimal authoritative server and multiplayer protocol
+
+Status: **in progress**
+
+Implemented so far:
+
+- added a rendering-independent `castle-fight-protocol` crate with schema-versioned client/server envelopes and stable wire forms for the current command vocabulary, canonical stream records, execution outcomes, admission failures, boundary controls, and checkpoints;
+- compatibility handshakes reuse replay/snapshot/checksum/content/configuration identity rather than inventing a second compatibility model;
+- command submission payloads intentionally contain no caller-authored `PlayerId`; the server session must bind an authenticated connection to its assigned player and submit commands under that identity;
+- selected TCP as the initial reliable ordered transport, with a 4-byte big-endian length prefix and a 1 MiB ordinary Step 9 frame bound;
+- bounded decoding rejects empty/oversized frames before allocating the declared body, rejects truncated/trailing frames, and rejects unknown inbound message/command fields;
+- documented TCP as a replaceable operational layer rather than part of canonical gameplay identity, including the requirement that transport silence never stands in for an explicit finalized empty tick.
+
+Compatibility/state changes:
+
+- protocol schema starts at `PROTOCOL_SCHEMA_VERSION = 1`;
+- no simulation checksum, snapshot, replay, content, or gameplay schema changed.
+
+Executed verification:
+
+- `tools/cargo-interactive test -p castle-fight-protocol`: **8 passed**;
+- `tools/cargo-interactive clippy -p castle-fight-protocol --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
+- `cargo fmt --all` and `git diff --check`: passed.
+
+Pending:
+
+- authoritative headless server/session loop and player/session assignment;
+- explicit tick pacing/finalization and command acknowledgements tied to canonical scheduling;
+- TCP connection layer and client integration;
+- two-client synchronization plus four-player/2v2 and delay/duplicate/disconnect fault-injection scenarios.
+
 ## Next action
 
-Begin Step 9 with the minimal authoritative server/protocol work, using the Step 7 snapshot/replay boundary and the now-explicit Step 8 simulation phases.
+Commit the verified protocol/handshake boundary, then implement the authoritative headless server/session loop on top of the shared Step 4 bootstrap and Step 6/7 match driver.

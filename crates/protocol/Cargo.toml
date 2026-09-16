@@ -1,0 +1,11 @@
+[package]
+name = "castle-fight-protocol"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+castle-fight-sim = { path = "../sim" }
+serde.workspace = true
+serde_json.workspace = true
