@@ -119,7 +119,9 @@ This policy must balance:
 - deterministic replication;
 - ability for all clients to receive commands before execution when practical.
 
-The exact input-delay policy is open, but the result must be explicit:
+The initial Step 9 server uses a zero-extra-delay **open-tick** policy. `Simulation::tick()` is the one currently unfinalized authoritative tick. Commands admitted before that tick is finalized are assigned to it in canonical server arrival order; once finalization occurs, that tick/order is immutable and later arrivals can only enter the next open tick. Clients do not predict authoritative advancement in this prototype: they wait for the explicit finalized tick record. A future measured input-delay policy may deliberately schedule farther ahead, but it must preserve the same canonical-order guarantees.
+
+The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. The result is explicit:
 
 ```rust
 pub struct ScheduledCommand {

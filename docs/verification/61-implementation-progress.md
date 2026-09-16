@@ -405,12 +405,16 @@ Status: **in progress**
 
 Implemented so far:
 
-- added a rendering-independent `castle-fight-protocol` crate with schema-versioned client/server envelopes and stable wire forms for the current command vocabulary, canonical stream records, execution outcomes, admission failures, boundary controls, and checkpoints;
-- compatibility handshakes reuse replay/snapshot/checksum/content/configuration identity rather than inventing a second compatibility model;
-- command submission payloads intentionally contain no caller-authored `PlayerId`; the server session must bind an authenticated connection to its assigned player and submit commands under that identity;
+- protocol/handshake boundary `6e44165` adds a rendering-independent `castle-fight-protocol` crate with schema-versioned client/server envelopes and stable wire forms for the current command vocabulary, canonical stream records, execution outcomes, admission failures, boundary controls, and checkpoints;
+- compatibility handshakes reuse snapshot/checksum/content/configuration identity plus the resolved match's exact map release `(version, revision)`; the handshake deliberately does not derive map release identity from the current replay header because that legacy field presently stores the runtime content revision;
+- command submission payloads intentionally contain no caller-authored `PlayerId`; the server session binds an accepted connection to its assigned player and always submits commands under that server-owned identity;
 - selected TCP as the initial reliable ordered transport, with a 4-byte big-endian length prefix and a 1 MiB ordinary Step 9 frame bound;
 - bounded decoding rejects empty/oversized frames before allocating the declared body, rejects truncated/trailing frames, and rejects unknown inbound message/command fields;
-- documented TCP as a replaceable operational layer rather than part of canonical gameplay identity, including the requirement that transport silence never stands in for an explicit finalized empty tick.
+- documented TCP as a replaceable operational layer rather than part of canonical gameplay identity, including the requirement that transport silence never stands in for an explicit finalized empty tick;
+- added a rendering-independent `castle-fight-server` authoritative match/session core using the shared match bootstrap and `MatchDriver`; deterministic slot assignment follows authored player IDs, claimed slots stay reserved after a Step 9 transport disconnect, and unauthenticated replacement connections cannot take them over;
+- the Step 9 scheduling policy is now explicit: `Simulation::tick()` is the one open/unfinalized tick, admitted commands enter it in canonical server arrival order, finalization freezes that order forever, and later arrivals can only enter the next open tick;
+- every finalized tick broadcasts an explicit canonical stream record and deterministic execution batch; periodic authoritative checksums are broadcast as checkpoints and client checkpoint reports are compared against the latest authoritative checkpoint;
+- duplicate command sequences receive duplicate acknowledgements without duplicate scheduling, sequence violations are rejected, and ownership admission still runs under the bound session player.
 
 Compatibility/state changes:
 
@@ -421,16 +425,17 @@ Executed verification:
 
 - `tools/cargo-interactive test -p castle-fight-protocol`: **8 passed**;
 - `tools/cargo-interactive clippy -p castle-fight-protocol --all-targets -- -D warnings`: passed;
-- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
+- `tools/cargo-interactive test -p castle-fight-server`: **9 passed**, including two independent 1v1 clients, a four-player/2v2 replication scenario, duplicate submission, unauthorized foreign-builder commands, explicit empty finalized ticks, checkpoint reporting, and disconnect slot retention;
+- `tools/cargo-interactive clippy -p castle-fight-server --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed** after the protocol boundary;
 - `cargo fmt --all` and `git diff --check`: passed.
 
 Pending:
 
-- authoritative headless server/session loop and player/session assignment;
-- explicit tick pacing/finalization and command acknowledgements tied to canonical scheduling;
-- TCP connection layer and client integration;
-- two-client synchronization plus four-player/2v2 and delay/duplicate/disconnect fault-injection scenarios.
+- TCP listener/connection fan-out and fixed-rate headless pacing around the verified authoritative session core;
+- network client integration consuming finalized records rather than advancing from silence;
+- socket-level delay/duplication/disconnect fault injection; the pure session layer already covers duplicate sequencing, disconnect slot retention, and unauthorized-command rejection.
 
 ## Next action
 
-Commit the verified protocol/handshake boundary, then implement the authoritative headless server/session loop on top of the shared Step 4 bootstrap and Step 6/7 match driver.
+Commit the verified server match/session loop, then add the TCP connection/pacing layer and network client integration without moving authoritative mutation out of the single server loop.

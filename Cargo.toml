@@ -6,6 +6,7 @@ members = [
     "crates/debug-viewer",
     "crates/client",
     "crates/protocol",
+    "crates/server",
     "crates/wc3-assets",
 ]
 

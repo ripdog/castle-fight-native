@@ -1945,6 +1945,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "castle-fight-server"
+version = "0.1.0"
+dependencies = [
+ "castle-fight-protocol",
+ "castle-fight-sim",
+]
+
+[[package]]
 name = "castle-fight-sim"
 version = "0.1.0"
 dependencies = [

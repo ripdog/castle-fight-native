@@ -1,0 +1,10 @@
+[package]
+name = "castle-fight-server"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+castle-fight-protocol = { path = "../protocol" }
+castle-fight-sim = { path = "../sim" }
