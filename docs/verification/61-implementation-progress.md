@@ -334,6 +334,11 @@ Completed subsystem commits:
 - `3d80efd` — `refactor(sim): isolate construction lifecycle`
 - `7d06e42` — `refactor(sim): isolate status effect machinery`
 - `a7d4d3e` — `refactor(sim): isolate automatic abilities`
+- `7c8b24d` — `refactor(sim): isolate projectile lifecycle helpers`
+- `794db5d` — `refactor(sim): isolate target selection coordinators`
+- `ea78725` — `refactor(sim): move target search helpers`
+- `cadddef` — `refactor(sim): isolate combat and bounce helpers`
+- `c66601b` — `refactor(sim): isolate combat and projectile resolution`
 
 Implemented so far:
 
@@ -348,7 +353,12 @@ Implemented so far:
 - reduced `simulation.rs` further from roughly 10.7k lines after the canonical extraction to roughly 8.6k lines without changing public behavior;
 - extracted timed status insertion/refresh/expiry, periodic damage-over-time resolution, Frost Armor reactive slows, spell effect application, armor/cooldown adjustment helpers, and related status mutation into `simulation/status.rs`;
 - extracted the complete automatic spell phase into `simulation/abilities.rs`: parallel caster evaluation, deterministic random/friendly target selection, canonical intent ordering/revalidation, mana/cooldown/cast-sequence mutation, effect application, and presentation cast events;
-- preserved the coordinator's existing status-before-ability phase sequence and deterministic target ranking while reducing `simulation.rs` to roughly 7.7k lines.
+- preserved the coordinator's existing status-before-ability phase sequence and deterministic target ranking while reducing `simulation.rs` to roughly 7.7k lines;
+- extracted unit/building target selection, retaliation and ally-defense lock resolution, acquisition/retention rules, pursuit limits, and reachability into `simulation/targeting.rs` while retaining the existing unit-before-building priority semantics;
+- extracted attack intent creation, uphill miss/evasion/passive proc resolution, cooldown/sequence updates, and launch-request generation into `simulation/combat.rs`;
+- extracted Chain Lightning staged hops, guaranteed-hit/reflected/bounce projectile impacts, post-movement ballistic impacts, Burning Oil zone resolution, projectile snapshot collection, bounce target selection, and deferred ECS projectile commits/spawns into `simulation/projectiles.rs`;
+- preserved the coordinator's critical projectile ordering: staged Chain Lightning and target-tracking projectile impacts before ordinary attacks, movement before ballistic impacts, and all projectile ECS removals/updates/spawns deferred until the original structural-commit point;
+- reduced `simulation.rs` further to roughly 5.6k lines without changing authoritative schemas, tick phase ordering, or gameplay behavior.
 
 Compatibility/state changes:
 
@@ -363,6 +373,10 @@ Executed verification:
 - focused construction regressions: **3 passed**, including the Step 7 construction snapshot continuation fixture;
 - focused automatic-spell regressions: **3 passed**, including worker-count independence, exact mana/cooldown timing, and spell-kill suppression of later ordinary attacks;
 - status behavior remained covered by the full suite, including timed movement modifier stacking/refresh/expiry, Entangling Roots DOT, Frost Armor behavior, global stun timing, and worker-count determinism;
+- focused target/ally-defense regressions: **24 passed** after both coordinator and helper-graph moves;
+- focused attack regressions: **33 passed** after combat intent/evasion/passive-effect extraction;
+- focused projectile regressions: **11 passed** throughout projectile extraction, including reflection, bounce identity, projectile-carried bash, target invalidation, ballistic move-in/move-out behavior, and the Step 7 projectile snapshot continuation fixture;
+- focused staged Chain Lightning regressions: **2 passed**, including worker-count independence;
 - Step 7 snapshot/driver snapshot regressions remained green throughout the extraction;
 - after each completed lifecycle boundary, `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
 - after each completed lifecycle boundary, `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
@@ -372,9 +386,9 @@ Executed verification:
 Pending:
 
 - continue extracting cohesive gameplay subsystems from `simulation.rs` one at a time while preserving the explicit tick phase order;
-- construction/builders/economy and abilities/statuses are complete; the next targeted ownership boundary is targeting/combat/projectiles, followed by navigation/movement;
+- construction/builders/economy, abilities/statuses, and targeting/combat/projectiles are complete; the next targeted ownership boundary is navigation/movement;
 - use the Step 7 restore/replay fixtures plus the full worker-count determinism suite as regression guards after each move.
 
 ## Next action
 
-Continue Step 8 with the targeting/combat/projectiles subsystem extraction, without changing gameplay rules or phase order.
+Continue Step 8 with the navigation/movement subsystem extraction, without changing gameplay rules or phase order.
