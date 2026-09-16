@@ -18,6 +18,12 @@ const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 
+mod snapshot;
+
+pub use snapshot::{
+    AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, SimulationSnapshot, SnapshotRestoreError,
+};
+
 use crate::{
     components::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
@@ -2941,14 +2947,10 @@ impl Simulation {
             // Presentation events describe one completed gameplay tick. A paused/terminal step has
             // no gameplay tick, so do not keep replaying the previous tick's cosmetic events while
             // the authoritative state is frozen.
-            self.last_attacks.clear();
-            self.last_ability_casts.clear();
-            self.last_chain_lightnings.clear();
+            self.clear_presentation_events();
             return self.frozen_tick_result();
         }
-        self.last_attacks.clear();
-        self.last_ability_casts.clear();
-        self.last_chain_lightnings.clear();
+        self.clear_presentation_events();
         let tick_start = Instant::now();
         let completed_tick = self.next_tick;
 
@@ -4250,6 +4252,15 @@ impl Simulation {
                 team_objectives: self.team_objectives,
             },
         )
+    }
+
+    /// Clears presentation-only events from the most recently simulated tick. This does not alter
+    /// authoritative state and is used after restore/catch-up so historical cosmetic effects are
+    /// not emitted as if they had just happened live.
+    pub fn clear_presentation_events(&mut self) {
+        self.last_attacks.clear();
+        self.last_ability_casts.clear();
+        self.last_chain_lightnings.clear();
     }
 
     #[must_use]
@@ -10876,208 +10887,7 @@ fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
         lifecycle,
         team_objectives,
     } = state;
-    let authoritative_entity_count = world
-        .iter_entities()
-        .filter(|entity| entity.get::<SimId>().is_some())
-        .count();
-    let mut entities: Vec<CanonicalEntity> = world
-        .iter_entities()
-        .filter_map(|entity| {
-            let id = *entity.get::<SimId>()?;
-            if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
-                return Some(CanonicalEntity::Projectile(CanonicalProjectile {
-                    id,
-                    projectile: *projectile,
-                }));
-            }
-            if let Some(projectile) = entity.get::<ReflectedProjectile>() {
-                return Some(CanonicalEntity::ReflectedProjectile(
-                    CanonicalReflectedProjectile {
-                        id,
-                        projectile: *projectile,
-                    },
-                ));
-            }
-            if let Some(projectile) = entity.get::<BallisticProjectile>() {
-                return Some(CanonicalEntity::BallisticProjectile(
-                    CanonicalBallisticProjectile {
-                        id,
-                        projectile: *projectile,
-                    },
-                ));
-            }
-            if let Some(projectile) = entity.get::<BounceProjectile>() {
-                return Some(CanonicalEntity::BounceProjectile(
-                    CanonicalBounceProjectile {
-                        id,
-                        projectile: *projectile,
-                    },
-                ));
-            }
-            if let Some(zone) = entity.get::<BurningOilZone>() {
-                return Some(CanonicalEntity::BurningOil(CanonicalBurningOil {
-                    id,
-                    zone: *zone,
-                }));
-            }
-            if let Some(state) = entity.get::<ChainLightningState>() {
-                return Some(CanonicalEntity::ChainLightning(CanonicalChainLightning {
-                    id,
-                    state: *state,
-                }));
-            }
-            if let Some(corpse) = entity.get::<Corpse>() {
-                return Some(CanonicalEntity::Corpse(CanonicalCorpse {
-                    id,
-                    position: entity.get::<Position>()?.0,
-                    corpse: *corpse,
-                }));
-            }
-            if entity.get::<Builder>().is_some() {
-                return Some(CanonicalEntity::Builder(CanonicalBuilder {
-                    id,
-                    owner: entity.get::<Owner>()?.0,
-                    team: *entity.get::<Team>()?,
-                    position: entity.get::<Position>()?.0,
-                    profile: *entity.get::<BuilderProfile>()?,
-                    configuration: entity.get::<BuilderConfiguration>()?.clone(),
-                    state: *entity.get::<BuilderState>()?,
-                    build_order: entity.get::<BuilderBuildOrder>().copied(),
-                }));
-            }
-            let team = *entity.get::<Team>()?;
-            let health = *entity.get::<Health>()?;
-            if let Some(position) = entity.get::<Position>() {
-                Some(CanonicalEntity::Unit(CanonicalUnit {
-                    id,
-                    content: entity.get::<ContentIdentity>().copied(),
-                    owner: entity.get::<Owner>()?.0,
-                    team,
-                    position: position.0,
-                    health,
-                    health_regeneration: *entity.get::<HealthRegeneration>()?,
-                    attack: *entity.get::<AttackProfile>()?,
-                    attack_targets: *entity.get::<AttackTargetMask>()?,
-                    damage_type: *entity.get::<DamageType>()?,
-                    armor: *entity.get::<ArmorProfile>()?,
-                    passive_effects: *entity.get::<PassiveUnitEffects>()?,
-                    movement_class: *entity.get::<MovementClass>()?,
-                    mechanical: entity.get::<MechanicalUnit>().is_some(),
-                    build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
-                    repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
-                    movement: *entity.get::<MovementProfile>()?,
-                    cooldown: *entity.get::<AttackCooldown>()?,
-                    attack_sequence: *entity.get::<AttackSequence>()?,
-                    target: *entity.get::<TargetState>()?,
-                    retaliation: *entity.get::<RetaliationState>()?,
-                    status: *entity.get::<StatusState>()?,
-                    navigation: *entity.get::<NavigationState>()?,
-                    spawn_tick: *entity.get::<SpawnTick>()?,
-                    corpse: entity.get::<CorpseProducer>().map(|corpse| corpse.0),
-                    collision_radius: entity.get::<CollisionRadius>().copied(),
-                    spellcasting: entity.get::<SpellcastingProfile>().copied(),
-                    mana: entity.get::<ManaState>().copied(),
-                    ability_state: entity.get::<AutomaticAbilityState>().copied(),
-                }))
-            } else {
-                Some(CanonicalEntity::Building(CanonicalBuilding {
-                    id,
-                    content: entity.get::<ContentIdentity>().copied(),
-                    owner: entity.get::<Owner>().map(|owner| owner.0),
-                    team,
-                    footprint: *entity.get::<BuildingFootprint>()?,
-                    health,
-                    construction: entity.get::<BuildingConstruction>().copied().map(
-                        |construction| {
-                            let mut definition_hash = Fnv64::new();
-                            hash_building_definition(
-                                &mut definition_hash,
-                                construction.building,
-                                construction.properties,
-                            );
-                            if let Some(source) = construction.upgrade_from {
-                                definition_hash.write_u8(1);
-                                hash_building_definition(
-                                    &mut definition_hash,
-                                    source.building,
-                                    source.properties,
-                                );
-                                definition_hash.write_i32(source.health.current);
-                                definition_hash.write_i32(source.health.max);
-                                hash_building_runtime_state(&mut definition_hash, source.runtime);
-                            } else {
-                                definition_hash.write_u8(0);
-                            }
-                            CanonicalBuildingConstruction {
-                                started_tick: construction.started_tick,
-                                complete_tick: construction.complete_tick,
-                                definition_hash: definition_hash.finish(),
-                            }
-                        },
-                    ),
-                    economy: entity.get::<BuildingEconomyProfile>().copied(),
-                    repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
-                    production: entity.get::<ProductionProfile>().copied(),
-                    production_state: entity.get::<ProductionState>().copied(),
-                    production_content: entity
-                        .get::<ProductionContentIdentity>()
-                        .map(|content| content.0),
-                    production_corpse: entity
-                        .get::<ProductionCorpseProfile>()
-                        .map(|corpse| corpse.0),
-                    production_collision_radius: entity
-                        .get::<ProductionCollisionRadius>()
-                        .map(|radius| radius.0),
-                    production_movement_class: entity
-                        .get::<ProductionMovementClass>()
-                        .map(|class| class.0),
-                    production_repair_metadata: entity
-                        .get::<ProductionUnitRepairMetadata>()
-                        .copied(),
-                    production_attack_targets: entity
-                        .get::<ProductionAttackTargets>()
-                        .map(|targets| targets.0),
-                    production_health_regen_per_second_per_10k: entity
-                        .get::<ProductionHealthRegeneration>()
-                        .map(|regeneration| regeneration.0),
-                    production_damage_type: entity
-                        .get::<ProductionDamageType>()
-                        .map(|damage_type| damage_type.0),
-                    production_armor: entity.get::<ProductionArmorProfile>().map(|armor| armor.0),
-                    production_passive_effects: entity
-                        .get::<ProductionPassiveEffects>()
-                        .map(|effects| effects.0),
-                    production_spellcasting: entity
-                        .get::<ProductionSpellcastingProfile>()
-                        .map(|profile| profile.0),
-                    attack: entity.get::<AttackProfile>().copied(),
-                    attack_targets: entity.get::<AttackTargetMask>().copied(),
-                    damage_type: *entity.get::<DamageType>()?,
-                    armor: *entity.get::<ArmorProfile>()?,
-                    cooldown: entity.get::<AttackCooldown>().copied(),
-                    target: entity.get::<TargetState>().copied(),
-                    spawn_tick: entity.get::<SpawnTick>().copied(),
-                    spellcasting: entity.get::<SpellcastingProfile>().copied(),
-                    mana: entity.get::<ManaState>().copied(),
-                    ability_state: entity.get::<AutomaticAbilityState>().copied(),
-                    status: entity.get::<StatusState>().copied(),
-                }))
-            }
-        })
-        .collect();
-    assert_eq!(
-        entities.len(),
-        authoritative_entity_count,
-        "canonical checksum omitted an entity with an invalid authoritative component shape"
-    );
-    entities.sort_unstable_by_key(CanonicalEntity::id);
-    for pair in entities.windows(2) {
-        assert_ne!(
-            pair[0].id(),
-            pair[1].id(),
-            "canonical state contains duplicate SimIds"
-        );
-    }
+    let entities = snapshot::canonical_entities(world);
 
     let mut hash = Fnv64::new();
     hash.write_u64(0x4346_5354_4154_4503);
@@ -11234,7 +11044,26 @@ fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
                     hash.write_u8(1);
                     hash.write_u64(construction.started_tick);
                     hash.write_u64(construction.complete_tick);
-                    hash.write_u64(construction.definition_hash);
+                    let mut definition_hash = Fnv64::new();
+                    hash_building_definition(
+                        &mut definition_hash,
+                        construction.building,
+                        construction.properties,
+                    );
+                    if let Some(source) = construction.upgrade_from {
+                        definition_hash.write_u8(1);
+                        hash_building_definition(
+                            &mut definition_hash,
+                            source.building,
+                            source.properties,
+                        );
+                        definition_hash.write_i32(source.health.current);
+                        definition_hash.write_i32(source.health.max);
+                        hash_building_runtime_state(&mut definition_hash, source.runtime);
+                    } else {
+                        definition_hash.write_u8(0);
+                    }
+                    hash.write_u64(definition_hash.finish());
                 } else {
                     hash.write_u8(0);
                 }
@@ -11664,14 +11493,7 @@ struct CanonicalUnit {
     ability_state: Option<AutomaticAbilityState>,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct CanonicalBuildingConstruction {
-    started_tick: u64,
-    complete_tick: u64,
-    definition_hash: u64,
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct CanonicalBuilding {
     id: SimId,
     content: Option<ContentIdentity>,
@@ -11679,7 +11501,7 @@ struct CanonicalBuilding {
     team: Team,
     footprint: BuildingFootprint,
     health: Health,
-    construction: Option<CanonicalBuildingConstruction>,
+    construction: Option<Box<BuildingConstruction>>,
     economy: Option<BuildingEconomyProfile>,
     repair_time_ticks: Option<u32>,
     production: Option<ProductionProfile>,
