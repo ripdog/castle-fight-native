@@ -1,6 +1,17 @@
 use std::{collections::HashMap, time::Duration};
 
-use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
+use bevy::{
+    camera::visibility::NoFrustumCulling,
+    ecs::system::SystemParam,
+    mesh::MeshVertexBufferLayoutRef,
+    pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline},
+    prelude::*,
+    reflect::TypePath,
+    render::render_resource::{
+        AsBindGroup, CompareFunction, RenderPipelineDescriptor, SpecializedMeshPipelineError,
+    },
+    window::PrimaryWindow,
+};
 use castle_fight_sim::{
     BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle, CommandCardPosition,
     CommandSubmission, NavCell, PlayerCommand, SimId, Team,
@@ -182,10 +193,41 @@ impl ActionTooltipKind {
 #[derive(Resource, Default)]
 struct BuildTooltipState(Option<ActionTooltipKind>);
 
+#[derive(Asset, AsBindGroup, TypePath, Clone, Default)]
+struct BuildGhostDepthExtension {}
+
+impl MaterialExtension for BuildGhostDepthExtension {
+    fn alpha_mode() -> Option<AlphaMode> {
+        Some(AlphaMode::Blend)
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn specialize(
+        _pipeline: &MaterialExtensionPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialExtensionKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
+            // Placement previews are player-feedback overlays. They must remain visible when an
+            // authored cliff, doodad, castle, or other world geometry lies between the camera and
+            // the target footprint.
+            depth_stencil.depth_compare = Some(CompareFunction::Always);
+            depth_stencil.depth_write_enabled = Some(false);
+        }
+        Ok(())
+    }
+}
+
+type BuildGhostRenderMaterial = ExtendedMaterial<StandardMaterial, BuildGhostDepthExtension>;
+
 #[derive(Component, Clone)]
 struct BuildGhostMaterialPair {
-    valid: Handle<StandardMaterial>,
-    invalid: Handle<StandardMaterial>,
+    valid: Handle<BuildGhostRenderMaterial>,
+    invalid: Handle<BuildGhostRenderMaterial>,
 }
 
 #[derive(Resource, Default)]
@@ -213,6 +255,13 @@ struct BuildPreviewResources<'w> {
     building_models: Res<'w, BuildingModelSet>,
 }
 
+#[derive(SystemParam)]
+struct BuildPreviewMaterialResources<'w> {
+    materials: Res<'w, Assets<StandardMaterial>>,
+    ghost_materials: ResMut<'w, Assets<BuildGhostRenderMaterial>>,
+    preview_materials: ResMut<'w, BuildPreviewMaterials>,
+}
+
 type ActionInteractions<'w, 's> = Query<
     'w,
     's,
@@ -225,7 +274,8 @@ pub(crate) struct BuildUiPlugin;
 impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
         let map_version = app.world().resource::<SelectedMatch>().content.map_version;
-        app.init_resource::<ActionPanelState>()
+        app.add_plugins(MaterialPlugin::<BuildGhostRenderMaterial>::default())
+            .init_resource::<ActionPanelState>()
             .init_resource::<BuildTooltipState>()
             .init_resource::<BuildPreviewMaterials>()
             .insert_resource(UiIconAssets::load_for_version(map_version))
@@ -1177,25 +1227,16 @@ fn sync_build_preview_ghost_materials(
     mut commands: Commands,
     ghosts: Query<(Entity, &BuildPlacementGhost)>,
     children: Query<&Children>,
-    mut mesh_materials: Query<(
-        &mut MeshMaterial3d<StandardMaterial>,
-        Option<&BuildGhostMaterialPair>,
-        Has<Wc3MaterialProcessed>,
+    source_mesh_materials: Query<(&MeshMaterial3d<StandardMaterial>, Has<Wc3MaterialProcessed>)>,
+    mut ghost_mesh_materials: Query<(
+        &mut MeshMaterial3d<BuildGhostRenderMaterial>,
+        &BuildGhostMaterialPair,
     )>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut preview_materials: ResMut<BuildPreviewMaterials>,
+    mut resources: BuildPreviewMaterialResources<'_>,
 ) {
     for (entity, ghost) in &ghosts {
         for child in children.iter_descendants(entity) {
-            let Ok((mut mesh_material, existing_pair, wc3_material_processed)) =
-                mesh_materials.get_mut(child)
-            else {
-                continue;
-            };
-
-            if let Some(pair) = existing_pair {
-                // Reassert the preview-owned material every frame. This makes the ghost immune to
-                // later presentation systems replacing a mesh material because of scene timing.
+            if let Ok((mut mesh_material, pair)) = ghost_mesh_materials.get_mut(child) {
                 mesh_material.0 = if ghost.valid {
                     pair.valid.clone()
                 } else {
@@ -1204,6 +1245,12 @@ fn sync_build_preview_ghost_materials(
                 continue;
             }
 
+            let Ok((source_mesh_material, wc3_material_processed)) =
+                source_mesh_materials.get(child)
+            else {
+                continue;
+            };
+
             // Never derive a ghost material from the raw glTF material. The normal Warcraft pass
             // first has to resolve filter modes and building team colour exactly as it does for a
             // real building; otherwise translucent team-colour layers can make the preview vanish.
@@ -1211,34 +1258,43 @@ fn sync_build_preview_ghost_materials(
                 continue;
             }
 
-            let source = mesh_material.0.clone();
+            let source = source_mesh_material.0.clone();
             let source_id = source.id();
-            let pair = if let Some(pair) = preview_materials.textured.get(&source_id) {
+            let pair = if let Some(pair) = resources.preview_materials.textured.get(&source_id) {
                 pair.clone()
             } else {
-                let Some(source_material) = materials.get(&source).cloned() else {
+                let Some(source_material) = resources.materials.get(&source).cloned() else {
                     continue;
                 };
                 let pair = BuildGhostMaterialPair {
-                    valid: materials.add(build_ghost_material(
-                        source_material.clone(),
-                        BUILD_GHOST_VALID_COLOR,
-                    )),
-                    invalid: materials.add(build_ghost_material(
-                        source_material,
-                        BUILD_GHOST_INVALID_COLOR,
-                    )),
+                    valid: resources.ghost_materials.add(BuildGhostRenderMaterial {
+                        base: build_ghost_material(
+                            source_material.clone(),
+                            BUILD_GHOST_VALID_COLOR,
+                        ),
+                        extension: BuildGhostDepthExtension::default(),
+                    }),
+                    invalid: resources.ghost_materials.add(BuildGhostRenderMaterial {
+                        base: build_ghost_material(source_material, BUILD_GHOST_INVALID_COLOR),
+                        extension: BuildGhostDepthExtension::default(),
+                    }),
                 };
-                preview_materials.textured.insert(source_id, pair.clone());
+                resources
+                    .preview_materials
+                    .textured
+                    .insert(source_id, pair.clone());
                 pair
             };
 
-            mesh_material.0 = if ghost.valid {
+            let selected = if ghost.valid {
                 pair.valid.clone()
             } else {
                 pair.invalid.clone()
             };
-            commands.entity(child).insert(pair);
+            commands
+                .entity(child)
+                .remove::<MeshMaterial3d<StandardMaterial>>()
+                .insert((MeshMaterial3d(selected), pair, NoFrustumCulling));
         }
     }
 }
@@ -1682,6 +1738,46 @@ mod tests {
         assert_eq!(ghost.emissive, LinearRgba::BLACK);
         assert_eq!(ghost.depth_bias, 7.0);
         assert_eq!(ghost.cull_mode, None);
+    }
+
+    #[test]
+    fn processed_ghost_mesh_becomes_uncullable_overlay_material() {
+        let mut world = World::new();
+        world.insert_resource(Assets::<StandardMaterial>::default());
+        world.insert_resource(Assets::<BuildGhostRenderMaterial>::default());
+        world.insert_resource(BuildPreviewMaterials::default());
+
+        let source = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let root = world
+            .spawn(BuildPlacementGhost {
+                rawcode: u32::from_be_bytes(*b"h03K"),
+                valid: true,
+            })
+            .id();
+        let mesh = world
+            .spawn((MeshMaterial3d(source), Wc3MaterialProcessed))
+            .id();
+        world.entity_mut(root).add_child(mesh);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_build_preview_ghost_materials);
+        schedule.run(&mut world);
+
+        assert!(
+            world
+                .get::<MeshMaterial3d<StandardMaterial>>(mesh)
+                .is_none()
+        );
+        let overlay = world
+            .get::<MeshMaterial3d<BuildGhostRenderMaterial>>(mesh)
+            .expect("processed preview mesh should use the overlay material");
+        let pair = world
+            .get::<BuildGhostMaterialPair>(mesh)
+            .expect("preview mesh should retain both validity variants");
+        assert_eq!(overlay.0, pair.valid);
+        assert!(world.get::<NoFrustumCulling>(mesh).is_some());
     }
 
     #[test]
