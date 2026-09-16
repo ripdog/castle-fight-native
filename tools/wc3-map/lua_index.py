@@ -7115,6 +7115,13 @@ def _extract_runtime_campaign_mechanics(
         "FrameHandleListener_onClick_CampaignUI_CampaignUI_onEvent_onClick_CampaignUI_CampaignUI2",
         "applyCampaignProfileToMissions__w3p_vmProtect", "saveCampaignProfile__w3p_vmProtect",
         "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+        "CampaignSaveData_CampaignSaveData_resetForVersionUpgrade__w3p_vmProtect",
+        "LoadListener_loadData_CampaignSaveData_onLoad_loadData_CampaignSaveData",
+        "CampaignSaveData_CampaignSaveData_deserializeFromCampaignSave",
+        "CampaignSaveData_CampaignSaveData_deserializeProperties",
+        "CampaignSaveData_CampaignSaveData_serializeProperties",
+        "CampaignSaveData_CampaignSaveData_hasValidSaveSignature",
+        "CampaignSaveData_new_CampaignSaveData",
         "CampaignSaveData_CampaignSaveData_serializeForCampaignSave", "player_saveData",
         "announceCheatProgressionDisabled__w3p_vmProtect", "markCampaignRunCheatTainted__w3p_vmProtect",
         "isCampaignRunCheatTainted", "findCheatInText",
@@ -8971,6 +8978,112 @@ def _extract_runtime_campaign_mechanics(
     ]:
         raise ValueError("campaign profile-apply VM34 control flow changed")
 
+    profile_load_offset, _profile_load_source = source(
+        "LoadListener_loadData_CampaignSaveData_onLoad_loadData_CampaignSaveData",
+        (
+            b"LYk=CampaignSaveData_new_CampaignSaveData(IYk.this)",
+            b"if(NYk==0)then CampaignSaveData_CampaignSaveData_deserializeFromCampaignSave(LYk,KYk)",
+            b"LYk.CampaignSaveData_saveFileVersion<qpb",
+            b"not CampaignSaveData_CampaignSaveData_hasValidSaveSignature(LYk)",
+            b"CampaignSaveData_CampaignSaveData_resetForVersionUpgrade__w3p_vmProtect(LYk)",
+            b"CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect(LYk)",
+            b"npb[player_getId(IYk.this)]=LYk",
+            b"publishCampaignAvailablePoints(LYk)",
+            b"if MYk then saveCampaignProfile__w3p_vmProtect(IYk.this)end",
+            b"publishCampaignProfileLoaded(player_getId(IYk.this))",
+        ),
+    )
+    profile_new_offset, _profile_new_source = source(
+        "CampaignSaveData_new_CampaignSaveData",
+        (
+            b"CampaignSaveData_saveFileVersion=qpb", b"CampaignSaveData_points=Rqb",
+            b"CampaignSaveData_loadedSaveSignature=0", b"CampaignSaveData_saveSignatureValid=true",
+            b"CampaignSaveData_lastCompletionUpdatedBestTime=false",
+            b"CampaignSaveData_completedMissions=LinkedList_new_LinkedList()",
+        ),
+    )
+    profile_deserialize_offset, _profile_deserialize_source = source(
+        "CampaignSaveData_CampaignSaveData_deserializeFromCampaignSave",
+        (
+            b"x0k=unwrapCampaignSaveData(w0k)",
+            b"if(x0k==nil)then v0k.CampaignSaveData_saveSignatureValid=false v0k.CampaignSaveData_loadedSaveSignature=0 return false end",
+            b"Serializable_Serializable_deserialize(v0k,x0k)", b"ChunkedString_destroyChunkedString(x0k)",
+            b"return CampaignSaveData_CampaignSaveData_hasValidSaveSignature(v0k)",
+        ),
+    )
+    profile_deserialize_properties_offset, _profile_deserialize_properties_source = source(
+        "CampaignSaveData_CampaignSaveData_deserializeProperties",
+        (
+            b"CampaignSaveData_saveFileVersion=Serializable_Serializable_getIntProperty(QYk,\"ver\")",
+            b"CampaignSaveData_points=Serializable_Serializable_getIntProperty(QYk,\"points\")",
+            b"if(QYk.CampaignSaveData_points<Rqb)then QYk.CampaignSaveData_points=Rqb end",
+            b"CampaignSaveData_CampaignSaveData_loadMissionList(QYk,\"cm\")",
+            b"CampaignSaveData_CampaignSaveData_reconcilePointsFromMissionProgress(QYk)",
+            b"CampaignSaveData_loadedSaveSignature=Serializable_Serializable_getIntProperty(QYk,\"sig\")",
+            b"CampaignSaveData_saveSignatureValid=((not(QYk.CampaignSaveData_loadedSaveSignature==0))",
+        ),
+    )
+    profile_serialize_properties_offset, _profile_serialize_properties_source = source(
+        "CampaignSaveData_CampaignSaveData_serializeProperties",
+        (
+            b"CampaignSaveData_CampaignSaveData_reconcilePointsFromMissionProgress(PYk)",
+            b"CampaignSaveData_loadedSaveSignature=CampaignSaveData_CampaignSaveData_computeSaveSignature(PYk)",
+            b"CampaignSaveData_saveSignatureValid=true",
+            b"Serializable_Serializable_addProperty(PYk,\"ver\",PYk.CampaignSaveData_saveFileVersion)",
+            b"Serializable_Serializable_addProperty(PYk,\"points\",PYk.CampaignSaveData_points)",
+            b"CampaignSaveData_CampaignSaveData_addMissionList(PYk,\"cm\",PYk.CampaignSaveData_completedMissions)",
+            b"Serializable_Serializable_addProperty(PYk,\"sig\",PYk.CampaignSaveData_loadedSaveSignature)",
+        ),
+    )
+    profile_signature_offset, _profile_signature_source = source(
+        "CampaignSaveData_CampaignSaveData_hasValidSaveSignature",
+        (
+            b"CampaignSaveData_saveSignatureValid", b"CampaignSaveData_loadedSaveSignature==0",
+            b"CampaignSaveData_CampaignSaveData_computeSaveSignature(BZk)",
+        ),
+    )
+    profile_reset_wrapper = "CampaignSaveData_CampaignSaveData_resetForVersionUpgrade__w3p_vmProtect"
+    profile_reset_offset, _profile_reset_source = source(
+        profile_reset_wrapper,
+        (b"return _qr(3,b0k)",),
+    )
+    if data.count(b"qpb=6 end") != 1:
+        raise ValueError("campaign save file version constant changed")
+    if data.count(b"Rqb=0 Qqb=\"\"") != 1:
+        raise ValueError("campaign baseline profile points changed")
+    profile_reset_static = _w3p_vm_static_strings(data, 3)
+    profile_reset_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 3)
+    ]
+    if profile_reset_static != [
+        "CampaignSaveData_completedMissions", "CampaignSaveData_points", "CampaignSaveData_saveFileVersion", "0",
+        "CampaignSaveData_loadedSaveSignature", "CampaignSaveData_saveSignatureValid",
+        "CampaignSaveData_lastCompletionUpdatedBestTime",
+    ]:
+        raise ValueError(f"campaign profile-reset VM3 static values changed: {profile_reset_static}")
+    if profile_reset_globals != [
+        "LinkedList_LinkedList_iterator", "LLIterator_LLIterator_hasNext", "LLIterator_LLIterator_next",
+        "MissionProgressData_destroyMissionProgressData", "LLIterator_LLIterator_close", "LinkedList_LinkedList_clear",
+        "Rqb", "qpb",
+    ]:
+        raise ValueError(f"campaign profile-reset VM3 globals changed: {profile_reset_globals}")
+    profile_reset_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 3, expected_opcode_xor_byte=21)["instructions"]
+    ]
+    if profile_reset_program != [
+        (224, ()), (24, (2,)), (224, ()), (24, (3,)), (218, (1,)), (241, (1, 1)),
+        (98, (17,)), (24, (2,)), (156, (1,)), (10, (0, 27)), (253, (2,)),
+        (42, (2, 17)), (236, ()), (10, (0, 3)), (240, (0, 15)), (253, (2,)),
+        (42, (3, 17)), (24, (3,)), (253, (3,)), (42, (4, 16)), (240, (255, 224)),
+        (253, (2,)), (42, (5, 16)), (218, (6,)), (241, (1, 1)), (98, (16,)),
+        (253, (1,)), (218, (7,)), (174, (2,)), (253, (1,)), (218, (8,)), (174, (3,)),
+        (253, (1,)), (144, (4,)), (174, (5,)), (253, (1,)), (156, (1,)), (174, (6,)),
+        (253, (1,)), (156, (0,)), (174, (7,)), (221, ()),
+    ]:
+        raise ValueError("campaign profile-reset VM3 control flow changed")
+
     profile_save_wrapper = "saveCampaignProfile__w3p_vmProtect"
     profile_save_offset, _profile_save_source = source(
         profile_save_wrapper,
@@ -9023,6 +9136,29 @@ def _extract_runtime_campaign_mechanics(
             "profile_lookup_lazily_creates_missing_profile": True,
             "profile_lookup_applies_new_profile_once_before_return": True,
             "profile_application_updates_mission_beaten_stars_unlocks_and_progress_records": True,
+            "current_save_file_version_symbol": "qpb",
+            "current_save_file_version": 6,
+            "baseline_profile_points_symbol": "Rqb",
+            "baseline_profile_points": 0,
+            "load_deserializes_only_when_load_status_zero": True,
+            "load_resets_when_saved_version_is_older_or_signature_invalid": True,
+            "reset_wrapper_vm_index": 3,
+            "reset_destroys_each_completed_mission_progress_record": True,
+            "reset_clears_completed_mission_list": True,
+            "reset_points_to_baseline": 0,
+            "reset_save_file_version_to_current": 6,
+            "reset_loaded_save_signature": 0,
+            "reset_save_signature_valid": True,
+            "reset_last_completion_updated_best_time": False,
+            "load_applies_profile_after_deserialize_or_reset": True,
+            "load_stores_profile_by_owner_player_id": True,
+            "load_publishes_available_points": True,
+            "load_saves_repaired_profile_after_reset": True,
+            "load_publishes_profile_loaded_signal": True,
+            "serialized_property_keys": ["ver", "points", "cm", "sig"],
+            "deserialize_clamps_points_to_baseline_before_mission_reconciliation": True,
+            "deserialize_unwrap_failure_marks_signature_invalid_and_zero": True,
+            "serialized_profile_recomputes_points_and_signature_before_write": True,
             "save_wrapper_vm_index": 35,
             "save_skips_cheat_tainted_campaign_run": True,
             "save_skips_null_player_or_profile": True,
@@ -9035,10 +9171,19 @@ def _extract_runtime_campaign_mechanics(
         "related_rawcode_ids": [],
         "source_functions": [
             profile_apply_wrapper, "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+            "LoadListener_loadData_CampaignSaveData_onLoad_loadData_CampaignSaveData", profile_reset_wrapper,
+            "CampaignSaveData_new_CampaignSaveData", "CampaignSaveData_CampaignSaveData_deserializeFromCampaignSave",
+            "CampaignSaveData_CampaignSaveData_deserializeProperties", "CampaignSaveData_CampaignSaveData_serializeProperties",
+            "CampaignSaveData_CampaignSaveData_hasValidSaveSignature",
             profile_save_wrapper, "CampaignSaveData_CampaignSaveData_serializeForCampaignSave", "player_saveData",
         ],
-        "evidence_kind": "statically-decoded-vm34-vm35-profile-apply-save-plus-readable-profile-and-file-helpers",
-        "byte_offset": min(profile_apply_offset, profile_lookup_offset, profile_apply_impl_offset, profile_save_offset, profile_serialize_offset, player_save_offset),
+        "evidence_kind": "statically-decoded-vm3-vm34-vm35-profile-load-reset-apply-save-plus-readable-serialization-and-file-helpers",
+        "byte_offset": min(
+            profile_apply_offset, profile_lookup_offset, profile_apply_impl_offset,
+            profile_load_offset, profile_reset_offset, profile_new_offset, profile_deserialize_offset,
+            profile_deserialize_properties_offset, profile_serialize_properties_offset, profile_signature_offset,
+            profile_save_offset, profile_serialize_offset, player_save_offset,
+        ),
     })
 
     challenge_wrapper = "startCampaignCastleHealthChallenge__w3p_vmProtect"

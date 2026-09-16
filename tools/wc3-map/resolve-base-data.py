@@ -3144,6 +3144,29 @@ def main() -> None:
                         or parameters.get("apply_profile_lookup") != "getCampaignProfile"
                         or parameters.get("apply_target") != "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect"
                         or parameters.get("profile_lookup_lazily_creates_missing_profile") is not True
+                        or parameters.get("current_save_file_version_symbol") != "qpb"
+                        or parameters.get("current_save_file_version") != 6
+                        or parameters.get("baseline_profile_points_symbol") != "Rqb"
+                        or parameters.get("baseline_profile_points") != 0
+                        or parameters.get("load_deserializes_only_when_load_status_zero") is not True
+                        or parameters.get("load_resets_when_saved_version_is_older_or_signature_invalid") is not True
+                        or parameters.get("reset_wrapper_vm_index") != 3
+                        or parameters.get("reset_destroys_each_completed_mission_progress_record") is not True
+                        or parameters.get("reset_clears_completed_mission_list") is not True
+                        or parameters.get("reset_points_to_baseline") != 0
+                        or parameters.get("reset_save_file_version_to_current") != 6
+                        or parameters.get("reset_loaded_save_signature") != 0
+                        or parameters.get("reset_save_signature_valid") is not True
+                        or parameters.get("reset_last_completion_updated_best_time") is not False
+                        or parameters.get("load_applies_profile_after_deserialize_or_reset") is not True
+                        or parameters.get("load_stores_profile_by_owner_player_id") is not True
+                        or parameters.get("load_publishes_available_points") is not True
+                        or parameters.get("load_saves_repaired_profile_after_reset") is not True
+                        or parameters.get("load_publishes_profile_loaded_signal") is not True
+                        or parameters.get("serialized_property_keys") != ["ver", "points", "cm", "sig"]
+                        or parameters.get("deserialize_clamps_points_to_baseline_before_mission_reconciliation") is not True
+                        or parameters.get("deserialize_unwrap_failure_marks_signature_invalid_and_zero") is not True
+                        or parameters.get("serialized_profile_recomputes_points_and_signature_before_write") is not True
                         or parameters.get("save_wrapper_vm_index") != 35
                         or parameters.get("save_skips_cheat_tainted_campaign_run") is not True
                         or parameters.get("save_serializes_profile_before_persistence") is not True
