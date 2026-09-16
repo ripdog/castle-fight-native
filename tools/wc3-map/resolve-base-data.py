@@ -2607,6 +2607,38 @@ def main() -> None:
                         or parameters.get("ordinary_game_handoff") != "startGame"
                     ):
                         raise ValueError(f"runtime mode protected start/finalization semantics changed: {parameters}")
+                    expected_reset_defaults = {
+                        "T8": False, "S8": True, "R8": 0, "U9": True, "PGb": False, "DGb": False, "IGb": False,
+                        "LGb": -1, "KGb": 0, "MGb": "", "MX": 250, "LX": 125, "KX": 1, "JGb": 0, "EX": -1,
+                        "BX": False, "mX": 0, "AX": False, "HGb": False, "zX": False, "yX": False, "xX": True,
+                        "wX": True, "GGb": True, "vX": True, "uX": False, "FGb": True, "tX": False, "sX": False,
+                        "rX": False, "EGb": True, "qX": True, "pX": 0, "WW": 25, "BGb": -1, "AGb": 0, "zGb": 0,
+                        "oX": 0, "yGb": 0, "nX": 0, "HX": 1, "CX": 30, "sFb": 120,
+                    }
+                    if (
+                        parameters.get("mode_reset_command") != "-reset"
+                        or parameters.get("protected_mode_reset_command_vm") != 78
+                        or parameters.get("protected_parse_mode_vm") != 79
+                        or parameters.get("protected_reentry_reset_vm") != 80
+                        or parameters.get("protected_reentry_reset_assignments") != expected_reset_defaults
+                        or parameters.get("protected_reentry_reset_restores_treasure_box_rawcode") != "h008"
+                        or parameters.get("protected_reentry_reset_restores_treasure_box_for_player_ids") != [0, 11]
+                        or parameters.get("protected_reentry_reset_enables_player_bounty_for_player_ids") != [0, 11]
+                        or parameters.get("protected_clear_and_restart_vm") != 81
+                        or parameters.get("protected_timer_start_vm") != 82
+                        or parameters.get("race_ban_reset_vm") != 74
+                        or parameters.get("remembered_race_ban_clear_vm") != 84
+                        or parameters.get("remembered_race_ban_insert_vm") != 85
+                        or parameters.get("remembered_race_ban_ignores_zero") is not True
+                        or parameters.get("remembered_race_ban_deduplicates") is not True
+                        or parameters.get("ultimate_builder_rawcode") != "X075"
+                        or parameters.get("ultimate_builder_choice_ability_object") != "A0FY"
+                        or parameters.get("ultimate_builder_slot_vm") != 75
+                        or parameters.get("ultimate_race_choice_index_vm") != 90
+                        or parameters.get("ultimate_remove_vm") != 76
+                        or parameters.get("ultimate_remove_disables_builder_choice_ability_for_player_ids") != [0, 11]
+                    ):
+                        raise ValueError(f"runtime mode protected reset/race-pool semantics changed: {parameters}")
                 elif (
                     parameters.get("detection_player_id") != 23
                     or parameters.get("detection_player_name") != "FLO"

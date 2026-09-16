@@ -5754,7 +5754,15 @@ def _extract_runtime_mode_mechanics(
         "CallbackSingle_doAfter_registerMode_ModeParser_ModeParser_call_doAfter_registerMode_ModeParser_ModeParser1",
         "CallbackSingle_doAfter_ModeParser_ModeParser_call_doAfter_ModeParser_ModeParser",
         "ModeParser_startSelectedModesOrDefault__w3p_vmProtect",
+        "ModeParser_isModeResetCommand__w3p_vmProtect", "ModeParser_parseMode__w3p_vmProtect",
+        "ModeParser_resetSelectedModesForReentry__w3p_vmProtect",
+        "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect",
+        "ModeParser_startModeSelectionTimer__w3p_vmProtect",
         "ModeParser_startModeSelectionTimerInternal", "ModeParser_cancelModeSelectionTimer",
+        "resetRaceBanModes__w3p_vmProtect", "clearRememberedRaceBans__w3p_vmProtect",
+        "rememberRaceBan__w3p_vmProtect", "findUltimateBuilderRaceSlot__w3p_vmProtect",
+        "getUltimateRaceChoiceIndex__w3p_vmProtect", "removeUltimateFromPool__w3p_vmProtect",
+        "applyUltimateInPool", "setArtilleryModeAbilityIds", "clearPresetRaceAssignments",
         "syncArtilleryModeAvailability", "startDefaultDraft__w3p_vmProtect", "startGame",
     }
     if not required.issubset(functions_by_name):
@@ -6042,6 +6050,233 @@ def _extract_runtime_mode_mechanics(
     if any(vm77_by_pc.get(pc) != instruction for pc, instruction in expected_vm77.items()):
         raise ValueError("ModeParser VM77 selected/default start control flow changed")
 
+    protected_mode_wrappers = {
+        "resetRaceBanModes__w3p_vmProtect": b"function resetRaceBanModes__w3p_vmProtect()return _qr(74)end",
+        "findUltimateBuilderRaceSlot__w3p_vmProtect": b"function findUltimateBuilderRaceSlot__w3p_vmProtect()return _qr(75)end",
+        "removeUltimateFromPool__w3p_vmProtect": b"function removeUltimateFromPool__w3p_vmProtect()return _qr(76)end",
+        "ModeParser_isModeResetCommand__w3p_vmProtect": b"function ModeParser_isModeResetCommand__w3p_vmProtect(eUq)return _qr(78,eUq)end",
+        "ModeParser_parseMode__w3p_vmProtect": b"function ModeParser_parseMode__w3p_vmProtect(AUq)return _qr(79,AUq)end",
+        "ModeParser_resetSelectedModesForReentry__w3p_vmProtect": b"function ModeParser_resetSelectedModesForReentry__w3p_vmProtect()return _qr(80)end",
+        "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect": b"function ModeParser_clearSelectedModesAndRestart__w3p_vmProtect(XUq)return _qr(81,XUq)end",
+        "ModeParser_startModeSelectionTimer__w3p_vmProtect": b"function ModeParser_startModeSelectionTimer__w3p_vmProtect(YUq)return _qr(82,YUq)end",
+        "clearRememberedRaceBans__w3p_vmProtect": b"function clearRememberedRaceBans__w3p_vmProtect()return _qr(84)end",
+        "rememberRaceBan__w3p_vmProtect": b"function rememberRaceBan__w3p_vmProtect(JVq)return _qr(85,JVq)end",
+        "getUltimateRaceChoiceIndex__w3p_vmProtect": b"function getUltimateRaceChoiceIndex__w3p_vmProtect()return _qr(90)end",
+    }
+    protected_mode_starts: list[int] = []
+    for name, expected_source in protected_mode_wrappers.items():
+        protected_start, protected_source = body(name)
+        protected_mode_starts.append(protected_start)
+        if protected_source != expected_source:
+            raise ValueError(f"protected mode wrapper changed: {name}")
+
+    def vm_program(vm_index: int, xor_byte: int) -> list[tuple[int, tuple[int, ...]]]:
+        return [
+            (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+            for instruction in _decode_w3p_vm_program(data, vm_index, expected_opcode_xor_byte=xor_byte)["instructions"]
+        ]
+
+    if _w3p_vm_static_strings(data, 74) != [
+        "0", "ModeAppliers_manualRaceBanCount", "ModeAppliers_randomRaceBanCount", "c_", "b_",
+    ] or vm_program(74, 200) != [
+        (144, (1,)), (251, (4,)), (144, (1,)), (251, (5,)), (221, ()),
+    ]:
+        raise ValueError("protected race-ban reset VM74 changed")
+
+    if _w3p_vm_static_strings(data, 75) != []:
+        raise ValueError("protected Ultimate builder slot VM75 static table changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 75)
+    ] != ["getUltimateRaceChoiceIndex__w3p_vmProtect"] or vm_program(75, 177) != [
+        (218, (1,)), (172, (0,)), (221, ()),
+    ]:
+        raise ValueError("protected Ultimate builder slot VM75 changed")
+
+    ultimate_remove_static = _w3p_vm_static_strings(data, 76)
+    ultimate_remove_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 76)
+    ]
+    if ultimate_remove_static != ["0", "raceCount", "1", "11", "ultiInPool", "LHb", "KHb"]:
+        raise ValueError(f"protected Ultimate removal VM76 static values changed: {ultimate_remove_static}")
+    if ultimate_remove_globals != [
+        "findUltimateBuilderRaceSlot__w3p_vmProtect", "LHb", "KHb", "e_",
+        "__wurst_safe_SetPlayerAbilityAvailable", "V1", "__wurst_ensureInt", "OHb", "VN",
+    ]:
+        raise ValueError(f"protected Ultimate removal VM76 globals changed: {ultimate_remove_globals}")
+    vm76 = _decode_w3p_vm_program(data, 76, expected_opcode_xor_byte=130)
+    vm76_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm76["instructions"]
+    }
+    expected_vm76 = {
+        7: (42, (1, 1)), 10: (24, (1,)),
+        72: (218, (2,)), 74: (144, (3,)), 76: (198, (16,)), 78: (251, (6,)),
+        127: (218, (5,)), 129: (218, (6,)), 131: (253, (2,)), 133: (162, ()),
+        134: (218, (7,)), 136: (218, (8,)), 138: (253, (1,)), 140: (162, ()),
+        141: (98, (17,)), 143: (156, (0,)), 145: (98, (48,)), 147: (63, (2, 3)),
+        153: (156, (0,)), 155: (251, (7,)), 157: (218, (4,)), 159: (236, ()),
+        163: (42, (9, 0)), 166: (221, ()),
+    }
+    if any(vm76_by_pc.get(pc) != instruction for pc, instruction in expected_vm76.items()):
+        raise ValueError("protected Ultimate removal VM76 control flow changed")
+
+    if _w3p_vm_static_strings(data, 78) != ["-reset"] or vm_program(78, 192) != [
+        (253, (1,)), (46, (1,)), (18, (16,)), (243, (1,)), (221, ()),
+    ]:
+        raise ValueError("ModeParser protected reset-command VM78 changed")
+
+    parse_mode_static = _w3p_vm_static_strings(data, 79)
+    parse_mode_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 79)
+    ]
+    if parse_mode_static != ["ModeAppliers_isModeAppliersTest", "ModeParser_manualModeEntryRequired", "e_", "U9"]:
+        raise ValueError(f"ModeParser VM79 static values changed: {parse_mode_static}")
+    if parse_mode_globals != [
+        "ModeParser_initialize__w3p_vmProtect", "a_", "LinkedList_LinkedList_clear", "Y9",
+        "resetRaceBanModes__w3p_vmProtect", "ModeParser_parseModeAppend__w3p_vmProtect",
+    ] or vm_program(79, 250) != [
+        (224, ()), (24, (2,)), (42, (1, 0)), (218, (2,)), (24, (2,)),
+        (253, (2,)), (251, (3,)), (218, (3,)), (218, (4,)), (98, (16,)),
+        (156, (0,)), (251, (4,)), (42, (5, 0)), (218, (6,)), (253, (1,)),
+        (172, (1,)), (221, ()),
+    ]:
+        raise ValueError("ModeParser protected parse-entry VM79 changed")
+
+    reset_static = _w3p_vm_static_strings(data, 80)
+    reset_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 80)
+    ]
+    expected_reset_static = [
+        "ModeAppliers_isModeAppliersTest", "ModeState_ultimateDraft", "ModeState_itemsMode", "0",
+        "ModeState_roundLimit", "ModeParser_manualModeEntryRequired", "isUltDraft", "ultimateMode", "ur", "1",
+        "baseMode", "winsRequired", "", "modeFuncName", "250", "RuntimeGlobals_startGold", "125",
+        "RuntimeGlobals_startLumber", "RuntimeGlobals_startFood", "Qr", "RuntimeGlobals_fogDelaySeconds",
+        "RuntimeGlobals_dualRacesMode", "RuntimeGlobals_fi", "RuntimeGlobals_noArtillery", "noCheese",
+        "RuntimeGlobals_noTreasureBox", "RuntimeGlobals_noBounty", "RuntimeGlobals_specialsEnabledMode",
+        "RuntimeGlobals_zr", "Zr", "RuntimeGlobals_rsEnabled", "RuntimeGlobals_ei", "xi", "RuntimeGlobals_oi",
+        "RuntimeGlobals_ri", "RuntimeGlobals_noAfkMode", "syncMode", "RuntimeGlobals_orbEnabled",
+        "RuntimeGlobals_taxMode", "25.", "RuntimeGlobals_incomeIncrement", "Ai", "mp_extraPlayers", "ci",
+        "RuntimeGlobals_roundTimeLimit", "di", "RuntimeGlobals_modeDi", "RuntimeGlobals_autobalanceMode", "30",
+        "RuntimeGlobals_incomeTime", "120", "labelTimer", "11", "1747988536", "e_", "T8", "S8", "R8",
+        "U9", "PGb", "DGb", "IGb", "LGb", "KGb", "MGb", "MX", "LX", "KX", "JGb", "EX", "BX", "mX",
+        "AX", "HGb", "zX", "yX", "xX", "wX", "GGb", "vX", "uX", "FGb", "tX", "sX", "rX", "EGb",
+        "qX", "pX", "WW", "BGb", "AGb", "zGb", "oX", "yGb", "nX", "HX", "CX", "sFb",
+    ]
+    if reset_static != expected_reset_static:
+        raise ValueError(f"ModeParser VM80 static values changed: {reset_static}")
+    if reset_globals != [
+        "ModeParser_initialize__w3p_vmProtect", "a_", "LinkedList_LinkedList_clear", "Y9",
+        "clearPresetRaceAssignments", "resetRaceBanModes__w3p_vmProtect", "removeUltimateFromPool__w3p_vmProtect",
+        "clearRememberedRaceBans__w3p_vmProtect", "setArtilleryModeAbilityIds", "syncArtilleryModeAvailability",
+        "__wurst_safe_SetPlayerUnitAvailableBJ", "V1", "__wurst_safe_SetPlayerFlagBJ", "PLAYER_STATE_GIVES_BOUNTY",
+    ]:
+        raise ValueError(f"ModeParser VM80 globals changed: {reset_globals}")
+    vm80 = _decode_w3p_vm_program(data, 80, expected_opcode_xor_byte=163)
+    vm80_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm80["instructions"]
+    }
+    expected_vm80 = {
+        7: (42, (1, 0)), 14: (253, (2,)), 16: (251, (55,)), 18: (218, (3,)), 20: (218, (4,)), 22: (98, (16,)),
+        24: (156, (0,)), 26: (251, (56,)), 28: (156, (1,)), 30: (251, (57,)), 32: (144, (4,)), 34: (251, (58,)),
+        36: (156, (1,)), 38: (251, (59,)), 40: (42, (5, 0)), 43: (156, (0,)), 45: (251, (60,)),
+        47: (156, (0,)), 49: (251, (61,)), 51: (156, (0,)), 53: (251, (62,)), 55: (144, (10,)), 57: (248, ()), 58: (251, (63,)),
+        60: (144, (4,)), 62: (251, (64,)), 64: (46, (13,)), 66: (251, (65,)), 68: (144, (15,)), 70: (251, (66,)),
+        72: (144, (17,)), 74: (251, (67,)), 76: (144, (10,)), 78: (251, (68,)), 80: (144, (4,)), 82: (251, (69,)),
+        84: (144, (10,)), 86: (248, ()), 87: (251, (70,)), 89: (156, (0,)), 91: (251, (71,)), 93: (144, (4,)), 95: (251, (72,)),
+        97: (156, (0,)), 99: (251, (73,)), 101: (156, (0,)), 103: (251, (74,)), 105: (156, (0,)), 107: (251, (75,)),
+        109: (156, (0,)), 111: (251, (76,)), 113: (156, (1,)), 115: (251, (77,)), 117: (156, (1,)), 119: (251, (78,)),
+        121: (156, (1,)), 123: (251, (79,)), 125: (156, (1,)), 127: (251, (80,)), 129: (156, (0,)), 131: (251, (81,)),
+        133: (156, (1,)), 135: (251, (82,)), 137: (156, (0,)), 139: (251, (83,)), 141: (156, (0,)), 143: (251, (84,)),
+        145: (156, (0,)), 147: (251, (85,)), 149: (156, (1,)), 151: (251, (86,)), 153: (156, (1,)), 155: (251, (87,)),
+        157: (144, (4,)), 159: (251, (88,)), 161: (144, (40,)), 163: (251, (89,)),
+        165: (144, (10,)), 167: (248, ()), 168: (251, (90,)),
+        170: (42, (6, 0)), 173: (144, (4,)), 175: (251, (91,)), 177: (144, (4,)), 179: (251, (92,)),
+        181: (144, (4,)), 183: (251, (93,)), 185: (144, (4,)), 187: (251, (94,)), 189: (144, (4,)), 191: (251, (95,)),
+        193: (144, (10,)), 195: (251, (96,)), 197: (144, (49,)), 199: (251, (97,)), 201: (144, (51,)), 203: (251, (98,)),
+        205: (42, (7, 0)), 208: (42, (8, 0)), 211: (156, (1,)), 213: (42, (9, 16)),
+        216: (218, (2,)), 218: (236, ()), 222: (42, (10, 0)),
+        247: (218, (11,)), 249: (144, (54,)), 251: (156, (1,)), 253: (218, (12,)), 255: (253, (1,)), 257: (162, ()), 258: (98, (48,)),
+        260: (218, (13,)), 262: (218, (14,)), 264: (156, (1,)), 266: (218, (12,)), 268: (253, (1,)), 270: (162, ()), 271: (98, (48,)),
+        273: (63, (1, 10)), 279: (221, ()),
+    }
+    if any(vm80_by_pc.get(pc) != instruction for pc, instruction in expected_vm80.items()):
+        raise ValueError("ModeParser protected reentry reset VM80 changed")
+
+    if _w3p_vm_static_strings(data, 81) != []:
+        raise ValueError("ModeParser VM81 static table changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 81)
+    ] != ["Ocb", "ModeParser_resetSelectedModesForReentry__w3p_vmProtect", "ModeParser_startModeSelectionTimerInternal"] or vm_program(81, 119) != [
+        (218, (1,)), (10, (0, 4)), (156, (0,)), (243, (1,)), (42, (2, 0)),
+        (253, (1,)), (156, (1,)), (42, (3, 32)), (156, (1,)), (243, (1,)), (221, ()),
+    ]:
+        raise ValueError("ModeParser protected clear-and-restart VM81 changed")
+
+    if _w3p_vm_static_strings(data, 82) != []:
+        raise ValueError("ModeParser VM82 static table changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 82)
+    ] != ["ModeParser_startModeSelectionTimerInternal"] or vm_program(82, 250) != [
+        (253, (1,)), (156, (0,)), (42, (1, 32)), (221, ()),
+    ]:
+        raise ValueError("ModeParser protected timer-start VM82 changed")
+
+    if _w3p_vm_static_strings(data, 84) != []:
+        raise ValueError("remembered race-ban clear VM84 static table changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 84)
+    ] != ["ArrayList_ArrayList_clear", "R9"] or vm_program(84, 143) != [
+        (218, (1,)), (218, (2,)), (98, (16,)), (221, ()),
+    ]:
+        raise ValueError("remembered race-ban clear VM84 changed")
+
+    if _w3p_vm_static_strings(data, 85) != ["0"]:
+        raise ValueError("remembered race-ban insert VM85 static table changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 85)
+    ] != ["ArrayList_ArrayList_has", "R9", "ArrayList_ArrayList_add"] or vm_program(85, 195) != [
+        (253, (1,)), (144, (1,)), (18, (16,)), (236, ()), (24, (2,)), (253, (2,)),
+        (10, (0, 12)), (218, (1,)), (218, (2,)), (253, (1,)), (98, (33,)), (236, ()),
+        (240, (0, 2)), (253, (2,)), (10, (0, 8)), (218, (3,)), (218, (2,)), (253, (1,)),
+        (98, (32,)), (221, ()),
+    ]:
+        raise ValueError("remembered race-ban insert VM85 changed")
+
+    if _w3p_vm_static_strings(data, 90) != []:
+        raise ValueError("Ultimate race choice index VM90 static table changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 90)
+    ] != ["I0"] or vm_program(90, 116) != [(218, (1,)), (243, (1,)), (221, ())]:
+        raise ValueError("Ultimate race choice index VM90 changed")
+
+    apply_ultimate_start, apply_ultimate_source = body("applyUltimateInPool")
+    for fragment in (
+        b"if KHb then return end", b"findUltimateBuilderRaceSlot__w3p_vmProtect()", b"if(iSq<0)then",
+        b"if(LHb<=iSq)then LHb=(iSq+1)end", b"MHb[iSq]=true", b"MHb[(LHb+iSq)]=true",
+        b"KHb=true", b"if(not e_)then VN()end",
+    ):
+        if fragment not in apply_ultimate_source:
+            raise ValueError(f"Ultimate-in-pool enable path changed: missing {fragment!r}")
+
+    mode_reset_defaults = {
+        "T8": False, "S8": True, "R8": 0, "U9": True, "PGb": False, "DGb": False, "IGb": False,
+        "LGb": -1, "KGb": 0, "MGb": "", "MX": 250, "LX": 125, "KX": 1, "JGb": 0, "EX": -1,
+        "BX": False, "mX": 0, "AX": False, "HGb": False, "zX": False, "yX": False, "xX": True,
+        "wX": True, "GGb": True, "vX": True, "uX": False, "FGb": True, "tX": False, "sX": False,
+        "rX": False, "EGb": True, "qX": True, "pX": 0, "WW": 25, "BGb": -1, "AGb": 0, "zGb": 0, "oX": 0,
+        "yGb": 0, "nX": 0, "HX": 1, "CX": 30, "sFb": 120,
+    }
+
     rows = [{
         "system_id": "mode-selection-controller-and-registry",
         "mechanic_kind": "host-chat-mode-parser-with-exact-registered-mode-catalog",
@@ -6107,8 +6342,58 @@ def _extract_runtime_mode_mechanics(
             "default_draft_handoff_condition": "T8 or PGb",
             "default_draft_handoff": "startDefaultDraft__w3p_vmProtect",
             "ordinary_game_handoff": "startGame",
+            "mode_reset_command": "-reset",
+            "protected_mode_reset_command_vm": 78,
+            "protected_parse_mode_vm": 79,
+            "protected_parse_mode_initializes_registry": True,
+            "protected_parse_mode_clears_selected_mode_list_Y9": True,
+            "protected_parse_mode_clears_manual_entry_U9": True,
+            "protected_parse_mode_resets_race_ban_counts": True,
+            "protected_parse_mode_tail_calls_append_parser": True,
+            "protected_reentry_reset_vm": 80,
+            "protected_reentry_reset_assignments": mode_reset_defaults,
+            "protected_reentry_reset_sets_e_to_a": True,
+            "protected_reentry_reset_clears_selected_mode_list_Y9": True,
+            "protected_reentry_reset_clears_preset_race_assignments": True,
+            "protected_reentry_reset_clears_race_ban_counts": True,
+            "protected_reentry_reset_removes_ultimate_from_pool": True,
+            "protected_reentry_reset_clears_remembered_race_bans": True,
+            "protected_reentry_reset_sets_artillery_ability_ids_enabled": True,
+            "protected_reentry_reset_syncs_artillery_availability_outside_test_mode": True,
+            "protected_reentry_reset_restores_treasure_box_rawcode": "h008",
+            "protected_reentry_reset_restores_treasure_box_for_player_ids": [0, 11],
+            "protected_reentry_reset_enables_player_bounty_for_player_ids": [0, 11],
+            "protected_clear_and_restart_vm": 81,
+            "protected_clear_and_restart_rejects_finalized_selection_Ocb": True,
+            "protected_clear_and_restart_restarts_timer_as_manual_entry": True,
+            "protected_timer_start_vm": 82,
+            "protected_timer_start_uses_non_manual_entry": True,
+            "race_ban_reset_vm": 74,
+            "race_ban_reset_manual_count_symbol": "c_",
+            "race_ban_reset_random_count_symbol": "b_",
+            "race_ban_reset_value": 0,
+            "remembered_race_ban_list_symbol": "R9",
+            "remembered_race_ban_clear_vm": 84,
+            "remembered_race_ban_insert_vm": 85,
+            "remembered_race_ban_ignores_zero": True,
+            "remembered_race_ban_deduplicates": True,
+            "ultimate_builder_rawcode": "X075",
+            "ultimate_builder_choice_ability_object": "A0FY",
+            "ultimate_builder_slot_vm": 75,
+            "ultimate_race_choice_index_vm": 90,
+            "ultimate_race_choice_index_symbol": "I0",
+            "ultimate_in_pool_flag_symbol": "KHb",
+            "ultimate_race_count_symbol": "LHb",
+            "ultimate_race_availability_symbol": "MHb",
+            "ultimate_race_ability_ids_symbol": "OHb",
+            "ultimate_enable_is_idempotent_when_KHb": True,
+            "ultimate_enable_marks_both_team_availability_slots": True,
+            "ultimate_remove_vm": 76,
+            "ultimate_remove_disables_builder_choice_ability_for_player_ids": [0, 11],
+            "ultimate_remove_clears_KHb": True,
+            "ultimate_remove_refreshes_race_ui_outside_test_mode": True,
         },
-        "related_rawcode_ids": [],
+        "related_rawcode_ids": [1479554869, 1747988536],
         "source_functions": [
             listener_name, parse_name, initializer_name,
             "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
@@ -6116,10 +6401,19 @@ def _extract_runtime_mode_mechanics(
             "StartResourceMode_StartResourceMode_applyChoice", mode_round_watch, ultimate_round_watch,
             "startNextRoundViaModeRuntime", "player_allowAllBuildings", "clearUltiTexttags",
             *periodic_mode_sources.keys(), *round_limit_sources.keys(), *mode_start_sources.keys(),
-            start_selected_name, "ModeParser_startModeSelectionTimerInternal", *callback_functions,
+            start_selected_name, "ModeParser_isModeResetCommand__w3p_vmProtect", "ModeParser_parseMode__w3p_vmProtect",
+            "ModeParser_resetSelectedModesForReentry__w3p_vmProtect", "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect",
+            "ModeParser_startModeSelectionTimer__w3p_vmProtect", "ModeParser_startModeSelectionTimerInternal",
+            "resetRaceBanModes__w3p_vmProtect", "clearRememberedRaceBans__w3p_vmProtect", "rememberRaceBan__w3p_vmProtect",
+            "findUltimateBuilderRaceSlot__w3p_vmProtect", "getUltimateRaceChoiceIndex__w3p_vmProtect",
+            "removeUltimateFromPool__w3p_vmProtect", "applyUltimateInPool", "setArtilleryModeAbilityIds",
+            "clearPresetRaceAssignments", "syncArtilleryModeAvailability", *callback_functions,
         ],
-        "evidence_kind": "exact-readable-mode-registry-chat-parser-plus-statically-decoded-vm77-start-finalization",
-        "byte_offset": min(initializer_start, listener_start, parse_start, start_selected_start, timer_internal_start),
+        "evidence_kind": "exact-readable-mode-registry-plus-statically-decoded-vm74-82-84-85-90-selection-reset-and-race-pool-control-flow",
+        "byte_offset": min(
+            initializer_start, listener_start, parse_start, start_selected_start, timer_internal_start,
+            apply_ultimate_start, *protected_mode_starts,
+        ),
     }]
 
     w3c_callback = "CallbackSingle_doAfter_W3Champions_call_doAfter_W3Champions"
