@@ -2865,21 +2865,71 @@ def main() -> None:
                     ):
                         raise ValueError(f"campaign Chapter I/II enemy bot semantics changed: {parameters}")
                 elif system_id == "campaign-friendly-bot-supply-and-placeholder-content-catalog":
+                    known_races = parameters.get("known_races", [])
                     friendly_bots = parameters.get("friendly_bots", [])
                     supplies = parameters.get("supplies", [])
                     placeholder_chapters = parameters.get("placeholder_chapters", [])
                     if (
                         parameters.get("protected_campaign_content_vm") != 22
+                        or parameters.get("protected_known_race_vm") != 21
+                        or parameters.get("known_race_count") != 14
+                        or parameters.get("starter_race_count") != 3
+                        or parameters.get("known_race_registry_symbol") != "Uqb"
+                        or parameters.get("starter_race_registry_symbol") != "Tqb"
+                        or parameters.get("unlocked_race_registry_symbol") != "Sqb"
+                        or parameters.get("known_race_insert_deduplicates_by_builder_id") is not True
+                        or parameters.get("profile_apply_resets_unlocked_races_to_starters_then_adds_completed_chapter_unlocks") is not True
                         or parameters.get("friendly_bot_count") != 16
                         or parameters.get("supply_count") != 5
                         or parameters.get("placeholder_chapter_count") != 2
                         or parameters.get("placeholder_mission_count") != 12
                         or parameters.get("mission_initial_unlock_rule") != "first mission in a non-secret chapter"
+                        or len(known_races) != 14
                         or len(friendly_bots) != 16
                         or len(supplies) != 5
                         or len(placeholder_chapters) != 2
                     ):
                         raise ValueError(f"campaign VM22 auxiliary catalog header changed: {parameters}")
+                    expected_races = [
+                        ("X00C", "Human", True),
+                        ("X019", "Orc", True),
+                        ("X089", "Nightelf", True),
+                        ("X018", "Undead", False),
+                        ("X00P", "Elven", False),
+                        ("X006", "Corrupted", False),
+                        ("X00E", "Naga", False),
+                        ("X017", "Northern", False),
+                        ("X00O", "Chaos", False),
+                        ("X06P", "Mech", False),
+                        ("X051", "Elemental", False),
+                        ("X01A", "Nature", False),
+                        ("X078", "Desert", False),
+                        ("X07P", "Pandaren", False),
+                    ]
+                    if [
+                        (str(race.get("builder_object_id")), str(race.get("name")), race.get("starter"))
+                        for race in known_races
+                    ] != expected_races:
+                        raise ValueError(f"campaign known race catalog changed: {known_races}")
+                    expected_unlock_chapters = {
+                        "X00C": None, "X019": None, "X089": None,
+                        "X018": "chapter_1", "X00P": "chapter_1", "X006": "chapter_1", "X00E": "chapter_1",
+                        "X017": "chapter_2", "X00O": "chapter_2", "X06P": "chapter_2",
+                        "X051": "chapter_3", "X01A": "chapter_3", "X078": "chapter_3", "X07P": "chapter_3",
+                    }
+                    if {
+                        str(race.get("builder_object_id")): race.get("unlock_chapter_id")
+                        for race in known_races
+                    } != expected_unlock_chapters:
+                        raise ValueError(f"campaign race unlock progression changed: {known_races}")
+                    for race in known_races:
+                        builder_object_id = str(race.get("builder_object_id", ""))
+                        builder_name = campaign_unit_names.get(builder_object_id)
+                        if not builder_name:
+                            raise ValueError(
+                                f"campaign race builder cannot be resolved: {race.get('name')}: {builder_object_id}"
+                            )
+                        race["builder_name"] = builder_name
                     friendly_by_id = {str(bot.get("bot_id")): bot for bot in friendly_bots}
                     if len(friendly_by_id) != 16:
                         raise ValueError(f"campaign friendly bot ids changed: {sorted(friendly_by_id)}")

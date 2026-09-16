@@ -645,6 +645,31 @@ class ResolvedEvidenceTests(unittest.TestCase):
 
         catalog = json.loads(rows["campaign-friendly-bot-supply-and-placeholder-content-catalog"]["parameters_json"])
         self.assertEqual(catalog["protected_campaign_content_vm"], 22)
+        self.assertEqual(catalog["protected_known_race_vm"], 21)
+        self.assertEqual(catalog["known_race_count"], 14)
+        self.assertEqual(catalog["starter_race_count"], 3)
+        self.assertEqual(catalog["known_race_registry_symbol"], "Uqb")
+        self.assertEqual(catalog["starter_race_registry_symbol"], "Tqb")
+        self.assertEqual(catalog["unlocked_race_registry_symbol"], "Sqb")
+        self.assertTrue(catalog["known_race_insert_deduplicates_by_builder_id"])
+        self.assertTrue(catalog["profile_apply_resets_unlocked_races_to_starters_then_adds_completed_chapter_unlocks"])
+        self.assertEqual(
+            [(race["builder_object_id"], race["name"], race["starter"]) for race in catalog["known_races"]],
+            [
+                ("X00C", "Human", True), ("X019", "Orc", True),
+                ("X089", "Nightelf", True), ("X018", "Undead", False),
+                ("X00P", "Elven", False), ("X006", "Corrupted", False),
+                ("X00E", "Naga", False), ("X017", "Northern", False),
+                ("X00O", "Chaos", False), ("X06P", "Mech", False),
+                ("X051", "Elemental", False), ("X01A", "Nature", False),
+                ("X078", "Desert", False), ("X07P", "Pandaren", False),
+            ],
+        )
+        self.assertEqual(catalog["known_races"][0]["builder_name"], "Human Builder")
+        self.assertEqual(catalog["known_races"][3]["unlock_chapter_id"], "chapter_1")
+        self.assertEqual(catalog["known_races"][7]["unlock_chapter_id"], "chapter_2")
+        self.assertEqual(catalog["known_races"][9]["builder_name"], "Mechanical Builder")
+        self.assertEqual(catalog["known_races"][10]["unlock_chapter_id"], "chapter_3")
         self.assertEqual(catalog["friendly_bot_count"], 16)
         self.assertEqual(catalog["supply_count"], 5)
         self.assertEqual(catalog["placeholder_chapter_count"], 2)

@@ -7134,6 +7134,8 @@ def _extract_runtime_campaign_mechanics(
         "failPendingCampaignMissionStart",
         "ensureCampaignContent__w3p_vmProtect", "registerCampaignChapterIEnemyBots__w3p_vmProtect", "registerCampaignChapterIIEnemyBots__w3p_vmProtect",
         "addEnemyBot__w3p_vmProtect", "addFriendlyBot__w3p_vmProtect", "addSupply__w3p_vmProtect",
+        "addKnownRace__w3p_vmProtect", "addStarterRace__w3p_vmProtect", "addRaceOption__w3p_vmProtect",
+        "CampaignRaceOption_new_CampaignRaceOption", "getCampaignKnownRaceByBuilderId", "isCampaignRaceUnlocked",
         "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
         "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_cost", "CampaignBot_CampaignBot_builder", "CampaignBot_CampaignBot_skill",
         "CampaignBot_CampaignBot_coop", "CampaignBot_CampaignBot_speed", "CampaignBot_CampaignBot_style",
@@ -7911,6 +7913,91 @@ def _extract_runtime_campaign_mechanics(
             return value
         raise ValueError(f"campaign VM22 {context} retained unsupported value: {value!r}")
 
+    def parse_campaign_races() -> list[dict[str, object]]:
+        expected_races = [
+            ("X00C", "Human", True),
+            ("X019", "Orc", True),
+            ("X089", "Nightelf", True),
+            ("X018", "Undead", False),
+            ("X00P", "Elven", False),
+            ("X006", "Corrupted", False),
+            ("X00E", "Naga", False),
+            ("X017", "Northern", False),
+            ("X00O", "Chaos", False),
+            ("X06P", "Mech", False),
+            ("X051", "Elemental", False),
+            ("X01A", "Nature", False),
+            ("X078", "Desert", False),
+            ("X07P", "Pandaren", False),
+        ]
+        races: list[dict[str, object]] = []
+        for call in vm22_catalog_calls:
+            callee = str(call["callee"])
+            if callee not in {"addStarterRace__w3p_vmProtect", "addKnownRace__w3p_vmProtect"}:
+                continue
+            args = [resolve_vm22_string(value, "campaign race") for value in call["args"]]
+            if len(args) != 3:
+                raise ValueError(f"campaign race VM22 constructor arity changed: {callee}: {args}")
+            builder_rawcode = int(args[0])
+            races.append({
+                "builder_rawcode": builder_rawcode,
+                "builder_object_id": builder_rawcode.to_bytes(4, "big").decode("latin1"),
+                "name": str(args[1]),
+                "icon_path": str(args[2]),
+                "starter": callee == "addStarterRace__w3p_vmProtect",
+            })
+        actual = [(race["builder_object_id"], race["name"], race["starter"]) for race in races]
+        if actual != expected_races:
+            raise ValueError(f"campaign VM22 race catalog changed: {actual}")
+        if len({int(race["builder_rawcode"]) for race in races}) != len(races):
+            raise ValueError("campaign VM22 race catalog contains duplicate builder ids")
+        return races
+
+    known_race_static = _w3p_vm_static_strings(data, 21)
+    known_race_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 21)
+    ]
+    if known_race_static != [] or known_race_globals != ["addRaceOption__w3p_vmProtect", "Uqb"]:
+        raise ValueError(f"campaign known-race VM21 payload changed: {known_race_static} / {known_race_globals}")
+    known_race_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 21, expected_opcode_xor_byte=3)["instructions"]
+    ]
+    if known_race_program != [
+        (218, (1,)), (218, (2,)), (253, (1,)), (253, (2,)), (253, (3,)), (98, (64,)), (221, ()),
+    ]:
+        raise ValueError("campaign known-race VM21 control flow changed")
+    known_race_offset, _known_race_source = source(
+        "addKnownRace__w3p_vmProtect",
+        (b"return _qr(21,YJp,ZJp,aKp)",),
+    )
+    starter_race_offset, _starter_race_source = source(
+        "addStarterRace__w3p_vmProtect",
+        (
+            b"addKnownRace__w3p_vmProtect(bKp,cKp,dKp)",
+            b"CampaignRaceOption_new_CampaignRaceOption(bKp,cKp,dKp)",
+            b"ArrayList_ArrayList_add(Tqb,eKp)",
+            b"ArrayList_ArrayList_add(Sqb,CampaignRaceOption_new_CampaignRaceOption(bKp,cKp,dKp))",
+        ),
+    )
+    add_race_option_offset, _add_race_option_source = source(
+        "addRaceOption__w3p_vmProtect",
+        (
+            b"CampaignRaceOption_builderId==TJp", b"return end",
+            b"ArrayList_ArrayList_add(SJp,CampaignRaceOption_new_CampaignRaceOption(TJp,UJp,VJp))",
+        ),
+    )
+    profile_race_apply_offset, _profile_race_apply_source = source(
+        "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+        (
+            b"ArrayList_ArrayList_clear(Sqb)", b"ArrayList_ArrayList_size(Tqb)",
+            b"ArrayList_ArrayList_add(Sqb,ArrayList_ArrayList_get(Tqb,d0k))",
+            b"getCampaignKnownRaceByBuilderId", b"CampaignChapter_racesUnlockedOnComplete",
+            b"ArrayList_ArrayList_add(Sqb,r0k)",
+        ),
+    )
+
     def parse_campaign_supplies() -> list[dict[str, object]]:
         supplies: list[dict[str, object]] = []
         for call in vm22_catalog_calls:
@@ -7978,8 +8065,30 @@ def _extract_runtime_campaign_mechanics(
         return chapters
 
     friendly_bots = parse_campaign_friendly_bots()
+    known_races = parse_campaign_races()
     campaign_supplies = parse_campaign_supplies()
     placeholder_chapters = parse_campaign_placeholder_chapters()
+    race_unlock_chapter_by_rawcode: dict[int, str] = {}
+    for chapter in [chapter_one, chapter_two, *placeholder_chapters]:
+        for builder_rawcode in chapter["races_unlocked_on_complete"]:
+            builder_rawcode = int(builder_rawcode)
+            if builder_rawcode in race_unlock_chapter_by_rawcode:
+                raise ValueError(
+                    f"campaign race is unlocked by multiple chapters: {builder_rawcode}: "
+                    f"{race_unlock_chapter_by_rawcode[builder_rawcode]} and {chapter['chapter_id']}"
+                )
+            race_unlock_chapter_by_rawcode[builder_rawcode] = str(chapter["chapter_id"])
+    for race in known_races:
+        builder_rawcode = int(race["builder_rawcode"])
+        unlock_chapter_id = race_unlock_chapter_by_rawcode.get(builder_rawcode)
+        if race["starter"]:
+            if unlock_chapter_id is not None:
+                raise ValueError(f"campaign starter race also appears in chapter unlocks: {race}")
+            race["unlock_chapter_id"] = None
+        else:
+            if unlock_chapter_id is None:
+                raise ValueError(f"campaign non-starter race has no chapter unlock: {race}")
+            race["unlock_chapter_id"] = unlock_chapter_id
     base_enemy_bots = parse_campaign_enemy_bots(
         22, 26, 14, calls_override=vm22_catalog_calls
     )
@@ -8094,7 +8203,9 @@ def _extract_runtime_campaign_mechanics(
         "byte_offset": min(data.find(b"_fr(28,"), data.find(b"_fr(30,")),
     }
 
-    campaign_auxiliary_content_rawcodes: set[int] = set()
+    campaign_auxiliary_content_rawcodes: set[int] = {
+        int(race["builder_rawcode"]) for race in known_races
+    }
     for bot in friendly_bots:
         campaign_auxiliary_content_rawcodes.add(int(bot["builder_rawcode"]))
         campaign_auxiliary_content_rawcodes.update(
@@ -8113,6 +8224,15 @@ def _extract_runtime_campaign_mechanics(
         "trigger": "campaign-content-initialization-vm22",
         "parameters": {
             "protected_campaign_content_vm": 22,
+            "protected_known_race_vm": 21,
+            "known_race_count": len(known_races),
+            "starter_race_count": sum(1 for race in known_races if race["starter"]),
+            "known_race_registry_symbol": "Uqb",
+            "starter_race_registry_symbol": "Tqb",
+            "unlocked_race_registry_symbol": "Sqb",
+            "known_race_insert_deduplicates_by_builder_id": True,
+            "profile_apply_resets_unlocked_races_to_starters_then_adds_completed_chapter_unlocks": True,
+            "known_races": known_races,
             "friendly_bot_count": len(friendly_bots),
             "supply_count": len(campaign_supplies),
             "placeholder_chapter_count": len(placeholder_chapters),
@@ -8124,7 +8244,11 @@ def _extract_runtime_campaign_mechanics(
         },
         "related_rawcode_ids": sorted(campaign_auxiliary_content_rawcodes),
         "source_functions": [
-            "ensureCampaignContent__w3p_vmProtect", "addFriendlyBot__w3p_vmProtect",
+            "ensureCampaignContent__w3p_vmProtect", "addKnownRace__w3p_vmProtect", "addStarterRace__w3p_vmProtect",
+            "addRaceOption__w3p_vmProtect", "CampaignRaceOption_new_CampaignRaceOption",
+            "getCampaignKnownRaceByBuilderId", "isCampaignRaceUnlocked",
+            "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+            "addFriendlyBot__w3p_vmProtect",
             "CampaignBot_CampaignBot_displayName", "CampaignBot_CampaignBot_description",
             "CampaignBot_CampaignBot_icon", "CampaignBot_CampaignBot_cost", "CampaignBot_CampaignBot_builder",
             "CampaignBot_CampaignBot_skill", "CampaignBot_CampaignBot_coop", "CampaignBot_CampaignBot_speed",
@@ -8132,8 +8256,8 @@ def _extract_runtime_campaign_mechanics(
             "addSupply__w3p_vmProtect", "addChapter__w3p_vmProtect", "addMission__w3p_vmProtect",
             "CampaignChapter_CampaignChapter_unlocksRace",
         ],
-        "evidence_kind": "statically-symbolically-executed-fingerprinted-vm22-campaign-friendly-bots-supplies-and-placeholder-chapters",
-        "byte_offset": data.find(b"_fr(22,"),
+        "evidence_kind": "statically-symbolically-executed-fingerprinted-vm22-campaign-races-friendly-bots-supplies-and-placeholder-chapters-plus-vm21-known-race-insertion",
+        "byte_offset": min(data.find(b"_fr(22,"), known_race_offset, starter_race_offset, add_race_option_offset, profile_race_apply_offset),
     }
 
     rescue_strike_wrapper = "recordCampaignRescueStrike__w3p_vmProtect"
