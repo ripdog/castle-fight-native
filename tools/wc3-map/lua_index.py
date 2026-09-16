@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import hashlib
 import re
 from typing import Iterable, Iterator
 
@@ -7115,6 +7116,14 @@ def _extract_runtime_campaign_mechanics(
         "applyCampaignProfileToMissions__w3p_vmProtect", "saveCampaignProfile__w3p_vmProtect",
         "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
         "CampaignSaveData_CampaignSaveData_serializeForCampaignSave", "player_saveData",
+        "registerCampaignChapterI__w3p_vmProtect", "registerCampaignChapterII__w3p_vmProtect",
+        "addChapter__w3p_vmProtect", "addMission__w3p_vmProtect", "chapterTwoModeString", "challenge",
+        "CampaignChapter_CampaignChapter_environment", "CampaignChapter_CampaignChapter_unlocksRace",
+        "CampaignMission_CampaignMission_masteries", "CampaignMission_CampaignMission_enemyAdvantage",
+        "CampaignMission_CampaignMission_enemyRescueStrikes", "CampaignMission_CampaignMission_survival",
+        "CampaignMission_CampaignMission_teamResources", "CampaignMission_CampaignMission_enemyOpening",
+        "CampaignStarChallenge_CampaignStarChallenge_fastWin", "CampaignStarChallenge_CampaignStarChallenge_castleNeverBelow",
+        "CampaignStarChallenge_CampaignStarChallenge_banRace", "CampaignStarChallenge_CampaignStarChallenge_restriction",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -7130,12 +7139,17 @@ def _extract_runtime_campaign_mechanics(
     def decode_protected_string_global(symbol: bytes) -> str:
         match = re.search(
             rb"(?<![A-Za-z0-9_])" + symbol
-            + rb'=\(_d\[\d+\]or _y\(\d+,(_(?:T|r|a|j)\("(?:\\.|[^"\\])*"\))\)\)',
+            + rb'=\(_d\[\d+\]or _y\(\d+,(.{1,600}?)\)\)',
             data,
         )
         if match is None:
             raise ValueError(f"campaign protected string global assignment changed: {symbol.decode('ascii')}")
-        return _decode_w3p_global_name(match.group(1), 11351, 1106)
+        expression = match.group(1)
+        if not expression.startswith((b"_T(", b"_r(", b"_a(", b"_j(", b"_L(")):
+            raise ValueError(
+                f"campaign protected string global expression changed: {symbol.decode('ascii')}: {expression[:40]!r}"
+            )
+        return _decode_w3p_global_name(expression, 11351, 1106)
 
     def decode_cached_keyed_name(cache_index: int) -> str:
         index = str(cache_index).encode("ascii")
@@ -7159,6 +7173,386 @@ def _extract_runtime_campaign_mechanics(
         raise ValueError(f"campaign no-items restriction id changed: {no_items_id!r}")
     if no_rescue_strike_id != "challenge_no_rescue_strike":
         raise ValueError(f"campaign no-rescue-strike restriction id changed: {no_rescue_strike_id!r}")
+
+    def campaign_vm_fingerprint(vm_index: int, xor_byte: int) -> tuple[int, str]:
+        program = _decode_w3p_vm_program(data, vm_index, expected_opcode_xor_byte=xor_byte)
+        normalized = ";".join(
+            f"{int(instruction['opcode'])}:"
+            + ",".join(str(int(value)) for value in instruction["operands"])
+            for instruction in program["instructions"]
+        )
+        return len(program["instructions"]), hashlib.sha256(normalized.encode("ascii")).hexdigest()
+
+    expected_campaign_content_vm_fingerprints = {
+        19: (140, 36, "15ffbc9ad8da202882164b274a4f9d6b9c56103ecf5dba8fe0c63b74705733e0"),
+        29: (56, 303, "e961d0dd842b84592312732a08af0e904c154947fdbcf4a5d44fcd88db30593a"),
+        31: (202, 298, "5ce83ce163ee4dcb5ae91ff6779ee3a0409a7d312df83570e4c8274e30ef585f"),
+    }
+    for vm_index, (xor_byte, expected_count, expected_fingerprint) in expected_campaign_content_vm_fingerprints.items():
+        count, fingerprint = campaign_vm_fingerprint(vm_index, xor_byte)
+        if (count, fingerprint) != (expected_count, expected_fingerprint):
+            raise ValueError(
+                f"campaign content VM{vm_index} instruction stream changed: "
+                f"{count}/{fingerprint}"
+            )
+
+    if _w3p_vm_static_strings(data, 19) != ["CampaignChapter_missions", "CampaignChapter_secret"]:
+        raise ValueError("campaign addMission VM19 static fields changed")
+    if [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 19)
+    ] != [
+        "LinkedList_LinkedList_isEmpty", "CampaignMission_new_CampaignMission",
+        "LinkedList_LinkedList_add", "Xqb",
+    ]:
+        raise ValueError("campaign addMission VM19 globals changed")
+
+    chapter_two_mode_offset, chapter_two_mode_source = source(
+        "chapterTwoModeString", (b'return"-cr1-na-ntb-it7-mt-glw32"',)
+    )
+    chapter_two_mode_string = "-cr1-na-ntb-it7-mt-glw32"
+
+    def numeric_static(value: str) -> int | float | None:
+        try:
+            parsed = Decimal(value)
+        except InvalidOperation:
+            return None
+        if parsed == parsed.to_integral_value():
+            return int(parsed)
+        return float(parsed)
+
+    def trace_campaign_content_vm(vm_index: int, xor_byte: int) -> list[dict[str, object]]:
+        static_values = _w3p_vm_static_strings(data, vm_index)
+        global_names = [
+            _decode_w3p_global_name(expression, 11351, 1106)
+            for expression in _w3p_vm_global_expressions(data, vm_index)
+        ]
+        program = _decode_w3p_vm_program(data, vm_index, expected_opcode_xor_byte=xor_byte)
+        allowed_opcodes = {24, 42, 46, 98, 144, 156, 218, 221, 224, 248, 253}
+        actual_opcodes = {int(instruction["opcode"]) for instruction in program["instructions"]}
+        if not actual_opcodes.issubset(allowed_opcodes):
+            raise ValueError(
+                f"campaign content VM{vm_index} gained non-straight-line opcodes: "
+                f"{sorted(actual_opcodes - allowed_opcodes)}"
+            )
+
+        stack: list[object] = []
+        locals_by_index: dict[int, object] = {}
+        calls: list[dict[str, object]] = []
+
+        def finish_call(pc: int, callee: str, args: list[object], return_count: int) -> None:
+            call_ref = ("call", vm_index, pc, callee)
+            calls.append({"pc": pc, "callee": callee, "args": list(args), "result": call_ref if return_count else None})
+            if callee == "chapterTwoModeString":
+                if return_count != 1:
+                    raise ValueError("chapterTwoModeString protected call return shape changed")
+                stack.append(chapter_two_mode_string)
+                return
+            for return_index in range(return_count):
+                stack.append(call_ref if return_index == 0 else ("call-result", call_ref, return_index + 1))
+
+        for instruction in program["instructions"]:
+            pc = int(instruction["pc"])
+            opcode = int(instruction["opcode"])
+            operands = [int(value) for value in instruction["operands"]]
+            if opcode == 224:
+                stack.append(None)
+            elif opcode == 46:
+                stack.append(static_values[operands[0] - 1])
+            elif opcode == 144:
+                converted = numeric_static(static_values[operands[0] - 1])
+                if converted is None:
+                    raise ValueError(
+                        f"campaign content VM{vm_index} numeric static stopped being numeric: "
+                        f"{static_values[operands[0] - 1]!r}"
+                    )
+                stack.append(converted)
+            elif opcode == 156:
+                stack.append(operands[0] != 0)
+            elif opcode == 218:
+                stack.append(("global", global_names[operands[0] - 1]))
+            elif opcode == 253:
+                if operands[0] not in locals_by_index:
+                    raise ValueError(f"campaign content VM{vm_index} reads unset local {operands[0]} at pc {pc}")
+                stack.append(locals_by_index[operands[0]])
+            elif opcode == 24:
+                if not stack:
+                    raise ValueError(f"campaign content VM{vm_index} local store underflow at pc {pc}")
+                locals_by_index[operands[0]] = stack.pop()
+            elif opcode == 248:
+                if not stack or not isinstance(stack[-1], (int, float)):
+                    raise ValueError(f"campaign content VM{vm_index} unary minus shape changed at pc {pc}")
+                stack[-1] = -stack[-1]
+            elif opcode == 42:
+                signature = operands[1]
+                argument_count = signature >> 4
+                return_count = signature & 15
+                if len(stack) < argument_count:
+                    raise ValueError(f"campaign content VM{vm_index} direct-call stack underflow at pc {pc}")
+                args = stack[-argument_count:] if argument_count else []
+                if argument_count:
+                    del stack[-argument_count:]
+                finish_call(pc, global_names[operands[0] - 1], args, return_count)
+            elif opcode == 98:
+                signature = operands[0]
+                argument_count = signature >> 4
+                return_count = signature & 15
+                function_index = len(stack) - argument_count - 1
+                if function_index < 0:
+                    raise ValueError(f"campaign content VM{vm_index} indirect-call stack underflow at pc {pc}")
+                function_value = stack[function_index]
+                args = stack[function_index + 1:]
+                del stack[function_index:]
+                if not (
+                    isinstance(function_value, tuple)
+                    and len(function_value) == 2
+                    and function_value[0] == "global"
+                ):
+                    raise ValueError(
+                        f"campaign content VM{vm_index} indirect callee stopped being a global at pc {pc}: "
+                        f"{function_value!r}"
+                    )
+                finish_call(pc, str(function_value[1]), args, return_count)
+            elif opcode == 221:
+                continue
+            else:
+                raise ValueError(f"campaign content VM{vm_index} unsupported opcode at pc {pc}: {opcode}")
+        return calls
+
+    def decode_numeric_global(symbol: str) -> int:
+        match = re.search(
+            rb"(?<![A-Za-z0-9_])" + symbol.encode("ascii") + rb"=([0-9]+)(?![0-9.])",
+            data,
+        )
+        if match is None:
+            raise ValueError(f"campaign numeric global assignment changed: {symbol}")
+        return int(match.group(1))
+
+    campaign_global_string_symbols = {
+        "ecb", "Nbb", "Pab", "Sbb", "Lbb", "Wbb", "abb", "Bbb",
+        "Rab", "acb", "bcb", "Vab", "Gbb", "ccb",
+        "arb", "brb", "crb", "drb", "frb", "grb", "lrb", "krb",
+    }
+    decoded_campaign_globals = {
+        symbol: decode_protected_string_global(symbol.encode("ascii"))
+        for symbol in sorted(campaign_global_string_symbols)
+    }
+    expected_campaign_globals = {
+        "ecb": "ReplaceableTextures\\CommandButtons\\BTNCastle.blp",
+        "Nbb": "ReplaceableTextures\\CommandButtons\\BTNGlacier.blp",
+        "Pab": "ReplaceableTextures\\CommandButtons\\BTNYouDirtyRat!.blp",
+        "Sbb": "ReplaceableTextures\\CommandButtons\\BTNEnt.blp",
+        "Lbb": "ReplaceableTextures\\CommandButtons\\BTNGoblinZeppelin.blp",
+        "Wbb": "ReplaceableTextures\\CommandButtons\\BTNCrate.blp",
+        "abb": "ReplaceableTextures\\CommandButtons\\BTNSpikedBarricades.blp",
+        "Bbb": "ReplaceableTextures\\CommandButtons\\BTNInfernal.blp",
+        "Rab": "ReplaceableTextures\\CommandButtons\\BTNVillagerMan1.blp",
+        "acb": "ReplaceableTextures\\CommandButtons\\BTNClockWerkGoblin.blp",
+        "bcb": "ReplaceableTextures\\CommandButtons\\BTNChaosGrunt.blp",
+        "Vab": "ReplaceableTextures\\CommandButtons\\BTNThoriumArmor.blp",
+        "Gbb": "ReplaceableTextures\\CommandButtons\\BTNHeroTinker.blp",
+        "ccb": "ReplaceableTextures\\CommandButtons\\BTNChaosBlademaster.blp",
+        "arb": "challenge_no_buildings_lost",
+        "brb": "challenge_no_rescue_strike",
+        "crb": "challenge_no_items",
+        "drb": "challenge_no_legendary",
+        "frb": "challenge_no_air",
+        "grb": "challenge_no_siege",
+        "lrb": "challenge_no_player_upgrades",
+        "krb": "challenge_no_mission_supplies",
+    }
+    if decoded_campaign_globals != expected_campaign_globals:
+        raise ValueError(f"campaign chapter/mission protected globals changed: {decoded_campaign_globals}")
+    opening_building_rawcode = decode_numeric_global("Mub")
+    if opening_building_rawcode != 1747988570:
+        raise ValueError(f"campaign enemy opening building changed: {opening_building_rawcode}")
+
+    def resolve_campaign_value(value: object) -> object:
+        if isinstance(value, tuple) and len(value) == 2 and value[0] == "global":
+            symbol = str(value[1])
+            if symbol == "Mub":
+                return opening_building_rawcode
+            if symbol in decoded_campaign_globals:
+                return decoded_campaign_globals[symbol]
+            raise ValueError(f"campaign content VM retained unresolved global value: {symbol}")
+        return value
+
+    def star_row() -> dict[str, object]:
+        return {
+            "fast_win_seconds": None,
+            "minimum_castle_hp_percent": None,
+            "banned_race_builder_rawcodes": [],
+            "restriction_id": None,
+        }
+
+    def parse_campaign_chapter(vm_index: int, xor_byte: int) -> dict[str, object]:
+        calls = trace_campaign_content_vm(vm_index, xor_byte)
+        chapter_calls = [call for call in calls if call["callee"] == "addChapter__w3p_vmProtect"]
+        if len(chapter_calls) != 1:
+            raise ValueError(f"campaign chapter VM{vm_index} addChapter call count changed: {len(chapter_calls)}")
+        chapter_call = chapter_calls[0]
+        chapter_args = [resolve_campaign_value(value) for value in chapter_call["args"]]
+        if len(chapter_args) != 5:
+            raise ValueError(f"campaign chapter VM{vm_index} addChapter arity changed: {chapter_args}")
+        chapter_ref = chapter_call["result"]
+        chapter: dict[str, object] = {
+            "chapter_id": chapter_args[0],
+            "name": chapter_args[1],
+            "description": chapter_args[2],
+            "icon_path": chapter_args[3],
+            "secret": chapter_args[4],
+            "environment_theme": "",
+            "races_unlocked_on_complete": [],
+            "missions": [],
+        }
+        challenges: dict[object, dict[str, object]] = {}
+        missions: dict[object, dict[str, object]] = {}
+
+        for call in calls:
+            callee = str(call["callee"])
+            args = [resolve_campaign_value(value) for value in call["args"]]
+            if callee == "CampaignChapter_CampaignChapter_environment" and args[0] == chapter_ref:
+                chapter["environment_theme"] = args[1]
+            elif callee == "CampaignChapter_CampaignChapter_unlocksRace" and args[0] == chapter_ref:
+                chapter["races_unlocked_on_complete"].append(args[1])
+            elif callee == "addMission__w3p_vmProtect":
+                if len(args) != 7 or args[0] != chapter_ref:
+                    raise ValueError(f"campaign chapter VM{vm_index} mission constructor shape changed: {args}")
+                mission_ref = call["result"]
+                mission = {
+                    "mission_id": args[1],
+                    "name": args[2],
+                    "description": args[3],
+                    "icon_path": args[4],
+                    "mode_string": args[5],
+                    "enemy_roster_ids": str(args[6]).split(",") if args[6] else [],
+                    "initially_unlocked": len(chapter["missions"]) == 0 and not bool(chapter["secret"]),
+                    "enemy_gold_bonus": 0,
+                    "enemy_lumber_bonus": 0,
+                    "enemy_preplaced_towers": 0,
+                    "enemy_rescue_strike_count": 3,
+                    "team_gold_bonus": 0,
+                    "team_lumber_bonus": 0,
+                    "survival_seconds": 0,
+                    "team_preplaced_towers": 0,
+                    "enemy_opening_bot_id": "",
+                    "enemy_opening_building_rawcode": 0,
+                    "second_star": None,
+                    "third_star": None,
+                }
+                missions[mission_ref] = mission
+                chapter["missions"].append(mission)
+            elif callee == "challenge":
+                challenges[call["result"]] = star_row()
+            elif callee == "CampaignStarChallenge_CampaignStarChallenge_fastWin":
+                challenges[args[0]]["fast_win_seconds"] = args[1]
+            elif callee == "CampaignStarChallenge_CampaignStarChallenge_castleNeverBelow":
+                challenges[args[0]]["minimum_castle_hp_percent"] = args[1]
+            elif callee == "CampaignStarChallenge_CampaignStarChallenge_banRace":
+                challenges[args[0]]["banned_race_builder_rawcodes"].append(args[1])
+            elif callee == "CampaignStarChallenge_CampaignStarChallenge_restriction":
+                challenges[args[0]]["restriction_id"] = args[1]
+            elif callee == "CampaignMission_CampaignMission_masteries":
+                missions[args[0]]["second_star"] = challenges[args[1]]
+                missions[args[0]]["third_star"] = challenges[args[2]]
+            elif callee == "CampaignMission_CampaignMission_enemyAdvantage":
+                mission = missions[args[0]]
+                mission["enemy_gold_bonus"] = args[1]
+                mission["enemy_lumber_bonus"] = args[2]
+                mission["enemy_preplaced_towers"] = args[3]
+            elif callee == "CampaignMission_CampaignMission_enemyRescueStrikes":
+                missions[args[0]]["enemy_rescue_strike_count"] = max(0, int(args[1]))
+            elif callee == "CampaignMission_CampaignMission_survival":
+                missions[args[0]]["survival_seconds"] = args[1]
+                missions[args[0]]["team_preplaced_towers"] = args[2]
+            elif callee == "CampaignMission_CampaignMission_teamResources":
+                missions[args[0]]["team_gold_bonus"] = args[1]
+                missions[args[0]]["team_lumber_bonus"] = args[2]
+            elif callee == "CampaignMission_CampaignMission_enemyOpening":
+                missions[args[0]]["enemy_opening_bot_id"] = args[1]
+                missions[args[0]]["enemy_opening_building_rawcode"] = args[2]
+
+        if len(chapter["missions"]) != 6:
+            raise ValueError(f"campaign chapter VM{vm_index} mission count changed: {len(chapter['missions'])}")
+        if any(mission["second_star"] is None or mission["third_star"] is None for mission in chapter["missions"]):
+            raise ValueError(f"campaign chapter VM{vm_index} has mission without both mastery challenges")
+        chapter["races_unlocked_on_complete_object_ids"] = [
+            int(value).to_bytes(4, "big").decode("latin1")
+            for value in chapter["races_unlocked_on_complete"]
+        ]
+        for mission in chapter["missions"]:
+            opening_rawcode = int(mission["enemy_opening_building_rawcode"])
+            mission["enemy_opening_building_object_id"] = (
+                opening_rawcode.to_bytes(4, "big").decode("latin1") if opening_rawcode else None
+            )
+            for star_key in ("second_star", "third_star"):
+                star = mission[star_key]
+                star["banned_race_builder_object_ids"] = [
+                    int(value).to_bytes(4, "big").decode("latin1")
+                    for value in star["banned_race_builder_rawcodes"]
+                ]
+        return chapter
+
+    chapter_one = parse_campaign_chapter(31, 202)
+    chapter_two = parse_campaign_chapter(29, 56)
+    if [mission["mission_id"] for mission in chapter_one["missions"]] != [
+        "mission_lab_rat", "mission_walk_in_the_park", "mission_lift_off",
+        "mission_heavy_load", "mission_grinder", "mission_is_it_harder_yet",
+    ]:
+        raise ValueError("campaign Chapter I mission ordering changed")
+    if [mission["mission_id"] for mission in chapter_two["missions"]] != [
+        "mission_northern_exposure", "mission_loose_screws", "mission_red_flags",
+        "mission_cold_shoulder", "mission_assembly_line", "mission_no_more_warmups",
+    ]:
+        raise ValueError("campaign Chapter II mission ordering changed")
+    if chapter_one["chapter_id"] != "chapter_1" or chapter_two["chapter_id"] != "chapter_2":
+        raise ValueError("campaign Chapter I/II protected chapter ids changed")
+
+    campaign_content_rawcodes: set[int] = set()
+    for chapter in (chapter_one, chapter_two):
+        campaign_content_rawcodes.update(int(value) for value in chapter["races_unlocked_on_complete"])
+        for mission in chapter["missions"]:
+            opening_rawcode = int(mission["enemy_opening_building_rawcode"])
+            if opening_rawcode:
+                campaign_content_rawcodes.add(opening_rawcode)
+            for star_key in ("second_star", "third_star"):
+                campaign_content_rawcodes.update(
+                    int(value) for value in mission[star_key]["banned_race_builder_rawcodes"]
+                )
+
+    campaign_content_row: dict[str, object] = {
+        "system_id": "campaign-chapter-i-ii-content-catalog",
+        "mechanic_kind": "protected-versioned-campaign-chapter-mission-and-star-definition-catalog",
+        "trigger": "campaign-content-initialization-register-chapter-i-and-ii",
+        "parameters": {
+            "protected_add_mission_vm": 19,
+            "protected_chapter_i_vm": 31,
+            "protected_chapter_ii_vm": 29,
+            "chapter_two_shared_mode_string": chapter_two_mode_string,
+            "mission_initial_unlock_rule": "first mission in a non-secret chapter",
+            "mission_default_enemy_rescue_strike_count": 3,
+            "enemy_opening_building_rawcode": opening_building_rawcode,
+            "enemy_opening_building_object_id": opening_building_rawcode.to_bytes(4, "big").decode("latin1"),
+            "chapters": [chapter_one, chapter_two],
+        },
+        "related_rawcode_ids": sorted(campaign_content_rawcodes),
+        "source_functions": [
+            "registerCampaignChapterI__w3p_vmProtect", "registerCampaignChapterII__w3p_vmProtect",
+            "addChapter__w3p_vmProtect", "addMission__w3p_vmProtect", "chapterTwoModeString", "challenge",
+            "CampaignChapter_CampaignChapter_environment", "CampaignChapter_CampaignChapter_unlocksRace",
+            "CampaignMission_CampaignMission_masteries", "CampaignMission_CampaignMission_enemyAdvantage",
+            "CampaignMission_CampaignMission_enemyRescueStrikes", "CampaignMission_CampaignMission_survival",
+            "CampaignMission_CampaignMission_teamResources", "CampaignMission_CampaignMission_enemyOpening",
+            "CampaignStarChallenge_CampaignStarChallenge_fastWin",
+            "CampaignStarChallenge_CampaignStarChallenge_castleNeverBelow",
+            "CampaignStarChallenge_CampaignStarChallenge_banRace",
+            "CampaignStarChallenge_CampaignStarChallenge_restriction",
+        ],
+        "evidence_kind": "statically-symbolically-executed-straight-line-vm29-vm31-plus-vm19-initial-unlock-and-readable-field-mutators",
+        "byte_offset": min(
+            data.find(b"_fr(29,"), data.find(b"_fr(31,"), chapter_two_mode_offset,
+        ),
+    }
 
     rescue_strike_wrapper = "recordCampaignRescueStrike__w3p_vmProtect"
     rescue_strike_static = _w3p_vm_static_strings(data, 27)
@@ -7211,7 +7605,7 @@ def _extract_runtime_campaign_mechanics(
     ]
     offsets = [source(name, fragments)[0] for name, fragments in sources]
 
-    rows = [{
+    rows = [campaign_content_row, {
         "system_id": "campaign-star-restriction-failure-hooks",
         "mechanic_kind": "campaign-active-star-restriction-event-failure",
         "trigger": "tracked-building-death-challenge-bound-player-item-purchase-or-rescue-strike-use",

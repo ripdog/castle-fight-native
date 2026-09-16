@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 8)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 9)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -562,6 +562,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(
             set(rows),
             {
+                "campaign-chapter-i-ii-content-catalog",
                 "campaign-star-restriction-failure-hooks",
                 "campaign-round-start-state-reset",
                 "campaign-quit-and-replay-control",
@@ -572,6 +573,43 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "campaign-mission-supply-application",
             },
         )
+        content = json.loads(rows["campaign-chapter-i-ii-content-catalog"]["parameters_json"])
+        self.assertEqual(content["protected_add_mission_vm"], 19)
+        self.assertEqual(content["protected_chapter_i_vm"], 31)
+        self.assertEqual(content["protected_chapter_ii_vm"], 29)
+        self.assertEqual(content["enemy_opening_building_object_id"], "h00Z")
+        chapters = content["chapters"]
+        self.assertEqual([chapter["chapter_id"] for chapter in chapters], ["chapter_1", "chapter_2"])
+        self.assertEqual(chapters[0]["environment_theme"], "default")
+        self.assertEqual(chapters[0]["races_unlocked_on_complete_object_ids"], ["X018", "X00P", "X006", "X00E"])
+        self.assertEqual(chapters[1]["environment_theme"], "ice")
+        self.assertEqual(chapters[1]["races_unlocked_on_complete_object_ids"], ["X017", "X00O", "X06P"])
+        chapter_one = {mission["mission_id"]: mission for mission in chapters[0]["missions"]}
+        chapter_two = {mission["mission_id"]: mission for mission in chapters[1]["missions"]}
+        self.assertTrue(chapter_one["mission_lab_rat"]["initially_unlocked"])
+        self.assertEqual(chapter_one["mission_lab_rat"]["enemy_gold_bonus"], -50)
+        self.assertEqual(chapter_one["mission_lab_rat"]["enemy_rescue_strike_count"], 0)
+        self.assertEqual(chapter_one["mission_lab_rat"]["second_star"]["fast_win_seconds"], 900)
+        self.assertEqual(chapter_one["mission_lab_rat"]["third_star"]["restriction_id"], "challenge_no_rescue_strike")
+        self.assertEqual(chapter_one["mission_heavy_load"]["third_star"]["restriction_id"], "challenge_no_siege")
+        self.assertEqual(chapter_one["mission_heavy_load"]["third_star"]["fast_win_seconds"], 1080)
+        self.assertEqual(chapter_one["mission_is_it_harder_yet"]["enemy_opening_bot_id"], "enemy_hard_vex")
+        self.assertEqual(chapter_one["mission_is_it_harder_yet"]["enemy_opening_building_object_id"], "h00Z")
+        self.assertEqual(chapter_two["mission_cold_shoulder"]["enemy_lumber_bonus"], 300)
+        self.assertEqual(chapter_two["mission_cold_shoulder"]["enemy_preplaced_towers"], 5)
+        self.assertEqual(chapter_two["mission_assembly_line"]["enemy_gold_bonus"], 250)
+        self.assertEqual(chapter_two["mission_assembly_line"]["survival_seconds"], 720)
+        self.assertEqual(chapter_two["mission_assembly_line"]["team_preplaced_towers"], 2)
+        self.assertEqual(chapter_two["mission_no_more_warmups"]["team_gold_bonus"], -25)
+        self.assertEqual(
+            chapter_two["mission_no_more_warmups"]["second_star"]["banned_race_builder_object_ids"],
+            ["X00E", "X00C"],
+        )
+        self.assertEqual(
+            chapter_two["mission_no_more_warmups"]["third_star"]["restriction_id"],
+            "challenge_no_mission_supplies",
+        )
+
         parameters = json.loads(rows["campaign-star-restriction-failure-hooks"]["parameters_json"])
         self.assertEqual(parameters["active_restriction_scope"], ["second-star", "third-star"])
         building_loss = parameters["tracked_building_loss"]
@@ -678,7 +716,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 8)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 9)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:

@@ -2702,6 +2702,7 @@ def main() -> None:
             for mechanic in csv.DictReader(handle, delimiter="\t"):
                 system_id = mechanic["system_id"]
                 if system_id not in {
+                    "campaign-chapter-i-ii-content-catalog",
                     "campaign-star-restriction-failure-hooks",
                     "campaign-round-start-state-reset",
                     "campaign-quit-and-replay-control",
@@ -2713,7 +2714,63 @@ def main() -> None:
                 }:
                     raise ValueError(f"unrecognized runtime campaign mechanic: {system_id}")
                 parameters = json.loads(mechanic["parameters_json"])
-                if system_id == "campaign-star-restriction-failure-hooks":
+                if system_id == "campaign-chapter-i-ii-content-catalog":
+                    chapters = parameters.get("chapters", [])
+                    if (
+                        parameters.get("protected_add_mission_vm") != 19
+                        or parameters.get("protected_chapter_i_vm") != 31
+                        or parameters.get("protected_chapter_ii_vm") != 29
+                        or parameters.get("chapter_two_shared_mode_string") != "-cr1-na-ntb-it7-mt-glw32"
+                        or parameters.get("mission_initial_unlock_rule") != "first mission in a non-secret chapter"
+                        or parameters.get("mission_default_enemy_rescue_strike_count") != 3
+                        or parameters.get("enemy_opening_building_object_id") != "h00Z"
+                        or len(chapters) != 2
+                        or [chapter.get("chapter_id") for chapter in chapters] != ["chapter_1", "chapter_2"]
+                    ):
+                        raise ValueError(f"campaign Chapter I/II catalog header changed: {parameters}")
+                    chapter_one, chapter_two = chapters
+                    chapter_one_missions = chapter_one.get("missions", [])
+                    chapter_two_missions = chapter_two.get("missions", [])
+                    if (
+                        chapter_one.get("environment_theme") != "default"
+                        or chapter_one.get("races_unlocked_on_complete_object_ids") != ["X018", "X00P", "X006", "X00E"]
+                        or [mission.get("mission_id") for mission in chapter_one_missions] != [
+                            "mission_lab_rat", "mission_walk_in_the_park", "mission_lift_off",
+                            "mission_heavy_load", "mission_grinder", "mission_is_it_harder_yet",
+                        ]
+                        or chapter_two.get("environment_theme") != "ice"
+                        or chapter_two.get("races_unlocked_on_complete_object_ids") != ["X017", "X00O", "X06P"]
+                        or [mission.get("mission_id") for mission in chapter_two_missions] != [
+                            "mission_northern_exposure", "mission_loose_screws", "mission_red_flags",
+                            "mission_cold_shoulder", "mission_assembly_line", "mission_no_more_warmups",
+                        ]
+                    ):
+                        raise ValueError(f"campaign Chapter I/II catalog ordering changed: {parameters}")
+                    lab_rat = chapter_one_missions[0]
+                    heavy_load = chapter_one_missions[3]
+                    chapter_one_finale = chapter_one_missions[5]
+                    assembly_line = chapter_two_missions[4]
+                    chapter_two_finale = chapter_two_missions[5]
+                    if (
+                        lab_rat.get("enemy_gold_bonus") != -50
+                        or lab_rat.get("enemy_rescue_strike_count") != 0
+                        or lab_rat.get("second_star", {}).get("fast_win_seconds") != 900
+                        or lab_rat.get("third_star", {}).get("restriction_id") != "challenge_no_rescue_strike"
+                        or heavy_load.get("third_star", {}).get("fast_win_seconds") != 1080
+                        or heavy_load.get("third_star", {}).get("restriction_id") != "challenge_no_siege"
+                        or chapter_one_finale.get("enemy_opening_bot_id") != "enemy_hard_vex"
+                        or chapter_one_finale.get("enemy_opening_building_object_id") != "h00Z"
+                        or assembly_line.get("enemy_gold_bonus") != 250
+                        or assembly_line.get("survival_seconds") != 720
+                        or assembly_line.get("team_preplaced_towers") != 2
+                        or assembly_line.get("second_star", {}).get("restriction_id") != "challenge_no_rescue_strike"
+                        or assembly_line.get("third_star", {}).get("minimum_castle_hp_percent") != 80
+                        or chapter_two_finale.get("team_gold_bonus") != -25
+                        or chapter_two_finale.get("second_star", {}).get("banned_race_builder_object_ids") != ["X00E", "X00C"]
+                        or chapter_two_finale.get("third_star", {}).get("restriction_id") != "challenge_no_mission_supplies"
+                    ):
+                        raise ValueError(f"campaign Chapter I/II catalog semantics changed: {parameters}")
+                elif system_id == "campaign-star-restriction-failure-hooks":
                     if parameters.get("tracked_building_loss", {}).get("restriction_id") != "challenge_no_buildings_lost":
                         raise ValueError(f"campaign building-loss restriction changed: {parameters}")
                     if parameters.get("challenge_bound_item_purchase", {}).get("restriction_id") != "challenge_no_items":
