@@ -2865,6 +2865,16 @@ def main() -> None:
                         or parameters.get("pool_reset_filters_buildings_through_current_modes") is not True
                         or parameters.get("building_draw_refills_active_pool_from_returned_pool_only_when_active_pool_empty") is not True
                         or parameters.get("building_draw_random_call") != "GetRandomInt(0, active_pool_size - 1)"
+                        or parameters.get("perk_registry_symbol") != "Reb"
+                        or parameters.get("perk_active_draw_pool_symbol") != "Qeb"
+                        or parameters.get("perk_returned_pool_symbol") != "Peb"
+                        or parameters.get("perk_initializer_vm") != 65
+                        or parameters.get("perk_pool_copy_vm") != 70
+                        or parameters.get("perk_pool_copy_requires_valid_registry_token") is not True
+                        or parameters.get("perk_pool_copy_requires_matching_manifest_slot") is not True
+                        or parameters.get("perk_draw_refills_Qeb_from_Peb_only_when_Qeb_empty") is not True
+                        or parameters.get("perk_draw_random_call") != "GetRandomInt(0, LinkedList_size(Qeb) - 1)"
+                        or parameters.get("perk_return_destination") != "Peb"
                         or parameters.get("pick_returns_other_current_packs_before_applying_selected_pack") is not True
                         or parameters.get("reroll_draws_replacement_before_returning_replaced_pack") is not True
                         or parameters.get("ai_away_or_afk_autopick_each_countdown_tick") is not True
@@ -2879,6 +2889,16 @@ def main() -> None:
                         or parameters.get("rebuilds_default_round_order") is not True
                     ):
                         raise ValueError(f"draft restart tier/order semantics changed: {parameters}")
+                elif system_id == "draft-perk-reminder-reapply":
+                    if (
+                        parameters.get("protected_hook_install_vm") != 71
+                        or parameters.get("protected_hook_install_guard_symbol") != "Meb"
+                        or parameters.get("protected_hook_install_is_idempotent") is not True
+                        or parameters.get("protected_hook_action_constructor") != "Sl:create455"
+                        or parameters.get("protected_hook_registration_function") != "watch"
+                        or parameters.get("protected_hook_install_called_from_perk_initializer_vm65") is not True
+                    ):
+                        raise ValueError(f"draft perk reminder hook semantics changed: {parameters}")
                 runtime_draft_rows.append([
                     system_id, mechanic["mechanic_kind"], mechanic["trigger"],
                     mechanic["related_objects_json"], mechanic["parameters_json"],

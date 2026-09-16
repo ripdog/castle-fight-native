@@ -8001,7 +8001,9 @@ def _extract_runtime_draft_mechanics(
     required = {
         "Action_watch_DraftOrchestrator_run_watch_DraftOrchestrator", "restartDraftAfterRoundEnd",
         "Action_watch_DraftPerkRegistry_run_watch_DraftPerkRegistry", "ensureAppliedList", "addPerkReminderToBuilder",
-        "initPerks__w3p_vmProtect", "initializeDefaultDraftTiers__w3p_vmProtect",
+        "initPerks__w3p_vmProtect", "copyAllPerksIntoDrawPool__w3p_vmProtect",
+        "installReminderRoundStartHookOnce__w3p_vmProtect", "drawPerk", "returnPerk",
+        "initializeDefaultDraftTiers__w3p_vmProtect",
         "setupDefaultRoundOrder__w3p_vmProtect", "syncDraftPlayersFromForces",
         "CFBuilding_CFBuilding_tier", "hotkeyToTier", "LinkedList_LinkedList_shuffle",
         "getDefaultRoundType", "DefaultPackSupplier_DefaultPackSupplier_makeOne",
@@ -8235,11 +8237,119 @@ def _extract_runtime_draft_mechanics(
             b"DraftController_DraftController_requestPick(Wem.this,afm.PlayerDraftState_plr,cfm)",
         ),
     )
+    perk_draw_offset, _perk_draw = source(
+        "drawPerk",
+        (
+            b"if(LinkedList_LinkedList_size(Qeb)==0)then",
+            b"LinkedList_LinkedList_addAll(Qeb,Peb)",
+            b"LinkedList_LinkedList_clear(Peb)",
+            b"Duq=GetRandomInt(0,(LinkedList_LinkedList_size(Qeb)-1))",
+            b"Euq=LinkedList_LinkedList_removeAt(Qeb,Duq)",
+            b"if isRegisteredPerk(Euq)then return Euq end",
+        ),
+    )
+    perk_return_offset, _perk_return = source(
+        "returnPerk",
+        (b"if isRegisteredPerk(Fuq)then LinkedList_LinkedList_add(Peb,Fuq)end",),
+    )
+    perk_copy_wrapper_offset, perk_copy_wrapper = source(
+        "copyAllPerksIntoDrawPool__w3p_vmProtect",
+        (b"return _qr(70)",),
+    )
+    perk_hook_wrapper_offset, perk_hook_wrapper = source(
+        "installReminderRoundStartHookOnce__w3p_vmProtect",
+        (b"return _qr(71)",),
+    )
+    if perk_copy_wrapper != b"function copyAllPerksIntoDrawPool__w3p_vmProtect()return _qr(70)end":
+        raise ValueError("protected perk draw-pool copy wrapper changed")
+    if perk_hook_wrapper != b"function installReminderRoundStartHookOnce__w3p_vmProtect()return _qr(71)end":
+        raise ValueError("protected perk reminder-hook wrapper changed")
+
+    vm65 = _decode_w3p_vm_program(data, 65, expected_opcode_xor_byte=41)
+    vm65_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm65["instructions"]
+    }
+    expected_vm65_lifecycle = {
+        58: (42, (1, 0)),
+        82: (218, (9,)), 84: (218, (10,)), 86: (98, (16,)),
+        88: (218, (9,)), 90: (218, (11,)), 92: (98, (16,)),
+        574: (42, (70, 0)), 577: (42, (75, 0)),
+    }
+    if any(vm65_by_pc.get(pc) != instruction for pc, instruction in expected_vm65_lifecycle.items()):
+        raise ValueError("protected perk initializer VM65 pool/hook lifecycle changed")
+    vm65_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 65)
+    ]
+    expected_vm65_lifecycle_globals = {
+        1: "installReminderRoundStartHookOnce__w3p_vmProtect",
+        9: "LinkedList_LinkedList_clear",
+        10: "Qeb",
+        11: "Peb",
+        70: "validateRegisteredPerks__w3p_vmProtect",
+        75: "copyAllPerksIntoDrawPool__w3p_vmProtect",
+    }
+    if any(vm65_globals[index - 1] != name for index, name in expected_vm65_lifecycle_globals.items()):
+        raise ValueError("protected perk initializer VM65 lifecycle globals changed")
+
+    vm70_static = _w3p_vm_static_strings(data, 70)
+    vm70_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 70)
+    ]
+    if vm70_static != ["0", "1"]:
+        raise ValueError(f"protected perk draw-pool VM70 static values changed: {vm70_static}")
+    if vm70_globals != [
+        "validateRegisteredPerks__w3p_vmProtect", "ArrayList_ArrayList_size", "Reb", "ArrayList_ArrayList_get",
+        "isPerkRegistryTokenValid__w3p_vmProtect", "isPerkManifestSlot__w3p_vmProtect",
+        "LinkedList_LinkedList_add", "Qeb",
+    ]:
+        raise ValueError(f"protected perk draw-pool VM70 globals changed: {vm70_globals}")
+    vm70_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 70, expected_opcode_xor_byte=91)["instructions"]
+    ]
+    expected_vm70_program = [
+        (224, ()), (24, (1,)), (224, ()), (24, (2,)), (224, ()), (24, (3,)),
+        (42, (1, 0)), (144, (1,)), (24, (1,)), (218, (2,)), (218, (3,)), (98, (17,)),
+        (144, (2,)), (198, (16,)), (24, (2,)), (156, (1,)), (10, (0, 62)),
+        (253, (1,)), (253, (2,)), (184, ()), (8, (16,)), (10, (0, 3)), (240, (0, 49)),
+        (218, (4,)), (218, (3,)), (253, (1,)), (98, (33,)), (24, (3,)),
+        (42, (5, 1)), (24, (4,)), (253, (4,)), (10, (0, 10)),
+        (253, (3,)), (253, (1,)), (42, (6, 33)), (240, (0, 2)), (253, (4,)),
+        (10, (0, 8)), (218, (7,)), (218, (8,)), (253, (3,)), (98, (32,)),
+        (63, (1, 2)), (240, (255, 189)), (221, ()),
+    ]
+    if vm70_program != expected_vm70_program:
+        raise ValueError("protected perk draw-pool VM70 program changed")
+
+    vm71_static = _w3p_vm_static_strings(data, 71)
+    vm71_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 71)
+    ]
+    if vm71_static != ["DraftPerkRegistry_reminderRoundStartHookInstalled", "create455", "Meb"]:
+        raise ValueError(f"protected perk reminder-hook VM71 static values changed: {vm71_static}")
+    if vm71_globals != ["Meb", "Sl", "watch"]:
+        raise ValueError(f"protected perk reminder-hook VM71 globals changed: {vm71_globals}")
+    vm71_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 71, expected_opcode_xor_byte=181)["instructions"]
+    ]
+    if vm71_program != [
+        (224, ()), (24, (1,)), (218, (1,)), (10, (0, 1)), (221, ()),
+        (156, (1,)), (251, (3,)), (218, (2,)), (90, (2,)), (87, (1,)),
+        (24, (1,)), (253, (1,)), (42, (3, 16)), (221, ()),
+    ]:
+        raise ValueError("protected perk reminder-hook VM71 program changed")
+
     pack_lifecycle_offsets = [
         pool_filter_offset, reset_pool_offset, random_tier_offset, put_back_offset,
         make_pair_offset, offer_offset, return_unpicked_offset, pick_pack_offset,
         player_pick_offset, request_pick_offset, request_reroll_offset, reroll_offset,
         use_reroll_offset, ai_away_pick_offset, timeout_pick_offset,
+        perk_draw_offset, perk_return_offset, perk_copy_wrapper_offset,
     ]
 
     vm41_static = _w3p_vm_static_strings(data, 41)
@@ -8358,7 +8468,7 @@ def _extract_runtime_draft_mechanics(
             b"unit_makeAbilityPermanent", b"ABILITY_RLF_CHANCE_TO_CRITICAL_STRIKE", b"BlzSetAbilityRealLevelField",
         )),
     ]
-    reminder_offsets = [source(name, fragments)[0] for name, fragments in reminder_sources]
+    reminder_offsets = [source(name, fragments)[0] for name, fragments in reminder_sources] + [perk_hook_wrapper_offset]
 
     timer_sources = [
         ("DraftController_DraftController_init", (
@@ -8460,6 +8570,25 @@ def _extract_runtime_draft_mechanics(
                 "building_draw_clears_returned_pool_after_refill": True,
                 "building_draw_random_call": "GetRandomInt(0, active_pool_size - 1)",
                 "building_draw_removes_selected_entry_from_active_pool": True,
+                "perk_registry_symbol": "Reb",
+                "perk_active_draw_pool_symbol": "Qeb",
+                "perk_returned_pool_symbol": "Peb",
+                "perk_initializer_vm": 65,
+                "perk_initializer_clears_active_pool_Qeb": True,
+                "perk_initializer_clears_returned_pool_Peb": True,
+                "perk_initializer_validates_registry_before_pool_copy": True,
+                "perk_pool_copy_vm": 70,
+                "perk_pool_copy_iterates_registry_indices": "0..ArrayList_size(Reb)-1",
+                "perk_pool_copy_requires_valid_registry_token": True,
+                "perk_pool_copy_requires_matching_manifest_slot": True,
+                "perk_pool_copy_destination": "Qeb",
+                "perk_draw_refills_Qeb_from_Peb_only_when_Qeb_empty": True,
+                "perk_draw_clears_Peb_after_refill": True,
+                "perk_draw_random_call": "GetRandomInt(0, LinkedList_size(Qeb) - 1)",
+                "perk_draw_removes_selected_entry_from_Qeb": True,
+                "perk_draw_returns_only_entries_still_registered": True,
+                "perk_return_accepts_only_registered_perks": True,
+                "perk_return_destination": "Peb",
                 "building_pack_return_first_goes_to_Rfb_tier_returned_pool": True,
                 "building_pack_return_second_goes_to_Pfb_tier_returned_pool": True,
                 "perk_pack_return_uses_returnPerk": True,
@@ -8491,8 +8620,10 @@ def _extract_runtime_draft_mechanics(
                 "PlayerDraftState_PlayerDraftState_useReroll",
                 "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData4",
                 "IMItrClosure_forEach_DraftController_DraftData_run_forEach_DraftController_DraftData5",
+                "initPerks__w3p_vmProtect", "copyAllPerksIntoDrawPool__w3p_vmProtect",
+                "drawPerk", "returnPerk",
             ],
-            "evidence_kind": "exact-readable-default-draft-pool-offer-pick-reroll-and-autopick-control-flow",
+            "evidence_kind": "exact-readable-default-draft-pool-offer-pick-reroll-and-autopick-control-flow-plus-statically-decoded-vm65-vm70-perk-pool-reset-copy",
             "byte_offset": min(pack_lifecycle_offsets),
         },
         {
@@ -8558,10 +8689,19 @@ def _extract_runtime_draft_mechanics(
                 "sets_ability_real_level_field": "ABILITY_RLF_CHANCE_TO_CRITICAL_STRIKE",
                 "sets_field_level_index": 0,
                 "sets_field_value": 0.0,
+                "protected_hook_install_vm": 71,
+                "protected_hook_install_guard_symbol": "Meb",
+                "protected_hook_install_is_idempotent": True,
+                "protected_hook_install_sets_guard_before_watch": True,
+                "protected_hook_action_constructor": "Sl:create455",
+                "protected_hook_registration_function": "watch",
+                "protected_hook_install_called_from_perk_initializer_vm65": True,
             },
             "related_rawcode_ids": [],
-            "source_functions": [name for name, _fragments in reminder_sources],
-            "evidence_kind": "exact-readable-applied-perk-list-builder-reminder-reapply-control-flow",
+            "source_functions": [name for name, _fragments in reminder_sources] + [
+                "initPerks__w3p_vmProtect", "installReminderRoundStartHookOnce__w3p_vmProtect",
+            ],
+            "evidence_kind": "exact-readable-applied-perk-list-builder-reminder-reapply-control-flow-plus-statically-decoded-vm65-vm71-one-shot-hook-install",
             "byte_offset": min(reminder_offsets),
         },
     ]
