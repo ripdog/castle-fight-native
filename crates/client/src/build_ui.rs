@@ -73,6 +73,12 @@ const BUILD_PREVIEW_VALID_COLOR: Color = Color::srgba(0.18, 1.0, 0.24, 0.82);
 const BUILD_PREVIEW_INVALID_COLOR: Color = Color::srgba(1.0, 0.12, 0.10, 0.88);
 const BUILD_GHOST_VALID_COLOR: Color = Color::srgba(0.48, 1.0, 0.52, 0.82);
 const BUILD_GHOST_INVALID_COLOR: Color = Color::srgba(1.0, 0.30, 0.24, 0.86);
+// Bevy sorts blended 3D materials by camera-space Z + material depth_bias. WC3 terrain
+// palette meshes are also blended, and their shared map-centre sort point otherwise causes the
+// placement ghost to flip from after-terrain to before-terrain at a hard line across the map.
+// Keep this comfortably beyond the camera far plane so the preview is always the last ordinary
+// transparent world material regardless of cursor position.
+const BUILD_GHOST_TRANSPARENT_SORT_BIAS: f32 = 100_000.0;
 
 fn command_slot(position: CommandCardPosition) -> usize {
     usize::from(position.y) * GRID_COLUMNS + usize::from(position.x)
@@ -1042,6 +1048,7 @@ fn build_ghost_material(mut source: StandardMaterial, tint: Color) -> StandardMa
     // team-colour flattening, alpha/filter-mode fixes, and the diffuse texture are all retained.
     source.base_color = tint;
     source.alpha_mode = AlphaMode::Blend;
+    source.depth_bias = BUILD_GHOST_TRANSPARENT_SORT_BIAS;
     source.unlit = true;
     source.emissive = LinearRgba::BLACK;
     source.cull_mode = None;
@@ -1736,7 +1743,7 @@ mod tests {
         assert_eq!(ghost.alpha_mode, AlphaMode::Blend);
         assert!(ghost.unlit);
         assert_eq!(ghost.emissive, LinearRgba::BLACK);
-        assert_eq!(ghost.depth_bias, 7.0);
+        assert_eq!(ghost.depth_bias, BUILD_GHOST_TRANSPARENT_SORT_BIAS);
         assert_eq!(ghost.cull_mode, None);
     }
 
