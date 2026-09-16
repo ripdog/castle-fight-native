@@ -7535,6 +7535,12 @@ def _extract_runtime_campaign_mechanics(
         "FrameHandleListener_onEditboxEnter_CampaignAntiCheat_onEvent_onEditboxEnter_CampaignAntiCheat",
         "CallbackSingle_doAfter_CampaignAntiCheat_call_doAfter_CampaignAntiCheat",
         "onEditBoxEnter", "armEditBoxEvents", "kF", "jF", "iK",
+        "main", "iH", "ArgHandler_addCommand_Campaign_handleArgs_addCommand_Campaign",
+        "applyChapterOneProgressCheat__w3p_vmProtect", "applyChapterOneProgressCheatToPlayer__w3p_vmProtect",
+        "getCampaignProgressCheatOwner", "makeChapterOneCheatStarMasks",
+        "applyCampaignMissionRecordCheatToPlayer__w3p_vmProtect",
+        "makeCampaignCheatRaceIds", "makeCampaignCheatRecruitIds", "makeCampaignCheatSupplies",
+        "completeCampaignChapterWithStarMasks__w3p_vmProtect",
         "registerCampaignChapterI__w3p_vmProtect", "registerCampaignChapterII__w3p_vmProtect",
         "addChapter__w3p_vmProtect", "addMission__w3p_vmProtect", "chapterTwoModeString", "challenge",
         "CampaignChapter_CampaignChapter_environment", "CampaignChapter_CampaignChapter_unlocksRace",
@@ -7607,6 +7613,28 @@ def _extract_runtime_campaign_mechanics(
         )
         if match is None:
             raise ValueError(f"campaign protected registry cache entry changed: {cache_index}")
+        return _decode_w3p_keyed_hex_string(
+            int(match.group(1)), match.group(2), 11351, 1106
+        )
+
+    def decode_cached_protected_string(cache_index: int) -> str:
+        index = str(cache_index).encode("ascii")
+        match = re.search(
+            rb"_d\[" + index + rb"\]or _y\(" + index
+            + rb",((?:_T|_r|_j|_L)\(\"[^\"]*\"\))\)",
+            data,
+        )
+        if match is None:
+            raise ValueError(f"campaign protected string cache entry changed: {cache_index}")
+        return _decode_w3p_global_name(match.group(1), 11351, 1106)
+
+    def decode_function_registry_name(alias_symbol: bytes) -> str:
+        match = re.search(
+            rb"_I\[_T\(([0-9]+),\"([0-9a-fA-F]+)\"\)\]=" + re.escape(alias_symbol),
+            data,
+        )
+        if match is None:
+            raise ValueError(f"campaign function registry alias changed: {alias_symbol.decode('ascii')}")
         return _decode_w3p_keyed_hex_string(
             int(match.group(1)), match.group(2), 11351, 1106
         )
@@ -9074,6 +9102,173 @@ def _extract_runtime_campaign_mechanics(
             anti_cheat_enter_listener_offset, anti_cheat_enter_offset, anti_cheat_arm_offset,
             anti_cheat_callback_offset, anti_cheat_rearm_offset, anti_cheat_state_offset,
             anti_cheat_duration_offset, anti_cheat_announce_offset, anti_cheat_mark_offset,
+        ),
+    })
+
+    main_offset, main_source = source("main", (b"xpcall(iH,", b"xpcall(hF,"))
+    game_basics_offset, _game_basics_source = source(
+        "iH", (b"Pcb=__wurst_ensureBool(true)", b"doAfter(1.,xAq)"),
+    )
+    campaign_init_offset, campaign_init_source = source(
+        "hF", (b"if(not Pcb)then", b"_d[5155]", b"_d[5158]", b"_d[5161]", b"_d[5164]"),
+    )
+    if main_source.count(b"xpcall(iH,") != 1 or main_source.count(b"xpcall(hF,") != 1:
+        raise ValueError("campaign dev-command init call multiplicity changed")
+    if main_source.find(b"xpcall(iH,") >= main_source.find(b"xpcall(hF,"):
+        raise ValueError("campaign dev-command production guard init ordering changed")
+    if decode_function_registry_name(b"iH") != "init_GameBasics":
+        raise ValueError("campaign dev-command GameBasics registry alias changed")
+    if decode_function_registry_name(b"hF") != "init_Campaign":
+        raise ValueError("campaign dev-command Campaign registry alias changed")
+    dev_commands = [decode_cached_protected_string(index) for index in (5155, 5158, 5161, 5164)]
+    if dev_commands != ["unlockmissions", "envice", "envdesert", "envcorrupt"]:
+        raise ValueError(f"campaign dev command registry changed: {dev_commands}")
+
+    dev_command_handler_offset, _dev_command_handler = source(
+        "ArgHandler_addCommand_Campaign_handleArgs_addCommand_Campaign",
+        (b"applyChapterOneProgressCheat__w3p_vmProtect(bOl)",),
+    )
+    progress_owner_offset, _progress_owner = source(
+        "getCampaignProgressCheatOwner",
+        (
+            b"if(not(Ypb==nil))then return Ypb end",
+            b"if isCampaignHumanPlayer(V1[0])then return V1[0]end",
+            b"return a9p",
+        ),
+    )
+    star_masks_offset, _star_masks = source(
+        "makeChapterOneCheatStarMasks",
+        (
+            b"LinkedList_LinkedList_size(b9p.CampaignChapter_missions)",
+            b"campaignStarMaskForStarCount(GetRandomInt(1,3))",
+        ),
+    )
+    per_player_wrapper = "applyChapterOneProgressCheatToPlayer__w3p_vmProtect"
+    per_player_wrapper_offset, _per_player_wrapper_source = source(
+        per_player_wrapper,
+        (b"function applyChapterOneProgressCheatToPlayer__w3p_vmProtect(f9p,g9p,h9p)return _qr(39,f9p,g9p,h9p)end",),
+    )
+    vm39_static = _w3p_vm_static_strings(data, 39)
+    vm39_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 39)
+    ]
+    if vm39_static != []:
+        raise ValueError(f"campaign Chapter I progress cheat VM39 static values changed: {vm39_static}")
+    if vm39_globals != ["getCampaignProfile", "completeCampaignChapterWithStarMasks__w3p_vmProtect"]:
+        raise ValueError(f"campaign Chapter I progress cheat VM39 globals changed: {vm39_globals}")
+    vm39_program = _decode_w3p_vm_program(data, 39, expected_opcode_xor_byte=87)
+    if vm39_program["operand_mode"] != 6:
+        raise ValueError(f"campaign Chapter I progress cheat VM39 operand mode changed: {vm39_program['operand_mode']}")
+    if [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm39_program["instructions"]
+    ] != [
+        (224, ()), (24, (4,)), (253, (1,)), (42, (1, 17)), (24, (4,)),
+        (218, (2,)), (253, (4,)), (253, (2,)), (253, (3,)), (172, (3,)), (221, ()),
+    ]:
+        raise ValueError("campaign Chapter I progress cheat protected VM39 changed")
+
+    progress_cheat_offset, _progress_cheat = source(
+        "applyChapterOneProgressCheat__w3p_vmProtect",
+        (
+            b"R9p=getCampaignProgressCheatOwner(Q9p)", b'S9p=getCampaignChapterById("chapter_1")',
+            b"T9p=makeChapterOneCheatStarMasks(S9p)", b"U9p=getCampaignPartyPlayers(R9p)",
+            b"if LinkedList_LinkedList_isEmpty(U9p)then LinkedList_LinkedList_add(U9p,playerToIndex(R9p))end",
+            b"applyChapterOneProgressCheatToPlayer__w3p_vmProtect(X9p,S9p,T9p)",
+            b"applyCampaignMissionRecordCheatToPlayer__w3p_vmProtect(Z9p,S9p,T9p)",
+            b"Campaign test cheat:|r Chapter I completed. Chapter II unlocked. Party star budget: ",
+            b"if(aqb and(not bqb))then showCampaignUI(R9p)end",
+        ),
+    )
+    record_cheat_offset, _record_cheat = source(
+        "applyCampaignMissionRecordCheatToPlayer__w3p_vmProtect",
+        (
+            b"K9p=1 while true do if(K9p>3)then break end",
+            b"L9p=int_toReal(GetRandomInt(180,1500))", b"M9p=GetRandomInt(4,24)",
+            b"N9p=makeCampaignCheatRaceIds(K9p)", b"O9p=makeCampaignCheatRecruitIds(K9p)",
+            b"P9p=tupleCopy17(makeCampaignCheatSupplies(K9p))",
+            b"completeCampaignMission__w3p_vmProtect(C9p,H9p,I9p,L9p,K9p,M9p,N9p,O9p,P9p[1],P9p[2])",
+        ),
+    )
+    race_ids_offset, _race_ids = source(
+        "makeCampaignCheatRaceIds",
+        (b"n9p=1 o9p=l9p", b"randomCampaignCheatRaceBuilderId()", b"joinCampaignCheatToken"),
+    )
+    recruit_ids_offset, _recruit_ids = source(
+        "makeCampaignCheatRecruitIds",
+        (
+            b"getCampaignRequiredAllyRecruitsForPartySize(p9p)",
+            b"LinkedList_LinkedList_getRandomElement(Zqb).CampaignBot_id",
+        ),
+    )
+    supplies_offset, _supplies = source(
+        "makeCampaignCheatSupplies",
+        (
+            b"GetRandomInt(0,min(4,LinkedList_LinkedList_size(Vqb)))",
+            b"if(GetRandomInt(0,1)==0)then A9p=(-1)else A9p=GetRandomInt(0,(t9p-1))end",
+            b"LinkedList_LinkedList_getRandomElement(Vqb).CampaignSupply_id",
+        ),
+    )
+    chapter_completion_offset, _chapter_completion = source(
+        "completeCampaignChapterWithStarMasks__w3p_vmProtect",
+        (
+            b"CampaignSaveData_CampaignSaveData_completeMission__w3p_vmProtect(RVp,XVp,YVp,1.0)",
+            b"CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect(RVp)",
+            b"publishCampaignAvailablePoints(RVp)", b"saveCampaignProfile__w3p_vmProtect(RVp.CampaignSaveData_owner)",
+        ),
+    )
+    rows.append({
+        "system_id": "campaign-dev-chapter-one-progress-cheat",
+        "mechanic_kind": "developer-only-chapter-one-progress-and-mission-record-seeding-command",
+        "trigger": "unlockmissions command, registered only when Pcb is false",
+        "parameters": {
+            "command": dev_commands[0],
+            "sibling_developer_commands": dev_commands[1:],
+            "registration_guard_symbol": "Pcb",
+            "registration_condition": "not Pcb",
+            "normal_production_registration": False,
+            "normal_init_order": ["init_GameBasics", "init_Campaign"],
+            "init_game_basics_sets_Pcb_true_before_campaign_init": True,
+            "command_handler": "ArgHandler_addCommand_Campaign_handleArgs_addCommand_Campaign",
+            "target_owner_precedence": [
+                "active campaign owner Ypb when non-null",
+                "host V1[0] when host is a campaign human player",
+                "invoking player",
+            ],
+            "chapter_id": "chapter_1",
+            "per_mission_random_star_count_inclusive": [1, 3],
+            "star_count_to_mask_function": "campaignStarMaskForStarCount",
+            "party_source": "getCampaignPartyPlayers(owner), falling back to owner when empty",
+            "protected_per_player_vm_index": 39,
+            "protected_per_player_profile_lookup": "getCampaignProfile(player)",
+            "protected_per_player_completion_handoff": "completeCampaignChapterWithStarMasks(profile, chapter, star_masks)",
+            "completion_helper_reapplies_campaign_missions_and_publishes_available_points": True,
+            "completion_helper_may_persist_profile_via_normal_save_path": True,
+            "mission_record_seeding_runs_after_progress_completion": True,
+            "mission_record_seed_party_size_inclusive": [1, 3],
+            "mission_record_seed_time_seconds_random_inclusive": [180, 1500],
+            "mission_record_seed_aux_integer_random_inclusive": [4, 24],
+            "mission_record_seed_race_count_equals_party_size": True,
+            "mission_record_seed_recruit_count_uses_required_allies_for_party_size": True,
+            "mission_record_seed_supply_count_random_inclusive": [0, 4],
+            "mission_record_seed_supply_assignment": "-1 or random player index 0..party_size-1",
+            "menu_refresh_when_campaign_menu_open_and_no_active_mission": True,
+            "import_policy": "developer/test tooling only; do not model as production campaign gameplay",
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            "main", "iH", "hF", "ArgHandler_addCommand_Campaign_handleArgs_addCommand_Campaign",
+            "getCampaignProgressCheatOwner", "makeChapterOneCheatStarMasks", per_player_wrapper,
+            "applyChapterOneProgressCheat__w3p_vmProtect", "applyCampaignMissionRecordCheatToPlayer__w3p_vmProtect",
+            "makeCampaignCheatRaceIds", "makeCampaignCheatRecruitIds", "makeCampaignCheatSupplies",
+            "completeCampaignChapterWithStarMasks__w3p_vmProtect",
+        ],
+        "evidence_kind": "exact-readable-dev-command-registration-and-helper-flow-plus-statically-decoded-vm39-with-production-init-order-exclusion",
+        "byte_offset": min(
+            main_offset, game_basics_offset, campaign_init_offset, dev_command_handler_offset,
+            progress_owner_offset, star_masks_offset, per_player_wrapper_offset, progress_cheat_offset,
+            record_cheat_offset, race_ids_offset, recruit_ids_offset, supplies_offset, chapter_completion_offset,
         ),
     })
 

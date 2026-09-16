@@ -2760,6 +2760,7 @@ def main() -> None:
                     "campaign-star-restriction-failure-hooks",
                     "campaign-challenge-active-state-clear",
                     "campaign-cheat-detection-and-persistence-taint",
+                    "campaign-dev-chapter-one-progress-cheat",
                     "campaign-round-start-state-reset",
                     "campaign-quit-and-replay-control",
                     "campaign-profile-apply-and-save",
@@ -3150,6 +3151,36 @@ def main() -> None:
                         or parameters.get("campaign_result_rejects_chapter_completion_when_tainted") is not True
                     ):
                         raise ValueError(f"campaign anti-cheat detection/taint semantics changed: {parameters}")
+                elif system_id == "campaign-dev-chapter-one-progress-cheat":
+                    if (
+                        parameters.get("command") != "unlockmissions"
+                        or parameters.get("sibling_developer_commands") != ["envice", "envdesert", "envcorrupt"]
+                        or parameters.get("registration_guard_symbol") != "Pcb"
+                        or parameters.get("registration_condition") != "not Pcb"
+                        or parameters.get("normal_production_registration") is not False
+                        or parameters.get("normal_init_order") != ["init_GameBasics", "init_Campaign"]
+                        or parameters.get("init_game_basics_sets_Pcb_true_before_campaign_init") is not True
+                        or parameters.get("chapter_id") != "chapter_1"
+                        or parameters.get("per_mission_random_star_count_inclusive") != [1, 3]
+                        or parameters.get("protected_per_player_vm_index") != 39
+                        or parameters.get("protected_per_player_profile_lookup") != "getCampaignProfile(player)"
+                        or parameters.get("protected_per_player_completion_handoff")
+                        != "completeCampaignChapterWithStarMasks(profile, chapter, star_masks)"
+                        or parameters.get("completion_helper_reapplies_campaign_missions_and_publishes_available_points") is not True
+                        or parameters.get("completion_helper_may_persist_profile_via_normal_save_path") is not True
+                        or parameters.get("mission_record_seeding_runs_after_progress_completion") is not True
+                        or parameters.get("mission_record_seed_party_size_inclusive") != [1, 3]
+                        or parameters.get("mission_record_seed_time_seconds_random_inclusive") != [180, 1500]
+                        or parameters.get("mission_record_seed_aux_integer_random_inclusive") != [4, 24]
+                        or parameters.get("mission_record_seed_race_count_equals_party_size") is not True
+                        or parameters.get("mission_record_seed_recruit_count_uses_required_allies_for_party_size") is not True
+                        or parameters.get("mission_record_seed_supply_count_random_inclusive") != [0, 4]
+                        or parameters.get("mission_record_seed_supply_assignment")
+                        != "-1 or random player index 0..party_size-1"
+                        or parameters.get("import_policy")
+                        != "developer/test tooling only; do not model as production campaign gameplay"
+                    ):
+                        raise ValueError(f"campaign developer progress cheat classification changed: {parameters}")
                 elif system_id == "campaign-round-start-state-reset":
                     if (
                         parameters.get("protected_reset_vm_index") != 83
@@ -6672,7 +6703,7 @@ def main() -> None:
             "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the staggered 1-second AI executor FSM tick, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
             "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; unanimous-draw round cleanup/restart without setting a match winner; and the exact 15-second one-second-tick round-review gate before next-round dispatch",
             "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, the full Ultimate Roll pool lifecycle (VM1/VM6 campaign-only and legendary-pool gates, ten V-tier Treasure Box entries, mode-filtered active pools, legendary-first no-replacement draws, and Ultimate Draft upgrade closure), the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
-            "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, and survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry",
+            "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry, and VM39's unlockmissions Chapter-I progress seeder is explicitly classified as developer/test-only because normal init_GameBasics sets Pcb=true before init_Campaign reaches its if-not-Pcb command-registration block",
             "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout and exact readable pack lifecycle: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, per-tier without-replacement draw pools with separate returned-pack recycling, reroll replacement-before-return ordering, immediate building/perk pick application, AI/AWAY/AFK and timeout random autopicks, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",
             "production-unit-abilities.tsv keeps every initial production-unit ability link, applies protected runtime cooldown/mana where available, preserves labeled editor Data fields, and retains inherited Blizzard utility abilities instead of dropping unmodified rawcodes",

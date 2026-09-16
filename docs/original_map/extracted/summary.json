@@ -157,7 +157,7 @@
       "external-ladder-detection-protected-auto-mode-and-game-start-handoff": 1,
       "host-chat-mode-parser-with-exact-registered-mode-catalog": 1
     },
-    "runtime_campaign_mechanics": 13,
+    "runtime_campaign_mechanics": 14,
     "runtime_campaign_mechanic_kinds": {
       "active-mission-abandonment-and-last-draft-relaunch": 1,
       "campaign-active-challenge-state-reset-after-pending-start-failure": 1,
@@ -165,6 +165,7 @@
       "campaign-chat-editbox-cheat-token-detection-one-shot-taint-and-progress-save-suppression": 1,
       "campaign-launch-clean-round-and-player-runtime-state": 1,
       "delayed-campaign-result-lock-star-award-persistence-and-ui": 1,
+      "developer-only-chapter-one-progress-and-mission-record-seeding-command": 1,
       "lazy-profile-application-and-cheat-aware-persistent-save": 1,
       "one-second-survival-objective-countdown-and-castle-kill-victory": 1,
       "protected-versioned-campaign-chapter-mission-and-star-definition-catalog": 1,

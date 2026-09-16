@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 13)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 14)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -572,6 +572,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
                 "campaign-star-restriction-failure-hooks",
                 "campaign-challenge-active-state-clear",
                 "campaign-cheat-detection-and-persistence-taint",
+                "campaign-dev-chapter-one-progress-cheat",
                 "campaign-round-start-state-reset",
                 "campaign-quit-and-replay-control",
                 "campaign-profile-apply-and-save",
@@ -807,6 +808,24 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(anti_cheat["campaign_result_skips_persistent_completion_when_tainted"])
         self.assertTrue(anti_cheat["campaign_result_rejects_chapter_completion_when_tainted"])
 
+        dev_cheat = json.loads(rows["campaign-dev-chapter-one-progress-cheat"]["parameters_json"])
+        self.assertEqual(dev_cheat["command"], "unlockmissions")
+        self.assertEqual(dev_cheat["sibling_developer_commands"], ["envice", "envdesert", "envcorrupt"])
+        self.assertEqual(dev_cheat["registration_guard_symbol"], "Pcb")
+        self.assertEqual(dev_cheat["registration_condition"], "not Pcb")
+        self.assertFalse(dev_cheat["normal_production_registration"])
+        self.assertEqual(dev_cheat["normal_init_order"], ["init_GameBasics", "init_Campaign"])
+        self.assertTrue(dev_cheat["init_game_basics_sets_Pcb_true_before_campaign_init"])
+        self.assertEqual(dev_cheat["chapter_id"], "chapter_1")
+        self.assertEqual(dev_cheat["per_mission_random_star_count_inclusive"], [1, 3])
+        self.assertEqual(dev_cheat["protected_per_player_vm_index"], 39)
+        self.assertEqual(dev_cheat["protected_per_player_profile_lookup"], "getCampaignProfile(player)")
+        self.assertEqual(dev_cheat["mission_record_seed_party_size_inclusive"], [1, 3])
+        self.assertEqual(dev_cheat["mission_record_seed_time_seconds_random_inclusive"], [180, 1500])
+        self.assertEqual(dev_cheat["mission_record_seed_aux_integer_random_inclusive"], [4, 24])
+        self.assertEqual(dev_cheat["mission_record_seed_supply_count_random_inclusive"], [0, 4])
+        self.assertIn("developer/test tooling only", dev_cheat["import_policy"])
+
         round_reset = json.loads(rows["campaign-round-start-state-reset"]["parameters_json"])
         self.assertEqual(round_reset["protected_reset_vm_index"], 83)
         self.assertTrue(round_reset["cancels_pending_round_start_timers"])
@@ -913,7 +932,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 13)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 14)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
