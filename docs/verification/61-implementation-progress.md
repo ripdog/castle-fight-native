@@ -322,7 +322,7 @@ Pending:
 
 ## Step 8 — Split simulation responsibilities without changing phase semantics
 
-Status: **in progress**
+Status: **complete**
 
 Completed subsystem commits:
 
@@ -339,6 +339,11 @@ Completed subsystem commits:
 - `ea78725` — `refactor(sim): move target search helpers`
 - `cadddef` — `refactor(sim): isolate combat and bounce helpers`
 - `c66601b` — `refactor(sim): isolate combat and projectile resolution`
+- `260334b` — `refactor(sim): isolate movement coordinator`
+- `f025d9e` — `refactor(sim): isolate movement routing`
+- `4427138` — `refactor(sim): isolate movement collision resolution`
+- `b62f369` — `refactor(sim): move movement traversal helpers`
+- `e3de965` — `refactor(sim): consolidate movement internals`
 
 Implemented so far:
 
@@ -358,7 +363,11 @@ Implemented so far:
 - extracted attack intent creation, uphill miss/evasion/passive proc resolution, cooldown/sequence updates, and launch-request generation into `simulation/combat.rs`;
 - extracted Chain Lightning staged hops, guaranteed-hit/reflected/bounce projectile impacts, post-movement ballistic impacts, Burning Oil zone resolution, projectile snapshot collection, bounce target selection, and deferred ECS projectile commits/spawns into `simulation/projectiles.rs`;
 - preserved the coordinator's critical projectile ordering: staged Chain Lightning and target-tracking projectile impacts before ordinary attacks, movement before ballistic impacts, and all projectile ECS removals/updates/spawns deferred until the original structural-commit point;
-- reduced `simulation.rs` further to roughly 5.6k lines without changing authoritative schemas, tick phase ordering, or gameplay behavior.
+- reduced `simulation.rs` further to roughly 5.6k lines without changing authoritative schemas, tick phase ordering, or gameplay behavior;
+- extracted the complete navigation/movement phase into `simulation/movement.rs`: movement intent orchestration and metrics, pursuit/A* cache use, targetless lane ingress and horizontal objective routing, air routing, radius-aware attack-position search, crowd separation, hard non-overlap commitment, traversability checks, deterministic sidestep/avoidance steering, and movement-only support types/math;
+- preserved the explicit coordinator phase boundary between ordinary combat, movement/collision commitment, and post-movement ballistic impacts; the coordinator is now roughly 500 lines and `simulation.rs` roughly 4.1k lines including the public facade, shared state/views, spawn/production plumbing, and common geometry helpers;
+- retained shared point/building geometry in the parent facade where it is also consumed by builder logic rather than forcing cross-subsystem ownership;
+- confirmed the resolved-spawn requirement remains satisfied by the earlier `ResolvedUnitDefinition`/`spawn_resolved_unit` work and its direct-spawn/production equivalence regression.
 
 Compatibility/state changes:
 
@@ -377,18 +386,19 @@ Executed verification:
 - focused attack regressions: **33 passed** after combat intent/evasion/passive-effect extraction;
 - focused projectile regressions: **11 passed** throughout projectile extraction, including reflection, bounce identity, projectile-carried bash, target invalidation, ballistic move-in/move-out behavior, and the Step 7 projectile snapshot continuation fixture;
 - focused staged Chain Lightning regressions: **2 passed**, including worker-count independence;
+- focused movement/status regressions: **8 passed** after movement coordinator/routing consolidation;
+- focused pursuit/radius-aware routing regressions: **10 passed** after traversal helper extraction;
+- focused crowd/non-overlap regressions: **2 passed**, including worker-count independence and converging-crowd non-overlap commitment;
 - Step 7 snapshot/driver snapshot regressions remained green throughout the extraction;
 - after each completed lifecycle boundary, `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
 - after each completed lifecycle boundary, `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
-- `tools/cargo-interactive check -p castle-fight-client -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed after the completed economy/builder/construction tranche;
+- `tools/cargo-interactive check -p castle-fight-client -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed after the completed economy/builder/construction tranche and again after the final navigation/movement tranche;
 - `cargo fmt --all` and `git diff --check`: passed.
 
 Pending:
 
-- continue extracting cohesive gameplay subsystems from `simulation.rs` one at a time while preserving the explicit tick phase order;
-- construction/builders/economy, abilities/statuses, and targeting/combat/projectiles are complete; the next targeted ownership boundary is navigation/movement;
-- use the Step 7 restore/replay fixtures plus the full worker-count determinism suite as regression guards after each move.
+- none for Step 8; speculative indexing/performance changes remain intentionally separate from this mechanical ownership refactor.
 
 ## Next action
 
-Continue Step 8 with the navigation/movement subsystem extraction, without changing gameplay rules or phase order.
+Begin Step 9 with the minimal authoritative server/protocol work, using the Step 7 snapshot/replay boundary and the now-explicit Step 8 simulation phases.
