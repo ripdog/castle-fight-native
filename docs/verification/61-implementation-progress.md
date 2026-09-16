@@ -232,6 +232,52 @@ Pending:
 - actual connection events are still external to the simulation; Step 6/10 will represent their gameplay effects through the canonical control/command stream rather than direct runtime calls;
 - generated local WC3 unit/building packs must be regenerated after this Step 5 code is merged so existing two-colour packs gain the complete Team Glow set.
 
+## Step 6 — Canonical commands and local execution path
+
+Status: **implemented and verified**
+
+Step commits:
+
+- `9eac5d0` — `sim: add canonical player command driver`
+- `6edd05e` — `client: route gameplay input through match driver`
+- `e739cfc` — `docs: define canonical command stream boundary`
+- `29a8c2a` — `content: pin catalog gameplay projections` (post-rebase compatibility fix for extractor report-schema expansion; gameplay bundle identity unchanged)
+
+Implemented:
+
+- added explicit `PlayerCommand` variants for every currently exposed ordinary player action: builder move/follow/stop/blink/repair/repair-autocast, building placement/cancellation/upgrade, and permitted manual building attack targeting; ordinary combat units still expose no player-authored order surface;
+- commands contain stable entity/content IDs and deterministic coordinates only. `PlaceBuilding` carries a stable `CastleFightBuildingId` plus integer build-grid position; authoritative execution resolves authored footprint, costs, stats, and components from the selected immutable content bundle;
+- separated admission from execution-time validation. Admission rejects invalid phase/player/control/content/catalog/upgrade/coordinate requests, while execution rechecks mutable ownership, resources, occupancy, targets, and placement state and returns structured deterministic outcomes without partial mutation;
+- added `ClientCommandSequence`, canonical within-tick `CommandOrder`, `ScheduledCommand`, explicit `FinalizedTickInputs` including empty ticks, and monotonic `InputStreamPosition` records;
+- added duplicate/retry identity, conflicting-duplicate rejection, sequence-gap/stale detection, finalized-bundle preflight, unknown-player rejection, and duplicate-sequence rejection before any command in a malformed finalized tick can mutate state;
+- added gameplay-relevant boundary control records for connection transitions and terminal match controls. Pause does not advance simulation ticks and does not prevent canonical reconnect/resume/end controls from applying at completed boundaries;
+- introduced shared `MatchDriver`, used by the local client and suitable for later server/replay feeding. It owns command admission/scheduling, finalized tick execution, stream continuity, per-player sequence tracking, control history, and execution acknowledgements;
+- migrated normal client keyboard/mouse/action-panel/Smart/build/upgrade/cancel/autocast actions to `MatchDriver` submission. The presentation may preview affordability/placement but does not mutate authoritative gameplay before its finalized tick; execution/rejection feedback is published after the canonical tick;
+- kept F8/debug cheats and playback controls explicitly outside the normal player-command role; raw gameplay mutation helpers are crate-internal where practical;
+- pending builder build orders now reserve their footprints for placement validation, making same-tick build contention canonical and atomic: the earlier command reserves/spends, the later conflicting command rejects without being charged;
+- hardened command coordinates: build footprints use checked arithmetic and extreme point distances use widened arithmetic with saturating `u64` results, so malformed inputs reject deterministically rather than depending on debug/release overflow behavior;
+- recorded driver-owned stream position, future/pending commands, sequence/dedup state, and history boundary as Step 7 snapshot/replay continuity state rather than silently folding transport history into the gameplay checksum;
+- corrected the retained 9.27 catalog guard after concurrent extractor work added report-only tier columns. The runtime now parses the affected aggregate TSVs by field name and fingerprints only their gameplay-consumed projections, while direct source evidence remains byte-pinned. The retained/current projections are identical, so `cf-native-dev-slice-r2` and its gameplay bundle hash remain unchanged.
+
+Compatibility/state changes:
+
+- canonical simulation checksum schema remains revision 5; Step 6 adds authoritative driver/stream continuity outside `Simulation`, to be captured explicitly by Step 7 snapshots/replay boundaries;
+- `catalog-source-r1.json` schema is revision 2 because its evidence fingerprint now distinguishes gameplay projection from report-only schema growth; this does **not** change the selected 9.27 gameplay content revision or bundle identity.
+
+Executed verification after rebasing onto `af7d571`:
+
+- `python -m unittest tools/wc3-map/test_build_runtime_catalog.py`: **4 passed**;
+- `tools/cargo-interactive test -p castle-fight-client`: **108 passed**;
+- `tools/cargo-interactive test -p castle-fight-sim`: **234 passed**;
+- command/driver regressions cover explicit empty ticks, duplicate retry/no double charge, conflicting duplicates, sequence gaps, unknown players, duplicate sequence inside one finalized bundle, same-input worker-count agreement, pause/resume/end controls, atomic same-site build contention, authorization, malformed build positions, and execution-time resource rejection;
+- `tools/cargo-interactive clippy -p castle-fight-sim -p castle-fight-client --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed;
+- `cargo fmt --all` and `git diff --check`: passed.
+
+Pending:
+
+- Step 7 must snapshot/restore the driver continuity boundary (stream position, per-player sequence state, admitted future commands, and the required history/dedup boundary) together with logical simulation state so restore cannot lose or double-apply an already scheduled command.
+
 ## Next action
 
-Step 6: define canonical typed player commands and finalized tick inputs, introduce the local match driver, and migrate all ordinary client input away from direct simulation mutation.
+Step 7: implement logical authoritative snapshots, deterministic restore, replay history/checkpoints, and continuation equivalence using the completed Step 1 inventory and Step 6 canonical stream.
