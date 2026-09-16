@@ -328,33 +328,46 @@ Completed subsystem commits:
 
 - `e0a1021` — `refactor(sim): extract canonical checksum coordinator`
 - `d00a087` — `refactor(sim): isolate canonical state encoding`
+- `58cde4c` — `refactor(sim): isolate economy subsystem`
+- `92ce1c4` — `refactor(sim): isolate builder command lifecycle`
+- `fff4fce` — `refactor(sim): move builder tick phase`
+- `3d80efd` — `refactor(sim): isolate construction lifecycle`
 
 Implemented so far:
 
 - extracted immutable configuration identity, complete live canonical checksum encoding, canonical entity forms, hashing helpers, and their checksum-focused regression tests into `simulation/canonical.rs`;
 - kept snapshot capture/restore in its existing sibling module while making it consume the canonical entity representation directly, so Step 7 persistence remains the shared equivalence boundary rather than duplicating state definitions;
 - reduced `simulation.rs` by roughly 1,430 canonical-state/checksum lines without altering the tick coordinator, phase ordering, authoritative schema, gameplay behavior, or public API;
-- moved canonical checksum tests beside the subsystem they exercise.
+- moved canonical checksum tests beside the subsystem they exercise;
+- extracted per-player resource views, affordability, raw/taxed income calculation, payout timing, and developer grants into `simulation/economy.rs` without changing the existing income phase position;
+- extracted builder ownership/delegation, command/order lifecycle, paid build-order commitment/refunds, builder spawn/configuration, and the complete per-tick builder movement/follow/repair/autocast/build handoff into `simulation/builder.rs`;
+- extracted building spawn/activation, placement validation, construction, cancellation, upgrades, precursor runtime restoration, and construction completion into `simulation/construction.rs`, while leaving shared build-region geometry in the parent facade for the builder/construction boundary;
+- kept the tick coordinator's calls to builder advancement and construction completion in their original order, including the topology refresh immediately after builder/construction changes;
+- reduced `simulation.rs` further from roughly 10.7k lines after the canonical extraction to roughly 8.6k lines without changing public behavior.
 
 Compatibility/state changes:
 
 - none; canonical checksum schema remains revision 5 and snapshot/replay schemas remain revision 1;
 - no content identity, command semantics, phase ordering, or gameplay rule changed.
 
-Executed verification for the canonical-state extraction:
+Executed verification:
 
 - focused canonical checksum regressions: **6 passed**;
-- Step 7 snapshot/driver snapshot regressions remained green during the extraction;
-- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
-- `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
+- focused economy regressions: **3 passed**;
+- focused builder/control regressions: **16 passed** after both the command-lifecycle and tick-phase moves;
+- focused construction regressions: **3 passed**, including the Step 7 construction snapshot continuation fixture;
+- Step 7 snapshot/driver snapshot regressions remained green throughout the extraction;
+- after each completed lifecycle boundary, `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
+- after each completed lifecycle boundary, `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-client -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed after the completed economy/builder/construction tranche;
 - `cargo fmt --all` and `git diff --check`: passed.
 
 Pending:
 
 - continue extracting cohesive gameplay subsystems from `simulation.rs` one at a time while preserving the explicit tick phase order;
-- construction/builders/economy is the next targeted ownership boundary, followed by abilities/statuses, targeting/combat/projectiles, and navigation/movement;
+- construction/builders/economy is complete; the next targeted ownership boundary is abilities/statuses, followed by targeting/combat/projectiles and navigation/movement;
 - use the Step 7 restore/replay fixtures plus the full worker-count determinism suite as regression guards after each move.
 
 ## Next action
 
-Continue Step 8 with the construction/builders/economy subsystem extraction, without changing gameplay rules or phase order.
+Continue Step 8 with the abilities/statuses subsystem extraction, without changing gameplay rules or phase order.
