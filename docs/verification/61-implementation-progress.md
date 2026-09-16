@@ -332,6 +332,8 @@ Completed subsystem commits:
 - `92ce1c4` — `refactor(sim): isolate builder command lifecycle`
 - `fff4fce` — `refactor(sim): move builder tick phase`
 - `3d80efd` — `refactor(sim): isolate construction lifecycle`
+- `7d06e42` — `refactor(sim): isolate status effect machinery`
+- `a7d4d3e` — `refactor(sim): isolate automatic abilities`
 
 Implemented so far:
 
@@ -343,7 +345,10 @@ Implemented so far:
 - extracted builder ownership/delegation, command/order lifecycle, paid build-order commitment/refunds, builder spawn/configuration, and the complete per-tick builder movement/follow/repair/autocast/build handoff into `simulation/builder.rs`;
 - extracted building spawn/activation, placement validation, construction, cancellation, upgrades, precursor runtime restoration, and construction completion into `simulation/construction.rs`, while leaving shared build-region geometry in the parent facade for the builder/construction boundary;
 - kept the tick coordinator's calls to builder advancement and construction completion in their original order, including the topology refresh immediately after builder/construction changes;
-- reduced `simulation.rs` further from roughly 10.7k lines after the canonical extraction to roughly 8.6k lines without changing public behavior.
+- reduced `simulation.rs` further from roughly 10.7k lines after the canonical extraction to roughly 8.6k lines without changing public behavior;
+- extracted timed status insertion/refresh/expiry, periodic damage-over-time resolution, Frost Armor reactive slows, spell effect application, armor/cooldown adjustment helpers, and related status mutation into `simulation/status.rs`;
+- extracted the complete automatic spell phase into `simulation/abilities.rs`: parallel caster evaluation, deterministic random/friendly target selection, canonical intent ordering/revalidation, mana/cooldown/cast-sequence mutation, effect application, and presentation cast events;
+- preserved the coordinator's existing status-before-ability phase sequence and deterministic target ranking while reducing `simulation.rs` to roughly 7.7k lines.
 
 Compatibility/state changes:
 
@@ -356,6 +361,8 @@ Executed verification:
 - focused economy regressions: **3 passed**;
 - focused builder/control regressions: **16 passed** after both the command-lifecycle and tick-phase moves;
 - focused construction regressions: **3 passed**, including the Step 7 construction snapshot continuation fixture;
+- focused automatic-spell regressions: **3 passed**, including worker-count independence, exact mana/cooldown timing, and spell-kill suppression of later ordinary attacks;
+- status behavior remained covered by the full suite, including timed movement modifier stacking/refresh/expiry, Entangling Roots DOT, Frost Armor behavior, global stun timing, and worker-count determinism;
 - Step 7 snapshot/driver snapshot regressions remained green throughout the extraction;
 - after each completed lifecycle boundary, `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
 - after each completed lifecycle boundary, `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
@@ -365,9 +372,9 @@ Executed verification:
 Pending:
 
 - continue extracting cohesive gameplay subsystems from `simulation.rs` one at a time while preserving the explicit tick phase order;
-- construction/builders/economy is complete; the next targeted ownership boundary is abilities/statuses, followed by targeting/combat/projectiles and navigation/movement;
+- construction/builders/economy and abilities/statuses are complete; the next targeted ownership boundary is targeting/combat/projectiles, followed by navigation/movement;
 - use the Step 7 restore/replay fixtures plus the full worker-count determinism suite as regression guards after each move.
 
 ## Next action
 
-Continue Step 8 with the abilities/statuses subsystem extraction, without changing gameplay rules or phase order.
+Continue Step 8 with the targeting/combat/projectiles subsystem extraction, without changing gameplay rules or phase order.
