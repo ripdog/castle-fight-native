@@ -320,6 +320,41 @@ Pending:
 - network/on-disk bounded encoding remains intentionally deferred to the protocol/server work; Step 7 establishes the logical state and replay boundary it will encode;
 - snapshot transfer/history retention and live-subscription handoff are Step 10 reconnect/resynchronization responsibilities.
 
+## Step 8 — Split simulation responsibilities without changing phase semantics
+
+Status: **in progress**
+
+Completed subsystem commits:
+
+- `e0a1021` — `refactor(sim): extract canonical checksum coordinator`
+- `d00a087` — `refactor(sim): isolate canonical state encoding`
+
+Implemented so far:
+
+- extracted immutable configuration identity, complete live canonical checksum encoding, canonical entity forms, hashing helpers, and their checksum-focused regression tests into `simulation/canonical.rs`;
+- kept snapshot capture/restore in its existing sibling module while making it consume the canonical entity representation directly, so Step 7 persistence remains the shared equivalence boundary rather than duplicating state definitions;
+- reduced `simulation.rs` by roughly 1,430 canonical-state/checksum lines without altering the tick coordinator, phase ordering, authoritative schema, gameplay behavior, or public API;
+- moved canonical checksum tests beside the subsystem they exercise.
+
+Compatibility/state changes:
+
+- none; canonical checksum schema remains revision 5 and snapshot/replay schemas remain revision 1;
+- no content identity, command semantics, phase ordering, or gameplay rule changed.
+
+Executed verification for the canonical-state extraction:
+
+- focused canonical checksum regressions: **6 passed**;
+- Step 7 snapshot/driver snapshot regressions remained green during the extraction;
+- `tools/cargo-interactive test -p castle-fight-sim`: **240 passed**;
+- `tools/cargo-interactive clippy -p castle-fight-sim --all-targets -- -D warnings`: passed;
+- `cargo fmt --all` and `git diff --check`: passed.
+
+Pending:
+
+- continue extracting cohesive gameplay subsystems from `simulation.rs` one at a time while preserving the explicit tick phase order;
+- construction/builders/economy is the next targeted ownership boundary, followed by abilities/statuses, targeting/combat/projectiles, and navigation/movement;
+- use the Step 7 restore/replay fixtures plus the full worker-count determinism suite as regression guards after each move.
+
 ## Next action
 
-Step 8: split `simulation.rs` incrementally without changing phase semantics, beginning with a narrow cohesive subsystem extraction and using the Step 7 restore/replay fixtures as equivalence guards.
+Continue Step 8 with the construction/builders/economy subsystem extraction, without changing gameplay rules or phase order.
