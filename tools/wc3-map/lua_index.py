@@ -4065,8 +4065,29 @@ def _w3p_vm_static_strings(data: bytes, vm_index: int) -> list[str]:
     payload = data[table_start + len(b"_s={"):table_end]
     if not payload:
         return []
+    expressions: list[bytes] = []
+    expression_start = 0
+    in_string = False
+    escaped = False
+    for index, value in enumerate(payload):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif value == ord("\\"):
+                escaped = True
+            elif value == ord('"'):
+                in_string = False
+        elif value == ord('"'):
+            in_string = True
+        elif value == ord(";"):
+            expressions.append(payload[expression_start:index])
+            expression_start = index + 1
+    if in_string or escaped:
+        raise ValueError(f"W3P VM {vm_index} has unterminated static string entry")
+    expressions.append(payload[expression_start:])
+
     rows: list[str] = []
-    for expression in payload.split(b";"):
+    for expression in expressions:
         match = re.fullmatch(rb'"((?:\\.|[^"\\])*)"', expression)
         if match is None:
             raise ValueError(f"W3P VM {vm_index} has non-literal static string entry")
@@ -5759,6 +5780,10 @@ def _extract_runtime_mode_mechanics(
         "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect",
         "ModeParser_startModeSelectionTimer__w3p_vmProtect",
         "ModeParser_startModeSelectionTimerInternal", "ModeParser_cancelModeSelectionTimer",
+        "startCustomMode__w3p_vmProtect", "startLadderModes__w3p_vmProtect", "clearHostSelectedModes__w3p_vmProtect",
+        "FrameHandleListener_onClick_Campaign_onEvent_onClick_Campaign1",
+        "FrameHandleListener_onClick_Campaign_onEvent_onClick_Campaign2",
+        "ArgHandler_addCommand_Commands_handleArgs_addCommand_Commands13",
         "resetRaceBanModes__w3p_vmProtect", "clearRememberedRaceBans__w3p_vmProtect",
         "rememberRaceBan__w3p_vmProtect", "findUltimateBuilderRaceSlot__w3p_vmProtect",
         "getUltimateRaceChoiceIndex__w3p_vmProtect", "removeUltimateFromPool__w3p_vmProtect",
@@ -6049,6 +6074,104 @@ def _extract_runtime_mode_mechanics(
     }
     if any(vm77_by_pc.get(pc) != instruction for pc, instruction in expected_vm77.items()):
         raise ValueError("ModeParser VM77 selected/default start control flow changed")
+
+    mode_entry_wrappers = {
+        "startCustomMode__w3p_vmProtect": b"function startCustomMode__w3p_vmProtect(n7p)return _qr(37,n7p)end",
+        "startLadderModes__w3p_vmProtect": b"function startLadderModes__w3p_vmProtect(o7p)return _qr(38,o7p)end",
+        "clearHostSelectedModes__w3p_vmProtect": b"function clearHostSelectedModes__w3p_vmProtect(mkq)return _qr(40,mkq)end",
+    }
+    mode_entry_starts: list[int] = []
+    for name, expected_source in mode_entry_wrappers.items():
+        entry_start, entry_source = body(name)
+        mode_entry_starts.append(entry_start)
+        if entry_source != expected_source:
+            raise ValueError(f"protected mode-entry wrapper changed: {name}")
+
+    ladder_click_start, ladder_click_source = body("FrameHandleListener_onClick_Campaign_onEvent_onClick_Campaign1")
+    if b"startLadderModes__w3p_vmProtect(GNl.owner)" not in ladder_click_source or b"closeStartDialog()" not in ladder_click_source:
+        raise ValueError("ladder start-dialog click path changed")
+    custom_click_start, custom_click_source = body("FrameHandleListener_onClick_Campaign_onEvent_onClick_Campaign2")
+    if b"startCustomMode__w3p_vmProtect(INl.owner)" not in custom_click_source or b"closeStartDialog()" not in custom_click_source:
+        raise ValueError("custom-mode start-dialog click path changed")
+    reset_command_start, reset_command_source = body("ArgHandler_addCommand_Commands_handleArgs_addCommand_Commands13")
+    if b"clearHostSelectedModes__w3p_vmProtect(JTl)" not in reset_command_source:
+        raise ValueError("host selected-mode reset command dispatch changed")
+
+    custom_mode_static = _w3p_vm_static_strings(data, 37)
+    custom_mode_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 37)
+    ]
+    if custom_mode_static != [
+        "CampaignRuntime_isCampaignFlowActive", "Welcome to |cFFFFCC00Castle Fight|r!", "60.",
+        "Mode flow: |cFFFFCC00custom mode selection|r is active.",
+        "Host: type a mode string to start, e.g. |cFFFFCC00-pr1-ur-na-ntb-it7-glw30|r, or |cFFFFCC00-w3c|r for default ladder modes.",
+        "Host helpers: |cFFFFCC00-mode|r previews selected modes, |cFFFFCC00-skip|r starts after a base mode, |cFFFFCC00-reset|r clears accidental modes.",
+        "aqb",
+    ]:
+        raise ValueError(f"custom-mode entry VM37 static values changed: {custom_mode_static}")
+    if custom_mode_globals != ["__wurst_ensureStr", "player_print", "U1", "ModeParser_startModeSelectionTimer__w3p_vmProtect"]:
+        raise ValueError(f"custom-mode entry VM37 globals changed: {custom_mode_globals}")
+    custom_mode_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 37, expected_opcode_xor_byte=173)["instructions"]
+    ]
+    if custom_mode_program != [
+        (224, ()), (24, (2,)), (224, ()), (24, (3,)), (224, ()), (24, (4,)), (224, ()), (24, (5,)),
+        (253, (1,)), (224, ()), (18, (16,)), (10, (0, 1)), (221, ()),
+        (156, (0,)), (251, (7,)),
+        (46, (2,)), (42, (1, 17)), (24, (2,)), (218, (2,)), (218, (3,)), (253, (2,)), (144, (3,)), (98, (48,)),
+        (46, (4,)), (42, (1, 17)), (24, (3,)), (218, (2,)), (218, (3,)), (253, (3,)), (144, (3,)), (98, (48,)),
+        (46, (5,)), (42, (1, 17)), (24, (4,)), (218, (2,)), (218, (3,)), (253, (4,)), (144, (3,)), (98, (48,)),
+        (46, (6,)), (42, (1, 17)), (24, (5,)), (218, (2,)), (218, (3,)), (253, (5,)), (144, (3,)), (98, (48,)),
+        (253, (1,)), (42, (4, 16)), (221, ()),
+    ]:
+        raise ValueError("custom-mode entry protected VM37 changed")
+
+    ladder_mode_static = _w3p_vm_static_strings(data, 38)
+    ladder_mode_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 38)
+    ]
+    if ladder_mode_static != ["CampaignRuntime_isCampaignFlowActive", "-w3c", "aqb"]:
+        raise ValueError(f"ladder-mode entry VM38 static values changed: {ladder_mode_static}")
+    if ladder_mode_globals != ["ModeParser_parseMode__w3p_vmProtect", "ClearTextMessages"]:
+        raise ValueError(f"ladder-mode entry VM38 globals changed: {ladder_mode_globals}")
+    ladder_mode_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 38, expected_opcode_xor_byte=167)["instructions"]
+    ]
+    if ladder_mode_program != [
+        (253, (1,)), (224, ()), (18, (16,)), (10, (0, 1)), (221, ()),
+        (156, (0,)), (251, (3,)), (46, (2,)), (42, (1, 16)), (42, (2, 0)), (221, ()),
+    ]:
+        raise ValueError("ladder-mode entry protected VM38 changed")
+
+    host_reset_static = _w3p_vm_static_strings(data, 40)
+    host_reset_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 40)
+    ]
+    if host_reset_static != [
+        "0", "0.", "|cffC6FF00Mode selection reset.|r The host must enter modes again; the timer has restarted.",
+    ]:
+        raise ValueError(f"host mode-reset VM40 static values changed: {host_reset_static}")
+    if host_reset_globals != [
+        "V1", "Ocb", "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect",
+        "__wurst_safe_DisplayTimedTextToPlayer", "U1", "H1",
+    ]:
+        raise ValueError(f"host mode-reset VM40 globals changed: {host_reset_globals}")
+    host_reset_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 40, expected_opcode_xor_byte=147)["instructions"]
+    ]
+    if host_reset_program != [
+        (253, (1,)), (218, (1,)), (144, (1,)), (162, ()), (18, (16,)), (236, ()), (24, (2,)),
+        (253, (2,)), (124, (0, 5)), (218, (2,)), (240, (0, 2)), (253, (2,)), (10, (0, 1)), (221, ()),
+        (253, (1,)), (42, (3, 17)), (10, (0, 14)),
+        (218, (4,)), (218, (5,)), (144, (2,)), (144, (2,)), (218, (6,)), (46, (3,)), (98, (80,)), (221, ()),
+    ]:
+        raise ValueError("host mode-reset protected VM40 changed")
 
     protected_mode_wrappers = {
         "resetRaceBanModes__w3p_vmProtect": b"function resetRaceBanModes__w3p_vmProtect()return _qr(74)end",
@@ -6342,6 +6465,35 @@ def _extract_runtime_mode_mechanics(
             "default_draft_handoff_condition": "T8 or PGb",
             "default_draft_handoff": "startDefaultDraft__w3p_vmProtect",
             "ordinary_game_handoff": "startGame",
+            "start_dialog_custom_mode_vm": 37,
+            "start_dialog_custom_mode_requires_non_null_owner": True,
+            "start_dialog_custom_mode_clears_campaign_flow_flag_aqb": True,
+            "start_dialog_custom_mode_message_seconds": 60,
+            "start_dialog_custom_mode_messages": [
+                "Welcome to |cFFFFCC00Castle Fight|r!",
+                "Mode flow: |cFFFFCC00custom mode selection|r is active.",
+                "Host: type a mode string to start, e.g. |cFFFFCC00-pr1-ur-na-ntb-it7-glw30|r, or |cFFFFCC00-w3c|r for default ladder modes.",
+                "Host helpers: |cFFFFCC00-mode|r previews selected modes, |cFFFFCC00-skip|r starts after a base mode, |cFFFFCC00-reset|r clears accidental modes.",
+            ],
+            "start_dialog_custom_mode_message_target_symbol": "U1",
+            "start_dialog_custom_mode_handoff": "ModeParser_startModeSelectionTimer__w3p_vmProtect(owner)",
+            "start_dialog_custom_mode_timer_uses_non_manual_entry": True,
+            "start_dialog_ladder_mode_vm": 38,
+            "start_dialog_ladder_mode_requires_non_null_owner": True,
+            "start_dialog_ladder_mode_clears_campaign_flow_flag_aqb": True,
+            "start_dialog_ladder_mode_parse_string": "-w3c",
+            "start_dialog_ladder_mode_parser": "ModeParser_parseMode__w3p_vmProtect",
+            "start_dialog_ladder_mode_clears_text_messages_after_parse": True,
+            "start_dialog_buttons_close_start_dialog_after_dispatch": True,
+            "campaign_flow_active_symbol": "aqb",
+            "host_selected_mode_reset_vm": 40,
+            "host_selected_mode_reset_requires_host_V1_0": True,
+            "host_selected_mode_reset_rejects_finalized_selection_Ocb": True,
+            "host_selected_mode_reset_handoff": "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect",
+            "host_selected_mode_reset_message_only_after_successful_restart": True,
+            "host_selected_mode_reset_message": "|cffC6FF00Mode selection reset.|r The host must enter modes again; the timer has restarted.",
+            "host_selected_mode_reset_message_target_symbol": "U1",
+            "host_selected_mode_reset_message_duration_symbol": "H1",
             "mode_reset_command": "-reset",
             "protected_mode_reset_command_vm": 78,
             "protected_parse_mode_vm": 79,
@@ -6404,15 +6556,20 @@ def _extract_runtime_mode_mechanics(
             start_selected_name, "ModeParser_isModeResetCommand__w3p_vmProtect", "ModeParser_parseMode__w3p_vmProtect",
             "ModeParser_resetSelectedModesForReentry__w3p_vmProtect", "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect",
             "ModeParser_startModeSelectionTimer__w3p_vmProtect", "ModeParser_startModeSelectionTimerInternal",
+            "startCustomMode__w3p_vmProtect", "startLadderModes__w3p_vmProtect", "clearHostSelectedModes__w3p_vmProtect",
+            "FrameHandleListener_onClick_Campaign_onEvent_onClick_Campaign1",
+            "FrameHandleListener_onClick_Campaign_onEvent_onClick_Campaign2",
+            "ArgHandler_addCommand_Commands_handleArgs_addCommand_Commands13",
             "resetRaceBanModes__w3p_vmProtect", "clearRememberedRaceBans__w3p_vmProtect", "rememberRaceBan__w3p_vmProtect",
             "findUltimateBuilderRaceSlot__w3p_vmProtect", "getUltimateRaceChoiceIndex__w3p_vmProtect",
             "removeUltimateFromPool__w3p_vmProtect", "applyUltimateInPool", "setArtilleryModeAbilityIds",
             "clearPresetRaceAssignments", "syncArtilleryModeAvailability", *callback_functions,
         ],
-        "evidence_kind": "exact-readable-mode-registry-plus-statically-decoded-vm74-82-84-85-90-selection-reset-and-race-pool-control-flow",
+        "evidence_kind": "exact-readable-mode-registry-plus-statically-decoded-vm37-38-40-74-82-84-85-90-start-selection-reset-and-race-pool-control-flow",
         "byte_offset": min(
             initializer_start, listener_start, parse_start, start_selected_start, timer_internal_start,
-            apply_ultimate_start, *protected_mode_starts,
+            apply_ultimate_start, ladder_click_start, custom_click_start, reset_command_start,
+            *mode_entry_starts, *protected_mode_starts,
         ),
     }]
 

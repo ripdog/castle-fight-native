@@ -2607,6 +2607,26 @@ def main() -> None:
                         or parameters.get("ordinary_game_handoff") != "startGame"
                     ):
                         raise ValueError(f"runtime mode protected start/finalization semantics changed: {parameters}")
+                    if (
+                        parameters.get("start_dialog_custom_mode_vm") != 37
+                        or parameters.get("start_dialog_custom_mode_clears_campaign_flow_flag_aqb") is not True
+                        or parameters.get("start_dialog_custom_mode_message_seconds") != 60
+                        or parameters.get("start_dialog_custom_mode_handoff") != "ModeParser_startModeSelectionTimer__w3p_vmProtect(owner)"
+                        or parameters.get("start_dialog_custom_mode_timer_uses_non_manual_entry") is not True
+                        or parameters.get("start_dialog_ladder_mode_vm") != 38
+                        or parameters.get("start_dialog_ladder_mode_clears_campaign_flow_flag_aqb") is not True
+                        or parameters.get("start_dialog_ladder_mode_parse_string") != "-w3c"
+                        or parameters.get("start_dialog_ladder_mode_parser") != "ModeParser_parseMode__w3p_vmProtect"
+                        or parameters.get("start_dialog_ladder_mode_clears_text_messages_after_parse") is not True
+                        or parameters.get("start_dialog_buttons_close_start_dialog_after_dispatch") is not True
+                        or parameters.get("campaign_flow_active_symbol") != "aqb"
+                        or parameters.get("host_selected_mode_reset_vm") != 40
+                        or parameters.get("host_selected_mode_reset_requires_host_V1_0") is not True
+                        or parameters.get("host_selected_mode_reset_rejects_finalized_selection_Ocb") is not True
+                        or parameters.get("host_selected_mode_reset_handoff") != "ModeParser_clearSelectedModesAndRestart__w3p_vmProtect"
+                        or parameters.get("host_selected_mode_reset_message_only_after_successful_restart") is not True
+                    ):
+                        raise ValueError(f"runtime mode protected start-dialog/reset entry semantics changed: {parameters}")
                     expected_reset_defaults = {
                         "T8": False, "S8": True, "R8": 0, "U9": True, "PGb": False, "DGb": False, "IGb": False,
                         "LGb": -1, "KGb": 0, "MGb": "", "MX": 250, "LX": 125, "KX": 1, "JGb": 0, "EX": -1,
