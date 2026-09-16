@@ -2659,6 +2659,55 @@ def main() -> None:
                         or parameters.get("ultimate_remove_disables_builder_choice_ability_for_player_ids") != [0, 11]
                     ):
                         raise ValueError(f"runtime mode protected reset/race-pool semantics changed: {parameters}")
+                    ultimate_roll = parameters.get("ultimate_roll_runtime", {})
+                    if (
+                        ultimate_roll.get("enter_rect_symbol") != "uIb"
+                        or ultimate_roll.get("builder_rawcode") != "X075"
+                        or int(ultimate_roll.get("builder_rawcode_integer", -1)) != 1479554869
+                        or ultimate_roll.get("filter_removes_marker_rawcode") != "nfbr"
+                        or ultimate_roll.get("ultimate_draft_flag_symbol") != "T8"
+                        or ultimate_roll.get("ordinary_roll_function") != "rollForPlayer"
+                        or ultimate_roll.get("ultimate_draft_function") != "setUltimateDraftForPlayer"
+                        or ultimate_roll.get("authored_tier_pool_symbol") != "btb[tier_index]"
+                        or ultimate_roll.get("active_tier_pool_symbol") != "atb[tier_index]"
+                        or ultimate_roll.get("authored_legendary_pool_symbol") != "Ysb"
+                        or ultimate_roll.get("active_legendary_pool_symbol") != "Xsb"
+                        or numeric(ultimate_roll.get("ordinary_roll_refreshes_pool_when_elapsed_delta_gt")) != 2
+                        or ultimate_roll.get("race_registration_vm") != 1
+                        or ultimate_roll.get("race_registration_requires_non_null_tier_before_pool_insert") is not True
+                        or ultimate_roll.get("race_registration_excludes_campaign_only_races_from_pool_insert") is not True
+                        or ultimate_roll.get("add_to_pool_vm") != 6
+                        or ultimate_roll.get("legendary_pool_requires_is_legendary_line") is not True
+                        or ultimate_roll.get("legendary_pool_excluded_building_rawcode") != "h063"
+                        or int(ultimate_roll.get("legendary_pool_excluded_building_rawcode_integer", -1)) != 1747990067
+                        or ultimate_roll.get("treasure_box_rawcode") != "h008"
+                        or ultimate_roll.get("treasure_box_tier_hotkey") != "V"
+                        or int(ultimate_roll.get("treasure_box_authored_pool_copies", -1)) != 10
+                        or ultimate_roll.get("ordinary_roll_draws_one_random_active_legendary_first_when_available") is not True
+                        or ultimate_roll.get("ordinary_roll_removes_first_legendary_tier_from_remaining_tiers") is not True
+                        or ultimate_roll.get("ordinary_roll_removes_first_legendary_from_its_active_tier_pool") is not True
+                        or ultimate_roll.get("ordinary_roll_then_draws_at_most_one_random_entry_from_each_remaining_nonempty_tier") is not True
+                        or ultimate_roll.get("ordinary_roll_tier_draw_is_without_replacement_within_active_pool_epoch") is not True
+                        or ultimate_roll.get("ordinary_roll_tier_drawn_legendary_is_removed_from_active_legendary_pool") is not True
+                        or ultimate_roll.get("ordinary_roll_selected_lines_recursively_include_upgrade_lines") is not True
+                        or ultimate_roll.get("ultimate_draft_reuses_existing_player_draft_buildings") is not True
+                        or ultimate_roll.get("ultimate_draft_recursively_includes_upgrade_lines") is not True
+                        or ultimate_roll.get("ultimate_draft_adds_missing_upgrade_lines_back_to_player_building_list") is not True
+                    ):
+                        raise ValueError(f"runtime mode Ultimate Roll semantics changed: {ultimate_roll}")
+                    if ultimate_roll.get("current_mode_eligibility") != {
+                        "nil_building_is_disallowed": True,
+                        "treasure_box_disallowed_when_symbol_zX": True,
+                        "artillery_disallowed_when_symbol_AX": True,
+                        "na_only_disallowed_when_symbol_AX_is_false": True,
+                        "positive_lumber_cost_disallowed_when_symbol_xX_is_false": True,
+                        "positive_lumber_cost_exception_treasure_box": True,
+                        "positive_lumber_cost_exception_placement_strategy_1": True,
+                    }:
+                        raise ValueError(
+                            f"runtime mode Ultimate Roll current-mode eligibility changed: "
+                            f"{ultimate_roll.get('current_mode_eligibility')}"
+                        )
                 elif (
                     parameters.get("detection_player_id") != 23
                     or parameters.get("detection_player_name") != "FLO"
@@ -6622,7 +6671,7 @@ def main() -> None:
             "perk-mechanics.tsv now normalizes all 19/19 protected-registry draft perks. Script control flow remains authoritative where it disagrees with display text: Towerless retains its 45-DPS item text beside the protected Tiny Watch Tower's 53-DPS weapon, Production Enchantment applies separately rounded 0.95 then 1.15 scaling with explicit life-adjustment semantics, and Longline Formation preserves the generated weapon-index-1 range-write quirk rather than silently implementing the tooltip's intended weapon-0 +90 range",
             "runtime-ai-mechanics.tsv separates AI decision/observation semantics from authoritative combat rewrites. It preserves the 2-second/0.8 decayed engagement centroid and structure-pressure signals, the staggered 1-second AI executor FSM tick, the damage-triggered Rescue Strike controller with its HP/count threshold curve and protected A005 runtime fields, and the exact I00A/I003 strategic-aura purchase observer used to coordinate team AI buying state across human and AI purchases",
             "runtime-session-mechanics.tsv normalizes live player-session behavior that changes authoritative control or match flow: No-AFK automatic idle detection/AWAY control sharing with 20/30/60/120-second thresholds and round-end shutdown; the three leave-autobalance modes (asset redistribution, dependent-slot sharing, AI takeover) plus delayed team-empty match resolution; unanimous-draw round cleanup/restart without setting a match winner; and the exact 15-second one-second-tick round-review gate before next-round dispatch",
-            "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, Ultimate-roll building-availability reset, the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
+            "runtime-mode-mechanics.tsv recovers the complete 44-entry host-selected mode registry from the readable ModeParser initializer, including exact IDs/names/descriptions/value bounds, Start Resource g/l/u validation, generated closure-class to callback-function mappings, callback direct-call evidence, host-chat append parser gates/conflict handling, round-end next-round dispatch, the full Ultimate Roll pool lifecycle (VM1/VM6 campaign-only and legendary-pool gates, ten V-tier Treasure Box entries, mode-filtered active pools, legendary-first no-replacement draws, and Ultimate Draft upgrade closure), the 0.25-second lumber clamp, and the 0.1-second race ban/draft/pick polling timers",
             "runtime-campaign-mechanics.tsv normalizes campaign challenge/runtime flow: tracked player-built building loss fails challenge_no_buildings_lost, a challenge-bound player item purchase fails challenge_no_items, protected VM block 23 drives the exact 0.25-second fast-win/castle-health tracker, and survival missions use a 1-second countdown that records victory then kills the campaign owner's castle at expiry",
             "runtime-draft-mechanics.tsv now includes the statically decoded default-draft layout and exact readable pack lifecycle: the 11 authored BuildingTier hotkeys, explicit removal of empty V/Trb, one-time Fisher-Yates pairing of the remaining ten tiers into five Rfb/Pfb pairs, per-start shuffle of five building rounds plus one perk round, exact pack counts/labels, per-tier without-replacement draw pools with separate returned-pack recycling, reroll replacement-before-return ordering, immediate building/perk pick application, AI/AWAY/AFK and timeout random autopicks, round-end preservation of the initial tier pairing, the three 1-second draft controller timers, and round-start reapplication of already-earned perk reminder abilities",
             "runtime-system-mechanics.tsv normalizes gameplay systems that cut across ordinary unit/spell rows, including Power Plant spawn augmentation/freeze cleanup, Heroic Shrine companion spawning, Golden Shrine revival, Blood Fiend procedural bodies/traits, player-issued combat-unit order suppression/restoration with escalating control penalties, first-15-second castle protection, Eye of Corruption's B00Q-gated 12% positive non-attack damage amplification, and Obelisk of Light's persistent Phoenix Fire cleanse carrier. Runtime probabilities and script/object discrepancies are preserved instead of silently flattened, and Blood Fiend body stats use protected UnitStat values rather than poisoned static object fields",

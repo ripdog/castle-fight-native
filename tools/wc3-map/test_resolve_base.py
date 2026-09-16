@@ -1024,6 +1024,46 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(parameters["ultimate_race_choice_index_vm"], 90)
         self.assertEqual(parameters["ultimate_remove_vm"], 76)
         self.assertEqual(parameters["ultimate_remove_disables_builder_choice_ability_for_player_ids"], [0, 11])
+        ultimate_roll = parameters["ultimate_roll_runtime"]
+        self.assertEqual(ultimate_roll["builder_rawcode"], "X075")
+        self.assertEqual(ultimate_roll["filter_removes_marker_rawcode"], "nfbr")
+        self.assertEqual(ultimate_roll["ordinary_roll_function"], "rollForPlayer")
+        self.assertEqual(ultimate_roll["ultimate_draft_function"], "setUltimateDraftForPlayer")
+        self.assertEqual(ultimate_roll["authored_tier_pool_symbol"], "btb[tier_index]")
+        self.assertEqual(ultimate_roll["active_tier_pool_symbol"], "atb[tier_index]")
+        self.assertEqual(ultimate_roll["authored_legendary_pool_symbol"], "Ysb")
+        self.assertEqual(ultimate_roll["active_legendary_pool_symbol"], "Xsb")
+        self.assertEqual(ultimate_roll["ordinary_roll_refreshes_pool_when_elapsed_delta_gt"], 2)
+        self.assertEqual(ultimate_roll["race_registration_vm"], 1)
+        self.assertTrue(ultimate_roll["race_registration_requires_non_null_tier_before_pool_insert"])
+        self.assertTrue(ultimate_roll["race_registration_excludes_campaign_only_races_from_pool_insert"])
+        self.assertEqual(ultimate_roll["add_to_pool_vm"], 6)
+        self.assertEqual(ultimate_roll["legendary_pool_excluded_building_rawcode"], "h063")
+        self.assertEqual(ultimate_roll["treasure_box_rawcode"], "h008")
+        self.assertEqual(ultimate_roll["treasure_box_tier_hotkey"], "V")
+        self.assertEqual(ultimate_roll["treasure_box_authored_pool_copies"], 10)
+        self.assertTrue(ultimate_roll["ordinary_roll_draws_one_random_active_legendary_first_when_available"])
+        self.assertTrue(ultimate_roll["ordinary_roll_removes_first_legendary_tier_from_remaining_tiers"])
+        self.assertTrue(ultimate_roll["ordinary_roll_removes_first_legendary_from_its_active_tier_pool"])
+        self.assertTrue(ultimate_roll["ordinary_roll_then_draws_at_most_one_random_entry_from_each_remaining_nonempty_tier"])
+        self.assertTrue(ultimate_roll["ordinary_roll_tier_draw_is_without_replacement_within_active_pool_epoch"])
+        self.assertTrue(ultimate_roll["ordinary_roll_tier_drawn_legendary_is_removed_from_active_legendary_pool"])
+        self.assertTrue(ultimate_roll["ordinary_roll_selected_lines_recursively_include_upgrade_lines"])
+        self.assertTrue(ultimate_roll["ultimate_draft_reuses_existing_player_draft_buildings"])
+        self.assertTrue(ultimate_roll["ultimate_draft_recursively_includes_upgrade_lines"])
+        self.assertTrue(ultimate_roll["ultimate_draft_adds_missing_upgrade_lines_back_to_player_building_list"])
+        self.assertEqual(
+            ultimate_roll["current_mode_eligibility"],
+            {
+                "nil_building_is_disallowed": True,
+                "treasure_box_disallowed_when_symbol_zX": True,
+                "artillery_disallowed_when_symbol_AX": True,
+                "na_only_disallowed_when_symbol_AX_is_false": True,
+                "positive_lumber_cost_disallowed_when_symbol_xX_is_false": True,
+                "positive_lumber_cost_exception_treasure_box": True,
+                "positive_lumber_cost_exception_placement_strategy_1": True,
+            },
+        )
 
         w3c = json.loads(rows["w3champions-ladder-bootstrap"]["parameters_json"])
         self.assertEqual(w3c["detection_player_id"], 23)

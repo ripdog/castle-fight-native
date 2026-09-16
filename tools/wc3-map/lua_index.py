@@ -5896,6 +5896,11 @@ def _extract_runtime_mode_mechanics(
         "getUltimateRaceChoiceIndex__w3p_vmProtect", "removeUltimateFromPool__w3p_vmProtect",
         "applyUltimateInPool", "setArtilleryModeAbilityIds", "clearPresetRaceAssignments",
         "syncArtilleryModeAvailability", "startDefaultDraft__w3p_vmProtect", "startGame",
+        "main", "aD", "bD", "cD", "pO", "qO", "rO", "sO", "uO", "XE",
+        "resetPool", "isBuildingAllowedForCurrentModes",
+        "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools",
+        "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools2",
+        "CFRace_CFRace_registerBuildings__w3p_vmProtect", "addToPool__w3p_vmProtect",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -5903,6 +5908,19 @@ def _extract_runtime_mode_mechanics(
     def body(name: str) -> tuple[int, bytes]:
         row = functions_by_name[name]
         return int(row["start"]), data[int(row["start"]):int(row["end"])]
+
+    def decode_cached_keyed_name(cache_index: int) -> str:
+        index = str(cache_index).encode("ascii")
+        match = re.search(
+            rb"_d\[" + index + rb"\]or _y\(" + index
+            + rb',_T\(([0-9]+),"([0-9a-fA-F]+)"\)\)',
+            data,
+        )
+        if match is None:
+            raise ValueError(f"mode runtime protected registry cache entry changed: {cache_index}")
+        return _decode_w3p_keyed_hex_string(
+            int(match.group(1)), match.group(2), 11351, 1106
+        )
 
     initializer_start, initializer = body(initializer_name)
     listener_start, listener = body(listener_name)
@@ -6498,6 +6516,217 @@ def _extract_runtime_mode_mechanics(
         if fragment not in apply_ultimate_source:
             raise ValueError(f"Ultimate-in-pool enable path changed: missing {fragment!r}")
 
+    ultimate_cached_names = {
+        2414: "rollUltimateBuildings",
+        7366: "CFBuilding_new_CFBuilding1",
+        7368: "code__addAction_UltimateRoll",
+        7375: "setUltimateDraftForPlayer",
+        7376: "rollForPlayer",
+        7377: "player_resetBuildings",
+        7379: "allowBuildingAndUpgs",
+        7380: "createTextForTier",
+        7381: "createPerkText",
+        7382: "player_resetBuildings",
+        7383: "allowBuildingAndUpgs",
+        7384: "createTextForTier",
+        7385: "allowBuildingAndUpgs",
+        7386: "createTextForTier",
+        7387: "createPerkText",
+        7388: "allowBuildingAndUpgs",
+    }
+    for cache_index, expected_name in ultimate_cached_names.items():
+        actual_name = decode_cached_keyed_name(cache_index)
+        if actual_name != expected_name:
+            raise ValueError(
+                f"Ultimate Roll protected registry entry {cache_index} changed: {actual_name!r} != {expected_name!r}"
+            )
+
+    main_start, main_source = body("main")
+    roll_enter_start, roll_enter_source = body("aD")
+    roll_filter_start, roll_filter_source = body("bD")
+    roll_action_start, roll_action_source = body("cD")
+    ultimate_init_start, ultimate_init_source = body("pO")
+    ultimate_dispatch_start, ultimate_dispatch_source = body("qO")
+    ultimate_draft_start, ultimate_draft_source = body("rO")
+    ultimate_roll_start, ultimate_roll_source = body("sO")
+    allow_line_start, allow_line_source = body("uO")
+    pool_storage_start, pool_storage_source = body("XE")
+    reset_pool_start, reset_pool_source = body("resetPool")
+    allowed_pool_start, allowed_pool_source = body("isBuildingAllowedForCurrentModes")
+    tier_filter_start, tier_filter_source = body("LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools")
+    legendary_filter_start, legendary_filter_source = body("LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools2")
+
+    for fragment in (
+        b"__wurst_safe_TriggerRegisterEnterRectSimple(EFb,uIb)",
+        b"_d[2608]", b"_d[2614]",
+    ):
+        if fragment not in main_source:
+            raise ValueError(f"Ultimate Builder enter-rect trigger registration changed: missing {fragment!r}")
+    for fragment in (
+        b"if(not(__wurst_safe_GetUnitTypeId(Rgo)==1479554869))then return end",
+        b"Sgo=__wurst_safe_GetOwningPlayer(Rgo)", b"tFb=Sgo __wurst_safe_TriggerExecute(uFb)",
+    ):
+        if fragment not in roll_enter_source:
+            raise ValueError(f"Ultimate Builder roll dispatch changed: missing {fragment!r}")
+    for fragment in (
+        b"__wurst_safe_GetUnitTypeId(_br())==1852203634", b"__wurst_safe_RemoveUnit(_br())",
+        b"return(__wurst_safe_GetUnitTypeId(_br())==1479554869)",
+    ):
+        if fragment not in roll_filter_source:
+            raise ValueError(f"Ultimate Builder enter-rect filter changed: missing {fragment!r}")
+    if b"_d[2414]" not in roll_action_source:
+        raise ValueError("Ultimate Builder enter-rect action stopped dispatching rollUltimateBuildings")
+
+    tier_hotkey_match = re.search(
+        rb'_d\[7367\]or _y\(7367,(_T\("[^"]+"\))\)',
+        ultimate_init_source,
+    )
+    if tier_hotkey_match is None:
+        raise ValueError("Ultimate Roll Treasure Box tier protected string changed")
+    treasure_box_tier_hotkey = _decode_w3p_global_name(tier_hotkey_match.group(1), 11351, 1106)
+    if treasure_box_tier_hotkey != "V":
+        raise ValueError(f"Ultimate Roll Treasure Box tier changed: {treasure_box_tier_hotkey!r}")
+    for fragment in (
+        b"fS=LinkedList_new_LinkedList()", b"(1747988536)", b"CFBuilding_CFBuilding_tier(jbs,",
+        b"eS=jbs", b"lbs=0 while true do if(lbs>9)then break end",
+        b"addToPool__w3p_vmProtect(eS)",
+    ):
+        if fragment not in ultimate_init_source:
+            raise ValueError(f"Ultimate Roll pool initialization changed: missing {fragment!r}")
+    for fragment in (
+        b"btb[0]=LinkedList_new_LinkedList()", b"atb[0]=LinkedList_new_LinkedList()",
+        b"Zsb[0]=LinkedList_new_LinkedList()", b"Ysb=LinkedList_new_LinkedList()",
+        b"Xsb=LinkedList_new_LinkedList()", b"Wsb=(-1000.)",
+    ):
+        if fragment not in pool_storage_source:
+            raise ValueError(f"Ultimate Roll pool storage initialization changed: missing {fragment!r}")
+    for fragment in (
+        b"if T8 then", b"_d[7375]", b"(tFb)", b"if((Jcb-Wsb)>2.)then resetPool()end", b"_d[7376]",
+    ):
+        if fragment not in ultimate_dispatch_source:
+            raise ValueError(f"Ultimate Roll mode dispatch changed: missing {fragment!r}")
+    for fragment in (
+        b"tbs=ctb[player_getId(sbs)]", b"ubs=LinkedList_new_LinkedList()", b"_d[7379]", b"_d[7380]",
+        b"__wurst_safe_SetPlayerTechMaxAllowed(sbs,ybs.CFBuilding_buildingId,getBuildingTechMaxAllowedForCurrentModes(ybs))",
+        b"if(not LinkedList_LinkedList_has(tbs,Abs))then LinkedList_LinkedList_add(tbs,Abs)end",
+        b"_d[7381]", b"enforceFortifiedOutpostTechAvailability(sbs)",
+    ):
+        if fragment not in ultimate_draft_source:
+            raise ValueError(f"Ultimate Draft building availability path changed: missing {fragment!r}")
+    for fragment in (
+        b"LinkedList_LinkedList_add(Obs,Pbs)", b"if(not(Pbs.CFBuilding_upgrades==nil))then",
+        b"ArrayList_ArrayList_get(Pbs.CFBuilding_upgrades,Qbs)", b"_d[7388]",
+    ):
+        if fragment not in allow_line_source:
+            raise ValueError(f"Ultimate Roll recursive upgrade closure changed: missing {fragment!r}")
+    for fragment in (
+        b"LinkedList_LinkedList_clear(fS)", b"LinkedList_LinkedList_addAll(fS,Srb)",
+        b"LinkedList_destroyLinkedList(ctb[player_getId(Bbs)])", b"ctb[player_getId(Bbs)]=Cbs",
+        b"LinkedList_LinkedList_removeAt(Xsb,_Ir(0,(LinkedList_LinkedList_size(Xsb)-1)))",
+        b"LinkedList_LinkedList_remove(fS,Dbs.CFBuilding_tier_field)",
+        b"LinkedList_LinkedList_remove(atb[Dbs.CFBuilding_tier_field.BuildingTier_index],Dbs)",
+        b"Gbs=atb[Fbs.BuildingTier_index]", b"LinkedList_LinkedList_removeAt(Gbs,_Ir(0,(LinkedList_LinkedList_size(Gbs)-1)))",
+        b"if Hbs.CFBuilding_isLegendaryLine_field then LinkedList_LinkedList_remove(Xsb,Hbs)end",
+        b"__wurst_safe_SetPlayerTechMaxAllowed(Bbs,Jbs.CFBuilding_buildingId,getBuildingTechMaxAllowedForCurrentModes(Jbs))",
+        b"enforceFortifiedOutpostTechAvailability(Bbs)",
+    ):
+        if fragment not in ultimate_roll_source:
+            raise ValueError(f"Ultimate Roll random building selection changed: missing {fragment!r}")
+    for fragment in (
+        b"Wsb=Jcb", b"LinkedList_LinkedList_clear(atb[ZEp.BuildingTier_index])",
+        b"LinkedList_LinkedList_forEach(btb[ZEp.BuildingTier_index],aFp)",
+        b"LinkedList_LinkedList_clear(Xsb)", b"LinkedList_LinkedList_forEach(Ysb,YEp)",
+    ):
+        if fragment not in reset_pool_source:
+            raise ValueError(f"Ultimate Roll active-pool reset changed: missing {fragment!r}")
+    if (
+        b"if isBuildingAllowedForCurrentModes(IMk)then LinkedList_LinkedList_add(atb[HMk.tier.BuildingTier_index],IMk)end"
+        not in tier_filter_source
+        or b"if isBuildingAllowedForCurrentModes(OMk)then LinkedList_LinkedList_add(Xsb,OMk)end"
+        not in legendary_filter_source
+    ):
+        raise ValueError("Ultimate Roll current-mode pool filtering changed")
+    for fragment in (
+        b"if(MEp==nil)then return false end", b"(MEp.CFBuilding_buildingId==1747988536)and zX",
+        b"MEp.CFBuilding_isArtillery_field and AX", b"MEp.CFBuilding_isNAOnly_field and(not AX)",
+        b"(MEp.CFBuilding_lumberCost>0)and(not xX)", b"MEp.CFBuilding_placementStrat_field==1",
+    ):
+        if fragment not in allowed_pool_source:
+            raise ValueError(f"Ultimate Roll current-mode eligibility changed: missing {fragment!r}")
+
+    race_registrar_start, race_registrar_source = body("CFRace_CFRace_registerBuildings__w3p_vmProtect")
+    add_to_pool_start, add_to_pool_source = body("addToPool__w3p_vmProtect")
+    if race_registrar_source != b"function CFRace_CFRace_registerBuildings__w3p_vmProtect(oVk,...)return _qr(1,oVk,...)end":
+        raise ValueError("Ultimate Roll race-registration protected VM1 wrapper changed")
+    if add_to_pool_source != b"function addToPool__w3p_vmProtect(VEp)return _qr(6,VEp)end":
+        raise ValueError("Ultimate Roll addToPool protected VM6 wrapper changed")
+
+    race_pool_static = _w3p_vm_static_strings(data, 1)
+    race_pool_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 1)
+    ]
+    if race_pool_static != [
+        "CFRace_builderId", "pack", "0", "n", "1", "CFBuilding_buildingId", "CFBuilding_goldCost",
+        "CFBuilding_income", "CFBuilding_incomeDelta", "CFBuilding_givesLumber", "CFBuilding_isSiege_field",
+        "CFBuilding_tier_field", "CFRace_isCampaignOnly",
+    ]:
+        raise ValueError(f"Ultimate Roll race-registration VM1 static values changed: {race_pool_static}")
+    if race_pool_globals != [
+        "beginCFRaceBuildingRegistration__w3p_vmProtect", "recordCFRaceBuilding__w3p_vmProtect",
+        "CFRace_CFRace_addBuilding", "buildingTypeIndex", "lIb", "kIb", "bvb", "jIb", "iIb",
+        "addToPool__w3p_vmProtect", "finishCFRaceBuildingRegistration__w3p_vmProtect",
+    ]:
+        raise ValueError(f"Ultimate Roll race-registration VM1 globals changed: {race_pool_globals}")
+    vm1 = _decode_w3p_vm_program(data, 1, expected_opcode_xor_byte=197)
+    if vm1["operand_mode"] != 5:
+        raise ValueError(f"Ultimate Roll race-registration VM1 operand mode changed: {vm1['operand_mode']}")
+    vm1_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm1["instructions"]
+    }
+    expected_vm1_pool_gate = {
+        106: (241, (3, 12)), 109: (224, ()), 110: (18, (16,)), 112: (236, ()), 113: (24, (6,)),
+        115: (253, (6,)), 117: (10, (0, 7)), 120: (241, (1, 13)), 123: (236, ()),
+        124: (240, (0, 2)), 127: (253, (6,)), 129: (10, (0, 5)), 132: (253, (3,)),
+        134: (42, (10, 16)),
+    }
+    if any(vm1_by_pc.get(pc) != instruction for pc, instruction in expected_vm1_pool_gate.items()):
+        raise ValueError("Ultimate Roll race-registration VM1 tier/campaign-only pool gate changed")
+
+    pool_static = _w3p_vm_static_strings(data, 6)
+    pool_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 6)
+    ]
+    if pool_static != [
+        "CFBuilding_tier_field", "BuildingTier_index", "CFBuilding_isLegendaryLine_field",
+        "CFBuilding_buildingId", "1747990067",
+    ]:
+        raise ValueError(f"Ultimate Roll addToPool VM6 static values changed: {pool_static}")
+    if pool_globals != [
+        "assertCFBuildingAllowedInPool__w3p_vmProtect", "btb", "LinkedList_LinkedList_add", "Ysb",
+    ]:
+        raise ValueError(f"Ultimate Roll addToPool VM6 globals changed: {pool_globals}")
+    vm6 = _decode_w3p_vm_program(data, 6, expected_opcode_xor_byte=53)
+    if vm6["operand_mode"] != 2:
+        raise ValueError(f"Ultimate Roll addToPool VM6 operand mode changed: {vm6['operand_mode']}")
+    vm6_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in vm6["instructions"]
+    }
+    expected_vm6_pool_flow = {
+        1: (253, (1,)), 3: (42, (1, 16)), 33: (218, (2,)), 35: (241, (1, 1)),
+        38: (51, (2,)), 40: (162, ()), 48: (218, (3,)), 50: (218, (2,)), 52: (241, (1, 1)),
+        55: (51, (2,)), 57: (162, ()), 58: (253, (1,)), 60: (98, (32,)),
+        62: (241, (1, 3)), 65: (24, (3,)), 67: (253, (3,)), 69: (10, (0, 11)),
+        72: (241, (1, 4)), 75: (144, (5,)), 77: (18, (16,)), 79: (236, ()),
+        83: (253, (3,)), 85: (10, (0, 8)), 88: (218, (3,)), 90: (218, (4,)),
+        92: (253, (1,)), 94: (98, (32,)),
+    }
+    if any(vm6_by_pc.get(pc) != instruction for pc, instruction in expected_vm6_pool_flow.items()):
+        raise ValueError("Ultimate Roll addToPool VM6 tier/legendary pool flow changed")
+
     mode_reset_defaults = {
         "T8": False, "S8": True, "R8": 0, "U9": True, "PGb": False, "DGb": False, "IGb": False,
         "LGb": -1, "KGb": 0, "MGb": "", "MX": 250, "LX": 125, "KX": 1, "JGb": 0, "EX": -1,
@@ -6651,8 +6880,69 @@ def _extract_runtime_mode_mechanics(
             "ultimate_remove_disables_builder_choice_ability_for_player_ids": [0, 11],
             "ultimate_remove_clears_KHb": True,
             "ultimate_remove_refreshes_race_ui_outside_test_mode": True,
+            "ultimate_roll_runtime": {
+                "enter_rect_symbol": "uIb",
+                "enter_trigger_symbol": "EFb",
+                "builder_rawcode": "X075",
+                "builder_rawcode_integer": 1479554869,
+                "filter_removes_marker_rawcode": "nfbr",
+                "filter_removes_marker_rawcode_integer": 1852203634,
+                "owner_symbol": "tFb",
+                "roll_trigger_symbol": "uFb",
+                "ultimate_draft_flag_symbol": "T8",
+                "ordinary_roll_function": "rollForPlayer",
+                "ultimate_draft_function": "setUltimateDraftForPlayer",
+                "player_building_list_symbol": "ctb[player_id]",
+                "authored_tier_pool_symbol": "btb[tier_index]",
+                "active_tier_pool_symbol": "atb[tier_index]",
+                "authored_legendary_pool_symbol": "Ysb",
+                "active_legendary_pool_symbol": "Xsb",
+                "pool_last_reset_symbol": "Wsb",
+                "elapsed_game_time_symbol": "Jcb",
+                "ordinary_roll_refreshes_pool_when_elapsed_delta_gt": 2,
+                "pool_reset_rebuilds_active_tier_pools_from_authored_pools": True,
+                "pool_reset_rebuilds_active_legendary_pool_from_authored_pool": True,
+                "pool_reset_filters_each_entry_through_current_mode_eligibility": True,
+                "pool_reset_records_elapsed_game_time_as_last_reset": True,
+                "race_registration_vm": 1,
+                "race_registration_requires_non_null_tier_before_pool_insert": True,
+                "race_registration_excludes_campaign_only_races_from_pool_insert": True,
+                "add_to_pool_vm": 6,
+                "add_to_pool_inserts_into_authored_tier_pool": True,
+                "legendary_pool_requires_is_legendary_line": True,
+                "legendary_pool_excluded_building_rawcode": "h063",
+                "legendary_pool_excluded_building_rawcode_integer": 1747990067,
+                "treasure_box_rawcode": "h008",
+                "treasure_box_rawcode_integer": 1747988536,
+                "treasure_box_tier_hotkey": treasure_box_tier_hotkey,
+                "treasure_box_authored_pool_copies": 10,
+                "current_mode_eligibility": {
+                    "nil_building_is_disallowed": True,
+                    "treasure_box_disallowed_when_symbol_zX": True,
+                    "artillery_disallowed_when_symbol_AX": True,
+                    "na_only_disallowed_when_symbol_AX_is_false": True,
+                    "positive_lumber_cost_disallowed_when_symbol_xX_is_false": True,
+                    "positive_lumber_cost_exception_treasure_box": True,
+                    "positive_lumber_cost_exception_placement_strategy_1": True,
+                },
+                "ordinary_roll_replaces_existing_player_building_list": True,
+                "ordinary_roll_copies_all_building_tiers_before_selection": True,
+                "ordinary_roll_draws_one_random_active_legendary_first_when_available": True,
+                "ordinary_roll_removes_first_legendary_tier_from_remaining_tiers": True,
+                "ordinary_roll_removes_first_legendary_from_its_active_tier_pool": True,
+                "ordinary_roll_then_draws_at_most_one_random_entry_from_each_remaining_nonempty_tier": True,
+                "ordinary_roll_tier_draw_is_without_replacement_within_active_pool_epoch": True,
+                "ordinary_roll_tier_drawn_legendary_is_removed_from_active_legendary_pool": True,
+                "ordinary_roll_selected_lines_recursively_include_upgrade_lines": True,
+                "ordinary_roll_sets_selected_line_tech_max_from_current_modes": True,
+                "ultimate_draft_reuses_existing_player_draft_buildings": True,
+                "ultimate_draft_recursively_includes_upgrade_lines": True,
+                "ultimate_draft_adds_missing_upgrade_lines_back_to_player_building_list": True,
+                "ultimate_draft_sets_selected_line_tech_max_from_current_modes": True,
+                "both_paths_enforce_fortified_outpost_tech_availability": True,
+            },
         },
-        "related_rawcode_ids": [1479554869, 1747988536],
+        "related_rawcode_ids": [1479554869, 1747988536, 1747990067, 1852203634],
         "source_functions": [
             listener_name, parse_name, initializer_name,
             "StartResourceMode_new_StartResourceMode", "StartResourceMode_StartResourceMode_execute",
@@ -6670,12 +6960,22 @@ def _extract_runtime_mode_mechanics(
             "resetRaceBanModes__w3p_vmProtect", "clearRememberedRaceBans__w3p_vmProtect", "rememberRaceBan__w3p_vmProtect",
             "findUltimateBuilderRaceSlot__w3p_vmProtect", "getUltimateRaceChoiceIndex__w3p_vmProtect",
             "removeUltimateFromPool__w3p_vmProtect", "applyUltimateInPool", "setArtilleryModeAbilityIds",
-            "clearPresetRaceAssignments", "syncArtilleryModeAvailability", *callback_functions,
+            "clearPresetRaceAssignments", "syncArtilleryModeAvailability",
+            "CFRace_CFRace_registerBuildings__w3p_vmProtect", "addToPool__w3p_vmProtect",
+            "main", "aD", "bD", "cD", "pO", "qO", "rO", "sO", "uO", "XE",
+            "resetPool", "isBuildingAllowedForCurrentModes",
+            "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools",
+            "LLItrClosure_forEach_BuildingPools_run_forEach_BuildingPools2",
+            *callback_functions,
         ],
-        "evidence_kind": "exact-readable-mode-registry-plus-statically-decoded-vm37-38-40-74-82-84-85-90-start-selection-reset-and-race-pool-control-flow",
+        "evidence_kind": "exact-readable-and-obfuscated-mode-runtime-plus-statically-decoded-vm1-vm6-vm37-38-40-74-82-84-85-90-control-flow",
         "byte_offset": min(
             initializer_start, listener_start, parse_start, start_selected_start, timer_internal_start,
             apply_ultimate_start, ladder_click_start, custom_click_start, reset_command_start,
+            main_start, roll_enter_start, roll_filter_start, roll_action_start, ultimate_init_start,
+            ultimate_dispatch_start, ultimate_draft_start, ultimate_roll_start, allow_line_start,
+            pool_storage_start, reset_pool_start, allowed_pool_start, tier_filter_start, legendary_filter_start,
+            race_registrar_start, add_to_pool_start,
             *mode_entry_starts, *protected_mode_starts,
         ),
     }]
