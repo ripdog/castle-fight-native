@@ -2684,6 +2684,8 @@ def main() -> None:
                 if system_id not in {
                     "campaign-star-restriction-failure-hooks",
                     "campaign-round-start-state-reset",
+                    "campaign-quit-and-replay-control",
+                    "campaign-profile-apply-and-save",
                     "campaign-star-periodic-objectives",
                     "campaign-survival-countdown",
                     "campaign-match-result-bridge",
@@ -2729,6 +2731,36 @@ def main() -> None:
                         or parameters.get("builder_unit_reset") is not None
                     ):
                         raise ValueError(f"campaign round-start state reset changed: {parameters}")
+                elif system_id == "campaign-quit-and-replay-control":
+                    if (
+                        parameters.get("quit_vm_index") != 32
+                        or parameters.get("quit_requires_campaign_active_bqb") is not True
+                        or parameters.get("quit_requires_owner_matches_active_campaign_owner_Ypb") is not True
+                        or parameters.get("quit_rejected_after_match_end_dY") is not True
+                        or parameters.get("quit_round_victory_condition") != "Mission abandoned"
+                        or parameters.get("quit_kills_owner_team_castle_when_present") is not True
+                        or parameters.get("quit_returns_true_after_valid_request_even_if_castle_missing") is not True
+                        or parameters.get("replay_vm_index") != 33
+                        or parameters.get("replay_null_mission_argument_falls_back_to_last_mission_Tpb") is not True
+                        or parameters.get("replay_handoff") != "launchCampaignMission__w3p_vmProtect"
+                        or parameters.get("replay_success_condition") != "bqb and Ypb == owner and Zpb == chosen_mission"
+                        or parameters.get("replay_destroys_all_temporary_copies_before_return") is not True
+                    ):
+                        raise ValueError(f"campaign quit/replay control changed: {parameters}")
+                elif system_id == "campaign-profile-apply-and-save":
+                    if (
+                        parameters.get("apply_wrapper_vm_index") != 34
+                        or parameters.get("apply_profile_lookup") != "getCampaignProfile"
+                        or parameters.get("apply_target") != "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect"
+                        or parameters.get("profile_lookup_lazily_creates_missing_profile") is not True
+                        or parameters.get("save_wrapper_vm_index") != 35
+                        or parameters.get("save_skips_cheat_tainted_campaign_run") is not True
+                        or parameters.get("save_serializes_profile_before_persistence") is not True
+                        or parameters.get("save_key") != "cf_de_campaign_profile_v6"
+                        or parameters.get("save_file_name") != "cf_de_campaign_profile_v6.pld"
+                        or parameters.get("save_destroys_serialized_chunk_after_write") is not True
+                    ):
+                        raise ValueError(f"campaign profile apply/save changed: {parameters}")
                 elif system_id == "campaign-star-periodic-objectives" and parameters.get("period_seconds") != 0.25:
                     raise ValueError(f"campaign challenge polling period changed: {parameters}")
                 elif system_id == "campaign-survival-countdown" and parameters.get("period_seconds") != 1:

@@ -6951,6 +6951,13 @@ def _extract_runtime_campaign_mechanics(
         "giveCampaignSupplyItemToBuilder", "giveCloudStaffToBuilder", "setCampaignAiSpeedBonus",
         "launchCampaignMission__w3p_vmProtect", "resetCampaignRoundStartState__w3p_vmProtect",
         "cancelPendingRoundStartTimers", "setTeamWins", "clearRememberedRaceBans__w3p_vmProtect",
+        "quitCampaignMission__w3p_vmProtect", "replayLastCampaignMission__w3p_vmProtect",
+        "canReplayLastCampaignMission", "rememberCampaignMissionDraft__w3p_vmProtect",
+        "CampaignMissionControls_CampaignMissionControls_confirmQuit",
+        "FrameHandleListener_onClick_CampaignUI_CampaignUI_onEvent_onClick_CampaignUI_CampaignUI2",
+        "applyCampaignProfileToMissions__w3p_vmProtect", "saveCampaignProfile__w3p_vmProtect",
+        "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+        "CampaignSaveData_CampaignSaveData_serializeForCampaignSave", "player_saveData",
     }
     if not required.issubset(functions_by_name):
         return []
@@ -6963,14 +6970,14 @@ def _extract_runtime_campaign_mechanics(
                 raise ValueError(f"runtime campaign mechanic source changed: {name}: missing {fragment!r}")
         return int(row["start"]), body
 
-    def decode_restriction_global(symbol: bytes) -> str:
+    def decode_protected_string_global(symbol: bytes) -> str:
         match = re.search(
             rb"(?<![A-Za-z0-9_])" + symbol
-            + rb'=\(_d\[\d+\]or _y\(\d+,(_T\("(?:\\.|[^"\\])*"\))\)\)',
+            + rb'=\(_d\[\d+\]or _y\(\d+,(_(?:T|r|a|j)\("(?:\\.|[^"\\])*"\))\)\)',
             data,
         )
         if match is None:
-            raise ValueError(f"campaign restriction global assignment changed: {symbol.decode('ascii')}")
+            raise ValueError(f"campaign protected string global assignment changed: {symbol.decode('ascii')}")
         return _decode_w3p_global_name(match.group(1), 11351, 1106)
 
     def decode_cached_keyed_name(cache_index: int) -> str:
@@ -6986,9 +6993,9 @@ def _extract_runtime_campaign_mechanics(
             int(match.group(1)), match.group(2), 11351, 1106
         )
 
-    no_buildings_id = decode_restriction_global(b"arb")
-    no_items_id = decode_restriction_global(b"crb")
-    no_rescue_strike_id = decode_restriction_global(b"brb")
+    no_buildings_id = decode_protected_string_global(b"arb")
+    no_items_id = decode_protected_string_global(b"crb")
+    no_rescue_strike_id = decode_protected_string_global(b"brb")
     if no_buildings_id != "challenge_no_buildings_lost":
         raise ValueError(f"campaign no-buildings restriction id changed: {no_buildings_id!r}")
     if no_items_id != "challenge_no_items":
@@ -7193,6 +7200,273 @@ def _extract_runtime_campaign_mechanics(
         ],
         "evidence_kind": "statically-decoded-vm83-campaign-launch-round-player-state-reset-plus-readable-call-order",
         "byte_offset": min(campaign_reset_wrapper_offset, campaign_launch_offset, cancel_round_timers_offset, team_wins_offset),
+    })
+
+    quit_wrapper = "quitCampaignMission__w3p_vmProtect"
+    quit_wrapper_offset, _quit_wrapper_source = source(
+        quit_wrapper,
+        (b"function quitCampaignMission__w3p_vmProtect(WTp)return _qr(32,WTp)end",),
+    )
+    quit_ui_offset, _quit_ui_source = source(
+        "CampaignMissionControls_CampaignMissionControls_confirmQuit",
+        (b"CampaignMissionControls_CampaignMissionControls_hide(xjl)", b"quitCampaignMission__w3p_vmProtect(xjl.CampaignMissionControls_owner)"),
+    )
+    mission_abandoned_condition = decode_protected_string_global(b"MY")
+    if mission_abandoned_condition != "Mission abandoned":
+        raise ValueError(f"campaign abandoned victory-condition label changed: {mission_abandoned_condition!r}")
+    quit_static = _w3p_vm_static_strings(data, 32)
+    quit_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 32)
+    ]
+    if quit_static != ["|cffff7f7fMission abandoned.|r", "5.", "1", "0"]:
+        raise ValueError(f"campaign quit VM32 static values changed: {quit_static}")
+    if quit_globals != [
+        "bqb", "Ypb", "dY", "player_print", "player_getForce", "nGb", "cX",
+        "noteRoundVictoryCondition", "MY", "__wurst_safe_KillUnit",
+    ]:
+        raise ValueError(f"campaign quit VM32 globals changed: {quit_globals}")
+    quit_vm = _decode_w3p_vm_program(data, 32, expected_opcode_xor_byte=165)
+    if quit_vm["operand_mode"] != 6:
+        raise ValueError(f"campaign quit VM32 operand mode changed: {quit_vm['operand_mode']}")
+    quit_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in quit_vm["instructions"]
+    }
+    expected_quit_vm = {
+        13: (253, (1,)), 15: (224, ()), 16: (18, (16,)),
+        25: (218, (1,)), 27: (236, ()), 40: (218, (2,)), 42: (253, (1,)), 44: (18, (16,)),
+        59: (218, (3,)), 69: (156, (0,)), 71: (243, (1,)),
+        73: (253, (1,)), 75: (46, (1,)), 77: (144, (2,)), 79: (42, (4, 48)),
+        82: (253, (1,)), 84: (42, (5, 17)), 87: (218, (6,)), 89: (18, (16,)),
+        94: (144, (3,)), 101: (144, (4,)), 105: (253, (3,)), 107: (24, (2,)),
+        109: (218, (7,)), 111: (253, (2,)), 113: (162, ()), 114: (24, (4,)),
+        116: (253, (4,)), 118: (224, ()), 119: (18, (16,)), 121: (236, ()),
+        125: (218, (8,)), 127: (218, (9,)), 129: (98, (16,)),
+        131: (253, (4,)), 133: (24, (5,)), 135: (253, (5,)), 137: (42, (10, 16)),
+        140: (156, (1,)), 142: (243, (1,)), 144: (221, ()),
+    }
+    if any(quit_by_pc.get(pc) != instruction for pc, instruction in expected_quit_vm.items()):
+        raise ValueError("campaign quit VM32 control flow changed")
+
+    replay_wrapper = "replayLastCampaignMission__w3p_vmProtect"
+    replay_wrapper_offset, _replay_wrapper_source = source(
+        replay_wrapper,
+        (b"function replayLastCampaignMission__w3p_vmProtect(tUp,uUp)return _qr(33,tUp,uUp)end",),
+    )
+    replay_ui_offset, _replay_ui_source = source(
+        "FrameHandleListener_onClick_CampaignUI_CampaignUI_onEvent_onClick_CampaignUI_CampaignUI2",
+        (
+            b"replayLastCampaignMission__w3p_vmProtect(cHl.this.CampaignUI_owner,Signal_Signal_peek(cHl.this.CampaignUI_selectedMissionState))",
+            b"showCampaignMissionControlsForParty(cHl.this.CampaignUI_owner)", b"CampaignUI_CampaignUI_showTeamScreen(cHl.this)",
+        ),
+    )
+    can_replay_offset, _can_replay_source = source(
+        "canReplayLastCampaignMission",
+        (b"uOp==Upb", b"vOp==Tpb", b"not(Spb==nil)", b"not(Rpb==nil)"),
+    )
+    remembered_draft_offset, _remembered_draft_source = source(
+        "rememberCampaignMissionDraft__w3p_vmProtect",
+        (
+            b"Upb=iOp Tpb=jOp", b"Spb=qOp", b"Rpb=rOp", b"Qpb=sOp", b"Ppb=tOp",
+            b"Opb=max1(0,oOp)", b"Npb=max1(1,min(gqb,pOp))",
+        ),
+    )
+    replay_static = _w3p_vm_static_strings(data, 33)
+    replay_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 33)
+    ]
+    if replay_static != ["No previous campaign team is available. Please assemble the team again.", "6.", "4"]:
+        raise ValueError(f"campaign replay VM33 static values changed: {replay_static}")
+    if replay_globals != [
+        "Tpb", "canReplayLastCampaignMission", "player_print", "LinkedList_LinkedList_copy", "Spb",
+        "ArrayList_ArrayList_copy", "Rpb", "Qpb", "ArrayList_new_ArrayList", "Ppb",
+        "launchCampaignMission__w3p_vmProtect", "Opb", "bqb", "Ypb", "Zpb",
+        "LinkedList_destroyLinkedList", "ArrayList_destroyArrayList",
+    ]:
+        raise ValueError(f"campaign replay VM33 globals changed: {replay_globals}")
+    replay_vm = _decode_w3p_vm_program(data, 33, expected_opcode_xor_byte=187)
+    if replay_vm["operand_mode"] != 0:
+        raise ValueError(f"campaign replay VM33 operand mode changed: {replay_vm['operand_mode']}")
+    replay_by_pc = {
+        int(instruction["pc"]): (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in replay_vm["instructions"]
+    }
+    expected_replay_vm = {
+        28: (253, (2,)), 30: (224, ()), 31: (18, (16,)), 33: (236, ()),
+        37: (253, (2,)), 39: (24, (4,)), 44: (218, (1,)), 46: (24, (4,)), 48: (253, (4,)), 50: (24, (3,)),
+        52: (253, (1,)), 54: (253, (3,)), 56: (42, (2, 33)), 59: (236, ()),
+        63: (253, (1,)), 65: (224, ()), 66: (18, (16,)), 68: (236, ()),
+        72: (253, (1,)), 74: (46, (1,)), 76: (144, (2,)), 78: (42, (3, 48)), 81: (156, (0,)), 83: (243, (1,)),
+        85: (218, (4,)), 87: (218, (5,)), 89: (98, (17,)), 91: (24, (5,)),
+        93: (218, (6,)), 95: (218, (7,)), 97: (98, (17,)), 99: (24, (6,)),
+        101: (218, (8,)), 103: (224, ()), 104: (18, (16,)), 110: (218, (6,)), 112: (218, (8,)), 114: (98, (17,)),
+        121: (144, (3,)), 123: (42, (9, 17)), 132: (218, (10,)), 134: (224, ()), 135: (18, (16,)),
+        141: (218, (6,)), 143: (218, (10,)), 145: (98, (17,)), 152: (144, (3,)), 154: (42, (9, 17)),
+        163: (218, (11,)), 165: (253, (1,)), 167: (253, (3,)), 169: (253, (5,)), 171: (253, (6,)),
+        173: (253, (7,)), 175: (253, (9,)), 177: (218, (12,)), 179: (98, (112,)),
+        181: (218, (13,)), 190: (218, (14,)), 192: (253, (1,)), 194: (18, (16,)),
+        208: (218, (15,)), 210: (253, (3,)), 212: (18, (16,)),
+        221: (253, (5,)), 223: (42, (16, 16)), 226: (253, (6,)), 228: (42, (17, 16)),
+        231: (253, (7,)), 233: (42, (17, 16)), 236: (253, (9,)), 238: (42, (17, 16)),
+        241: (253, (11,)), 243: (243, (1,)), 245: (221, ()),
+    }
+    if any(replay_by_pc.get(pc) != instruction for pc, instruction in expected_replay_vm.items()):
+        raise ValueError("campaign replay VM33 control flow changed")
+
+    rows.append({
+        "system_id": "campaign-quit-and-replay-control",
+        "mechanic_kind": "active-mission-abandonment-and-last-draft-relaunch",
+        "trigger": "campaign-mission-controls-quit-or-result-ui-replay",
+        "parameters": {
+            "quit_vm_index": 32,
+            "quit_requires_non_null_owner": True,
+            "quit_requires_campaign_active_bqb": True,
+            "quit_requires_owner_matches_active_campaign_owner_Ypb": True,
+            "quit_rejected_after_match_end_dY": True,
+            "quit_message": "|cffff7f7fMission abandoned.|r",
+            "quit_message_seconds": 5,
+            "quit_owner_team_formula": "player_getForce(owner) == nGb -> team 1; otherwise team 0",
+            "quit_team_castle_array_symbol": "cX",
+            "quit_round_victory_condition": mission_abandoned_condition,
+            "quit_kills_owner_team_castle_when_present": True,
+            "quit_returns_true_after_valid_request_even_if_castle_missing": True,
+            "replay_vm_index": 33,
+            "replay_null_mission_argument_falls_back_to_last_mission_Tpb": True,
+            "replay_requires_owner_matches_last_owner_Upb": True,
+            "replay_requires_mission_matches_last_mission_Tpb": True,
+            "replay_requires_saved_recruit_list_Spb": True,
+            "replay_requires_saved_race_selection_Rpb": True,
+            "replay_failure_message": "No previous campaign team is available. Please assemble the team again.",
+            "replay_failure_message_seconds": 6,
+            "replay_copies_saved_recruit_list_Spb": True,
+            "replay_copies_saved_race_selection_Rpb": True,
+            "replay_optional_supply_list_Qpb_fallback_capacity": 4,
+            "replay_optional_supply_party_slots_Ppb_fallback_capacity": 4,
+            "replay_passes_saved_star_budget_Opb": True,
+            "replay_handoff": "launchCampaignMission__w3p_vmProtect",
+            "replay_success_condition": "bqb and Ypb == owner and Zpb == chosen_mission",
+            "replay_destroys_all_temporary_copies_before_return": True,
+            "remembered_draft_symbols": {
+                "owner": "Upb", "mission": "Tpb", "ally_recruits": "Spb", "race_selection": "Rpb",
+                "supplies": "Qpb", "supply_party_slots": "Ppb", "star_budget": "Opb", "party_size": "Npb",
+            },
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            quit_wrapper, "CampaignMissionControls_CampaignMissionControls_confirmQuit",
+            replay_wrapper, "FrameHandleListener_onClick_CampaignUI_CampaignUI_onEvent_onClick_CampaignUI_CampaignUI2",
+            "canReplayLastCampaignMission", "rememberCampaignMissionDraft__w3p_vmProtect", "launchCampaignMission__w3p_vmProtect",
+        ],
+        "evidence_kind": "statically-decoded-vm32-vm33-campaign-quit-replay-plus-readable-ui-and-last-draft-state",
+        "byte_offset": min(quit_wrapper_offset, quit_ui_offset, replay_wrapper_offset, replay_ui_offset, can_replay_offset, remembered_draft_offset),
+    })
+
+    profile_apply_wrapper = "applyCampaignProfileToMissions__w3p_vmProtect"
+    profile_apply_offset, _profile_apply_source = source(
+        profile_apply_wrapper,
+        (b"function applyCampaignProfileToMissions__w3p_vmProtect(JVp)return _qr(34,JVp)end",),
+    )
+    profile_lookup_offset, _profile_lookup_source = source(
+        "getCampaignProfile",
+        (
+            b"if(HVp==nil)then return nil", b"npb[IVp]=CampaignSaveData_new_CampaignSaveData(HVp)",
+            b"CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect(npb[IVp])",
+        ),
+    )
+    profile_apply_impl_offset, _profile_apply_impl_source = source(
+        "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+        (b"CampaignMission_beaten", b"CampaignMission_starsEarned", b"CampaignMission_unlocked"),
+    )
+    profile_apply_static = _w3p_vm_static_strings(data, 34)
+    profile_apply_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 34)
+    ]
+    if profile_apply_static != [] or profile_apply_globals != [
+        "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+    ]:
+        raise ValueError(f"campaign profile-apply VM34 payload changed: {profile_apply_static} / {profile_apply_globals}")
+    profile_apply_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 34, expected_opcode_xor_byte=107)["instructions"]
+    ]
+    if profile_apply_program != [
+        (224, ()), (24, (2,)), (253, (1,)), (42, (1, 17)), (24, (2,)),
+        (253, (2,)), (224, ()), (18, (16,)), (236, ()), (10, (0, 5)),
+        (253, (2,)), (42, (2, 16)), (221, ()),
+    ]:
+        raise ValueError("campaign profile-apply VM34 control flow changed")
+
+    profile_save_wrapper = "saveCampaignProfile__w3p_vmProtect"
+    profile_save_offset, _profile_save_source = source(
+        profile_save_wrapper,
+        (b"function saveCampaignProfile__w3p_vmProtect(aWp)return _qr(35,aWp)end",),
+    )
+    profile_serialize_offset, _profile_serialize_source = source(
+        "CampaignSaveData_CampaignSaveData_serializeForCampaignSave",
+        (b"Serializable_Serializable_serialize(s0k)", b"wrapCampaignSaveData(t0k)", b"ChunkedString_destroyChunkedString(t0k)"),
+    )
+    player_save_offset, _player_save_source = source(
+        "player_saveData",
+        (b"if string_endsWith(RHr,\".pld\")", b"File_new_File(THr)", b"File_File_write1(UHr,QHr,SHr)"),
+    )
+    profile_save_key = decode_protected_string_global(b"Apb")
+    if profile_save_key != "cf_de_campaign_profile_v6":
+        raise ValueError(f"campaign profile save key changed: {profile_save_key!r}")
+    profile_save_static = _w3p_vm_static_strings(data, 35)
+    profile_save_globals = [
+        _decode_w3p_global_name(expression, 11351, 1106)
+        for expression in _w3p_vm_global_expressions(data, 35)
+    ]
+    if profile_save_static != [] or profile_save_globals != [
+        "isCampaignRunCheatTainted", "getCampaignProfile", "CampaignSaveData_CampaignSaveData_serializeForCampaignSave",
+        "player_saveData", "Apb", "ChunkedString_destroyChunkedString",
+    ]:
+        raise ValueError(f"campaign profile-save VM35 payload changed: {profile_save_static} / {profile_save_globals}")
+    profile_save_program = [
+        (int(instruction["opcode"]), tuple(int(value) for value in instruction["operands"]))
+        for instruction in _decode_w3p_vm_program(data, 35, expected_opcode_xor_byte=41)["instructions"]
+    ]
+    if profile_save_program != [
+        (224, ()), (24, (2,)), (224, ()), (24, (3,)), (42, (1, 1)), (10, (0, 1)), (221, ()),
+        (253, (1,)), (42, (2, 17)), (24, (2,)), (253, (1,)), (224, ()), (18, (16,)), (24, (4,)),
+        (253, (4,)), (124, (0, 8)), (253, (2,)), (224, ()), (18, (16,)), (240, (0, 2)),
+        (253, (4,)), (10, (0, 1)), (221, ()), (253, (2,)), (42, (3, 17)), (24, (3,)),
+        (218, (4,)), (253, (1,)), (218, (5,)), (253, (3,)), (98, (48,)),
+        (253, (3,)), (42, (6, 16)), (221, ()),
+    ]:
+        raise ValueError("campaign profile-save VM35 control flow changed")
+
+    rows.append({
+        "system_id": "campaign-profile-apply-and-save",
+        "mechanic_kind": "lazy-profile-application-and-cheat-aware-persistent-save",
+        "trigger": "campaign-ui-open-reopen-load-or-progress-persistence",
+        "parameters": {
+            "apply_wrapper_vm_index": 34,
+            "apply_profile_lookup": "getCampaignProfile",
+            "apply_skips_null_profile": True,
+            "apply_target": "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+            "profile_lookup_lazily_creates_missing_profile": True,
+            "profile_lookup_applies_new_profile_once_before_return": True,
+            "profile_application_updates_mission_beaten_stars_unlocks_and_progress_records": True,
+            "save_wrapper_vm_index": 35,
+            "save_skips_cheat_tainted_campaign_run": True,
+            "save_skips_null_player_or_profile": True,
+            "save_serializes_profile_before_persistence": True,
+            "save_key": profile_save_key,
+            "save_file_name": profile_save_key + ".pld",
+            "player_save_data_appends_pld_suffix_when_missing": True,
+            "save_destroys_serialized_chunk_after_write": True,
+        },
+        "related_rawcode_ids": [],
+        "source_functions": [
+            profile_apply_wrapper, "getCampaignProfile", "CampaignSaveData_CampaignSaveData_applyToCampaignMissions__w3p_vmProtect",
+            profile_save_wrapper, "CampaignSaveData_CampaignSaveData_serializeForCampaignSave", "player_saveData",
+        ],
+        "evidence_kind": "statically-decoded-vm34-vm35-profile-apply-save-plus-readable-profile-and-file-helpers",
+        "byte_offset": min(profile_apply_offset, profile_lookup_offset, profile_apply_impl_offset, profile_save_offset, profile_serialize_offset, player_save_offset),
     })
 
     challenge_wrapper = "startCampaignCastleHealthChallenge__w3p_vmProtect"

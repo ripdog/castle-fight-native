@@ -191,7 +191,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["runtime_ai_mechanics"], 5)
         self.assertEqual(summary["runtime_session_mechanics"], 7)
         self.assertEqual(summary["runtime_mode_mechanics"], 2)
-        self.assertEqual(summary["runtime_campaign_mechanics"], 6)
+        self.assertEqual(summary["runtime_campaign_mechanics"], 8)
         self.assertEqual(summary["runtime_draft_mechanics"], 5)
         self.assertEqual(summary["damage_listener_coverage_rows"], 20)
         self.assertEqual(summary["action_watch_coverage_rows"], 43)
@@ -545,6 +545,8 @@ class ResolvedEvidenceTests(unittest.TestCase):
             {
                 "campaign-star-restriction-failure-hooks",
                 "campaign-round-start-state-reset",
+                "campaign-quit-and-replay-control",
+                "campaign-profile-apply-and-save",
                 "campaign-star-periodic-objectives",
                 "campaign-survival-countdown",
                 "campaign-match-result-bridge",
@@ -591,6 +593,27 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertEqual(round_reset["builder_unit_symbol"], "jX")
         self.assertIsNone(round_reset["builder_unit_reset"])
 
+        quit_replay = json.loads(rows["campaign-quit-and-replay-control"]["parameters_json"])
+        self.assertEqual(quit_replay["quit_vm_index"], 32)
+        self.assertTrue(quit_replay["quit_requires_campaign_active_bqb"])
+        self.assertTrue(quit_replay["quit_requires_owner_matches_active_campaign_owner_Ypb"])
+        self.assertEqual(quit_replay["quit_round_victory_condition"], "Mission abandoned")
+        self.assertTrue(quit_replay["quit_kills_owner_team_castle_when_present"])
+        self.assertEqual(quit_replay["replay_vm_index"], 33)
+        self.assertTrue(quit_replay["replay_null_mission_argument_falls_back_to_last_mission_Tpb"])
+        self.assertEqual(quit_replay["replay_handoff"], "launchCampaignMission__w3p_vmProtect")
+        self.assertTrue(quit_replay["replay_destroys_all_temporary_copies_before_return"])
+
+        profile = json.loads(rows["campaign-profile-apply-and-save"]["parameters_json"])
+        self.assertEqual(profile["apply_wrapper_vm_index"], 34)
+        self.assertEqual(profile["apply_profile_lookup"], "getCampaignProfile")
+        self.assertTrue(profile["profile_lookup_lazily_creates_missing_profile"])
+        self.assertEqual(profile["save_wrapper_vm_index"], 35)
+        self.assertTrue(profile["save_skips_cheat_tainted_campaign_run"])
+        self.assertEqual(profile["save_key"], "cf_de_campaign_profile_v6")
+        self.assertEqual(profile["save_file_name"], "cf_de_campaign_profile_v6.pld")
+        self.assertTrue(profile["save_destroys_serialized_chunk_after_write"])
+
         periodic = json.loads(rows["campaign-star-periodic-objectives"]["parameters_json"])
         self.assertEqual(periodic["period_seconds"], 0.25)
         self.assertEqual(periodic["protected_setup_vm_index"], 23)
@@ -636,7 +659,7 @@ class ResolvedEvidenceTests(unittest.TestCase):
         self.assertTrue(supplies["this_function_does_not_directly_add_accumulated_gold_or_lumber"])
 
         summary = json.loads((self.resolved / "summary.json").read_text(encoding="utf-8"))
-        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 6)
+        self.assertEqual(summary["runtime_campaign_mechanic_rows"], 8)
 
     def test_runtime_mode_registry_and_host_chat_parser_are_normalized(self) -> None:
         with (self.resolved / "runtime-mode-mechanics.tsv").open(encoding="utf-8") as handle:
