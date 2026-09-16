@@ -112,6 +112,7 @@ const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
 pub(crate) const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 pub(crate) const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
+const CAMERA_EDGE_SCROLL_MARGIN: f32 = 8.0;
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -445,6 +446,9 @@ impl Default for DebugPresentation {
     }
 }
 
+#[derive(Resource, Default)]
+pub(crate) struct CameraFocusRequest(pub(crate) Option<SimId>);
+
 #[derive(Component)]
 struct RtsCamera {
     focus: Vec3,
@@ -693,6 +697,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<Wc3VisualSet>()
             .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<FpsDisplay>()
+            .init_resource::<CameraFocusRequest>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
@@ -3985,13 +3990,14 @@ struct CameraControlResources<'w> {
     terrain: Res<'w, TerrainSurface>,
     inspection: Option<Res<'w, crate::inspection::InspectionSelection>>,
     samples: Res<'w, PresentationSamples>,
+    camera_focus: ResMut<'w, CameraFocusRequest>,
 }
 
 fn update_camera(
     mut mouse_wheel: MessageReader<MouseWheel>,
     window: Single<&Window, With<PrimaryWindow>>,
     mut camera: Single<(&Camera, &mut RtsCamera, &mut Transform), With<Camera3d>>,
-    resources: CameraControlResources<'_>,
+    mut resources: CameraControlResources<'_>,
 ) {
     let builder_selected = resources
         .inspection
@@ -3999,6 +4005,13 @@ fn update_camera(
         .and_then(|inspection| inspection.selected)
         .is_some_and(|id| resources.samples.current.builders.contains_key(&id));
     let (camera_component, rig, transform) = &mut *camera;
+
+    if let Some(target) = resources.camera_focus.0.take()
+        && let Some(builder) = resources.samples.current.builders.get(&target)
+    {
+        rig.focus = sim_point_to_terrain_world(builder.position, &resources.terrain);
+        rig.grab_anchor = None;
+    }
 
     if resources.mouse_buttons.just_pressed(MouseButton::Middle)
         && let Some(cursor) = window.cursor_position()
@@ -4025,6 +4038,17 @@ fn update_camera(
     }
     if resources.keys.pressed(KeyCode::KeyA) || resources.keys.pressed(KeyCode::ArrowLeft) {
         movement -= right;
+    }
+    if window.focused
+        && !resources.mouse_buttons.pressed(MouseButton::Middle)
+        && let Some(cursor) = window.cursor_position()
+    {
+        let edge = camera_edge_scroll_axes(
+            cursor,
+            Vec2::new(window.width(), window.height()),
+            CAMERA_EDGE_SCROLL_MARGIN,
+        );
+        movement += right * edge.x + forward * edge.y;
     }
     if movement != Vec3::ZERO {
         let pan_speed = rig.distance * 0.65;
@@ -4079,6 +4103,26 @@ fn update_camera(
     rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
 
     **transform = camera_transform(rig);
+}
+
+fn camera_edge_scroll_axes(cursor: Vec2, window_size: Vec2, margin: f32) -> Vec2 {
+    if margin <= 0.0 || window_size.x <= 0.0 || window_size.y <= 0.0 {
+        return Vec2::ZERO;
+    }
+    let mut axes = Vec2::ZERO;
+    if cursor.x <= margin {
+        axes.x -= 1.0;
+    }
+    if cursor.x >= window_size.x - margin {
+        axes.x += 1.0;
+    }
+    if cursor.y <= margin {
+        axes.y += 1.0;
+    }
+    if cursor.y >= window_size.y - margin {
+        axes.y -= 1.0;
+    }
+    axes
 }
 
 pub(crate) fn viewport_ground_point(
@@ -4636,6 +4680,31 @@ mod tests {
         let extracted = wc3_missile_arc_height(start, target, 0.4);
         assert!(extracted > DEFAULT_BALLISTIC_ARC_HEIGHT * 5.0);
         assert!(extracted < 250.0);
+    }
+
+    #[test]
+    fn camera_edge_scroll_axes_follow_screen_edges_and_corners() {
+        let size = Vec2::new(1_440.0, 900.0);
+        assert_eq!(
+            camera_edge_scroll_axes(Vec2::new(4.0, 450.0), size, CAMERA_EDGE_SCROLL_MARGIN),
+            Vec2::new(-1.0, 0.0)
+        );
+        assert_eq!(
+            camera_edge_scroll_axes(Vec2::new(1_436.0, 450.0), size, CAMERA_EDGE_SCROLL_MARGIN),
+            Vec2::new(1.0, 0.0)
+        );
+        assert_eq!(
+            camera_edge_scroll_axes(Vec2::new(720.0, 4.0), size, CAMERA_EDGE_SCROLL_MARGIN),
+            Vec2::new(0.0, 1.0)
+        );
+        assert_eq!(
+            camera_edge_scroll_axes(Vec2::new(4.0, 896.0), size, CAMERA_EDGE_SCROLL_MARGIN),
+            Vec2::new(-1.0, -1.0)
+        );
+        assert_eq!(
+            camera_edge_scroll_axes(Vec2::new(720.0, 450.0), size, CAMERA_EDGE_SCROLL_MARGIN),
+            Vec2::ZERO
+        );
     }
 
     #[test]

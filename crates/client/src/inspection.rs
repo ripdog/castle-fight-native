@@ -1,4 +1,4 @@
-use bevy::{prelude::*, time::Fixed, window::PrimaryWindow};
+use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 use castle_fight_sim::{ArmorType, DamageType, SUBUNITS_PER_WORLD_UNIT, SimId, Team};
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
         unit_visual_center_lerp, viewport_ground_point,
     },
-    resource_ui::TOP_BAR_HEIGHT,
+    resource_ui::{BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts},
     terrain::TerrainSurface,
 };
 
@@ -40,6 +40,15 @@ pub(crate) struct InspectionSelection {
 struct InspectionText;
 
 pub(crate) struct InspectionPlugin;
+
+#[derive(SystemParam)]
+pub(crate) struct WorldSelectionState<'w> {
+    samples: Res<'w, PresentationSamples>,
+    action_panel: Res<'w, ActionPanelState>,
+    playback: Res<'w, SimulationPlayback>,
+    debug_menu: Res<'w, DebugMenuState>,
+    builder_shortcuts: Res<'w, BuilderShortcutState>,
+}
 
 impl Plugin for InspectionPlugin {
     fn build(&self, app: &mut App) {
@@ -100,42 +109,39 @@ pub(crate) fn handle_world_selection(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     world: (Res<Time<Fixed>>, Res<WorldMetrics>, Res<TerrainSurface>),
-    state: (
-        Res<PresentationSamples>,
-        Res<ActionPanelState>,
-        Res<SimulationPlayback>,
-        Res<DebugMenuState>,
-    ),
+    state: WorldSelectionState<'_>,
     mut selection: ResMut<InspectionSelection>,
 ) {
     let (fixed_time, metrics, terrain) = world;
-    let (samples, action_panel, playback, debug_menu) = state;
-    if !mouse_buttons.just_pressed(MouseButton::Left) || action_panel.targeting().is_some() {
+    if !mouse_buttons.just_pressed(MouseButton::Left) || state.action_panel.targeting().is_some() {
         return;
     }
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    let action_panel_visible = action_panel.actor.is_some();
+    let action_panel_visible = state.action_panel.actor.is_some();
     if cursor_over_action_panel(cursor, window.height(), action_panel_visible)
         || cursor_over_inspector_panel(cursor, window.width())
-        || cursor_over_debug_menu(cursor, debug_menu.is_open())
+        || cursor_over_debug_menu(cursor, state.debug_menu.is_open())
+        || cursor_over_builder_shortcuts(cursor, &state.builder_shortcuts)
     {
         return;
     }
     let (camera, camera_transform) = *camera;
-    let alpha = playback.interpolation_alpha(&fixed_time);
+    let alpha = state.playback.interpolation_alpha(&fixed_time);
     let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
         selection.selected = None;
         return;
     };
     if let Some(builder) =
-        pick_builder_on_ray(ray.origin, *ray.direction, &samples, &terrain, alpha)
+        pick_builder_on_ray(ray.origin, *ray.direction, &state.samples, &terrain, alpha)
     {
         selection.selected = Some(builder);
         return;
     }
-    if let Some(unit) = pick_unit_on_ray(ray.origin, *ray.direction, &samples, &terrain, alpha) {
+    if let Some(unit) =
+        pick_unit_on_ray(ray.origin, *ray.direction, &state.samples, &terrain, alpha)
+    {
         selection.selected = Some(unit);
         return;
     }
@@ -143,7 +149,7 @@ pub(crate) fn handle_world_selection(
         selection.selected = None;
         return;
     };
-    selection.selected = pick_building_at_ground(world, &samples, &metrics);
+    selection.selected = pick_building_at_ground(world, &state.samples, &metrics);
 }
 
 fn clear_stale_selection(

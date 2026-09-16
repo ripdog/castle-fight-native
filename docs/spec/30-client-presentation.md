@@ -226,13 +226,15 @@ The camera is purely client-local.
 
 Expected RTS controls may include:
 
-- pan;
+- keyboard pan;
+- screen-edge pan while the client window is focused;
+- middle-mouse drag pan;
 - zoom;
 - optional rotate;
 - jump to castle/important event;
 - follow selected entity.
 
-Camera movement MUST NOT modify the authoritative simulation.
+Screen-edge panning uses a narrow logical-pixel band at each viewport edge, combines both axes at corners, and follows the same camera-relative pan directions/speed as keyboard panning. It is disabled while middle-mouse drag panning is active and when the window is not focused. Camera movement MUST NOT modify the authoritative simulation.
 
 ## 14. Selection/inspection and builder presentation
 

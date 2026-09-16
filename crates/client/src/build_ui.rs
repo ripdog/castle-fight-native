@@ -31,7 +31,7 @@ use crate::{
         WC3_BUILDING_AMBIENT_ANIMATION_SPEED, WC3_MODEL_FACING_OFFSET, WorldMetrics,
         building_terrain_height, draw_footprint_outline, player_color, viewport_ground_point,
     },
-    resource_ui::TOP_BAR_HEIGHT,
+    resource_ui::{BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts},
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey},
     wc3_effects::{Wc3MaterialProcessed, Wc3TeamTint, fix_wc3_scene_materials},
@@ -257,6 +257,7 @@ struct BuildPreviewResources<'w> {
     authoritative: Res<'w, AuthoritativeSimulation>,
     state: Res<'w, ActionPanelState>,
     debug_menu: Res<'w, DebugMenuState>,
+    builder_shortcuts: Res<'w, BuilderShortcutState>,
     selected_match: Res<'w, SelectedMatch>,
     building_models: Res<'w, BuildingModelSet>,
 }
@@ -1082,6 +1083,7 @@ fn update_build_preview(
     if cursor_over_action_panel(cursor, window.height(), resources.state.actor.is_some())
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
+        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
     {
         for (entity, ..) in &mut ghosts {
             commands.entity(entity).despawn();

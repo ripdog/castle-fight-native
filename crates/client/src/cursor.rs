@@ -5,6 +5,7 @@ use crate::{
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     inspection::cursor_over_inspector_panel,
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
+    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts},
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets},
 };
@@ -75,6 +76,7 @@ pub(crate) struct CursorPresentationPlugin;
 struct CursorPresentationResources<'w> {
     action_panel: Res<'w, ActionPanelState>,
     debug_menu: Res<'w, DebugMenuState>,
+    builder_shortcuts: Res<'w, BuilderShortcutState>,
     metrics: Res<'w, WorldMetrics>,
     terrain: Res<'w, TerrainSurface>,
     presentation: Res<'w, PresentationSamples>,
@@ -170,6 +172,7 @@ fn desired_cursor_state(
         resources.action_panel.actor.is_some(),
     ) || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
+        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
     {
         return Wc3CursorState::Normal;
     }
