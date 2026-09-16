@@ -1344,3 +1344,195 @@ impl Simulation {
             .unwrap_or(desired)
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+struct NavigationRoute {
+    next_cell: Option<NavCell>,
+    navigation_route_step: bool,
+    used_a_star: bool,
+    a_star_cache_hit: bool,
+    a_star_expanded_nodes: usize,
+    cache_insert: Option<PursuitCacheInsert>,
+}
+
+impl NavigationRoute {
+    const fn at(cell: NavCell) -> Self {
+        Self {
+            next_cell: Some(cell),
+            navigation_route_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
+    }
+
+    const fn none() -> Self {
+        Self {
+            next_cell: None,
+            navigation_route_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PursuitCacheInsert {
+    from: NavCell,
+    target: NavCell,
+    collision_radius: Option<i32>,
+    route_bias: i8,
+    next: NavCell,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MovementDecision {
+    position: SimPoint,
+    pursuit_step: bool,
+    pursuit_target: Option<SimId>,
+    attack_goal: Option<SimPoint>,
+    navigation_route_step: bool,
+    used_a_star: bool,
+    a_star_cache_hit: bool,
+    a_star_expanded_nodes: usize,
+    cache_insert: Option<PursuitCacheInsert>,
+}
+
+impl MovementDecision {
+    const fn stationary(position: SimPoint) -> Self {
+        Self {
+            position,
+            pursuit_step: false,
+            pursuit_target: None,
+            attack_goal: None,
+            navigation_route_step: false,
+            used_a_star: false,
+            a_star_cache_hit: false,
+            a_star_expanded_nodes: 0,
+            cache_insert: None,
+        }
+    }
+}
+
+fn navigation_goal(unit: &UnitSnapshot, decision: &MovementDecision) -> NavigationGoal {
+    if let Some(target) = decision.pursuit_target {
+        NavigationGoal::Target(target)
+    } else if decision.position != unit.position {
+        NavigationGoal::Objective(unit.team)
+    } else {
+        NavigationGoal::None
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct MovementMetrics {
+    pub(super) intent: Duration,
+    pub(super) crowd_and_collision: Duration,
+    pub(super) pursuit_steps: usize,
+    pub(super) navigation_route_steps: usize,
+    pub(super) movement_intents: usize,
+    pub(super) movement_blocked: usize,
+    pub(super) objective_move_intents: usize,
+    pub(super) a_star_fallbacks: usize,
+    pub(super) a_star_cache_hits: usize,
+    pub(super) a_star_expanded_nodes: usize,
+}
+
+fn movement_collision_partition(movement_class: MovementClass) -> SpatialPartition {
+    let component = match movement_class {
+        MovementClass::Ground => 0,
+        MovementClass::Air => 1,
+    };
+    SpatialPartition::new(0, component)
+}
+
+fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
+    let count = usize::from(unit.status.movement_modifier_count);
+    debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
+    let percent = unit.status.movement_modifiers[..count]
+        .iter()
+        .fold(100_i32, |total, modifier| {
+            total
+                .checked_add(i32::from(modifier.percent_delta))
+                .expect("movement percentage overflow")
+        })
+        .clamp(0, 1_000);
+    i32::try_from(i64::from(unit.movement.speed_per_tick) * i64::from(percent) / 100)
+        .expect("effective movement speed overflowed validated bounds")
+}
+
+fn offset_point(point: SimPoint, x: i32, y: i32) -> Option<SimPoint> {
+    Some(SimPoint::new(
+        point.x.checked_add(x)?,
+        point.y.checked_add(y)?,
+    ))
+}
+
+fn exact_overlap_direction(a: SimId, b: SimId) -> (i32, i32) {
+    debug_assert_ne!(a, b);
+    let (low, high, sign) = if a < b { (a.0, b.0, -1) } else { (b.0, a.0, 1) };
+    let axis = (low.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ high.rotate_left(17)) & 1;
+    if axis == 0 { (sign, 0) } else { (0, sign) }
+}
+
+fn sidestep_sign(id: SimId) -> i32 {
+    let mixed = id.0 ^ id.0.rotate_left(21) ^ 0x9e37_79b9_7f4a_7c15;
+    if mixed & 1 == 0 { -1 } else { 1 }
+}
+
+fn perpendicular_step_with_side(
+    side: i8,
+    from: SimPoint,
+    toward: SimPoint,
+    distance: i32,
+) -> SimPoint {
+    debug_assert!(side == -1 || side == 1);
+    let dx = i64::from(toward.x) - i64::from(from.x);
+    let dy = i64::from(toward.y) - i64::from(from.y);
+    if dx == 0 && dy == 0 {
+        return SimPoint::new(0, i32::from(side) * distance);
+    }
+    let side = i64::from(side);
+    let raw = SimPoint::new(
+        i32::try_from(-dy * side).expect("sidestep x overflow"),
+        i32::try_from(dx * side).expect("sidestep y overflow"),
+    );
+    SimPoint::new(0, 0).step_towards(raw, distance)
+}
+
+fn pursuit_arc_step(
+    side: i8,
+    from: SimPoint,
+    toward: SimPoint,
+    distance: i32,
+    forward: bool,
+) -> SimPoint {
+    debug_assert!(side == -1 || side == 1);
+    let dx = i64::from(toward.x) - i64::from(from.x);
+    let dy = i64::from(toward.y) - i64::from(from.y);
+    if dx == 0 && dy == 0 {
+        return perpendicular_step_with_side(side, from, toward, distance);
+    }
+    let side = i64::from(side);
+    let forward_sign = if forward { 1_i64 } else { -1_i64 };
+    let raw_x = dx * forward_sign - dy * side;
+    let raw_y = dy * forward_sign + dx * side;
+    let raw = SimPoint::new(
+        i32::try_from(raw_x).expect("pursuit arc x overflow"),
+        i32::try_from(raw_y).expect("pursuit arc y overflow"),
+    );
+    SimPoint::new(0, 0).step_towards(raw, distance)
+}
+
+fn building_attack_envelope_goal(
+    source: SimPoint,
+    footprint: BuildingFootprint,
+    max_range: i32,
+    cell_size: i32,
+) -> SimPoint {
+    let closest = closest_point_on_footprint(source, footprint, cell_size);
+    point_attack_envelope_goal(source, closest, max_range)
+}
