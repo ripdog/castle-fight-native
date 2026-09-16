@@ -455,6 +455,61 @@ Pending:
 
 - none for Step 9. Reconnect identity restoration, canonical disconnect/delegation controls, team-wide pause/timeout, snapshot/history handoff, and desync replacement remain Step 10 work.
 
+## Step 10 — Reconnect, delegated control, and resynchronization
+
+Status: **implemented and verified**
+
+Step commits:
+
+- `13585fb` — `feat(server): canonicalize connection lifecycle`
+- `c05a337` — `feat(server): authenticate reconnect sessions`
+- `45073e0` — `feat(server): enforce disconnect timeout`
+- `b81dcd2` — `feat(network): synchronize reconnect snapshots`
+- `e839525` — `feat(network): recover checkpoint desync`
+
+Implemented:
+
+- transport disconnects are translated into canonical `MatchDriver` connection controls rather than remaining server-only session flags; single-player disconnects immediately update replayable connection state while a connected teammate remains;
+- existing simulation permission rules now become network-reachable: a connected teammate may command only the disconnected owner's builder, while ownership/resources/buildings remain unchanged, and a canonical reconnect control revokes that delegation;
+- if the last connected player on a team drops after the initial roster has joined, the server finalizes the currently open tick before recording the disconnect control, preserving already-admitted command order before the canonical lifecycle enters `PausedForDisconnect`;
+- the TCP runner no longer exits merely because the simulation is paused for disconnect; it continues servicing transport/session events without advancing simulation ticks;
+- an authenticated-session reconnect transition is available at the authoritative-match boundary and emits the same canonical `Connected` control used by replay/client replicas;
+- protocol revision 2 now assigns each new session a server-generated 256-bit random reconnect bearer token bound to a server-created session ID; reconnect requests present only that credential pair plus compatibility identity and contain no caller-supplied `PlayerId` claim;
+- reconnect authentication rejects unknown sessions, incorrect tokens, compatibility mismatches, and already-connected sessions; bearer-token comparison is constant-time and token debug formatting is redacted;
+- TCP replacement sockets are bound only after the canonical `Connected` control has been emitted into history and delivered to existing live peers, establishing the ordering needed for the reconnecting client to receive that control exactly once through subsequent catch-up rather than racing the live broadcast against its handshake;
+- post-start team-wide pauses now have independent operational monotonic deadlines (60 seconds by default, configurable with `--disconnect-timeout-seconds`); reconnect clears only that team's deadline, one expired team canonically forfeits to the opponent, simultaneous observed expiries canonically draw, and the wall-clock instants themselves never enter snapshot/checksum/replay state;
+- protocol revision 3 adds bounded authoritative snapshot transfer: logical `SimulationSnapshot` state serializes without ECS handles, presentation-only static names are omitted from wire identity and rehydrated from the selected versioned content bundle, each transfer is capped at 8 MiB and split into 48 KiB chunks, and the reconnect history suffix is independently capped;
+- authenticated reconnect captures a fresh snapshot while the session is still canonically disconnected, then emits the canonical `Connected` record, queues the snapshot plus the exact pinned history suffix through that record, verifies the completion boundary/checksum, and only afterward binds the replacement socket into live broadcasts; the serialized server loop therefore cannot create a live-record race across the handoff boundary;
+- clients reconnect on a background transport thread using the retained session credential, ignore stale socket-generation events, disable gameplay command submission during catch-up, replace rather than merge authoritative state, resume the `MatchDriver` at the supplied stream position, suppress historical presentation events, verify the handoff checksum, reset interpolation/presentation samples, and only then resume normal command submission;
+- live checkpoint divergence now invokes that same replacement machinery: a client reports the observed checksum and disables command submission when it differs from the server checkpoint; only after the server independently proves the mismatch does it capture a fresh current-boundary snapshot and queue a bounded replacement on the same authenticated socket. The current fresh-snapshot desync path needs no history suffix, does not mutate canonical history, and resumes commands only after the completion checksum matches.
+
+Compatibility/state changes:
+
+- connection state/lifecycle remain the existing canonical checksum/snapshot state and `MatchControlEvent` remains replayable;
+- protocol schema advanced to `PROTOCOL_SCHEMA_VERSION = 3`; revision 2 introduced reconnect credentials and revision 3 adds resumable client command sequence plus snapshot/catch-up transfer messages;
+- authoritative snapshot schema remains revision 1: the new wire representation serializes the existing logical state rather than introducing a second gameplay-state schema.
+
+Executed verification:
+
+- lifecycle/delegation substep: `tools/cargo-interactive test -p castle-fight-server`: **14 passed** (13 library/TCP tests plus binary test), including single-player 2v2 delegated builder control/revocation, team-wide 1v1 finalize-before-pause/resume, and the updated TCP fault-injection path;
+- secure reconnect substep: `tools/cargo-interactive test -p castle-fight-protocol -p castle-fight-server`: protocol **9 passed**, server **16 passed** (15 library/TCP tests plus binary test), including wrong-token/unknown-session rejection, token-replay rejection while connected, distinct per-session credentials, successful TCP rebinding, and canonical reconnect-before-live-binding ordering;
+- `tools/cargo-interactive check -p castle-fight-protocol -p castle-fight-server`: passed;
+- wall-clock timeout substep: `tools/cargo-interactive test -p castle-fight-server`: **18 passed** (17 library/TCP tests plus binary test), including exact-deadline expiry without sleeping, opponent-victory and simultaneous-expiry draw controls, and canonical-history insertion only when the deadline actually expires;
+- `tools/cargo-interactive clippy -p castle-fight-server --all-targets -- -D warnings`: passed;
+- reconnect snapshot wire round-trip: passed, including cross-worker restore and versioned static-content-name rehydration;
+- authenticated TCP reconnect handoff: passed, including disconnected-state snapshot capture, exactly-once canonical `Connected` history delivery, completion checksum equality, and bind-after-handoff ordering;
+- background client reconnect transport test: passed, including credential reuse and reconnect event ordering before snapshot messages;
+- deliberately divergent client replacement test: passed, restoring the authoritative checksum/stream boundary and resetting presentation samples without replaying historical cosmetic events;
+- live checkpoint-mismatch trigger test: passed, proving a bad client checksum causes a bounded same-session replacement snapshot while canonical history length and authenticated-session count remain unchanged;
+- final full regression matrix: protocol **9 passed**, server **19 passed** (18 library/TCP tests plus binary test), simulation **241 passed**, client **111 passed**;
+- `tools/cargo-interactive clippy -p castle-fight-sim -p castle-fight-protocol -p castle-fight-server -p castle-fight-client --all-targets -- -D warnings`: passed;
+- `tools/cargo-interactive check -p castle-fight-debug-viewer -p castle-fight-sim-bench`: passed;
+- `tools/cargo-interactive fmt --all -- --check` and `git diff --check`: passed.
+
+Pending:
+
+- none for Step 10. Step 11 begins the roster-breadth simulation abstractions, starting with evidence-backed multiple-attack support.
+
 ## Next action
 
-Begin Step 10 by translating transport disconnect/reconnect into canonical boundary controls, then add authenticated reconnect/session restoration and bounded snapshot/history catch-up using the Step 7 persistence boundary.
+Begin Step 11 by selecting a verified 9.27 multi-attack representative and extending attack state/checksum/snapshot handling without regressing the existing single-attack path.

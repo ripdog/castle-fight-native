@@ -121,7 +121,7 @@ This policy must balance:
 
 The initial Step 9 server uses a zero-extra-delay **open-tick** policy. `Simulation::tick()` is the one currently unfinalized authoritative tick. Commands admitted before that tick is finalized are assigned to it in canonical server arrival order; once finalization occurs, that tick/order is immutable and later arrivals can only enter the next open tick. Clients do not predict authoritative advancement in this prototype: they wait for the explicit finalized tick record. A future measured input-delay policy may deliberately schedule farther ahead, but it must preserve the same canonical-order guarantees.
 
-The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because Step 9 does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection; reconnect identity and canonical disconnect/delegation controls are completed in Step 10.
+The headless network runner paces finalization at the selected simulation rate; wall-clock pacing itself is operational and never enters authoritative state. Because the initial multiplayer prototype does not yet transfer snapshots/history to late joiners, tick `0` does not begin until the full configured initial roster has completed compatibility handshake. Once the match has started, a transport disconnect does not reopen that claimed player slot to an unauthenticated replacement connection. The Step 10 connection-lifecycle path records disconnect/reconnect permission changes through `MatchDriver` boundary controls. Protocol revision 2 adds server-issued reconnect credentials; snapshot/history handoff remains separate session-transport work.
 
 The result is explicit:
 
@@ -216,39 +216,40 @@ The server may broadcast:
 
 Clients compare once they have reached the same tick.
 
-A mismatch triggers a desync recovery path rather than allowing divergent simulations to continue indefinitely.
+A mismatch triggers the authoritative snapshot replacement path rather than allowing divergent simulations to continue indefinitely. The client still sends its observed checksum to the server; a mismatching report disables further local command submission until replacement completes.
 
 ## 11. Desync recovery
 
 The server wins all state disputes.
 
-On mismatch, protocol behavior SHOULD support:
+On mismatch, the current protocol behavior is:
 
-1. client reports/recognizes mismatch;
-2. client pauses presentation of speculative future authoritative state as needed;
-3. server selects an appropriate canonical snapshot/checkpoint;
-4. client loads the snapshot;
-5. client replays canonical stream records to the live boundary;
-6. checksum is revalidated;
-7. normal pacing resumes.
+1. client reports its checksum for the server-issued checkpoint and disables gameplay command submission after detecting inequality;
+2. server verifies that report against its latest authoritative checkpoint before taking recovery action;
+3. on proven mismatch, server captures a fresh canonical snapshot at the current stream boundary and sends it over the same authenticated connection using the bounded snapshot-transfer messages;
+4. because the fresh snapshot is captured at the handoff boundary, the initial live-desync transfer has an empty history suffix; any later implementation using an older retained snapshot must preserve the same pinned suffix rules;
+5. client replaces divergent state, clears historical presentation events, resets interpolation samples, and verifies the transfer completion boundary/checksum;
+6. gameplay command submission and normal live-stream processing resume only after equality is restored.
 
 Repeated mismatch after resync is an implementation/version integrity fault and should be reported with diagnostics.
 
 ## 12. Disconnect behavior
 
-A single client disconnect does not stop the match. The server continues simulating that player's autonomous state, and a canonical disconnect event grants temporary builder-control permission to still-connected teammates as defined by `41-match-gameplay.md` and `42-builder-items.md`.
+A single client disconnect does not stop the match. The server records a canonical `SetPlayerConnection(Disconnected)` boundary control, continues simulating that player's autonomous state, and the resulting canonical permission state grants temporary builder-control authority to still-connected teammates as defined by `41-match-gameplay.md` and `42-builder-items.md`. Reconnecting records the matching `Connected` control, which revokes delegated builder authority.
 
-If every player on one team is disconnected, the server finalizes the current tick, records a canonical team-disconnected pause event, and stops advancing simulation ticks while a configured wall-clock reconnect timeout runs. A reconnect before expiry records a canonical resume event; expiry records a canonical match-end/forfeit event.
+If every player on one team becomes disconnected, the server first finalizes the currently open tick so already-admitted commands are not discarded or reordered, then records the last disconnect at that completed boundary. Applying the control transitions the authoritative lifecycle to the team-disconnected pause and stops further simulation ticks. A reconnect records a canonical connection control at the same completed boundary and resumes when at least one player on each team is connected. After the initial roster has started the match, the TCP server tracks a separate monotonic wall-clock deadline for each fully disconnected team; the default grace period is 60 seconds and may be configured with `--disconnect-timeout-seconds`. Reconnecting a team clears only that team's deadline. When exactly one team's deadline expires, the server emits a canonical terminal control awarding victory to the opposing team; if multiple team deadlines are observed expired together, the canonical result is a draw.
 
-The paused wall-clock interval itself is operational time, not simulation time. Replay applies the recorded control events at their stream positions without waiting.
+The deadline instants and paused wall-clock interval are operational state, not simulation state and not part of any checksum or snapshot. Only the resulting canonical `FinishMatch` record enters gameplay history. Replay applies the recorded controls at their stream positions without reproducing or waiting for wall-clock timing.
 
 ## 13. Reconnect identity
 
 Reconnect requires secure restoration of the correct player/session identity.
 
-Authentication/session details are outside the simulation crate, but the protocol must prevent a reconnecting client from claiming another player's slot merely by sending a `PlayerId`.
+Authentication/session details are outside the simulation crate. Protocol revision 2 introduced a server-generated 256-bit random reconnect bearer token for each newly created session and returns the pair `(session_id, reconnect_token)` to that client. A reconnect request presents that pair plus the normal compatibility identity; it contains no `PlayerId` claim. The server rejects unknown sessions, incorrect tokens, compatibility mismatches, and attempts to rebind an already-connected session. Token comparison is constant-time and token `Debug` output is redacted.
 
-Server-issued reconnect/session credentials should be separate from deterministic gameplay state.
+Protocol revision 3 extends the accepted session assignment with the next client-command sequence and adds the bounded snapshot/catch-up transfer used after authentication. Reconnect/session credentials remain operational server state, not deterministic gameplay state.
+
+For reconnect, the server pins a fresh authoritative snapshot while the session is still canonically disconnected. It then emits the canonical `Connected` boundary control, records the resulting handoff stream position, and queues to the replacement socket: the accepted assignment, snapshot metadata/chunks, every canonical stream record from the snapshot boundary through the pinned handoff boundary, and a completion marker carrying the final completed tick/checksum. Only after all handoff messages have entered that connection's FIFO outbound queue may the socket become a live broadcast recipient. The reconnecting client therefore receives `Connected` exactly once through catch-up, with no live-broadcast race or ambiguous overlap.
 
 ## 14. Transport
 
@@ -260,11 +261,11 @@ Each TCP connection carries a sequence of bounded protocol frames:
 [u32 payload length, big-endian][payload bytes]
 ```
 
-Step 9 payloads use the protocol crate's schema-versioned JSON encoding and are limited to 1 MiB per frame. The decoder MUST reject zero-length and oversized frames before allocating the declared body. Snapshot/reconnect transfer introduced in Step 10 may define a separate bounded bulk-transfer/chunking policy rather than increasing ordinary command/control message limits without review.
+Ordinary protocol payloads use the protocol crate's schema-versioned JSON encoding and are limited to 1 MiB per frame. The decoder MUST reject zero-length and oversized frames before allocating the declared body. Step 10 snapshot transfer keeps that frame bound unchanged: one logical snapshot is capped at 8 MiB and split into 48 KiB snapshot chunks, while the canonical history suffix carried by one handoff is independently bounded. A server that cannot encode a snapshot within those limits rejects/postpones the handoff rather than allocating or queueing unbounded transfer state.
 
 TCP's byte-stream ordering does not replace canonical logical ordering. Every finalized tick/control record still carries `InputStreamPosition`, and clients MUST NOT infer an empty tick from transport silence, connection liveness, or lack of immediately available bytes. A missing/disconnected TCP stream therefore never means "advance with no commands"; only an explicit finalized tick record proves that input set complete.
 
-Server implementations SHOULD enable `TCP_NODELAY` for latency-sensitive command/control traffic. Large reconnect snapshots MUST NOT be allowed to indefinitely head-of-line block live canonical traffic; Step 10 must address this through bounded chunking, a separate bulk channel/connection, or a transport revision such as QUIC streams.
+Server implementations SHOULD enable `TCP_NODELAY` for latency-sensitive command/control traffic. The current TCP implementation bounds reconnect snapshot size/chunk count/history suffix so a handoff cannot grow without limit, and it queues the complete pinned handoff before adding the replacement socket to live recipients. This preserves logical ordering, but TCP still has transport-level head-of-line behavior; a future separate bulk channel or QUIC stream remains a valid measured optimization if snapshot size or reconnect latency justifies it.
 
 Because authoritative gameplay mostly transmits low-rate commands, finalized-input records, outcomes, and checkpoints rather than frame-by-frame unit transforms, correctness and reconnect semantics matter more initially than minimizing every packet's transport latency. QUIC/reliable-UDP remain valid future choices if measured behavior justifies the extra transport complexity.
 

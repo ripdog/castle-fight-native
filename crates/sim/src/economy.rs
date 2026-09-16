@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::Component;
+use serde::{Deserialize, Serialize};
 
 pub const RESOURCE_FIXED_SCALE: u64 = 10_000;
 
@@ -14,7 +15,7 @@ pub struct EconomyRules {
     pub income_tax_bracket_per_10k: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerResources {
     pub gold: u32,
     pub lumber: u32,
@@ -30,7 +31,7 @@ impl PlayerResources {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildingEconomyProfile {
     pub gold_cost: u32,
     pub lumber_cost: u32,

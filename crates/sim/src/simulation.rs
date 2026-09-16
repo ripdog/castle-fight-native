@@ -5,6 +5,7 @@ use std::{
 
 use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
+use serde::{Deserialize, Serialize};
 
 const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
@@ -36,6 +37,7 @@ use projectiles::{BallisticImpactContext, ProjectileWorldChanges, TargetProjecti
 
 pub use snapshot::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, SimulationSnapshot, SnapshotRestoreError,
+    SnapshotWireError,
 };
 use status::{
     apply_ability_effect_to_unit, apply_melee_reactive_armor_effects, apply_timed_damage_over_time,
@@ -158,19 +160,19 @@ pub struct PlayerConfig {
     pub team: Team,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlayerConnectionStatus {
     Connected,
     Disconnected,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MatchOutcome {
     Victory(Team),
     Draw,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MatchLifecycle {
     Running,
     PausedForDisconnect {
@@ -198,7 +200,7 @@ pub struct PlayerView {
     pub connection: PlayerConnectionStatus,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct PlayerState {
     id: PlayerId,
     team: Team,
@@ -2888,7 +2890,7 @@ struct DamageTargetState<'a> {
     navigation_cell_size: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct DefenseAlert {
     victim_id: SimId,
     victim_team: Team,

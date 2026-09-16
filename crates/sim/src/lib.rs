@@ -79,8 +79,8 @@ pub use simulation::{
     BuildingUpgradeError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
     CombatRules, CorpseView, MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus,
     PlayerView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    SimulationSnapshot, SnapshotRestoreError, TargetlessLane, TeamObjectiveError, TickResult,
-    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    SimulationSnapshot, SnapshotRestoreError, SnapshotWireError, TargetlessLane,
+    TeamObjectiveError, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,

@@ -1,10 +1,14 @@
 use super::{canonical::*, *};
+use crate::CastleFightContentBundle;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
 pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SimulationSnapshot {
     schema_version: u32,
     configuration_identity: u64,
@@ -48,6 +52,116 @@ impl SimulationSnapshot {
     #[must_use]
     pub fn entity_count(&self) -> usize {
         self.entities.len()
+    }
+
+    pub fn encode_wire(&self) -> Result<Vec<u8>, SnapshotWireError> {
+        serde_json::to_vec(self).map_err(SnapshotWireError::Encode)
+    }
+
+    pub fn decode_wire(
+        bytes: &[u8],
+        content: &CastleFightContentBundle,
+    ) -> Result<Self, SnapshotWireError> {
+        let mut snapshot: Self =
+            serde_json::from_slice(bytes).map_err(SnapshotWireError::Decode)?;
+        snapshot.rehydrate_content_identities(content)?;
+        Ok(snapshot)
+    }
+
+    fn rehydrate_content_identities(
+        &mut self,
+        content: &CastleFightContentBundle,
+    ) -> Result<(), SnapshotWireError> {
+        for entity in &mut self.entities {
+            match entity {
+                CanonicalEntity::Unit(unit) => {
+                    rehydrate_optional_content(&mut unit.content, content)?;
+                }
+                CanonicalEntity::Building(building) => {
+                    rehydrate_optional_content(&mut building.content, content)?;
+                    rehydrate_optional_content(&mut building.production_content, content)?;
+                    if let Some(construction) = building.construction.as_deref_mut() {
+                        rehydrate_building_properties(&mut construction.properties, content)?;
+                        if let Some(upgrade_from) = &mut construction.upgrade_from {
+                            rehydrate_building_properties(&mut upgrade_from.properties, content)?;
+                        }
+                    }
+                }
+                CanonicalEntity::Builder(builder) => {
+                    builder.configuration.appearance = resolve_content_identity(
+                        builder.configuration.appearance.rawcode,
+                        content,
+                    )?;
+                    if let Some(build_order) = &mut builder.build_order {
+                        rehydrate_building_properties(&mut build_order.properties, content)?;
+                    }
+                }
+                CanonicalEntity::Projectile(_)
+                | CanonicalEntity::ReflectedProjectile(_)
+                | CanonicalEntity::BallisticProjectile(_)
+                | CanonicalEntity::BounceProjectile(_)
+                | CanonicalEntity::Corpse(_)
+                | CanonicalEntity::BurningOil(_)
+                | CanonicalEntity::ChainLightning(_) => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+fn rehydrate_optional_content(
+    identity: &mut Option<ContentIdentity>,
+    content: &CastleFightContentBundle,
+) -> Result<(), SnapshotWireError> {
+    if let Some(identity) = identity {
+        *identity = resolve_content_identity(identity.rawcode, content)?;
+    }
+    Ok(())
+}
+
+fn rehydrate_building_properties(
+    properties: &mut BuildingGameplayProperties,
+    content: &CastleFightContentBundle,
+) -> Result<(), SnapshotWireError> {
+    rehydrate_optional_content(&mut properties.content, content)?;
+    rehydrate_optional_content(&mut properties.production_unit.content, content)
+}
+
+fn resolve_content_identity(
+    rawcode: u32,
+    content: &CastleFightContentBundle,
+) -> Result<ContentIdentity, SnapshotWireError> {
+    content
+        .content_identity_for_rawcode(rawcode)
+        .ok_or(SnapshotWireError::UnknownContentRawcode(rawcode))
+}
+
+#[derive(Debug)]
+pub enum SnapshotWireError {
+    Encode(serde_json::Error),
+    Decode(serde_json::Error),
+    UnknownContentRawcode(u32),
+}
+
+impl fmt::Display for SnapshotWireError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Encode(error) => write!(formatter, "snapshot encoding failed: {error}"),
+            Self::Decode(error) => write!(formatter, "snapshot decoding failed: {error}"),
+            Self::UnknownContentRawcode(rawcode) => write!(
+                formatter,
+                "snapshot references unknown content rawcode {rawcode:#010x}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SnapshotWireError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Encode(error) | Self::Decode(error) => Some(error),
+            Self::UnknownContentRawcode(_) => None,
+        }
     }
 }
 
@@ -550,7 +664,10 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
 mod tests {
     use super::*;
     use crate::components::TimedMovementModifier;
-    use crate::{BurningOilEffectProfile, ChainLightningEffectProfile, ManaProfile};
+    use crate::{
+        BurningOilEffectProfile, CastleFightMatchConfig, ChainLightningEffectProfile, ManaProfile,
+        MapVersion, create_castle_fight_match,
+    };
 
     #[test]
     fn initial_snapshot_restores_pre_tick_boundary_across_worker_counts() {
@@ -565,6 +682,50 @@ mod tests {
         assert_eq!(restored.tick(), 0);
         assert_eq!(restored.checksum(), original.checksum());
         assert_eq!(restored.worker_count(), 3);
+    }
+
+    #[test]
+    fn wire_snapshot_round_trip_rehydrates_versioned_content_and_restores() {
+        let config = CastleFightMatchConfig::development_subset(
+            MapVersion::CASTLE_FIGHT_9_27,
+            "r1",
+            0x5749_5245_534e_4150,
+        )
+        .unwrap();
+        let mut original = create_castle_fight_match(config.clone(), 1).unwrap();
+        for _ in 0..4 {
+            original.simulation.step();
+        }
+        let snapshot = original.simulation.capture_snapshot();
+        let bytes = snapshot.encode_wire().unwrap();
+        assert!(bytes.len() > 100);
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains("Main Castle"),
+            "presentation names must not become snapshot identity"
+        );
+
+        let decoded = SimulationSnapshot::decode_wire(&bytes, original.content).unwrap();
+        assert_eq!(decoded.checksum(), snapshot.checksum());
+        assert_eq!(decoded.completed_tick(), snapshot.completed_tick());
+
+        let mut restored = create_castle_fight_match(config, 3).unwrap();
+        restored.simulation.restore_snapshot(&decoded).unwrap();
+        assert_eq!(
+            restored.simulation.checksum(),
+            original.simulation.checksum()
+        );
+        let castle = restored
+            .simulation
+            .team_objective(Team(0))
+            .expect("western castle must exist");
+        assert_eq!(
+            restored
+                .simulation
+                .building(castle)
+                .and_then(|building| building.content)
+                .map(|identity| identity.name),
+            Some("Main Castle")
+        );
     }
 
     #[test]

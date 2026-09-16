@@ -229,6 +229,50 @@ impl CastleFightContentBundle {
     }
 
     #[must_use]
+    pub fn content_identity_for_rawcode(&self, rawcode: u32) -> Option<ContentIdentity> {
+        self.units
+            .values()
+            .find(|definition| definition.rawcode == rawcode)
+            .map(|definition| ContentIdentity {
+                rawcode,
+                name: definition.name,
+            })
+            .or_else(|| {
+                self.production_buildings
+                    .values()
+                    .find(|definition| definition.rawcode == rawcode)
+                    .map(|definition| ContentIdentity {
+                        rawcode,
+                        name: definition.name,
+                    })
+            })
+            .or_else(|| {
+                self.towers
+                    .values()
+                    .find(|definition| definition.rawcode == rawcode)
+                    .map(|definition| ContentIdentity {
+                        rawcode,
+                        name: definition.name,
+                    })
+            })
+            .or_else(|| {
+                self.builders
+                    .values()
+                    .find(|definition| definition.rawcode == rawcode)
+                    .map(|definition| ContentIdentity {
+                        rawcode,
+                        name: definition.name,
+                    })
+            })
+            .or_else(|| {
+                (rawcode == u32::from_be_bytes(*b"hcas")).then_some(ContentIdentity {
+                    rawcode,
+                    name: "Main Castle",
+                })
+            })
+    }
+
+    #[must_use]
     pub fn direct_building_kinds(&self) -> Vec<CastleFightBuildingKind> {
         CastleFightProductionKind::ALL
             .into_iter()

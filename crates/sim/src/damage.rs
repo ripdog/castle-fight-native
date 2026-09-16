@@ -1,12 +1,26 @@
 use std::{error::Error, fmt};
 
 use bevy_ecs::prelude::Component;
+use serde::{Deserialize, Serialize};
 
 pub const DAMAGE_MULTIPLIER_SCALE: u16 = 10_000;
 const ARMOR_EXP_SCALE: i128 = 1_000_000_000;
 const STOCK_ARMOR_FACTOR_PER_10K: u16 = 600;
 
-#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Component,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+)]
 pub enum DamageType {
     #[default]
     Normal,
@@ -39,7 +53,9 @@ impl DamageType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub enum ArmorType {
     Small,
     Medium,
@@ -74,7 +90,7 @@ impl ArmorType {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ArmorProfile {
     pub armor_type: ArmorType,
     pub armor_points: i16,

@@ -1,6 +1,8 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
-use castle_fight_server::{AuthoritativeMatch, ServerMatchOptions, tcp::TcpAuthoritativeServer};
+use castle_fight_server::{
+    AuthoritativeMatch, DEFAULT_DISCONNECT_TIMEOUT, ServerMatchOptions, tcp::TcpAuthoritativeServer,
+};
 use castle_fight_sim::{
     CastleFightBuilderRace, CastleFightMatchConfig, CastleFightParticipantConfig, MapVersion,
     PlayerId, Team,
@@ -14,6 +16,7 @@ struct ServerOptions {
     seed: u64,
     team_size: usize,
     workers: usize,
+    disconnect_timeout: Duration,
 }
 
 impl ServerOptions {
@@ -27,6 +30,7 @@ impl ServerOptions {
             seed: 0x4341_5354_4c45,
             team_size: 1,
             workers: default_worker_count(),
+            disconnect_timeout: DEFAULT_DISCONNECT_TIMEOUT,
         };
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -76,9 +80,17 @@ impl ServerOptions {
                         .expect("--workers requires a positive integer");
                     assert!(options.workers > 0, "--workers must be greater than zero");
                 }
+                "--disconnect-timeout-seconds" => {
+                    let seconds = args
+                        .next()
+                        .expect("--disconnect-timeout-seconds requires an unsigned integer")
+                        .parse()
+                        .expect("--disconnect-timeout-seconds requires an unsigned integer");
+                    options.disconnect_timeout = Duration::from_secs(seconds);
+                }
                 "-h" | "--help" => {
                     println!(
-                        "Usage: castle-fight-server [--bind 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--workers N]"
+                        "Usage: castle-fight-server [--bind 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--workers N] [--disconnect-timeout-seconds N]"
                     );
                     std::process::exit(0);
                 }
@@ -124,7 +136,10 @@ fn main() {
     let authoritative = AuthoritativeMatch::new(
         match_config.clone(),
         options.workers,
-        ServerMatchOptions::default(),
+        ServerMatchOptions {
+            disconnect_timeout: options.disconnect_timeout,
+            ..ServerMatchOptions::default()
+        },
     )
     .unwrap_or_else(|error| panic!("cannot create authoritative match: {error}"));
     let server = TcpAuthoritativeServer::bind(options.bind, authoritative)
@@ -168,6 +183,7 @@ mod tests {
             seed: 9,
             team_size: 2,
             workers: 1,
+            disconnect_timeout: DEFAULT_DISCONNECT_TIMEOUT,
         };
         let config = options.match_config();
         assert_eq!(
