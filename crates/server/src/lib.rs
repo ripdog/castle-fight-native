@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, fmt};
 
+pub mod tcp;
+
 use castle_fight_protocol::{
     Checkpoint, CheckpointReport, ClientHello, ClientMessage, CommandAcknowledgement,
     CompatibilityIdentity, HandshakeRejectReason, ProtocolErrorCode, ServerMessage,
@@ -225,6 +227,15 @@ impl AuthoritativeMatch {
         self.sessions
             .get(&session_id)
             .is_some_and(|session| session.connected)
+    }
+
+    #[must_use]
+    pub fn all_players_connected(&self) -> bool {
+        self.player_claims.len() == self.game.match_config.participants.len()
+            && self
+                .player_claims
+                .values()
+                .all(|session_id| self.session_is_connected(*session_id))
     }
 
     #[must_use]
