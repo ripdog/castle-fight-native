@@ -46,7 +46,7 @@ When the original player reconnects, normal control returns to that player and t
 
 Connection/disconnection changes have gameplay consequences and therefore MUST enter the replayable canonical server-event stream rather than existing only as transport state.
 
-If every player on one team is disconnected, the entire match pauses at a completed tick boundary and a configured real-time reconnect timeout begins. Simulation ticks do not advance while paused. If any player on that team reconnects before timeout, the server records a canonical resume event and play continues from the same simulation boundary. If the timeout expires, the server records a canonical timeout/end event and the match ends under the game mode's abandonment/forfeit result.
+If every player on one team is disconnected, the entire match pauses at a completed tick boundary and a configured real-time reconnect timeout begins for that team. Simulation ticks do not advance while paused. If any player on that team reconnects before timeout, the server records the canonical connection/resume transition and play continues from the same simulation boundary unless another team is still fully disconnected. If exactly one team's deadline expires, the opposing team wins by abandonment; if multiple team deadlines are observed expired together, the result is a draw. The deadline itself is operational wall-clock state: replay reproduces only the canonical terminal control and never waits out the timeout.
 
 Replay playback applies the recorded pause/resume/end events immediately at their stream positions; it need not reproduce the real-world waiting time.
 

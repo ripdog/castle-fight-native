@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, time::Duration};
 
 pub mod tcp;
 
@@ -11,22 +11,25 @@ use castle_fight_protocol::{
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION, CanonicalStreamError,
     CanonicalStreamRecord, CastleFightMatch, CastleFightMatchConfig, CastleFightMatchSetupError,
-    ClientCommandSequence, MatchControlEvent, MatchDriver, MatchLifecycle, PlayerConnectionStatus,
-    PlayerId, Simulation, Team, create_castle_fight_match,
+    ClientCommandSequence, MatchControlEvent, MatchDriver, MatchLifecycle, MatchOutcome,
+    PlayerConnectionStatus, PlayerId, Simulation, Team, create_castle_fight_match,
 };
 use constant_time_eq::constant_time_eq_32;
 
 pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 30;
+pub const DEFAULT_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServerMatchOptions {
     pub checkpoint_interval_ticks: u64,
+    pub disconnect_timeout: Duration,
 }
 
 impl Default for ServerMatchOptions {
     fn default() -> Self {
         Self {
             checkpoint_interval_ticks: DEFAULT_CHECKPOINT_INTERVAL_TICKS,
+            disconnect_timeout: DEFAULT_DISCONNECT_TIMEOUT,
         }
     }
 }
@@ -219,6 +222,11 @@ impl AuthoritativeMatch {
     #[must_use]
     pub const fn last_checkpoint(&self) -> Option<Checkpoint> {
         self.last_checkpoint
+    }
+
+    #[must_use]
+    pub const fn disconnect_timeout(&self) -> Duration {
+        self.options.disconnect_timeout
     }
 
     #[must_use]
@@ -433,6 +441,31 @@ impl AuthoritativeMatch {
             player: session.player,
             connection: PlayerConnectionStatus::Connected,
         })
+    }
+
+    pub(crate) fn expire_disconnect_timeout(
+        &mut self,
+        timed_out_teams_mask: u8,
+    ) -> Result<Vec<OutboundMessage>, ServerMatchError> {
+        let MatchLifecycle::PausedForDisconnect {
+            disconnected_teams_mask,
+        } = self.game.simulation.lifecycle()
+        else {
+            return Ok(Vec::new());
+        };
+        let timed_out_teams_mask = timed_out_teams_mask & disconnected_teams_mask & 0b11;
+        if timed_out_teams_mask == 0 {
+            return Ok(Vec::new());
+        }
+
+        let outcome = if timed_out_teams_mask.count_ones() > 1 {
+            MatchOutcome::Draw
+        } else if timed_out_teams_mask & 0b01 != 0 {
+            MatchOutcome::Victory(Team(1))
+        } else {
+            MatchOutcome::Victory(Team(0))
+        };
+        self.emit_control(MatchControlEvent::FinishMatch { outcome })
     }
 
     fn connected_session_count_for_team(&self, team: Team) -> usize {
@@ -842,6 +875,7 @@ mod tests {
             1,
             ServerMatchOptions {
                 checkpoint_interval_ticks: 1,
+                ..ServerMatchOptions::default()
             },
         )
         .unwrap();
@@ -870,6 +904,7 @@ mod tests {
             1,
             ServerMatchOptions {
                 checkpoint_interval_ticks: 1,
+                ..ServerMatchOptions::default()
             },
         )
         .unwrap();
@@ -928,6 +963,7 @@ mod tests {
             1,
             ServerMatchOptions {
                 checkpoint_interval_ticks: 2,
+                ..ServerMatchOptions::default()
             },
         )
         .unwrap();
@@ -1074,6 +1110,62 @@ mod tests {
     }
 
     #[test]
+    fn disconnect_timeout_finishes_with_opponent_victory_or_draw() {
+        let mut server =
+            AuthoritativeMatch::new(config(21), 1, ServerMatchOptions::default()).unwrap();
+        let _session_0 = accepted_session(server.accept_hello(hello(&server, 0)));
+        let session_6 = accepted_session(server.accept_hello(hello(&server, 6)));
+        server.disconnect_session(session_6).unwrap();
+        assert_eq!(
+            server.simulation().lifecycle(),
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask: 0b10,
+            }
+        );
+
+        let timeout = server.expire_disconnect_timeout(0b10).unwrap();
+        assert!(matches!(
+            stream_record(&timeout),
+            CanonicalStreamRecord::Control(BoundaryControlRecord {
+                event: MatchControlEvent::FinishMatch {
+                    outcome: MatchOutcome::Victory(Team(0)),
+                },
+                ..
+            })
+        ));
+        assert!(matches!(
+            server.simulation().lifecycle(),
+            MatchLifecycle::Finished {
+                outcome: MatchOutcome::Victory(Team(0)),
+                ..
+            }
+        ));
+
+        let mut simultaneous =
+            AuthoritativeMatch::new(config(22), 1, ServerMatchOptions::default()).unwrap();
+        let session_0 = accepted_session(simultaneous.accept_hello(hello(&simultaneous, 0)));
+        let session_6 = accepted_session(simultaneous.accept_hello(hello(&simultaneous, 6)));
+        simultaneous.disconnect_session(session_0).unwrap();
+        simultaneous.disconnect_session(session_6).unwrap();
+        assert_eq!(
+            simultaneous.simulation().lifecycle(),
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask: 0b11,
+            }
+        );
+        let timeout = simultaneous.expire_disconnect_timeout(0b11).unwrap();
+        assert!(matches!(
+            stream_record(&timeout),
+            CanonicalStreamRecord::Control(BoundaryControlRecord {
+                event: MatchControlEvent::FinishMatch {
+                    outcome: MatchOutcome::Draw,
+                },
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn single_player_disconnect_delegates_only_builder_control_until_reconnect() {
         let match_config = config_2v2(19);
         let mut server =
@@ -1210,6 +1302,7 @@ mod tests {
             1,
             ServerMatchOptions {
                 checkpoint_interval_ticks: 1,
+                ..ServerMatchOptions::default()
             },
         )
         .unwrap();

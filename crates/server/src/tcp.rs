@@ -89,6 +89,7 @@ pub struct TcpAuthoritativeServer {
     session_connections: BTreeMap<SessionId, ConnectionId>,
     next_connection_id: u64,
     started: bool,
+    team_disconnect_since: [Option<Instant>; 2],
 }
 
 impl TcpAuthoritativeServer {
@@ -108,6 +109,7 @@ impl TcpAuthoritativeServer {
             session_connections: BTreeMap::new(),
             next_connection_id: 1,
             started: false,
+            team_disconnect_since: [None; 2],
         })
     }
 
@@ -131,6 +133,10 @@ impl TcpAuthoritativeServer {
     }
 
     pub fn poll_network(&mut self) -> Result<(), TcpServerError> {
+        self.poll_network_at(Instant::now())
+    }
+
+    fn poll_network_at(&mut self, now: Instant) -> Result<(), TcpServerError> {
         self.accept_pending_connections()?;
         loop {
             match self.inbound_rx.try_recv() {
@@ -141,6 +147,56 @@ impl TcpAuthoritativeServer {
         }
         if !self.started && self.authoritative.all_players_connected() {
             self.started = true;
+        }
+        self.update_disconnect_timeouts(now)
+    }
+
+    fn update_disconnect_timeouts(&mut self, now: Instant) -> Result<(), TcpServerError> {
+        if !self.started {
+            self.team_disconnect_since = [None; 2];
+            return Ok(());
+        }
+        let disconnected_teams_mask = match self.authoritative.simulation().lifecycle() {
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask,
+            } => disconnected_teams_mask,
+            MatchLifecycle::Running | MatchLifecycle::Finished { .. } => {
+                self.team_disconnect_since = [None; 2];
+                return Ok(());
+            }
+        };
+
+        for (team, disconnected_since) in self.team_disconnect_since.iter_mut().enumerate() {
+            let bit = 1_u8 << team;
+            if disconnected_teams_mask & bit == 0 {
+                *disconnected_since = None;
+            } else if disconnected_since.is_none() {
+                *disconnected_since = Some(now);
+            }
+        }
+
+        let timeout = self.authoritative.disconnect_timeout();
+        let mut timed_out_teams_mask = 0_u8;
+        for (team, disconnected_since) in self.team_disconnect_since.iter().enumerate() {
+            if disconnected_since
+                .is_some_and(|since| now.saturating_duration_since(since) >= timeout)
+            {
+                timed_out_teams_mask |= 1_u8 << team;
+            }
+        }
+        if timed_out_teams_mask == 0 {
+            return Ok(());
+        }
+
+        let outbound = self
+            .authoritative
+            .expire_disconnect_timeout(timed_out_teams_mask)?;
+        self.dispatch_all(outbound)?;
+        if matches!(
+            self.authoritative.simulation().lifecycle(),
+            MatchLifecycle::Finished { .. }
+        ) {
+            self.team_disconnect_since = [None; 2];
         }
         Ok(())
     }
@@ -455,11 +511,14 @@ mod tests {
     use crate::ServerMatchOptions;
 
     fn server() -> TcpAuthoritativeServer {
+        server_with_options(ServerMatchOptions::default())
+    }
+
+    fn server_with_options(options: ServerMatchOptions) -> TcpAuthoritativeServer {
         let config =
             CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 0x1234)
                 .unwrap();
-        let authoritative =
-            AuthoritativeMatch::new(config, 1, ServerMatchOptions::default()).unwrap();
+        let authoritative = AuthoritativeMatch::new(config, 1, options).unwrap();
         TcpAuthoritativeServer::bind("127.0.0.1:0", authoritative).unwrap()
     }
 
@@ -649,6 +708,73 @@ mod tests {
     }
 
     #[test]
+    fn tcp_team_disconnect_timeout_uses_wall_clock_only_to_emit_terminal_control() {
+        let disconnect_timeout = Duration::from_secs(10);
+        let mut server = server_with_options(ServerMatchOptions {
+            disconnect_timeout,
+            ..ServerMatchOptions::default()
+        });
+        let mut first = connect(&server);
+        let mut second = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut first, hello(&server, 1));
+        send_client(&mut second, hello(&server, 2));
+        pump_until(&mut server, |view| view.started);
+        let _ = receive_server(&mut first);
+        let _ = receive_server(&mut second);
+
+        second.shutdown(Shutdown::Both).unwrap();
+        drop(second);
+        pump_until(&mut server, |view| view.authenticated == 1);
+        assert_eq!(
+            server.authoritative().simulation().lifecycle(),
+            MatchLifecycle::PausedForDisconnect {
+                disconnected_teams_mask: 0b10,
+            }
+        );
+        let disconnected_since = server.team_disconnect_since[1]
+            .expect("team-wide disconnect must start an operational deadline");
+        let history_len = server.authoritative().driver().history().len();
+
+        server
+            .update_disconnect_timeouts(
+                disconnected_since + disconnect_timeout - Duration::from_millis(1),
+            )
+            .unwrap();
+        assert_eq!(server.authoritative().driver().history().len(), history_len);
+        assert!(matches!(
+            server.authoritative().simulation().lifecycle(),
+            MatchLifecycle::PausedForDisconnect { .. }
+        ));
+
+        server
+            .update_disconnect_timeouts(disconnected_since + disconnect_timeout)
+            .unwrap();
+        assert_eq!(
+            server.authoritative().driver().history().len(),
+            history_len + 1
+        );
+        assert!(matches!(
+            server.authoritative().driver().history().last(),
+            Some(CanonicalStreamRecord::Control(control))
+                if matches!(
+                    control.event,
+                    castle_fight_sim::MatchControlEvent::FinishMatch {
+                        outcome: castle_fight_sim::MatchOutcome::Victory(castle_fight_sim::Team(0)),
+                    }
+                )
+        ));
+        assert!(matches!(
+            server.authoritative().simulation().lifecycle(),
+            MatchLifecycle::Finished {
+                outcome: castle_fight_sim::MatchOutcome::Victory(castle_fight_sim::Team(0)),
+                ..
+            }
+        ));
+        assert_eq!(server.team_disconnect_since, [None; 2]);
+    }
+
+    #[test]
     fn tcp_duplicate_command_is_acknowledged_once_and_finalized_once() {
         let mut server = server();
         let mut first = connect(&server);
@@ -742,6 +868,7 @@ mod tests {
             1,
             ServerMatchOptions {
                 checkpoint_interval_ticks: 1,
+                ..ServerMatchOptions::default()
             },
         )
         .unwrap();
