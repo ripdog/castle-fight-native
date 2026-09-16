@@ -1,4 +1,4 @@
-use super::*;
+use super::{canonical::*, *};
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
