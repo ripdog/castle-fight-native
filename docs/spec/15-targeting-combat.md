@@ -429,6 +429,8 @@ Each jump MUST define:
 
 For the ordinary `Bounce` delivery mode, the first target is guaranteed to be hit; subsequent targets are selected using the attack's bounce policy.
 
+Castle Fight content may define disjoint attack-effect profiles by the **primary target class** rather than one mixed chain candidate set. Castle Fight 9.27's Elemental of Lightning and Greater Elemental of Lightning do this for Lightning Attack: when the primary target is a unit, the Forked Lightning abilities (`A0CJ` / `A0CK`) target hostile air/ground unit-like targets and may hit up to 3 / 5 targets, but structures are not eligible secondary targets. A nearby tower or other hostile structure therefore MUST NOT receive a fork merely because it is within the effect geometry of a unit-primary attack. When the primary target is a structure, the map instead uses the structure-only Forked Lightning variants (`A0F8` / `A0F6`), each authored for exactly one target. That structure-primary path hits only the selected building and MUST NOT fork onward to nearby units or structures. Implementations MUST preserve this target-class split rather than collapsing the four abilities into one query over units plus buildings.
+
 Spatial traversal order cannot act as the tie-break or alter the random candidate index.
 
 ## 19. Performance requirements
@@ -480,4 +482,5 @@ The targeting/combat test suite MUST eventually include:
 28. ballistic ranged projectile captures a fixed destination, queries post-movement occupants, can miss the original moving target, and can hit another eligible unit in the impact zone;
 29. bounce attack chooses identical subsequent random targets across worker counts, with any uphill interaction following its explicit authored/compatibility semantics;
 30. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path;
-31. a nearby ally attacked by a distant ranged unit or attack building can still cause a building-engaged responder to peel off even when the aggressor lies beyond the responder's ordinary pursuit leash.
+31. a nearby ally attacked by a distant ranged unit or attack building can still cause a building-engaged responder to peel off even when the aggressor lies beyond the responder's ordinary pursuit leash;
+32. Elemental of Lightning/Greater Elemental of Lightning unit-primary Lightning Attack never selects a nearby structure as an additional Forked Lightning victim, while a structure-primary attack damages only the selected structure through its one-target structure profile.
