@@ -166,7 +166,7 @@ Because occupancy is strategically significant, the client SHOULD make footprint
 
 Potential affordances:
 
-- a player-toggleable map grid aligned to the production-building footprint scale; for Castle Fight 9.27 one grid square is one production-building footprint and every fourth line is shown as a double line;
+- a player-toggleable map grid aligned to the production-building footprint scale; its origin and clipping are derived from the selected release's canonical build-region/lane geometry plus the production footprint phase, so it does not extend into the lane band, centre no-man's-land, side dead-space, or other terrain outside those authored regions; for Castle Fight 9.27 one grid square is one production-building footprint and every fourth line is shown as a double line;
 - cell grid while placing;
 - exact occupied-cell overlay;
 - nearby building footprint outlines;

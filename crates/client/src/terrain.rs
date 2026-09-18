@@ -234,8 +234,8 @@ impl TerrainSurface {
     }
 
     #[must_use]
-    pub fn side_mask_mesh(&self, playable_min_x: f32, playable_max_x: f32) -> Mesh {
-        assert!(playable_min_x <= playable_max_x);
+    pub fn side_mask_mesh(&self, buildable_min_x: f32, buildable_max_x: f32) -> Mesh {
+        assert!(buildable_min_x <= buildable_max_x);
         let width = self.elevation.width_tiles() * TERRAIN_PRESENTATION_SUBDIVISIONS;
         let height = self.elevation.height_tiles() * TERRAIN_PRESENTATION_SUBDIVISIONS;
         let row_width = width + 1;
@@ -259,7 +259,7 @@ impl TerrainSurface {
                 let left_world = self.origin_world.x + x as f32 / subdivisions * self.tile_world;
                 let right_world =
                     self.origin_world.x + (x + 1) as f32 / subdivisions * self.tile_world;
-                if right_world > playable_min_x && left_world < playable_max_x {
+                if right_world > buildable_min_x && left_world < buildable_max_x {
                     continue;
                 }
                 let bottom_left = y * row_width + x;
@@ -817,11 +817,11 @@ mod tests {
     }
 
     #[test]
-    fn side_mask_covers_only_terrain_outside_the_playable_x_bounds() {
+    fn side_mask_covers_only_terrain_outside_the_buildable_x_bounds() {
         let terrain = original_terrain();
-        let mask = terrain.side_mask_mesh(-6_400.0, 6_400.0);
+        let mask = terrain.side_mask_mesh(-6_176.0, 6_176.0);
         let indices = mask.indices().expect("side mask should be indexed");
-        let expected_side_columns = 56usize + 72;
+        let expected_side_columns = 63usize + 79;
         let expected_rows = 64usize * TERRAIN_PRESENTATION_SUBDIVISIONS as usize;
         assert_eq!(indices.len(), expected_side_columns * expected_rows * 6);
     }

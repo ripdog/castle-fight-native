@@ -125,6 +125,8 @@ pub struct WorldMetrics {
     navigation_cell_size_subunits: i32,
     navigation_min: IVec2,
     navigation_max: IVec2,
+    build_regions: Vec<BuildingFootprint>,
+    targetless_lane_world: Option<(f32, f32)>,
     camera_focus_min_world: Vec2,
     camera_focus_max_world: Vec2,
 }
@@ -136,10 +138,40 @@ impl WorldMetrics {
             config.navigation_cell_size as f32 / SUBUNITS_PER_WORLD_UNIT as f32;
         let navigation_min = IVec2::new(config.navigation_min.x, config.navigation_min.y);
         let navigation_max = IVec2::new(config.navigation_max.x, config.navigation_max.y);
+        let navigation_footprint = || {
+            BuildingFootprint::new(
+                config.navigation_min.x,
+                config.navigation_min.y,
+                u16::try_from(config.navigation_max.x - config.navigation_min.x + 1)
+                    .expect("navigation width must fit a building footprint"),
+                u16::try_from(config.navigation_max.y - config.navigation_min.y + 1)
+                    .expect("navigation height must fit a building footprint"),
+            )
+        };
+        let build_regions = if config.team_build_regions.iter().any(Vec::is_empty) {
+            vec![navigation_footprint()]
+        } else {
+            config.team_build_regions.iter().flatten().copied().fold(
+                Vec::new(),
+                |mut regions, region| {
+                    if !regions.contains(&region) {
+                        regions.push(region);
+                    }
+                    regions
+                },
+            )
+        };
         Self {
             navigation_cell_size_subunits: config.navigation_cell_size,
             navigation_min,
             navigation_max,
+            build_regions,
+            targetless_lane_world: config.targetless_lane.map(|lane| {
+                (
+                    lane.min_y as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
+                    lane.max_y as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
+                )
+            }),
             camera_focus_min_world: navigation_min.as_vec2() * navigation_cell_world,
             camera_focus_max_world: (navigation_max + IVec2::ONE).as_vec2() * navigation_cell_world,
         }
@@ -167,6 +199,43 @@ impl WorldMetrics {
 
     pub(crate) fn navigation_cell_world(&self) -> f32 {
         self.navigation_cell_size_subunits as f32 / SUBUNITS_PER_WORLD_UNIT as f32
+    }
+
+    fn build_regions(&self) -> impl Iterator<Item = BuildingFootprint> + '_ {
+        self.build_regions.iter().copied()
+    }
+
+    fn build_region_world_bounds(&self, region: BuildingFootprint) -> (Vec2, Vec2) {
+        let cell = self.navigation_cell_world();
+        (
+            Vec2::new(region.min_x as f32 * cell, region.min_y as f32 * cell),
+            Vec2::new(
+                (region.max_x() + 1) as f32 * cell,
+                (region.max_y() + 1) as f32 * cell,
+            ),
+        )
+    }
+
+    fn buildable_world_bounds(&self) -> (Vec2, Vec2) {
+        let mut min = Vec2::splat(f32::INFINITY);
+        let mut max = Vec2::splat(f32::NEG_INFINITY);
+        for region in self.build_regions() {
+            let (region_min, region_max) = self.build_region_world_bounds(region);
+            min = min.min(region_min);
+            max = max.max(region_max);
+        }
+        debug_assert!(min.is_finite() && max.is_finite());
+        (min, max)
+    }
+
+    fn buildable_world_x_bounds(&self) -> (f32, f32) {
+        let (min, max) = self.buildable_world_bounds();
+        (min.x, max.x)
+    }
+
+    fn map_grid_lane_exclusion_world(&self, spacing: f32) -> Option<(f32, f32)> {
+        self.targetless_lane_world
+            .map(|(min_y, max_y)| (min_y - spacing * 0.5, max_y + spacing * 0.5))
     }
 
     fn world_min(&self) -> Vec2 {
@@ -1045,9 +1114,10 @@ fn setup_scene(
     // The retained Warcraft terrain extends well beyond the authored playable rectangle on the
     // west/east sides. WC3 presents those side bands as almost-black dead space. Keep the actual
     // terrain geometry underneath for camera/background continuity, but depth-occlude its diffuse
-    // layers with a conforming unlit mask derived from the authoritative navigation bounds.
+    // layers with a conforming unlit mask derived from the authoritative build-region bounds.
+    let (buildable_min_x, buildable_max_x) = metrics.buildable_world_x_bounds();
     commands.spawn((
-        Mesh3d(meshes.add(terrain.side_mask_mesh(metrics.world_min().x, metrics.world_max().x))),
+        Mesh3d(meshes.add(terrain.side_mask_mesh(buildable_min_x, buildable_max_x))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: SIDE_TERRAIN_MASK_COLOR,
             unlit: true,
@@ -3893,83 +3963,176 @@ fn draw_map_grid(
     let Some(base_cells) = map_grid_base_cells(&selected_match) else {
         return;
     };
-    let spacing = metrics.navigation_cell_world() * f32::from(base_cells);
-    if spacing <= f32::EPSILON {
+    if base_cells == 0 {
         return;
     }
 
-    let min = metrics.world_min();
-    let max = metrics.world_max();
-    let first_x = (min.x / spacing).ceil() as i32;
-    let last_x = (max.x / spacing).floor() as i32;
+    let spacing = metrics.navigation_cell_world() * f32::from(base_cells);
+    let (build_min, build_max) = metrics.buildable_world_bounds();
+    let grid_origin = (build_min + build_max) * 0.5 + Vec2::splat(spacing * 0.5);
+    for region in metrics.build_regions() {
+        draw_map_grid_region(
+            &mut gizmos,
+            &terrain,
+            &metrics,
+            region,
+            spacing,
+            grid_origin,
+        );
+    }
+}
+
+fn map_grid_axis_line_bounds(
+    region_min: f32,
+    region_max: f32,
+    spacing: f32,
+    origin: f32,
+) -> Option<(i32, i32)> {
+    let first = ((region_min - origin) / spacing).ceil() as i32;
+    let last = ((region_max - origin) / spacing).floor() as i32;
+    (first <= last).then_some((first, last))
+}
+
+fn draw_map_grid_region(
+    gizmos: &mut Gizmos<MapGridGizmos>,
+    terrain: &TerrainSurface,
+    metrics: &WorldMetrics,
+    region: BuildingFootprint,
+    spacing: f32,
+    grid_origin: Vec2,
+) {
+    let (region_min, region_max) = metrics.build_region_world_bounds(region);
+    let Some((first_x, last_x)) =
+        map_grid_axis_line_bounds(region_min.x, region_max.x, spacing, grid_origin.x)
+    else {
+        return;
+    };
+    let Some((first_z, last_z)) =
+        map_grid_axis_line_bounds(region_min.y, region_max.y, spacing, grid_origin.y)
+    else {
+        return;
+    };
+    let min = Vec2::new(
+        grid_origin.x + first_x as f32 * spacing,
+        grid_origin.y + first_z as f32 * spacing,
+    );
+    let max = Vec2::new(
+        grid_origin.x + last_x as f32 * spacing,
+        grid_origin.y + last_z as f32 * spacing,
+    );
+    let clip = MapGridClip {
+        min,
+        max,
+        segment_length: spacing,
+        lane_exclusion: metrics.map_grid_lane_exclusion_world(spacing),
+    };
+
     for index in first_x..=last_x {
-        let x = index as f32 * spacing;
+        let x = grid_origin.x + index as f32 * spacing;
         if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
-            draw_map_grid_x_line(
-                &mut gizmos,
-                &terrain,
-                min,
-                max,
+            draw_map_grid_x_line_clipped(
+                gizmos,
+                terrain,
+                clip,
                 x - MAP_GRID_MAJOR_OFFSET_WORLD,
-                spacing,
                 MAP_GRID_MAJOR_COLOR,
             );
-            draw_map_grid_x_line(
-                &mut gizmos,
-                &terrain,
-                min,
-                max,
+            draw_map_grid_x_line_clipped(
+                gizmos,
+                terrain,
+                clip,
                 x + MAP_GRID_MAJOR_OFFSET_WORLD,
-                spacing,
                 MAP_GRID_MAJOR_COLOR,
             );
         } else {
-            draw_map_grid_x_line(
-                &mut gizmos,
-                &terrain,
-                min,
-                max,
-                x,
-                spacing,
-                MAP_GRID_LINE_COLOR,
-            );
+            draw_map_grid_x_line_clipped(gizmos, terrain, clip, x, MAP_GRID_LINE_COLOR);
         }
     }
 
-    let first_z = (min.y / spacing).ceil() as i32;
-    let last_z = (max.y / spacing).floor() as i32;
     for index in first_z..=last_z {
-        let z = index as f32 * spacing;
+        let z = grid_origin.y + index as f32 * spacing;
         if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
-            draw_map_grid_z_line(
-                &mut gizmos,
-                &terrain,
-                min,
-                max,
+            draw_map_grid_z_line_clipped(
+                gizmos,
+                terrain,
+                clip,
                 z - MAP_GRID_MAJOR_OFFSET_WORLD,
-                spacing,
                 MAP_GRID_MAJOR_COLOR,
             );
-            draw_map_grid_z_line(
-                &mut gizmos,
-                &terrain,
-                min,
-                max,
+            draw_map_grid_z_line_clipped(
+                gizmos,
+                terrain,
+                clip,
                 z + MAP_GRID_MAJOR_OFFSET_WORLD,
-                spacing,
                 MAP_GRID_MAJOR_COLOR,
             );
         } else {
-            draw_map_grid_z_line(
-                &mut gizmos,
-                &terrain,
-                min,
-                max,
-                z,
-                spacing,
-                MAP_GRID_LINE_COLOR,
-            );
+            draw_map_grid_z_line_clipped(gizmos, terrain, clip, z, MAP_GRID_LINE_COLOR);
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MapGridClip {
+    min: Vec2,
+    max: Vec2,
+    segment_length: f32,
+    lane_exclusion: Option<(f32, f32)>,
+}
+
+fn draw_map_grid_x_line_clipped(
+    gizmos: &mut Gizmos<MapGridGizmos>,
+    terrain: &TerrainSurface,
+    clip: MapGridClip,
+    x: f32,
+    color: Color,
+) {
+    let Some((lane_min, lane_max)) = clip.lane_exclusion else {
+        draw_map_grid_x_line(
+            gizmos,
+            terrain,
+            clip.min,
+            clip.max,
+            x,
+            clip.segment_length,
+            color,
+        );
+        return;
+    };
+    if lane_max <= clip.min.y || lane_min >= clip.max.y {
+        draw_map_grid_x_line(
+            gizmos,
+            terrain,
+            clip.min,
+            clip.max,
+            x,
+            clip.segment_length,
+            color,
+        );
+        return;
+    }
+
+    if lane_min > clip.min.y {
+        draw_map_grid_x_line(
+            gizmos,
+            terrain,
+            clip.min,
+            Vec2::new(clip.max.x, lane_min.min(clip.max.y)),
+            x,
+            clip.segment_length,
+            color,
+        );
+    }
+    if lane_max < clip.max.y {
+        draw_map_grid_x_line(
+            gizmos,
+            terrain,
+            Vec2::new(clip.min.x, lane_max.max(clip.min.y)),
+            clip.max,
+            x,
+            clip.segment_length,
+            color,
+        );
     }
 }
 
@@ -4001,6 +4164,30 @@ fn draw_map_grid_x_line(
         );
         gizmos.line(p0, p1, color);
     }
+}
+
+fn draw_map_grid_z_line_clipped(
+    gizmos: &mut Gizmos<MapGridGizmos>,
+    terrain: &TerrainSurface,
+    clip: MapGridClip,
+    z: f32,
+    color: Color,
+) {
+    if clip
+        .lane_exclusion
+        .is_some_and(|(lane_min, lane_max)| z > lane_min && z < lane_max)
+    {
+        return;
+    }
+    draw_map_grid_z_line(
+        gizmos,
+        terrain,
+        clip.min,
+        clip.max,
+        z,
+        clip.segment_length,
+        color,
+    );
 }
 
 fn draw_map_grid_z_line(
@@ -4590,6 +4777,57 @@ mod tests {
         };
         assert_eq!(map_grid_base_cells(&selected_match), Some(4));
         assert_eq!(demo.metrics.navigation_cell_world() * 4.0, 128.0);
+    }
+
+    #[test]
+    fn map_boundary_and_grid_geometry_come_from_authoritative_build_regions() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let regions = demo.metrics.build_regions().collect::<Vec<_>>();
+        assert_eq!(regions.len(), 2);
+
+        let (build_min, build_max) = demo.metrics.buildable_world_bounds();
+        assert_eq!(build_min, Vec2::new(-6_176.0, -2_048.0));
+        assert_eq!(build_max, Vec2::new(6_176.0, 2_048.0));
+        assert_eq!(demo.metrics.buildable_world_x_bounds(), (-6_176.0, 6_176.0));
+
+        let spacing = demo.metrics.navigation_cell_world() * 4.0;
+        let grid_origin = (build_min + build_max) * 0.5 + Vec2::splat(spacing * 0.5);
+        assert_eq!(grid_origin, Vec2::new(64.0, 64.0));
+        assert_eq!(
+            demo.metrics.map_grid_lane_exclusion_world(spacing),
+            Some((-448.0, 448.0))
+        );
+
+        let (left_min, left_max) = demo.metrics.build_region_world_bounds(regions[0]);
+        let (right_min, right_max) = demo.metrics.build_region_world_bounds(regions[1]);
+        let left_x =
+            map_grid_axis_line_bounds(left_min.x, left_max.x, spacing, grid_origin.x).unwrap();
+        let right_x =
+            map_grid_axis_line_bounds(right_min.x, right_max.x, spacing, grid_origin.x).unwrap();
+        let vertical =
+            map_grid_axis_line_bounds(left_min.y, left_max.y, spacing, grid_origin.y).unwrap();
+
+        assert_eq!(
+            (
+                grid_origin.x + left_x.0 as f32 * spacing,
+                grid_origin.x + left_x.1 as f32 * spacing,
+            ),
+            (-6_080.0, -1_984.0)
+        );
+        assert_eq!(
+            (
+                grid_origin.x + right_x.0 as f32 * spacing,
+                grid_origin.x + right_x.1 as f32 * spacing,
+            ),
+            (1_984.0, 6_080.0)
+        );
+        assert_eq!(
+            (
+                grid_origin.y + vertical.0 as f32 * spacing,
+                grid_origin.y + vertical.1 as f32 * spacing,
+            ),
+            (-1_984.0, 1_984.0)
+        );
     }
 
     #[test]

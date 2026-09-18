@@ -507,9 +507,29 @@ fn simulation_config_927(
             (navigation_max.y - LANE_MAX_Y) as u16,
         ),
     ];
+    let navigation_height = u16::try_from(navigation_max.y - navigation_min.y + 1)
+        .expect("Castle Fight navigation height must fit a footprint");
+    let side_dead_space_blockers = vec![
+        BuildingFootprint::new(
+            navigation_min.x,
+            navigation_min.y,
+            u16::try_from(left_build_region.min_x - navigation_min.x)
+                .expect("left dead-space width must fit a footprint"),
+            navigation_height,
+        ),
+        BuildingFootprint::new(
+            right_build_region.max_x() + 1,
+            navigation_min.y,
+            u16::try_from(navigation_max.x - right_build_region.max_x())
+                .expect("right dead-space width must fit a footprint"),
+            navigation_height,
+        ),
+    ];
     let mut static_blockers = no_mans_land_blockers.clone();
+    static_blockers.extend(side_dead_space_blockers.iter().copied());
     static_blockers.extend(original_wall_blockers());
     let mut air_static_blockers = no_mans_land_blockers;
+    air_static_blockers.extend(side_dead_space_blockers);
     air_static_blockers.extend(original_air_pathing_blockers());
 
     SimulationConfig {
@@ -1449,8 +1469,53 @@ mod tests {
                 384 * SUBUNITS_PER_WORLD_UNIT
             ))
         );
-        assert_eq!(resolved.simulation_config.team_build_regions[0].len(), 1);
-        assert_eq!(resolved.simulation_config.team_build_regions[1].len(), 1);
+        let left_build_region = world_rect_footprint(
+            LEFT_BUILD_MIN_X_WORLD,
+            BUILD_MIN_Y_WORLD,
+            LEFT_BUILD_MAX_X_WORLD,
+            BUILD_MAX_Y_WORLD,
+        );
+        let right_build_region = world_rect_footprint(
+            RIGHT_BUILD_MIN_X_WORLD,
+            BUILD_MIN_Y_WORLD,
+            RIGHT_BUILD_MAX_X_WORLD,
+            BUILD_MAX_Y_WORLD,
+        );
+        assert_eq!(
+            resolved.simulation_config.team_build_regions[0],
+            vec![left_build_region]
+        );
+        assert_eq!(
+            resolved.simulation_config.team_build_regions[1],
+            vec![right_build_region]
+        );
+
+        let left_dead_space = world_rect_footprint(
+            PLAYABLE_MIN_X_WORLD,
+            PLAYABLE_MIN_Y_WORLD,
+            LEFT_BUILD_MIN_X_WORLD,
+            PLAYABLE_MAX_Y_WORLD,
+        );
+        let right_dead_space = world_rect_footprint(
+            RIGHT_BUILD_MAX_X_WORLD,
+            PLAYABLE_MIN_Y_WORLD,
+            PLAYABLE_MAX_X_WORLD,
+            PLAYABLE_MAX_Y_WORLD,
+        );
+        for blocker in [left_dead_space, right_dead_space] {
+            assert!(
+                resolved
+                    .simulation_config
+                    .static_blockers
+                    .contains(&blocker)
+            );
+            assert!(
+                resolved
+                    .simulation_config
+                    .air_static_blockers
+                    .contains(&blocker)
+            );
+        }
 
         let navigation_min_x = resolved.simulation_config.navigation_min.x
             * resolved.simulation_config.navigation_cell_size;
