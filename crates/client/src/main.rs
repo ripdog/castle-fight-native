@@ -644,12 +644,18 @@ fn advance_authoritative_simulation(
     mut presentation: ResMut<PresentationSamples>,
     mut performance: Option<ResMut<PerformanceCounters>>,
 ) {
+    let fixed_started = std::time::Instant::now();
+
     if authoritative.is_networked() {
-        if let Err(error) = process_network_events(
+        let result = process_network_events(
             &mut authoritative,
             &mut presentation,
             performance.as_deref_mut(),
-        ) {
+        );
+        if let Some(performance) = performance.as_deref_mut() {
+            performance.record_fixed_update_wall(fixed_started.elapsed());
+        }
+        if let Err(error) = result {
             panic!("network canonical stream invariant failed: {error}");
         }
         return;
@@ -668,6 +674,9 @@ fn advance_authoritative_simulation(
         }
         Err(CanonicalStreamError::MatchNotRunning(_)) => {}
         Err(error) => panic!("local canonical stream invariant failed: {error:?}"),
+    }
+    if let Some(performance) = performance.as_deref_mut() {
+        performance.record_fixed_update_wall(fixed_started.elapsed());
     }
 }
 
