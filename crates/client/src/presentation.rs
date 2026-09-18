@@ -715,7 +715,12 @@ struct SceneAssetResources<'w> {
 #[derive(SystemParam)]
 struct HealthBarRenderParams<'w, 's> {
     debug: Res<'w, DebugPresentation>,
-    camera: Single<'w, 's, (&'static Camera, &'static Transform, &'static Frustum), With<Camera3d>>,
+    camera: Single<
+        'w,
+        's,
+        (&'static Camera, &'static Transform, &'static Frustum),
+        (With<Camera3d>, Without<HealthBarBatchEntity>),
+    >,
     batch: ResMut<'w, HealthBarBatch>,
     health_bar_materials: ResMut<'w, Assets<HealthBarMaterial>>,
     shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
