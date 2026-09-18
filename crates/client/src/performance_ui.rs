@@ -4,7 +4,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bevy::prelude::*;
+use bevy::{
+    camera::visibility::{NoFrustumCulling, ViewVisibility},
+    diagnostic::DiagnosticsStore,
+    prelude::*,
+    render::diagnostic::RenderDiagnosticsPlugin,
+};
 use castle_fight_sim::TickTimings;
 
 use crate::{bridge::PresentationSamples, resource_ui::TOP_BAR_HEIGHT};
@@ -172,6 +177,9 @@ pub(crate) struct PerformanceUiPlugin;
 
 impl Plugin for PerformanceUiPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<RenderDiagnosticsPlugin>() {
+            app.add_plugins(RenderDiagnosticsPlugin);
+        }
         app.init_resource::<PerformanceCounters>()
             .add_systems(Startup, setup_performance_panel)
             .add_systems(First, begin_main_frame_profile)
@@ -225,6 +233,8 @@ fn setup_performance_panel(mut commands: Commands) {
 fn update_performance_panel(
     counters: Res<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
+    diagnostics: Res<DiagnosticsStore>,
+    mesh_visibility: Query<(&ViewVisibility, Has<NoFrustumCulling>), With<Mesh3d>>,
     mut text: Single<&mut Text, With<PerformancePanelText>>,
 ) {
     let now = Instant::now();
@@ -233,6 +243,17 @@ fn update_performance_panel(
     let collision_fallback =
         summarize_collision_fallback_samples(&counters.collision_fallback_samples, now);
     let render = average_presentation_samples(&counters.presentation_samples, now);
+    let gpu_passes = gpu_pass_timings(&diagnostics);
+    let (mesh_count, visible_meshes, no_cull_meshes) = mesh_visibility.iter().fold(
+        (0usize, 0usize, 0usize),
+        |(total, visible, no_cull), (view_visibility, no_frustum_culling)| {
+            (
+                total + 1,
+                visible + usize::from(view_visibility.get()),
+                no_cull + usize::from(no_frustum_culling),
+            )
+        },
+    );
 
     let output = &mut text.0;
     output.clear();
@@ -273,6 +294,15 @@ fn update_performance_panel(
             duration_ms(frame.sim_step)
         )
         .unwrap();
+        if let Some(render) = render {
+            push_timing(
+                output,
+                "other main",
+                frame
+                    .main_cpu
+                    .saturating_sub(frame.fixed_wall.saturating_add(render.total)),
+            );
+        }
     } else {
         output.push_str("FRAME  collecting 1s average...\n");
     }
@@ -352,6 +382,47 @@ fn update_performance_panel(
     } else {
         output.push_str("\n3D CPU  collecting 1s average...\n");
     }
+
+    writeln!(
+        output,
+        "\nRENDER  meshes {:>5}/{:<5} visible   no-cull {:>5}",
+        visible_meshes, mesh_count, no_cull_meshes
+    )
+    .unwrap();
+    if gpu_passes.is_empty() {
+        output.push_str("GPU PASS  collecting render diagnostics...\n");
+    } else {
+        output.push_str("GPU PASS  recent avg\n");
+        for (name, milliseconds) in gpu_passes {
+            writeln!(output, "  {name:<24} {milliseconds:>7.3}ms").unwrap();
+        }
+    }
+}
+
+fn gpu_pass_timings(diagnostics: &DiagnosticsStore) -> Vec<(&str, f64)> {
+    const MAX_GPU_PASSES: usize = 8;
+
+    let mut passes = diagnostics
+        .iter()
+        .filter_map(|diagnostic| {
+            let name = diagnostic
+                .path()
+                .as_str()
+                .strip_prefix("render/")?
+                .strip_suffix("/elapsed_gpu")?;
+            let milliseconds = diagnostic.average()?;
+            milliseconds.is_finite().then_some((name, milliseconds))
+        })
+        .collect::<Vec<_>>();
+    passes.sort_by(|left, right| {
+        right
+            .1
+            .partial_cmp(&left.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| left.0.cmp(right.0))
+    });
+    passes.truncate(MAX_GPU_PASSES);
+    passes
 }
 
 fn push_timing(output: &mut String, label: &str, duration: Duration) {
@@ -648,6 +719,31 @@ mod tests {
 
         let summary = summarize_collision_fallback_samples(&samples, now).unwrap();
         assert_eq!(summary, (3.0, 200.0, 31));
+    }
+
+    #[test]
+    fn gpu_pass_summary_filters_and_orders_render_gpu_timings() {
+        use bevy::diagnostic::{Diagnostic, DiagnosticMeasurement, DiagnosticPath};
+
+        let mut diagnostics = DiagnosticsStore::default();
+        for (path, value) in [
+            ("render/main_opaque_pass_3d/elapsed_gpu", 8.0),
+            ("render/ui/elapsed_gpu", 2.0),
+            ("render/main_opaque_pass_3d/elapsed_cpu", 20.0),
+            ("other/not_render_gpu", 99.0),
+        ] {
+            let mut diagnostic = Diagnostic::new(DiagnosticPath::new(path.to_owned()));
+            diagnostic.add_measurement(DiagnosticMeasurement {
+                time: Instant::now(),
+                value,
+            });
+            diagnostics.add(diagnostic);
+        }
+
+        assert_eq!(
+            gpu_pass_timings(&diagnostics),
+            vec![("main_opaque_pass_3d", 8.0), ("ui", 2.0)]
+        );
     }
 
     #[test]
