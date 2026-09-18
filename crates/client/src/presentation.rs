@@ -696,6 +696,7 @@ struct HealthBarRect {
 #[derive(Resource)]
 struct HealthBarBatch {
     buffer: Handle<ShaderBuffer>,
+    material: Handle<HealthBarMaterial>,
     rects: Vec<HealthBarRect>,
     gpu_data: Vec<[f32; 4]>,
     gpu_capacity_rects: usize,
@@ -714,13 +715,9 @@ struct SceneAssetResources<'w> {
 #[derive(SystemParam)]
 struct HealthBarRenderParams<'w, 's> {
     debug: Res<'w, DebugPresentation>,
-    camera: Single<
-        'w,
-        's,
-        (&'static Camera, &'static GlobalTransform, &'static Frustum),
-        With<Camera3d>,
-    >,
+    camera: Single<'w, 's, (&'static Camera, &'static Transform, &'static Frustum), With<Camera3d>>,
     batch: ResMut<'w, HealthBarBatch>,
+    health_bar_materials: ResMut<'w, Assets<HealthBarMaterial>>,
     shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
     batch_entity: Single<
         'w,
@@ -915,12 +912,13 @@ fn setup_scene(
 
     let health_bar_buffer_data = vec![[0.0; 4]; 1 + HEALTH_BAR_BATCH_MIN_BUFFER_RECTS * 2];
     let health_bar_buffer = shader_buffers.add(ShaderBuffer::from(health_bar_buffer_data.clone()));
+    let health_bar_material = health_bar_materials.add(HealthBarMaterial {
+        rect_data: health_bar_buffer.clone(),
+    });
     let health_bar_mesh = meshes.add(health_bar_batch_mesh());
     commands.spawn((
         Mesh3d(health_bar_mesh),
-        MeshMaterial3d(health_bar_materials.add(HealthBarMaterial {
-            rect_data: health_bar_buffer.clone(),
-        })),
+        MeshMaterial3d(health_bar_material.clone()),
         Transform::default(),
         Visibility::Hidden,
         NoFrustumCulling,
@@ -928,6 +926,7 @@ fn setup_scene(
     ));
     commands.insert_resource(HealthBarBatch {
         buffer: health_bar_buffer,
+        material: health_bar_material,
         rects: Vec::with_capacity(256),
         gpu_data: health_bar_buffer_data,
         gpu_capacity_rects: HEALTH_BAR_BATCH_MIN_BUFFER_RECTS,
@@ -3670,17 +3669,26 @@ fn update_health_bar_batch(
         debug,
         camera,
         mut batch,
+        mut health_bar_materials,
         mut shader_buffers,
         mut batch_entity,
     } = params;
     let (camera, camera_transform, frustum) = *camera;
+    // Camera movement is applied earlier in Update, while Bevy propagates GlobalTransform in
+    // PostUpdate. This camera is an unparented root, so derive its current global transform
+    // directly from Transform to keep screen-space bars on the same frame as camera motion.
+    let camera_global = GlobalTransform::from(*camera_transform);
     let (batch_transform, batch_visibility) = &mut *batch_entity;
 
     batch.rects.clear();
 
     if debug.health_bars {
         let Some(viewport) = camera.logical_viewport_rect() else {
-            clear_health_bar_buffer_if_needed(&mut batch, &mut shader_buffers);
+            clear_health_bar_buffer_if_needed(
+                &mut batch,
+                &mut health_bar_materials,
+                &mut shader_buffers,
+            );
             **batch_visibility = Visibility::Hidden;
             return;
         };
@@ -3706,7 +3714,7 @@ fn update_health_bar_batch(
                 continue;
             }
             let Some(screen) =
-                health_bar_screen_layout(camera, camera_transform, anchor, world_width, viewport)
+                health_bar_screen_layout(camera, &camera_global, anchor, world_width, viewport)
             else {
                 continue;
             };
@@ -3734,7 +3742,7 @@ fn update_health_bar_batch(
                 continue;
             }
             let Some(screen) =
-                health_bar_screen_layout(camera, camera_transform, anchor, world_width, viewport)
+                health_bar_screen_layout(camera, &camera_global, anchor, world_width, viewport)
             else {
                 continue;
             };
@@ -3775,20 +3783,21 @@ fn update_health_bar_batch(
         **batch_visibility = Visibility::Visible;
         // Transparent meshes are sorted back-to-front. The shader ignores this transform, but
         // keeping a non-empty batch at the camera sorts it after ordinary transparent geometry.
-        batch_transform.translation = camera_transform.translation();
+        batch_transform.translation = camera_transform.translation;
     }
-    upload_health_bar_rects(&mut batch, &mut shader_buffers);
+    upload_health_bar_rects(&mut batch, &mut health_bar_materials, &mut shader_buffers);
 }
 
 fn clear_health_bar_buffer_if_needed(
     batch: &mut HealthBarBatch,
+    health_bar_materials: &mut Assets<HealthBarMaterial>,
     shader_buffers: &mut Assets<ShaderBuffer>,
 ) {
     if batch.last_rect_count == 0 {
         return;
     }
     batch.rects.clear();
-    upload_health_bar_rects(batch, shader_buffers);
+    upload_health_bar_rects(batch, health_bar_materials, shader_buffers);
 }
 
 fn health_bar_world_visible(frustum: &Frustum, center: Vec3, width: f32) -> bool {
@@ -3938,13 +3947,18 @@ fn health_bar_batch_mesh() -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
 }
 
-fn upload_health_bar_rects(batch: &mut HealthBarBatch, shader_buffers: &mut Assets<ShaderBuffer>) {
+fn upload_health_bar_rects(
+    batch: &mut HealthBarBatch,
+    health_bar_materials: &mut Assets<HealthBarMaterial>,
+    shader_buffers: &mut Assets<ShaderBuffer>,
+) {
     let rect_count = batch.rects.len().min(HEALTH_BAR_BATCH_MAX_RECTS);
     let required_capacity = rect_count
         .max(HEALTH_BAR_BATCH_MIN_BUFFER_RECTS)
         .next_power_of_two()
         .min(HEALTH_BAR_BATCH_MAX_RECTS);
-    if required_capacity > batch.gpu_capacity_rects {
+    let grew = required_capacity > batch.gpu_capacity_rects;
+    if grew {
         batch.gpu_capacity_rects = required_capacity;
         batch
             .gpu_data
@@ -3957,7 +3971,17 @@ fn upload_health_bar_rects(batch: &mut HealthBarBatch, shader_buffers: &mut Asse
         batch.gpu_data[2 + index * 2] = rect.color;
     }
 
-    if let Some(mut buffer) = shader_buffers.get_mut(&batch.buffer) {
+    if grew {
+        // A ShaderBuffer whose byte length changes is recreated on the GPU. The material bind
+        // group does not observe that recreation through an unchanged Handle, so explicitly
+        // replace the asset and retarget the material whenever capacity grows.
+        let new_buffer = shader_buffers.add(ShaderBuffer::from(batch.gpu_data.clone()));
+        batch.buffer = new_buffer.clone();
+        let mut material = health_bar_materials
+            .get_mut(&batch.material)
+            .expect("health bar material must outlive its batch");
+        material.rect_data = new_buffer;
+    } else if let Some(mut buffer) = shader_buffers.get_mut(&batch.buffer) {
         buffer.set_data(batch.gpu_data.clone());
     }
     batch.last_rect_count = rect_count;
@@ -5336,6 +5360,43 @@ mod tests {
         assert!((rects[0].max.x - rects[1].min.x).abs() < 1.0e-6);
         assert_eq!(rects[0].min.y, rects[1].min.y);
         assert_eq!(rects[0].max.y, rects[1].max.y);
+    }
+
+    #[test]
+    fn health_bar_buffer_growth_rebinds_the_material() {
+        let mut shader_buffers = Assets::<ShaderBuffer>::default();
+        let mut health_bar_materials = Assets::<HealthBarMaterial>::default();
+        let gpu_data = vec![[0.0; 4]; 1 + HEALTH_BAR_BATCH_MIN_BUFFER_RECTS * 2];
+        let old_buffer = shader_buffers.add(ShaderBuffer::from(gpu_data.clone()));
+        let material = health_bar_materials.add(HealthBarMaterial {
+            rect_data: old_buffer.clone(),
+        });
+        let rect = HealthBarRect {
+            min: Vec2::ZERO,
+            max: Vec2::ONE,
+            color: [1.0; 4],
+        };
+        let mut batch = HealthBarBatch {
+            buffer: old_buffer.clone(),
+            material: material.clone(),
+            rects: vec![rect; HEALTH_BAR_BATCH_MIN_BUFFER_RECTS + 1],
+            gpu_data,
+            gpu_capacity_rects: HEALTH_BAR_BATCH_MIN_BUFFER_RECTS,
+            last_rect_count: 0,
+        };
+
+        upload_health_bar_rects(&mut batch, &mut health_bar_materials, &mut shader_buffers);
+
+        assert_eq!(batch.gpu_capacity_rects, 128);
+        assert_ne!(batch.buffer.id(), old_buffer.id());
+        assert_eq!(
+            health_bar_materials
+                .get(&material)
+                .expect("test health bar material should exist")
+                .rect_data
+                .id(),
+            batch.buffer.id()
+        );
     }
 
     #[test]
