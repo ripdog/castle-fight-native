@@ -225,6 +225,16 @@ type ActionInteractions<'w, 's> = Query<
     (Changed<Interaction>, With<Button>),
 >;
 
+type BuildPlacementGhosts<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static BuildPlacementGhost,
+        &'static mut Transform,
+        &'static mut Visibility,
+    ),
+>;
+
 type BuildGhostMeshMaterials<'w, 's> = Query<
     'w,
     's,
@@ -1029,24 +1039,30 @@ fn build_ghost_material(mut source: StandardMaterial) -> StandardMaterial {
     source
 }
 
+fn hide_build_preview_ghosts(ghosts: &mut BuildPlacementGhosts<'_, '_>) {
+    // Keep the loaded scene hierarchy alive. The material/animation setup systems can queue
+    // deferred commands for ghost descendants later in the same Update schedule; despawning here
+    // races those commands and can make Bevy apply an insert to an entity whose generation already
+    // changed. Hidden roots are also cheaper to reuse when the cursor crosses validity boundaries.
+    for (_, _, mut visibility) in ghosts {
+        *visibility = Visibility::Hidden;
+    }
+}
+
 fn update_build_preview(
     mut commands: Commands,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut ghosts: Query<(Entity, &BuildPlacementGhost, &mut Transform)>,
+    mut ghosts: BuildPlacementGhosts<'_, '_>,
     resources: BuildPreviewResources<'_>,
     mut gizmos: Gizmos,
 ) {
     let Some(TargetingAction::Build(kind)) = resources.state.targeting() else {
-        for (entity, ..) in &mut ghosts {
-            commands.entity(entity).despawn();
-        }
+        hide_build_preview_ghosts(&mut ghosts);
         return;
     };
     let Some(cursor) = window.cursor_position() else {
-        for (entity, ..) in &mut ghosts {
-            commands.entity(entity).despawn();
-        }
+        hide_build_preview_ghosts(&mut ghosts);
         return;
     };
     if cursor_over_action_panel(cursor, window.height(), resources.state.actor.is_some())
@@ -1055,17 +1071,13 @@ fn update_build_preview(
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
         || cursor_over_map_grid_toggle(cursor, window.width())
     {
-        for (entity, ..) in &mut ghosts {
-            commands.entity(entity).despawn();
-        }
+        hide_build_preview_ghosts(&mut ghosts);
         return;
     }
     let (camera, camera_transform) = *camera;
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &resources.terrain)
     else {
-        for (entity, ..) in &mut ghosts {
-            commands.entity(entity).despawn();
-        }
+        hide_build_preview_ghosts(&mut ghosts);
         return;
     };
     let footprint = placement_footprint(
@@ -1107,17 +1119,13 @@ fn update_build_preview(
     }
 
     if !valid {
-        for (entity, ..) in &mut ghosts {
-            commands.entity(entity).despawn();
-        }
+        hide_build_preview_ghosts(&mut ghosts);
         return;
     }
 
     let rawcode = kind.rawcode(resources.selected_match.content);
     let Some(model) = resources.building_models.get(rawcode) else {
-        for (entity, ..) in &mut ghosts {
-            commands.entity(entity).despawn();
-        }
+        hide_build_preview_ghosts(&mut ghosts);
         return;
     };
     let (mut center, _) = resources.metrics.footprint_center_size(footprint);
@@ -1129,13 +1137,14 @@ fn update_build_preview(
     };
 
     let mut found_matching_ghost = false;
-    for (entity, ghost, mut ghost_transform) in &mut ghosts {
-        if found_matching_ghost || ghost.rawcode != rawcode {
-            commands.entity(entity).despawn();
-            continue;
+    for (ghost, mut ghost_transform, mut visibility) in &mut ghosts {
+        if ghost.rawcode == rawcode && !found_matching_ghost {
+            found_matching_ghost = true;
+            *ghost_transform = transform;
+            *visibility = Visibility::Visible;
+        } else {
+            *visibility = Visibility::Hidden;
         }
-        found_matching_ghost = true;
-        *ghost_transform = transform;
     }
     if !found_matching_ghost {
         commands.spawn((
@@ -1150,6 +1159,7 @@ fn update_build_preview(
                 "wc3/buildings",
             ),
             transform,
+            Visibility::Visible,
             BuildPlacementGhost { rawcode },
         ));
     }
@@ -1718,9 +1728,13 @@ mod tests {
                 ..default()
             });
         let root = world
-            .spawn(BuildPlacementGhost {
-                rawcode: u32::from_be_bytes(*b"h03K"),
-            })
+            .spawn((
+                BuildPlacementGhost {
+                    rawcode: u32::from_be_bytes(*b"h03K"),
+                },
+                Transform::default(),
+                Visibility::Visible,
+            ))
             .id();
         let mesh = world
             .spawn((MeshMaterial3d(source.clone()), Wc3MaterialProcessed))
@@ -1750,6 +1764,48 @@ mod tests {
         assert_eq!(tinted.alpha_mode, AlphaMode::Opaque);
         assert_eq!(tinted.depth_bias, 7.0);
         assert!(!tinted.unlit);
+    }
+
+    #[test]
+    fn hiding_preview_keeps_scene_entities_alive_for_deferred_material_work() {
+        let mut world = World::new();
+        world.insert_resource(Assets::<StandardMaterial>::default());
+        world.insert_resource(BuildPreviewMaterials::default());
+
+        let source = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let root = world
+            .spawn((
+                BuildPlacementGhost {
+                    rawcode: u32::from_be_bytes(*b"h03K"),
+                },
+                Transform::default(),
+                Visibility::Visible,
+            ))
+            .id();
+        let mesh = world
+            .spawn((MeshMaterial3d(source), Wc3MaterialProcessed))
+            .id();
+        world.entity_mut(root).add_child(mesh);
+
+        let mut state =
+            bevy::ecs::system::SystemState::<BuildPlacementGhosts<'_, '_>>::new(&mut world);
+        {
+            let mut ghosts = state
+                .get_mut(&mut world)
+                .expect("preview ghost query should validate in test world");
+            hide_build_preview_ghosts(&mut ghosts);
+        }
+        state.apply(&mut world);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_build_preview_ghost_materials);
+        schedule.run(&mut world);
+
+        assert_eq!(world.get::<Visibility>(root), Some(&Visibility::Hidden));
+        assert!(world.get::<BuildPlacementGhost>(root).is_some());
+        assert!(world.get::<BuildGhostMaterial>(mesh).is_some());
     }
 
     #[test]
