@@ -54,7 +54,7 @@ use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use network::{NetworkClient, NetworkEvent};
-use performance_ui::{PerformanceCounters, PerformanceUiPlugin};
+use performance_ui::{PerformanceCounters, PerformanceUiPlugin, performance_trace_layer};
 use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
@@ -348,6 +348,10 @@ fn main() {
         .insert_resource(terrain_textures)
         .add_plugins(
             DefaultPlugins
+                .set(bevy::log::LogPlugin {
+                    custom_layer: performance_trace_layer,
+                    ..default()
+                })
                 .set(AssetPlugin {
                     file_path: client_asset_root().to_string_lossy().into_owned(),
                     ..default()

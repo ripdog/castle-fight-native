@@ -1,6 +1,10 @@
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     fmt::Write as _,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -8,7 +12,12 @@ use bevy::{
     app::{MainScheduleOrder, RunFixedMainLoop, SpawnScene},
     camera::visibility::{DynamicSkinnedMeshBounds, NoFrustumCulling, ViewVisibility},
     diagnostic::DiagnosticsStore,
-    ecs::schedule::ScheduleLabel,
+    ecs::{schedule::ScheduleLabel, system::SystemParam},
+    log::{
+        BoxedLayer,
+        tracing::{self, Subscriber},
+        tracing_subscriber::{Layer, layer::Context, registry::LookupSpan},
+    },
     mesh::skinning::SkinnedMesh,
     prelude::*,
     render::diagnostic::RenderDiagnosticsPlugin,
@@ -27,6 +36,157 @@ const PANEL_BORDER: Color = Color::srgba(0.28, 0.32, 0.38, 0.96);
 const HEADING_COLOR: Color = Color::srgb(0.92, 0.94, 0.98);
 const FRAME_COLOR: Color = Color::srgb(0.76, 0.80, 0.86);
 const SMOOTHING_WINDOW: Duration = Duration::from_secs(1);
+const MAX_SYSTEM_TIMINGS: usize = 10;
+
+#[derive(Default)]
+struct SystemTraceAccumulator {
+    name: String,
+    busy_ns: AtomicU64,
+    calls: AtomicU64,
+}
+
+#[derive(Resource, Clone, Default)]
+struct SystemTraceSink(Arc<Mutex<Vec<Arc<SystemTraceAccumulator>>>>);
+
+#[derive(Default)]
+struct SystemSpanState {
+    accumulator: Arc<SystemTraceAccumulator>,
+    entered: usize,
+    last_entered: Option<Instant>,
+}
+
+struct SystemTraceLayer {
+    sink: Arc<Mutex<Vec<Arc<SystemTraceAccumulator>>>>,
+}
+
+struct SystemNameVisitor(Option<String>);
+
+impl tracing::field::Visit for SystemNameVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() != "name" || self.0.is_some() {
+            return;
+        }
+        let value = format!("{value:?}");
+        self.0 = Some(
+            value
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+                .unwrap_or(&value)
+                .to_owned(),
+        );
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "name" {
+            self.0 = Some(value.to_owned());
+        }
+    }
+}
+
+impl<S> Layer<S> for SystemTraceLayer
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+{
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        id: &tracing::span::Id,
+        ctx: Context<'_, S>,
+    ) {
+        if attrs.metadata().name() != "system" {
+            return;
+        }
+
+        let mut visitor = SystemNameVisitor(None);
+        attrs.record(&mut visitor);
+        let Some(name) = visitor.0 else {
+            return;
+        };
+        let accumulator = Arc::new(SystemTraceAccumulator { name, ..default() });
+        self.sink
+            .lock()
+            .expect("system trace sink mutex poisoned")
+            .push(accumulator.clone());
+        let Some(span) = ctx.span(id) else {
+            return;
+        };
+        span.extensions_mut().insert(SystemSpanState {
+            accumulator,
+            ..default()
+        });
+    }
+
+    fn on_enter(&self, id: &tracing::span::Id, ctx: Context<'_, S>) {
+        let Some(span) = ctx.span(id) else {
+            return;
+        };
+        let mut extensions = span.extensions_mut();
+        let Some(state) = extensions.get_mut::<SystemSpanState>() else {
+            return;
+        };
+        if state.entered == 0 {
+            state.last_entered = Some(Instant::now());
+        }
+        state.entered += 1;
+    }
+
+    fn on_exit(&self, id: &tracing::span::Id, ctx: Context<'_, S>) {
+        let Some(span) = ctx.span(id) else {
+            return;
+        };
+        let mut extensions = span.extensions_mut();
+        let Some(state) = extensions.get_mut::<SystemSpanState>() else {
+            return;
+        };
+        if state.entered == 0 {
+            return;
+        }
+        state.entered -= 1;
+        if state.entered != 0 {
+            return;
+        }
+        let Some(started) = state.last_entered.take() else {
+            return;
+        };
+        let elapsed_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+        state
+            .accumulator
+            .busy_ns
+            .fetch_add(elapsed_ns, Ordering::Relaxed);
+        state.accumulator.calls.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+pub(crate) fn performance_trace_layer(app: &mut App) -> Option<BoxedLayer> {
+    let sink = SystemTraceSink::default();
+    let layer = SystemTraceLayer {
+        sink: sink.0.clone(),
+    };
+    app.insert_resource(sink);
+    Some(Box::new(layer))
+}
+
+#[derive(Resource)]
+struct SystemTraceDisplay {
+    window_started: Instant,
+    rows: Vec<SystemTraceRow>,
+}
+
+impl Default for SystemTraceDisplay {
+    fn default() -> Self {
+        Self {
+            window_started: Instant::now(),
+            rows: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SystemTraceRow {
+    name: String,
+    average_per_frame: Duration,
+    calls_per_frame: f64,
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct PresentationTimings {
@@ -242,6 +402,7 @@ impl Plugin for PerformanceUiPlugin {
         }
 
         app.init_resource::<PerformanceCounters>()
+            .init_resource::<SystemTraceDisplay>()
             .init_schedule(PerfFrameStart)
             .init_schedule(PerfAfterFirst)
             .init_schedule(PerfAfterPreUpdate)
@@ -327,13 +488,20 @@ type MeshVisibilityDiagnostics<'w, 's> = Query<
     With<Mesh3d>,
 >;
 
+#[derive(SystemParam)]
+struct PerformancePanelDiagnostics<'w, 's> {
+    diagnostics: Res<'w, DiagnosticsStore>,
+    fixed_time: Res<'w, Time<Fixed>>,
+    trace_sink: Option<Res<'w, SystemTraceSink>>,
+    trace_display: ResMut<'w, SystemTraceDisplay>,
+    mesh_visibility: MeshVisibilityDiagnostics<'w, 's>,
+    animation_players: Query<'w, 's, (), With<AnimationPlayer>>,
+}
+
 fn update_performance_panel(
     counters: Res<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
-    diagnostics: Res<DiagnosticsStore>,
-    fixed_time: Res<Time<Fixed>>,
-    mesh_visibility: MeshVisibilityDiagnostics<'_, '_>,
-    animation_players: Query<(), With<AnimationPlayer>>,
+    mut diagnostics: PerformancePanelDiagnostics<'_, '_>,
     mut text: Single<&mut Text, With<PerformancePanelText>>,
 ) {
     let now = Instant::now();
@@ -342,9 +510,17 @@ fn update_performance_panel(
     let collision_fallback =
         summarize_collision_fallback_samples(&counters.collision_fallback_samples, now);
     let render = average_presentation_samples(&counters.presentation_samples, now);
-    let gpu_passes = gpu_pass_timings(&diagnostics);
+    if let Some(trace_sink) = diagnostics.trace_sink.as_deref() {
+        refresh_system_trace_display(
+            &mut diagnostics.trace_display,
+            trace_sink,
+            now,
+            frame.map(|f| f.wall),
+        );
+    }
+    let gpu_passes = gpu_pass_timings(&diagnostics.diagnostics);
     let (mesh_count, visible_meshes, no_cull_meshes, skinned_meshes, dynamic_skinned_bounds) =
-        mesh_visibility.iter().fold(
+        diagnostics.mesh_visibility.iter().fold(
             (0usize, 0usize, 0usize, 0usize, 0usize),
             |(total, visible, no_cull, skinned, dynamic_bounds),
              (
@@ -362,7 +538,7 @@ fn update_performance_panel(
                 )
             },
         );
-    let effective_sim_hz = 1.0 / fixed_time.timestep().as_secs_f64();
+    let effective_sim_hz = 1.0 / diagnostics.fixed_time.timestep().as_secs_f64();
     let sim_speed = effective_sim_hz / f64::from(CASTLE_FIGHT_SIMULATION_HZ);
 
     let output = &mut text.0;
@@ -434,6 +610,20 @@ fn update_performance_panel(
         );
     } else {
         output.push_str("FRAME  collecting 1s average...\n");
+    }
+
+    if !diagnostics.trace_display.rows.is_empty() {
+        output.push_str("\nSYSTEM CPU  top 1s avg/frame\n");
+        for row in &diagnostics.trace_display.rows {
+            writeln!(
+                output,
+                "  {:<25} {:>7.3}ms {:>4.1}x",
+                compact_system_name(&row.name),
+                duration_ms(row.average_per_frame),
+                row.calls_per_frame,
+            )
+            .unwrap();
+        }
     }
 
     writeln!(
@@ -523,7 +713,7 @@ fn update_performance_panel(
         "        skinned {:>5}  dynamic {:>5}  anim players {:>5}",
         skinned_meshes,
         dynamic_skinned_bounds,
-        animation_players.iter().count()
+        diagnostics.animation_players.iter().count()
     )
     .unwrap();
     if gpu_passes.is_empty() {
@@ -533,6 +723,73 @@ fn update_performance_panel(
         for (name, milliseconds) in gpu_passes {
             writeln!(output, "  {name:<24} {milliseconds:>7.3}ms").unwrap();
         }
+    }
+}
+
+fn refresh_system_trace_display(
+    display: &mut SystemTraceDisplay,
+    sink: &SystemTraceSink,
+    now: Instant,
+    frame_wall: Option<Duration>,
+) {
+    let elapsed = now.duration_since(display.window_started);
+    if elapsed < SMOOTHING_WINDOW {
+        return;
+    }
+    display.window_started = now;
+
+    let accumulators = sink
+        .0
+        .lock()
+        .expect("system trace sink mutex poisoned")
+        .clone();
+    let mut totals = BTreeMap::<String, (u64, u64)>::new();
+    for accumulator in accumulators {
+        let busy_ns = accumulator.busy_ns.swap(0, Ordering::Relaxed);
+        let calls = accumulator.calls.swap(0, Ordering::Relaxed);
+        if busy_ns == 0 && calls == 0 {
+            continue;
+        }
+        let total = totals.entry(accumulator.name.clone()).or_default();
+        total.0 = total.0.saturating_add(busy_ns);
+        total.1 = total.1.saturating_add(calls);
+    }
+
+    let Some(frame_wall) = frame_wall else {
+        display.rows.clear();
+        return;
+    };
+    let frames_per_window = elapsed.as_secs_f64() / frame_wall.as_secs_f64();
+    if !frames_per_window.is_finite() || frames_per_window <= 0.0 {
+        display.rows.clear();
+        return;
+    }
+
+    display.rows = totals
+        .into_iter()
+        .map(|(name, (busy_ns, calls))| SystemTraceRow {
+            name,
+            average_per_frame: Duration::from_secs_f64(
+                Duration::from_nanos(busy_ns).as_secs_f64() / frames_per_window,
+            ),
+            calls_per_frame: calls as f64 / frames_per_window,
+        })
+        .collect();
+    display.rows.sort_by(|left, right| {
+        right
+            .average_per_frame
+            .cmp(&left.average_per_frame)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    display.rows.truncate(MAX_SYSTEM_TIMINGS);
+}
+
+fn compact_system_name(name: &str) -> String {
+    let parts = name.rsplit("::").take(2).collect::<Vec<_>>();
+    if parts.len() == 2 {
+        format!("{}::{}", parts[1], parts[0])
+    } else {
+        name.to_owned()
     }
 }
 
