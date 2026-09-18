@@ -105,7 +105,15 @@ impl Simulation {
         let separation_start = Instant::now();
         let separated_positions =
             self.apply_crowd_separation(units, unit_health, &decisions, &desired_positions);
-        let legal_positions = self.enforce_hard_non_overlap(
+        let crowd_separation = separation_start.elapsed();
+        let collision_start = Instant::now();
+        let (
+            legal_positions,
+            collision_fallback_search,
+            collision_fallback_searches,
+            collision_fallback_candidate_checks,
+            collision_fallback_max_ring,
+        ) = self.enforce_hard_non_overlap(
             units,
             unit_health,
             navigation_states,
@@ -113,7 +121,8 @@ impl Simulation {
             &desired_positions,
             &separated_positions,
         );
-        let crowd_and_collision = separation_start.elapsed();
+        let hard_collision = collision_start.elapsed();
+        let crowd_and_collision = crowd_separation + hard_collision;
         let movement_blocked = decisions
             .iter()
             .zip(units)
@@ -125,6 +134,12 @@ impl Simulation {
         positions.copy_from_slice(&legal_positions);
         MovementMetrics {
             intent,
+            crowd_separation,
+            hard_collision,
+            collision_fallback_search,
+            collision_fallback_searches,
+            collision_fallback_candidate_checks,
+            collision_fallback_max_ring,
             crowd_and_collision,
             pursuit_steps,
             navigation_route_steps,
@@ -896,7 +911,7 @@ impl Simulation {
         decisions: &[MovementDecision],
         desired_positions: &[SimPoint],
         separated_positions: &[SimPoint],
-    ) -> Vec<SimPoint> {
+    ) -> (Vec<SimPoint>, Duration, usize, usize, u32) {
         let max_radius = units
             .iter()
             .enumerate()
@@ -905,7 +920,7 @@ impl Simulation {
             .max()
             .unwrap_or(0);
         if max_radius == 0 {
-            return separated_positions.to_vec();
+            return (separated_positions.to_vec(), Duration::ZERO, 0, 0, 0);
         }
 
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
@@ -932,6 +947,10 @@ impl Simulation {
                 }),
             );
         let mut result: Vec<_> = units.iter().map(|unit| unit.position).collect();
+        let mut fallback_search = Duration::ZERO;
+        let mut fallback_searches = 0usize;
+        let mut fallback_candidate_checks = 0usize;
+        let mut fallback_max_ring = 0u32;
         let lateral = self.config.max_separation_per_tick.max(1);
 
         for index in (0..units.len()).rev() {
@@ -1060,22 +1079,35 @@ impl Simulation {
                 }
             }
 
-            let chosen = chosen
-                .or_else(|| {
-                    self.find_local_non_overlap_position(
+            let chosen = match chosen {
+                Some(chosen) => chosen,
+                None => {
+                    fallback_searches += 1;
+                    let fallback_started = Instant::now();
+                    let fallback = self.find_local_non_overlap_position(
                         unit,
                         original_cell,
                         sidestep_sign(unit.id),
                         reservations,
-                    )
-                })
-                .unwrap_or(unit.position);
+                        &mut fallback_candidate_checks,
+                        &mut fallback_max_ring,
+                    );
+                    fallback_search += fallback_started.elapsed();
+                    fallback.unwrap_or(unit.position)
+                }
+            };
 
             reservations.insert_with_radius(index, chosen, unit.collision_radius);
             result[index] = chosen;
         }
 
-        result
+        (
+            result,
+            fallback_search,
+            fallback_searches,
+            fallback_candidate_checks,
+            fallback_max_ring,
+        )
     }
 
     fn find_local_non_overlap_position(
@@ -1084,6 +1116,8 @@ impl Simulation {
         original_cell: NavCell,
         search_bias: i32,
         reservations: &SpatialReservationGrid,
+        candidate_checks: &mut usize,
+        max_ring_reached: &mut u32,
     ) -> Option<SimPoint> {
         debug_assert!(search_bias == -1 || search_bias == 1);
         let origin = unit.position;
@@ -1115,6 +1149,8 @@ impl Simulation {
         };
         let order_multiplier = -search_bias;
         for ring in 1..=max_ring {
+            *max_ring_reached = (*max_ring_reached)
+                .max(u32::try_from(ring).expect("fallback ring is non-negative"));
             let distance = ring.checked_mul(step)?;
             for raw_x_step in -ring..=ring {
                 let x_step = raw_x_step.checked_mul(order_multiplier)?;
@@ -1126,8 +1162,9 @@ impl Simulation {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
-                    if legal_position(candidate)
-                        && reservations.is_clear_with_radius(candidate, collision_radius)
+                    *candidate_checks = candidate_checks.saturating_add(1);
+                    if reservations.is_clear_with_radius(candidate, collision_radius)
+                        && legal_position(candidate)
                     {
                         return Some(candidate);
                     }
@@ -1143,8 +1180,9 @@ impl Simulation {
                     let Some(candidate) = offset_point(origin, x, y) else {
                         continue;
                     };
-                    if legal_position(candidate)
-                        && reservations.is_clear_with_radius(candidate, collision_radius)
+                    *candidate_checks = candidate_checks.saturating_add(1);
+                    if reservations.is_clear_with_radius(candidate, collision_radius)
+                        && legal_position(candidate)
                     {
                         return Some(candidate);
                     }
@@ -1430,6 +1468,12 @@ fn navigation_goal(unit: &UnitSnapshot, decision: &MovementDecision) -> Navigati
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct MovementMetrics {
     pub(super) intent: Duration,
+    pub(super) crowd_separation: Duration,
+    pub(super) hard_collision: Duration,
+    pub(super) collision_fallback_search: Duration,
+    pub(super) collision_fallback_searches: usize,
+    pub(super) collision_fallback_candidate_checks: usize,
+    pub(super) collision_fallback_max_ring: u32,
     pub(super) crowd_and_collision: Duration,
     pub(super) pursuit_steps: usize,
     pub(super) navigation_route_steps: usize,

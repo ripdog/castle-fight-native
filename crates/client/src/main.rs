@@ -669,6 +669,9 @@ fn advance_authoritative_simulation(
                 performance.record_sim_tick(
                     result.tick_result.completed_tick,
                     result.tick_result.timings,
+                    result.tick_result.collision_fallback_searches,
+                    result.tick_result.collision_fallback_candidate_checks,
+                    result.tick_result.collision_fallback_max_ring,
                 );
             }
         }
@@ -842,6 +845,9 @@ fn process_network_events(
                             performance.record_sim_tick(
                                 result.tick_result.completed_tick,
                                 result.tick_result.timings,
+                                result.tick_result.collision_fallback_searches,
+                                result.tick_result.collision_fallback_candidate_checks,
+                                result.tick_result.collision_fallback_max_ring,
                             );
                         }
                         authoritative.simulation.clear_presentation_events();
@@ -860,6 +866,9 @@ fn process_network_events(
                                 performance.record_sim_tick(
                                     result.tick_result.completed_tick,
                                     result.tick_result.timings,
+                                    result.tick_result.collision_fallback_searches,
+                                    result.tick_result.collision_fallback_candidate_checks,
+                                    result.tick_result.collision_fallback_max_ring,
                                 );
                             }
                             let expected = result

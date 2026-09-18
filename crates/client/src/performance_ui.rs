@@ -56,10 +56,18 @@ struct FrameSample {
     sim_step: Duration,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct CollisionFallbackSample {
+    searches: usize,
+    candidate_checks: usize,
+    max_ring: u32,
+}
+
 #[derive(Resource, Debug, Default)]
 pub(crate) struct PerformanceCounters {
     sim_tick: Option<u64>,
     sim_samples: VecDeque<(Instant, TickTimings)>,
+    collision_fallback_samples: VecDeque<(Instant, CollisionFallbackSample)>,
     presentation: PresentationTimings,
     presentation_samples: VecDeque<(Instant, PresentationTimings)>,
     presentation_started: Option<Instant>,
@@ -71,10 +79,26 @@ pub(crate) struct PerformanceCounters {
 }
 
 impl PerformanceCounters {
-    pub(crate) fn record_sim_tick(&mut self, tick: u64, timings: TickTimings) {
+    pub(crate) fn record_sim_tick(
+        &mut self,
+        tick: u64,
+        timings: TickTimings,
+        collision_fallback_searches: usize,
+        collision_fallback_candidate_checks: usize,
+        collision_fallback_max_ring: u32,
+    ) {
         let now = Instant::now();
         self.sim_tick = Some(tick);
         push_recent_sample(&mut self.sim_samples, now, timings);
+        push_recent_sample(
+            &mut self.collision_fallback_samples,
+            now,
+            CollisionFallbackSample {
+                searches: collision_fallback_searches,
+                candidate_checks: collision_fallback_candidate_checks,
+                max_ring: collision_fallback_max_ring,
+            },
+        );
         self.current_frame_work.sim_ticks = self.current_frame_work.sim_ticks.saturating_add(1);
         self.current_frame_work.sim_step += timings.total;
     }
@@ -206,6 +230,8 @@ fn update_performance_panel(
     let now = Instant::now();
     let frame = average_frame_samples(&counters.frame_samples, now);
     let sim = average_sim_samples(&counters.sim_samples, now);
+    let collision_fallback =
+        summarize_collision_fallback_samples(&counters.collision_fallback_samples, now);
     let render = average_presentation_samples(&counters.presentation_samples, now);
 
     let output = &mut text.0;
@@ -283,6 +309,24 @@ fn update_performance_panel(
         push_timing(output, "combat", sim.combat);
         push_timing(output, "move intent", sim.movement_intent);
         push_timing(output, "crowd/collision", sim.crowd_and_collision);
+        push_timing(output, "crowd separate", sim.crowd_separation);
+        push_timing(output, "hard collision", sim.hard_collision);
+        push_timing(output, "fallback search", sim.collision_fallback_search);
+        let (fallback_searches, fallback_checks, fallback_max_ring) =
+            collision_fallback.unwrap_or_default();
+        writeln!(
+            output,
+            "  fallback calls      {:>7.2}/tick",
+            fallback_searches
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "  fallback checks     {:>7.1}/tick",
+            fallback_checks
+        )
+        .unwrap();
+        writeln!(output, "  fallback ring max   {:>7}", fallback_max_ring).unwrap();
         push_timing(output, "ballistic", sim.ballistic_impact);
         push_timing(output, "commit", sim.structural_commit);
         push_timing(output, "checksum", sim.checksum);
@@ -335,6 +379,34 @@ fn recent_sample_count<T>(samples: &VecDeque<(Instant, T)>, now: Instant) -> usi
         .count()
 }
 
+fn summarize_collision_fallback_samples(
+    samples: &VecDeque<(Instant, CollisionFallbackSample)>,
+    now: Instant,
+) -> Option<(f64, f64, u32)> {
+    let mut count = 0usize;
+    let mut searches = 0usize;
+    let mut candidate_checks = 0usize;
+    let mut max_ring = 0u32;
+    for (_, sample) in samples
+        .iter()
+        .filter(|(recorded, _)| now.duration_since(*recorded) <= SMOOTHING_WINDOW)
+    {
+        count += 1;
+        searches = searches.saturating_add(sample.searches);
+        candidate_checks = candidate_checks.saturating_add(sample.candidate_checks);
+        max_ring = max_ring.max(sample.max_ring);
+    }
+    if count == 0 {
+        return None;
+    }
+    let divisor = count as f64;
+    Some((
+        searches as f64 / divisor,
+        candidate_checks as f64 / divisor,
+        max_ring,
+    ))
+}
+
 fn average_sim_samples(
     samples: &VecDeque<(Instant, TickTimings)>,
     now: Instant,
@@ -357,6 +429,9 @@ fn average_sim_samples(
         total.targeting += sample.targeting;
         total.combat += sample.combat;
         total.movement_intent += sample.movement_intent;
+        total.crowd_separation += sample.crowd_separation;
+        total.hard_collision += sample.hard_collision;
+        total.collision_fallback_search += sample.collision_fallback_search;
         total.crowd_and_collision += sample.crowd_and_collision;
         total.ballistic_impact += sample.ballistic_impact;
         total.structural_commit += sample.structural_commit;
@@ -374,6 +449,9 @@ fn average_sim_samples(
         targeting: total.targeting / divisor,
         combat: total.combat / divisor,
         movement_intent: total.movement_intent / divisor,
+        crowd_separation: total.crowd_separation / divisor,
+        hard_collision: total.hard_collision / divisor,
+        collision_fallback_search: total.collision_fallback_search / divisor,
         crowd_and_collision: total.crowd_and_collision / divisor,
         ballistic_impact: total.ballistic_impact / divisor,
         structural_commit: total.structural_commit / divisor,
@@ -545,6 +623,31 @@ mod tests {
 
         let average = average_sim_samples(&samples, now).unwrap();
         assert_eq!(average.total, Duration::from_millis(20));
+    }
+
+    #[test]
+    fn collision_fallback_summary_averages_work_and_keeps_peak_ring() {
+        let now = Instant::now();
+        let mut samples = VecDeque::new();
+        samples.push_back((
+            now - Duration::from_millis(400),
+            CollisionFallbackSample {
+                searches: 2,
+                candidate_checks: 120,
+                max_ring: 7,
+            },
+        ));
+        samples.push_back((
+            now - Duration::from_millis(100),
+            CollisionFallbackSample {
+                searches: 4,
+                candidate_checks: 280,
+                max_ring: 31,
+            },
+        ));
+
+        let summary = summarize_collision_fallback_samples(&samples, now).unwrap();
+        assert_eq!(summary, (3.0, 200.0, 31));
     }
 
     #[test]
