@@ -7,7 +7,7 @@ use std::{
 
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
-    camera::{primitives::Aabb, visibility::DynamicSkinnedMeshBounds},
+    camera::visibility::DynamicSkinnedMeshBounds,
     gltf::{Gltf, GltfMaterialExtras},
     mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
     prelude::*,
@@ -24,7 +24,6 @@ const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
-const GAMEPLAY_STATIC_SKINNED_BOUNDS_SCALE: f32 = 2.0;
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
@@ -662,33 +661,6 @@ type Wc3MaterialMeshQuery<'w, 's> = Query<
     ),
     Without<Wc3MaterialProcessed>,
 >;
-
-pub fn stabilize_wc3_gameplay_skinned_bounds(
-    mut commands: Commands,
-    parents: Query<&ChildOf>,
-    team_roots: Query<&Wc3TeamTint>,
-    mut meshes: Query<(Entity, &mut Aabb), With<DynamicSkinnedMeshBounds>>,
-) {
-    for (entity, mut aabb) in &mut meshes {
-        let Some(team) = wc3_team_tint(entity, &parents, &team_roots) else {
-            continue;
-        };
-        if !matches!(team.asset_prefix, "wc3/buildings" | "wc3/units") {
-            continue;
-        }
-
-        // Bevy's default glTF policy recomputes a skinned AABB for every skinned primitive every
-        // frame. WC3 assets split one model into many skinned primitives that all share the same
-        // skeleton, so this repeats the same joint-bound work dozens of times per model. Model
-        // composition can therefore cause abrupt PostUpdate spikes even when logical entity
-        // counts barely change (for example, Gryphon Riders are much more expensive than
-        // Footmen). Gameplay models move as a whole through their root transform, so keep the
-        // loader-provided bind-pose bounds, conservatively pad them for animation motion, and let
-        // normal frustum culling use those static local-space bounds.
-        aabb.half_extents *= GAMEPLAY_STATIC_SKINNED_BOUNDS_SCALE;
-        commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();
-    }
-}
 
 pub fn fix_wc3_scene_materials(
     mut commands: Commands,
@@ -1436,84 +1408,6 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn gameplay_skinned_bounds_become_padded_static_bounds() {
-        let mut app = App::new();
-        app.add_systems(Update, stabilize_wc3_gameplay_skinned_bounds);
-
-        let building_root = app
-            .world_mut()
-            .spawn(Wc3TeamTint::new(0, Color::WHITE, "wc3/buildings"))
-            .id();
-        let building_mesh = app
-            .world_mut()
-            .spawn((
-                Aabb {
-                    center: Vec3A::ZERO,
-                    half_extents: Vec3A::new(1.0, 2.0, 3.0),
-                },
-                DynamicSkinnedMeshBounds,
-            ))
-            .id();
-        app.world_mut()
-            .entity_mut(building_root)
-            .add_child(building_mesh);
-
-        let unit_root = app
-            .world_mut()
-            .spawn(Wc3TeamTint::new(0, Color::WHITE, "wc3/units"))
-            .id();
-        let unit_mesh = app
-            .world_mut()
-            .spawn((
-                Aabb {
-                    center: Vec3A::ZERO,
-                    half_extents: Vec3A::ONE,
-                },
-                DynamicSkinnedMeshBounds,
-            ))
-            .id();
-        app.world_mut().entity_mut(unit_root).add_child(unit_mesh);
-
-        app.update();
-
-        assert_eq!(
-            app.world().get::<Aabb>(building_mesh).unwrap().half_extents,
-            Vec3A::new(2.0, 4.0, 6.0)
-        );
-        assert!(
-            app.world()
-                .get::<DynamicSkinnedMeshBounds>(building_mesh)
-                .is_none()
-        );
-        assert_eq!(
-            app.world().get::<Aabb>(unit_mesh).unwrap().half_extents,
-            Vec3A::splat(2.0)
-        );
-        assert!(
-            app.world()
-                .get::<DynamicSkinnedMeshBounds>(unit_mesh)
-                .is_none()
-        );
-
-        let effect_mesh = app
-            .world_mut()
-            .spawn((
-                Aabb {
-                    center: Vec3A::ZERO,
-                    half_extents: Vec3A::ONE,
-                },
-                DynamicSkinnedMeshBounds,
-            ))
-            .id();
-        app.update();
-        assert!(
-            app.world()
-                .get::<DynamicSkinnedMeshBounds>(effect_mesh)
-                .is_some()
-        );
-    }
 
     #[test]
     fn building_team_color_flattens_overlay_and_underlay_into_one_opaque_texture() {

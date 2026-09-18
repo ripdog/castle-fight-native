@@ -51,8 +51,7 @@ use crate::{
         Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3RibbonSource,
         Wc3StatusVisualKind, Wc3TeamTint, Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet,
         emit_wc3_particles, fix_wc3_scene_materials, setup_wc3_visual_animation_players,
-        spawn_wc3_ribbon_trails, stabilize_wc3_gameplay_skinned_bounds, update_wc3_particles,
-        update_wc3_ribbon_trails,
+        spawn_wc3_ribbon_trails, update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
 
@@ -818,7 +817,6 @@ impl Plugin for CastlePresentationPlugin {
             .add_systems(
                 Update,
                 (
-                    stabilize_wc3_gameplay_skinned_bounds,
                     fix_wc3_scene_materials,
                     setup_wc3_visual_animation_players,
                     setup_imported_unit_animation_players,
