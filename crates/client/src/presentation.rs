@@ -39,6 +39,11 @@ use crate::{
         UnitVisualKind,
     },
     building_models::{BuildingAnimationClip, BuildingModelSet},
+    performance_ui::{
+        begin_presentation_profile, finish_animation_profile, finish_camera_profile,
+        finish_effects_profile, finish_entity_sync_profile, finish_model_prep_profile,
+        finish_presentation_profile, finish_scene_setup_profile, finish_transform_profile,
+    },
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitModelSet},
     wc3_effects::{
@@ -797,21 +802,35 @@ impl Plugin for CastlePresentationPlugin {
                 Update,
                 (
                     toggle_debug_controls,
+                    begin_presentation_profile,
                     update_camera,
+                    finish_camera_profile,
                     prepare_unit_model_animations,
                     prepare_building_model_animations,
+                    finish_model_prep_profile,
                     sync_render_entities,
+                    finish_entity_sync_profile,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                Update,
+                (
                     fix_wc3_scene_materials,
                     setup_wc3_visual_animation_players,
                     setup_imported_unit_animation_players,
                     setup_imported_building_animation_players,
+                    finish_scene_setup_profile,
                     update_imported_building_animations,
                     trigger_attack_animations,
                     update_imported_unit_animations,
                     spawn_miss_indicators,
+                    finish_animation_profile,
                     interpolate_render_transforms,
+                    finish_transform_profile,
                 )
-                    .chain(),
+                    .chain()
+                    .after(finish_entity_sync_profile),
             )
             .add_systems(
                 Update,
@@ -827,14 +846,16 @@ impl Plugin for CastlePresentationPlugin {
                     update_wc3_ribbon_trails,
                     update_wc3_particles,
                     emit_wc3_particles,
+                    finish_effects_profile,
                     draw_projectile_effects,
                     update_health_bar_batch,
                     draw_map_grid,
                     draw_presentation_gizmos,
                     sample_display_fps,
+                    finish_presentation_profile,
                 )
                     .chain()
-                    .after(interpolate_render_transforms),
+                    .after(finish_transform_profile),
             );
     }
 }

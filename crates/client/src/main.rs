@@ -8,6 +8,7 @@ mod demo;
 mod doodads;
 mod inspection;
 mod network;
+mod performance_ui;
 mod presentation;
 mod resource_ui;
 mod terrain;
@@ -51,6 +52,7 @@ use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use network::{NetworkClient, NetworkEvent};
+use performance_ui::{PerformanceCounters, PerformanceUiPlugin};
 use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
@@ -365,6 +367,7 @@ fn main() {
             BuildUiPlugin,
             CursorPresentationPlugin,
             ResourceUiPlugin,
+            PerformanceUiPlugin,
             InspectionPlugin,
             BuilderControlPlugin,
             DebugMenuPlugin,
@@ -635,9 +638,14 @@ fn advance_authoritative_simulation(
     playback: Res<SimulationPlayback>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
+    mut performance: Option<ResMut<PerformanceCounters>>,
 ) {
     if authoritative.is_networked() {
-        if let Err(error) = process_network_events(&mut authoritative, &mut presentation) {
+        if let Err(error) = process_network_events(
+            &mut authoritative,
+            &mut presentation,
+            performance.as_deref_mut(),
+        ) {
             panic!("network canonical stream invariant failed: {error}");
         }
         return;
@@ -646,7 +654,15 @@ fn advance_authoritative_simulation(
         return;
     }
     match advance_authoritative_simulation_once(&mut authoritative, &mut presentation) {
-        Ok(_) | Err(CanonicalStreamError::MatchNotRunning(_)) => {}
+        Ok(result) => {
+            if let Some(performance) = performance.as_deref_mut() {
+                performance.record_sim_tick(
+                    result.tick_result.completed_tick,
+                    result.tick_result.timings,
+                );
+            }
+        }
+        Err(CanonicalStreamError::MatchNotRunning(_)) => {}
         Err(error) => panic!("local canonical stream invariant failed: {error:?}"),
     }
 }
@@ -670,6 +686,7 @@ pub(crate) fn advance_authoritative_simulation_once(
 fn process_network_events(
     authoritative: &mut AuthoritativeSimulation,
     presentation: &mut PresentationSamples,
+    mut performance: Option<&mut PerformanceCounters>,
 ) -> Result<(), String> {
     let events = match &mut authoritative.authority {
         AuthorityMode::Local => return Ok(()),
@@ -800,12 +817,20 @@ fn process_network_events(
                                     .to_owned(),
                             );
                         }
-                        authoritative
+                        let applied = authoritative
                             .driver
                             .apply_stream_record(&mut authoritative.simulation, canonical)
                             .map_err(|error| {
                                 format!("canonical catch-up stream error: {error:?}")
                             })?;
+                        if let (Some(result), Some(performance)) =
+                            (applied, performance.as_deref_mut())
+                        {
+                            performance.record_sim_tick(
+                                result.tick_result.completed_tick,
+                                result.tick_result.timings,
+                            );
+                        }
                         authoritative.simulation.clear_presentation_events();
                         if authoritative.driver.next_stream_position().0 > handoff_stream_position {
                             return Err(
@@ -818,6 +843,12 @@ fn process_network_events(
                             .apply_stream_record(&mut authoritative.simulation, canonical)
                             .map_err(|error| format!("canonical stream error: {error:?}"))?;
                         if let Some(result) = applied {
+                            if let Some(performance) = performance.as_deref_mut() {
+                                performance.record_sim_tick(
+                                    result.tick_result.completed_tick,
+                                    result.tick_result.timings,
+                                );
+                            }
                             let expected = result
                                 .executions
                                 .iter()
@@ -1293,6 +1324,7 @@ mod tests {
             0,
         );
         let mut presentation = PresentationSamples::new(initial_presentation);
+        let mut performance = PerformanceCounters::default();
 
         let network = match &authoritative.authority {
             AuthorityMode::Network { client, .. } => client,
@@ -1310,7 +1342,12 @@ mod tests {
         }
         network.inject_server_message_for_test(ServerMessage::CatchUpComplete { complete });
 
-        process_network_events(&mut authoritative, &mut presentation).unwrap();
+        process_network_events(
+            &mut authoritative,
+            &mut presentation,
+            Some(&mut performance),
+        )
+        .unwrap();
         assert_eq!(
             authoritative.simulation.checksum(),
             source.simulation.checksum()
