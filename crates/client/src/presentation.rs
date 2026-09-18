@@ -3990,6 +3990,7 @@ fn draw_map_grid(
 
     let spacing = metrics.navigation_cell_world() * f32::from(base_cells);
     let (build_min, build_max) = metrics.buildable_world_bounds();
+    let build_center_x = (build_min.x + build_max.x) * 0.5;
     let grid_origin = (build_min + build_max) * 0.5 + Vec2::splat(spacing * 0.5);
     for region in metrics.build_regions() {
         draw_map_grid_region(
@@ -3999,6 +4000,7 @@ fn draw_map_grid(
             region,
             spacing,
             grid_origin,
+            build_center_x,
         );
     }
 }
@@ -4014,6 +4016,27 @@ fn map_grid_axis_line_bounds(
     (first <= last).then_some((first, last))
 }
 
+// Preserve the authored finite grid window width, but pin its rear/outside edge to the
+// authoritative build-region boundary instead of centring the window inside a non-grid-multiple
+// region width. This naturally produces the three-nav-cell 9.27 correction without a version
+// specific presentation offset.
+fn map_grid_outward_x_shift(
+    region_min_x: f32,
+    region_max_x: f32,
+    grid_min_x: f32,
+    grid_max_x: f32,
+    build_center_x: f32,
+) -> f32 {
+    let region_center_x = (region_min_x + region_max_x) * 0.5;
+    if region_center_x < build_center_x {
+        region_min_x - grid_min_x
+    } else if region_center_x > build_center_x {
+        region_max_x - grid_max_x
+    } else {
+        0.0
+    }
+}
+
 fn draw_map_grid_region(
     gizmos: &mut Gizmos<MapGridGizmos>,
     terrain: &TerrainSurface,
@@ -4021,6 +4044,7 @@ fn draw_map_grid_region(
     region: BuildingFootprint,
     spacing: f32,
     grid_origin: Vec2,
+    build_center_x: f32,
 ) {
     let (region_min, region_max) = metrics.build_region_world_bounds(region);
     let Some((first_x, last_x)) =
@@ -4033,14 +4057,20 @@ fn draw_map_grid_region(
     else {
         return;
     };
+    let raw_min_x = grid_origin.x + first_x as f32 * spacing;
+    let raw_max_x = grid_origin.x + last_x as f32 * spacing;
+    let x_shift = map_grid_outward_x_shift(
+        region_min.x,
+        region_max.x,
+        raw_min_x,
+        raw_max_x,
+        build_center_x,
+    );
     let min = Vec2::new(
-        grid_origin.x + first_x as f32 * spacing,
+        raw_min_x + x_shift,
         grid_origin.y + first_z as f32 * spacing,
     );
-    let max = Vec2::new(
-        grid_origin.x + last_x as f32 * spacing,
-        grid_origin.y + last_z as f32 * spacing,
-    );
+    let max = Vec2::new(raw_max_x + x_shift, grid_origin.y + last_z as f32 * spacing);
     let clip = MapGridClip {
         min,
         max,
@@ -4049,7 +4079,7 @@ fn draw_map_grid_region(
     };
 
     for index in first_x..=last_x {
-        let x = grid_origin.x + index as f32 * spacing;
+        let x = grid_origin.x + index as f32 * spacing + x_shift;
         if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
             draw_map_grid_x_line_clipped(
                 gizmos,
@@ -4827,20 +4857,39 @@ mod tests {
             map_grid_axis_line_bounds(right_min.x, right_max.x, spacing, grid_origin.x).unwrap();
         let vertical =
             map_grid_axis_line_bounds(left_min.y, left_max.y, spacing, grid_origin.y).unwrap();
+        let build_center_x = (build_min.x + build_max.x) * 0.5;
+        let left_raw = (
+            grid_origin.x + left_x.0 as f32 * spacing,
+            grid_origin.x + left_x.1 as f32 * spacing,
+        );
+        let right_raw = (
+            grid_origin.x + right_x.0 as f32 * spacing,
+            grid_origin.x + right_x.1 as f32 * spacing,
+        );
+        let left_shift = map_grid_outward_x_shift(
+            left_min.x,
+            left_max.x,
+            left_raw.0,
+            left_raw.1,
+            build_center_x,
+        );
+        let right_shift = map_grid_outward_x_shift(
+            right_min.x,
+            right_max.x,
+            right_raw.0,
+            right_raw.1,
+            build_center_x,
+        );
 
+        assert_eq!(left_shift / demo.metrics.navigation_cell_world(), -3.0);
+        assert_eq!(right_shift / demo.metrics.navigation_cell_world(), 3.0);
         assert_eq!(
-            (
-                grid_origin.x + left_x.0 as f32 * spacing,
-                grid_origin.x + left_x.1 as f32 * spacing,
-            ),
-            (-6_080.0, -1_984.0)
+            (left_raw.0 + left_shift, left_raw.1 + left_shift),
+            (-6_176.0, -2_080.0)
         );
         assert_eq!(
-            (
-                grid_origin.x + right_x.0 as f32 * spacing,
-                grid_origin.x + right_x.1 as f32 * spacing,
-            ),
-            (1_984.0, 6_080.0)
+            (right_raw.0 + right_shift, right_raw.1 + right_shift),
+            (2_080.0, 6_176.0)
         );
         assert_eq!(
             (
