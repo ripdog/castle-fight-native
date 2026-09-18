@@ -4427,8 +4427,7 @@ struct CameraControlResources<'w> {
     mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
     metrics: Res<'w, WorldMetrics>,
     terrain: Res<'w, TerrainSurface>,
-    inspection: Option<Res<'w, crate::inspection::InspectionSelection>>,
-    action_panel: Option<Res<'w, crate::build_ui::ActionPanelState>>,
+    hotkey_capture: Option<Res<'w, crate::build_ui::ActionPanelHotkeyCapture>>,
     samples: Res<'w, PresentationSamples>,
     camera_focus: ResMut<'w, CameraFocusRequest>,
 }
@@ -4439,15 +4438,6 @@ fn update_camera(
     mut camera: Single<(&Camera, &mut RtsCamera, &mut Transform), With<Camera3d>>,
     mut resources: CameraControlResources<'_>,
 ) {
-    let builder_selected = resources
-        .inspection
-        .as_ref()
-        .and_then(|inspection| inspection.selected)
-        .is_some_and(|id| resources.samples.current.builders.contains_key(&id));
-    let build_menu_open = resources
-        .action_panel
-        .as_ref()
-        .is_some_and(|panel| panel.mode == crate::build_ui::ActionPanelMode::BuildMenu);
     let (camera_component, rig, transform) = &mut *camera;
 
     if let Some(target) = resources.camera_focus.0.take()
@@ -4468,25 +4458,24 @@ fn update_camera(
     let dt = resources.time.delta_secs();
     let forward = Vec3::new(-rig.yaw.sin(), 0.0, -rig.yaw.cos());
     let right = Vec3::new(rig.yaw.cos(), 0.0, -rig.yaw.sin());
+    let camera_key_pressed = |key| {
+        resources.keys.pressed(key)
+            && !resources
+                .hotkey_capture
+                .as_ref()
+                .is_some_and(|capture| capture.captures(key))
+    };
     let mut movement = Vec3::ZERO;
-    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyW))
-        || resources.keys.pressed(KeyCode::ArrowUp)
-    {
+    if camera_key_pressed(KeyCode::KeyW) || resources.keys.pressed(KeyCode::ArrowUp) {
         movement += forward;
     }
-    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyS))
-        || resources.keys.pressed(KeyCode::ArrowDown)
-    {
+    if camera_key_pressed(KeyCode::KeyS) || resources.keys.pressed(KeyCode::ArrowDown) {
         movement -= forward;
     }
-    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyD) && !builder_selected)
-        || resources.keys.pressed(KeyCode::ArrowRight)
-    {
+    if camera_key_pressed(KeyCode::KeyD) || resources.keys.pressed(KeyCode::ArrowRight) {
         movement += right;
     }
-    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyA))
-        || resources.keys.pressed(KeyCode::ArrowLeft)
-    {
+    if camera_key_pressed(KeyCode::KeyA) || resources.keys.pressed(KeyCode::ArrowLeft) {
         movement -= right;
     }
     if window.focused
@@ -4504,10 +4493,10 @@ fn update_camera(
         let pan_speed = rig.distance * 0.65;
         rig.focus += movement.normalize() * pan_speed * dt;
     }
-    if !build_menu_open && resources.keys.pressed(KeyCode::KeyQ) {
+    if camera_key_pressed(KeyCode::KeyQ) {
         rig.yaw += 0.9 * dt;
     }
-    if !build_menu_open && resources.keys.pressed(KeyCode::KeyE) {
+    if camera_key_pressed(KeyCode::KeyE) {
         rig.yaw -= 0.9 * dt;
     }
     let scroll: f32 = mouse_wheel.read().map(|event| event.y).sum();

@@ -7,7 +7,8 @@ use crate::{
     bridge::{PresentationSamples, PresentationSnapshot},
     build_ui::{
         ActionPanelMode, ActionPanelState, TargetingAction, cursor_over_action_panel,
-        placement_footprint, try_arm_build_target,
+        hotkey_just_pressed, placement_footprint, production_upgrade_hotkey_target,
+        queue_production_upgrade, try_arm_build_target,
     },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::BuildKind,
@@ -82,6 +83,24 @@ fn handle_selection_commands(
         );
     }
 
+    if !opened_build_menu
+        && resources.action_panel.mode == ActionPanelMode::Actions
+        && let Some(target) = production_upgrade_hotkey_target(
+            &resources.keys,
+            &resources.action_panel,
+            &resources.authoritative,
+            &resources.selected_match,
+        )
+    {
+        queue_production_upgrade(
+            &mut resources.authoritative,
+            &mut resources.action_panel,
+            target,
+            &resources.selected_match,
+            &resources.debug_menu,
+        );
+    }
+
     // Castle Fight's live Blink uses D. Enter the same point-targeting mode as clicking Blink on
     // the command card instead of maintaining a separate keyboard-only state machine.
     if resources.action_panel.mode == ActionPanelMode::Actions
@@ -123,6 +142,12 @@ fn handle_selection_commands(
         };
     }
 
+    if resources.mouse_buttons.just_pressed(MouseButton::Right)
+        && cancel_build_cursor_for_right_click(&mut resources.action_panel)
+    {
+        return;
+    }
+
     if resources.playback.paused {
         return;
     }
@@ -135,6 +160,17 @@ fn handle_selection_commands(
     if resources.mouse_buttons.just_pressed(MouseButton::Right) {
         handle_smart_right_click(*window, *camera, &mut resources);
     }
+}
+
+fn cancel_build_cursor_for_right_click(action_panel: &mut ActionPanelState) -> bool {
+    if !matches!(
+        action_panel.mode,
+        ActionPanelMode::Targeting(TargetingAction::Build(_))
+    ) {
+        return false;
+    }
+    action_panel.cancel_modal();
+    true
 }
 
 fn handle_modal_left_click(
@@ -643,42 +679,6 @@ fn build_menu_hotkey_target(
     selected
 }
 
-fn key_code_for_hotkey(hotkey: char) -> Option<KeyCode> {
-    Some(match hotkey.to_ascii_uppercase() {
-        'A' => KeyCode::KeyA,
-        'B' => KeyCode::KeyB,
-        'C' => KeyCode::KeyC,
-        'D' => KeyCode::KeyD,
-        'E' => KeyCode::KeyE,
-        'F' => KeyCode::KeyF,
-        'G' => KeyCode::KeyG,
-        'H' => KeyCode::KeyH,
-        'I' => KeyCode::KeyI,
-        'J' => KeyCode::KeyJ,
-        'K' => KeyCode::KeyK,
-        'L' => KeyCode::KeyL,
-        'M' => KeyCode::KeyM,
-        'N' => KeyCode::KeyN,
-        'O' => KeyCode::KeyO,
-        'P' => KeyCode::KeyP,
-        'Q' => KeyCode::KeyQ,
-        'R' => KeyCode::KeyR,
-        'S' => KeyCode::KeyS,
-        'T' => KeyCode::KeyT,
-        'U' => KeyCode::KeyU,
-        'V' => KeyCode::KeyV,
-        'W' => KeyCode::KeyW,
-        'X' => KeyCode::KeyX,
-        'Y' => KeyCode::KeyY,
-        'Z' => KeyCode::KeyZ,
-        _ => return None,
-    })
-}
-
-fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
-    key_code_for_hotkey(hotkey).is_some_and(|key_code| keys.just_pressed(key_code))
-}
-
 fn command_submission_status(
     submission: ClientCommandSubmission,
     accepted: String,
@@ -760,17 +760,16 @@ mod tests {
             .direct_buildings
             .iter()
             .copied()
-            .filter(|kind| {
+            .rfind(|kind| {
                 builder
                     .configuration
                     .allows_building(kind.rawcode(demo.content))
                     && kind.hotkey(demo.content) == collision_hotkey
             })
-            .next_back()
             .expect("collision hotkey must have an eligible claimant");
 
         let mut keys = ButtonInput::<KeyCode>::default();
-        keys.press(key_code_for_hotkey(collision_hotkey).unwrap());
+        keys.press(crate::build_ui::key_code_for_hotkey(collision_hotkey).unwrap());
         assert_eq!(
             build_menu_hotkey_target(
                 &keys,
@@ -780,6 +779,21 @@ mod tests {
             ),
             Some(expected)
         );
+    }
+
+    #[test]
+    fn right_click_with_build_ghost_only_clears_the_build_cursor() {
+        let mut state = ActionPanelState {
+            mode: ActionPanelMode::Targeting(TargetingAction::Build(
+                crate::demo::BuildKind::Production(crate::demo::ProductionKind::Barracks),
+            )),
+            ..ActionPanelState::default()
+        };
+        assert!(cancel_build_cursor_for_right_click(&mut state));
+        assert_eq!(state.mode, ActionPanelMode::BuildMenu);
+
+        assert!(!cancel_build_cursor_for_right_click(&mut state));
+        assert_eq!(state.mode, ActionPanelMode::BuildMenu);
     }
 
     #[test]

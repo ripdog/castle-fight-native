@@ -1,6 +1,9 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
-use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
+use bevy::{ecs::system::SystemParam, input::InputSystems, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
     BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle, CommandCardPosition,
     CommandSubmission, NavCell, PlayerCommand, SimId, Team,
@@ -84,6 +87,17 @@ pub(crate) enum ActionPanelMode {
     Actions,
     BuildMenu,
     Targeting(TargetingAction),
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct ActionPanelHotkeyCapture {
+    captured: HashSet<KeyCode>,
+}
+
+impl ActionPanelHotkeyCapture {
+    pub(crate) fn captures(&self, key: KeyCode) -> bool {
+        self.captured.contains(&key)
+    }
 }
 
 #[derive(Resource)]
@@ -227,6 +241,18 @@ type ActionInteractions<'w, 's> = Query<
     (&'static Interaction, &'static SlotAction),
     (Changed<Interaction>, With<Button>),
 >;
+type SlotLabelTexts<'w, 's> = Query<
+    'w,
+    's,
+    (&'static CommandSlot, &'static mut Text),
+    (With<SlotLabel>, Without<SlotHotkey>),
+>;
+type SlotHotkeyTexts<'w, 's> = Query<
+    'w,
+    's,
+    (&'static CommandSlot, &'static mut Text),
+    (With<SlotHotkey>, Without<SlotLabel>),
+>;
 
 type BuildPlacementGhosts<'w, 's> = Query<
     'w,
@@ -255,10 +281,12 @@ impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
         let map_version = app.world().resource::<SelectedMatch>().content.map_version;
         app.init_resource::<ActionPanelState>()
+            .init_resource::<ActionPanelHotkeyCapture>()
             .init_resource::<BuildTooltipState>()
             .init_resource::<BuildPreviewMaterials>()
             .insert_resource(UiIconAssets::load_for_version(map_version))
             .add_systems(Startup, setup_action_panel)
+            .add_systems(PreUpdate, capture_action_panel_hotkeys.after(InputSystems))
             .add_systems(
                 Update,
                 (
@@ -568,8 +596,8 @@ fn populate_action_panel(
     asset_server: Res<AssetServer>,
     mut icon_assets: ResMut<UiIconAssets>,
     mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility)>,
-    mut labels: Query<(&CommandSlot, &mut Text), (With<SlotLabel>, Without<SlotHotkey>)>,
-    mut hotkeys: Query<(&CommandSlot, &mut Text), (With<SlotHotkey>, Without<SlotLabel>)>,
+    mut labels: SlotLabelTexts<'_, '_>,
+    mut hotkeys: SlotHotkeyTexts<'_, '_>,
     mut icons: Query<(&CommandSlot, &mut ImageNode), With<SlotIcon>>,
 ) {
     let (state, authoritative, selected_match) = match_state;
@@ -614,9 +642,100 @@ fn populate_action_panel(
 
 fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Option<char> {
     match action {
+        PanelAction::OpenBuildMenu => Some(content.command_card.build_hotkey),
+        PanelAction::Target(TargetingAction::Blink) => Some(content.command_card.blink_hotkey),
         PanelAction::Target(TargetingAction::Build(kind)) => Some(kind.hotkey(content)),
+        PanelAction::Production(ProductionPanelAction::Upgrade(target)) => Some(
+            content
+                .production_building(target)
+                .expect("upgrade target must belong to selected content bundle")
+                .hotkey,
+        ),
         _ => None,
     }
+}
+
+pub(crate) fn key_code_for_hotkey(hotkey: char) -> Option<KeyCode> {
+    Some(match hotkey.to_ascii_uppercase() {
+        'A' => KeyCode::KeyA,
+        'B' => KeyCode::KeyB,
+        'C' => KeyCode::KeyC,
+        'D' => KeyCode::KeyD,
+        'E' => KeyCode::KeyE,
+        'F' => KeyCode::KeyF,
+        'G' => KeyCode::KeyG,
+        'H' => KeyCode::KeyH,
+        'I' => KeyCode::KeyI,
+        'J' => KeyCode::KeyJ,
+        'K' => KeyCode::KeyK,
+        'L' => KeyCode::KeyL,
+        'M' => KeyCode::KeyM,
+        'N' => KeyCode::KeyN,
+        'O' => KeyCode::KeyO,
+        'P' => KeyCode::KeyP,
+        'Q' => KeyCode::KeyQ,
+        'R' => KeyCode::KeyR,
+        'S' => KeyCode::KeyS,
+        'T' => KeyCode::KeyT,
+        'U' => KeyCode::KeyU,
+        'V' => KeyCode::KeyV,
+        'W' => KeyCode::KeyW,
+        'X' => KeyCode::KeyX,
+        'Y' => KeyCode::KeyY,
+        'Z' => KeyCode::KeyZ,
+        _ => return None,
+    })
+}
+
+pub(crate) fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
+    key_code_for_hotkey(hotkey).is_some_and(|key_code| keys.just_pressed(key_code))
+}
+
+fn capture_action_panel_hotkeys(
+    keys: Res<ButtonInput<KeyCode>>,
+    state: Res<ActionPanelState>,
+    authoritative: Res<AuthoritativeSimulation>,
+    selected_match: Res<SelectedMatch>,
+    mut capture: ResMut<ActionPanelHotkeyCapture>,
+) {
+    capture.captured.retain(|key| keys.pressed(*key));
+    for action in action_layout(&state, &authoritative, &selected_match)
+        .into_iter()
+        .flatten()
+    {
+        let Some(key) = action_hotkey(action, selected_match.content).and_then(key_code_for_hotkey)
+        else {
+            continue;
+        };
+        if keys.just_pressed(key) {
+            capture.captured.insert(key);
+        }
+    }
+}
+
+pub(crate) fn production_upgrade_hotkey_target(
+    keys: &ButtonInput<KeyCode>,
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+    selected_match: &SelectedMatch,
+) -> Option<ProductionKind> {
+    let mut selected = None;
+    for action in action_layout(state, authoritative, selected_match)
+        .into_iter()
+        .flatten()
+    {
+        let PanelAction::Production(ProductionPanelAction::Upgrade(target)) = action else {
+            continue;
+        };
+        let definition = selected_match
+            .content
+            .production_building(target)
+            .expect("upgrade target must belong to selected content bundle");
+        if hotkey_just_pressed(keys, definition.hotkey) {
+            selected = Some(target);
+        }
+    }
+    selected
 }
 
 fn action_icon_key(
@@ -786,46 +905,12 @@ fn handle_action_panel_buttons(
                 state.status = "Choose a building.".into();
             }
             PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
-                let Some(actor) = state.actor else {
-                    continue;
-                };
-                if !can_afford_production_upgrade(
-                    &authoritative,
-                    &state,
+                queue_production_upgrade(
+                    &mut authoritative,
+                    &mut state,
                     target,
-                    selected_match.content,
-                ) {
-                    state.status = insufficient_upgrade_resources_status(
-                        &authoritative,
-                        &state,
-                        target,
-                        selected_match.content,
-                    );
-                    continue;
-                }
-                let target_definition = selected_match
-                    .content
-                    .production_building(target)
-                    .expect("upgrade target must belong to selected bundle");
-                let controller = debug_menu.controller_for_actor(
-                    &authoritative.simulation,
-                    selected_match.local_player,
-                    actor,
-                );
-                let submission = authoritative.submit_local_command(
-                    controller,
-                    PlayerCommand::UpgradeBuilding {
-                        building: actor,
-                        target: target.stable_id(),
-                    },
-                );
-                state.status = submission_status(
-                    submission,
-                    &format!(
-                        "Upgrade to {} queued — construction can be cancelled after execution.",
-                        target_definition.name
-                    ),
-                    "Unable to start upgrade",
+                    &selected_match,
+                    &debug_menu,
                 );
             }
             PanelAction::Target(TargetingAction::Build(kind)) => {
@@ -1339,6 +1424,51 @@ pub(crate) fn try_arm_build_target(
     true
 }
 
+pub(crate) fn queue_production_upgrade(
+    authoritative: &mut AuthoritativeSimulation,
+    state: &mut ActionPanelState,
+    target: ProductionKind,
+    selected_match: &SelectedMatch,
+    debug_menu: &DebugMenuState,
+) {
+    let Some(actor) = state.actor else {
+        return;
+    };
+    if !can_afford_production_upgrade(authoritative, state, target, selected_match.content) {
+        state.status = insufficient_upgrade_resources_status(
+            authoritative,
+            state,
+            target,
+            selected_match.content,
+        );
+        return;
+    }
+    let target_definition = selected_match
+        .content
+        .production_building(target)
+        .expect("upgrade target must belong to selected bundle");
+    let controller = debug_menu.controller_for_actor(
+        &authoritative.simulation,
+        selected_match.local_player,
+        actor,
+    );
+    let submission = authoritative.submit_local_command(
+        controller,
+        PlayerCommand::UpgradeBuilding {
+            building: actor,
+            target: target.stable_id(),
+        },
+    );
+    state.status = submission_status(
+        submission,
+        &format!(
+            "Upgrade to {} queued — construction can be cancelled after execution.",
+            target_definition.name
+        ),
+        "Unable to start upgrade",
+    );
+}
+
 fn can_afford_production_upgrade(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
@@ -1715,6 +1845,106 @@ mod tests {
             Some(PanelAction::Production(ProductionPanelAction::Upgrade(
                 stronghold
             )))
+        );
+    }
+
+    #[test]
+    fn production_upgrade_hotkey_comes_from_target_map_data() {
+        let demo = create_demo_world(1, Some(0));
+        let barracks = demo
+            .content
+            .production_building(ProductionKind::Barracks)
+            .unwrap();
+        let mut simulation = demo.simulation;
+        let barracks_id = simulation.spawn_building_with_properties(
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
+            barracks.gameplay_properties(),
+        );
+        let state = ActionPanelState {
+            actor: Some(barracks_id),
+            ..ActionPanelState::default()
+        };
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        };
+        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
+        let stronghold = selected_match
+            .content
+            .production_building(ProductionKind::Stronghold)
+            .unwrap();
+        assert_eq!(stronghold.hotkey, 'R');
+
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(key_code_for_hotkey(stronghold.hotkey).unwrap());
+        assert_eq!(
+            production_upgrade_hotkey_target(&keys, &state, &authoritative, &selected_match,),
+            Some(ProductionKind::Stronghold)
+        );
+        assert_eq!(
+            action_hotkey(
+                PanelAction::Production(
+                    ProductionPanelAction::Upgrade(ProductionKind::Stronghold,)
+                ),
+                selected_match.content,
+            ),
+            Some(stronghold.hotkey)
+        );
+    }
+
+    #[test]
+    fn action_panel_hotkey_capture_survives_modal_transition_until_release() {
+        let demo = create_demo_world(1, None);
+        let actor = demo.simulation.builder_for_team(Team(0)).unwrap().id;
+        let barracks = BuildKind::Production(ProductionKind::Barracks);
+        let hotkey = key_code_for_hotkey(barracks.hotkey(demo.content)).unwrap();
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        };
+        let authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+
+        let mut world = World::new();
+        world.insert_resource(ButtonInput::<KeyCode>::default());
+        world.insert_resource(ActionPanelState {
+            actor: Some(actor),
+            mode: ActionPanelMode::BuildMenu,
+            ..ActionPanelState::default()
+        });
+        world.insert_resource(authoritative);
+        world.insert_resource(selected_match);
+        world.insert_resource(ActionPanelHotkeyCapture::default());
+        world.resource_mut::<ButtonInput<KeyCode>>().press(hotkey);
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(capture_action_panel_hotkeys);
+        schedule.run(&mut world);
+        assert!(
+            world
+                .resource::<ActionPanelHotkeyCapture>()
+                .captures(hotkey)
+        );
+
+        world.resource_mut::<ActionPanelState>().mode =
+            ActionPanelMode::Targeting(TargetingAction::Build(barracks));
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .clear_just_pressed(hotkey);
+        schedule.run(&mut world);
+        assert!(
+            world
+                .resource::<ActionPanelHotkeyCapture>()
+                .captures(hotkey)
+        );
+
+        world.resource_mut::<ButtonInput<KeyCode>>().release(hotkey);
+        schedule.run(&mut world);
+        assert!(
+            !world
+                .resource::<ActionPanelHotkeyCapture>()
+                .captures(hotkey)
         );
     }
 
