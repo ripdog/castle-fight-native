@@ -5697,6 +5697,54 @@ mod tests {
     }
 
     #[test]
+    fn hard_collision_keeps_committed_positions_as_safe_fallbacks() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, -10),
+            navigation_max: NavCell::new(100, 10),
+            unit_separation_distance: world,
+            max_separation_per_tick: world / 16,
+            team_objective: [SimPoint::new(80 * world, 0), SimPoint::new(0, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        let mover = |team, x| UnitSpawn {
+            team: Team(team),
+            position: SimPoint::new(x * world, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile {
+                speed_per_tick: world / 2,
+            },
+        };
+        let left = sim.spawn_unit(mover(0, 20));
+        let right = sim.spawn_unit(mover(1, 21));
+
+        let tick = sim.step();
+
+        assert_eq!(tick.collision_fallback_searches, 0);
+        assert_eq!(tick.collision_fallback_candidate_checks, 0);
+        assert_eq!(tick.collision_fallback_max_ring, 0);
+        let minimum_distance_sq = {
+            let distance = i64::from(world);
+            (distance * distance) as u64
+        };
+        assert!(
+            sim.unit(left)
+                .unwrap()
+                .position
+                .distance_sq(sim.unit(right).unwrap().position)
+                >= minimum_distance_sq
+        );
+    }
+
+    #[test]
     fn converging_crowd_never_commits_overlapping_units() {
         let mut config = SimulationConfig {
             navigation_min: NavCell::new(0, 0),

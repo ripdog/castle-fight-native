@@ -333,6 +333,25 @@ impl SpatialReservationGrid {
 
     #[must_use]
     pub fn is_clear_with_radius(&self, position: SimPoint, radius: i32) -> bool {
+        self.is_clear_with_radius_matching(position, radius, |_| true)
+    }
+
+    #[must_use]
+    pub fn is_clear_with_radius_after_index(
+        &self,
+        position: SimPoint,
+        radius: i32,
+        index: usize,
+    ) -> bool {
+        self.is_clear_with_radius_matching(position, radius, |other_index| other_index > index)
+    }
+
+    fn is_clear_with_radius_matching(
+        &self,
+        position: SimPoint,
+        radius: i32,
+        mut include: impl FnMut(usize) -> bool,
+    ) -> bool {
         debug_assert!(radius >= 0);
         let search_distance = radius.saturating_add(self.max_radius);
         let min = SimPoint::new(
@@ -362,13 +381,15 @@ impl SpatialReservationGrid {
                 while index != NONE {
                     let entry =
                         self.entries[index].expect("reservation list referenced missing entry");
-                    let minimum_distance = radius.saturating_add(entry.radius);
-                    let minimum_distance_sq = {
-                        let distance = i64::from(minimum_distance);
-                        (distance * distance) as u64
-                    };
-                    if position.distance_sq(entry.position) < minimum_distance_sq {
-                        return false;
+                    if include(index) {
+                        let minimum_distance = radius.saturating_add(entry.radius);
+                        let minimum_distance_sq = {
+                            let distance = i64::from(minimum_distance);
+                            (distance * distance) as u64
+                        };
+                        if position.distance_sq(entry.position) < minimum_distance_sq {
+                            return false;
+                        }
                     }
                     index = self.next[index];
                 }

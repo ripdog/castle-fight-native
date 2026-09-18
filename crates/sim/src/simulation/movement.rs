@@ -1081,6 +1081,19 @@ impl Simulation {
 
             let chosen = match chosen {
                 Some(chosen) => chosen,
+                None if self.position_is_legal_for_unit(unit, original_cell, unit.position)
+                    && reservations.is_clear_with_radius_after_index(
+                        unit.position,
+                        unit.collision_radius,
+                        index,
+                    ) =>
+                {
+                    // Tentative separation slots belonging to units that have not been resolved
+                    // yet are allowed to overlap this unit's last committed position. Those units
+                    // will see this committed reservation when their turn arrives. Only already
+                    // resolved units can make the old position genuinely unavailable.
+                    unit.position
+                }
                 None => {
                     fallback_searches += 1;
                     let fallback_started = Instant::now();
