@@ -12,7 +12,9 @@ use crate::{
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
-    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts},
+    resource_ui::{
+        BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_grid_toggle,
+    },
     terrain::TerrainSurface,
 };
 
@@ -131,6 +133,7 @@ fn handle_modal_left_click(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
+        || cursor_over_map_grid_toggle(cursor, window.width())
     {
         return;
     }
@@ -439,6 +442,7 @@ fn handle_smart_right_click(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
+        || cursor_over_map_grid_toggle(cursor, window.width())
     {
         return;
     }

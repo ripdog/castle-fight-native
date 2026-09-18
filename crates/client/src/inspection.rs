@@ -14,7 +14,10 @@ use crate::{
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
         unit_visual_center_lerp, viewport_ground_point,
     },
-    resource_ui::{BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts},
+    resource_ui::{
+        BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts,
+        cursor_over_map_grid_toggle,
+    },
     terrain::TerrainSurface,
 };
 
@@ -124,6 +127,7 @@ pub(crate) fn handle_world_selection(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, state.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &state.builder_shortcuts)
+        || cursor_over_map_grid_toggle(cursor, window.width())
     {
         return;
     }

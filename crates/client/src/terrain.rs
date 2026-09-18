@@ -22,6 +22,7 @@ const TERRAIN_PRESENTATION_SUBDIVISIONS: u32 = 4;
 const TERRAIN_NORMAL_SAMPLE_GRID_DELTA: f32 = 0.5;
 const TERRAIN_SLOPE_SHADE_STRENGTH: f32 = 0.24;
 const TERRAIN_SLOPE_MIN_BRIGHTNESS: f32 = 0.84;
+const TERRAIN_SIDE_MASK_HEIGHT_OFFSET: f32 = 0.6;
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainSurface {
@@ -230,6 +231,59 @@ impl TerrainSurface {
         position.z = position.z.clamp(self.origin_world.y, self.max_world.y);
         position.y = self.height_at_world(position.xz());
         position
+    }
+
+    #[must_use]
+    pub fn side_mask_mesh(&self, playable_min_x: f32, playable_max_x: f32) -> Mesh {
+        assert!(playable_min_x <= playable_max_x);
+        let width = self.elevation.width_tiles() * TERRAIN_PRESENTATION_SUBDIVISIONS;
+        let height = self.elevation.height_tiles() * TERRAIN_PRESENTATION_SUBDIVISIONS;
+        let row_width = width + 1;
+        let subdivisions = TERRAIN_PRESENTATION_SUBDIVISIONS as f32;
+        let mut positions = Vec::with_capacity((row_width as usize) * ((height + 1) as usize));
+        let mut normals = Vec::with_capacity(positions.capacity());
+
+        for y in 0..=height {
+            for x in 0..=width {
+                let grid = Vec2::new(x as f32 / subdivisions, y as f32 / subdivisions);
+                let mut position = self.position_at_grid(grid);
+                position[1] += TERRAIN_SIDE_MASK_HEIGHT_OFFSET;
+                positions.push(position);
+                normals.push(self.normal_at_grid(grid));
+            }
+        }
+
+        let mut indices = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                let left_world = self.origin_world.x + x as f32 / subdivisions * self.tile_world;
+                let right_world =
+                    self.origin_world.x + (x + 1) as f32 / subdivisions * self.tile_world;
+                if right_world > playable_min_x && left_world < playable_max_x {
+                    continue;
+                }
+                let bottom_left = y * row_width + x;
+                let bottom_right = bottom_left + 1;
+                let top_left = bottom_left + row_width;
+                let top_right = top_left + 1;
+                indices.extend_from_slice(&[
+                    bottom_left,
+                    top_left,
+                    bottom_right,
+                    bottom_right,
+                    top_left,
+                    top_right,
+                ]);
+            }
+        }
+
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_indices(Indices::U32(indices))
     }
 
     #[must_use]
@@ -760,6 +814,16 @@ mod tests {
             ))
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn side_mask_covers_only_terrain_outside_the_playable_x_bounds() {
+        let terrain = original_terrain();
+        let mask = terrain.side_mask_mesh(-6_400.0, 6_400.0);
+        let indices = mask.indices().expect("side mask should be indexed");
+        let expected_side_columns = 56usize + 72;
+        let expected_rows = 64usize * TERRAIN_PRESENTATION_SUBDIVISIONS as usize;
+        assert_eq!(indices.len(), expected_side_columns * expected_rows * 6);
     }
 
     fn original_texture_layout() -> TerrainTextureLayout {

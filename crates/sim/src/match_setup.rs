@@ -1451,5 +1451,20 @@ mod tests {
         );
         assert_eq!(resolved.simulation_config.team_build_regions[0].len(), 1);
         assert_eq!(resolved.simulation_config.team_build_regions[1].len(), 1);
+
+        let navigation_min_x = resolved.simulation_config.navigation_min.x
+            * resolved.simulation_config.navigation_cell_size;
+        let navigation_max_x = (resolved.simulation_config.navigation_max.x + 1)
+            * resolved.simulation_config.navigation_cell_size;
+        assert_eq!(
+            navigation_min_x,
+            PLAYABLE_MIN_X_WORLD * SUBUNITS_PER_WORLD_UNIT
+        );
+        assert_eq!(
+            navigation_max_x,
+            PLAYABLE_MAX_X_WORLD * SUBUNITS_PER_WORLD_UNIT
+        );
+        assert!(resolved.terrain.origin().x < navigation_min_x);
+        assert!(resolved.terrain.max_point().x > navigation_max_x);
     }
 }

@@ -113,6 +113,12 @@ pub(crate) const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 pub(crate) const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
 const CAMERA_EDGE_SCROLL_MARGIN: f32 = 8.0;
+const SIDE_TERRAIN_MASK_COLOR: Color = Color::srgb(0.006, 0.009, 0.006);
+const MAP_GRID_HEIGHT_OFFSET: f32 = 0.35;
+const MAP_GRID_MAJOR_INTERVAL: i32 = 4;
+const MAP_GRID_MAJOR_OFFSET_WORLD: f32 = 2.0;
+const MAP_GRID_LINE_COLOR: Color = Color::srgba(0.62, 0.70, 0.64, 0.34);
+const MAP_GRID_MAJOR_COLOR: Color = Color::srgba(0.70, 0.78, 0.68, 0.52);
 
 #[derive(Resource, Debug, Clone)]
 pub struct WorldMetrics {
@@ -653,6 +659,14 @@ struct HealthBarRenderParams<'w, 's> {
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct ProjectileEffectGizmos;
 
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct MapGridGizmos;
+
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct MapGridState {
+    pub(crate) enabled: bool,
+}
+
 #[derive(Resource, Debug, Default)]
 pub(crate) struct FpsDisplay {
     elapsed_seconds: f32,
@@ -697,12 +711,14 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<Wc3VisualSet>()
             .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<FpsDisplay>()
+            .init_resource::<MapGridState>()
             .init_resource::<CameraFocusRequest>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
             .init_resource::<TimedWc3Effects>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
+            .init_gizmo_group::<MapGridGizmos>()
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -744,6 +760,7 @@ impl Plugin for CastlePresentationPlugin {
                     emit_wc3_particles,
                     draw_projectile_effects,
                     update_health_bar_batch,
+                    draw_map_grid,
                     draw_presentation_gizmos,
                     sample_display_fps,
                 )
@@ -829,6 +846,8 @@ fn setup_scene(
 
     let (projectile_effect_config, _) = gizmo_configs.config_mut::<ProjectileEffectGizmos>();
     projectile_effect_config.line.width = 3.0;
+    let (map_grid_config, _) = gizmo_configs.config_mut::<MapGridGizmos>();
+    map_grid_config.line.width = 1.0;
     let melee_mesh = meshes.add(Cuboid::new(7.0, UNIT_MELEE_HEIGHT, 7.0));
     let ranged_mesh = meshes.add(Cuboid::new(6.0, UNIT_RANGED_HEIGHT, 6.0));
     let ballistic_unit_mesh = meshes.add(Cuboid::new(7.0, UNIT_RANGED_HEIGHT, 7.0));
@@ -1022,6 +1041,20 @@ fn setup_scene(
             }
         }
     }
+
+    // The retained Warcraft terrain extends well beyond the authored playable rectangle on the
+    // west/east sides. WC3 presents those side bands as almost-black dead space. Keep the actual
+    // terrain geometry underneath for camera/background continuity, but depth-occlude its diffuse
+    // layers with a conforming unlit mask derived from the authoritative navigation bounds.
+    commands.spawn((
+        Mesh3d(meshes.add(terrain.side_mask_mesh(metrics.world_min().x, metrics.world_max().x))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: SIDE_TERRAIN_MASK_COLOR,
+            unlit: true,
+            ..default()
+        })),
+        Transform::IDENTITY,
+    ));
 
     commands.spawn((
         DirectionalLight {
@@ -3839,6 +3872,167 @@ fn upload_health_bar_rects(batch: &mut HealthBarBatch, shader_buffers: &mut Asse
     batch.last_rect_count = rect_count;
 }
 
+fn map_grid_base_cells(selected_match: &SelectedMatch) -> Option<u16> {
+    selected_match
+        .content
+        .production_building_definitions()
+        .map(|definition| definition.footprint_size_cells)
+        .min()
+}
+
+fn draw_map_grid(
+    state: Res<MapGridState>,
+    selected_match: Res<SelectedMatch>,
+    metrics: Res<WorldMetrics>,
+    terrain: Res<TerrainSurface>,
+    mut gizmos: Gizmos<MapGridGizmos>,
+) {
+    if !state.enabled {
+        return;
+    }
+    let Some(base_cells) = map_grid_base_cells(&selected_match) else {
+        return;
+    };
+    let spacing = metrics.navigation_cell_world() * f32::from(base_cells);
+    if spacing <= f32::EPSILON {
+        return;
+    }
+
+    let min = metrics.world_min();
+    let max = metrics.world_max();
+    let first_x = (min.x / spacing).ceil() as i32;
+    let last_x = (max.x / spacing).floor() as i32;
+    for index in first_x..=last_x {
+        let x = index as f32 * spacing;
+        if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
+            draw_map_grid_x_line(
+                &mut gizmos,
+                &terrain,
+                min,
+                max,
+                x - MAP_GRID_MAJOR_OFFSET_WORLD,
+                spacing,
+                MAP_GRID_MAJOR_COLOR,
+            );
+            draw_map_grid_x_line(
+                &mut gizmos,
+                &terrain,
+                min,
+                max,
+                x + MAP_GRID_MAJOR_OFFSET_WORLD,
+                spacing,
+                MAP_GRID_MAJOR_COLOR,
+            );
+        } else {
+            draw_map_grid_x_line(
+                &mut gizmos,
+                &terrain,
+                min,
+                max,
+                x,
+                spacing,
+                MAP_GRID_LINE_COLOR,
+            );
+        }
+    }
+
+    let first_z = (min.y / spacing).ceil() as i32;
+    let last_z = (max.y / spacing).floor() as i32;
+    for index in first_z..=last_z {
+        let z = index as f32 * spacing;
+        if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
+            draw_map_grid_z_line(
+                &mut gizmos,
+                &terrain,
+                min,
+                max,
+                z - MAP_GRID_MAJOR_OFFSET_WORLD,
+                spacing,
+                MAP_GRID_MAJOR_COLOR,
+            );
+            draw_map_grid_z_line(
+                &mut gizmos,
+                &terrain,
+                min,
+                max,
+                z + MAP_GRID_MAJOR_OFFSET_WORLD,
+                spacing,
+                MAP_GRID_MAJOR_COLOR,
+            );
+        } else {
+            draw_map_grid_z_line(
+                &mut gizmos,
+                &terrain,
+                min,
+                max,
+                z,
+                spacing,
+                MAP_GRID_LINE_COLOR,
+            );
+        }
+    }
+}
+
+fn draw_map_grid_x_line(
+    gizmos: &mut Gizmos<MapGridGizmos>,
+    terrain: &TerrainSurface,
+    min: Vec2,
+    max: Vec2,
+    x: f32,
+    segment_length: f32,
+    color: Color,
+) {
+    if x < min.x || x > max.x {
+        return;
+    }
+    let segment_count = ((max.y - min.y) / segment_length).ceil() as u32;
+    for segment in 0..segment_count {
+        let z0 = min.y + segment as f32 * segment_length;
+        let z1 = (z0 + segment_length).min(max.y);
+        let p0 = Vec3::new(
+            x,
+            terrain.height_at_world(Vec2::new(x, z0)) + MAP_GRID_HEIGHT_OFFSET,
+            z0,
+        );
+        let p1 = Vec3::new(
+            x,
+            terrain.height_at_world(Vec2::new(x, z1)) + MAP_GRID_HEIGHT_OFFSET,
+            z1,
+        );
+        gizmos.line(p0, p1, color);
+    }
+}
+
+fn draw_map_grid_z_line(
+    gizmos: &mut Gizmos<MapGridGizmos>,
+    terrain: &TerrainSurface,
+    min: Vec2,
+    max: Vec2,
+    z: f32,
+    segment_length: f32,
+    color: Color,
+) {
+    if z < min.y || z > max.y {
+        return;
+    }
+    let segment_count = ((max.x - min.x) / segment_length).ceil() as u32;
+    for segment in 0..segment_count {
+        let x0 = min.x + segment as f32 * segment_length;
+        let x1 = (x0 + segment_length).min(max.x);
+        let p0 = Vec3::new(
+            x0,
+            terrain.height_at_world(Vec2::new(x0, z)) + MAP_GRID_HEIGHT_OFFSET,
+            z,
+        );
+        let p1 = Vec3::new(
+            x1,
+            terrain.height_at_world(Vec2::new(x1, z)) + MAP_GRID_HEIGHT_OFFSET,
+            z,
+        );
+        gizmos.line(p0, p1, color);
+    }
+}
+
 fn draw_presentation_gizmos(
     clocks: (Res<Time<Fixed>>, Res<SimulationPlayback>),
     samples: Res<PresentationSamples>,
@@ -4384,6 +4578,18 @@ mod tests {
             ))
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn map_grid_uses_selected_release_production_building_footprint_scale() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        };
+        assert_eq!(map_grid_base_cells(&selected_match), Some(4));
+        assert_eq!(demo.metrics.navigation_cell_world() * 4.0, 128.0);
     }
 
     #[test]

@@ -7,7 +7,7 @@ use crate::{
     build_ui::{ActionPanelMode, ActionPanelState},
     debug_menu::DebugMenuState,
     inspection::InspectionSelection,
-    presentation::{CameraFocusRequest, FpsDisplay, player_color},
+    presentation::{CameraFocusRequest, FpsDisplay, MapGridState, player_color},
     ui_icons::{UiIconAssets, UiIconKey},
 };
 
@@ -30,6 +30,14 @@ const BUILDER_SHORTCUT_BORDER: f32 = 3.0;
 const BUILDER_SHORTCUT_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.96);
 const BUILDER_SHORTCUT_HOVERED: Color = Color::srgba(0.16, 0.14, 0.10, 0.98);
 const BUILDER_SHORTCUT_SELECTED: Color = Color::srgba(0.28, 0.24, 0.12, 0.98);
+const MAP_GRID_BUTTON_WIDTH: f32 = 52.0;
+const MAP_GRID_BUTTON_HEIGHT: f32 = 22.0;
+const MAP_GRID_BUTTON_TOP: f32 = TOP_BAR_HEIGHT + 4.0;
+// The fixed right-side resource slots are GOLD, LUMBER, LEGENDARY. Keep this centred below GOLD.
+const MAP_GRID_BUTTON_RIGHT: f32 = 385.0;
+const MAP_GRID_BUTTON_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.96);
+const MAP_GRID_BUTTON_HOVERED: Color = Color::srgba(0.16, 0.14, 0.10, 0.98);
+const MAP_GRID_BUTTON_ENABLED: Color = Color::srgba(0.18, 0.28, 0.16, 0.98);
 
 #[derive(Component)]
 struct PerformanceText;
@@ -54,6 +62,9 @@ struct LegendaryText;
 
 #[derive(Component)]
 struct BuilderShortcutRoot;
+
+#[derive(Component)]
+struct MapGridToggleButton;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct BuilderShortcutButton(SimId);
@@ -82,8 +93,16 @@ pub(crate) struct ResourceUiPlugin;
 impl Plugin for ResourceUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BuilderShortcutState>()
+            .init_resource::<MapGridState>()
             .init_resource::<CameraFocusRequest>()
-            .add_systems(Startup, (setup_resource_bar, setup_builder_shortcuts))
+            .add_systems(
+                Startup,
+                (
+                    setup_resource_bar,
+                    setup_builder_shortcuts,
+                    setup_map_grid_toggle,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -91,6 +110,8 @@ impl Plugin for ResourceUiPlugin {
                     sync_builder_shortcuts,
                     handle_builder_shortcut_click,
                     update_builder_shortcut_visuals,
+                    handle_map_grid_toggle_click,
+                    update_map_grid_toggle_visual,
                 )
                     .chain(),
             );
@@ -110,6 +131,34 @@ fn setup_builder_shortcuts(mut commands: Commands) {
         ZIndex(950),
         BuilderShortcutRoot,
     ));
+}
+
+fn setup_map_grid_toggle(mut commands: Commands) {
+    commands
+        .spawn((
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(MAP_GRID_BUTTON_RIGHT),
+                top: px(MAP_GRID_BUTTON_TOP),
+                width: px(MAP_GRID_BUTTON_WIDTH),
+                height: px(MAP_GRID_BUTTON_HEIGHT),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(px(1.0)),
+                ..default()
+            },
+            BackgroundColor(MAP_GRID_BUTTON_BACKGROUND),
+            BorderColor::all(SLOT_BORDER),
+            ZIndex(1001),
+            MapGridToggleButton,
+        ))
+        .with_child((
+            Text::new("GRID"),
+            TextFont::from_font_size(9.0),
+            TextColor(LABEL_COLOR),
+            Pickable::IGNORE,
+        ));
 }
 
 fn setup_resource_bar(mut commands: Commands) {
@@ -442,6 +491,42 @@ fn update_builder_shortcut_visuals(
     }
 }
 
+fn handle_map_grid_toggle_click(
+    buttons: Query<&Interaction, (Changed<Interaction>, With<MapGridToggleButton>)>,
+    mut state: ResMut<MapGridState>,
+) {
+    for interaction in &buttons {
+        if *interaction == Interaction::Pressed {
+            state.enabled = !state.enabled;
+        }
+    }
+}
+
+fn update_map_grid_toggle_visual(
+    state: Res<MapGridState>,
+    mut button: Single<(&Interaction, &mut BackgroundColor), With<MapGridToggleButton>>,
+) {
+    let (interaction, background) = &mut *button;
+    background.0 = if **interaction == Interaction::Hovered || **interaction == Interaction::Pressed
+    {
+        MAP_GRID_BUTTON_HOVERED
+    } else if state.enabled {
+        MAP_GRID_BUTTON_ENABLED
+    } else {
+        MAP_GRID_BUTTON_BACKGROUND
+    };
+}
+
+#[must_use]
+pub(crate) fn cursor_over_map_grid_toggle(cursor: Vec2, window_width: f32) -> bool {
+    let right = window_width - MAP_GRID_BUTTON_RIGHT;
+    let left = right - MAP_GRID_BUTTON_WIDTH;
+    cursor.x >= left
+        && cursor.x <= right
+        && cursor.y >= MAP_GRID_BUTTON_TOP
+        && cursor.y <= MAP_GRID_BUTTON_TOP + MAP_GRID_BUTTON_HEIGHT
+}
+
 #[must_use]
 pub(crate) fn cursor_over_builder_shortcuts(cursor: Vec2, state: &BuilderShortcutState) -> bool {
     let count = state.len();
@@ -672,6 +757,28 @@ mod tests {
         assert_eq!(all_shortcuts.len(), 2);
         assert_eq!(all_shortcuts[0].owner, PlayerId(0));
         assert_eq!(all_shortcuts[1].owner, PlayerId(1));
+    }
+
+    #[test]
+    fn map_grid_toggle_hit_box_tracks_the_right_anchored_button() {
+        let window_width = 1_440.0;
+        let right = window_width - MAP_GRID_BUTTON_RIGHT;
+        let left = right - MAP_GRID_BUTTON_WIDTH;
+        assert!(cursor_over_map_grid_toggle(
+            Vec2::new((left + right) * 0.5, MAP_GRID_BUTTON_TOP + 5.0),
+            window_width,
+        ));
+        assert!(!cursor_over_map_grid_toggle(
+            Vec2::new(left - 1.0, MAP_GRID_BUTTON_TOP + 5.0),
+            window_width,
+        ));
+        assert!(!cursor_over_map_grid_toggle(
+            Vec2::new(
+                (left + right) * 0.5,
+                MAP_GRID_BUTTON_TOP + MAP_GRID_BUTTON_HEIGHT + 1.0
+            ),
+            window_width,
+        ));
     }
 
     #[test]
