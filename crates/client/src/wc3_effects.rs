@@ -7,7 +7,7 @@ use std::{
 
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
-    camera::visibility::NoFrustumCulling,
+    camera::visibility::DynamicSkinnedMeshBounds,
     gltf::{Gltf, GltfMaterialExtras},
     mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
     prelude::*,
@@ -787,10 +787,9 @@ pub fn fix_wc3_scene_materials(
                     MeshMaterial3d(underlay_handle),
                     Transform::IDENTITY,
                     Visibility::default(),
-                    NoFrustumCulling,
                 ));
                 if let Some(skin) = skin {
-                    underlay_entity.insert(skin.clone());
+                    underlay_entity.insert((skin.clone(), DynamicSkinnedMeshBounds));
                 }
                 let underlay_entity = underlay_entity.id();
                 commands.entity(entity).add_child(underlay_entity);
@@ -941,7 +940,6 @@ pub fn spawn_wc3_ribbon_trails(
                 MeshMaterial3d(material),
                 Transform::IDENTITY,
                 Visibility::default(),
-                NoFrustumCulling,
                 Wc3RibbonTrail {
                     source,
                     spec: spec.clone(),
