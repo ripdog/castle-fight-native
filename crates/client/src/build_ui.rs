@@ -16,6 +16,7 @@ use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
     building_models::BuildingModelSet,
+    control_modifier_pressed,
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::{BuildKind, ProductionKind},
     inspection::{InspectionSelection, cursor_over_inspector_panel},
@@ -688,7 +689,8 @@ pub(crate) fn key_code_for_hotkey(hotkey: char) -> Option<KeyCode> {
 }
 
 pub(crate) fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
-    key_code_for_hotkey(hotkey).is_some_and(|key_code| keys.just_pressed(key_code))
+    !control_modifier_pressed(keys)
+        && key_code_for_hotkey(hotkey).is_some_and(|key_code| keys.just_pressed(key_code))
 }
 
 fn capture_action_panel_hotkeys(
@@ -699,6 +701,9 @@ fn capture_action_panel_hotkeys(
     mut capture: ResMut<ActionPanelHotkeyCapture>,
 ) {
     capture.captured.retain(|key| keys.pressed(*key));
+    if control_modifier_pressed(&keys) {
+        return;
+    }
     for action in action_layout(&state, &authoritative, &selected_match)
         .into_iter()
         .flatten()

@@ -206,6 +206,8 @@ Selection MUST NOT imply or enable direct control. The builder is the sole norma
 
 Development/verification clients MAY expose a **local simulation pause** for inspection. This pause stops local authoritative simulation ticks at a completed tick boundary while leaving rendering, camera control, selection, inspection, and other presentation-only UI responsive. It MUST NOT mutate gameplay state merely by being toggled, and it is distinct from canonical network/match pause controls. While locally paused, inspection SHOULD show the latest committed authoritative state rather than an interpolated in-between presentation state. Useful debug fields include the unit's current target/order, most recent attacker and attack tick, and whether direct-retaliation or ally-defense lock is active.
 
+Offline development clients MAY also expose quicksave/quickload at completed authoritative boundaries. The default development bindings are `Ctrl+S` to write the current logical simulation snapshot and `Ctrl+O` to restore it; these modified shortcuts take precedence over command-card and camera letter bindings. Quickload rebuilds the local command driver from the restored boundary rather than pretending pre-load command history still applies. Development debug UI MAY populate completed instances of every production-building and tower definition available in the selected versioned content bundle, arranging one top-to-bottom vertical line behind each team's castle without charging player resources.
+
 ## 15. Camera/input mappings
 
 Controls should be configurable and may include:

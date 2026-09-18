@@ -1,8 +1,12 @@
 use bevy::{prelude::*, time::Fixed};
-use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, PlayerId, SimId, Simulation};
+use castle_fight_sim::{
+    BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CastleFightContentBundle,
+    CastleFightProductionKind, CastleFightTowerKind, PlayerId, SimId, Simulation, Team,
+};
 
 use crate::{
-    AuthoritativeSimulation, SimulationPlayback, advance_authoritative_simulation_once,
+    AuthoritativeSimulation, SelectedMatch, SimulationPlayback,
+    advance_authoritative_simulation_once,
     bridge::{PresentationSamples, PresentationSnapshot},
     resource_ui::TOP_BAR_HEIGHT,
 };
@@ -10,12 +14,14 @@ use crate::{
 const PANEL_LEFT: f32 = 12.0;
 const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
 const PANEL_WIDTH: f32 = 360.0;
-const PANEL_HEIGHT: f32 = 452.0;
+const PANEL_HEIGHT: f32 = 496.0;
 const PANEL_PADDING: f32 = 12.0;
 const BUTTON_HEIGHT: f32 = 38.0;
 const BUTTON_GAP: f32 = 6.0;
 const DEBUG_RESOURCE_GRANT: u32 = 1_000_000;
 const DEBUG_KILL_DAMAGE: i32 = 9_999;
+const DEBUG_BUILDING_LINE_MARGIN_CELLS: i32 = 4;
+const DEBUG_BUILDING_LINE_GAP_CELLS: i32 = 2;
 
 const PANEL_BACKGROUND: Color = Color::srgba(0.030, 0.035, 0.045, 0.97);
 const PANEL_BORDER: Color = Color::srgb(0.42, 0.33, 0.17);
@@ -96,6 +102,7 @@ enum DebugAction {
     KillAllUnits,
     ToggleControlAllPlayers,
     ToggleBuildingsInvulnerable,
+    PopulateBuildings,
     TogglePause,
     StepOneTick,
     SetSpeed(DebugSpeed),
@@ -183,6 +190,12 @@ fn setup_debug_menu(mut commands: Commands) {
                 panel,
                 DebugAction::ToggleBuildingsInvulnerable,
                 "Buildings invulnerable: OFF",
+                percent(100.0),
+            );
+            spawn_debug_button(
+                panel,
+                DebugAction::PopulateBuildings,
+                "Populate implemented building lines",
                 percent(100.0),
             );
             spawn_debug_button(
@@ -288,6 +301,7 @@ fn handle_debug_buttons(
     mut state: ResMut<DebugMenuState>,
     mut playback: ResMut<SimulationPlayback>,
     mut fixed_time: ResMut<Time<Fixed>>,
+    selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
@@ -355,6 +369,24 @@ fn handle_debug_buttons(
                     "Building damage restored to normal.".into()
                 };
             }
+            DebugAction::PopulateBuildings => {
+                if authoritative.is_networked() {
+                    state.status =
+                        "Building population is offline-only; the server owns network state."
+                            .into();
+                    continue;
+                }
+                let (spawned, skipped) = populate_debug_building_lines(
+                    &mut authoritative.simulation,
+                    selected_match.content,
+                );
+                presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
+                state.status = if skipped == 0 {
+                    format!("Spawned {spawned} completed buildings in top-to-bottom debug lines.")
+                } else {
+                    format!("Spawned {spawned} completed buildings; {skipped} could not be placed.")
+                };
+            }
             DebugAction::TogglePause => {
                 playback.paused = !playback.paused;
                 state.status = if playback.paused {
@@ -390,6 +422,166 @@ fn handle_debug_buttons(
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DebugBuildingKind {
+    Production(CastleFightProductionKind),
+    Tower(CastleFightTowerKind),
+}
+
+impl DebugBuildingKind {
+    fn footprint_size(self, content: &CastleFightContentBundle) -> u16 {
+        match self {
+            Self::Production(kind) => {
+                content
+                    .production_building(kind)
+                    .expect("debug production kind must belong to selected content")
+                    .footprint_size_cells
+            }
+            Self::Tower(kind) => {
+                content
+                    .tower(kind)
+                    .expect("debug tower kind must belong to selected content")
+                    .footprint_size_cells
+            }
+        }
+    }
+}
+
+fn populate_debug_building_lines(
+    simulation: &mut Simulation,
+    content: &CastleFightContentBundle,
+) -> (usize, usize) {
+    let definitions = CastleFightProductionKind::ALL
+        .into_iter()
+        .filter(|kind| content.production_building(*kind).is_some())
+        .map(DebugBuildingKind::Production)
+        .chain(
+            CastleFightTowerKind::ALL
+                .into_iter()
+                .filter(|kind| content.tower(*kind).is_some())
+                .map(DebugBuildingKind::Tower),
+        )
+        .collect::<Vec<_>>();
+    if definitions.is_empty() {
+        return (0, 0);
+    }
+
+    let max_size = definitions
+        .iter()
+        .map(|definition| definition.footprint_size(content))
+        .max()
+        .expect("non-empty debug building list");
+    let max_size_i32 = i32::from(max_size);
+    let mut spawned = 0;
+    let mut skipped = 0;
+
+    for team in [Team(0), Team(1)] {
+        let Some(castle) = simulation
+            .team_objective(team)
+            .and_then(|objective| simulation.building(objective))
+        else {
+            skipped += definitions.len();
+            continue;
+        };
+        let owner = castle.owner.or_else(|| {
+            simulation
+                .players()
+                .into_iter()
+                .filter(|player| player.team == team)
+                .map(|player| player.id)
+                .min()
+        });
+        let Some(owner) = owner else {
+            skipped += definitions.len();
+            continue;
+        };
+
+        let region = simulation
+            .team_build_regions(team)
+            .iter()
+            .copied()
+            .find(|region| footprint_contains(*region, castle.footprint))
+            .or_else(|| {
+                simulation
+                    .team_build_regions(team)
+                    .iter()
+                    .copied()
+                    .max_by_key(|region| u32::from(region.width) * u32::from(region.height))
+            });
+        let Some(region) = region else {
+            skipped += definitions.len();
+            continue;
+        };
+
+        let castle_center_x2 = castle.footprint.min_x * 2 + i32::from(castle.footprint.width) - 1;
+        let region_center_x2 = region.min_x * 2 + i32::from(region.width) - 1;
+        let outer_side_is_left = castle_center_x2 < region_center_x2;
+        let line_min_x = if outer_side_is_left {
+            region.min_x + DEBUG_BUILDING_LINE_MARGIN_CELLS
+        } else {
+            region.max_x() - DEBUG_BUILDING_LINE_MARGIN_CELLS - max_size_i32 + 1
+        };
+        let minimum_y = region.min_y + DEBUG_BUILDING_LINE_MARGIN_CELLS;
+        let mut cursor_max_y = region.max_y() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
+
+        for definition in &definitions {
+            let definition = *definition;
+            let size = definition.footprint_size(content);
+            let size_i32 = i32::from(size);
+            let min_x = line_min_x + (max_size_i32 - size_i32) / 2;
+            let mut candidate_max_y = cursor_max_y;
+            let mut placed = false;
+
+            while candidate_max_y - size_i32 + 1 >= minimum_y {
+                let min_y = candidate_max_y - size_i32 + 1;
+                let footprint = BuildingFootprint::new(min_x, min_y, size, size);
+                if simulation.can_place_building_for_team(team, footprint) {
+                    match definition {
+                        DebugBuildingKind::Production(kind) => {
+                            let definition = content
+                                .production_building(kind)
+                                .expect("debug production kind must belong to selected content");
+                            simulation.spawn_building_for_player_with_properties(
+                                owner,
+                                definition.spawn(team, footprint),
+                                definition.gameplay_properties(),
+                            );
+                        }
+                        DebugBuildingKind::Tower(kind) => {
+                            let definition = content
+                                .tower(kind)
+                                .expect("debug tower kind must belong to selected content");
+                            simulation.spawn_building_for_player_with_properties(
+                                owner,
+                                definition.spawn(team, footprint),
+                                definition.gameplay_properties(),
+                            );
+                        }
+                    }
+                    cursor_max_y = min_y - DEBUG_BUILDING_LINE_GAP_CELLS - 1;
+                    spawned += 1;
+                    placed = true;
+                    break;
+                }
+                candidate_max_y -= 1;
+            }
+
+            if !placed {
+                skipped += 1;
+            }
+        }
+    }
+
+    (spawned, skipped)
+}
+
+const fn footprint_contains(region: BuildingFootprint, footprint: BuildingFootprint) -> bool {
+    footprint.min_x >= region.min_x
+        && footprint.max_x() <= region.max_x()
+        && footprint.min_y >= region.min_y
+        && footprint.max_y() <= region.max_y()
 }
 
 fn apply_debug_speed(fixed_time: &mut Time<Fixed>, speed: DebugSpeed) {
@@ -504,6 +696,10 @@ impl DebugMenuState {
         self.control_all_players
     }
 
+    pub(crate) const fn buildings_invulnerable(&self) -> bool {
+        self.buildings_invulnerable
+    }
+
     pub(crate) fn can_control_builder(
         &self,
         simulation: &Simulation,
@@ -577,5 +773,71 @@ mod tests {
         assert!(!cursor_over_debug_menu(inside, false));
         assert!(cursor_over_debug_menu(inside, true));
         assert!(!cursor_over_debug_menu(outside, true));
+    }
+
+    #[test]
+    fn debug_population_builds_complete_vertical_rosters_behind_both_castles() {
+        let mut demo = crate::demo::create_demo_world(1, None);
+        let content = demo.content;
+        let implemented_rawcodes = content
+            .production_building_definitions()
+            .map(|definition| definition.rawcode)
+            .chain(
+                content
+                    .tower_definitions()
+                    .map(|definition| definition.rawcode),
+            )
+            .collect::<Vec<_>>();
+        let expected_spawned = implemented_rawcodes.len() * 2;
+        let initial_buildings = demo.simulation.building_count();
+
+        let (spawned, skipped) = populate_debug_building_lines(&mut demo.simulation, content);
+
+        assert_eq!(skipped, 0);
+        assert_eq!(spawned, expected_spawned);
+        assert_eq!(
+            demo.simulation.building_count(),
+            initial_buildings + expected_spawned
+        );
+
+        for team in [Team(0), Team(1)] {
+            let castle = demo
+                .simulation
+                .team_objective(team)
+                .and_then(|objective| demo.simulation.building(objective))
+                .expect("development match must have both castles");
+            let castle_center_x2 =
+                castle.footprint.min_x * 2 + i32::from(castle.footprint.width) - 1;
+            let mut line = demo
+                .simulation
+                .buildings()
+                .into_iter()
+                .filter(|building| building.team == team)
+                .filter(|building| {
+                    building
+                        .content
+                        .is_some_and(|content| implemented_rawcodes.contains(&content.rawcode))
+                })
+                .collect::<Vec<_>>();
+            line.sort_unstable_by_key(|building| std::cmp::Reverse(building.footprint.min_y));
+            assert_eq!(line.len(), implemented_rawcodes.len());
+
+            let line_center_x2 =
+                line[0].footprint.min_x * 2 + i32::from(line[0].footprint.width) - 1;
+            assert!(line.iter().all(|building| {
+                let center_x2 =
+                    building.footprint.min_x * 2 + i32::from(building.footprint.width) - 1;
+                (center_x2 - line_center_x2).abs() <= 1
+            }));
+            assert!(
+                line.windows(2)
+                    .all(|pair| { pair[0].footprint.min_y > pair[1].footprint.min_y })
+            );
+            if team == Team(0) {
+                assert!(line_center_x2 < castle_center_x2);
+            } else {
+                assert!(line_center_x2 > castle_center_x2);
+            }
+        }
     }
 }

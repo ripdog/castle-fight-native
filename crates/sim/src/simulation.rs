@@ -711,6 +711,14 @@ impl Simulation {
             .flatten()
     }
 
+    #[must_use]
+    pub fn team_build_regions(&self, team: Team) -> &[BuildingFootprint] {
+        self.config
+            .team_build_regions
+            .get(usize::from(team.0))
+            .map_or(&[], Vec::as_slice)
+    }
+
     pub fn register_team_objective(
         &mut self,
         team: Team,

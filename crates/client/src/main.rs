@@ -17,6 +17,8 @@ mod unit_models;
 mod wc3_effects;
 mod wc3_text;
 
+use std::path::PathBuf;
+
 use bevy::{
     asset::AssetPlugin,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
@@ -376,6 +378,7 @@ fn main() {
         .add_systems(
             Update,
             (
+                handle_quicksave_hotkeys,
                 toggle_simulation_pause,
                 update_simulation_pause_ui,
                 sync_local_command_feedback,
@@ -607,6 +610,124 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
             TextColor(Color::srgb(1.0, 0.78, 0.20)),
             SimulationPauseText,
         ));
+}
+
+pub(crate) fn control_modifier_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)
+}
+
+fn quicksave_path() -> PathBuf {
+    if let Some(state_home) = std::env::var_os("XDG_STATE_HOME") {
+        return PathBuf::from(state_home)
+            .join("castle-fight-native")
+            .join("quicksave.json");
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("state")
+            .join("castle-fight-native")
+            .join("quicksave.json");
+    }
+    PathBuf::from("castle-fight-native-quicksave.json")
+}
+
+fn handle_quicksave_hotkeys(
+    keys: Res<ButtonInput<KeyCode>>,
+    selected_match: Res<SelectedMatch>,
+    debug_menu: Res<debug_menu::DebugMenuState>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut presentation: ResMut<PresentationSamples>,
+) {
+    if !control_modifier_pressed(&keys) {
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::KeyS) {
+        if authoritative.is_networked() {
+            authoritative
+                .pending_status
+                .push("Quicksave is available only for offline matches.".into());
+            return;
+        }
+
+        let path = quicksave_path();
+        let save_result = (|| -> Result<(usize, Option<u64>), String> {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| {
+                    format!(
+                        "could not create quicksave directory {}: {error}",
+                        parent.display()
+                    )
+                })?;
+            }
+            let snapshot = authoritative.simulation.capture_snapshot();
+            let completed_tick = snapshot.completed_tick();
+            let bytes = snapshot
+                .encode_wire()
+                .map_err(|error| format!("could not encode quicksave: {error}"))?;
+            std::fs::write(&path, &bytes)
+                .map_err(|error| format!("could not write {}: {error}", path.display()))?;
+            Ok((bytes.len(), completed_tick))
+        })();
+
+        authoritative.pending_status.push(match save_result {
+            Ok((bytes, completed_tick)) => format!(
+                "Saved tick {} to {} ({bytes} bytes).",
+                completed_tick
+                    .map(|tick| tick.to_string())
+                    .unwrap_or_else(|| "initial".into()),
+                path.display()
+            ),
+            Err(error) => format!("Quicksave failed: {error}"),
+        });
+        return;
+    }
+
+    if !keys.just_pressed(KeyCode::KeyO) {
+        return;
+    }
+    if authoritative.is_networked() {
+        authoritative
+            .pending_status
+            .push("Quickload is available only for offline matches.".into());
+        return;
+    }
+
+    let path = quicksave_path();
+    let load_result = (|| -> Result<Option<u64>, String> {
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        let snapshot = SimulationSnapshot::decode_wire(&bytes, selected_match.content)
+            .map_err(|error| format!("could not decode quicksave: {error}"))?;
+        let completed_tick = snapshot.completed_tick();
+        authoritative
+            .simulation
+            .restore_snapshot(&snapshot)
+            .map_err(|error| format!("could not restore quicksave: {error:?}"))?;
+        authoritative
+            .simulation
+            .debug_set_buildings_invulnerable(debug_menu.buildings_invulnerable());
+        authoritative.driver = MatchDriver::new(&authoritative.simulation, selected_match.content);
+        authoritative.pending_feedback.clear();
+        authoritative.expected_execution_batch = None;
+        authoritative.catch_up = None;
+        *presentation =
+            PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
+        Ok(completed_tick)
+    })();
+
+    authoritative.pending_status.clear();
+    authoritative.pending_status.push(match load_result {
+        Ok(completed_tick) => format!(
+            "Loaded tick {} from {}.",
+            completed_tick
+                .map(|tick| tick.to_string())
+                .unwrap_or_else(|| "initial".into()),
+            path.display()
+        ),
+        Err(error) => format!("Quickload failed: {error}"),
+    });
 }
 
 fn toggle_simulation_pause(

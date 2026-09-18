@@ -39,6 +39,7 @@ use crate::{
         UnitVisualKind,
     },
     building_models::{BuildingAnimationClip, BuildingModelSet},
+    control_modifier_pressed,
     performance_ui::{
         begin_presentation_profile, finish_animation_profile, finish_camera_profile,
         finish_effects_profile, finish_entity_sync_profile, finish_model_prep_profile,
@@ -712,15 +713,13 @@ struct SceneAssetResources<'w> {
     shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
 }
 
+type HealthBarCameraData = (&'static Camera, &'static Transform, &'static Frustum);
+type HealthBarCameraFilter = (With<Camera3d>, Without<HealthBarBatchEntity>);
+
 #[derive(SystemParam)]
 struct HealthBarRenderParams<'w, 's> {
     debug: Res<'w, DebugPresentation>,
-    camera: Single<
-        'w,
-        's,
-        (&'static Camera, &'static Transform, &'static Frustum),
-        (With<Camera3d>, Without<HealthBarBatchEntity>),
-    >,
+    camera: Single<'w, 's, HealthBarCameraData, HealthBarCameraFilter>,
     batch: ResMut<'w, HealthBarBatch>,
     health_bar_materials: ResMut<'w, Assets<HealthBarMaterial>>,
     shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
@@ -4489,6 +4488,7 @@ fn update_camera(
     let right = Vec3::new(rig.yaw.cos(), 0.0, -rig.yaw.sin());
     let camera_key_pressed = |key| {
         resources.keys.pressed(key)
+            && !control_modifier_pressed(&resources.keys)
             && !resources
                 .hotkey_capture
                 .as_ref()
