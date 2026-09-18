@@ -6,19 +6,21 @@ use std::{
 
 use bevy::{
     app::{MainScheduleOrder, RunFixedMainLoop, SpawnScene},
-    camera::visibility::{NoFrustumCulling, ViewVisibility},
+    camera::visibility::{DynamicSkinnedMeshBounds, NoFrustumCulling, ViewVisibility},
     diagnostic::DiagnosticsStore,
     ecs::schedule::ScheduleLabel,
+    mesh::skinning::SkinnedMesh,
     prelude::*,
     render::diagnostic::RenderDiagnosticsPlugin,
+    time::Fixed,
 };
-use castle_fight_sim::TickTimings;
+use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, TickTimings};
 
 use crate::{bridge::PresentationSamples, resource_ui::TOP_BAR_HEIGHT};
 
 const PANEL_LEFT: f32 = 72.0;
 const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
-const PANEL_WIDTH: f32 = 314.0;
+const PANEL_WIDTH: f32 = 350.0;
 const PANEL_PADDING: f32 = 10.0;
 const PANEL_BACKGROUND: Color = Color::srgba(0.025, 0.030, 0.040, 0.94);
 const PANEL_BORDER: Color = Color::srgba(0.28, 0.32, 0.38, 0.96);
@@ -313,11 +315,25 @@ fn setup_performance_panel(mut commands: Commands) {
         });
 }
 
+type MeshVisibilityDiagnostics<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static ViewVisibility,
+        Has<NoFrustumCulling>,
+        Has<SkinnedMesh>,
+        Has<DynamicSkinnedMeshBounds>,
+    ),
+    With<Mesh3d>,
+>;
+
 fn update_performance_panel(
     counters: Res<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
     diagnostics: Res<DiagnosticsStore>,
-    mesh_visibility: Query<(&ViewVisibility, Has<NoFrustumCulling>), With<Mesh3d>>,
+    fixed_time: Res<Time<Fixed>>,
+    mesh_visibility: MeshVisibilityDiagnostics<'_, '_>,
+    animation_players: Query<(), With<AnimationPlayer>>,
     mut text: Single<&mut Text, With<PerformancePanelText>>,
 ) {
     let now = Instant::now();
@@ -327,16 +343,27 @@ fn update_performance_panel(
         summarize_collision_fallback_samples(&counters.collision_fallback_samples, now);
     let render = average_presentation_samples(&counters.presentation_samples, now);
     let gpu_passes = gpu_pass_timings(&diagnostics);
-    let (mesh_count, visible_meshes, no_cull_meshes) = mesh_visibility.iter().fold(
-        (0usize, 0usize, 0usize),
-        |(total, visible, no_cull), (view_visibility, no_frustum_culling)| {
-            (
-                total + 1,
-                visible + usize::from(view_visibility.get()),
-                no_cull + usize::from(no_frustum_culling),
-            )
-        },
-    );
+    let (mesh_count, visible_meshes, no_cull_meshes, skinned_meshes, dynamic_skinned_bounds) =
+        mesh_visibility.iter().fold(
+            (0usize, 0usize, 0usize, 0usize, 0usize),
+            |(total, visible, no_cull, skinned, dynamic_bounds),
+             (
+                view_visibility,
+                no_frustum_culling,
+                skinned_mesh,
+                dynamic_skinned_bounds,
+            )| {
+                (
+                    total + 1,
+                    visible + usize::from(view_visibility.get()),
+                    no_cull + usize::from(no_frustum_culling),
+                    skinned + usize::from(skinned_mesh),
+                    dynamic_bounds + usize::from(dynamic_skinned_bounds),
+                )
+            },
+        );
+    let effective_sim_hz = 1.0 / fixed_time.timestep().as_secs_f64();
+    let sim_speed = effective_sim_hz / f64::from(CASTLE_FIGHT_SIMULATION_HZ);
 
     let output = &mut text.0;
     output.clear();
@@ -375,6 +402,12 @@ fn update_performance_panel(
             "  sim ticks/frame   {:>4.1}x {:>7.3}ms",
             frame.sim_ticks,
             duration_ms(frame.sim_step)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "  sim rate          {:>4.2}x {:>7.1}Hz",
+            sim_speed, effective_sim_hz
         )
         .unwrap();
         if let Some(render) = render {
@@ -481,8 +514,16 @@ fn update_performance_panel(
 
     writeln!(
         output,
-        "\nRENDER  meshes {:>5}/{:<5} visible   no-cull {:>5}",
+        "\nRENDER  meshes {:>5}/{:<5} visible  no-cull {:>4}",
         visible_meshes, mesh_count, no_cull_meshes
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "        skinned {:>5}  dynamic {:>5}  anim players {:>5}",
+        skinned_meshes,
+        dynamic_skinned_bounds,
+        animation_players.iter().count()
     )
     .unwrap();
     if gpu_passes.is_empty() {
