@@ -1,17 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use bevy::{
-    camera::visibility::NoFrustumCulling,
-    ecs::system::SystemParam,
-    mesh::MeshVertexBufferLayoutRef,
-    pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline},
-    prelude::*,
-    reflect::TypePath,
-    render::render_resource::{
-        AsBindGroup, CompareFunction, RenderPipelineDescriptor, SpecializedMeshPipelineError,
-    },
-    window::PrimaryWindow,
-};
+use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
     BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle, CommandCardPosition,
     CommandSubmission, NavCell, PlayerCommand, SimId, Team,
@@ -71,14 +60,7 @@ const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
 const TOOLTIP_TEXT_COLOR: Color = Color::srgb(0.95, 0.95, 0.92);
 const BUILD_PREVIEW_VALID_COLOR: Color = Color::srgba(0.18, 1.0, 0.24, 0.82);
 const BUILD_PREVIEW_INVALID_COLOR: Color = Color::srgba(1.0, 0.12, 0.10, 0.88);
-const BUILD_GHOST_VALID_COLOR: Color = Color::srgba(0.48, 1.0, 0.52, 0.82);
-const BUILD_GHOST_INVALID_COLOR: Color = Color::srgba(1.0, 0.30, 0.24, 0.86);
-// Bevy sorts blended 3D materials by camera-space Z + material depth_bias. WC3 terrain
-// palette meshes are also blended, and their shared map-centre sort point otherwise causes the
-// placement ghost to flip from after-terrain to before-terrain at a hard line across the map.
-// Keep this comfortably beyond the camera far plane so the preview is always the last ordinary
-// transparent world material regardless of cursor position.
-const BUILD_GHOST_TRANSPARENT_SORT_BIAS: f32 = 100_000.0;
+const BUILD_GHOST_VALID_COLOR: Color = Color::srgb(0.48, 1.0, 0.52);
 
 fn command_slot(position: CommandCardPosition) -> usize {
     usize::from(position.y) * GRID_COLUMNS + usize::from(position.x)
@@ -199,52 +181,17 @@ impl ActionTooltipKind {
 #[derive(Resource, Default)]
 struct BuildTooltipState(Option<ActionTooltipKind>);
 
-#[derive(Asset, AsBindGroup, TypePath, Clone, Default)]
-struct BuildGhostDepthExtension {}
-
-impl MaterialExtension for BuildGhostDepthExtension {
-    fn alpha_mode() -> Option<AlphaMode> {
-        Some(AlphaMode::Blend)
-    }
-
-    fn enable_shadows() -> bool {
-        false
-    }
-
-    fn specialize(
-        _pipeline: &MaterialExtensionPipeline,
-        descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
-        _key: MaterialExtensionKey<Self>,
-    ) -> Result<(), SpecializedMeshPipelineError> {
-        if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
-            // Placement previews are player-feedback overlays. They must remain visible when an
-            // authored cliff, doodad, castle, or other world geometry lies between the camera and
-            // the target footprint.
-            depth_stencil.depth_compare = Some(CompareFunction::Always);
-            depth_stencil.depth_write_enabled = Some(false);
-        }
-        Ok(())
-    }
-}
-
-type BuildGhostRenderMaterial = ExtendedMaterial<StandardMaterial, BuildGhostDepthExtension>;
-
 #[derive(Component, Clone)]
-struct BuildGhostMaterialPair {
-    valid: Handle<BuildGhostRenderMaterial>,
-    invalid: Handle<BuildGhostRenderMaterial>,
-}
+struct BuildGhostMaterial(Handle<StandardMaterial>);
 
 #[derive(Resource, Default)]
 struct BuildPreviewMaterials {
-    textured: HashMap<AssetId<StandardMaterial>, BuildGhostMaterialPair>,
+    textured: HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct BuildPlacementGhost {
     rawcode: u32,
-    valid: bool,
 }
 
 #[derive(Component)]
@@ -264,8 +211,7 @@ struct BuildPreviewResources<'w> {
 
 #[derive(SystemParam)]
 struct BuildPreviewMaterialResources<'w> {
-    materials: Res<'w, Assets<StandardMaterial>>,
-    ghost_materials: ResMut<'w, Assets<BuildGhostRenderMaterial>>,
+    materials: ResMut<'w, Assets<StandardMaterial>>,
     preview_materials: ResMut<'w, BuildPreviewMaterials>,
 }
 
@@ -276,13 +222,23 @@ type ActionInteractions<'w, 's> = Query<
     (Changed<Interaction>, With<Button>),
 >;
 
+type BuildGhostMeshMaterials<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static mut MeshMaterial3d<StandardMaterial>,
+        Has<Wc3MaterialProcessed>,
+        Option<&'static BuildGhostMaterial>,
+    ),
+>;
+
 pub(crate) struct BuildUiPlugin;
 
 impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
         let map_version = app.world().resource::<SelectedMatch>().content.map_version;
-        app.add_plugins(MaterialPlugin::<BuildGhostRenderMaterial>::default())
-            .init_resource::<ActionPanelState>()
+        app.init_resource::<ActionPanelState>()
             .init_resource::<BuildTooltipState>()
             .init_resource::<BuildPreviewMaterials>()
             .insert_resource(UiIconAssets::load_for_version(map_version))
@@ -1062,15 +1018,11 @@ fn wc3_text_for_embedded_font(text: &str) -> String {
     text.replace('•', "-")
 }
 
-fn build_ghost_material(mut source: StandardMaterial, tint: Color) -> StandardMaterial {
-    // Derive the placement material from the already-processed Warcraft building material so
-    // team-colour flattening, alpha/filter-mode fixes, and the diffuse texture are all retained.
-    source.base_color = tint;
-    source.alpha_mode = AlphaMode::Blend;
-    source.depth_bias = BUILD_GHOST_TRANSPARENT_SORT_BIAS;
-    source.unlit = true;
-    source.emissive = LinearRgba::BLACK;
-    source.cull_mode = None;
+fn build_ghost_material(mut source: StandardMaterial) -> StandardMaterial {
+    // Derive the preview from the already-processed Warcraft building material so team-colour
+    // flattening, filter modes, lighting, culling, depth testing, and the diffuse texture all match
+    // a completed building. Only the color multiplier changes.
+    source.base_color = BUILD_GHOST_VALID_COLOR;
     source
 }
 
@@ -1078,7 +1030,7 @@ fn update_build_preview(
     mut commands: Commands,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut ghosts: Query<(Entity, &mut BuildPlacementGhost, &mut Transform)>,
+    mut ghosts: Query<(Entity, &BuildPlacementGhost, &mut Transform)>,
     resources: BuildPreviewResources<'_>,
     mut gizmos: Gizmos,
 ) {
@@ -1150,6 +1102,13 @@ fn update_build_preview(
         }
     }
 
+    if !valid {
+        for (entity, ..) in &mut ghosts {
+            commands.entity(entity).despawn();
+        }
+        return;
+    }
+
     let rawcode = kind.rawcode(resources.selected_match.content);
     let Some(model) = resources.building_models.get(rawcode) else {
         for (entity, ..) in &mut ghosts {
@@ -1158,7 +1117,7 @@ fn update_build_preview(
         return;
     };
     let (mut center, _) = resources.metrics.footprint_center_size(footprint);
-    center.y = building_terrain_height(&resources.metrics, &resources.terrain, footprint) + 0.05;
+    center.y = building_terrain_height(&resources.metrics, &resources.terrain, footprint);
     let transform = Transform {
         translation: center,
         rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
@@ -1166,16 +1125,13 @@ fn update_build_preview(
     };
 
     let mut found_matching_ghost = false;
-    for (entity, mut ghost, mut ghost_transform) in &mut ghosts {
+    for (entity, ghost, mut ghost_transform) in &mut ghosts {
         if found_matching_ghost || ghost.rawcode != rawcode {
             commands.entity(entity).despawn();
             continue;
         }
         found_matching_ghost = true;
         *ghost_transform = transform;
-        if ghost.valid != valid {
-            ghost.valid = valid;
-        }
     }
     if !found_matching_ghost {
         commands.spawn((
@@ -1190,7 +1146,7 @@ fn update_build_preview(
                 "wc3/buildings",
             ),
             transform,
-            BuildPlacementGhost { rawcode, valid },
+            BuildPlacementGhost { rawcode },
         ));
     }
 }
@@ -1252,76 +1208,54 @@ fn build_preview_ghost_rawcode(
 
 fn sync_build_preview_ghost_materials(
     mut commands: Commands,
-    ghosts: Query<(Entity, &BuildPlacementGhost)>,
+    ghosts: Query<Entity, With<BuildPlacementGhost>>,
     children: Query<&Children>,
-    source_mesh_materials: Query<(&MeshMaterial3d<StandardMaterial>, Has<Wc3MaterialProcessed>)>,
-    mut ghost_mesh_materials: Query<(
-        &mut MeshMaterial3d<BuildGhostRenderMaterial>,
-        &BuildGhostMaterialPair,
-    )>,
+    mut mesh_materials: BuildGhostMeshMaterials<'_, '_>,
     mut resources: BuildPreviewMaterialResources<'_>,
 ) {
-    for (entity, ghost) in &ghosts {
+    for entity in &ghosts {
         for child in children.iter_descendants(entity) {
-            if let Ok((mut mesh_material, pair)) = ghost_mesh_materials.get_mut(child) {
-                mesh_material.0 = if ghost.valid {
-                    pair.valid.clone()
-                } else {
-                    pair.invalid.clone()
-                };
-                continue;
-            }
-
-            let Ok((source_mesh_material, wc3_material_processed)) =
-                source_mesh_materials.get(child)
+            let Ok((mesh_entity, mut mesh_material, wc3_material_processed, ghost_material)) =
+                mesh_materials.get_mut(child)
             else {
                 continue;
             };
 
-            // Never derive a ghost material from the raw glTF material. The normal Warcraft pass
+            if let Some(ghost_material) = ghost_material {
+                mesh_material.0 = ghost_material.0.clone();
+                continue;
+            }
+
+            // Never derive a preview material from the raw glTF material. The normal Warcraft pass
             // first has to resolve filter modes and building team colour exactly as it does for a
-            // real building; otherwise translucent team-colour layers can make the preview vanish.
+            // real building.
             if !wc3_material_processed {
                 continue;
             }
 
-            let source = source_mesh_material.0.clone();
+            let source = mesh_material.0.clone();
             let source_id = source.id();
-            let pair = if let Some(pair) = resources.preview_materials.textured.get(&source_id) {
-                pair.clone()
-            } else {
-                let Some(source_material) = resources.materials.get(&source).cloned() else {
-                    continue;
+            let tinted =
+                if let Some(material) = resources.preview_materials.textured.get(&source_id) {
+                    material.clone()
+                } else {
+                    let Some(source_material) = resources.materials.get(&source).cloned() else {
+                        continue;
+                    };
+                    let material = resources
+                        .materials
+                        .add(build_ghost_material(source_material));
+                    resources
+                        .preview_materials
+                        .textured
+                        .insert(source_id, material.clone());
+                    material
                 };
-                let pair = BuildGhostMaterialPair {
-                    valid: resources.ghost_materials.add(BuildGhostRenderMaterial {
-                        base: build_ghost_material(
-                            source_material.clone(),
-                            BUILD_GHOST_VALID_COLOR,
-                        ),
-                        extension: BuildGhostDepthExtension::default(),
-                    }),
-                    invalid: resources.ghost_materials.add(BuildGhostRenderMaterial {
-                        base: build_ghost_material(source_material, BUILD_GHOST_INVALID_COLOR),
-                        extension: BuildGhostDepthExtension::default(),
-                    }),
-                };
-                resources
-                    .preview_materials
-                    .textured
-                    .insert(source_id, pair.clone());
-                pair
-            };
 
-            let selected = if ghost.valid {
-                pair.valid.clone()
-            } else {
-                pair.invalid.clone()
-            };
+            mesh_material.0 = tinted.clone();
             commands
-                .entity(child)
-                .remove::<MeshMaterial3d<StandardMaterial>>()
-                .insert((MeshMaterial3d(selected), pair, NoFrustumCulling));
+                .entity(mesh_entity)
+                .insert(BuildGhostMaterial(tinted));
         }
     }
 }
@@ -1746,7 +1680,7 @@ mod tests {
     }
 
     #[test]
-    fn ghost_material_wraps_processed_building_material_without_losing_texture() {
+    fn ghost_material_tints_processed_building_material_without_changing_render_semantics() {
         let texture = Handle::<Image>::default();
         let source = StandardMaterial {
             base_color: Color::WHITE,
@@ -1756,35 +1690,36 @@ mod tests {
             depth_bias: 7.0,
             ..default()
         };
-        let ghost = build_ghost_material(source, BUILD_GHOST_VALID_COLOR);
+        let ghost = build_ghost_material(source.clone());
 
         assert_eq!(ghost.base_color_texture, Some(texture));
         assert_eq!(ghost.base_color, BUILD_GHOST_VALID_COLOR);
-        assert_eq!(ghost.alpha_mode, AlphaMode::Blend);
-        assert!(ghost.unlit);
-        assert_eq!(ghost.emissive, LinearRgba::BLACK);
-        assert_eq!(ghost.depth_bias, BUILD_GHOST_TRANSPARENT_SORT_BIAS);
-        assert_eq!(ghost.cull_mode, None);
+        assert_eq!(ghost.alpha_mode, source.alpha_mode);
+        assert_eq!(ghost.unlit, source.unlit);
+        assert_eq!(ghost.emissive, source.emissive);
+        assert_eq!(ghost.depth_bias, source.depth_bias);
+        assert_eq!(ghost.cull_mode, source.cull_mode);
     }
 
     #[test]
-    fn processed_ghost_mesh_becomes_uncullable_overlay_material() {
+    fn processed_ghost_mesh_remains_a_normally_depth_tested_standard_material() {
         let mut world = World::new();
         world.insert_resource(Assets::<StandardMaterial>::default());
-        world.insert_resource(Assets::<BuildGhostRenderMaterial>::default());
         world.insert_resource(BuildPreviewMaterials::default());
 
         let source = world
             .resource_mut::<Assets<StandardMaterial>>()
-            .add(StandardMaterial::default());
+            .add(StandardMaterial {
+                depth_bias: 7.0,
+                ..default()
+            });
         let root = world
             .spawn(BuildPlacementGhost {
                 rawcode: u32::from_be_bytes(*b"h03K"),
-                valid: true,
             })
             .id();
         let mesh = world
-            .spawn((MeshMaterial3d(source), Wc3MaterialProcessed))
+            .spawn((MeshMaterial3d(source.clone()), Wc3MaterialProcessed))
             .id();
         world.entity_mut(root).add_child(mesh);
 
@@ -1792,19 +1727,25 @@ mod tests {
         schedule.add_systems(sync_build_preview_ghost_materials);
         schedule.run(&mut world);
 
-        assert!(
-            world
-                .get::<MeshMaterial3d<StandardMaterial>>(mesh)
-                .is_none()
-        );
-        let overlay = world
-            .get::<MeshMaterial3d<BuildGhostRenderMaterial>>(mesh)
-            .expect("processed preview mesh should use the overlay material");
-        let pair = world
-            .get::<BuildGhostMaterialPair>(mesh)
-            .expect("preview mesh should retain both validity variants");
-        assert_eq!(overlay.0, pair.valid);
-        assert!(world.get::<NoFrustumCulling>(mesh).is_some());
+        let tinted_handle = world
+            .get::<MeshMaterial3d<StandardMaterial>>(mesh)
+            .expect("processed preview mesh should remain a standard material")
+            .0
+            .clone();
+        let marker = world
+            .get::<BuildGhostMaterial>(mesh)
+            .expect("processed preview mesh should retain its tinted material");
+        assert_eq!(tinted_handle, marker.0);
+        assert_ne!(tinted_handle, source);
+
+        let tinted = world
+            .resource::<Assets<StandardMaterial>>()
+            .get(&tinted_handle)
+            .expect("tinted preview material should exist");
+        assert_eq!(tinted.base_color, BUILD_GHOST_VALID_COLOR);
+        assert_eq!(tinted.alpha_mode, AlphaMode::Opaque);
+        assert_eq!(tinted.depth_bias, 7.0);
+        assert!(!tinted.unlit);
     }
 
     #[test]
