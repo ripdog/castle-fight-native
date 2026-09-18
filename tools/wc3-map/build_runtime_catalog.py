@@ -51,6 +51,15 @@ def _integer_recovered_value(value: str, *, rawcode: str, field_id: str) -> int:
         ) from error
 
 
+def _hotkey_recovered_value(value: str, *, rawcode: str) -> str | None:
+    normalized = value.strip('"')
+    if normalized in {"", "null"}:
+        return None
+    if len(normalized) != 1:
+        raise SystemExit(f"{rawcode} uhot has invalid recovered value {value!r}")
+    return normalized
+
+
 def _retained_file_bytes(repo_root: Path, git_tree: str, relative_path: str) -> bytes:
     result = subprocess.run(
         ["git", "show", f"{git_tree}:{relative_path}"],
@@ -143,7 +152,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
-            if row["category"] != "units" or row["field_id"] not in {"urtm", "ubpx", "ubpy"}:
+            if row["category"] != "units" or row["field_id"] not in {"urtm", "ubpx", "ubpy", "uhot"}:
                 continue
             rawcode = row["rawcode"]
             output = objects.setdefault(
@@ -153,15 +162,20 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                     "repair_time_seconds": None,
                     "button_x": None,
                     "button_y": None,
+                    "hotkey": None,
                 },
             )
-            value = _integer_recovered_value(
-                row["recovered_value_json"], rawcode=rawcode, field_id=row["field_id"]
-            )
+            if row["field_id"] == "uhot":
+                value = _hotkey_recovered_value(row["recovered_value_json"], rawcode=rawcode)
+            else:
+                value = _integer_recovered_value(
+                    row["recovered_value_json"], rawcode=rawcode, field_id=row["field_id"]
+                )
             key = {
                 "urtm": "repair_time_seconds",
                 "ubpx": "button_x",
                 "ubpy": "button_y",
+                "uhot": "hotkey",
             }[row["field_id"]]
             previous = output[key]
             if previous is not None and previous != value:
@@ -271,7 +285,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--content-revision",
-        help="required with --kind source-manifest (for example cf-native-dev-slice-r3)",
+        help="required with --kind source-manifest (for example cf-native-dev-slice-r4)",
     )
     args = parser.parse_args()
 

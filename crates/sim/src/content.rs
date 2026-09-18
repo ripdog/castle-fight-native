@@ -27,7 +27,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r3";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r4";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -467,6 +467,16 @@ impl CastleFightBuildingKind {
                 .production_building(kind)
                 .map(|definition| definition.economy),
             Self::Tower(kind) => bundle.tower(kind).map(|definition| definition.economy),
+        }
+    }
+
+    #[must_use]
+    pub fn hotkey(self, bundle: &CastleFightContentBundle) -> Option<char> {
+        match self {
+            Self::Production(kind) => bundle
+                .production_building(kind)
+                .map(|definition| definition.hotkey),
+            Self::Tower(kind) => bundle.tower(kind).map(|definition| definition.hotkey),
         }
     }
 
@@ -970,6 +980,7 @@ pub struct CastleFightProductionDefinition {
     pub unit: CastleFightUnitKind,
     pub produced_unit: CastleFightUnitDefinition,
     pub command_card_position: CommandCardPosition,
+    pub hotkey: char,
     pub map_version: MapVersion,
 }
 
@@ -1091,6 +1102,7 @@ pub struct CastleFightTowerDefinition {
     pub attack_targets: AttackTargetMask,
     pub footprint_size_cells: u16,
     pub command_card_position: CommandCardPosition,
+    pub hotkey: char,
     pub attack: AttackProfile,
     pub map_version: MapVersion,
 }
@@ -1469,6 +1481,7 @@ fn hash_production_definition(
     hash_unit_definition(hash, definition.produced_unit);
     hash.write_u8(definition.command_card_position.x);
     hash.write_u8(definition.command_card_position.y);
+    hash.write_u32(definition.hotkey as u32);
 
     let kind = CastleFightProductionKind::from_rawcode_for_version(
         definition.rawcode,
@@ -1510,6 +1523,7 @@ fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerD
     hash.write_u16(definition.footprint_size_cells);
     hash.write_u8(definition.command_card_position.x);
     hash.write_u8(definition.command_card_position.y);
+    hash.write_u32(definition.hotkey as u32);
     hash_attack_profile(hash, definition.attack);
 }
 
@@ -1870,6 +1884,7 @@ struct CatalogSupplementObject927 {
     repair_time_seconds: u32,
     button_x: Option<u8>,
     button_y: Option<u8>,
+    hotkey: Option<char>,
 }
 
 #[derive(Debug)]
@@ -1883,6 +1898,7 @@ struct ExtractedContent927 {
     corpses: BTreeMap<u32, ExtractedCorpse927>,
     repair_time_ticks: BTreeMap<u32, u32>,
     command_card_positions: BTreeMap<u32, CommandCardPosition>,
+    building_hotkeys: BTreeMap<u32, char>,
     upgrades: BTreeMap<u32, ExtractedUpgradeLinks927>,
     income_semantics: BTreeMap<u32, ExtractedIncomeSemantics927>,
     income_per_10k: BTreeMap<u32, u64>,
@@ -1944,6 +1960,7 @@ impl ExtractedContent927 {
         let supplement = catalog_supplement_927()?;
         let mut repair_time_ticks = BTreeMap::<u32, u32>::new();
         let mut command_card_positions = BTreeMap::new();
+        let mut building_hotkeys = BTreeMap::new();
         for object in supplement.objects {
             let rawcode = parse_rawcode(&object.rawcode);
             let repair_ticks = object
@@ -1965,6 +1982,13 @@ impl ExtractedContent927 {
             {
                 return Err(format!(
                     "catalog supplement repeats command-card position for {rawcode:#010x}"
+                ));
+            }
+            if let Some(hotkey) = object.hotkey
+                && building_hotkeys.insert(rawcode, hotkey).is_some()
+            {
+                return Err(format!(
+                    "catalog supplement repeats hotkey for {rawcode:#010x}"
                 ));
             }
         }
@@ -2371,6 +2395,7 @@ impl ExtractedContent927 {
             corpses,
             repair_time_ticks,
             command_card_positions,
+            building_hotkeys,
             upgrades,
             income_semantics,
             income_per_10k,
@@ -3058,6 +3083,10 @@ fn extracted_tower_definition_927(
         .command_card_positions
         .get(&rawcode)
         .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing command-card position"));
+    let hotkey = *content
+        .building_hotkeys
+        .get(&rawcode)
+        .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing build hotkey"));
 
     CastleFightTowerDefinition {
         rawcode,
@@ -3079,6 +3108,7 @@ fn extracted_tower_definition_927(
             panic!("tower {rawcode:#010x} has no square retained 9.27 footprint")
         }),
         command_card_position,
+        hotkey,
         attack,
         map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
@@ -3218,6 +3248,10 @@ fn production_definition(
         .command_card_positions
         .get(&rawcode)
         .unwrap_or_else(|| panic!("building {rawcode:#010x} missing command-card position"));
+    let hotkey = *content
+        .building_hotkeys
+        .get(&rawcode)
+        .unwrap_or_else(|| panic!("building {rawcode:#010x} missing build hotkey"));
     let economy = extracted_building_economy_927(rawcode);
     CastleFightProductionDefinition {
         rawcode,
@@ -3240,6 +3274,7 @@ fn production_definition(
         unit,
         produced_unit,
         command_card_position,
+        hotkey,
         map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
 }
@@ -3337,7 +3372,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 0x3d12_9327_3bbe_5eb9);
+        assert_eq!(bundle.identity.gameplay_hash, 0x0bcf_cce0_da4d_9989);
         assert_eq!(bundle.behaviors().len(), 12);
         assert!(
             bundle
@@ -3931,6 +3966,19 @@ mod tests {
         let extracted_position = |rawcode: u32| {
             CommandCardPosition::new(coordinate(rawcode, "ubpx"), coordinate(rawcode, "ubpy"))
         };
+        let extracted_hotkey = |rawcode: u32| {
+            let rawcode = rawcode.to_be_bytes();
+            let rawcode = std::str::from_utf8(&rawcode).expect("rawcode must be ASCII");
+            let row = rows
+                .iter()
+                .find(|row| {
+                    row[category_column] == "units"
+                        && row[rawcode_column] == rawcode
+                        && row[field_id_column] == "uhot"
+                })
+                .unwrap_or_else(|| panic!("missing extracted uhot for {rawcode}"));
+            parse_extracted_char(row[recovered_column])
+        };
 
         for kind in CastleFightProductionKind::ALL {
             let definition = kind.definition();
@@ -3938,6 +3986,7 @@ mod tests {
                 definition.command_card_position,
                 extracted_position(definition.rawcode)
             );
+            assert_eq!(definition.hotkey, extracted_hotkey(definition.rawcode));
         }
         for kind in CastleFightTowerKind::ALL {
             let definition = kind.definition();
@@ -3945,6 +3994,7 @@ mod tests {
                 definition.command_card_position,
                 extracted_position(definition.rawcode)
             );
+            assert_eq!(definition.hotkey, extracted_hotkey(definition.rawcode));
         }
     }
 

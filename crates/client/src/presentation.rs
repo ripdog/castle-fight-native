@@ -4404,11 +4404,18 @@ pub(crate) fn draw_footprint_outline(
     gizmos.line(min_max, min_min, color);
 }
 
-fn toggle_debug_controls(keys: Res<ButtonInput<KeyCode>>, mut debug: ResMut<DebugPresentation>) {
+fn toggle_debug_controls(
+    keys: Res<ButtonInput<KeyCode>>,
+    action_panel: Option<Res<crate::build_ui::ActionPanelState>>,
+    mut debug: ResMut<DebugPresentation>,
+) {
     if keys.just_pressed(KeyCode::F1) {
         debug.overlays = !debug.overlays;
     }
-    if keys.just_pressed(KeyCode::KeyH) {
+    let build_menu_open = action_panel
+        .as_ref()
+        .is_some_and(|panel| panel.mode == crate::build_ui::ActionPanelMode::BuildMenu);
+    if !build_menu_open && keys.just_pressed(KeyCode::KeyH) {
         debug.health_bars = !debug.health_bars;
     }
 }
@@ -4421,6 +4428,7 @@ struct CameraControlResources<'w> {
     metrics: Res<'w, WorldMetrics>,
     terrain: Res<'w, TerrainSurface>,
     inspection: Option<Res<'w, crate::inspection::InspectionSelection>>,
+    action_panel: Option<Res<'w, crate::build_ui::ActionPanelState>>,
     samples: Res<'w, PresentationSamples>,
     camera_focus: ResMut<'w, CameraFocusRequest>,
 }
@@ -4436,6 +4444,10 @@ fn update_camera(
         .as_ref()
         .and_then(|inspection| inspection.selected)
         .is_some_and(|id| resources.samples.current.builders.contains_key(&id));
+    let build_menu_open = resources
+        .action_panel
+        .as_ref()
+        .is_some_and(|panel| panel.mode == crate::build_ui::ActionPanelMode::BuildMenu);
     let (camera_component, rig, transform) = &mut *camera;
 
     if let Some(target) = resources.camera_focus.0.take()
@@ -4457,18 +4469,24 @@ fn update_camera(
     let forward = Vec3::new(-rig.yaw.sin(), 0.0, -rig.yaw.cos());
     let right = Vec3::new(rig.yaw.cos(), 0.0, -rig.yaw.sin());
     let mut movement = Vec3::ZERO;
-    if resources.keys.pressed(KeyCode::KeyW) || resources.keys.pressed(KeyCode::ArrowUp) {
+    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyW))
+        || resources.keys.pressed(KeyCode::ArrowUp)
+    {
         movement += forward;
     }
-    if resources.keys.pressed(KeyCode::KeyS) || resources.keys.pressed(KeyCode::ArrowDown) {
+    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyS))
+        || resources.keys.pressed(KeyCode::ArrowDown)
+    {
         movement -= forward;
     }
-    if (resources.keys.pressed(KeyCode::KeyD) && !builder_selected)
+    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyD) && !builder_selected)
         || resources.keys.pressed(KeyCode::ArrowRight)
     {
         movement += right;
     }
-    if resources.keys.pressed(KeyCode::KeyA) || resources.keys.pressed(KeyCode::ArrowLeft) {
+    if (!build_menu_open && resources.keys.pressed(KeyCode::KeyA))
+        || resources.keys.pressed(KeyCode::ArrowLeft)
+    {
         movement -= right;
     }
     if window.focused
@@ -4486,10 +4504,10 @@ fn update_camera(
         let pan_speed = rig.distance * 0.65;
         rig.focus += movement.normalize() * pan_speed * dt;
     }
-    if resources.keys.pressed(KeyCode::KeyQ) {
+    if !build_menu_open && resources.keys.pressed(KeyCode::KeyQ) {
         rig.yaw += 0.9 * dt;
     }
-    if resources.keys.pressed(KeyCode::KeyE) {
+    if !build_menu_open && resources.keys.pressed(KeyCode::KeyE) {
         rig.yaw -= 0.9 * dt;
     }
     let scroll: f32 = mouse_wheel.read().map(|event| event.y).sum();

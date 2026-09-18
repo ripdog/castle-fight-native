@@ -165,6 +165,12 @@ impl BuildKind {
             .expect("build kind must belong to selected content bundle")
     }
 
+    pub(crate) fn hotkey(self, content: &CastleFightContentBundle) -> char {
+        self.shared()
+            .hotkey(content)
+            .expect("build kind must belong to selected content bundle")
+    }
+
     pub(crate) fn command_card_position(
         self,
         content: &CastleFightContentBundle,

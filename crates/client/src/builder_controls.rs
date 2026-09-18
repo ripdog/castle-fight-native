@@ -1,15 +1,16 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 
-use castle_fight_sim::{BuildPosition, CommandSubmission, PlayerCommand};
+use castle_fight_sim::{BuildPosition, BuilderConfiguration, CommandSubmission, PlayerCommand};
 
 use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
     build_ui::{
         ActionPanelMode, ActionPanelState, TargetingAction, cursor_over_action_panel,
-        placement_footprint,
+        placement_footprint, try_arm_build_target,
     },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
+    demo::BuildKind,
     inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
     presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
     resource_ui::{
@@ -56,12 +57,30 @@ fn handle_selection_commands(
 
     let command_card = resources.selected_match.content.command_card;
 
-    try_open_build_menu_hotkey(
+    let opened_build_menu = try_open_build_menu_hotkey(
         &resources.keys,
         command_card.build_hotkey,
         resources.presentation.current.builders.contains_key(&actor),
         &mut resources.action_panel,
     );
+
+    if !opened_build_menu
+        && resources.action_panel.mode == ActionPanelMode::BuildMenu
+        && let Some(builder) = resources.authoritative.simulation.builder(actor)
+        && let Some(kind) = build_menu_hotkey_target(
+            &resources.keys,
+            &resources.selected_match.direct_buildings,
+            &builder.configuration,
+            resources.selected_match.content,
+        )
+    {
+        try_arm_build_target(
+            &resources.authoritative,
+            &mut resources.action_panel,
+            kind,
+            resources.selected_match.content,
+        );
+    }
 
     // Castle Fight's live Blink uses D. Enter the same point-targeting mode as clicking Blink on
     // the command card instead of maintaining a separate keyboard-only state machine.
@@ -607,8 +626,25 @@ fn try_open_build_menu_hotkey(
     true
 }
 
-fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
-    let key_code = match hotkey.to_ascii_uppercase() {
+fn build_menu_hotkey_target(
+    keys: &ButtonInput<KeyCode>,
+    direct_buildings: &[BuildKind],
+    builder: &BuilderConfiguration,
+    content: &castle_fight_sim::CastleFightContentBundle,
+) -> Option<BuildKind> {
+    let mut selected = None;
+    for &kind in direct_buildings {
+        if builder.allows_building(kind.rawcode(content))
+            && hotkey_just_pressed(keys, kind.hotkey(content))
+        {
+            selected = Some(kind);
+        }
+    }
+    selected
+}
+
+fn key_code_for_hotkey(hotkey: char) -> Option<KeyCode> {
+    Some(match hotkey.to_ascii_uppercase() {
         'A' => KeyCode::KeyA,
         'B' => KeyCode::KeyB,
         'C' => KeyCode::KeyC,
@@ -635,9 +671,12 @@ fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
         'X' => KeyCode::KeyX,
         'Y' => KeyCode::KeyY,
         'Z' => KeyCode::KeyZ,
-        _ => return false,
-    };
-    keys.just_pressed(key_code)
+        _ => return None,
+    })
+}
+
+fn hotkey_just_pressed(keys: &ButtonInput<KeyCode>, hotkey: char) -> bool {
+    key_code_for_hotkey(hotkey).is_some_and(|key_code| keys.just_pressed(key_code))
 }
 
 fn command_submission_status(
@@ -695,6 +734,52 @@ mod tests {
             &mut state,
         ));
         assert_eq!(state.mode, ActionPanelMode::Actions);
+    }
+
+    #[test]
+    fn build_menu_hotkey_collision_uses_last_eligible_building() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let builder = demo
+            .simulation
+            .builder_for_team(castle_fight_sim::Team(0))
+            .unwrap();
+        let collision_hotkey = demo
+            .direct_buildings
+            .iter()
+            .copied()
+            .map(|kind| kind.hotkey(demo.content))
+            .find(|hotkey| {
+                demo.direct_buildings
+                    .iter()
+                    .filter(|kind| kind.hotkey(demo.content) == *hotkey)
+                    .count()
+                    > 1
+            })
+            .expect("mixed demo catalog should exercise a hotkey collision");
+        let expected = demo
+            .direct_buildings
+            .iter()
+            .copied()
+            .filter(|kind| {
+                builder
+                    .configuration
+                    .allows_building(kind.rawcode(demo.content))
+                    && kind.hotkey(demo.content) == collision_hotkey
+            })
+            .next_back()
+            .expect("collision hotkey must have an eligible claimant");
+
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(key_code_for_hotkey(collision_hotkey).unwrap());
+        assert_eq!(
+            build_menu_hotkey_target(
+                &keys,
+                &demo.direct_buildings,
+                &builder.configuration,
+                demo.content,
+            ),
+            Some(expected)
+        );
     }
 
     #[test]

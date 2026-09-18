@@ -611,6 +611,7 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
 
 fn toggle_simulation_pause(
     keys: Res<ButtonInput<KeyCode>>,
+    action_panel: Option<Res<build_ui::ActionPanelState>>,
     authoritative: Res<AuthoritativeSimulation>,
     mut playback: ResMut<SimulationPlayback>,
 ) {
@@ -618,7 +619,10 @@ fn toggle_simulation_pause(
         playback.paused = false;
         return;
     }
-    if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyP) {
+    let build_menu_open = action_panel
+        .as_ref()
+        .is_some_and(|panel| panel.mode == build_ui::ActionPanelMode::BuildMenu);
+    if keys.just_pressed(KeyCode::Space) || (!build_menu_open && keys.just_pressed(KeyCode::KeyP)) {
         playback.paused = !playback.paused;
     }
 }

@@ -150,6 +150,9 @@ struct SlotAction(Option<PanelAction>);
 struct SlotLabel;
 
 #[derive(Component)]
+struct SlotHotkey;
+
+#[derive(Component)]
 struct SlotIcon;
 
 #[derive(Component)]
@@ -345,6 +348,26 @@ fn setup_action_panel(mut commands: Commands) {
                                     Pickable::IGNORE,
                                     CommandSlot(slot),
                                     SlotIcon,
+                                ));
+                                button.spawn((
+                                    Text::new(""),
+                                    TextFont::from_font_size(12.0),
+                                    TextColor(BUTTON_TEXT),
+                                    TextLayout::justify(Justify::Center),
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        right: px(2.0),
+                                        top: px(2.0),
+                                        min_width: px(16.0),
+                                        padding: UiRect::axes(px(3.0), px(1.0)),
+                                        justify_content: JustifyContent::Center,
+                                        ..default()
+                                    },
+                                    BackgroundColor(BUTTON_LABEL_BACKGROUND),
+                                    GlobalZIndex(2),
+                                    Pickable::IGNORE,
+                                    CommandSlot(slot),
+                                    SlotHotkey,
                                 ));
                                 button.spawn((
                                     Text::new(""),
@@ -545,7 +568,8 @@ fn populate_action_panel(
     asset_server: Res<AssetServer>,
     mut icon_assets: ResMut<UiIconAssets>,
     mut buttons: Query<(&CommandSlot, &mut SlotAction, &mut Visibility)>,
-    mut labels: Query<(&CommandSlot, &mut Text), With<SlotLabel>>,
+    mut labels: Query<(&CommandSlot, &mut Text), (With<SlotLabel>, Without<SlotHotkey>)>,
+    mut hotkeys: Query<(&CommandSlot, &mut Text), (With<SlotHotkey>, Without<SlotLabel>)>,
     mut icons: Query<(&CommandSlot, &mut ImageNode), With<SlotIcon>>,
 ) {
     let (state, authoritative, selected_match) = match_state;
@@ -567,6 +591,11 @@ fn populate_action_panel(
             action_label(action, selected_match.content)
         });
     }
+    for (slot, mut text) in &mut hotkeys {
+        text.0 = layout[slot.0]
+            .and_then(|action| action_hotkey(action, selected_match.content))
+            .map_or_else(String::new, |hotkey| hotkey.to_string());
+    }
     for (slot, mut image) in &mut icons {
         *image = layout[slot.0]
             .map(|action| {
@@ -580,6 +609,13 @@ fn populate_action_panel(
             })
             .and_then(|key| icon_assets.image(key, &asset_server))
             .map_or_else(ImageNode::default, ImageNode::new);
+    }
+}
+
+fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Option<char> {
+    match action {
+        PanelAction::Target(TargetingAction::Build(kind)) => Some(kind.hotkey(content)),
+        _ => None,
     }
 }
 
@@ -793,22 +829,7 @@ fn handle_action_panel_buttons(
                 );
             }
             PanelAction::Target(TargetingAction::Build(kind)) => {
-                if !can_afford_build_kind(&authoritative, &state, kind, selected_match.content) {
-                    state.status = insufficient_resources_status(
-                        &authoritative,
-                        &state,
-                        kind,
-                        selected_match.content,
-                    );
-                    continue;
-                }
-                state.mode = ActionPanelMode::Targeting(TargetingAction::Build(kind));
-                state.status = format!(
-                    "{} selected — {} gold / {} lumber. Left-click a build site; Esc cancels this building.",
-                    kind.label(selected_match.content),
-                    kind.gold_cost(selected_match.content),
-                    kind.lumber_cost(selected_match.content),
-                );
+                try_arm_build_target(&authoritative, &mut state, kind, selected_match.content);
             }
             PanelAction::Target(action) => {
                 state.mode = ActionPanelMode::Targeting(action);
@@ -1296,6 +1317,26 @@ fn can_afford_build_kind(
     authoritative
         .simulation
         .can_builder_afford_building(actor, kind.economy(content))
+}
+
+pub(crate) fn try_arm_build_target(
+    authoritative: &AuthoritativeSimulation,
+    state: &mut ActionPanelState,
+    kind: BuildKind,
+    content: &CastleFightContentBundle,
+) -> bool {
+    if !can_afford_build_kind(authoritative, state, kind, content) {
+        state.status = insufficient_resources_status(authoritative, state, kind, content);
+        return false;
+    }
+    state.mode = ActionPanelMode::Targeting(TargetingAction::Build(kind));
+    state.status = format!(
+        "{} selected — {} gold / {} lumber. Left-click a build site; Esc cancels this building.",
+        kind.label(content),
+        kind.gold_cost(content),
+        kind.lumber_cost(content),
+    );
+    true
 }
 
 fn can_afford_production_upgrade(
