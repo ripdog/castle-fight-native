@@ -57,11 +57,9 @@ impl PerformanceCounters {
 
     fn finish_step(&mut self) -> Duration {
         let now = Instant::now();
-        let elapsed = self
-            .step_started
+        self.step_started
             .replace(now)
-            .map_or(Duration::ZERO, |started| now.duration_since(started));
-        elapsed
+            .map_or(Duration::ZERO, |started| now.duration_since(started))
     }
 
     fn finish_presentation(&mut self) {
