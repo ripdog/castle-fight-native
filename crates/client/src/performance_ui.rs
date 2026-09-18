@@ -5,8 +5,10 @@ use std::{
 };
 
 use bevy::{
+    app::{MainScheduleOrder, RunFixedMainLoop, SpawnScene},
     camera::visibility::{NoFrustumCulling, ViewVisibility},
     diagnostic::DiagnosticsStore,
+    ecs::schedule::ScheduleLabel,
     prelude::*,
     render::diagnostic::RenderDiagnosticsPlugin,
 };
@@ -46,9 +48,33 @@ struct FrameWork {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+struct MainScheduleTimings {
+    first: Duration,
+    pre_update: Duration,
+    fixed_loop: Duration,
+    update: Duration,
+    spawn_scene: Duration,
+    post_update: Duration,
+    last: Duration,
+}
+
+impl MainScheduleTimings {
+    fn total(self) -> Duration {
+        self.first
+            + self.pre_update
+            + self.fixed_loop
+            + self.update
+            + self.spawn_scene
+            + self.post_update
+            + self.last
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 struct CompletedMainFrame {
     main_cpu: Duration,
     work: FrameWork,
+    schedules: MainScheduleTimings,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -59,6 +85,7 @@ struct FrameSample {
     sim_ticks: f64,
     fixed_wall: Duration,
     sim_step: Duration,
+    schedules: MainScheduleTimings,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -78,8 +105,10 @@ pub(crate) struct PerformanceCounters {
     presentation_started: Option<Instant>,
     step_started: Option<Instant>,
     main_frame_started: Option<Instant>,
+    main_phase_started: Option<Instant>,
     completed_main_frame: Option<CompletedMainFrame>,
     current_frame_work: FrameWork,
+    current_schedule_timings: MainScheduleTimings,
     frame_samples: VecDeque<(Instant, FrameSample)>,
 }
 
@@ -129,10 +158,20 @@ impl PerformanceCounters {
                     sim_ticks: f64::from(completed.work.sim_ticks),
                     fixed_wall: completed.work.fixed_wall,
                     sim_step: completed.work.sim_step,
+                    schedules: completed.schedules,
                 },
             );
         }
         self.current_frame_work = FrameWork::default();
+        self.current_schedule_timings = MainScheduleTimings::default();
+        self.main_phase_started = Some(now);
+    }
+
+    fn finish_main_schedule_phase(&mut self) -> Duration {
+        let now = Instant::now();
+        self.main_phase_started
+            .replace(now)
+            .map_or(Duration::ZERO, |started| now.duration_since(started))
     }
 
     fn finish_main_frame(&mut self) {
@@ -142,7 +181,9 @@ impl PerformanceCounters {
         self.completed_main_frame = Some(CompletedMainFrame {
             main_cpu: started.elapsed(),
             work: self.current_frame_work,
+            schedules: self.current_schedule_timings,
         });
+        self.main_phase_started = None;
     }
 
     fn begin_presentation(&mut self) {
@@ -173,6 +214,23 @@ impl PerformanceCounters {
 #[derive(Component)]
 struct PerformancePanelText;
 
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfFrameStart;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterFirst;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterPreUpdate;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterFixedLoop;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterUpdate;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterSpawnScene;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterPostUpdate;
+#[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
+struct PerfAfterLast;
+
 pub(crate) struct PerformanceUiPlugin;
 
 impl Plugin for PerformanceUiPlugin {
@@ -180,14 +238,39 @@ impl Plugin for PerformanceUiPlugin {
         if !app.is_plugin_added::<RenderDiagnosticsPlugin>() {
             app.add_plugins(RenderDiagnosticsPlugin);
         }
+
         app.init_resource::<PerformanceCounters>()
+            .init_schedule(PerfFrameStart)
+            .init_schedule(PerfAfterFirst)
+            .init_schedule(PerfAfterPreUpdate)
+            .init_schedule(PerfAfterFixedLoop)
+            .init_schedule(PerfAfterUpdate)
+            .init_schedule(PerfAfterSpawnScene)
+            .init_schedule(PerfAfterPostUpdate)
+            .init_schedule(PerfAfterLast)
             .add_systems(Startup, setup_performance_panel)
-            .add_systems(First, begin_main_frame_profile)
+            .add_systems(PerfFrameStart, begin_main_frame_profile)
+            .add_systems(PerfAfterFirst, finish_first_profile)
+            .add_systems(PerfAfterPreUpdate, finish_pre_update_profile)
+            .add_systems(PerfAfterFixedLoop, finish_fixed_loop_profile)
+            .add_systems(PerfAfterUpdate, finish_update_profile)
+            .add_systems(PerfAfterSpawnScene, finish_spawn_scene_profile)
+            .add_systems(PerfAfterPostUpdate, finish_post_update_profile)
+            .add_systems(PerfAfterLast, finish_main_frame_profile)
             .add_systems(
                 Update,
                 update_performance_panel.after(finish_presentation_profile),
-            )
-            .add_systems(Last, finish_main_frame_profile);
+            );
+
+        let mut order = app.world_mut().resource_mut::<MainScheduleOrder>();
+        order.insert_before(First, PerfFrameStart);
+        order.insert_after(First, PerfAfterFirst);
+        order.insert_after(PreUpdate, PerfAfterPreUpdate);
+        order.insert_after(RunFixedMainLoop, PerfAfterFixedLoop);
+        order.insert_after(Update, PerfAfterUpdate);
+        order.insert_after(SpawnScene, PerfAfterSpawnScene);
+        order.insert_after(PostUpdate, PerfAfterPostUpdate);
+        order.insert_after(Last, PerfAfterLast);
     }
 }
 
@@ -303,6 +386,19 @@ fn update_performance_panel(
                     .saturating_sub(frame.fixed_wall.saturating_add(render.total)),
             );
         }
+        output.push_str("  main schedules\n");
+        push_timing(output, "    First", frame.schedules.first);
+        push_timing(output, "    PreUpdate", frame.schedules.pre_update);
+        push_timing(output, "    fixed loop", frame.schedules.fixed_loop);
+        push_timing(output, "    Update", frame.schedules.update);
+        push_timing(output, "    SpawnScene", frame.schedules.spawn_scene);
+        push_timing(output, "    PostUpdate", frame.schedules.post_update);
+        push_timing(output, "    Last", frame.schedules.last);
+        push_timing(
+            output,
+            "    unaccounted",
+            frame.main_cpu.saturating_sub(frame.schedules.total()),
+        );
     } else {
         output.push_str("FRAME  collecting 1s average...\n");
     }
@@ -590,6 +686,13 @@ fn average_frame_samples(
         total.sim_ticks += sample.sim_ticks;
         total.fixed_wall += sample.fixed_wall;
         total.sim_step += sample.sim_step;
+        total.schedules.first += sample.schedules.first;
+        total.schedules.pre_update += sample.schedules.pre_update;
+        total.schedules.fixed_loop += sample.schedules.fixed_loop;
+        total.schedules.update += sample.schedules.update;
+        total.schedules.spawn_scene += sample.schedules.spawn_scene;
+        total.schedules.post_update += sample.schedules.post_update;
+        total.schedules.last += sample.schedules.last;
     }
 
     let divisor = u32::try_from(count).expect("one-second timing sample count fits u32");
@@ -601,14 +704,55 @@ fn average_frame_samples(
         sim_ticks: total.sim_ticks / scalar,
         fixed_wall: total.fixed_wall / divisor,
         sim_step: total.sim_step / divisor,
+        schedules: MainScheduleTimings {
+            first: total.schedules.first / divisor,
+            pre_update: total.schedules.pre_update / divisor,
+            fixed_loop: total.schedules.fixed_loop / divisor,
+            update: total.schedules.update / divisor,
+            spawn_scene: total.schedules.spawn_scene / divisor,
+            post_update: total.schedules.post_update / divisor,
+            last: total.schedules.last / divisor,
+        },
     })
 }
 
-pub(crate) fn begin_main_frame_profile(mut counters: ResMut<PerformanceCounters>) {
+fn begin_main_frame_profile(mut counters: ResMut<PerformanceCounters>) {
     counters.begin_main_frame();
 }
 
-pub(crate) fn finish_main_frame_profile(mut counters: ResMut<PerformanceCounters>) {
+fn finish_first_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.first = elapsed;
+}
+
+fn finish_pre_update_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.pre_update = elapsed;
+}
+
+fn finish_fixed_loop_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.fixed_loop = elapsed;
+}
+
+fn finish_update_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.update = elapsed;
+}
+
+fn finish_spawn_scene_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.spawn_scene = elapsed;
+}
+
+fn finish_post_update_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.post_update = elapsed;
+}
+
+fn finish_main_frame_profile(mut counters: ResMut<PerformanceCounters>) {
+    let elapsed = counters.finish_main_schedule_phase();
+    counters.current_schedule_timings.last = elapsed;
     counters.finish_main_frame();
 }
 
@@ -759,6 +903,11 @@ mod tests {
                 sim_ticks: 1.0,
                 fixed_wall: Duration::from_millis(6),
                 sim_step: Duration::from_millis(5),
+                schedules: MainScheduleTimings {
+                    update: Duration::from_millis(4),
+                    post_update: Duration::from_millis(2),
+                    ..default()
+                },
             },
         ));
         samples.push_back((
@@ -770,6 +919,11 @@ mod tests {
                 sim_ticks: 3.0,
                 fixed_wall: Duration::from_millis(10),
                 sim_step: Duration::from_millis(8),
+                schedules: MainScheduleTimings {
+                    update: Duration::from_millis(8),
+                    post_update: Duration::from_millis(4),
+                    ..default()
+                },
             },
         ));
 
@@ -780,5 +934,7 @@ mod tests {
         assert_eq!(average.sim_ticks, 2.0);
         assert_eq!(average.fixed_wall, Duration::from_millis(8));
         assert_eq!(average.sim_step, Duration::from_micros(6_500));
+        assert_eq!(average.schedules.update, Duration::from_millis(6));
+        assert_eq!(average.schedules.post_update, Duration::from_millis(3));
     }
 }
