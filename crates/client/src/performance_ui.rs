@@ -167,9 +167,30 @@ pub(crate) fn performance_trace_layer(app: &mut App) -> Option<BoxedLayer> {
 }
 
 #[derive(Resource)]
-struct SystemTraceDisplay {
+pub(crate) struct SystemTraceDisplay {
     window_started: Instant,
     rows: Vec<SystemTraceRow>,
+}
+
+impl SystemTraceDisplay {
+    #[must_use]
+    pub(crate) fn format(&self) -> String {
+        if self.rows.is_empty() {
+            return "SYSTEM CPU  no samples\n".to_owned();
+        }
+        let mut output = String::from("SYSTEM CPU  top 1s avg/frame\n");
+        for row in &self.rows {
+            writeln!(
+                output,
+                "  {:<25} {:>7.3}ms {:>4.1}x",
+                compact_system_name(&row.name),
+                duration_ms(row.average_per_frame),
+                row.calls_per_frame,
+            )
+            .unwrap();
+        }
+        output
+    }
 }
 
 impl Default for SystemTraceDisplay {

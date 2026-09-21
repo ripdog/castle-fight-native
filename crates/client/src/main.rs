@@ -57,7 +57,9 @@ use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use network::{NetworkClient, NetworkEvent};
-use performance_ui::{PerformanceCounters, PerformanceUiPlugin, performance_trace_layer};
+use performance_ui::{
+    PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, performance_trace_layer,
+};
 use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
@@ -450,6 +452,7 @@ fn finish_automated_profile(
     mut run: ResMut<AutomatedProfileRun>,
     mut counters: ResMut<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
+    trace_display: Res<SystemTraceDisplay>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let now = Instant::now();
@@ -475,6 +478,7 @@ fn finish_automated_profile(
         presentation.current.projectiles.len(),
     );
     print!("{}", report.format());
+    print!("{}", trace_display.format());
     exit.write(AppExit::Success);
 }
 
