@@ -29,7 +29,7 @@ use bevy::{
 use castle_fight_sim::{
     AbilityCastTarget, AbilityEffect, BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CorpseView,
     MovementClass, PlayerId, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId,
-    SimPoint, SimulationConfig,
+    SimPoint, SimulationConfig, Team,
 };
 
 use crate::{
@@ -132,6 +132,7 @@ pub struct WorldMetrics {
     navigation_min: IVec2,
     navigation_max: IVec2,
     build_regions: Vec<BuildingFootprint>,
+    team_build_regions: [Vec<BuildingFootprint>; 2],
     targetless_lane_world: Option<(f32, f32)>,
     camera_focus_min_world: Vec2,
     camera_focus_max_world: Vec2,
@@ -154,24 +155,29 @@ impl WorldMetrics {
                     .expect("navigation height must fit a building footprint"),
             )
         };
-        let build_regions = if config.team_build_regions.iter().any(Vec::is_empty) {
-            vec![navigation_footprint()]
+        let team_build_regions = if config.team_build_regions.iter().any(Vec::is_empty) {
+            let region = navigation_footprint();
+            [vec![region], vec![region]]
         } else {
-            config.team_build_regions.iter().flatten().copied().fold(
-                Vec::new(),
-                |mut regions, region| {
+            config.team_build_regions.clone()
+        };
+        let build_regions =
+            team_build_regions
+                .iter()
+                .flatten()
+                .copied()
+                .fold(Vec::new(), |mut regions, region| {
                     if !regions.contains(&region) {
                         regions.push(region);
                     }
                     regions
-                },
-            )
-        };
+                });
         Self {
             navigation_cell_size_subunits: config.navigation_cell_size,
             navigation_min,
             navigation_max,
             build_regions,
+            team_build_regions,
             targetless_lane_world: config.targetless_lane.map(|lane| {
                 (
                     lane.min_y as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
@@ -211,6 +217,14 @@ impl WorldMetrics {
         self.build_regions.iter().copied()
     }
 
+    fn team_build_regions(&self, team: Team) -> impl Iterator<Item = BuildingFootprint> + '_ {
+        self.team_build_regions
+            .get(usize::from(team.0))
+            .into_iter()
+            .flatten()
+            .copied()
+    }
+
     fn build_region_world_bounds(&self, region: BuildingFootprint) -> (Vec2, Vec2) {
         let cell = self.navigation_cell_world();
         (
@@ -237,6 +251,24 @@ impl WorldMetrics {
     fn buildable_world_x_bounds(&self) -> (f32, f32) {
         let (min, max) = self.buildable_world_bounds();
         (min.x, max.x)
+    }
+
+    fn map_grid_anchor_cells(&self, region: BuildingFootprint, grid_size: u16) -> Option<IVec2> {
+        if grid_size == 0 || region.width < grid_size || region.height < grid_size {
+            return None;
+        }
+        let (build_min, build_max) = self.buildable_world_bounds();
+        let build_center_x = (build_min.x + build_max.x) * 0.5;
+        let (region_min, region_max) = self.build_region_world_bounds(region);
+        let anchored_left = (region_min.x + region_max.x) * 0.5 <= build_center_x;
+        Some(IVec2::new(
+            if anchored_left {
+                region.min_x
+            } else {
+                region.max_x() + 1 - i32::from(grid_size)
+            },
+            region.max_y() + 1 - i32::from(grid_size),
+        ))
     }
 
     fn map_grid_lane_exclusion_world(&self, spacing: f32) -> Option<(f32, f32)> {
@@ -301,6 +333,44 @@ impl WorldMetrics {
             height,
         )
     }
+
+    /// Snaps a square building footprint to the independently anchored grid for its side.
+    ///
+    /// The left grid starts at the top-left build-region corner. The right grid starts one
+    /// building width inside the top-right corner, so its footprint origins extend leftward.
+    pub(crate) fn snapped_footprint_at_world(
+        &self,
+        world: Vec3,
+        team: Team,
+        size: u16,
+        grid_size: u16,
+    ) -> BuildingFootprint {
+        let unsnapped = self.footprint_at_world(world, size, size);
+        let Some(region) = self.team_build_regions(team).min_by_key(|region| {
+            let center_x = i64::from(region.min_x) * 2 + i64::from(region.width);
+            let center_y = i64::from(region.min_y) * 2 + i64::from(region.height);
+            let world_cell_x = (world.x / self.navigation_cell_world()).floor() as i64;
+            let world_cell_y = (world.z / self.navigation_cell_world()).floor() as i64;
+            (world_cell_x * 2 - center_x).pow(2) + (world_cell_y * 2 - center_y).pow(2)
+        }) else {
+            return unsnapped;
+        };
+        let Some(anchor) = self.map_grid_anchor_cells(region, grid_size) else {
+            return unsnapped;
+        };
+        let step = i32::from(grid_size);
+        BuildingFootprint::new(
+            snap_cell_to_lattice(unsnapped.min_x, anchor.x, step),
+            snap_cell_to_lattice(unsnapped.min_y, anchor.y, step),
+            size,
+            size,
+        )
+    }
+}
+
+fn snap_cell_to_lattice(cell: i32, anchor: i32, step: i32) -> i32 {
+    let delta = cell - anchor;
+    anchor + (delta + step.div_euclid(2)).div_euclid(step) * step
 }
 
 /// Presentation elevation for a flat building model covering `footprint`.
@@ -742,6 +812,17 @@ pub(crate) struct MapGridState {
     pub(crate) enabled: bool,
 }
 
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BuildingGridSnapState {
+    pub(crate) enabled: bool,
+}
+
+impl Default for BuildingGridSnapState {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 #[derive(Resource, Debug, Default)]
 pub(crate) struct FpsDisplay {
     elapsed_seconds: f32,
@@ -787,6 +868,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<FpsDisplay>()
             .init_resource::<MapGridState>()
+            .init_resource::<BuildingGridSnapState>()
             .init_resource::<CameraFocusRequest>()
             .init_resource::<DeathRemnants>()
             .init_resource::<ProjectileImpacts>()
@@ -4016,52 +4098,8 @@ fn draw_map_grid(
         return;
     }
 
-    let spacing = metrics.navigation_cell_world() * f32::from(base_cells);
-    let (build_min, build_max) = metrics.buildable_world_bounds();
-    let build_center_x = (build_min.x + build_max.x) * 0.5;
-    let grid_origin = (build_min + build_max) * 0.5 + Vec2::splat(spacing * 0.5);
     for region in metrics.build_regions() {
-        draw_map_grid_region(
-            &mut gizmos,
-            &terrain,
-            &metrics,
-            region,
-            spacing,
-            grid_origin,
-            build_center_x,
-        );
-    }
-}
-
-fn map_grid_axis_line_bounds(
-    region_min: f32,
-    region_max: f32,
-    spacing: f32,
-    origin: f32,
-) -> Option<(i32, i32)> {
-    let first = ((region_min - origin) / spacing).ceil() as i32;
-    let last = ((region_max - origin) / spacing).floor() as i32;
-    (first <= last).then_some((first, last))
-}
-
-// Preserve the authored finite grid window width, but pin its rear/outside edge to the
-// authoritative build-region boundary instead of centring the window inside a non-grid-multiple
-// region width. This naturally produces the three-nav-cell 9.27 correction without a version
-// specific presentation offset.
-fn map_grid_outward_x_shift(
-    region_min_x: f32,
-    region_max_x: f32,
-    grid_min_x: f32,
-    grid_max_x: f32,
-    build_center_x: f32,
-) -> f32 {
-    let region_center_x = (region_min_x + region_max_x) * 0.5;
-    if region_center_x < build_center_x {
-        region_min_x - grid_min_x
-    } else if region_center_x > build_center_x {
-        region_max_x - grid_max_x
-    } else {
-        0.0
+        draw_map_grid_region(&mut gizmos, &terrain, &metrics, region, base_cells);
     }
 }
 
@@ -4070,35 +4108,26 @@ fn draw_map_grid_region(
     terrain: &TerrainSurface,
     metrics: &WorldMetrics,
     region: BuildingFootprint,
-    spacing: f32,
-    grid_origin: Vec2,
-    build_center_x: f32,
+    base_cells: u16,
 ) {
-    let (region_min, region_max) = metrics.build_region_world_bounds(region);
-    let Some((first_x, last_x)) =
-        map_grid_axis_line_bounds(region_min.x, region_max.x, spacing, grid_origin.x)
-    else {
+    let Some(anchor) = metrics.map_grid_anchor_cells(region, base_cells) else {
         return;
     };
-    let Some((first_z, last_z)) =
-        map_grid_axis_line_bounds(region_min.y, region_max.y, spacing, grid_origin.y)
-    else {
-        return;
+    let cell = metrics.navigation_cell_world();
+    let spacing = cell * f32::from(base_cells);
+    let columns = u32::from((region.width - base_cells) / base_cells) + 1;
+    let rows = u32::from((region.height - base_cells) / base_cells) + 1;
+    let anchored_left = anchor.x == region.min_x;
+    let anchor_x = anchor.x as f32 * cell;
+    let anchor_z = anchor.y as f32 * cell;
+    let opposite_x = if anchored_left {
+        anchor_x + (columns - 1) as f32 * spacing
+    } else {
+        anchor_x - (columns - 1) as f32 * spacing
     };
-    let raw_min_x = grid_origin.x + first_x as f32 * spacing;
-    let raw_max_x = grid_origin.x + last_x as f32 * spacing;
-    let x_shift = map_grid_outward_x_shift(
-        region_min.x,
-        region_max.x,
-        raw_min_x,
-        raw_max_x,
-        build_center_x,
-    );
-    let min = Vec2::new(
-        raw_min_x + x_shift,
-        grid_origin.y + first_z as f32 * spacing,
-    );
-    let max = Vec2::new(raw_max_x + x_shift, grid_origin.y + last_z as f32 * spacing);
+    let opposite_z = anchor_z - (rows - 1) as f32 * spacing;
+    let min = Vec2::new(anchor_x.min(opposite_x), opposite_z);
+    let max = Vec2::new(anchor_x.max(opposite_x), anchor_z);
     let clip = MapGridClip {
         min,
         max,
@@ -4106,9 +4135,10 @@ fn draw_map_grid_region(
         lane_exclusion: metrics.map_grid_lane_exclusion_world(spacing),
     };
 
-    for index in first_x..=last_x {
-        let x = grid_origin.x + index as f32 * spacing + x_shift;
-        if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
+    for index in 0..columns {
+        let direction = if anchored_left { 1.0 } else { -1.0 };
+        let x = anchor_x + direction * index as f32 * spacing;
+        if index.is_multiple_of(MAP_GRID_MAJOR_INTERVAL as u32) {
             draw_map_grid_x_line_clipped(
                 gizmos,
                 terrain,
@@ -4128,9 +4158,9 @@ fn draw_map_grid_region(
         }
     }
 
-    for index in first_z..=last_z {
-        let z = grid_origin.y + index as f32 * spacing;
-        if index.rem_euclid(MAP_GRID_MAJOR_INTERVAL) == 0 {
+    for index in 0..rows {
+        let z = anchor_z - index as f32 * spacing;
+        if index.is_multiple_of(MAP_GRID_MAJOR_INTERVAL as u32) {
             draw_map_grid_z_line_clipped(
                 gizmos,
                 terrain,
@@ -4878,62 +4908,36 @@ mod tests {
         assert_eq!(demo.metrics.buildable_world_x_bounds(), (-6_176.0, 6_176.0));
 
         let spacing = demo.metrics.navigation_cell_world() * 4.0;
-        let grid_origin = (build_min + build_max) * 0.5 + Vec2::splat(spacing * 0.5);
-        assert_eq!(grid_origin, Vec2::new(64.0, 64.0));
         assert_eq!(
             demo.metrics.map_grid_lane_exclusion_world(spacing),
             Some((-448.0, 448.0))
         );
 
-        let (left_min, left_max) = demo.metrics.build_region_world_bounds(regions[0]);
-        let (right_min, right_max) = demo.metrics.build_region_world_bounds(regions[1]);
-        let left_x =
-            map_grid_axis_line_bounds(left_min.x, left_max.x, spacing, grid_origin.x).unwrap();
-        let right_x =
-            map_grid_axis_line_bounds(right_min.x, right_max.x, spacing, grid_origin.x).unwrap();
-        let vertical =
-            map_grid_axis_line_bounds(left_min.y, left_max.y, spacing, grid_origin.y).unwrap();
-        let build_center_x = (build_min.x + build_max.x) * 0.5;
-        let left_raw = (
-            grid_origin.x + left_x.0 as f32 * spacing,
-            grid_origin.x + left_x.1 as f32 * spacing,
+        // Grid marks are footprint origins. The left side grows right from its top-left corner;
+        // the right side grows left from one building width inside its top-right corner.
+        assert_eq!(regions[0], BuildingFootprint::new(-193, -64, 133, 128));
+        assert_eq!(regions[1], BuildingFootprint::new(60, -64, 133, 128));
+        let left_top = demo.metrics.snapped_footprint_at_world(
+            Vec3::new(-6_111.0, 0.0, 1_985.0),
+            Team(0),
+            4,
+            4,
         );
-        let right_raw = (
-            grid_origin.x + right_x.0 as f32 * spacing,
-            grid_origin.x + right_x.1 as f32 * spacing,
+        let right_top = demo.metrics.snapped_footprint_at_world(
+            Vec3::new(6_113.0, 0.0, 1_985.0),
+            Team(1),
+            4,
+            4,
         );
-        let left_shift = map_grid_outward_x_shift(
-            left_min.x,
-            left_max.x,
-            left_raw.0,
-            left_raw.1,
-            build_center_x,
+        let right_inner = demo.metrics.snapped_footprint_at_world(
+            Vec3::new(2_017.0, 0.0, -2_015.0),
+            Team(1),
+            4,
+            4,
         );
-        let right_shift = map_grid_outward_x_shift(
-            right_min.x,
-            right_max.x,
-            right_raw.0,
-            right_raw.1,
-            build_center_x,
-        );
-
-        assert_eq!(left_shift / demo.metrics.navigation_cell_world(), -3.0);
-        assert_eq!(right_shift / demo.metrics.navigation_cell_world(), 3.0);
-        assert_eq!(
-            (left_raw.0 + left_shift, left_raw.1 + left_shift),
-            (-6_176.0, -2_080.0)
-        );
-        assert_eq!(
-            (right_raw.0 + right_shift, right_raw.1 + right_shift),
-            (2_080.0, 6_176.0)
-        );
-        assert_eq!(
-            (
-                grid_origin.y + vertical.0 as f32 * spacing,
-                grid_origin.y + vertical.1 as f32 * spacing,
-            ),
-            (-1_984.0, 1_984.0)
-        );
+        assert_eq!(left_top, BuildingFootprint::new(-193, 60, 4, 4));
+        assert_eq!(right_top, BuildingFootprint::new(189, 60, 4, 4));
+        assert_eq!(right_inner, BuildingFootprint::new(61, -64, 4, 4));
     }
 
     #[test]

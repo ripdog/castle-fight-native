@@ -4,8 +4,10 @@ use crate::{
     build_ui::{ActionPanelState, TargetingAction, cursor_over_action_panel, placement_footprint},
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     inspection::cursor_over_inspector_panel,
-    presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
-    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts},
+    presentation::{
+        BuildingGridSnapState, WorldMetrics, viewport_ground_point, world_to_sim_point,
+    },
+    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets},
 };
@@ -78,6 +80,7 @@ struct CursorPresentationResources<'w> {
     debug_menu: Res<'w, DebugMenuState>,
     builder_shortcuts: Res<'w, BuilderShortcutState>,
     metrics: Res<'w, WorldMetrics>,
+    grid_snap: Res<'w, BuildingGridSnapState>,
     terrain: Res<'w, TerrainSurface>,
     presentation: Res<'w, PresentationSamples>,
     authoritative: Res<'w, AuthoritativeSimulation>,
@@ -173,6 +176,7 @@ fn desired_cursor_state(
     ) || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
+        || cursor_over_map_controls(cursor, window.width())
     {
         return Wc3CursorState::Normal;
     }
@@ -210,8 +214,10 @@ fn desired_cursor_state(
     let footprint = placement_footprint(
         &resources.metrics,
         world,
+        resources.action_panel.team,
         kind,
         resources.selected_match.content,
+        resources.grid_snap.enabled,
     );
     let affordable = resources.action_panel.actor.is_some_and(|actor| {
         resources

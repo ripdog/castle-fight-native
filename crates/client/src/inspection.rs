@@ -16,7 +16,7 @@ use crate::{
     },
     resource_ui::{
         BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts,
-        cursor_over_map_grid_toggle,
+        cursor_over_map_controls,
     },
     terrain::TerrainSurface,
 };
@@ -127,7 +127,7 @@ pub(crate) fn handle_world_selection(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, state.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &state.builder_shortcuts)
-        || cursor_over_map_grid_toggle(cursor, window.width())
+        || cursor_over_map_controls(cursor, window.width())
     {
         return;
     }

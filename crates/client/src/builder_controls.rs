@@ -13,10 +13,10 @@ use crate::{
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::BuildKind,
     inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
-    presentation::{WorldMetrics, viewport_ground_point, world_to_sim_point},
-    resource_ui::{
-        BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_grid_toggle,
+    presentation::{
+        BuildingGridSnapState, WorldMetrics, viewport_ground_point, world_to_sim_point,
     },
+    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
 };
 
@@ -38,6 +38,7 @@ struct SelectionCommandResources<'w> {
     fixed_time: Res<'w, Time<Fixed>>,
     terrain: Res<'w, TerrainSurface>,
     metrics: Res<'w, WorldMetrics>,
+    grid_snap: Res<'w, BuildingGridSnapState>,
     playback: Res<'w, SimulationPlayback>,
     debug_menu: Res<'w, DebugMenuState>,
     builder_shortcuts: Res<'w, BuilderShortcutState>,
@@ -188,7 +189,7 @@ fn handle_modal_left_click(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
-        || cursor_over_map_grid_toggle(cursor, window.width())
+        || cursor_over_map_controls(cursor, window.width())
     {
         return;
     }
@@ -401,8 +402,10 @@ fn handle_modal_left_click(
             let footprint = placement_footprint(
                 &resources.metrics,
                 world,
+                resources.action_panel.team,
                 kind,
                 resources.selected_match.content,
+                resources.grid_snap.enabled,
             );
             if !resources
                 .authoritative
@@ -497,7 +500,7 @@ fn handle_smart_right_click(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
-        || cursor_over_map_grid_toggle(cursor, window.width())
+        || cursor_over_map_controls(cursor, window.width())
     {
         return;
     }

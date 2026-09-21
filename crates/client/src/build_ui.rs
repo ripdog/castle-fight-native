@@ -21,12 +21,13 @@ use crate::{
     demo::{BuildKind, ProductionKind},
     inspection::{InspectionSelection, cursor_over_inspector_panel},
     presentation::{
-        WC3_BUILDING_AMBIENT_ANIMATION_SPEED, WC3_MODEL_FACING_OFFSET, WorldMetrics,
-        building_terrain_height, draw_footprint_outline, player_color, viewport_ground_point,
+        BuildingGridSnapState, WC3_BUILDING_AMBIENT_ANIMATION_SPEED, WC3_MODEL_FACING_OFFSET,
+        WorldMetrics, building_terrain_height, draw_footprint_outline, player_color,
+        viewport_ground_point,
     },
     resource_ui::{
         BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts,
-        cursor_over_map_grid_toggle,
+        cursor_over_map_controls,
     },
     terrain::TerrainSurface,
     ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey},
@@ -227,6 +228,7 @@ struct BuildPreviewResources<'w> {
     debug_menu: Res<'w, DebugMenuState>,
     builder_shortcuts: Res<'w, BuilderShortcutState>,
     selected_match: Res<'w, SelectedMatch>,
+    grid_snap: Res<'w, BuildingGridSnapState>,
     building_models: Res<'w, BuildingModelSet>,
 }
 
@@ -1180,7 +1182,7 @@ fn update_build_preview(
         || cursor_over_inspector_panel(cursor, window.width())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
-        || cursor_over_map_grid_toggle(cursor, window.width())
+        || cursor_over_map_controls(cursor, window.width())
     {
         hide_build_preview_ghosts(&mut ghosts);
         return;
@@ -1194,8 +1196,10 @@ fn update_build_preview(
     let footprint = placement_footprint(
         &resources.metrics,
         world,
+        resources.state.team,
         kind,
         resources.selected_match.content,
+        resources.grid_snap.enabled,
     );
     let valid = resources
         .authoritative
@@ -1388,11 +1392,22 @@ fn sync_build_preview_ghost_materials(
 pub(crate) fn placement_footprint(
     metrics: &WorldMetrics,
     world: Vec3,
+    team: Team,
     kind: BuildKind,
     content: &CastleFightContentBundle,
+    snap_to_grid: bool,
 ) -> BuildingFootprint {
     let size = kind.footprint_size(content);
-    metrics.footprint_at_world(world, size, size)
+    if snap_to_grid
+        && let Some(grid_size) = content
+            .production_building_definitions()
+            .map(|definition| definition.footprint_size_cells)
+            .min()
+    {
+        metrics.snapped_footprint_at_world(world, team, size, grid_size)
+    } else {
+        metrics.footprint_at_world(world, size, size)
+    }
 }
 
 fn can_afford_build_kind(
@@ -1683,8 +1698,10 @@ mod tests {
         let footprint = placement_footprint(
             &metrics,
             Vec3::new(105.0, 0.0, 75.0),
+            Team(0),
             BuildKind::Production(ProductionKind::Barracks),
             demo.content,
+            false,
         );
         assert_eq!(footprint, BuildingFootprint::new(8, 5, 4, 4));
     }

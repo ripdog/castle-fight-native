@@ -7,7 +7,9 @@ use crate::{
     build_ui::{ActionPanelMode, ActionPanelState},
     debug_menu::DebugMenuState,
     inspection::InspectionSelection,
-    presentation::{CameraFocusRequest, FpsDisplay, MapGridState, player_color},
+    presentation::{
+        BuildingGridSnapState, CameraFocusRequest, FpsDisplay, MapGridState, player_color,
+    },
     ui_icons::{UiIconAssets, UiIconKey},
 };
 
@@ -38,6 +40,9 @@ const MAP_GRID_BUTTON_RIGHT: f32 = 385.0;
 const MAP_GRID_BUTTON_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.96);
 const MAP_GRID_BUTTON_HOVERED: Color = Color::srgba(0.16, 0.14, 0.10, 0.98);
 const MAP_GRID_BUTTON_ENABLED: Color = Color::srgba(0.18, 0.28, 0.16, 0.98);
+const GRID_SNAP_BUTTON_WIDTH: f32 = 72.0;
+const GRID_SNAP_BUTTON_RIGHT: f32 =
+    MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH - BUILDER_SHORTCUT_GAP;
 
 #[derive(Component)]
 struct PerformanceText;
@@ -65,6 +70,12 @@ struct BuilderShortcutRoot;
 
 #[derive(Component)]
 struct MapGridToggleButton;
+
+#[derive(Component)]
+struct BuildingGridSnapToggleButton;
+
+#[derive(Component)]
+struct BuildingGridSnapCheckmark;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct BuilderShortcutButton(SimId);
@@ -94,6 +105,7 @@ impl Plugin for ResourceUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BuilderShortcutState>()
             .init_resource::<MapGridState>()
+            .init_resource::<BuildingGridSnapState>()
             .init_resource::<CameraFocusRequest>()
             .add_systems(
                 Startup,
@@ -101,6 +113,7 @@ impl Plugin for ResourceUiPlugin {
                     setup_resource_bar,
                     setup_builder_shortcuts,
                     setup_map_grid_toggle,
+                    setup_building_grid_snap_toggle,
                 ),
             )
             .add_systems(
@@ -112,6 +125,8 @@ impl Plugin for ResourceUiPlugin {
                     update_builder_shortcut_visuals,
                     handle_map_grid_toggle_click,
                     update_map_grid_toggle_visual,
+                    handle_building_grid_snap_toggle_click,
+                    update_building_grid_snap_toggle_visual,
                 )
                     .chain(),
             );
@@ -159,6 +174,56 @@ fn setup_map_grid_toggle(mut commands: Commands) {
             TextColor(LABEL_COLOR),
             Pickable::IGNORE,
         ));
+}
+
+fn setup_building_grid_snap_toggle(mut commands: Commands) {
+    commands
+        .spawn((
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(GRID_SNAP_BUTTON_RIGHT),
+                top: px(MAP_GRID_BUTTON_TOP),
+                width: px(GRID_SNAP_BUTTON_WIDTH),
+                height: px(MAP_GRID_BUTTON_HEIGHT),
+                padding: UiRect::horizontal(px(5.0)),
+                align_items: AlignItems::Center,
+                column_gap: px(4.0),
+                border: UiRect::all(px(1.0)),
+                ..default()
+            },
+            BackgroundColor(MAP_GRID_BUTTON_ENABLED),
+            BorderColor::all(SLOT_BORDER),
+            ZIndex(1001),
+            BuildingGridSnapToggleButton,
+        ))
+        .with_children(|button| {
+            button
+                .spawn((
+                    Node {
+                        width: px(12.0),
+                        height: px(12.0),
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        border: UiRect::all(px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(LABEL_COLOR),
+                ))
+                .with_child((
+                    Text::new("X"),
+                    TextFont::from_font_size(9.0),
+                    TextColor(LABEL_COLOR),
+                    Pickable::IGNORE,
+                    BuildingGridSnapCheckmark,
+                ));
+            button.spawn((
+                Text::new("SNAP"),
+                TextFont::from_font_size(9.0),
+                TextColor(LABEL_COLOR),
+                Pickable::IGNORE,
+            ));
+        });
 }
 
 fn setup_resource_bar(mut commands: Commands) {
@@ -517,10 +582,38 @@ fn update_map_grid_toggle_visual(
     };
 }
 
+fn handle_building_grid_snap_toggle_click(
+    buttons: Query<&Interaction, (Changed<Interaction>, With<BuildingGridSnapToggleButton>)>,
+    mut state: ResMut<BuildingGridSnapState>,
+) {
+    for interaction in &buttons {
+        if *interaction == Interaction::Pressed {
+            state.enabled = !state.enabled;
+        }
+    }
+}
+
+fn update_building_grid_snap_toggle_visual(
+    state: Res<BuildingGridSnapState>,
+    mut button: Single<(&Interaction, &mut BackgroundColor), With<BuildingGridSnapToggleButton>>,
+    mut checkmark: Single<&mut Text, With<BuildingGridSnapCheckmark>>,
+) {
+    let (interaction, background) = &mut *button;
+    background.0 = if **interaction == Interaction::Hovered || **interaction == Interaction::Pressed
+    {
+        MAP_GRID_BUTTON_HOVERED
+    } else if state.enabled {
+        MAP_GRID_BUTTON_ENABLED
+    } else {
+        MAP_GRID_BUTTON_BACKGROUND
+    };
+    checkmark.0 = if state.enabled { "X" } else { "" }.into();
+}
+
 #[must_use]
-pub(crate) fn cursor_over_map_grid_toggle(cursor: Vec2, window_width: f32) -> bool {
-    let right = window_width - MAP_GRID_BUTTON_RIGHT;
-    let left = right - MAP_GRID_BUTTON_WIDTH;
+pub(crate) fn cursor_over_map_controls(cursor: Vec2, window_width: f32) -> bool {
+    let left = window_width - MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH;
+    let right = window_width - GRID_SNAP_BUTTON_RIGHT;
     cursor.x >= left
         && cursor.x <= right
         && cursor.y >= MAP_GRID_BUTTON_TOP
@@ -760,25 +853,34 @@ mod tests {
     }
 
     #[test]
-    fn map_grid_toggle_hit_box_tracks_the_right_anchored_button() {
+    fn map_control_hit_box_covers_grid_and_snap_buttons() {
         let window_width = 1_440.0;
-        let right = window_width - MAP_GRID_BUTTON_RIGHT;
-        let left = right - MAP_GRID_BUTTON_WIDTH;
-        assert!(cursor_over_map_grid_toggle(
-            Vec2::new((left + right) * 0.5, MAP_GRID_BUTTON_TOP + 5.0),
+        let left = window_width - MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH;
+        let right = window_width - GRID_SNAP_BUTTON_RIGHT;
+        assert!(cursor_over_map_controls(
+            Vec2::new(left + 2.0, MAP_GRID_BUTTON_TOP + 5.0),
             window_width,
         ));
-        assert!(!cursor_over_map_grid_toggle(
+        assert!(cursor_over_map_controls(
+            Vec2::new(right - 2.0, MAP_GRID_BUTTON_TOP + 5.0),
+            window_width,
+        ));
+        assert!(!cursor_over_map_controls(
             Vec2::new(left - 1.0, MAP_GRID_BUTTON_TOP + 5.0),
             window_width,
         ));
-        assert!(!cursor_over_map_grid_toggle(
+        assert!(!cursor_over_map_controls(
             Vec2::new(
                 (left + right) * 0.5,
                 MAP_GRID_BUTTON_TOP + MAP_GRID_BUTTON_HEIGHT + 1.0
             ),
             window_width,
         ));
+    }
+
+    #[test]
+    fn building_grid_snapping_is_enabled_by_default() {
+        assert!(BuildingGridSnapState::default().enabled);
     }
 
     #[test]

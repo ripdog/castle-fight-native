@@ -60,7 +60,8 @@ Recommended client placement flow:
 
 1. player activates Build and selects a buildable type from the build submenu;
 2. client enters the shared placement/targeting mode;
-3. cursor is projected into authoritative map coordinates;
+3. cursor is projected into authoritative map coordinates and, when the default-enabled grid-snap
+   checkbox is active, the footprint origin is snapped to the owning side's build grid;
 4. local placement preview evaluates current known occupancy/build rules;
 5. UI shows legal/illegal preview;
 6. player confirms;
@@ -166,7 +167,8 @@ Because occupancy is strategically significant, the client SHOULD make footprint
 
 Potential affordances:
 
-- a player-toggleable map grid aligned to the production-building footprint scale; its origin and clipping are derived from the selected release's canonical build-region/lane geometry plus the production footprint phase, so it does not extend into the lane band, centre no-man's-land, side dead-space, or other terrain outside those authored regions; each side's finite horizontal grid window is anchored to that side's outer build-region edge rather than being re-centred inside the region, so the visible cells stay aligned with the actual rear placement boundary; for Castle Fight 9.27 one grid square is one production-building footprint and every fourth line is shown as a double line;
+- a player-toggleable map grid aligned to the production-building footprint scale; its origin and clipping are derived from the selected release's canonical build-region/lane geometry, so it does not extend into the lane band, centre no-man's-land, side dead-space, or other terrain outside those authored regions; the two sides use independent lattices: the left grid's first footprint origin is anchored at the top-left build-region corner and extends right/down, while the right grid's first footprint origin is one full footprint inside the top-right corner and extends left/down; for Castle Fight 9.27 one grid square is one production-building footprint and every fourth line is shown as a double line;
+- an independent **Snap** checkbox beside the grid-visibility button; snapping is enabled by default, applies to every building-placement preview and confirmed command, and uses the same side-specific lattice as the overlay even when the overlay itself is hidden;
 - cell grid while placing;
 - exact occupied-cell overlay;
 - nearby building footprint outlines;
