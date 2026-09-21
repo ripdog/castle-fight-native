@@ -6,7 +6,6 @@ use std::{
 };
 
 use bevy::{
-    animation::AnimatedBy,
     asset::{AssetId, RenderAssetUsages},
     camera::visibility::DynamicSkinnedMeshBounds,
     gltf::{Gltf, GltfMaterialExtras},
