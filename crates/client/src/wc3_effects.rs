@@ -28,7 +28,7 @@ const MAX_RIBBON_POINTS: usize = 512;
 const ANIMATION_CULL_MARGIN_PIXELS: f32 = 192.0;
 
 #[derive(Component, Clone, Copy)]
-struct OffscreenAnimatedBy(Entity);
+pub(crate) struct OffscreenAnimatedBy(Entity);
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
