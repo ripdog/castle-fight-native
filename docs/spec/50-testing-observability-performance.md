@@ -258,6 +258,31 @@ A useful early diagnostic stress scenario is **10,000 simultaneously active unit
 
 The architecture should then be profiled at larger counts to find the next limiting subsystem.
 
+### 15.1 Automated client quicksave profiling
+
+The development client exposes a bounded profiling run for repeatable investigation of a live
+game state. `--profile-quicksave` restores the ordinary offline quicksave before the Bevy app
+starts, disables presentation synchronization to vertical refresh, lets the initialization frame
+complete, then captures the normal simulation and presentation paths for 10 seconds. It writes a
+summary to stdout and exits successfully. The duration is configurable and may be fractional:
+
+```text
+tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave
+tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave --profile-duration 30
+tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave-path /path/to/quicksave.json --profile-duration 2.5
+```
+
+The selected map version, release revision, seed, and team size MUST describe the configuration
+that created the quicksave; incompatible snapshots fail before the timed run. The mode is offline
+and cannot be combined with `--server` or `--stress-units`.
+
+The stdout report includes average FPS, 1% low FPS, average/p95/p99/maximum frame and simulation
+tick times, average main-schedule and presentation phase costs, collision-fallback work, tick range,
+final entity counts, source path, and actual capture duration. The 1% low is the reciprocal of the
+mean frame time in the slowest one percent of captured frames (rounded up to at least one frame).
+Frame, simulation, and presentation samples come from the same counters as the in-game performance
+panel so interactive and automated investigations measure the same work.
+
 ## 16. Tick budget
 
 If the final simulation rate is 20 Hz, the real-time wall-clock budget is 50 ms/tick; at 30 Hz it is ~33.3 ms/tick.

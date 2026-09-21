@@ -17,7 +17,10 @@ mod unit_models;
 mod wc3_effects;
 mod wc3_text;
 
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use bevy::{
     asset::AssetPlugin,
@@ -231,6 +234,14 @@ fn main() {
         );
         std::process::exit(2);
     }
+    if options.server.is_some() && options.profile_quicksave.is_some() {
+        eprintln!("--profile-quicksave is an offline mode and cannot be used with --server");
+        std::process::exit(2);
+    }
+    if options.stress_units.is_some() && options.profile_quicksave.is_some() {
+        eprintln!("--profile-quicksave cannot be combined with --stress-units");
+        std::process::exit(2);
+    }
     let match_config = client_match_config(&options).unwrap_or_else(|error| {
         eprintln!(
             "cannot configure Castle Fight {}/{}: {error}",
@@ -238,7 +249,7 @@ fn main() {
         );
         std::process::exit(2);
     });
-    let demo = create_demo_world_for_match_config(
+    let mut demo = create_demo_world_for_match_config(
         default_worker_count(),
         options.stress_units,
         match_config,
@@ -250,6 +261,21 @@ fn main() {
         );
         std::process::exit(2);
     });
+    if let Some(path) = &options.profile_quicksave {
+        let completed_tick = restore_simulation_quicksave(&mut demo.simulation, demo.content, path)
+            .unwrap_or_else(|error| {
+                eprintln!("cannot load profiling quicksave: {error}");
+                std::process::exit(2);
+            });
+        println!(
+            "client-profile loaded_tick={} source={} duration={:.3}s",
+            completed_tick
+                .map(|tick| tick.to_string())
+                .unwrap_or_else(|| "initial".into()),
+            path.display(),
+            options.profile_duration.as_secs_f64(),
+        );
+    }
     let (local_player, network_client) = if let Some(server_address) = options.server {
         let compatibility = compatibility_identity_for_demo(&demo);
         let (client, assignment) =
@@ -293,7 +319,7 @@ fn main() {
         (local_player, None)
     };
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
-    let present_mode = if options.stress_units.is_some() {
+    let present_mode = if options.stress_units.is_some() || options.profile_quicksave.is_some() {
         PresentMode::AutoNoVsync
     } else {
         PresentMode::AutoVsync
@@ -398,8 +424,58 @@ fn main() {
         )))
         .add_systems(Update, print_perf_telemetry);
     }
+    if let Some(path) = options.profile_quicksave {
+        app.insert_resource(AutomatedProfileRun {
+            path,
+            duration: options.profile_duration,
+            started: None,
+        })
+        .add_systems(
+            Update,
+            finish_automated_profile.after(performance_ui::finish_presentation_profile),
+        );
+    }
 
     app.run();
+}
+
+#[derive(Resource)]
+struct AutomatedProfileRun {
+    path: PathBuf,
+    duration: Duration,
+    started: Option<Instant>,
+}
+
+fn finish_automated_profile(
+    mut run: ResMut<AutomatedProfileRun>,
+    mut counters: ResMut<PerformanceCounters>,
+    presentation: Res<PresentationSamples>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let now = Instant::now();
+    let Some(started) = run.started else {
+        run.started = Some(now);
+        counters.start_capture();
+        return;
+    };
+    if now.duration_since(started) < run.duration || !counters.capture_has_frame_sample() {
+        return;
+    }
+    let report = counters
+        .finish_capture()
+        .expect("automated profiling run must own an active performance capture");
+    println!(
+        "client-profile source={} final_tick={} builders={} units={} buildings={} corpses={} projectiles={}",
+        run.path.display(),
+        presentation.current.tick,
+        presentation.current.builders.len(),
+        presentation.current.units.len(),
+        presentation.current.buildings.len(),
+        presentation.current.corpses.len(),
+        presentation.current.projectiles.len(),
+    );
+    print!("{}", report.format());
+    exit.write(AppExit::Success);
 }
 
 #[derive(Resource)]
@@ -437,6 +513,8 @@ struct ClientOptions {
     stress_units: Option<usize>,
     health_bars: bool,
     perf_log: bool,
+    profile_quicksave: Option<PathBuf>,
+    profile_duration: Duration,
     map_version: MapVersion,
     release_revision: String,
     match_seed: u64,
@@ -451,6 +529,8 @@ impl ClientOptions {
             stress_units: None,
             health_bars: true,
             perf_log: false,
+            profile_quicksave: None,
+            profile_duration: Duration::from_secs(10),
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: DEVELOPMENT_MATCH_SEED,
@@ -473,6 +553,20 @@ impl ClientOptions {
                 }
                 "--no-health-bars" => options.health_bars = false,
                 "--perf-log" => options.perf_log = true,
+                "--profile-quicksave" => options.profile_quicksave = Some(quicksave_path()),
+                "--profile-quicksave-path" => {
+                    options.profile_quicksave = Some(PathBuf::from(
+                        args.next()
+                            .expect("--profile-quicksave-path requires a snapshot path"),
+                    ));
+                }
+                "--profile-duration" => {
+                    let value = args
+                        .next()
+                        .expect("--profile-duration requires a positive number of seconds");
+                    options.profile_duration =
+                        parse_profile_duration(&value).unwrap_or_else(|error| panic!("{error}"));
+                }
                 "--map-version" => {
                     let value = args
                         .next()
@@ -515,7 +609,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-duration SECONDS]"
                     );
                     std::process::exit(0);
                 }
@@ -524,6 +618,16 @@ impl ClientOptions {
         }
         options
     }
+}
+
+fn parse_profile_duration(value: &str) -> Result<Duration, String> {
+    let seconds = value
+        .parse::<f64>()
+        .map_err(|_| "--profile-duration requires a positive number of seconds".to_owned())?;
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return Err("--profile-duration requires a positive finite number of seconds".to_owned());
+    }
+    Ok(Duration::from_secs_f64(seconds))
 }
 
 fn client_match_config(
@@ -636,6 +740,22 @@ fn quicksave_path() -> PathBuf {
     PathBuf::from("castle-fight-native-quicksave.json")
 }
 
+fn restore_simulation_quicksave(
+    simulation: &mut Simulation,
+    content: &CastleFightContentBundle,
+    path: &std::path::Path,
+) -> Result<Option<u64>, String> {
+    let bytes = std::fs::read(path)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+    let snapshot = SimulationSnapshot::decode_wire(&bytes, content)
+        .map_err(|error| format!("could not decode quicksave: {error}"))?;
+    let completed_tick = snapshot.completed_tick();
+    simulation
+        .restore_snapshot(&snapshot)
+        .map_err(|error| format!("could not restore quicksave: {error:?}"))?;
+    Ok(completed_tick)
+}
+
 fn handle_quicksave_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
     selected_match: Res<SelectedMatch>,
@@ -700,15 +820,11 @@ fn handle_quicksave_hotkeys(
 
     let path = quicksave_path();
     let load_result = (|| -> Result<Option<u64>, String> {
-        let bytes = std::fs::read(&path)
-            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-        let snapshot = SimulationSnapshot::decode_wire(&bytes, selected_match.content)
-            .map_err(|error| format!("could not decode quicksave: {error}"))?;
-        let completed_tick = snapshot.completed_tick();
-        authoritative
-            .simulation
-            .restore_snapshot(&snapshot)
-            .map_err(|error| format!("could not restore quicksave: {error:?}"))?;
+        let completed_tick = restore_simulation_quicksave(
+            &mut authoritative.simulation,
+            selected_match.content,
+            &path,
+        )?;
         authoritative
             .simulation
             .debug_set_buildings_invulnerable(debug_menu.buildings_invulnerable());
@@ -1359,6 +1475,17 @@ fn default_worker_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profiling_duration_accepts_fractional_seconds_and_rejects_invalid_values() {
+        assert_eq!(
+            parse_profile_duration("2.5").unwrap(),
+            Duration::from_millis(2_500)
+        );
+        for invalid in ["0", "-1", "NaN", "inf", "later"] {
+            assert!(parse_profile_duration(invalid).is_err(), "{invalid}");
+        }
+    }
 
     #[test]
     fn asset_io_pool_keeps_bevys_default_thread_assignment() {

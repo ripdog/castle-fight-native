@@ -272,9 +272,27 @@ pub(crate) struct PerformanceCounters {
     current_frame_work: FrameWork,
     current_schedule_timings: MainScheduleTimings,
     frame_samples: VecDeque<(Instant, FrameSample)>,
+    capture: Option<PerformanceCapture>,
 }
 
 impl PerformanceCounters {
+    pub(crate) fn start_capture(&mut self) {
+        self.capture = Some(PerformanceCapture {
+            started: Some(Instant::now()),
+            ..default()
+        });
+    }
+
+    pub(crate) fn finish_capture(&mut self) -> Option<PerformanceReport> {
+        self.capture.take().map(PerformanceCapture::finish)
+    }
+
+    pub(crate) fn capture_has_frame_sample(&self) -> bool {
+        self.capture
+            .as_ref()
+            .is_some_and(|capture| !capture.frames.is_empty())
+    }
+
     pub(crate) fn record_sim_tick(
         &mut self,
         tick: u64,
@@ -295,6 +313,19 @@ impl PerformanceCounters {
                 max_ring: collision_fallback_max_ring,
             },
         );
+        if let Some(capture) = &mut self.capture {
+            capture.started.get_or_insert(now);
+            capture.sim_ticks.push((tick, timings));
+            capture.collision_fallback_searches = capture
+                .collision_fallback_searches
+                .saturating_add(collision_fallback_searches);
+            capture.collision_fallback_candidate_checks = capture
+                .collision_fallback_candidate_checks
+                .saturating_add(collision_fallback_candidate_checks);
+            capture.collision_fallback_max_ring = capture
+                .collision_fallback_max_ring
+                .max(collision_fallback_max_ring);
+        }
         self.current_frame_work.sim_ticks = self.current_frame_work.sim_ticks.saturating_add(1);
         self.current_frame_work.sim_step += timings.total;
     }
@@ -310,19 +341,24 @@ impl PerformanceCounters {
             self.main_frame_started.replace(now),
             self.completed_main_frame.take(),
         ) {
-            push_recent_sample(
-                &mut self.frame_samples,
-                now,
-                FrameSample {
-                    wall: now.duration_since(previous_start),
-                    main_cpu: completed.main_cpu,
-                    fixed_runs: f64::from(completed.work.fixed_runs),
-                    sim_ticks: f64::from(completed.work.sim_ticks),
-                    fixed_wall: completed.work.fixed_wall,
-                    sim_step: completed.work.sim_step,
-                    schedules: completed.schedules,
-                },
-            );
+            let sample = FrameSample {
+                wall: now.duration_since(previous_start),
+                main_cpu: completed.main_cpu,
+                fixed_runs: f64::from(completed.work.fixed_runs),
+                sim_ticks: f64::from(completed.work.sim_ticks),
+                fixed_wall: completed.work.fixed_wall,
+                sim_step: completed.work.sim_step,
+                schedules: completed.schedules,
+            };
+            push_recent_sample(&mut self.frame_samples, now, sample);
+            if let Some(capture) = &mut self.capture
+                && capture
+                    .started
+                    .is_none_or(|started| previous_start >= started)
+            {
+                capture.started.get_or_insert(now);
+                capture.frames.push(sample);
+            }
         }
         self.current_frame_work = FrameWork::default();
         self.current_schedule_timings = MainScheduleTimings::default();
@@ -370,6 +406,206 @@ impl PerformanceCounters {
         self.step_started = None;
         let now = Instant::now();
         push_recent_sample(&mut self.presentation_samples, now, self.presentation);
+        if let Some(capture) = &mut self.capture {
+            capture.started.get_or_insert(now);
+            capture.presentation.push(self.presentation);
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct PerformanceCapture {
+    started: Option<Instant>,
+    frames: Vec<FrameSample>,
+    sim_ticks: Vec<(u64, TickTimings)>,
+    presentation: Vec<PresentationTimings>,
+    collision_fallback_searches: usize,
+    collision_fallback_candidate_checks: usize,
+    collision_fallback_max_ring: u32,
+}
+
+impl PerformanceCapture {
+    fn finish(self) -> PerformanceReport {
+        PerformanceReport {
+            elapsed: self
+                .started
+                .map_or(Duration::ZERO, |started| started.elapsed()),
+            frames: self.frames,
+            sim_ticks: self.sim_ticks,
+            presentation: self.presentation,
+            collision_fallback_searches: self.collision_fallback_searches,
+            collision_fallback_candidate_checks: self.collision_fallback_candidate_checks,
+            collision_fallback_max_ring: self.collision_fallback_max_ring,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PerformanceReport {
+    elapsed: Duration,
+    frames: Vec<FrameSample>,
+    sim_ticks: Vec<(u64, TickTimings)>,
+    presentation: Vec<PresentationTimings>,
+    collision_fallback_searches: usize,
+    collision_fallback_candidate_checks: usize,
+    collision_fallback_max_ring: u32,
+}
+
+impl PerformanceReport {
+    #[must_use]
+    pub(crate) fn format(&self) -> String {
+        let mut output = String::with_capacity(2_048);
+        writeln!(output, "PROFILE RESULTS").unwrap();
+        writeln!(
+            output,
+            "  elapsed             {:>9.3}s",
+            self.elapsed.as_secs_f64()
+        )
+        .unwrap();
+
+        let frame_wall = self
+            .frames
+            .iter()
+            .map(|sample| sample.wall)
+            .collect::<Vec<_>>();
+        let frame_total = frame_wall.iter().copied().sum::<Duration>();
+        let average_fps = if frame_total.is_zero() {
+            0.0
+        } else {
+            self.frames.len() as f64 / frame_total.as_secs_f64()
+        };
+        writeln!(
+            output,
+            "\nFRAME  samples {:>7}  avg FPS {:>7.2}  1% low {:>7.2}",
+            self.frames.len(),
+            average_fps,
+            one_percent_low_fps(&frame_wall),
+        )
+        .unwrap();
+        push_distribution(&mut output, "wall", &frame_wall);
+        push_average_timing(
+            &mut output,
+            "main CPU",
+            self.frames.iter().map(|sample| sample.main_cpu),
+        );
+        push_average_timing(
+            &mut output,
+            "outside main",
+            self.frames
+                .iter()
+                .map(|sample| sample.wall.saturating_sub(sample.main_cpu)),
+        );
+        push_average_timing(
+            &mut output,
+            "fixed loop",
+            self.frames.iter().map(|sample| sample.fixed_wall),
+        );
+        push_average_timing(
+            &mut output,
+            "sim step/frame",
+            self.frames.iter().map(|sample| sample.sim_step),
+        );
+        output.push_str("  main schedules (avg/frame)\n");
+        push_average_timing(
+            &mut output,
+            "    First",
+            self.frames.iter().map(|sample| sample.schedules.first),
+        );
+        push_average_timing(
+            &mut output,
+            "    PreUpdate",
+            self.frames.iter().map(|sample| sample.schedules.pre_update),
+        );
+        push_average_timing(
+            &mut output,
+            "    fixed loop",
+            self.frames.iter().map(|sample| sample.schedules.fixed_loop),
+        );
+        push_average_timing(
+            &mut output,
+            "    Update",
+            self.frames.iter().map(|sample| sample.schedules.update),
+        );
+        push_average_timing(
+            &mut output,
+            "    SpawnScene",
+            self.frames
+                .iter()
+                .map(|sample| sample.schedules.spawn_scene),
+        );
+        push_average_timing(
+            &mut output,
+            "    PostUpdate",
+            self.frames
+                .iter()
+                .map(|sample| sample.schedules.post_update),
+        );
+        push_average_timing(
+            &mut output,
+            "    Last",
+            self.frames.iter().map(|sample| sample.schedules.last),
+        );
+
+        let tick_durations = self
+            .sim_ticks
+            .iter()
+            .map(|(_, timings)| timings.total)
+            .collect::<Vec<_>>();
+        let tick_range = self
+            .sim_ticks
+            .first()
+            .zip(self.sim_ticks.last())
+            .map_or_else(
+                || "none".to_owned(),
+                |(first, last)| format!("{}..={}", first.0, last.0),
+            );
+        let tick_rate = if self.elapsed.is_zero() {
+            0.0
+        } else {
+            self.sim_ticks.len() as f64 / self.elapsed.as_secs_f64()
+        };
+        writeln!(
+            output,
+            "\nSIM  ticks {:>9}  range {:>18}  observed {:>6.2}Hz",
+            self.sim_ticks.len(),
+            tick_range,
+            tick_rate,
+        )
+        .unwrap();
+        push_distribution(&mut output, "tick total", &tick_durations);
+        for (label, duration) in average_tick_timings(&self.sim_ticks) {
+            push_timing(&mut output, label, duration);
+        }
+        let tick_count = self.sim_ticks.len().max(1) as f64;
+        writeln!(
+            output,
+            "  fallback calls      {:>9.2}/tick",
+            self.collision_fallback_searches as f64 / tick_count,
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "  fallback checks     {:>9.2}/tick",
+            self.collision_fallback_candidate_checks as f64 / tick_count,
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "  fallback max ring   {:>9}",
+            self.collision_fallback_max_ring,
+        )
+        .unwrap();
+
+        writeln!(
+            output,
+            "\n3D CPU  samples {:>7}  average/frame",
+            self.presentation.len(),
+        )
+        .unwrap();
+        for (label, duration) in average_presentation_timings(&self.presentation) {
+            push_timing(&mut output, label, duration);
+        }
+        output
     }
 }
 
@@ -819,6 +1055,107 @@ fn gpu_pass_timings(diagnostics: &DiagnosticsStore) -> Vec<(&str, f64)> {
     passes
 }
 
+fn push_distribution(output: &mut String, label: &str, samples: &[Duration]) {
+    writeln!(
+        output,
+        "  {label:<18} avg {:>8.3}ms  p95 {:>8.3}ms  p99 {:>8.3}ms  max {:>8.3}ms",
+        duration_ms(mean_duration(samples.iter().copied())),
+        duration_ms(duration_percentile(samples, 95)),
+        duration_ms(duration_percentile(samples, 99)),
+        duration_ms(samples.iter().copied().max().unwrap_or_default()),
+    )
+    .unwrap();
+}
+
+fn push_average_timing(output: &mut String, label: &str, samples: impl Iterator<Item = Duration>) {
+    push_timing(output, label, mean_duration(samples));
+}
+
+fn mean_duration(samples: impl Iterator<Item = Duration>) -> Duration {
+    let (seconds, count) = samples.fold((0.0, 0usize), |(seconds, count), sample| {
+        (seconds + sample.as_secs_f64(), count + 1)
+    });
+    if count == 0 {
+        Duration::ZERO
+    } else {
+        Duration::from_secs_f64(seconds / count as f64)
+    }
+}
+
+fn duration_percentile(samples: &[Duration], percentile: usize) -> Duration {
+    if samples.is_empty() {
+        return Duration::ZERO;
+    }
+    debug_assert!((1..=100).contains(&percentile));
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+    let rank = (percentile * sorted.len()).div_ceil(100);
+    sorted[rank.saturating_sub(1)]
+}
+
+fn one_percent_low_fps(frame_wall: &[Duration]) -> f64 {
+    if frame_wall.is_empty() {
+        return 0.0;
+    }
+    let mut slowest = frame_wall.to_vec();
+    slowest.sort_unstable_by(|left, right| right.cmp(left));
+    let count = slowest.len().div_ceil(100).max(1);
+    let mean = mean_duration(slowest.into_iter().take(count));
+    if mean.is_zero() {
+        0.0
+    } else {
+        1.0 / mean.as_secs_f64()
+    }
+}
+
+fn average_tick_timings(samples: &[(u64, TickTimings)]) -> [(&'static str, Duration); 15] {
+    let mean = |select: fn(&TickTimings) -> Duration| {
+        mean_duration(samples.iter().map(|(_, timings)| select(timings)))
+    };
+    [
+        ("topology", mean(|timings| timings.topology)),
+        ("timers/build", mean(|timings| timings.timers)),
+        ("production", mean(|timings| timings.production)),
+        (
+            "snapshot/spatial",
+            mean(|timings| timings.snapshot_and_spatial),
+        ),
+        ("abilities", mean(|timings| timings.abilities)),
+        ("targeting", mean(|timings| timings.targeting)),
+        ("combat", mean(|timings| timings.combat)),
+        ("move intent", mean(|timings| timings.movement_intent)),
+        (
+            "crowd/collision",
+            mean(|timings| timings.crowd_and_collision),
+        ),
+        ("crowd separate", mean(|timings| timings.crowd_separation)),
+        ("hard collision", mean(|timings| timings.hard_collision)),
+        (
+            "fallback search",
+            mean(|timings| timings.collision_fallback_search),
+        ),
+        ("ballistic", mean(|timings| timings.ballistic_impact)),
+        ("commit", mean(|timings| timings.structural_commit)),
+        ("checksum", mean(|timings| timings.checksum)),
+    ]
+}
+
+fn average_presentation_timings(samples: &[PresentationTimings]) -> [(&'static str, Duration); 9] {
+    let mean =
+        |select: fn(&PresentationTimings) -> Duration| mean_duration(samples.iter().map(select));
+    [
+        ("total", mean(|timings| timings.total)),
+        ("camera", mean(|timings| timings.camera)),
+        ("model prep", mean(|timings| timings.model_prep)),
+        ("entity sync", mean(|timings| timings.entity_sync)),
+        ("scene setup", mean(|timings| timings.scene_setup)),
+        ("animations", mean(|timings| timings.animations)),
+        ("transforms", mean(|timings| timings.transforms)),
+        ("effects", mean(|timings| timings.effects)),
+        ("overlays/gizmos", mean(|timings| timings.overlays)),
+    ]
+}
+
 fn push_timing(output: &mut String, label: &str, duration: Duration) {
     writeln!(output, "  {label:<18} {:>7.3}ms", duration_ms(duration)).unwrap();
 }
@@ -1106,6 +1443,49 @@ mod tests {
     #[test]
     fn duration_format_keeps_sub_millisecond_resolution() {
         assert_eq!(duration_ms(Duration::from_micros(125)), 0.125);
+    }
+
+    #[test]
+    fn percentile_uses_nearest_rank_and_one_percent_low_uses_slowest_frames() {
+        let mut samples = vec![Duration::from_millis(10); 99];
+        samples.push(Duration::from_millis(100));
+
+        assert_eq!(duration_percentile(&samples, 95), Duration::from_millis(10));
+        assert_eq!(duration_percentile(&samples, 99), Duration::from_millis(10));
+        assert_eq!(one_percent_low_fps(&samples), 10.0);
+    }
+
+    #[test]
+    fn completed_capture_reports_frame_and_tick_distributions() {
+        let report = PerformanceReport {
+            elapsed: Duration::from_secs(1),
+            frames: vec![FrameSample {
+                wall: Duration::from_millis(20),
+                main_cpu: Duration::from_millis(8),
+                ..default()
+            }],
+            sim_ticks: vec![(
+                42,
+                TickTimings {
+                    total: Duration::from_millis(4),
+                    combat: Duration::from_millis(1),
+                    ..default()
+                },
+            )],
+            presentation: vec![PresentationTimings {
+                total: Duration::from_millis(3),
+                ..default()
+            }],
+            collision_fallback_searches: 2,
+            collision_fallback_candidate_checks: 50,
+            collision_fallback_max_ring: 7,
+        };
+
+        let output = report.format();
+        assert!(output.contains("avg FPS   50.00"));
+        assert!(output.contains("1% low   50.00"));
+        assert!(output.contains("range            42..=42"));
+        assert!(output.contains("fallback calls           2.00/tick"));
     }
 
     #[test]
