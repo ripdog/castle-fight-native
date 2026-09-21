@@ -24,10 +24,6 @@ const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
-const ANIMATION_CULL_MARGIN_PIXELS: f32 = 192.0;
-
-#[derive(Component, Clone, Copy)]
-struct OffscreenAnimatedBy(Entity);
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
@@ -591,51 +587,6 @@ type Wc3AnimationAssets<'w> = (
     Res<'w, Assets<AnimationClip>>,
     ResMut<'w, Assets<AnimationGraph>>,
 );
-
-pub fn cull_offscreen_animation_targets(
-    mut commands: Commands,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    players: Query<(Entity, &GlobalTransform), With<AnimationPlayer>>,
-    active_targets: Query<(Entity, &AnimatedBy)>,
-    culled_targets: Query<(Entity, &OffscreenAnimatedBy), Without<AnimatedBy>>,
-    mut player_visibility: Local<HashMap<Entity, bool>>,
-) {
-    let (camera, camera_transform) = *camera;
-    let Some(viewport_size) = camera.logical_viewport_size() else {
-        return;
-    };
-    player_visibility.clear();
-    for (entity, transform) in &players {
-        let visible = camera
-            .world_to_viewport(camera_transform, transform.translation())
-            .is_ok_and(|point| {
-                point.x >= -ANIMATION_CULL_MARGIN_PIXELS
-                    && point.y >= -ANIMATION_CULL_MARGIN_PIXELS
-                    && point.x <= viewport_size.x + ANIMATION_CULL_MARGIN_PIXELS
-                    && point.y <= viewport_size.y + ANIMATION_CULL_MARGIN_PIXELS
-            });
-        player_visibility.insert(entity, visible);
-    }
-
-    for (entity, animated_by) in &active_targets {
-        if player_visibility.get(&animated_by.0) != Some(&false) {
-            continue;
-        }
-        commands
-            .entity(entity)
-            .remove::<AnimatedBy>()
-            .insert(OffscreenAnimatedBy(animated_by.0));
-    }
-    for (entity, culled_by) in &culled_targets {
-        if player_visibility.get(&culled_by.0) != Some(&true) {
-            continue;
-        }
-        commands
-            .entity(entity)
-            .remove::<OffscreenAnimatedBy>()
-            .insert(AnimatedBy(culled_by.0));
-    }
-}
 
 pub fn setup_wc3_visual_animation_players(
     mut commands: Commands,
