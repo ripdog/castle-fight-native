@@ -417,6 +417,7 @@ fn main() {
             )
                 .chain(),
         )
+        .add_systems(Update, wc3_effects::cull_offscreen_animation_targets)
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
     if options.perf_log {
