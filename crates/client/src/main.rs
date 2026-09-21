@@ -417,6 +417,12 @@ fn main() {
             )
                 .chain(),
         )
+        .add_systems(
+            PostUpdate,
+            wc3_effects::skip_unchanged_paused_animation_poses
+                .after(bevy::animation::advance_animations)
+                .before(bevy::animation::animate_targets),
+        )
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
     if options.perf_log {

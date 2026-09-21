@@ -588,6 +588,38 @@ type Wc3AnimationAssets<'w> = (
     ResMut<'w, Assets<AnimationGraph>>,
 );
 
+pub fn skip_unchanged_paused_animation_poses(
+    mut players: Query<(Entity, &mut AnimationPlayer), With<AnimationTransitions>>,
+    mut last_poses: Local<HashMap<Entity, Vec<(usize, u32)>>>,
+) {
+    for (entity, mut player) in &mut players {
+        if !player.all_paused() {
+            last_poses.remove(&entity);
+            continue;
+        }
+
+        let mut pose = player
+            .playing_animations()
+            .map(|(node, animation)| (node.index(), animation.seek_time().to_bits()))
+            .collect::<Vec<_>>();
+        if pose.is_empty() {
+            last_poses.remove(&entity);
+            continue;
+        }
+        pose.sort_unstable();
+        if last_poses
+            .get(&entity)
+            .is_some_and(|previous| *previous == pose)
+        {
+            for (_, animation) in player.playing_animations_mut() {
+                animation.set_weight(0.0);
+            }
+        } else {
+            last_poses.insert(entity, pose);
+        }
+    }
+}
+
 pub fn setup_wc3_visual_animation_players(
     mut commands: Commands,
     animation_assets: Wc3AnimationAssets<'_>,
