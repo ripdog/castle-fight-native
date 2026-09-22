@@ -6,6 +6,7 @@ use std::{
 };
 
 use bevy::{
+    animation::AnimatedBy,
     asset::{AssetId, RenderAssetUsages},
     camera::visibility::DynamicSkinnedMeshBounds,
     gltf::{Gltf, GltfMaterialExtras},
@@ -24,6 +25,9 @@ const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
+
+#[derive(Component)]
+pub(crate) struct FrozenPausedSkinnedBounds;
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
@@ -587,6 +591,71 @@ type Wc3AnimationAssets<'w> = (
     Res<'w, Assets<AnimationClip>>,
     ResMut<'w, Assets<AnimationGraph>>,
 );
+
+pub fn freeze_unchanged_paused_skinned_bounds(
+    mut commands: Commands,
+    players: Query<(Entity, &AnimationPlayer), With<AnimationTransitions>>,
+    skinned_meshes: Query<(
+        Entity,
+        &SkinnedMesh,
+        Has<DynamicSkinnedMeshBounds>,
+        Has<FrozenPausedSkinnedBounds>,
+    )>,
+    animation_targets: Query<&AnimatedBy>,
+    mut cache: Local<(HashMap<Entity, Vec<(usize, u32)>>, HashMap<Entity, bool>)>,
+) {
+    cache.1.clear();
+    for (entity, player) in &players {
+        if !player.all_paused() {
+            cache.0.remove(&entity);
+            cache.1.insert(entity, false);
+            continue;
+        }
+
+        let mut pose = player
+            .playing_animations()
+            .map(|(node, animation)| (node.index(), animation.seek_time().to_bits()))
+            .collect::<Vec<_>>();
+        if pose.is_empty() {
+            cache.0.remove(&entity);
+            cache.1.insert(entity, false);
+            continue;
+        }
+        pose.sort_unstable();
+        let unchanged = cache
+            .0
+            .get(&entity)
+            .is_some_and(|previous| *previous == pose);
+        cache.0.insert(entity, pose);
+        cache.1.insert(entity, unchanged);
+    }
+    let (last_poses, player_states) = &mut *cache;
+    last_poses.retain(|entity, _| player_states.contains_key(entity));
+
+    for (entity, skin, has_dynamic_bounds, has_frozen_bounds) in &skinned_meshes {
+        let player = skin
+            .joints
+            .iter()
+            .find_map(|joint| animation_targets.get(*joint).ok())
+            .map(|animated_by| animated_by.0);
+        let should_freeze = player
+            .and_then(|player| cache.1.get(&player))
+            .copied()
+            .unwrap_or(false);
+
+        if should_freeze && has_dynamic_bounds && !has_frozen_bounds {
+            commands
+                .entity(entity)
+                .remove::<DynamicSkinnedMeshBounds>()
+                .insert(FrozenPausedSkinnedBounds);
+        } else if !should_freeze && has_frozen_bounds {
+            commands
+                .entity(entity)
+                .remove::<FrozenPausedSkinnedBounds>()
+                .insert(DynamicSkinnedMeshBounds);
+        }
+    }
+}
 
 pub fn skip_unchanged_paused_animation_poses(
     mut players: Query<(Entity, &mut AnimationPlayer), With<AnimationTransitions>>,
@@ -1440,6 +1509,55 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unchanged_paused_pose_freezes_and_changed_pose_restores_dynamic_bounds() {
+        let mut app = App::new();
+        app.add_systems(Update, freeze_unchanged_paused_skinned_bounds);
+
+        let node = bevy::animation::graph::AnimationNodeIndex::new(0);
+        let mut player = AnimationPlayer::default();
+        player.start(node).pause();
+        let player_entity = app
+            .world_mut()
+            .spawn((player, AnimationTransitions::new()))
+            .id();
+        let joint = app.world_mut().spawn(AnimatedBy(player_entity)).id();
+        let mesh = app
+            .world_mut()
+            .spawn((
+                SkinnedMesh {
+                    inverse_bindposes: default(),
+                    joints: vec![joint],
+                },
+                DynamicSkinnedMeshBounds,
+            ))
+            .id();
+
+        app.update();
+        assert!(
+            app.world().get::<DynamicSkinnedMeshBounds>(mesh).is_some(),
+            "first paused frame must retain dynamic bounds so the current pose is measured"
+        );
+        assert!(app.world().get::<FrozenPausedSkinnedBounds>(mesh).is_none());
+
+        app.update();
+        assert!(app.world().get::<DynamicSkinnedMeshBounds>(mesh).is_none());
+        assert!(app.world().get::<FrozenPausedSkinnedBounds>(mesh).is_some());
+
+        app.world_mut()
+            .get_mut::<AnimationPlayer>(player_entity)
+            .unwrap()
+            .animation_mut(node)
+            .unwrap()
+            .set_seek_time(0.5);
+        app.update();
+        assert!(
+            app.world().get::<DynamicSkinnedMeshBounds>(mesh).is_some(),
+            "a changed paused pose must recompute its animated bounds"
+        );
+        assert!(app.world().get::<FrozenPausedSkinnedBounds>(mesh).is_none());
+    }
 
     #[test]
     fn building_team_color_flattens_overlay_and_underlay_into_one_opaque_texture() {
