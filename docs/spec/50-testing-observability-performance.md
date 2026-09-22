@@ -262,14 +262,17 @@ The architecture should then be profiled at larger counts to find the next limit
 
 The development client exposes a bounded profiling run for repeatable investigation of a live
 game state. `--profile-quicksave` restores the ordinary offline quicksave before the Bevy app
-starts, disables presentation synchronization to vertical refresh, lets the initialization frame
-complete, then captures the normal simulation and presentation paths for 10 seconds. It writes a
-summary to stdout and exits successfully. The duration is configurable and may be fractional:
+starts and disables presentation synchronization to vertical refresh. The restored simulation stays
+paused during a 5-second presentation warm-up so asset loading, scene instantiation, shader setup,
+and other startup work do not contaminate the timed sample or advance the saved game state. It then
+unpauses and captures the normal simulation and presentation paths for 10 seconds. The warm-up and
+capture durations are configurable and may be fractional; a zero warm-up is supported when startup
+behavior itself is the subject of the measurement:
 
 ```text
 tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave
-tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave --profile-duration 30
-tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave-path /path/to/quicksave.json --profile-duration 2.5
+tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave --profile-warmup 10 --profile-duration 30
+tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave-path /path/to/quicksave.json --profile-warmup 0 --profile-duration 2.5
 ```
 
 The selected map version, release revision, seed, and team size MUST describe the configuration

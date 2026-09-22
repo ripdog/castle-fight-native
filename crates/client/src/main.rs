@@ -270,11 +270,12 @@ fn main() {
                 std::process::exit(2);
             });
         println!(
-            "client-profile loaded_tick={} source={} duration={:.3}s",
+            "client-profile loaded_tick={} source={} warmup={:.3}s duration={:.3}s",
             completed_tick
                 .map(|tick| tick.to_string())
                 .unwrap_or_else(|| "initial".into()),
             path.display(),
+            options.profile_warmup.as_secs_f64(),
             options.profile_duration.as_secs_f64(),
         );
     }
@@ -368,7 +369,9 @@ fn main() {
             local_player,
         })
         .insert_resource(authoritative)
-        .init_resource::<SimulationPlayback>()
+        .insert_resource(SimulationPlayback {
+            paused: options.profile_quicksave.is_some(),
+        })
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
         .insert_resource(TerrainSurface::new(demo.terrain))
@@ -439,8 +442,10 @@ fn main() {
     if let Some(path) = options.profile_quicksave {
         app.insert_resource(AutomatedProfileRun {
             path,
+            warmup: options.profile_warmup,
             duration: options.profile_duration,
-            started: None,
+            warmup_started: None,
+            capture_started: None,
         })
         .add_systems(
             Update,
@@ -454,8 +459,10 @@ fn main() {
 #[derive(Resource)]
 struct AutomatedProfileRun {
     path: PathBuf,
+    warmup: Duration,
     duration: Duration,
-    started: Option<Instant>,
+    warmup_started: Option<Instant>,
+    capture_started: Option<Instant>,
 }
 
 fn finish_automated_profile(
@@ -463,15 +470,24 @@ fn finish_automated_profile(
     mut counters: ResMut<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
     trace_display: Res<SystemTraceDisplay>,
+    mut playback: ResMut<SimulationPlayback>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let now = Instant::now();
-    let Some(started) = run.started else {
-        run.started = Some(now);
+    let warmup_started = *run.warmup_started.get_or_insert(now);
+    if run.capture_started.is_none() {
+        if now.duration_since(warmup_started) < run.warmup {
+            return;
+        }
+        playback.paused = false;
         counters.start_capture();
+        run.capture_started = Some(now);
         return;
-    };
-    if now.duration_since(started) < run.duration || !counters.capture_has_frame_sample() {
+    }
+    let capture_started = run
+        .capture_started
+        .expect("capture start is set after automated profile warmup");
+    if now.duration_since(capture_started) < run.duration || !counters.capture_has_frame_sample() {
         return;
     }
     let report = counters
@@ -528,6 +544,7 @@ struct ClientOptions {
     health_bars: bool,
     perf_log: bool,
     profile_quicksave: Option<PathBuf>,
+    profile_warmup: Duration,
     profile_duration: Duration,
     map_version: MapVersion,
     release_revision: String,
@@ -544,6 +561,7 @@ impl ClientOptions {
             health_bars: true,
             perf_log: false,
             profile_quicksave: None,
+            profile_warmup: Duration::from_secs(5),
             profile_duration: Duration::from_secs(10),
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
@@ -573,6 +591,13 @@ impl ClientOptions {
                         args.next()
                             .expect("--profile-quicksave-path requires a snapshot path"),
                     ));
+                }
+                "--profile-warmup" => {
+                    let value = args
+                        .next()
+                        .expect("--profile-warmup requires a non-negative number of seconds");
+                    options.profile_warmup =
+                        parse_profile_warmup(&value).unwrap_or_else(|error| panic!("{error}"));
                 }
                 "--profile-duration" => {
                     let value = args
@@ -623,7 +648,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-duration SECONDS]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS]"
                     );
                     std::process::exit(0);
                 }
@@ -632,6 +657,16 @@ impl ClientOptions {
         }
         options
     }
+}
+
+fn parse_profile_warmup(value: &str) -> Result<Duration, String> {
+    let seconds = value
+        .parse::<f64>()
+        .map_err(|_| "--profile-warmup requires a non-negative number of seconds".to_owned())?;
+    if !seconds.is_finite() || seconds < 0.0 {
+        return Err("--profile-warmup requires a non-negative finite number of seconds".to_owned());
+    }
+    Ok(Duration::from_secs_f64(seconds))
 }
 
 fn parse_profile_duration(value: &str) -> Result<Duration, String> {
@@ -1498,6 +1533,18 @@ mod tests {
         );
         for invalid in ["0", "-1", "NaN", "inf", "later"] {
             assert!(parse_profile_duration(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn profiling_warmup_accepts_zero_and_fractional_seconds() {
+        assert_eq!(parse_profile_warmup("0").unwrap(), Duration::ZERO);
+        assert_eq!(
+            parse_profile_warmup("2.5").unwrap(),
+            Duration::from_millis(2_500)
+        );
+        for invalid in ["-1", "NaN", "inf", "later"] {
+            assert!(parse_profile_warmup(invalid).is_err(), "{invalid}");
         }
     }
 
