@@ -22,6 +22,10 @@ The client SHOULD use the full Bevy engine for:
 
 The authoritative simulation SHOULD remain a separate crate/module that can run identically in the headless server.
 
+### 2.1 Window state
+
+The native client starts in borderless fullscreen when no saved view state exists. Alt+Enter toggles between fullscreen and windowed mode. The client saves the current mode and the last windowed size and position when they change, and restores them on startup. Fullscreen monitor dimensions MUST NOT replace the saved windowed size. View state is client-local presentation data and does not affect authoritative simulation state.
+
 ## 3. Simulation/presentation boundary
 
 The client consumes completed authoritative simulation states and events.

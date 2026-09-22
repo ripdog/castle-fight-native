@@ -14,6 +14,7 @@ mod resource_ui;
 mod terrain;
 mod ui_icons;
 mod unit_models;
+mod view_state;
 mod wc3_effects;
 mod wc3_text;
 
@@ -63,6 +64,7 @@ use performance_ui::{
 use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
+use view_state::{ViewState, ViewStatePersistence, persist_view_state, toggle_fullscreen};
 
 const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 
@@ -358,8 +360,10 @@ fn main() {
         AuthoritativeSimulation::new(demo.simulation, demo.content)
     };
 
+    let view_state = ViewState::load();
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
+        .insert_resource(ViewStatePersistence::new(view_state))
         .insert_resource(Time::<Fixed>::from_hz(f64::from(
             CASTLE_FIGHT_SIMULATION_HZ,
         )))
@@ -390,7 +394,9 @@ fn main() {
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: window_title,
-                        resolution: (1440, 900).into(),
+                        resolution: (view_state.width, view_state.height).into(),
+                        mode: view_state.window_mode(),
+                        position: view_state.window_position(),
                         present_mode,
                         ..default()
                     }),
@@ -410,6 +416,7 @@ fn main() {
             DebugMenuPlugin,
         ))
         .add_systems(Startup, setup_simulation_pause_ui)
+        .add_systems(Update, (toggle_fullscreen, persist_view_state).chain())
         .add_systems(
             Update,
             (
