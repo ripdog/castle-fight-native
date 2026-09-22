@@ -29,6 +29,9 @@ const MAX_RIBBON_POINTS: usize = 512;
 #[derive(Component)]
 pub(crate) struct FrozenPausedSkinnedBounds;
 
+#[derive(Component, Clone, Copy)]
+pub(crate) struct SkinnedBoundsAnimationPlayer(Entity);
+
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
     projectile_by_rawcode: BTreeMap<u32, Wc3ProjectileVisual>,
@@ -595,9 +598,13 @@ type Wc3AnimationAssets<'w> = (
 pub fn freeze_unchanged_paused_skinned_bounds(
     mut commands: Commands,
     players: Query<(Entity, &AnimationPlayer), With<AnimationTransitions>>,
+    unassociated_skinned_meshes: Query<
+        (Entity, &SkinnedMesh),
+        Without<SkinnedBoundsAnimationPlayer>,
+    >,
     skinned_meshes: Query<(
         Entity,
-        &SkinnedMesh,
+        &SkinnedBoundsAnimationPlayer,
         Has<DynamicSkinnedMeshBounds>,
         Has<FrozenPausedSkinnedBounds>,
     )>,
@@ -632,16 +639,22 @@ pub fn freeze_unchanged_paused_skinned_bounds(
     let (last_poses, player_states) = &mut *cache;
     last_poses.retain(|entity, _| player_states.contains_key(entity));
 
-    for (entity, skin, has_dynamic_bounds, has_frozen_bounds) in &skinned_meshes {
-        let player = skin
+    for (entity, skin) in &unassociated_skinned_meshes {
+        let Some(player) = skin
             .joints
             .iter()
             .find_map(|joint| animation_targets.get(*joint).ok())
-            .map(|animated_by| animated_by.0);
-        let should_freeze = player
-            .and_then(|player| cache.1.get(&player))
-            .copied()
-            .unwrap_or(false);
+            .map(|animated_by| animated_by.0)
+        else {
+            continue;
+        };
+        commands
+            .entity(entity)
+            .insert(SkinnedBoundsAnimationPlayer(player));
+    }
+
+    for (entity, animation_player, has_dynamic_bounds, has_frozen_bounds) in &skinned_meshes {
+        let should_freeze = cache.1.get(&animation_player.0).copied().unwrap_or(false);
 
         if should_freeze && has_dynamic_bounds && !has_frozen_bounds {
             commands
