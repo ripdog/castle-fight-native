@@ -418,11 +418,6 @@ fn main() {
                 .chain(),
         )
         .add_systems(
-            Update,
-            wc3_effects::freeze_unchanged_paused_skinned_bounds
-                .after(performance_ui::finish_presentation_profile),
-        )
-        .add_systems(
             PostUpdate,
             wc3_effects::skip_unchanged_paused_animation_poses
                 .after(bevy::animation::advance_animations)
