@@ -24,6 +24,13 @@ const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
+const GAMEPLAY_ANIMATION_POSE_INTERVAL: f32 = 1.0 / 30.0;
+
+#[derive(Default)]
+pub(crate) struct GameplayAnimationPoseClock {
+    accumulated_seconds: f32,
+    initialized: bool,
+}
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
@@ -587,6 +594,38 @@ type Wc3AnimationAssets<'w> = (
     Res<'w, Assets<AnimationClip>>,
     ResMut<'w, Assets<AnimationGraph>>,
 );
+
+pub fn throttle_gameplay_animation_poses(
+    time: Res<Time>,
+    mut players: Query<
+        &mut AnimationPlayer,
+        (
+            With<AnimationTransitions>,
+            Without<Wc3VisualAnimationController>,
+        ),
+    >,
+    mut clock: Local<GameplayAnimationPoseClock>,
+) {
+    if !clock.initialized {
+        clock.initialized = true;
+        return;
+    }
+
+    clock.accumulated_seconds += time.delta_secs();
+    if clock.accumulated_seconds >= GAMEPLAY_ANIMATION_POSE_INTERVAL {
+        clock.accumulated_seconds %= GAMEPLAY_ANIMATION_POSE_INTERVAL;
+        return;
+    }
+
+    for mut player in &mut players {
+        if player.all_paused() {
+            continue;
+        }
+        for (_, animation) in player.playing_animations_mut() {
+            animation.set_weight(0.0);
+        }
+    }
+}
 
 pub fn skip_unchanged_paused_animation_poses(
     mut players: Query<(Entity, &mut AnimationPlayer), With<AnimationTransitions>>,

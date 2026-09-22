@@ -419,7 +419,11 @@ fn main() {
         )
         .add_systems(
             PostUpdate,
-            wc3_effects::skip_unchanged_paused_animation_poses
+            (
+                wc3_effects::throttle_gameplay_animation_poses,
+                wc3_effects::skip_unchanged_paused_animation_poses,
+            )
+                .chain()
                 .after(bevy::animation::advance_animations)
                 .before(bevy::animation::animate_targets),
         )
