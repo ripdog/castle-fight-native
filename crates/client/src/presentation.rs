@@ -112,6 +112,7 @@ const GUN_RECOIL_SECONDS: f32 = 0.16;
 const UNIT_WALK_BOB_HEIGHT: f32 = 0.55;
 const UNIT_WALK_PHASE_PER_TICK: f32 = 0.58;
 const UNIT_FACING_RESPONSE: f32 = 14.0;
+const UNIT_FACING_SNAP_RADIANS: f32 = 0.002;
 const MISS_INDICATOR_SECONDS: f32 = 1.0;
 const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
 const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
@@ -3144,13 +3145,15 @@ fn interpolate_render_transforms(
         };
         let position = ground_position + Vec3::Y * (BUILDER_HEIGHT * 0.5);
         if let Ok(mut transform) = transforms.get_mut(entry.entity) {
-            transform.translation = position;
+            if transform.translation != position {
+                transform.translation = position;
+            }
             if previous.position != current.position {
                 let delta =
                     sim_point_to_world(current.position) - sim_point_to_world(previous.position);
                 if delta.length_squared() > f32::EPSILON {
                     let desired = Quat::from_rotation_y(delta.x.atan2(delta.z));
-                    transform.rotation = transform.rotation.slerp(desired, facing_blend);
+                    update_facing_rotation(&mut transform, desired, facing_blend);
                 }
             }
         }
@@ -3169,7 +3172,11 @@ fn interpolate_render_transforms(
             &terrain,
         );
         let moving = previous.position != current.position;
-        let bob = unit_motion_bob(current.id, current.movement_class, render_tick, moving);
+        let bob = if entry.imported_rawcode.is_some() {
+            0.0
+        } else {
+            unit_motion_bob(current.id, current.movement_class, render_tick, moving)
+        };
         let position = ground_position + Vec3::Y * (unit_height(current) * 0.5 + bob);
         let desired_rotation =
             unit_facing_rotation(current, previous, &samples, &metrics, &terrain, alpha);
@@ -3178,7 +3185,7 @@ fn interpolate_render_transforms(
                 transform.translation = position;
             }
             if let Some(desired_rotation) = desired_rotation {
-                transform.rotation = transform.rotation.slerp(desired_rotation, facing_blend);
+                update_facing_rotation(&mut transform, desired_rotation, facing_blend);
             }
         }
         if let Some(stun_entity) = render_map.stun_effects.get(id)
@@ -3195,7 +3202,13 @@ fn interpolate_render_transforms(
         };
         let previous = samples.previous.units.get(&key.target).unwrap_or(current);
         let moving = previous.position != current.position;
-        let bob = unit_motion_bob(current.id, current.movement_class, render_tick, moving);
+        let bob = render_map.units.get(&key.target).map_or(0.0, |entry| {
+            if entry.imported_rawcode.is_some() {
+                0.0
+            } else {
+                unit_motion_bob(current.id, current.movement_class, render_tick, moving)
+            }
+        });
         let position = unit_ground_position_lerp(
             previous.position,
             current.position,
@@ -3214,6 +3227,14 @@ fn interpolate_render_transforms(
         let Some(entry) = render_map.buildings.get(id) else {
             continue;
         };
+        let previous = samples.previous.buildings.get(id).unwrap_or(current);
+        let has_stun_effect = render_map.stun_effects.contains_key(id);
+        if !has_stun_effect
+            && previous.footprint == current.footprint
+            && previous.visual_kind == current.visual_kind
+        {
+            continue;
+        }
         let (mut center, _) = metrics.footprint_center_size(current.footprint);
         center.y = building_terrain_height(&metrics, &terrain, current.footprint);
         let position = Vec3::new(
@@ -3375,6 +3396,17 @@ fn unit_facing_rotation(
 
 fn facing_rotation(direction: Vec3) -> Quat {
     Quat::from_rotation_y(direction.x.atan2(direction.z))
+}
+
+fn update_facing_rotation(transform: &mut Transform, desired: Quat, blend: f32) {
+    let angle = transform.rotation.angle_between(desired);
+    if angle <= UNIT_FACING_SNAP_RADIANS {
+        if transform.rotation != desired {
+            transform.rotation = desired;
+        }
+        return;
+    }
+    transform.rotation = transform.rotation.slerp(desired, blend);
 }
 
 fn unit_motion_bob(

@@ -13,12 +13,8 @@ The first multiplayer milestone uses the existing five combat units, five produc
 ## Instructions for Sol
 
 - Work through the numbered steps in order. Each step may require several small commits; the suggested commit boundaries below are not requests for one large commit per step.
-- Re-read `AGENTS.md`, inspect the current branch/diff, and reconcile this plan with work completed since the review before editing. The original review found unrelated uncommitted extractor changes under `tools/wc3-map` and `docs/original_map`, plus a new 9.32 archive. Preserve them; do not reset, overwrite, or include them in unrelated commits.
-- The user requested **no tests or builds** in this conversation. Do not execute them while that instruction remains in force. Author focused regression cases with behavior changes, perform static review, and explicitly record executable verification as pending. The acceptance scenarios below describe required evidence, not permission to run commands or a claim that they already pass.
-- When execution is authorized, compile-heavy Cargo commands must use `tools/cargo-interactive` through asynchronous Devspace tasks, with output inspected through task APIs. Respect the six-job cap. Follow repository requirements for formatting, linting, relevant tests, and builds.
 - Commit completed work automatically in narrowly scoped chunks. Distinguish implemented work from verified work in handoff notes; do not report an unexecuted gate as passed.
 - Update the affected normative specs whenever behavior changes. Preserve current phase order during mechanical refactors. Explicitly version intentional simulation-semantic changes.
-- This plan is for the implementation agent to execute sequentially. It does not require delegation or new agent tasks.
 
 ## Existing work to preserve
 

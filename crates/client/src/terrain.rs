@@ -30,6 +30,8 @@ pub struct TerrainSurface {
     origin_world: Vec2,
     tile_world: f32,
     max_world: Vec2,
+    vertex_width: usize,
+    vertex_heights: Vec<f32>,
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -118,11 +120,23 @@ impl TerrainSurface {
         let origin = elevation.origin();
         let maximum = elevation.max_point();
         let subunits = SUBUNITS_PER_WORLD_UNIT as f32;
+        let vertex_width =
+            usize::try_from(elevation.width_tiles()).expect("terrain width fits usize") + 1;
+        let vertex_height =
+            usize::try_from(elevation.height_tiles()).expect("terrain height fits usize") + 1;
+        let mut vertex_heights = Vec::with_capacity(vertex_width * vertex_height);
+        for y in 0..=elevation.height_tiles() {
+            for x in 0..=elevation.width_tiles() {
+                vertex_heights.push(sample_height(elevation.vertex_sample(x, y)));
+            }
+        }
         Self {
             origin_world: Vec2::new(origin.x as f32 / subunits, origin.y as f32 / subunits),
             tile_world: elevation.tile_size() as f32 / subunits,
             max_world: Vec2::new(maximum.x as f32 / subunits, maximum.y as f32 / subunits),
             elevation,
+            vertex_width,
+            vertex_heights,
         }
     }
 
@@ -190,9 +204,9 @@ impl TerrainSurface {
     }
 
     fn vertex_height_clamped(&self, x: i32, y: i32) -> f32 {
-        let vertex_x = x.clamp(0, self.elevation.width_tiles() as i32) as u32;
-        let vertex_y = y.clamp(0, self.elevation.height_tiles() as i32) as u32;
-        sample_height(self.elevation.vertex_sample(vertex_x, vertex_y))
+        let vertex_x = x.clamp(0, self.elevation.width_tiles() as i32) as usize;
+        let vertex_y = y.clamp(0, self.elevation.height_tiles() as i32) as usize;
+        self.vertex_heights[vertex_y * self.vertex_width + vertex_x]
     }
 
     fn position_at_grid(&self, grid: Vec2) -> [f32; 3] {
