@@ -271,7 +271,10 @@ mod tests {
             !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(60, 0, 4, 4))
         );
         assert!(
-            simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(65, 0, 4, 4))
+            !simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(65, 0, 4, 4))
+        );
+        assert!(
+            simulation.can_place_building_for_team(Team(1), BuildingFootprint::new(65, 20, 4, 4))
         );
     }
 }

@@ -428,7 +428,7 @@ mod tests {
             .builder_for_player(PlayerId(0))
             .expect("western builder");
         let barracks = CastleFightProductionKind::Barracks.stable_id();
-        let footprint = BuildingFootprint::new(-138, 2, 4, 4);
+        let footprint = BuildingFootprint::new(-138, 16, 4, 4);
         let command = PlayerCommand::PlaceBuilding {
             builder: builder.id,
             building: barracks,
@@ -554,7 +554,7 @@ mod tests {
         let command = PlayerCommand::PlaceBuilding {
             builder: builder.id,
             building: CastleFightTowerKind::WatchTower.stable_id(),
-            position: BuildPosition::new(-138, 2),
+            position: BuildPosition::new(-138, 16),
         };
         assert_eq!(
             admit_player_command(&game.simulation, game.content, PlayerId(0), command),

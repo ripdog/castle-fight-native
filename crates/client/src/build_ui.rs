@@ -2208,7 +2208,7 @@ mod tests {
             .unwrap();
         let mut simulation = demo.simulation;
         let tower_id = simulation.spawn_building_with_properties(
-            tower.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
+            tower.spawn(Team(0), BuildingFootprint::new(-120, 16, 4, 4)),
             tower.gameplay_properties(),
         );
         let state = ActionPanelState {
@@ -2281,7 +2281,7 @@ mod tests {
             .unwrap();
         let mut simulation = demo.simulation;
         let barracks_id = simulation.spawn_building_with_properties(
-            barracks.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 16, 4, 4)),
             barracks.gameplay_properties(),
         );
         let state = ActionPanelState {
@@ -2335,11 +2335,11 @@ mod tests {
             .unwrap();
         let mut simulation = demo.simulation;
         let first = simulation.spawn_building_with_properties(
-            barracks.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 16, 4, 4)),
             barracks.gameplay_properties(),
         );
         let second = simulation.spawn_building_with_properties(
-            barracks.spawn(Team(0), BuildingFootprint::new(-112, 0, 4, 4)),
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 24, 4, 4)),
             barracks.gameplay_properties(),
         );
         let state = ActionPanelState {
@@ -2385,7 +2385,7 @@ mod tests {
             .unwrap();
         let mut simulation = demo.simulation;
         let barracks_id = simulation.spawn_building_with_properties(
-            barracks.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 16, 4, 4)),
             barracks.gameplay_properties(),
         );
         let state = ActionPanelState {

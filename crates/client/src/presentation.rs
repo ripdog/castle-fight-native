@@ -138,7 +138,7 @@ pub struct WorldMetrics {
     navigation_max: IVec2,
     build_regions: Vec<BuildingFootprint>,
     team_build_regions: [Vec<BuildingFootprint>; 2],
-    targetless_lane_world: Option<(f32, f32)>,
+    build_static_blockers: Vec<BuildingFootprint>,
     camera_focus_min_world: Vec2,
     camera_focus_max_world: Vec2,
 }
@@ -183,12 +183,12 @@ impl WorldMetrics {
             navigation_max,
             build_regions,
             team_build_regions,
-            targetless_lane_world: config.targetless_lane.map(|lane| {
-                (
-                    lane.min_y as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
-                    lane.max_y as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
-                )
-            }),
+            build_static_blockers: config
+                .static_blockers
+                .iter()
+                .chain(&config.build_static_blockers)
+                .copied()
+                .collect(),
             camera_focus_min_world: navigation_min.as_vec2() * navigation_cell_world,
             camera_focus_max_world: (navigation_max + IVec2::ONE).as_vec2() * navigation_cell_world,
         }
@@ -287,9 +287,17 @@ impl WorldMetrics {
         ))
     }
 
-    fn map_grid_lane_exclusion_world(&self, spacing: f32) -> Option<(f32, f32)> {
-        self.targetless_lane_world
-            .map(|(min_y, max_y)| (min_y - spacing * 0.5, max_y + spacing * 0.5))
+    fn map_grid_cell_unblocked(&self, world: Vec2) -> bool {
+        let cell = IVec2::new(
+            (world.x / self.navigation_cell_world()).floor() as i32,
+            (world.y / self.navigation_cell_world()).floor() as i32,
+        );
+        !self.build_static_blockers.iter().any(|blocker| {
+            cell.x >= blocker.min_x
+                && cell.x <= blocker.max_x()
+                && cell.y >= blocker.min_y
+                && cell.y <= blocker.max_y()
+        })
     }
 
     fn world_min(&self) -> Vec2 {
@@ -4269,7 +4277,7 @@ fn draw_map_grid_region(
         min,
         max,
         segment_length: layout.spacing,
-        lane_exclusion: metrics.map_grid_lane_exclusion_world(layout.spacing),
+        metrics,
     };
 
     for index in 0..horizontal.line_count {
@@ -4319,66 +4327,41 @@ fn draw_map_grid_region(
 }
 
 #[derive(Debug, Clone, Copy)]
-struct MapGridClip {
+struct MapGridClip<'a> {
     min: Vec2,
     max: Vec2,
     segment_length: f32,
-    lane_exclusion: Option<(f32, f32)>,
+    metrics: &'a WorldMetrics,
 }
 
 fn draw_map_grid_x_line_clipped(
     gizmos: &mut Gizmos<MapGridGizmos>,
     terrain: &TerrainSurface,
-    clip: MapGridClip,
+    clip: MapGridClip<'_>,
     x: f32,
     color: Color,
 ) {
-    let Some((lane_min, lane_max)) = clip.lane_exclusion else {
-        draw_map_grid_x_line(
-            gizmos,
-            terrain,
-            clip.min,
-            clip.max,
-            x,
-            clip.segment_length,
-            color,
-        );
-        return;
-    };
-    if lane_max <= clip.min.y || lane_min >= clip.max.y {
-        draw_map_grid_x_line(
-            gizmos,
-            terrain,
-            clip.min,
-            clip.max,
-            x,
-            clip.segment_length,
-            color,
-        );
+    if x < clip.min.x || x > clip.max.x {
         return;
     }
-
-    if lane_min > clip.min.y {
-        draw_map_grid_x_line(
-            gizmos,
-            terrain,
-            clip.min,
-            Vec2::new(clip.max.x, lane_min.min(clip.max.y)),
-            x,
-            clip.segment_length,
-            color,
-        );
-    }
-    if lane_max < clip.max.y {
-        draw_map_grid_x_line(
-            gizmos,
-            terrain,
-            Vec2::new(clip.min.x, lane_max.max(clip.min.y)),
-            clip.max,
-            x,
-            clip.segment_length,
-            color,
-        );
+    let segment_count = ((clip.max.y - clip.min.y) / clip.segment_length).ceil() as u32;
+    for segment in 0..segment_count {
+        let y0 = clip.min.y + segment as f32 * clip.segment_length;
+        let y1 = (y0 + clip.segment_length).min(clip.max.y);
+        if clip
+            .metrics
+            .map_grid_cell_unblocked(Vec2::new(x, (y0 + y1) * 0.5))
+        {
+            draw_map_grid_x_line(
+                gizmos,
+                terrain,
+                Vec2::new(clip.min.x, y0),
+                Vec2::new(clip.max.x, y1),
+                x,
+                clip.segment_length,
+                color,
+            );
+        }
     }
 }
 
@@ -4415,25 +4398,32 @@ fn draw_map_grid_x_line(
 fn draw_map_grid_z_line_clipped(
     gizmos: &mut Gizmos<MapGridGizmos>,
     terrain: &TerrainSurface,
-    clip: MapGridClip,
+    clip: MapGridClip<'_>,
     z: f32,
     color: Color,
 ) {
-    if clip
-        .lane_exclusion
-        .is_some_and(|(lane_min, lane_max)| z > lane_min && z < lane_max)
-    {
+    if z < clip.min.y || z > clip.max.y {
         return;
     }
-    draw_map_grid_z_line(
-        gizmos,
-        terrain,
-        clip.min,
-        clip.max,
-        z,
-        clip.segment_length,
-        color,
-    );
+    let segment_count = ((clip.max.x - clip.min.x) / clip.segment_length).ceil() as u32;
+    for segment in 0..segment_count {
+        let x0 = clip.min.x + segment as f32 * clip.segment_length;
+        let x1 = (x0 + clip.segment_length).min(clip.max.x);
+        if clip
+            .metrics
+            .map_grid_cell_unblocked(Vec2::new((x0 + x1) * 0.5, z))
+        {
+            draw_map_grid_z_line(
+                gizmos,
+                terrain,
+                Vec2::new(x0, clip.min.y),
+                Vec2::new(x1, clip.max.y),
+                z,
+                clip.segment_length,
+                color,
+            );
+        }
+    }
 }
 
 fn draw_map_grid_z_line(
@@ -5060,9 +5050,19 @@ mod tests {
         assert_eq!(demo.metrics.buildable_world_x_bounds(), (-6_176.0, 6_176.0));
 
         let spacing = demo.metrics.navigation_cell_world() * 4.0;
-        assert_eq!(
-            demo.metrics.map_grid_lane_exclusion_world(spacing),
-            Some((-448.0, 448.0))
+        assert!(
+            !demo
+                .metrics
+                .map_grid_cell_unblocked(Vec2::new(4_000.0, 0.0))
+        );
+        assert!(
+            !demo
+                .metrics
+                .map_grid_cell_unblocked(Vec2::new(5_600.0, 320.0))
+        );
+        assert!(
+            demo.metrics
+                .map_grid_cell_unblocked(Vec2::new(5_600.0, 0.0))
         );
 
         // Grid lines bound build squares. The left keeps its authored phase, while the right

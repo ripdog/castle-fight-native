@@ -33,6 +33,10 @@ const STRATEGIC_LANE_MAX_Y_WORLD: i32 = 384;
 const CASTLE_CENTER_X_WORLD: i32 = 4_992;
 const BUILDER_START_X_WORLD: i32 = 4_352;
 const CASTLE_PATHING_SIZE_CELLS: u16 = 16;
+// The 9.27 road is seven 128-world-unit building rows wide. Behind each castle,
+// its middle three rows are mossy ground where buildings are allowed.
+const ROAD_HALF_WIDTH_WORLD: i32 = 448;
+const REAR_MOSS_HALF_WIDTH_WORLD: i32 = 192;
 const DEVELOPMENT_CASTLE_HEALTH: i32 = 20_000;
 const DEVELOPMENT_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
 const WALL_DOODAD_RAWCODES: [&str; 6] = ["B002", "B003", "D000", "D001", "D002", "D003"];
@@ -532,6 +536,53 @@ fn simulation_config_927(
     air_static_blockers.extend(side_dead_space_blockers);
     air_static_blockers.extend(original_air_pathing_blockers());
 
+    let mut build_static_blockers = original_doodad_build_blockers();
+    let castle_half_size = i32::from(CASTLE_PATHING_SIZE_CELLS) * NAV_CELL_WORLD / 2;
+    for (inner_x, castle_front_x, castle_rear_x, rear_x) in [
+        (
+            LEFT_BUILD_MAX_X_WORLD,
+            -CASTLE_CENTER_X_WORLD + castle_half_size,
+            -CASTLE_CENTER_X_WORLD - castle_half_size,
+            LEFT_BUILD_MIN_X_WORLD,
+        ),
+        (
+            RIGHT_BUILD_MIN_X_WORLD,
+            CASTLE_CENTER_X_WORLD - castle_half_size,
+            CASTLE_CENTER_X_WORLD + castle_half_size,
+            RIGHT_BUILD_MAX_X_WORLD,
+        ),
+    ] {
+        let (path_min_x, path_max_x) = (inner_x.min(castle_front_x), inner_x.max(castle_front_x));
+        build_static_blockers.push(world_rect_footprint(
+            path_min_x,
+            -ROAD_HALF_WIDTH_WORLD,
+            path_max_x,
+            ROAD_HALF_WIDTH_WORLD,
+        ));
+        let (castle_min_x, castle_max_x) = (
+            castle_front_x.min(castle_rear_x),
+            castle_front_x.max(castle_rear_x),
+        );
+        for (min_y, max_y) in [
+            (-ROAD_HALF_WIDTH_WORLD, -castle_half_size),
+            (castle_half_size, ROAD_HALF_WIDTH_WORLD),
+        ] {
+            build_static_blockers.push(world_rect_footprint(
+                castle_min_x,
+                min_y,
+                castle_max_x,
+                max_y,
+            ));
+        }
+        let (rear_min_x, rear_max_x) = (castle_rear_x.min(rear_x), castle_rear_x.max(rear_x));
+        for (min_y, max_y) in [
+            (-ROAD_HALF_WIDTH_WORLD, -REAR_MOSS_HALF_WIDTH_WORLD),
+            (REAR_MOSS_HALF_WIDTH_WORLD, ROAD_HALF_WIDTH_WORLD),
+        ] {
+            build_static_blockers.push(world_rect_footprint(rear_min_x, min_y, rear_max_x, max_y));
+        }
+    }
+
     SimulationConfig {
         match_seed,
         spatial_cell_size: 256 * SUBUNITS_PER_WORLD_UNIT,
@@ -543,7 +594,7 @@ fn simulation_config_927(
         max_separation_per_tick: SUBUNITS_PER_WORLD_UNIT,
         static_blockers,
         air_static_blockers,
-        build_static_blockers: original_doodad_build_blockers(),
+        build_static_blockers,
         team_build_regions: [vec![left_build_region], vec![right_build_region]],
         targetless_lane: Some(TargetlessLane::new(
             STRATEGIC_LANE_MIN_Y_WORLD * SUBUNITS_PER_WORLD_UNIT,
@@ -1170,7 +1221,7 @@ mod tests {
             .content
             .production_building(CastleFightProductionKind::Barracks)
             .expect("Barracks in development content");
-        let footprint = BuildingFootprint::new(-138, 2, 4, 4);
+        let footprint = BuildingFootprint::new(-138, 16, 4, 4);
         game.simulation
             .order_builder_purchase_building_with_properties_as(
                 PlayerId(0),
@@ -1194,15 +1245,14 @@ mod tests {
             250
         );
 
-        game.simulation.step();
-        let building = game
-            .simulation
-            .buildings()
-            .into_iter()
-            .find(|building| {
-                building.content.map(|content| content.rawcode) == Some(barracks.rawcode)
+        let building = (0..64)
+            .find_map(|_| {
+                game.simulation.step();
+                game.simulation.buildings().into_iter().find(|building| {
+                    building.content.map(|content| content.rawcode) == Some(barracks.rawcode)
+                })
             })
-            .expect("builder should begin Barracks construction");
+            .expect("builder should reach the legal Barracks site and begin construction");
         assert_eq!(building.owner, Some(PlayerId(0)));
         assert_eq!(building.team, Team(0));
         assert!(building.construction_complete_tick.is_some());
@@ -1261,7 +1311,7 @@ mod tests {
             .content
             .production_building(CastleFightProductionKind::Barracks)
             .expect("Barracks in development content");
-        let building = barracks.spawn(Team(0), BuildingFootprint::new(-138, 8, 4, 4));
+        let building = barracks.spawn(Team(0), BuildingFootprint::new(-138, 16, 4, 4));
         let initial_delay = building
             .production
             .expect("Barracks must produce units")
@@ -1531,5 +1581,70 @@ mod tests {
         );
         assert!(resolved.terrain.origin().x < navigation_min_x);
         assert!(resolved.terrain.max_point().x > navigation_max_x);
+    }
+
+    #[test]
+    fn road_placement_blocks_seven_rows_but_keeps_rear_moss_buildable() {
+        let config =
+            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 42)
+                .unwrap();
+        let game = create_castle_fight_match(config, 1).unwrap();
+
+        for (team, side) in [(Team(0), -1), (Team(1), 1)] {
+            let footprint = |x: i32, y: i32| world_rect_footprint(x - 64, y - 64, x + 64, y + 64);
+            let front_x = side * 4_000;
+            let rear_x = side * 5_600;
+            assert!(
+                !game
+                    .simulation
+                    .can_place_building_for_team(team, footprint(front_x, 0))
+            );
+            assert!(
+                !game
+                    .simulation
+                    .can_place_building_for_team(team, footprint(front_x, 384))
+            );
+            assert!(
+                !game
+                    .simulation
+                    .can_place_building_for_team(team, footprint(front_x, -384))
+            );
+            assert!(
+                game.simulation
+                    .can_place_building_for_team(team, footprint(front_x, 512))
+            );
+            assert!(
+                game.simulation
+                    .can_place_building_for_team(team, footprint(front_x, -512))
+            );
+            assert!(
+                game.simulation
+                    .can_place_building_for_team(team, footprint(rear_x, 0))
+            );
+            assert!(
+                game.simulation
+                    .can_place_building_for_team(team, footprint(rear_x, 128))
+            );
+            assert!(
+                game.simulation
+                    .can_place_building_for_team(team, footprint(rear_x, -128))
+            );
+            assert!(
+                !game.simulation.can_place_building_for_team(
+                    team,
+                    footprint(side * CASTLE_CENTER_X_WORLD, 384)
+                )
+            );
+            assert!(
+                !game
+                    .simulation
+                    .can_place_building_for_team(team, footprint(rear_x, 320))
+            );
+            assert!(
+                !game
+                    .simulation
+                    .can_place_building_for_team(team, footprint(rear_x, -320))
+            );
+        }
     }
 }

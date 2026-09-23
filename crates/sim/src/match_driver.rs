@@ -602,7 +602,7 @@ mod tests {
         let command = PlayerCommand::PlaceBuilding {
             builder: builder.id,
             building: CastleFightProductionKind::Barracks.stable_id(),
-            position: crate::BuildPosition::new(-138, 2),
+            position: crate::BuildPosition::new(-138, 16),
         };
         let sequence = ClientCommandSequence(0);
         let first = driver
@@ -680,7 +680,7 @@ mod tests {
         let first_builder = game.simulation.builder_for_player(PlayerId(0)).unwrap();
         let second_builder = game.simulation.builder_for_player(PlayerId(1)).unwrap();
         let building = CastleFightProductionKind::Barracks.stable_id();
-        let position = crate::BuildPosition::new(-138, 2);
+        let position = crate::BuildPosition::new(-138, 16);
         let first = PlayerCommand::PlaceBuilding {
             builder: first_builder.id,
             building,
@@ -769,7 +769,7 @@ mod tests {
         let command = PlayerCommand::PlaceBuilding {
             builder: builder.id,
             building: CastleFightProductionKind::Barracks.stable_id(),
-            position: crate::BuildPosition::new(-138, 2),
+            position: crate::BuildPosition::new(-138, 16),
         };
         let sequence = ClientCommandSequence(0);
         let finalized = FinalizedTickInputs {

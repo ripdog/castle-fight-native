@@ -56,6 +56,8 @@ The builder's movement is authoritative because its position may matter to build
 
 Building placement and builder movement are restricted to the owning team's authoritative build area. In the standard map this is the team's third of the battlefield; map content defines the exact canonical region.
 
+For Castle Fight 9.27, the central stone road inside each base is placement-blocked across seven 128-world-unit building rows (`y = -448..448`). The full road band remains blocked from the inner base edge to the castle's front edge, and the stone strips beside the castle remain blocked. Behind the castle, only the two stone strips (`y = -448..-192` and `192..448`) are blocked; the three middle mossy rows (`y = -192..192`) are buildable, subject to ordinary occupancy and authored doodad pathing. These road exclusions block building placement without changing unit navigation or the strategic movement lane. The optional map grid clips to the same static placement blockers so it shows the rear mossy cells.
+
 Recommended client placement flow:
 
 1. player activates Build and selects a buildable type from the build submenu;

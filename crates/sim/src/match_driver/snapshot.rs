@@ -346,7 +346,7 @@ mod tests {
         let command = PlayerCommand::PlaceBuilding {
             builder: builder.id,
             building: CastleFightProductionKind::Barracks.stable_id(),
-            position: BuildPosition::new(-138, 2),
+            position: BuildPosition::new(-138, 16),
         };
         let sequence = ClientCommandSequence(0);
         let scheduled = original_driver
