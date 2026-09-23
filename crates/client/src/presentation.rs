@@ -121,9 +121,9 @@ const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 pub(crate) const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
 const CAMERA_EDGE_SCROLL_MARGIN: f32 = 8.0;
 const CAMERA_PAN_SPEED_WORLD_PER_SECOND: f32 = 6_000.0;
-const CAMERA_DEFAULT_DISTANCE_FACTOR: f32 = 0.60;
+const CAMERA_DEFAULT_DISTANCE_WORLD: f32 = 4_500.0;
 const CAMERA_MIN_DISTANCE_FACTOR: f32 = 0.20;
-const CAMERA_MAX_DISTANCE_FACTOR: f32 = 1.25;
+const CAMERA_MAX_DISTANCE_WORLD: f32 = 8_000.0;
 const SIDE_TERRAIN_MASK_COLOR: Color = Color::srgb(0.006, 0.009, 0.006);
 const MAP_GRID_HEIGHT_OFFSET: f32 = 0.35;
 const MAP_GRID_MAJOR_INTERVAL: i32 = 4;
@@ -1184,7 +1184,6 @@ fn setup_scene(
         lightning_material,
     });
 
-    let world_size = metrics.world_size();
     let mut world_center = metrics.world_center();
     world_center.y = terrain.height_at_world(world_center.xz());
     let ground_mesh = meshes.add(terrain.mesh());
@@ -1257,7 +1256,7 @@ fn setup_scene(
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.75, 0.0)),
     ));
 
-    let distance = world_size.max_element() * CAMERA_DEFAULT_DISTANCE_FACTOR;
+    let distance = CAMERA_DEFAULT_DISTANCE_WORLD;
     let rig = RtsCamera {
         focus: world_center,
         distance,
@@ -4677,12 +4676,12 @@ fn update_camera(
     let world_size = resources.metrics.world_size();
     rig.distance = rig.distance.clamp(
         world_size.min_element() * CAMERA_MIN_DISTANCE_FACTOR,
-        world_size.max_element() * CAMERA_MAX_DISTANCE_FACTOR,
+        CAMERA_MAX_DISTANCE_WORLD,
     );
     if resources.keys.just_pressed(KeyCode::Home) {
         rig.focus = resources.metrics.world_center();
         rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
-        rig.distance = world_size.max_element() * CAMERA_DEFAULT_DISTANCE_FACTOR;
+        rig.distance = CAMERA_DEFAULT_DISTANCE_WORLD;
         rig.yaw = 0.0;
     }
 
@@ -5436,7 +5435,7 @@ mod tests {
         };
         let mut far = RtsCamera {
             focus: Vec3::ZERO,
-            distance: 16_000.0,
+            distance: 8_000.0,
             yaw: 0.0,
             grab_anchor: None,
         };

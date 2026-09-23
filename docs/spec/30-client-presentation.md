@@ -242,7 +242,7 @@ Expected RTS controls may include:
 
 Screen-edge panning uses a narrow logical-pixel band at each viewport edge, combines both axes at corners, and follows the same camera-relative pan directions/speed as keyboard panning. Pan speed is constant in world units per second, independent of zoom distance. It is disabled while middle-mouse drag panning is active and when the window is not focused. Camera movement MUST NOT modify the authoritative simulation.
 
-The current client pans at 6,000 world units per second. Its initial camera distance is 0.60 times the longer map dimension, with minimum 0.20 times the shorter dimension and maximum 1.25 times the longer dimension. These are cosmetic client settings and can be tuned without changing gameplay content.
+The current client pans at 6,000 world units per second. Its initial camera distance is 4,500 world units, with a minimum of 0.20 times the shorter map dimension and a maximum of 8,000 world units. These are cosmetic client settings and can be tuned without changing gameplay content.
 
 ## 14. Selection/inspection and builder presentation
 
