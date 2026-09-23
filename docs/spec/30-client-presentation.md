@@ -228,7 +228,7 @@ A useful code-level boundary is separate RNG types/modules for:
 
 ## 13. Camera
 
-The camera is purely client-local.
+The camera is purely client-local. On match startup, its focus is the local player's builder spawn position, including the builder's terrain height. If that builder is absent from the initial presentation snapshot, the focus falls back to the map center. The focus remains within the client camera bounds.
 
 Expected RTS controls may include:
 

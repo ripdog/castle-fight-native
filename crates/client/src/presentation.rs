@@ -959,6 +959,28 @@ impl Plugin for CastlePresentationPlugin {
     }
 }
 
+fn initial_camera_focus(
+    local_player: PlayerId,
+    samples: &PresentationSamples,
+    metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
+) -> Vec3 {
+    let focus = samples
+        .current
+        .builders
+        .values()
+        .find(|builder| builder.owner == local_player)
+        .map_or_else(
+            || {
+                let mut center = metrics.world_center();
+                center.y = terrain.height_at_world(center.xz());
+                center
+            },
+            |builder| sim_point_to_terrain_world(builder.position, terrain),
+        );
+    metrics.clamp_focus(focus)
+}
+
 fn setup_scene(
     mut commands: Commands,
     model_sets: (
@@ -967,6 +989,7 @@ fn setup_scene(
         ResMut<Wc3VisualSet>,
     ),
     selected_match: Res<SelectedMatch>,
+    samples: Res<PresentationSamples>,
     world: (
         Res<WorldMetrics>,
         Res<TerrainSurface>,
@@ -1184,8 +1207,8 @@ fn setup_scene(
         lightning_material,
     });
 
-    let mut world_center = metrics.world_center();
-    world_center.y = terrain.height_at_world(world_center.xz());
+    let initial_camera_focus =
+        initial_camera_focus(selected_match.local_player, &samples, &metrics, &terrain);
     let ground_mesh = meshes.add(terrain.mesh());
     let ground_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.16, 0.20, 0.13),
@@ -1258,7 +1281,7 @@ fn setup_scene(
 
     let distance = CAMERA_DEFAULT_DISTANCE_WORLD;
     let rig = RtsCamera {
-        focus: world_center,
+        focus: initial_camera_focus,
         distance,
         yaw: 0.0,
         grab_anchor: None,
@@ -5002,6 +5025,7 @@ mod tests {
     use castle_fight_sim::{CorpseDefinitionId, NavCell, Team, TerrainElevationMap};
 
     use super::*;
+    use crate::bridge::PresentationSnapshot;
 
     fn original_terrain() -> TerrainSurface {
         TerrainSurface::new(
@@ -5454,6 +5478,26 @@ mod tests {
         pan_camera_focus(&mut far, Vec3::X, 0.5);
         assert_eq!(near.focus, far.focus);
         assert_eq!(near.focus, Vec3::new(3_000.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn initial_camera_focus_uses_local_players_builder() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let samples = PresentationSamples::new(PresentationSnapshot::capture(&demo.simulation));
+        let terrain = TerrainSurface::new(demo.terrain);
+
+        for player in [PlayerId(0), PlayerId(6)] {
+            let builder = samples
+                .current
+                .builders
+                .values()
+                .find(|builder| builder.owner == player)
+                .expect("development player has a builder");
+            assert_eq!(
+                initial_camera_focus(player, &samples, &demo.metrics, &terrain),
+                sim_point_to_terrain_world(builder.position, &terrain)
+            );
+        }
     }
 
     #[test]
