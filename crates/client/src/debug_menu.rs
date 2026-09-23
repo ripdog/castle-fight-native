@@ -776,6 +776,41 @@ mod tests {
     }
 
     #[test]
+    fn control_all_players_uses_the_selected_actors_owner_for_commands() {
+        let mut demo = crate::demo::create_demo_world(1, None);
+        let (spawned, _) = populate_debug_building_lines(&mut demo.simulation, demo.content);
+        assert!(spawned > 0);
+        let simulation = &demo.simulation;
+        let other_builder = simulation.builder_for_team(Team(1)).unwrap();
+        let other_building = simulation
+            .buildings()
+            .into_iter()
+            .find(|building| building.owner == Some(other_builder.owner))
+            .unwrap();
+        let local = PlayerId(0);
+        let normal = DebugMenuState::default();
+        assert!(!normal.can_control_builder(simulation, local, other_builder.id));
+        assert!(!normal.can_control_building(simulation, local, other_building.id));
+
+        let debug = DebugMenuState {
+            control_all_players: true,
+            ..DebugMenuState::default()
+        };
+        assert!(debug.can_control_builder(simulation, local, other_builder.id));
+        assert!(debug.can_control_building(simulation, local, other_building.id));
+        assert_eq!(
+            debug.controller_for_actor(simulation, local, other_builder.id),
+            other_builder.owner
+        );
+        assert!(simulation.can_player_control_builder(other_builder.owner, other_builder.id));
+        assert_eq!(
+            debug.controller_for_actor(simulation, local, other_building.id),
+            other_builder.owner
+        );
+        assert!(simulation.can_player_control_building(other_builder.owner, other_building.id));
+    }
+
+    #[test]
     fn debug_population_builds_complete_vertical_rosters_behind_both_castles() {
         let mut demo = crate::demo::create_demo_world(1, None);
         let content = demo.content;

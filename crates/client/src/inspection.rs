@@ -695,41 +695,27 @@ pub(crate) fn handle_world_selection(
     let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
         return;
     };
-    if let Some((id, owner)) =
+    if let Some(id) =
         pick_world_actor_on_ray(ray.origin, *ray.direction, &state.samples, &terrain, alpha)
     {
-        if owner == input.selected_match.local_player {
-            select_click(
-                id,
-                &input.keys,
-                &input.time,
-                &selection_view,
-                input.selected_match.local_player,
-                &mut selection,
-            );
-        }
+        select_click(
+            id,
+            &input.keys,
+            &input.time,
+            &selection_view,
+            &mut selection,
+        );
         return;
     }
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
         return;
     };
-    if let Some(building) = pick_building_at_ground(world, &state.samples, &metrics).filter(|id| {
-        let building = &state.samples.current.buildings[id];
-        building.owner == Some(input.selected_match.local_player)
-            || (building.production_queue.is_some()
-                && state
-                    .samples
-                    .current
-                    .players
-                    .get(&input.selected_match.local_player)
-                    .is_some_and(|player| player.team == building.team))
-    }) {
+    if let Some(building) = pick_building_at_ground(world, &state.samples, &metrics) {
         select_click(
             building,
             &input.keys,
             &input.time,
             &selection_view,
-            input.selected_match.local_player,
             &mut selection,
         );
     }
@@ -741,15 +727,14 @@ fn pick_world_actor_on_ray(
     samples: &PresentationSamples,
     terrain: &TerrainSurface,
     alpha: f32,
-) -> Option<(SimId, PlayerId)> {
-    let mut nearest: Option<(f32, SimId, PlayerId)> = None;
-    let mut consider = |id: SimId, owner: PlayerId, center: Vec3, radius: f32| {
+) -> Option<SimId> {
+    let mut nearest: Option<(f32, SimId)> = None;
+    let mut consider = |id: SimId, center: Vec3, radius: f32| {
         if let Some(distance) = ray_sphere_hit_distance(ray_origin, ray_direction, center, radius)
-            && nearest.is_none_or(|(best, best_id, _)| {
-                distance < best || (distance == best && id < best_id)
-            })
+            && nearest
+                .is_none_or(|(best, best_id)| distance < best || (distance == best && id < best_id))
         {
-            nearest = Some((distance, id, owner));
+            nearest = Some((distance, id));
         }
     };
     for builder in samples.current.builders.values() {
@@ -763,7 +748,6 @@ fn pick_world_actor_on_ray(
                 + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5);
         consider(
             builder.id,
-            builder.owner,
             center,
             BUILDER_PICK_RADIUS.max(BUILDER_PICK_HEIGHT * 0.55),
         );
@@ -774,12 +758,11 @@ fn pick_world_actor_on_ray(
             unit_visual_center_lerp(previous.position, unit.position, unit, alpha, terrain);
         consider(
             unit.id,
-            unit.owner,
             center,
             unit_pick_radius(unit).max(unit_height(unit) * 0.55),
         );
     }
-    nearest.map(|(_, id, owner)| (id, owner))
+    nearest.map(|(_, id)| id)
 }
 
 fn clear_stale_selection(
@@ -794,7 +777,6 @@ fn select_click(
     keys: &ButtonInput<KeyCode>,
     time: &Time,
     view: &SelectionView<'_>,
-    local_player: PlayerId,
     selection: &mut InspectionSelection,
 ) {
     let now = time.elapsed_secs_f64();
@@ -806,7 +788,7 @@ fn select_click(
     selection.last_click = Some((id, now));
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     if same_type {
-        let ids = same_type_selection(id, view, local_player);
+        let ids = same_type_selection(id, view);
         if shift {
             selection.add(ids);
         } else {
@@ -843,6 +825,15 @@ impl SelectionView<'_> {
             let (mut center, _) = self.metrics.footprint_center_size(building.footprint);
             center.y = self.terrain.height_at_world(center.xz());
             center
+        } else if let Some(unit) = self.samples.current.units.get(&id) {
+            let previous = self.samples.previous.units.get(&id).unwrap_or(unit);
+            unit_visual_center_lerp(
+                previous.position,
+                unit.position,
+                unit,
+                self.alpha,
+                self.terrain,
+            )
         } else {
             return false;
         };
@@ -852,7 +843,7 @@ impl SelectionView<'_> {
     }
 }
 
-fn same_type_selection(id: SimId, view: &SelectionView<'_>, owner: PlayerId) -> Vec<SimId> {
+fn same_type_selection(id: SimId, view: &SelectionView<'_>) -> Vec<SimId> {
     let samples = view.samples;
     if let Some(builder) = samples.current.builders.get(&id) {
         return samples
@@ -860,7 +851,7 @@ fn same_type_selection(id: SimId, view: &SelectionView<'_>, owner: PlayerId) -> 
             .builders
             .values()
             .filter(|candidate| {
-                candidate.owner == owner
+                candidate.owner == builder.owner
                     && candidate.appearance.rawcode == builder.appearance.rawcode
             })
             .map(|candidate| candidate.id)
@@ -878,6 +869,21 @@ fn same_type_selection(id: SimId, view: &SelectionView<'_>, owner: PlayerId) -> 
                 candidate.owner == selected_owner
                     && candidate.content.map(|content| content.rawcode)
                         == building.content.map(|content| content.rawcode)
+            })
+            .map(|candidate| candidate.id)
+            .filter(|candidate| *candidate == id || view.visible(*candidate))
+            .take(MAX_SELECTION)
+            .collect();
+    }
+    if let Some(unit) = samples.current.units.get(&id) {
+        return samples
+            .current
+            .units
+            .values()
+            .filter(|candidate| {
+                candidate.owner == unit.owner
+                    && candidate.content.map(|content| content.rawcode)
+                        == unit.content.map(|content| content.rawcode)
             })
             .map(|candidate| candidate.id)
             .filter(|candidate| *candidate == id || view.visible(*candidate))
@@ -964,7 +970,65 @@ fn box_select(
         .map(|unit| unit.id)
         .take(MAX_SELECTION)
         .collect();
-    prioritized_box_selection(builders, buildings, units)
+    let local = prioritized_box_selection(builders, buildings, units);
+    if !local.is_empty() {
+        return local;
+    }
+    let other_builders: Vec<_> = samples
+        .current
+        .builders
+        .values()
+        .filter(|builder| builder.owner != owner)
+        .filter(|builder| {
+            let previous = samples
+                .previous
+                .builders
+                .get(&builder.id)
+                .unwrap_or(builder);
+            inside(
+                sim_point_to_terrain_world_lerp(
+                    previous.position,
+                    builder.position,
+                    view.alpha,
+                    view.terrain,
+                ) + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5),
+            )
+        })
+        .map(|builder| builder.id)
+        .take(MAX_SELECTION)
+        .collect();
+    let other_buildings: Vec<_> = samples
+        .current
+        .buildings
+        .values()
+        .filter(|building| building.owner.is_some_and(|player| player != owner))
+        .filter(|building| {
+            let (mut center, _) = view.metrics.footprint_center_size(building.footprint);
+            center.y = view.terrain.height_at_world(center.xz());
+            inside(center)
+        })
+        .map(|building| building.id)
+        .take(MAX_SELECTION)
+        .collect();
+    let other_units: Vec<_> = samples
+        .current
+        .units
+        .values()
+        .filter(|unit| unit.owner != owner)
+        .filter(|unit| {
+            let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
+            inside(unit_visual_center_lerp(
+                previous.position,
+                unit.position,
+                unit,
+                view.alpha,
+                view.terrain,
+            ))
+        })
+        .map(|unit| unit.id)
+        .take(MAX_SELECTION)
+        .collect();
+    prioritized_box_selection(other_builders, other_buildings, other_units)
 }
 
 fn prioritized_box_selection(
@@ -1342,8 +1406,9 @@ fn update_debug_inspector_text(
 fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
     if let Some(builder) = samples.current.builders.get(&id) {
         return format!(
-            "{}\nBuilder\n\n{}",
+            "{}\nPlayer {} builder\n\n{}",
             builder.appearance.name,
+            builder.owner.0 + 1,
             if builder.build_footprint.is_some() {
                 "Constructing"
             } else if builder.repair_target.is_some() {
@@ -1359,12 +1424,14 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
     }
     if let Some(unit) = samples.current.units.get(&id) {
         return format!(
-            "{}\nHealth: {} / {}\n{} armor\n{} attack",
+            "{} (Player {})\nHealth: {} / {}\n{} armor\n{} attack\n{}",
             unit.content.map_or("Unit", |content| content.name),
+            unit.owner.0 + 1,
             unit.health,
             unit.health_max,
             armor_type_name(unit.armor.armor_type),
-            damage_type_name(unit.damage_type)
+            damage_type_name(unit.damage_type),
+            status_effect_summary(unit, samples.current.tick)
         );
     }
     if let Some(building) = samples.current.buildings.get(&id) {
@@ -1403,17 +1470,125 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
         } else {
             format!("\n{status}")
         };
+        let stun = building
+            .stunned_until_tick
+            .filter(|until| *until > samples.current.tick)
+            .map_or_else(String::new, |until| {
+                format!(
+                    "\nDebuffs: Stunned ({}s)",
+                    until
+                        .saturating_sub(samples.current.tick)
+                        .div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
+                )
+            });
         return format!(
-            "{}\nHealth: {} / {}{}\n{}{}",
+            "{} ({})\nHealth: {} / {}{}\n{}{}{}",
             building.content.map_or("Building", |content| content.name),
+            building.owner.map_or_else(
+                || "Neutral".to_owned(),
+                |owner| format!("Player {}", owner.0 + 1)
+            ),
             building.health,
             building.health_max,
             training_mana,
             armor_type_name(building.armor.armor_type),
-            status
+            status,
+            stun
         );
     }
     "No selection.".into()
+}
+
+fn status_effect_summary(unit: &UnitSample, tick: u64) -> String {
+    let mut buffs = Vec::new();
+    let mut debuffs = Vec::new();
+    let remaining = |expires_tick: u64| {
+        expires_tick
+            .saturating_sub(tick)
+            .div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
+    };
+    if unit.status.stunned_until_tick > tick {
+        debuffs.push(format!(
+            "Stunned ({}s)",
+            remaining(unit.status.stunned_until_tick)
+        ));
+    }
+    if unit.active_defend_ability.is_some() {
+        buffs.push("Defend".to_owned());
+    }
+    for modifier in unit.status.movement_modifiers
+        [..usize::from(unit.status.movement_modifier_count)]
+        .iter()
+        .filter(|modifier| modifier.expires_tick > tick)
+    {
+        let label = format!(
+            "Move {:+}% ({}s)",
+            modifier.percent_delta,
+            remaining(modifier.expires_tick)
+        );
+        if modifier.percent_delta >= 0 {
+            buffs.push(label);
+        } else {
+            debuffs.push(label);
+        }
+    }
+    for modifier in unit.status.attack_speed_modifiers
+        [..usize::from(unit.status.attack_speed_modifier_count)]
+        .iter()
+        .filter(|modifier| modifier.expires_tick > tick)
+    {
+        let label = format!(
+            "Attack speed {:+}% ({}s)",
+            modifier.percent_delta,
+            remaining(modifier.expires_tick)
+        );
+        if modifier.percent_delta >= 0 {
+            buffs.push(label);
+        } else {
+            debuffs.push(label);
+        }
+    }
+    for modifier in unit.status.armor_modifiers[..usize::from(unit.status.armor_modifier_count)]
+        .iter()
+        .filter(|modifier| modifier.expires_tick > tick)
+    {
+        let label = format!(
+            "Armor {}{} ({}s)",
+            if modifier.armor_bonus_per_100 >= 0 {
+                "+"
+            } else {
+                ""
+            },
+            armor_points_label(i32::from(modifier.armor_bonus_per_100)),
+            remaining(modifier.expires_tick)
+        );
+        if modifier.armor_bonus_per_100 >= 0 {
+            buffs.push(label);
+        } else {
+            debuffs.push(label);
+        }
+    }
+    for modifier in unit.status.damage_over_time[..usize::from(unit.status.damage_over_time_count)]
+        .iter()
+        .filter(|modifier| modifier.expires_tick > tick)
+    {
+        debuffs.push(format!(
+            "{} damage/pulse ({}s)",
+            modifier.damage_per_pulse,
+            remaining(modifier.expires_tick)
+        ));
+    }
+    if buffs.is_empty() && debuffs.is_empty() {
+        return "Effects: None".to_owned();
+    }
+    let mut lines = Vec::new();
+    if !buffs.is_empty() {
+        lines.push(format!("Buffs: {}", buffs.join(", ")));
+    }
+    if !debuffs.is_empty() {
+        lines.push(format!("Debuffs: {}", debuffs.join(", ")));
+    }
+    lines.join("\n")
 }
 
 fn update_selection_tiles(
@@ -2375,6 +2550,7 @@ mod tests {
 
         let mut target = samples.current.units[&SimId(7)];
         target.id = SimId(8);
+        target.owner = PlayerId(6);
         target.team = Team(1);
         target.damage_type = DamageType::Normal;
         target.armor = castle_fight_sim::ArmorProfile::new(ArmorType::Small, 0);
@@ -2393,6 +2569,15 @@ mod tests {
         assert!(text.contains("Defense type: Light (3) <- Normal: 100% (0%) incoming"));
         assert!(!text.contains("Last attacker:"));
         assert!(!text.contains("Last attacked:"));
+
+        let enemy = samples.current.units.get_mut(&SimId(8)).unwrap();
+        enemy.status.stunned_until_tick = 16;
+        enemy.status.movement_modifiers[0].percent_delta = -25;
+        enemy.status.movement_modifiers[0].expires_tick = 40;
+        enemy.status.movement_modifier_count = 1;
+        let summary = selection_summary(SimId(8), &samples);
+        assert!(summary.contains("Player 7"));
+        assert!(summary.contains("Debuffs: Stunned (1s), Move -25% (1s)"));
     }
 
     #[test]
@@ -2430,7 +2615,7 @@ mod tests {
                     rawcode: u32::from_be_bytes(*b"h000"),
                     name: "Barracks",
                 }),
-                owner: Some(PlayerId(0)),
+                owner: Some(PlayerId(6)),
                 team: Team(1),
                 footprint: BuildingFootprint::new(10, 20, 4, 4),
                 health: 1_000,
@@ -2463,6 +2648,7 @@ mod tests {
             format_building_inspector(&samples.current.buildings[&SimId(9)], 10)
                 .contains("Name: Barracks")
         );
+        assert!(selection_summary(SimId(9), &samples).contains("Player 7"));
     }
 
     #[test]
@@ -2476,8 +2662,8 @@ mod tests {
                     rawcode: u32::from_be_bytes(*b"h016"),
                     name: "Gryphon Rider",
                 }),
-                owner: PlayerId(0),
-                team: Team(0),
+                owner: PlayerId(6),
+                team: Team(1),
                 position: SimPoint::new(
                     100 * SUBUNITS_PER_WORLD_UNIT,
                     100 * SUBUNITS_PER_WORLD_UNIT,
@@ -2512,6 +2698,16 @@ mod tests {
 
         assert_eq!(
             pick_unit_on_ray(
+                Vec3::new(center.x, center.y, 0.0),
+                Vec3::Z,
+                &samples,
+                &terrain,
+                1.0,
+            ),
+            Some(SimId(11))
+        );
+        assert_eq!(
+            pick_world_actor_on_ray(
                 Vec3::new(center.x, center.y, 0.0),
                 Vec3::Z,
                 &samples,

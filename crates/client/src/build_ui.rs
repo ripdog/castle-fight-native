@@ -7,11 +7,8 @@ use bevy::{ecs::system::SystemParam, input::InputSystems, prelude::*, window::Pr
 use castle_fight_sim::{
     BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle,
     CastleFightProductionDefinition, CommandCardPosition, CommandSubmission, NavCell,
-    PlayerCommand, SimId, Team,
+    PlayerCommand, PlayerId, SimId, Simulation, Team,
 };
-
-#[cfg(test)]
-use castle_fight_sim::PlayerId;
 
 use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch,
@@ -507,23 +504,31 @@ fn sync_action_panel_to_selection(
 ) {
     let selected = inspection.selected;
     state.members.clone_from(&inspection.members);
-    let relevant = selected.and_then(|id| {
-        if let Some(builder) = samples.current.builders.get(&id) {
-            return debug_menu
-                .can_control_builder(&authoritative.simulation, selected_match.local_player, id)
-                .then_some((id, builder.team));
-        }
-        samples.current.buildings.get(&id).and_then(|building| {
-            (debug_menu.can_control_building(
-                &authoritative.simulation,
-                selected_match.local_player,
-                id,
-            ) && (building.construction_complete_tick.is_some()
-                || building_is_controllable_production(building, selected_match.content)
-                || building_is_controllable_tower(building, selected_match.content)))
-            .then_some((id, building.team))
-        })
-    });
+    let all_members_controllable = selection_members_controllable(
+        &inspection.members,
+        &authoritative.simulation,
+        selected_match.local_player,
+        &debug_menu,
+    );
+    let relevant = selected
+        .filter(|_| all_members_controllable)
+        .and_then(|id| {
+            if let Some(builder) = samples.current.builders.get(&id) {
+                return debug_menu
+                    .can_control_builder(&authoritative.simulation, selected_match.local_player, id)
+                    .then_some((id, builder.team));
+            }
+            samples.current.buildings.get(&id).and_then(|building| {
+                (debug_menu.can_control_building(
+                    &authoritative.simulation,
+                    selected_match.local_player,
+                    id,
+                ) && (building.construction_complete_tick.is_some()
+                    || building_is_controllable_production(building, selected_match.content)
+                    || building_is_controllable_tower(building, selected_match.content)))
+                .then_some((id, building.team))
+            })
+        });
 
     match relevant {
         Some((actor, team)) => {
@@ -543,6 +548,23 @@ fn sync_action_panel_to_selection(
             **panel = Visibility::Hidden;
         }
     }
+}
+
+fn selection_members_controllable(
+    members: &[SimId],
+    simulation: &Simulation,
+    local_player: PlayerId,
+    debug_menu: &DebugMenuState,
+) -> bool {
+    members.iter().all(|id| {
+        if simulation.builder(*id).is_some() {
+            debug_menu.can_control_builder(simulation, local_player, *id)
+        } else if simulation.building(*id).is_some() {
+            debug_menu.can_control_building(simulation, local_player, *id)
+        } else {
+            false
+        }
+    })
 }
 
 fn handle_escape(
@@ -2141,6 +2163,40 @@ mod tests {
             layout[command_slot(command_card.build_command)],
             Some(PanelAction::OpenBuildMenu)
         );
+    }
+
+    #[test]
+    fn inspection_only_members_suppress_shared_command_actions() {
+        let demo = create_demo_world(1, Some(1));
+        let own_builder = demo.simulation.builder_for_team(Team(0)).unwrap().id;
+        let other_builder = demo.simulation.builder_for_team(Team(1)).unwrap().id;
+        let local = PlayerId(0);
+        let debug = DebugMenuState::default();
+        assert!(selection_members_controllable(
+            &[own_builder],
+            &demo.simulation,
+            local,
+            &debug
+        ));
+        assert!(!selection_members_controllable(
+            &[other_builder],
+            &demo.simulation,
+            local,
+            &debug
+        ));
+        assert!(!selection_members_controllable(
+            &[own_builder, other_builder],
+            &demo.simulation,
+            local,
+            &debug
+        ));
+        let combat_unit = demo.simulation.units()[0].id;
+        assert!(!selection_members_controllable(
+            &[combat_unit],
+            &demo.simulation,
+            local,
+            &debug
+        ));
     }
 
     #[test]
