@@ -37,6 +37,7 @@ const CASTLE_PATHING_SIZE_CELLS: u16 = 16;
 // its middle three rows are mossy ground where buildings are allowed.
 const ROAD_HALF_WIDTH_WORLD: i32 = 448;
 const REAR_MOSS_HALF_WIDTH_WORLD: i32 = 192;
+const REAR_MOSS_CENTER_X_WORLD: i32 = 5_760;
 const DEVELOPMENT_CASTLE_HEALTH: i32 = 20_000;
 const DEVELOPMENT_UPHILL_MISS_CHANCE_PER_10K: u16 = 2_500;
 const WALL_DOODAD_RAWCODES: [&str; 6] = ["B002", "B003", "D000", "D001", "D002", "D003"];
@@ -538,17 +539,19 @@ fn simulation_config_927(
 
     let mut build_static_blockers = original_doodad_build_blockers();
     let castle_half_size = i32::from(CASTLE_PATHING_SIZE_CELLS) * NAV_CELL_WORLD / 2;
-    for (inner_x, castle_front_x, castle_rear_x, rear_x) in [
+    for (inner_x, castle_front_x, castle_rear_x, moss_center_x, rear_x) in [
         (
             LEFT_BUILD_MAX_X_WORLD,
             -CASTLE_CENTER_X_WORLD + castle_half_size,
             -CASTLE_CENTER_X_WORLD - castle_half_size,
+            -REAR_MOSS_CENTER_X_WORLD,
             LEFT_BUILD_MIN_X_WORLD,
         ),
         (
             RIGHT_BUILD_MIN_X_WORLD,
             CASTLE_CENTER_X_WORLD - castle_half_size,
             CASTLE_CENTER_X_WORLD + castle_half_size,
+            REAR_MOSS_CENTER_X_WORLD,
             RIGHT_BUILD_MAX_X_WORLD,
         ),
     ] {
@@ -580,6 +583,16 @@ fn simulation_config_927(
             (REAR_MOSS_HALF_WIDTH_WORLD, ROAD_HALF_WIDTH_WORLD),
         ] {
             build_static_blockers.push(world_rect_footprint(rear_min_x, min_y, rear_max_x, max_y));
+        }
+        let moss_min_x = moss_center_x - REAR_MOSS_HALF_WIDTH_WORLD;
+        let moss_max_x = moss_center_x + REAR_MOSS_HALF_WIDTH_WORLD;
+        for (min_x, max_x) in [(rear_min_x, moss_min_x), (moss_max_x, rear_max_x)] {
+            build_static_blockers.push(world_rect_footprint(
+                min_x,
+                -REAR_MOSS_HALF_WIDTH_WORLD,
+                max_x,
+                REAR_MOSS_HALF_WIDTH_WORLD,
+            ));
         }
     }
 
@@ -1593,7 +1606,7 @@ mod tests {
         for (team, side) in [(Team(0), -1), (Team(1), 1)] {
             let footprint = |x: i32, y: i32| world_rect_footprint(x - 64, y - 64, x + 64, y + 64);
             let front_x = side * 4_000;
-            let rear_x = side * 5_600;
+            let rear_x = side * REAR_MOSS_CENTER_X_WORLD;
             assert!(
                 !game
                     .simulation
@@ -1629,6 +1642,13 @@ mod tests {
                 game.simulation
                     .can_place_building_for_team(team, footprint(rear_x, -128))
             );
+            for paved_x in [side * 5_440, side * 5_568, side * 5_952, side * 6_048] {
+                assert!(
+                    !game
+                        .simulation
+                        .can_place_building_for_team(team, footprint(paved_x, 0))
+                );
+            }
             assert!(
                 !game.simulation.can_place_building_for_team(
                     team,

@@ -5058,11 +5058,21 @@ mod tests {
         assert!(
             !demo
                 .metrics
-                .map_grid_cell_unblocked(Vec2::new(5_600.0, 320.0))
+                .map_grid_cell_unblocked(Vec2::new(5_760.0, 320.0))
         );
         assert!(
             demo.metrics
-                .map_grid_cell_unblocked(Vec2::new(5_600.0, 0.0))
+                .map_grid_cell_unblocked(Vec2::new(5_760.0, 0.0))
+        );
+        assert!(
+            !demo
+                .metrics
+                .map_grid_cell_unblocked(Vec2::new(5_440.0, 0.0))
+        );
+        assert!(
+            !demo
+                .metrics
+                .map_grid_cell_unblocked(Vec2::new(6_048.0, 0.0))
         );
 
         // Grid lines bound build squares. The left keeps its authored phase, while the right
