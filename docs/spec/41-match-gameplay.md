@@ -26,6 +26,8 @@ Network connection state itself is operational, but any gameplay consequence of 
 
 For the retained Castle Fight 9.27 map, native `PlayerId` is the original Warcraft III player-slot index rather than a dense per-match ordinal. The authored human slots are **0/1/2** on the Western force and **6/7/8** on the Eastern force, with fixed builder starts at Y **+128 / 0 / -128** world units respectively. The current development mode supports the map's balanced 1v1, 2v2, and 3v3 prefixes: slots `0` vs `6`, then `0/1` vs `6/7`, then `0/1/2` vs `6/7/8`. Retaining the Warcraft slot identity also gives presentation a stable key for the original player colour; `Team` is not a colour identity.
 
+The local client presents a setup lobby before starting ordinary play. Its current mode is **All Pick**: each active player slot has a race selector, currently limited to Human, and the local player can choose the Western or Eastern team. The lobby selects a balanced team size of one, two, or three players per side and constructs the authoritative match from that roster when Start is pressed. The local simulation does not advance while the lobby is open. A network client displays the server's fixed roster and assigned team; changing network rosters or races requires a future server-owned lobby protocol before the authoritative match starts.
+
 ### 2.1 Player builder
 
 Each active player has exactly one directly controlled builder under the standard rules.

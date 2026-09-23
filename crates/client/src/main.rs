@@ -7,6 +7,7 @@ mod debug_menu;
 mod demo;
 mod doodads;
 mod inspection;
+mod lobby;
 mod network;
 mod performance_ui;
 mod presentation;
@@ -57,6 +58,7 @@ use debug_menu::DebugMenuPlugin;
 use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config};
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
+use lobby::{LobbyPlugin, LobbyState};
 use network::{NetworkClient, NetworkEvent};
 use performance_ui::{
     PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, performance_trace_layer,
@@ -104,6 +106,7 @@ pub(crate) struct AuthoritativeSimulation {
     expected_execution_batch: Option<(u64, Vec<WireCommandExecution>)>,
     catch_up: Option<SnapshotCatchUp>,
     authority: AuthorityMode,
+    commands_enabled: bool,
 }
 
 impl AuthoritativeSimulation {
@@ -117,6 +120,7 @@ impl AuthoritativeSimulation {
             expected_execution_batch: None,
             catch_up: None,
             authority: AuthorityMode::Local,
+            commands_enabled: true,
         }
     }
 
@@ -142,6 +146,7 @@ impl AuthoritativeSimulation {
                 connected: true,
                 pending_handoff_position: None,
             },
+            commands_enabled: true,
         }
     }
 
@@ -155,6 +160,9 @@ impl AuthoritativeSimulation {
         player: PlayerId,
         command: PlayerCommand,
     ) -> ClientCommandSubmission {
+        if !self.commands_enabled {
+            return ClientCommandSubmission::Failed;
+        }
         match &mut self.authority {
             AuthorityMode::Local => ClientCommandSubmission::Local(
                 self.driver
@@ -350,7 +358,8 @@ fn main() {
             .expect("selected Warcraft terrain texture layout must be valid");
     let terrain_textures = TerrainTextureSet::load_default();
 
-    let authoritative = if let Some((client, next_sequence)) = network_client {
+    let networked = network_client.is_some();
+    let mut authoritative = if let Some((client, next_sequence)) = network_client {
         AuthoritativeSimulation::new_networked(
             demo.simulation,
             demo.content,
@@ -363,6 +372,9 @@ fn main() {
     };
 
     let view_state = ViewState::load();
+    let show_lobby = options.profile_quicksave.is_none() && options.stress_units.is_none();
+    authoritative.commands_enabled = !show_lobby;
+    let lobby_state = LobbyState::new(options.clone(), local_player, networked);
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
         .insert_resource(ViewStatePersistence::new(view_state))
@@ -376,7 +388,7 @@ fn main() {
         })
         .insert_resource(authoritative)
         .insert_resource(SimulationPlayback {
-            paused: options.profile_quicksave.is_some(),
+            paused: show_lobby || options.profile_quicksave.is_some(),
         })
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
@@ -443,6 +455,10 @@ fn main() {
                 .before(bevy::animation::animate_targets),
         )
         .add_systems(FixedUpdate, advance_authoritative_simulation);
+
+    if show_lobby {
+        app.insert_resource(lobby_state).add_plugins(LobbyPlugin);
+    }
 
     if options.perf_log {
         app.insert_resource(PerfTelemetry(Timer::from_seconds(
@@ -913,10 +929,14 @@ fn handle_quicksave_hotkeys(
 
 fn toggle_simulation_pause(
     keys: Res<ButtonInput<KeyCode>>,
+    lobby: Option<Res<LobbyState>>,
     action_panel: Option<Res<build_ui::ActionPanelState>>,
     authoritative: Res<AuthoritativeSimulation>,
     mut playback: ResMut<SimulationPlayback>,
 ) {
+    if lobby.as_ref().is_some_and(|lobby| lobby.active()) {
+        return;
+    }
     if authoritative.is_networked() {
         playback.paused = false;
         return;
