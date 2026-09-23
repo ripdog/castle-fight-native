@@ -925,10 +925,7 @@ fn box_select(
         .map(|builder| builder.id)
         .take(MAX_SELECTION)
         .collect();
-    if !builders.is_empty() {
-        return builders;
-    }
-    samples
+    let buildings: Vec<_> = samples
         .current
         .buildings
         .values()
@@ -948,7 +945,40 @@ fn box_select(
         })
         .map(|building| building.id)
         .take(MAX_SELECTION)
-        .collect()
+        .collect();
+    let units: Vec<_> = samples
+        .current
+        .units
+        .values()
+        .filter(|unit| unit.owner == owner)
+        .filter(|unit| {
+            let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
+            inside(unit_visual_center_lerp(
+                previous.position,
+                unit.position,
+                unit,
+                view.alpha,
+                view.terrain,
+            ))
+        })
+        .map(|unit| unit.id)
+        .take(MAX_SELECTION)
+        .collect();
+    prioritized_box_selection(builders, buildings, units)
+}
+
+fn prioritized_box_selection(
+    builders: Vec<SimId>,
+    buildings: Vec<SimId>,
+    units: Vec<SimId>,
+) -> Vec<SimId> {
+    if !builders.is_empty() {
+        builders
+    } else if !buildings.is_empty() {
+        buildings
+    } else {
+        units
+    }
 }
 
 fn handle_selection_hotkeys(
@@ -2170,6 +2200,22 @@ mod tests {
         selection.add([SimId(2), SimId(31)]);
         assert_eq!(selection.members.len(), MAX_SELECTION);
         assert!(!selection.members.contains(&SimId(31)));
+    }
+
+    #[test]
+    fn drag_selection_falls_back_from_builders_to_buildings_to_units() {
+        assert_eq!(
+            prioritized_box_selection(vec![SimId(1)], vec![SimId(2)], vec![SimId(3)]),
+            vec![SimId(1)]
+        );
+        assert_eq!(
+            prioritized_box_selection(Vec::new(), vec![SimId(2)], vec![SimId(3)]),
+            vec![SimId(2)]
+        );
+        assert_eq!(
+            prioritized_box_selection(Vec::new(), Vec::new(), vec![SimId(3)]),
+            vec![SimId(3)]
+        );
     }
 
     fn metrics() -> WorldMetrics {
