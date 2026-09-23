@@ -534,7 +534,7 @@ fn handle_builder_shortcut_click(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        selection.selected = Some(shortcut.0);
+        selection.replace([shortcut.0]);
         action_panel.mode = ActionPanelMode::Actions;
         action_panel.status = "Choose an action.".into();
         camera_focus.0 = Some(shortcut.0);

@@ -248,6 +248,8 @@ The current client pans at 6,000 world units per second. Its initial camera dist
 
 The user may select/inspect combat units/buildings for information. Ordinary combat-unit selection MUST remain inspection-only and MUST NOT expose direct orders.
 
+The selection highlight follows every member of the local, capped 24-entity selection set. The drag rectangle and bottom console are presentation-only. A ground click preserves the current selection, while a lost/dead entity is removed without invalidating the surviving group. Box selection gives locally owned builders priority over production buildings and excludes autonomous combat units.
+
 Air units SHOULD be presented at an obvious visual altitude above the sampled terrain, with presentation-only motion or silhouettes that distinguish them from ground units. Unit picking SHOULD test the rendered 3D unit volume rather than only the terrain point beneath it, so clicking an airborne model selects that unit at its visible altitude.
 
 The player's builder is the sole directly controlled unit and should be visually/UI-distinct enough that its movement/build/inventory controls are not confused with combat-unit inspection.

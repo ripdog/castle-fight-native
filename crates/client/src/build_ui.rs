@@ -35,7 +35,7 @@ use crate::{
     wc3_text::{Wc3Color, parse_wc3_text},
 };
 
-const PANEL_LEFT: f32 = 12.0;
+const PANEL_RIGHT: f32 = 12.0;
 const PANEL_BOTTOM: f32 = 12.0;
 const PANEL_PADDING: f32 = 8.0;
 const GRID_GAP: f32 = 4.0;
@@ -106,6 +106,7 @@ impl ActionPanelHotkeyCapture {
 pub(crate) struct ActionPanelState {
     pub(crate) team: Team,
     pub(crate) actor: Option<SimId>,
+    pub(crate) members: Vec<SimId>,
     pub(crate) mode: ActionPanelMode,
     pub(crate) status: String,
 }
@@ -115,6 +116,7 @@ impl Default for ActionPanelState {
         Self {
             team: Team(0),
             actor: None,
+            members: Vec::new(),
             mode: ActionPanelMode::Actions,
             status: "Select a controllable builder, production building, or tower.".into(),
         }
@@ -321,7 +323,7 @@ fn setup_action_panel(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: px(PANEL_LEFT),
+                right: px(PANEL_RIGHT),
                 bottom: px(PANEL_BOTTOM),
                 width: px(PANEL_WIDTH),
                 height: px(PANEL_HEIGHT),
@@ -430,7 +432,7 @@ fn setup_action_panel(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: px(PANEL_LEFT),
+                right: px(PANEL_RIGHT),
                 bottom: px(PANEL_BOTTOM + PANEL_HEIGHT + TOOLTIP_GAP),
                 width: px(TOOLTIP_WIDTH),
                 padding: UiRect::all(px(10.0)),
@@ -482,6 +484,7 @@ fn sync_action_panel_to_selection(
     mut panel: Single<&mut Visibility, With<ActionPanel>>,
 ) {
     let selected = inspection.selected;
+    state.members.clone_from(&inspection.members);
     let relevant = selected.and_then(|id| {
         if let Some(builder) = samples.current.builders.get(&id) {
             return debug_menu
@@ -537,17 +540,37 @@ fn handle_escape(
     let Some(actor) = state.actor else {
         return;
     };
-    if authoritative
-        .simulation
-        .building(actor)
-        .is_some_and(|building| building.construction_complete_tick.is_some())
+    if (state.members.len() <= 1
+        || state.members.iter().all(|id| {
+            authoritative
+                .simulation
+                .building(*id)
+                .is_some_and(|building| building.construction_complete_tick.is_some())
+        }))
+        && authoritative
+            .simulation
+            .building(actor)
+            .is_some_and(|building| building.construction_complete_tick.is_some())
     {
-        let controller = debug_menu.controller_for_actor(
-            &authoritative.simulation,
-            selected_match.local_player,
-            actor,
-        );
-        cancel_selected_construction(&mut authoritative, &mut state, controller, actor);
+        let actors = if state.members.is_empty() {
+            vec![actor]
+        } else {
+            state.members.clone()
+        };
+        for actor in actors {
+            if authoritative
+                .simulation
+                .building(actor)
+                .is_some_and(|building| building.construction_complete_tick.is_some())
+            {
+                let controller = debug_menu.controller_for_actor(
+                    &authoritative.simulation,
+                    selected_match.local_player,
+                    actor,
+                );
+                cancel_selected_construction(&mut authoritative, &mut state, controller, actor);
+            }
+        }
     }
 }
 
@@ -812,6 +835,55 @@ fn action_layout(
     let command_card = selected_match.content.command_card;
     let cancel_slot = command_slot(command_card.cancel_command);
 
+    if state.members.len() > 1 {
+        if state.mode != ActionPanelMode::Actions {
+            return slots;
+        }
+        let buildings: Vec<_> = state
+            .members
+            .iter()
+            .filter_map(|id| authoritative.simulation.building(*id))
+            .collect();
+        if buildings.len() != state.members.len() {
+            return slots;
+        }
+        if buildings
+            .iter()
+            .all(|building| building.construction_complete_tick.is_some())
+        {
+            slots[cancel_slot] = Some(PanelAction::CancelConstruction);
+            return slots;
+        }
+        let first_kind =
+            selected_production_kind_from_content(buildings[0].content, selected_match.content);
+        if let Some(kind) = first_kind
+            && buildings.iter().all(|building| {
+                building.construction_complete_tick.is_none()
+                    && selected_production_kind_from_content(
+                        building.content,
+                        selected_match.content,
+                    ) == Some(kind)
+            })
+        {
+            for target in kind
+                .upgrade_targets_for_version(selected_match.content.map_version)
+                .expect("selected bundle must support its production upgrade graph")
+            {
+                let definition = selected_match
+                    .content
+                    .production_building(target)
+                    .expect("upgrade target must belong to selected bundle");
+                insert_panel_action(
+                    &mut slots,
+                    command_slot(definition.command_card_position),
+                    cancel_slot,
+                    PanelAction::Production(ProductionPanelAction::Upgrade(target)),
+                );
+            }
+        }
+        return slots;
+    }
+
     match state.mode {
         ActionPanelMode::Actions => {
             if authoritative.simulation.builder(actor).is_some() {
@@ -941,15 +1013,30 @@ fn handle_action_panel_buttons(
                 };
             }
             PanelAction::CancelConstruction => {
-                let Some(actor) = state.actor else {
-                    continue;
+                let actors = if state.members.is_empty() {
+                    state.actor.into_iter().collect()
+                } else {
+                    state.members.clone()
                 };
-                let controller = debug_menu.controller_for_actor(
-                    &authoritative.simulation,
-                    selected_match.local_player,
-                    actor,
-                );
-                cancel_selected_construction(&mut authoritative, &mut state, controller, actor);
+                for actor in actors {
+                    if authoritative
+                        .simulation
+                        .building(actor)
+                        .is_some_and(|building| building.construction_complete_tick.is_some())
+                    {
+                        let controller = debug_menu.controller_for_actor(
+                            &authoritative.simulation,
+                            selected_match.local_player,
+                            actor,
+                        );
+                        cancel_selected_construction(
+                            &mut authoritative,
+                            &mut state,
+                            controller,
+                            actor,
+                        );
+                    }
+                }
             }
             PanelAction::Cancel => state.cancel_modal(),
         }
@@ -1178,8 +1265,12 @@ fn update_build_preview(
         hide_build_preview_ghosts(&mut ghosts);
         return;
     };
-    if cursor_over_action_panel(cursor, window.height(), resources.state.actor.is_some())
-        || cursor_over_inspector_panel(cursor, window.width())
+    if cursor_over_action_panel(
+        cursor,
+        window.width(),
+        window.height(),
+        resources.state.actor.is_some(),
+    ) || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
         || cursor_over_map_controls(cursor, window.width())
@@ -1451,6 +1542,32 @@ pub(crate) fn queue_production_upgrade(
     selected_match: &SelectedMatch,
     debug_menu: &DebugMenuState,
 ) {
+    if state.members.len() > 1 {
+        let original = state.actor;
+        let actors = state.members.clone();
+        for actor in actors {
+            state.actor = Some(actor);
+            queue_single_production_upgrade(
+                authoritative,
+                state,
+                target,
+                selected_match,
+                debug_menu,
+            );
+        }
+        state.actor = original;
+        return;
+    }
+    queue_single_production_upgrade(authoritative, state, target, selected_match, debug_menu);
+}
+
+fn queue_single_production_upgrade(
+    authoritative: &mut AuthoritativeSimulation,
+    state: &mut ActionPanelState,
+    target: ProductionKind,
+    selected_match: &SelectedMatch,
+    debug_menu: &DebugMenuState,
+) {
     let Some(actor) = state.actor else {
         return;
     };
@@ -1619,6 +1736,7 @@ fn build_button_label(kind: BuildKind, content: &CastleFightContentBundle) -> St
 
 pub(crate) fn cursor_over_action_panel(
     cursor: Vec2,
+    window_width: f32,
     window_height: f32,
     panel_visible: bool,
 ) -> bool {
@@ -1629,8 +1747,9 @@ pub(crate) fn cursor_over_action_panel(
         return false;
     }
     let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
-    cursor.x >= PANEL_LEFT
-        && cursor.x <= PANEL_LEFT + PANEL_WIDTH
+    let panel_left = window_width - PANEL_RIGHT - PANEL_WIDTH;
+    cursor.x >= panel_left
+        && cursor.x <= panel_left + PANEL_WIDTH
         && cursor.y >= panel_top
         && cursor.y <= panel_top + PANEL_HEIGHT
 }
@@ -1707,21 +1826,26 @@ mod tests {
     }
 
     #[test]
-    fn panel_capture_matches_visible_bottom_left_panel_bounds() {
+    fn panel_capture_matches_visible_bottom_right_panel_bounds() {
+        let window_width = 1280.0;
         let window_height = 720.0;
         let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
+        let panel_left = window_width - PANEL_RIGHT - PANEL_WIDTH;
         assert!(cursor_over_action_panel(
-            Vec2::new(PANEL_LEFT, panel_top),
+            Vec2::new(panel_left, panel_top),
+            window_width,
             window_height,
             true,
         ));
         assert!(!cursor_over_action_panel(
-            Vec2::new(PANEL_LEFT + PANEL_WIDTH + 1.0, panel_top),
+            Vec2::new(panel_left - 1.0, panel_top),
+            window_width,
             window_height,
             true,
         ));
         assert!(cursor_over_action_panel(
             Vec2::new(900.0, TOP_BAR_HEIGHT / 2.0),
+            window_width,
             window_height,
             false,
         ));
@@ -1866,6 +1990,48 @@ mod tests {
             layout[command_slot(stronghold_definition.command_card_position)],
             Some(PanelAction::Production(ProductionPanelAction::Upgrade(
                 stronghold
+            )))
+        );
+    }
+
+    #[test]
+    fn shared_upgrade_stays_visible_for_two_selected_production_buildings() {
+        let demo = create_demo_world(1, Some(0));
+        let barracks = demo
+            .content
+            .production_building(ProductionKind::Barracks)
+            .unwrap();
+        let mut simulation = demo.simulation;
+        let first = simulation.spawn_building_with_properties(
+            barracks.spawn(Team(0), BuildingFootprint::new(-120, 0, 4, 4)),
+            barracks.gameplay_properties(),
+        );
+        let second = simulation.spawn_building_with_properties(
+            barracks.spawn(Team(0), BuildingFootprint::new(-112, 0, 4, 4)),
+            barracks.gameplay_properties(),
+        );
+        let state = ActionPanelState {
+            actor: Some(first),
+            members: vec![first, second],
+            ..ActionPanelState::default()
+        };
+        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        };
+        let target = ProductionKind::Stronghold;
+        let position = selected_match
+            .content
+            .production_building(target)
+            .unwrap()
+            .command_card_position;
+        let layout = action_layout(&state, &authoritative, &selected_match);
+        assert_eq!(
+            layout[command_slot(position)],
+            Some(PanelAction::Production(ProductionPanelAction::Upgrade(
+                target
             )))
         );
     }

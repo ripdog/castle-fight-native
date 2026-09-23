@@ -171,9 +171,10 @@ fn desired_cursor_state(
     };
     if cursor_over_action_panel(
         cursor,
+        window.width(),
         window.height(),
         resources.action_panel.actor.is_some(),
-    ) || cursor_over_inspector_panel(cursor, window.width())
+    ) || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
         || cursor_over_map_controls(cursor, window.width())

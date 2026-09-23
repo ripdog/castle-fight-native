@@ -599,8 +599,8 @@ struct TimedWc3Effect {
 struct TimedWc3Effects(Vec<TimedWc3Effect>);
 
 #[derive(Resource)]
-struct DebugPresentation {
-    overlays: bool,
+pub(crate) struct DebugPresentation {
+    pub(crate) overlays: bool,
     health_bars: bool,
 }
 
@@ -4612,11 +4612,19 @@ fn update_camera(
 ) {
     let (camera_component, rig, transform) = &mut *camera;
 
-    if let Some(target) = resources.camera_focus.0.take()
-        && let Some(builder) = resources.samples.current.builders.get(&target)
-    {
-        rig.focus = sim_point_to_terrain_world(builder.position, &resources.terrain);
-        rig.grab_anchor = None;
+    if let Some(target) = resources.camera_focus.0.take() {
+        if let Some(builder) = resources.samples.current.builders.get(&target) {
+            rig.focus = sim_point_to_terrain_world(builder.position, &resources.terrain);
+            rig.grab_anchor = None;
+        } else if let Some(building) = resources.samples.current.buildings.get(&target) {
+            let (mut center, _) = resources.metrics.footprint_center_size(building.footprint);
+            center.y = resources.terrain.height_at_world(center.xz());
+            rig.focus = center;
+            rig.grab_anchor = None;
+        } else if let Some(unit) = resources.samples.current.units.get(&target) {
+            rig.focus = sim_point_to_terrain_world(unit.position, &resources.terrain);
+            rig.grab_anchor = None;
+        }
     }
 
     if resources.mouse_buttons.just_pressed(MouseButton::Middle)

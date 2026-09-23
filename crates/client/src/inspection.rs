@@ -1,8 +1,11 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
-use castle_fight_sim::{ArmorType, DamageType, SUBUNITS_PER_WORLD_UNIT, SimId, Team};
+use castle_fight_sim::{
+    ArmorType, CastleFightBuildingKind, CastleFightContentBundle, DamageType, PlayerId,
+    SUBUNITS_PER_WORLD_UNIT, SimId, Team,
+};
 
 use crate::{
-    SimulationPlayback,
+    SelectedMatch, SimulationPlayback,
     bridge::{
         BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
         UnitVisualKind,
@@ -14,33 +17,134 @@ use crate::{
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
         unit_visual_center_lerp, viewport_ground_point,
     },
-    resource_ui::{
-        BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts,
-        cursor_over_map_controls,
-    },
+    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
+    ui_icons::{UiIconAssets, UiIconKey},
 };
 
-const PANEL_RIGHT: f32 = 16.0;
-const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
-const PANEL_WIDTH: f32 = 340.0;
-const PANEL_HEIGHT: f32 = 410.0;
+const CONSOLE_HEIGHT: f32 = 248.0;
+const MAP_SLOT_WIDTH: f32 = 280.0;
+const ACTION_SLOT_WIDTH: f32 = 310.0;
+const TILE_SIZE: f32 = 43.0;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
 // Human Builder X00C inherits the stock Peasant's 100x100 shadow footprint and selection scale 1.
 // Use that authored footprint for the native click target instead of the old tiny placeholder size.
 const BUILDER_PICK_RADIUS: f32 = 50.0;
 const BUILDER_PICK_HEIGHT: f32 = 100.0;
 const SELECTION_RING_PADDING: f32 = 2.5;
-const SELECTION_COLOR: Color = Color::srgb(1.0, 0.88, 0.22);
+const SELECTION_COLOR: Color = Color::srgb(0.24, 0.95, 0.28);
 const PANEL_BACKGROUND: Color = Color::srgba(0.035, 0.045, 0.060, 0.94);
+const MAX_SELECTION: usize = 24;
+const DRAG_THRESHOLD: f32 = 6.0;
+const DOUBLE_CLICK_SECONDS: f64 = 0.35;
 
-#[derive(Resource, Default, Debug, Clone, Copy)]
+#[derive(Resource, Debug, Clone)]
 pub(crate) struct InspectionSelection {
     pub(crate) selected: Option<SimId>,
+    pub(crate) members: Vec<SimId>,
+    groups: [Vec<SimId>; 10],
+    last_click: Option<(SimId, f64)>,
+    last_group: Option<(usize, f64)>,
+}
+
+impl Default for InspectionSelection {
+    fn default() -> Self {
+        Self {
+            selected: None,
+            members: Vec::new(),
+            groups: std::array::from_fn(|_| Vec::new()),
+            last_click: None,
+            last_group: None,
+        }
+    }
+}
+
+impl InspectionSelection {
+    pub(crate) fn replace(&mut self, ids: impl IntoIterator<Item = SimId>) {
+        self.members.clear();
+        self.selected = None;
+        self.add(ids);
+    }
+
+    fn add(&mut self, ids: impl IntoIterator<Item = SimId>) {
+        for id in ids {
+            if self.members.len() == MAX_SELECTION {
+                break;
+            }
+            if !self.members.contains(&id) {
+                self.members.push(id);
+            }
+        }
+        if self.selected.is_none() {
+            self.selected = self.members.first().copied();
+        }
+    }
+
+    fn toggle(&mut self, id: SimId) {
+        if let Some(index) = self.members.iter().position(|member| *member == id) {
+            self.members.remove(index);
+            if self.selected == Some(id) {
+                self.selected = self.members.first().copied();
+            }
+        } else {
+            self.add([id]);
+        }
+    }
+
+    fn retain_present(&mut self, samples: &PresentationSamples) {
+        let present = |id: &SimId| {
+            samples.current.builders.contains_key(id)
+                || samples.current.units.contains_key(id)
+                || samples.current.buildings.contains_key(id)
+        };
+        self.members.retain(present);
+        for group in &mut self.groups {
+            group.retain(present);
+        }
+        if self.selected.is_some_and(|id| !self.members.contains(&id)) {
+            self.selected = self.members.first().copied();
+        }
+    }
+
+    fn focus(&mut self, id: SimId) {
+        if self.members.contains(&id) {
+            self.selected = Some(id);
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct SelectionDrag {
+    start: Option<Vec2>,
+    current: Option<Vec2>,
 }
 
 #[derive(Component)]
 struct InspectionText;
+
+#[derive(Component)]
+struct DebugInspectionPanel;
+
+#[derive(Component)]
+struct DebugInspectionText;
+
+#[derive(Component)]
+struct SelectionTile(usize);
+
+#[derive(Component)]
+struct SelectionTileRoot;
+
+#[derive(Component)]
+struct InventoryPlaceholder;
+
+#[derive(Component)]
+struct SelectionTileIcon(usize);
+
+#[derive(Component)]
+struct SelectionTileHealth(usize);
+
+#[derive(Component)]
+struct SelectionRectangle;
 
 pub(crate) struct InspectionPlugin;
 
@@ -53,16 +157,82 @@ pub(crate) struct WorldSelectionState<'w> {
     builder_shortcuts: Res<'w, BuilderShortcutState>,
 }
 
+#[derive(SystemParam)]
+pub(crate) struct SelectionInput<'w> {
+    mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    time: Res<'w, Time>,
+    selected_match: Res<'w, SelectedMatch>,
+    drag: ResMut<'w, SelectionDrag>,
+}
+
+type TileRootQuery<'w, 's> = Single<
+    'w,
+    's,
+    &'static mut Node,
+    (
+        With<SelectionTileRoot>,
+        Without<SelectionTile>,
+        Without<SelectionTileHealth>,
+    ),
+>;
+type InventoryQuery<'w, 's> =
+    Single<'w, 's, &'static mut Visibility, (With<InventoryPlaceholder>, Without<SelectionTile>)>;
+type SelectionTilesQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static SelectionTile,
+        &'static mut Node,
+        &'static mut Visibility,
+        &'static mut BorderColor,
+    ),
+    (
+        Without<SelectionTileRoot>,
+        Without<SelectionTileHealth>,
+        Without<InventoryPlaceholder>,
+    ),
+>;
+type SelectionBarsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static SelectionTileHealth, &'static mut Node),
+    (Without<SelectionTileRoot>, Without<SelectionTile>),
+>;
+
+#[derive(SystemParam)]
+struct SelectionTileUi<'w, 's> {
+    icon_assets: ResMut<'w, UiIconAssets>,
+    tile_root: TileRootQuery<'w, 's>,
+    inventory: InventoryQuery<'w, 's>,
+    tiles: SelectionTilesQuery<'w, 's>,
+    icons: Query<'w, 's, (&'static SelectionTileIcon, &'static mut ImageNode)>,
+    bars: SelectionBarsQuery<'w, 's>,
+}
+
+type SelectionTileInteractionQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static SelectionTile, &'static Interaction),
+    (Changed<Interaction>, With<Button>),
+>;
+
 impl Plugin for InspectionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InspectionSelection>()
+            .init_resource::<SelectionDrag>()
             .add_systems(Startup, setup_inspector_ui)
             .add_systems(
                 Update,
                 (
                     handle_world_selection,
+                    handle_selection_hotkeys,
                     clear_stale_selection,
                     update_inspector_text,
+                    update_debug_inspector_text,
+                    update_selection_tiles,
+                    handle_selection_tile_click,
+                    update_selection_rectangle,
                     draw_selection_highlight,
                 )
                     .chain(),
@@ -71,44 +241,214 @@ impl Plugin for InspectionPlugin {
 }
 
 fn setup_inspector_ui(mut commands: Commands) {
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            right: px(0.0),
+            bottom: px(0.0),
+            width: px(ACTION_SLOT_WIDTH),
+            height: px(CONSOLE_HEIGHT),
+            border: UiRect::all(px(3.0)),
+            ..default()
+        },
+        BackgroundColor(PANEL_BACKGROUND),
+        BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
+        ZIndex(-1),
+        Pickable::IGNORE,
+    ));
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                right: px(PANEL_RIGHT),
-                top: px(PANEL_TOP),
-                width: px(PANEL_WIDTH),
-                height: px(PANEL_HEIGHT),
-                padding: UiRect::all(px(14.0)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(8.0),
-                border_radius: BorderRadius::all(px(8.0)),
+                left: px(0.0),
+                bottom: px(0.0),
+                width: px(MAP_SLOT_WIDTH),
+                height: px(CONSOLE_HEIGHT),
+                border: UiRect::all(px(3.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
             BackgroundColor(PANEL_BACKGROUND),
+            BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
+        ))
+        .with_child((
+            Text::new("MINIMAP"),
+            TextFont::from_font_size(17.0),
+            TextColor(Color::srgb(0.45, 0.42, 0.35)),
+            Pickable::IGNORE,
+        ));
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(MAP_SLOT_WIDTH),
+                right: px(ACTION_SLOT_WIDTH),
+                bottom: px(0.0),
+                height: px(CONSOLE_HEIGHT),
+                padding: UiRect::all(px(12.0)),
+                border: UiRect::all(px(3.0)),
+                flex_direction: FlexDirection::Row,
+                column_gap: px(12.0),
+                ..default()
+            },
+            BackgroundColor(PANEL_BACKGROUND),
+            BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
         ))
         .with_children(|panel| {
-            panel.spawn((
-                Text::new("INSPECTOR"),
-                TextFont::from_font_size(22.0),
-                TextColor(Color::WHITE),
-            ));
-            panel.spawn((
-                Text::new("No selection."),
-                TextFont::from_font_size(15.0),
-                TextColor(Color::srgb(0.72, 0.76, 0.82)),
-                Node {
-                    width: percent(100.0),
+            panel
+                .spawn((
+                    Node {
+                        width: px(8.0 * (TILE_SIZE + 3.0)),
+                        height: percent(100.0),
+                        flex_wrap: FlexWrap::Wrap,
+                        column_gap: px(3.0),
+                        row_gap: px(3.0),
+                        align_content: AlignContent::FlexStart,
+                        ..default()
+                    },
+                    SelectionTileRoot,
+                ))
+                .with_children(|tiles| {
+                    for index in 0..MAX_SELECTION {
+                        tiles
+                            .spawn((
+                                Button,
+                                Node {
+                                    width: px(TILE_SIZE),
+                                    height: px(TILE_SIZE),
+                                    border: UiRect::all(px(2.0)),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgb(0.10, 0.09, 0.06)),
+                                BorderColor::all(Color::srgb(0.26, 0.24, 0.19)),
+                                Visibility::Hidden,
+                                SelectionTile(index),
+                            ))
+                            .with_children(|tile| {
+                                tile.spawn((
+                                    ImageNode::default(),
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        left: px(1.0),
+                                        right: px(1.0),
+                                        top: px(1.0),
+                                        bottom: px(5.0),
+                                        ..default()
+                                    },
+                                    Pickable::IGNORE,
+                                    SelectionTileIcon(index),
+                                ));
+                                tile.spawn((
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        left: px(1.0),
+                                        bottom: px(1.0),
+                                        width: percent(100.0),
+                                        height: px(4.0),
+                                        ..default()
+                                    },
+                                    BackgroundColor(Color::srgb(0.10, 0.72, 0.16)),
+                                    Pickable::IGNORE,
+                                    SelectionTileHealth(index),
+                                ));
+                            });
+                    }
+                });
+            panel
+                .spawn((Node {
+                    flex_grow: 1.0,
+                    height: percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(10.0),
                     ..default()
-                },
-                InspectionText,
-            ));
+                },))
+                .with_children(|details| {
+                    details.spawn((
+                        Text::new("SELECTION"),
+                        TextFont::from_font_size(19.0),
+                        TextColor(Color::srgb(0.92, 0.73, 0.25)),
+                    ));
+                    details.spawn((
+                        Text::new("No selection."),
+                        TextFont::from_font_size(15.0),
+                        TextColor(Color::srgb(0.82, 0.81, 0.75)),
+                        Node {
+                            width: percent(100.0),
+                            ..default()
+                        },
+                        InspectionText,
+                    ));
+                });
+            panel
+                .spawn((
+                    Node {
+                        width: px(99.0),
+                        height: percent(100.0),
+                        flex_wrap: FlexWrap::Wrap,
+                        column_gap: px(3.0),
+                        row_gap: px(3.0),
+                        align_content: AlignContent::FlexStart,
+                        ..default()
+                    },
+                    InventoryPlaceholder,
+                ))
+                .with_children(|inventory| {
+                    for _ in 0..6 {
+                        inventory.spawn((
+                            Node {
+                                width: px(46.0),
+                                height: px(46.0),
+                                border: UiRect::all(px(2.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.07, 0.065, 0.055)),
+                            BorderColor::all(Color::srgb(0.22, 0.21, 0.18)),
+                            Pickable::IGNORE,
+                        ));
+                    }
+                });
         });
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            width: px(0.0),
+            height: px(0.0),
+            border: UiRect::all(px(1.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.15, 0.90, 0.22, 0.12)),
+        BorderColor::all(Color::srgb(0.15, 0.90, 0.22)),
+        Visibility::Hidden,
+        Pickable::IGNORE,
+        GlobalZIndex(1000),
+        SelectionRectangle,
+    ));
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(12.0),
+                top: px(70.0),
+                width: px(350.0),
+                padding: UiRect::all(px(10.0)),
+                ..default()
+            },
+            BackgroundColor(PANEL_BACKGROUND),
+            Visibility::Hidden,
+            Pickable::IGNORE,
+            DebugInspectionPanel,
+        ))
+        .with_child((
+            Text::new(""),
+            TextFont::from_font_size(12.0),
+            TextColor(Color::WHITE),
+            DebugInspectionText,
+        ));
 }
 
 pub(crate) fn handle_world_selection(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    _keys: Res<ButtonInput<KeyCode>>,
+    mut input: SelectionInput<'_>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     world: (Res<Time<Fixed>>, Res<WorldMetrics>, Res<TerrainSurface>),
@@ -116,59 +456,429 @@ pub(crate) fn handle_world_selection(
     mut selection: ResMut<InspectionSelection>,
 ) {
     let (fixed_time, metrics, terrain) = world;
-    if !mouse_buttons.just_pressed(MouseButton::Left) || state.action_panel.targeting().is_some() {
+    if state.action_panel.targeting().is_some() {
+        input.drag.start = None;
         return;
     }
     let Some(cursor) = window.cursor_position() else {
         return;
     };
     let action_panel_visible = state.action_panel.actor.is_some();
-    if cursor_over_action_panel(cursor, window.height(), action_panel_visible)
-        || cursor_over_inspector_panel(cursor, window.width())
+    let over_ui = cursor_over_action_panel(
+        cursor,
+        window.width(),
+        window.height(),
+        action_panel_visible,
+    ) || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, state.debug_menu.is_open())
         || cursor_over_builder_shortcuts(cursor, &state.builder_shortcuts)
-        || cursor_over_map_controls(cursor, window.width())
-    {
+        || cursor_over_map_controls(cursor, window.width());
+    if input.mouse_buttons.just_pressed(MouseButton::Left) && !over_ui {
+        input.drag.start = Some(cursor);
+    }
+    input.drag.current = Some(cursor);
+    if !input.mouse_buttons.just_released(MouseButton::Left) {
         return;
     }
-    let (camera, camera_transform) = *camera;
-    let alpha = state.playback.interpolation_alpha(&fixed_time);
-    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
-        selection.selected = None;
+    let Some(start) = input.drag.start.take() else {
         return;
     };
-    if let Some(builder) =
-        pick_builder_on_ray(ray.origin, *ray.direction, &state.samples, &terrain, alpha)
-    {
-        selection.selected = Some(builder);
+    let (camera, camera_transform) = *camera;
+    let alpha = state.playback.interpolation_alpha(&fixed_time);
+    let selection_view = SelectionView {
+        camera,
+        transform: camera_transform,
+        samples: &state.samples,
+        metrics: &metrics,
+        terrain: &terrain,
+        alpha,
+        viewport: Vec2::new(window.width(), window.height()),
+    };
+    let shift = input.keys.pressed(KeyCode::ShiftLeft) || input.keys.pressed(KeyCode::ShiftRight);
+    if start.distance(cursor) >= DRAG_THRESHOLD {
+        let ids = box_select(
+            start,
+            cursor,
+            &selection_view,
+            input.selected_match.local_player,
+            input.selected_match.content,
+        );
+        if shift {
+            selection.add(ids);
+        } else if !ids.is_empty() {
+            selection.replace(ids);
+        }
         return;
     }
-    if let Some(unit) =
-        pick_unit_on_ray(ray.origin, *ray.direction, &state.samples, &terrain, alpha)
+    if over_ui {
+        return;
+    }
+    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
+        return;
+    };
+    if let Some((id, owner)) =
+        pick_world_actor_on_ray(ray.origin, *ray.direction, &state.samples, &terrain, alpha)
     {
-        selection.selected = Some(unit);
+        if owner == input.selected_match.local_player {
+            select_click(
+                id,
+                &input.keys,
+                &input.time,
+                &selection_view,
+                input.selected_match.local_player,
+                &mut selection,
+            );
+        }
         return;
     }
     let Some(world) = viewport_ground_point(camera, camera_transform, cursor, &terrain) else {
-        selection.selected = None;
         return;
     };
-    selection.selected = pick_building_at_ground(world, &state.samples, &metrics);
+    if let Some(building) = pick_building_at_ground(world, &state.samples, &metrics).filter(|id| {
+        state.samples.current.buildings[id].owner == Some(input.selected_match.local_player)
+    }) {
+        select_click(
+            building,
+            &input.keys,
+            &input.time,
+            &selection_view,
+            input.selected_match.local_player,
+            &mut selection,
+        );
+    }
+}
+
+fn pick_world_actor_on_ray(
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+    samples: &PresentationSamples,
+    terrain: &TerrainSurface,
+    alpha: f32,
+) -> Option<(SimId, PlayerId)> {
+    let mut nearest: Option<(f32, SimId, PlayerId)> = None;
+    let mut consider = |id: SimId, owner: PlayerId, center: Vec3, radius: f32| {
+        if let Some(distance) = ray_sphere_hit_distance(ray_origin, ray_direction, center, radius)
+            && nearest.is_none_or(|(best, best_id, _)| {
+                distance < best || (distance == best && id < best_id)
+            })
+        {
+            nearest = Some((distance, id, owner));
+        }
+    };
+    for builder in samples.current.builders.values() {
+        let previous = samples
+            .previous
+            .builders
+            .get(&builder.id)
+            .unwrap_or(builder);
+        let center =
+            sim_point_to_terrain_world_lerp(previous.position, builder.position, alpha, terrain)
+                + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5);
+        consider(
+            builder.id,
+            builder.owner,
+            center,
+            BUILDER_PICK_RADIUS.max(BUILDER_PICK_HEIGHT * 0.55),
+        );
+    }
+    for unit in samples.current.units.values() {
+        let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
+        let center =
+            unit_visual_center_lerp(previous.position, unit.position, unit, alpha, terrain);
+        consider(
+            unit.id,
+            unit.owner,
+            center,
+            unit_pick_radius(unit).max(unit_height(unit) * 0.55),
+        );
+    }
+    nearest.map(|(_, id, owner)| (id, owner))
 }
 
 fn clear_stale_selection(
     samples: Res<PresentationSamples>,
     mut selection: ResMut<InspectionSelection>,
 ) {
-    let Some(id) = selection.selected else {
-        return;
-    };
-    if !samples.current.builders.contains_key(&id)
-        && !samples.current.units.contains_key(&id)
-        && !samples.current.buildings.contains_key(&id)
-    {
-        selection.selected = None;
+    selection.retain_present(&samples);
+}
+
+fn select_click(
+    id: SimId,
+    keys: &ButtonInput<KeyCode>,
+    time: &Time,
+    view: &SelectionView<'_>,
+    local_player: PlayerId,
+    selection: &mut InspectionSelection,
+) {
+    let now = time.elapsed_secs_f64();
+    let same_type = keys.pressed(KeyCode::ControlLeft)
+        || keys.pressed(KeyCode::ControlRight)
+        || selection
+            .last_click
+            .is_some_and(|(previous, at)| previous == id && now - at <= DOUBLE_CLICK_SECONDS);
+    selection.last_click = Some((id, now));
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    if same_type {
+        let ids = same_type_selection(id, view, local_player);
+        if shift {
+            selection.add(ids);
+        } else {
+            selection.replace(ids);
+        }
+    } else if shift {
+        selection.toggle(id);
+    } else {
+        selection.replace([id]);
     }
+}
+
+struct SelectionView<'a> {
+    camera: &'a Camera,
+    transform: &'a GlobalTransform,
+    samples: &'a PresentationSamples,
+    metrics: &'a WorldMetrics,
+    terrain: &'a TerrainSurface,
+    alpha: f32,
+    viewport: Vec2,
+}
+
+impl SelectionView<'_> {
+    fn visible(&self, id: SimId) -> bool {
+        let position = if let Some(builder) = self.samples.current.builders.get(&id) {
+            let previous = self.samples.previous.builders.get(&id).unwrap_or(builder);
+            sim_point_to_terrain_world_lerp(
+                previous.position,
+                builder.position,
+                self.alpha,
+                self.terrain,
+            ) + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5)
+        } else if let Some(building) = self.samples.current.buildings.get(&id) {
+            let (mut center, _) = self.metrics.footprint_center_size(building.footprint);
+            center.y = self.terrain.height_at_world(center.xz());
+            center
+        } else {
+            return false;
+        };
+        self.camera
+            .world_to_viewport(self.transform, position)
+            .is_ok_and(|screen| screen.cmpge(Vec2::ZERO).all() && screen.cmple(self.viewport).all())
+    }
+}
+
+fn same_type_selection(id: SimId, view: &SelectionView<'_>, owner: PlayerId) -> Vec<SimId> {
+    let samples = view.samples;
+    if let Some(builder) = samples.current.builders.get(&id) {
+        return samples
+            .current
+            .builders
+            .values()
+            .filter(|candidate| {
+                candidate.owner == owner
+                    && candidate.appearance.rawcode == builder.appearance.rawcode
+            })
+            .map(|candidate| candidate.id)
+            .filter(|candidate| *candidate == id || view.visible(*candidate))
+            .take(MAX_SELECTION)
+            .collect();
+    }
+    if let Some(building) = samples.current.buildings.get(&id) {
+        return samples
+            .current
+            .buildings
+            .values()
+            .filter(|candidate| {
+                candidate.owner == Some(owner)
+                    && candidate.content.map(|content| content.rawcode)
+                        == building.content.map(|content| content.rawcode)
+            })
+            .map(|candidate| candidate.id)
+            .filter(|candidate| *candidate == id || view.visible(*candidate))
+            .take(MAX_SELECTION)
+            .collect();
+    }
+    vec![id]
+}
+
+fn box_select(
+    start: Vec2,
+    end: Vec2,
+    view: &SelectionView<'_>,
+    owner: PlayerId,
+    content: &CastleFightContentBundle,
+) -> Vec<SimId> {
+    let samples = view.samples;
+    let min = start.min(end);
+    let max = start.max(end);
+    let inside = |position: Vec3| {
+        view.camera
+            .world_to_viewport(view.transform, position)
+            .is_ok_and(|screen| screen.cmpge(min).all() && screen.cmple(max).all())
+    };
+    let builders: Vec<_> = samples
+        .current
+        .builders
+        .values()
+        .filter(|builder| builder.owner == owner)
+        .filter(|builder| {
+            let previous = samples
+                .previous
+                .builders
+                .get(&builder.id)
+                .unwrap_or(builder);
+            inside(
+                sim_point_to_terrain_world_lerp(
+                    previous.position,
+                    builder.position,
+                    view.alpha,
+                    view.terrain,
+                ) + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5),
+            )
+        })
+        .map(|builder| builder.id)
+        .take(MAX_SELECTION)
+        .collect();
+    if !builders.is_empty() {
+        return builders;
+    }
+    samples
+        .current
+        .buildings
+        .values()
+        .filter(|building| {
+            building.owner == Some(owner)
+                && building.content.is_some_and(|identity| {
+                    matches!(
+                        content.building_kind_for_rawcode(identity.rawcode),
+                        Some(CastleFightBuildingKind::Production(_))
+                    )
+                })
+        })
+        .filter(|building| {
+            let (mut center, _) = view.metrics.footprint_center_size(building.footprint);
+            center.y = view.terrain.height_at_world(center.xz());
+            inside(center)
+        })
+        .map(|building| building.id)
+        .take(MAX_SELECTION)
+        .collect()
+}
+
+fn handle_selection_hotkeys(
+    keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    samples: Res<PresentationSamples>,
+    selected_match: Res<SelectedMatch>,
+    mut selection: ResMut<InspectionSelection>,
+    mut camera_focus: ResMut<crate::presentation::CameraFocusRequest>,
+) {
+    if keys.just_pressed(KeyCode::Tab) && selection.members.len() > 1 {
+        let mut types = Vec::new();
+        for &id in &selection.members {
+            if let Some(kind) = selection_type_key(id, &samples)
+                && !types.contains(&kind)
+            {
+                types.push(kind);
+            }
+        }
+        if types.len() > 1 {
+            let active = selection
+                .selected
+                .and_then(|id| selection_type_key(id, &samples));
+            let index = active
+                .and_then(|kind| types.iter().position(|candidate| *candidate == kind))
+                .unwrap_or(0);
+            let backwards = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+            let next = if backwards {
+                (index + types.len() - 1) % types.len()
+            } else {
+                (index + 1) % types.len()
+            };
+            if let Some(id) = selection
+                .members
+                .iter()
+                .copied()
+                .find(|id| selection_type_key(*id, &samples) == Some(types[next]))
+            {
+                selection.focus(id);
+            }
+        }
+    }
+    if keys.just_pressed(KeyCode::Backquote) {
+        let idle: Vec<_> = samples
+            .current
+            .builders
+            .values()
+            .filter(|builder| builder.owner == selected_match.local_player)
+            .filter(|builder| {
+                builder.destination.is_none()
+                    && builder.follow_target.is_none()
+                    && builder.repair_target.is_none()
+                    && builder.build_footprint.is_none()
+            })
+            .map(|builder| builder.id)
+            .collect();
+        if !idle.is_empty() {
+            let next = idle
+                .iter()
+                .position(|id| Some(*id) == selection.selected)
+                .map_or(0, |index| (index + 1) % idle.len());
+            selection.replace([idle[next]]);
+            camera_focus.0 = Some(idle[next]);
+        }
+    }
+    const DIGITS: [KeyCode; 10] = [
+        KeyCode::Digit0,
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+    ];
+    for (index, key) in DIGITS.into_iter().enumerate() {
+        if !keys.just_pressed(key) {
+            continue;
+        }
+        if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
+            selection.groups[index] = selection.members.clone();
+        } else if !selection.groups[index].is_empty() {
+            let now = time.elapsed_secs_f64();
+            if selection
+                .last_group
+                .is_some_and(|(last, at)| last == index && now - at <= DOUBLE_CLICK_SECONDS)
+            {
+                camera_focus.0 = selection.groups[index].first().copied();
+            }
+            selection.last_group = Some((index, now));
+            let group = selection.groups[index].clone();
+            selection.replace(group);
+        }
+    }
+}
+
+fn selection_type_key(id: SimId, samples: &PresentationSamples) -> Option<(u8, u32)> {
+    samples
+        .current
+        .builders
+        .get(&id)
+        .map(|builder| (0, builder.appearance.rawcode))
+        .or_else(|| {
+            samples
+                .current
+                .units
+                .get(&id)
+                .map(|unit| (1, unit.content.map_or(0, |content| content.rawcode)))
+        })
+        .or_else(|| {
+            samples
+                .current
+                .buildings
+                .get(&id)
+                .map(|building| (2, building.content.map_or(0, |content| content.rawcode)))
+        })
 }
 
 fn update_inspector_text(
@@ -178,10 +888,237 @@ fn update_inspector_text(
 ) {
     let next = match selection.selected {
         None => "No selection.".into(),
-        Some(id) => inspector_text(id, &samples),
+        Some(_) if selection.members.len() > 1 => {
+            let constructing = selection
+                .members
+                .iter()
+                .filter(|id| {
+                    samples
+                        .current
+                        .buildings
+                        .get(id)
+                        .is_some_and(|building| building.construction_complete_tick.is_some())
+                })
+                .count();
+            format!(
+                "{} selected\n{} under construction\n\nShift-click an icon to remove it.",
+                selection.members.len(),
+                constructing
+            )
+        }
+        Some(id) => selection_summary(id, &samples),
     };
     if text.0 != next {
         text.0 = next;
+    }
+}
+
+fn update_debug_inspector_text(
+    samples: Res<PresentationSamples>,
+    selection: Res<InspectionSelection>,
+    debug: Res<crate::presentation::DebugPresentation>,
+    mut panel: Single<&mut Visibility, With<DebugInspectionPanel>>,
+    mut text: Single<&mut Text, With<DebugInspectionText>>,
+) {
+    **panel = if debug.overlays && selection.selected.is_some() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    if let Some(id) = selection.selected {
+        text.0 = inspector_text(id, &samples);
+    }
+}
+
+fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
+    if let Some(builder) = samples.current.builders.get(&id) {
+        return format!(
+            "{}\nBuilder\n\n{}",
+            builder.appearance.name,
+            if builder.build_footprint.is_some() {
+                "Constructing"
+            } else if builder.repair_target.is_some() {
+                "Repairing"
+            } else if builder.follow_target.is_some() {
+                "Following"
+            } else if builder.destination.is_some() {
+                "Moving"
+            } else {
+                "Idle"
+            }
+        );
+    }
+    if let Some(unit) = samples.current.units.get(&id) {
+        return format!(
+            "{}\nHealth: {} / {}\n{} armor\n{} attack",
+            unit.content.map_or("Unit", |content| content.name),
+            unit.health,
+            unit.health_max,
+            armor_type_name(unit.armor.armor_type),
+            damage_type_name(unit.damage_type)
+        );
+    }
+    if let Some(building) = samples.current.buildings.get(&id) {
+        let status = if let Some(complete_tick) = building.construction_complete_tick {
+            format!(
+                "Constructing: {} ticks remaining",
+                complete_tick.saturating_sub(samples.current.tick)
+            )
+        } else if let Some(next_spawn_tick) = building.next_spawn_tick {
+            format!(
+                "Next unit: {} ticks",
+                next_spawn_tick.saturating_sub(samples.current.tick)
+            )
+        } else {
+            "Ready".into()
+        };
+        return format!(
+            "{}\nHealth: {} / {}\n{}\n{}",
+            building.content.map_or("Building", |content| content.name),
+            building.health,
+            building.health_max,
+            armor_type_name(building.armor.armor_type),
+            status
+        );
+    }
+    "No selection.".into()
+}
+
+fn update_selection_tiles(
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    asset_server: Res<AssetServer>,
+    mut ui: SelectionTileUi<'_, '_>,
+) {
+    let single = selection.members.len() <= 1;
+    ui.tile_root.width = px(if single {
+        134.0
+    } else {
+        8.0 * (TILE_SIZE + 3.0)
+    });
+    **ui.inventory = if single {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for (slot, mut node, mut visibility, mut border) in &mut ui.tiles {
+        let size = if single && slot.0 == 0 {
+            132.0
+        } else {
+            TILE_SIZE
+        };
+        node.width = px(size);
+        node.height = px(size);
+        *visibility = if slot.0 < selection.members.len() {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        *border = BorderColor::all(
+            if selection.members.get(slot.0).copied() == selection.selected {
+                Color::srgb(0.95, 0.76, 0.22)
+            } else {
+                Color::srgb(0.40, 0.37, 0.25)
+            },
+        );
+    }
+    for (slot, mut image) in &mut ui.icons {
+        let rawcode = selection.members.get(slot.0).and_then(|id| {
+            samples
+                .current
+                .builders
+                .get(id)
+                .map(|builder| builder.appearance.rawcode)
+                .or_else(|| {
+                    samples
+                        .current
+                        .units
+                        .get(id)
+                        .and_then(|unit| unit.content.map(|content| content.rawcode))
+                })
+                .or_else(|| {
+                    samples
+                        .current
+                        .buildings
+                        .get(id)
+                        .and_then(|building| building.content.map(|content| content.rawcode))
+                })
+        });
+        *image = rawcode
+            .and_then(|code| {
+                ui.icon_assets
+                    .image(UiIconKey::unit_game_interface(code), &asset_server)
+            })
+            .map_or_else(ImageNode::default, ImageNode::new);
+    }
+    for (slot, mut node) in &mut ui.bars {
+        let fraction = selection
+            .members
+            .get(slot.0)
+            .and_then(|id| {
+                samples
+                    .current
+                    .units
+                    .get(id)
+                    .map(|unit| (unit.health, unit.health_max))
+                    .or_else(|| {
+                        samples
+                            .current
+                            .buildings
+                            .get(id)
+                            .map(|building| (building.health, building.health_max))
+                    })
+            })
+            .map_or(1.0, |(current, maximum)| {
+                if maximum > 0 {
+                    (current as f32 / maximum as f32).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                }
+            });
+        node.width = percent(fraction * 100.0);
+    }
+}
+
+fn handle_selection_tile_click(
+    keys: Res<ButtonInput<KeyCode>>,
+    interactions: SelectionTileInteractionQuery<'_, '_>,
+    mut selection: ResMut<InspectionSelection>,
+) {
+    for (slot, interaction) in &interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(&id) = selection.members.get(slot.0) else {
+            continue;
+        };
+        if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+            selection.toggle(id);
+        } else {
+            selection.focus(id);
+        }
+    }
+}
+
+fn update_selection_rectangle(
+    drag: Res<SelectionDrag>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut rectangle: Single<(&mut Node, &mut Visibility), With<SelectionRectangle>>,
+) {
+    let (node, visibility) = &mut *rectangle;
+    if let (Some(start), Some(current)) = (drag.start, drag.current)
+        && mouse.pressed(MouseButton::Left)
+        && start.distance(current) >= DRAG_THRESHOLD
+    {
+        let min = start.min(current);
+        let max = start.max(current);
+        node.left = px(min.x);
+        node.top = px(min.y);
+        node.width = px(max.x - min.x);
+        node.height = px(max.y - min.y);
+        **visibility = Visibility::Visible;
+    } else {
+        **visibility = Visibility::Hidden;
     }
 }
 
@@ -194,95 +1131,98 @@ fn draw_selection_highlight(
     selection: Res<InspectionSelection>,
     mut gizmos: Gizmos,
 ) {
-    let Some(id) = selection.selected else {
-        return;
-    };
     let alpha = playback.interpolation_alpha(&fixed_time);
-
-    if let Some(builder) = samples.current.builders.get(&id) {
-        let previous = samples.previous.builders.get(&id).unwrap_or(builder);
-        let center =
-            sim_point_to_terrain_world_lerp(previous.position, builder.position, alpha, &terrain);
-        gizmos.circle(
-            Isometry3d::new(
-                center + Vec3::Y * 0.35,
-                Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
-            ),
-            BUILDER_PICK_RADIUS + SELECTION_RING_PADDING,
-            SELECTION_COLOR,
-        );
-        if let Some(target) = builder.repair_target
-            && let Some(target_position) =
-                current_entity_position(target, &samples, &metrics, &terrain)
-        {
-            gizmos.line(
-                center + Vec3::Y * 4.0,
-                target_position + Vec3::Y * 4.0,
-                SELECTION_COLOR.with_alpha(0.55),
+    for &id in &selection.members {
+        if let Some(builder) = samples.current.builders.get(&id) {
+            let previous = samples.previous.builders.get(&id).unwrap_or(builder);
+            let center = sim_point_to_terrain_world_lerp(
+                previous.position,
+                builder.position,
+                alpha,
+                &terrain,
             );
+            gizmos.circle(
+                Isometry3d::new(
+                    center + Vec3::Y * 0.35,
+                    Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
+                ),
+                BUILDER_PICK_RADIUS + SELECTION_RING_PADDING,
+                SELECTION_COLOR,
+            );
+            if let Some(target) = builder.repair_target
+                && let Some(target_position) =
+                    current_entity_position(target, &samples, &metrics, &terrain)
+            {
+                gizmos.line(
+                    center + Vec3::Y * 4.0,
+                    target_position + Vec3::Y * 4.0,
+                    SELECTION_COLOR.with_alpha(0.55),
+                );
+            }
+            if let Some(footprint) = builder.build_footprint {
+                draw_footprint_outline(
+                    &mut gizmos,
+                    &metrics,
+                    &terrain,
+                    footprint,
+                    SELECTION_COLOR.with_alpha(0.75),
+                );
+            }
+            continue;
         }
-        if let Some(footprint) = builder.build_footprint {
+
+        if let Some(unit) = samples.current.units.get(&id) {
+            let previous = samples.previous.units.get(&id).unwrap_or(unit);
+            let center =
+                sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain)
+                    + Vec3::Y * unit_visual_altitude(unit.movement_class);
+            let radius = unit_pick_radius(unit) + SELECTION_RING_PADDING;
+            gizmos.circle(
+                Isometry3d::new(
+                    center + Vec3::Y * 0.35,
+                    Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
+                ),
+                radius,
+                SELECTION_COLOR,
+            );
+            if let Some(target) = unit.target
+                && let Some(target_position) =
+                    current_entity_position(target, &samples, &metrics, &terrain)
+            {
+                gizmos.line(
+                    center + Vec3::Y * 4.0,
+                    target_position + Vec3::Y * 4.0,
+                    SELECTION_COLOR.with_alpha(0.55),
+                );
+            }
+            continue;
+        }
+
+        if let Some(building) = samples.current.buildings.get(&id) {
             draw_footprint_outline(
                 &mut gizmos,
                 &metrics,
                 &terrain,
-                footprint,
-                SELECTION_COLOR.with_alpha(0.75),
+                building.footprint,
+                SELECTION_COLOR,
             );
-        }
-        return;
-    }
-
-    if let Some(unit) = samples.current.units.get(&id) {
-        let previous = samples.previous.units.get(&id).unwrap_or(unit);
-        let center =
-            sim_point_to_terrain_world_lerp(previous.position, unit.position, alpha, &terrain)
-                + Vec3::Y * unit_visual_altitude(unit.movement_class);
-        let radius = unit_pick_radius(unit) + SELECTION_RING_PADDING;
-        gizmos.circle(
-            Isometry3d::new(
-                center + Vec3::Y * 0.35,
-                Quat::from_rotation_arc(Vec3::Z, Vec3::Y),
-            ),
-            radius,
-            SELECTION_COLOR,
-        );
-        if let Some(target) = unit.target
-            && let Some(target_position) =
-                current_entity_position(target, &samples, &metrics, &terrain)
-        {
-            gizmos.line(
-                center + Vec3::Y * 4.0,
-                target_position + Vec3::Y * 4.0,
-                SELECTION_COLOR.with_alpha(0.55),
-            );
-        }
-        return;
-    }
-
-    if let Some(building) = samples.current.buildings.get(&id) {
-        draw_footprint_outline(
-            &mut gizmos,
-            &metrics,
-            &terrain,
-            building.footprint,
-            SELECTION_COLOR,
-        );
-        if let Some(target) = building.target
-            && let Some(target_position) =
-                current_entity_position(target, &samples, &metrics, &terrain)
-        {
-            let (mut center, _) = metrics.footprint_center_size(building.footprint);
-            center.y = terrain.height_at_world(center.xz());
-            gizmos.line(
-                center + Vec3::Y * 6.0,
-                target_position + Vec3::Y * 4.0,
-                SELECTION_COLOR.with_alpha(0.55),
-            );
+            if let Some(target) = building.target
+                && let Some(target_position) =
+                    current_entity_position(target, &samples, &metrics, &terrain)
+            {
+                let (mut center, _) = metrics.footprint_center_size(building.footprint);
+                center.y = terrain.height_at_world(center.xz());
+                gizmos.line(
+                    center + Vec3::Y * 6.0,
+                    target_position + Vec3::Y * 4.0,
+                    SELECTION_COLOR.with_alpha(0.55),
+                );
+            }
         }
     }
 }
 
+#[cfg(test)]
 pub(crate) fn pick_builder_on_ray(
     ray_origin: Vec3,
     ray_direction: Vec3,
@@ -761,18 +1701,22 @@ fn team_label(team: Team) -> &'static str {
     }
 }
 
-pub(crate) fn cursor_over_inspector_panel(cursor: Vec2, window_width: f32) -> bool {
-    let left = window_width - PANEL_RIGHT - PANEL_WIDTH;
-    cursor.x >= left
-        && cursor.x <= window_width - PANEL_RIGHT
-        && cursor.y >= PANEL_TOP
-        && cursor.y <= PANEL_TOP + PANEL_HEIGHT
+pub(crate) fn cursor_over_inspector_panel(
+    cursor: Vec2,
+    window_width: f32,
+    window_height: f32,
+) -> bool {
+    cursor.x >= 0.0
+        && cursor.x <= window_width
+        && cursor.y >= window_height - CONSOLE_HEIGHT
+        && cursor.y <= window_height
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
+    use bevy::ecs::system::SystemState;
     use castle_fight_sim::{
         BuilderLocomotion, BuildingFootprint, ContentIdentity, MovementClass, NavCell,
         PlayerConnectionStatus, PlayerEconomyView, PlayerId, PlayerResources, PlayerView, SimPoint,
@@ -781,6 +1725,29 @@ mod tests {
 
     use super::*;
     use crate::bridge::PresentationSnapshot;
+
+    #[test]
+    fn selection_tile_ui_queries_are_disjoint_at_runtime() {
+        let mut world = World::new();
+        let _state = SystemState::<SelectionTileUi<'_, '_>>::new(&mut world);
+    }
+
+    #[test]
+    fn selection_caps_at_twenty_four_and_shift_toggle_preserves_order() {
+        let mut selection = InspectionSelection::default();
+        selection.replace((1..=30).map(SimId));
+        assert_eq!(selection.members.len(), MAX_SELECTION);
+        assert_eq!(selection.selected, Some(SimId(1)));
+        assert_eq!(selection.members.last(), Some(&SimId(24)));
+
+        selection.toggle(SimId(1));
+        assert_eq!(selection.selected, Some(SimId(2)));
+        selection.toggle(SimId(1));
+        assert_eq!(selection.members.last(), Some(&SimId(1)));
+        selection.add([SimId(2), SimId(31)]);
+        assert_eq!(selection.members.len(), MAX_SELECTION);
+        assert!(!selection.members.contains(&SimId(31)));
+    }
 
     fn metrics() -> WorldMetrics {
         WorldMetrics::from_simulation_config(&SimulationConfig {
@@ -1096,22 +2063,26 @@ mod tests {
     }
 
     #[test]
-    fn inspector_panel_capture_tracks_right_edge_below_resource_bar() {
+    fn console_capture_covers_minimap_and_selection_space() {
         assert!(!cursor_over_inspector_panel(
-            Vec2::new(1424.0, 16.0),
-            1440.0
+            Vec2::new(100.0, 400.0),
+            1440.0,
+            720.0
         ));
         assert!(cursor_over_inspector_panel(
-            Vec2::new(1424.0, PANEL_TOP),
-            1440.0
+            Vec2::new(100.0, 500.0),
+            1440.0,
+            720.0
         ));
         assert!(cursor_over_inspector_panel(
-            Vec2::new(1084.0, PANEL_TOP + 330.0),
-            1440.0
+            Vec2::new(1129.0, 700.0),
+            1440.0,
+            720.0
         ));
         assert!(!cursor_over_inspector_panel(
-            Vec2::new(1083.0, PANEL_TOP + 200.0),
-            1440.0
+            Vec2::new(1441.0, 700.0),
+            1440.0,
+            720.0
         ));
     }
 }
