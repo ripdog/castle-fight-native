@@ -6,7 +6,7 @@
 - Always commit completed work automatically in logical, reviewable chunks with clear commit messages.
 - Keep commits narrowly scoped; do not mix unrelated refactors, formatting, and behavior changes unless they are inseparable.
 - Preserve and update the specifications under `docs/spec` when implementation decisions change normative behavior.
-- Devspace worktrees are large: after merging a worktree's completed changes, remove that worktree instead of leaving it on disk.
+- When using Devspace worktrees, remove a completed worktree after merging its changes instead of leaving it on disk.
 
 ## Rust expectations
 
@@ -31,6 +31,6 @@
 
 - Add or update focused tests for behavior changes, especially determinism-sensitive code.
 - Run relevant formatting, linting, tests, and build checks before committing.
-- Run compile-heavy Cargo commands through `tools/cargo-interactive` (for example `tools/cargo-interactive check --workspace` or `tools/cargo-interactive test -p castle-fight-sim`) and launch them through Devspace as asynchronous tasks (`async=true`), then inspect their output with the task APIs. The wrapper reserves half of the machine's physical CPU cores for interactive use, constrains the long-lived sccache compiler server, gives sccache a larger shared cache budget, and serializes compile-heavy CF Native builds across worktrees so parallel agents do not oversubscribe the same CPUs. Do not bypass it with raw `cargo build`, `cargo check`, `cargo test`, `cargo clippy`, benchmarks, or similar compile-heavy commands.
+- Run compile-heavy Cargo commands through `tools/cargo-interactive` (for example `tools/cargo-interactive check --workspace` or `tools/cargo-interactive test -p castle-fight-sim`). The wrapper reserves half of the machine's physical CPU cores for interactive use, constrains the long-lived sccache compiler server, gives sccache a larger shared cache budget, and serializes compile-heavy CF Native builds across worktrees so parallel agents do not oversubscribe the same CPUs. Codex should launch these commands with its native command/task tools and inspect their output there. ChatGPT, which does not have those native tools, should launch them through Devspace as asynchronous tasks (`async=true`) and inspect their output with the task APIs. Do not bypass the wrapper with raw `cargo build`, `cargo check`, `cargo test`, `cargo clippy`, benchmarks, or similar compile-heavy commands.
 - Respect the repository's six-job Cargo build cap; do not override it with `-j`/`--jobs` or `CARGO_BUILD_JOBS` unless the user explicitly asks.
 - For performance-sensitive changes, benchmark/profile where practical rather than assuming an optimization is beneficial.
