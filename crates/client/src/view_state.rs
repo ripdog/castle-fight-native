@@ -276,4 +276,57 @@ mod tests {
             CursorGrabMode::None
         );
     }
+
+    #[test]
+    fn fullscreen_reapplies_cursor_grab_after_focus_returns() {
+        let mut app = App::new();
+        app.add_message::<WindowFocused>()
+            .add_systems(Update, sync_cursor_grab);
+        let window_entity = app
+            .world_mut()
+            .spawn((
+                Window {
+                    mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+                    ..default()
+                },
+                PrimaryWindow,
+            ))
+            .id();
+        app.update();
+        let grab_changed = app
+            .world()
+            .entity(window_entity)
+            .get_change_ticks::<CursorOptions>()
+            .unwrap()
+            .changed;
+
+        app.world_mut().write_message(WindowFocused {
+            window: window_entity,
+            focused: false,
+        });
+        app.update();
+        assert_eq!(
+            app.world()
+                .entity(window_entity)
+                .get_change_ticks::<CursorOptions>()
+                .unwrap()
+                .changed,
+            grab_changed
+        );
+
+        app.world_mut().write_message(WindowFocused {
+            window: window_entity,
+            focused: true,
+        });
+        app.update();
+        let window = app.world().entity(window_entity);
+        assert_eq!(
+            window.get::<CursorOptions>().unwrap().grab_mode,
+            CursorGrabMode::Confined
+        );
+        assert_ne!(
+            window.get_change_ticks::<CursorOptions>().unwrap().changed,
+            grab_changed
+        );
+    }
 }
