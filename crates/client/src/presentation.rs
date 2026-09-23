@@ -120,6 +120,10 @@ pub(crate) const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 pub(crate) const WC3_BUILDING_AMBIENT_ANIMATION_SPEED: f32 = 0.5;
 const CAMERA_EDGE_SCROLL_MARGIN: f32 = 8.0;
+const CAMERA_PAN_SPEED_WORLD_PER_SECOND: f32 = 6_000.0;
+const CAMERA_DEFAULT_DISTANCE_FACTOR: f32 = 0.60;
+const CAMERA_MIN_DISTANCE_FACTOR: f32 = 0.20;
+const CAMERA_MAX_DISTANCE_FACTOR: f32 = 1.25;
 const SIDE_TERRAIN_MASK_COLOR: Color = Color::srgb(0.006, 0.009, 0.006);
 const MAP_GRID_HEIGHT_OFFSET: f32 = 0.35;
 const MAP_GRID_MAJOR_INTERVAL: i32 = 4;
@@ -1253,7 +1257,7 @@ fn setup_scene(
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.85, -0.75, 0.0)),
     ));
 
-    let distance = world_size.max_element() * 0.72;
+    let distance = world_size.max_element() * CAMERA_DEFAULT_DISTANCE_FACTOR;
     let rig = RtsCamera {
         focus: world_center,
         distance,
@@ -4659,10 +4663,7 @@ fn update_camera(
         );
         movement += right * edge.x + forward * edge.y;
     }
-    if movement != Vec3::ZERO {
-        let pan_speed = rig.distance * 0.65;
-        rig.focus += movement.normalize() * pan_speed * dt;
-    }
+    pan_camera_focus(rig, movement, dt);
     if camera_key_pressed(KeyCode::KeyQ) {
         rig.yaw += 0.9 * dt;
     }
@@ -4675,13 +4676,13 @@ fn update_camera(
     }
     let world_size = resources.metrics.world_size();
     rig.distance = rig.distance.clamp(
-        world_size.min_element() * 0.28,
-        world_size.max_element() * 1.7,
+        world_size.min_element() * CAMERA_MIN_DISTANCE_FACTOR,
+        world_size.max_element() * CAMERA_MAX_DISTANCE_FACTOR,
     );
     if resources.keys.just_pressed(KeyCode::Home) {
         rig.focus = resources.metrics.world_center();
         rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
-        rig.distance = world_size.max_element() * 0.72;
+        rig.distance = world_size.max_element() * CAMERA_DEFAULT_DISTANCE_FACTOR;
         rig.yaw = 0.0;
     }
 
@@ -4712,6 +4713,12 @@ fn update_camera(
     rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
 
     **transform = camera_transform(rig);
+}
+
+fn pan_camera_focus(rig: &mut RtsCamera, movement: Vec3, dt: f32) {
+    if movement != Vec3::ZERO {
+        rig.focus += movement.normalize() * CAMERA_PAN_SPEED_WORLD_PER_SECOND * dt;
+    }
 }
 
 fn camera_edge_scroll_axes(cursor: Vec2, window_size: Vec2, margin: f32) -> Vec2 {
@@ -5417,6 +5424,26 @@ mod tests {
             camera_edge_scroll_axes(Vec2::new(720.0, 450.0), size, CAMERA_EDGE_SCROLL_MARGIN),
             Vec2::ZERO
         );
+    }
+
+    #[test]
+    fn camera_pan_speed_is_independent_of_zoom_distance() {
+        let mut near = RtsCamera {
+            focus: Vec3::ZERO,
+            distance: 1_433.6,
+            yaw: 0.0,
+            grab_anchor: None,
+        };
+        let mut far = RtsCamera {
+            focus: Vec3::ZERO,
+            distance: 16_000.0,
+            yaw: 0.0,
+            grab_anchor: None,
+        };
+        pan_camera_focus(&mut near, Vec3::X, 0.5);
+        pan_camera_focus(&mut far, Vec3::X, 0.5);
+        assert_eq!(near.focus, far.focus);
+        assert_eq!(near.focus, Vec3::new(3_000.0, 0.0, 0.0));
     }
 
     #[test]
