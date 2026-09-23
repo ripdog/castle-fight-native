@@ -137,6 +137,7 @@ pub struct BuildingSample {
     pub armor: ArmorProfile,
     pub target: Option<SimId>,
     pub next_spawn_tick: Option<u64>,
+    pub production_queue: Option<u8>,
     pub production_interval_ticks: Option<u16>,
     pub cooldown_remaining: Option<u16>,
     pub mana_current: Option<i32>,
@@ -250,6 +251,7 @@ impl PresentationSnapshot {
                         armor: building.armor,
                         target: building.target,
                         next_spawn_tick: building.next_spawn_tick,
+                        production_queue: building.production_queue,
                         production_interval_ticks: building
                             .production
                             .map(|production| production.interval_ticks),

@@ -4541,6 +4541,9 @@ fn construction_progress(building: &BuildingSample, rendered_tick: f64) -> Optio
 }
 
 fn production_progress(building: &BuildingSample, rendered_tick: f64) -> Option<f32> {
+    if building.production_queue == Some(0) {
+        return None;
+    }
     let next_spawn_tick = building.next_spawn_tick?;
     let interval_ticks = building.production_interval_ticks?;
     if interval_ticks == 0 {
@@ -5490,6 +5493,7 @@ mod tests {
             armor: castle_fight_sim::ArmorProfile::UNARMORED,
             target: None,
             next_spawn_tick: Some(40),
+            production_queue: Some(2),
             production_interval_ticks: Some(20),
             cooldown_remaining: None,
             mana_current: None,
@@ -5524,6 +5528,7 @@ mod tests {
             armor: castle_fight_sim::ArmorProfile::UNARMORED,
             target: None,
             next_spawn_tick: None,
+            production_queue: None,
             production_interval_ticks: None,
             cooldown_remaining: None,
             mana_current: None,

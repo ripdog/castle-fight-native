@@ -5,8 +5,9 @@ use std::{
 
 use bevy::{ecs::system::SystemParam, input::InputSystems, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
-    BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle, CommandCardPosition,
-    CommandSubmission, NavCell, PlayerCommand, SimId, Team,
+    BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle,
+    CastleFightProductionDefinition, CommandCardPosition, CommandSubmission, NavCell,
+    PlayerCommand, SimId, Team,
 };
 
 #[cfg(test)]
@@ -152,6 +153,8 @@ enum PanelAction {
     Production(ProductionPanelAction),
     OpenBuildMenu,
     CancelConstruction,
+    TrainUnit,
+    CancelProduction,
     Cancel,
 }
 
@@ -186,6 +189,7 @@ struct BuildTooltipBody;
 enum ActionTooltipKind {
     Build(BuildKind),
     ProductionUpgrade(ProductionKind),
+    TrainUnit(ProductionKind),
 }
 
 impl ActionTooltipKind {
@@ -197,6 +201,15 @@ impl ActionTooltipKind {
                     .production_building(kind)
                     .expect("upgrade target must belong to selected content bundle");
                 (definition.basic_tooltip, definition.extended_tooltip)
+            }
+            Self::TrainUnit(kind) => {
+                let definition = content
+                    .production_building(kind)
+                    .expect("selected production definition");
+                (
+                    definition.train_basic_tooltip,
+                    definition.train_extended_tooltip,
+                )
             }
         }
     }
@@ -259,6 +272,14 @@ type SlotHotkeyTexts<'w, 's> = Query<
     (With<SlotHotkey>, Without<SlotLabel>),
 >;
 
+#[derive(SystemParam)]
+struct BuildTooltipUi<'w, 's> {
+    state: ResMut<'w, BuildTooltipState>,
+    visibility: Single<'w, 's, &'static mut Visibility, With<BuildTooltip>>,
+    title: Single<'w, 's, Entity, With<BuildTooltipTitle>>,
+    body: Single<'w, 's, Entity, With<BuildTooltipBody>>,
+}
+
 type BuildPlacementGhosts<'w, 's> = Query<
     'w,
     's,
@@ -297,6 +318,7 @@ impl Plugin for BuildUiPlugin {
                 (
                     sync_action_panel_to_selection,
                     handle_escape,
+                    handle_production_train_hotkey,
                     populate_action_panel,
                     handle_action_panel_buttons,
                     handle_action_panel_right_click,
@@ -540,6 +562,40 @@ fn handle_escape(
     let Some(actor) = state.actor else {
         return;
     };
+    if authoritative
+        .simulation
+        .building(actor)
+        .is_some_and(|building| building.production_queue.is_some_and(|count| count > 0))
+    {
+        let actors = if state.members.is_empty() {
+            vec![actor]
+        } else {
+            state.members.clone()
+        };
+        for building in actors {
+            if authoritative
+                .simulation
+                .building(building)
+                .is_some_and(|view| view.production_queue.is_some_and(|count| count > 0))
+            {
+                let controller = debug_menu.controller_for_actor(
+                    &authoritative.simulation,
+                    selected_match.local_player,
+                    building,
+                );
+                let submission = authoritative.submit_local_command(
+                    controller,
+                    PlayerCommand::CancelProductionUnit { building },
+                );
+                state.status = submission_status(
+                    submission,
+                    "Training cancellation queued.",
+                    "Unable to cancel training",
+                );
+            }
+        }
+        return;
+    }
     if (state.members.len() <= 1
         || state.members.iter().all(|id| {
             authoritative
@@ -571,6 +627,92 @@ fn handle_escape(
                 cancel_selected_construction(&mut authoritative, &mut state, controller, actor);
             }
         }
+    }
+}
+
+fn handle_production_train_hotkey(
+    keys: Res<ButtonInput<KeyCode>>,
+    selected_match: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut state: ResMut<ActionPanelState>,
+) {
+    if control_modifier_pressed(&keys) || state.mode != ActionPanelMode::Actions {
+        return;
+    }
+    let layout = action_layout(&state, &authoritative, &selected_match);
+    if !layout.contains(&Some(PanelAction::TrainUnit)) {
+        return;
+    }
+    let Some(actor) = state.actor else { return };
+    let Some(definition) =
+        production_definition_for_actor(actor, &authoritative, selected_match.content)
+    else {
+        return;
+    };
+    if hotkey_just_pressed(&keys, definition.train_hotkey)
+        && production_queue_has_room(&state, &authoritative)
+    {
+        submit_production_queue_change(
+            &mut authoritative,
+            &mut state,
+            &selected_match,
+            &debug_menu,
+            true,
+        );
+    }
+}
+
+fn production_queue_has_room(
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+) -> bool {
+    let has_room = |actor| {
+        authoritative
+            .simulation
+            .building(actor)
+            .is_some_and(|building| building.production_queue.is_some_and(|count| count < 2))
+    };
+    if state.members.is_empty() {
+        state.actor.is_some_and(has_room)
+    } else {
+        state.members.iter().copied().all(has_room)
+    }
+}
+
+fn submit_production_queue_change(
+    authoritative: &mut AuthoritativeSimulation,
+    state: &mut ActionPanelState,
+    selected_match: &SelectedMatch,
+    debug_menu: &DebugMenuState,
+    enqueue: bool,
+) {
+    let actors = if state.members.is_empty() {
+        state.actor.into_iter().collect()
+    } else {
+        state.members.clone()
+    };
+    for building in actors {
+        let controller = debug_menu.controller_for_actor(
+            &authoritative.simulation,
+            selected_match.local_player,
+            building,
+        );
+        let command = if enqueue {
+            PlayerCommand::QueueProductionUnit { building }
+        } else {
+            PlayerCommand::CancelProductionUnit { building }
+        };
+        let submission = authoritative.submit_local_command(controller, command);
+        state.status = submission_status(
+            submission,
+            if enqueue {
+                "Unit training queued."
+            } else {
+                "Training cancellation queued."
+            },
+            "Unable to change production queue",
+        );
     }
 }
 
@@ -647,7 +789,9 @@ fn populate_action_panel(
     }
     for (slot, mut text) in &mut hotkeys {
         text.0 = layout[slot.0]
-            .and_then(|action| action_hotkey(action, selected_match.content))
+            .and_then(|action| {
+                action_hotkey_for_state(action, &state, &authoritative, selected_match.content)
+            })
             .map_or_else(String::new, |hotkey| hotkey.to_string());
     }
     for (slot, mut image) in &mut icons {
@@ -677,8 +821,34 @@ fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Opt
                 .expect("upgrade target must belong to selected content bundle")
                 .hotkey,
         ),
+        PanelAction::TrainUnit => None,
         _ => None,
     }
+}
+
+fn action_hotkey_for_state(
+    action: PanelAction,
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+    content: &CastleFightContentBundle,
+) -> Option<char> {
+    if action == PanelAction::TrainUnit {
+        return state
+            .actor
+            .and_then(|actor| production_definition_for_actor(actor, authoritative, content))
+            .map(|definition| definition.train_hotkey);
+    }
+    action_hotkey(action, content)
+}
+
+fn production_definition_for_actor(
+    actor: SimId,
+    authoritative: &AuthoritativeSimulation,
+    content: &CastleFightContentBundle,
+) -> Option<CastleFightProductionDefinition> {
+    let building = authoritative.simulation.building(actor)?;
+    let kind = selected_production_kind_from_content(building.content, content)?;
+    content.production_building(kind)
 }
 
 pub(crate) fn key_code_for_hotkey(hotkey: char) -> Option<KeyCode> {
@@ -733,7 +903,9 @@ fn capture_action_panel_hotkeys(
         .into_iter()
         .flatten()
     {
-        let Some(key) = action_hotkey(action, selected_match.content).and_then(key_code_for_hotkey)
+        let Some(key) =
+            action_hotkey_for_state(action, &state, &authoritative, selected_match.content)
+                .and_then(key_code_for_hotkey)
         else {
             continue;
         };
@@ -784,6 +956,15 @@ fn action_icon_key(
                 .rawcode;
             UiIconKey::unit_game_interface(rawcode)
         }
+        PanelAction::TrainUnit => UiIconKey::unit_game_interface(
+            state
+                .actor
+                .and_then(|actor| production_definition_for_actor(actor, authoritative, content))
+                .expect("train action requires a versioned production building")
+                .produced_unit
+                .rawcode,
+        ),
+        PanelAction::CancelProduction => presentation.cancel_command,
         PanelAction::CancelConstruction | PanelAction::Cancel => presentation.cancel_command,
         PanelAction::Target(TargetingAction::Move) => presentation.move_command,
         PanelAction::Target(TargetingAction::Repair) => {
@@ -854,11 +1035,42 @@ fn action_layout(
             slots[cancel_slot] = Some(PanelAction::CancelConstruction);
             return slots;
         }
+        if buildings
+            .iter()
+            .all(|building| building.production_queue.is_some())
+        {
+            if buildings
+                .iter()
+                .all(|building| building.production_queue.is_some_and(|count| count > 0))
+            {
+                slots[cancel_slot] = Some(PanelAction::CancelProduction);
+            }
+            let first_kind =
+                selected_production_kind_from_content(buildings[0].content, selected_match.content);
+            if let Some(kind) = first_kind
+                && buildings.iter().all(|building| {
+                    selected_production_kind_from_content(building.content, selected_match.content)
+                        == Some(kind)
+                })
+            {
+                let definition = selected_match
+                    .content
+                    .production_building(kind)
+                    .expect("selected production definition");
+                insert_panel_action(
+                    &mut slots,
+                    command_slot(definition.train_command_position),
+                    cancel_slot,
+                    PanelAction::TrainUnit,
+                );
+            }
+        }
         let first_kind =
             selected_production_kind_from_content(buildings[0].content, selected_match.content);
         if let Some(kind) = first_kind
             && buildings.iter().all(|building| {
                 building.construction_complete_tick.is_none()
+                    && building.production_queue == Some(0)
                     && selected_production_kind_from_content(
                         building.content,
                         selected_match.content,
@@ -900,6 +1112,22 @@ fn action_layout(
                 } else if let Some(kind) =
                     selected_production_kind_from_content(building.content, selected_match.content)
                 {
+                    if building.production_queue.is_some_and(|count| count > 0) {
+                        slots[cancel_slot] = Some(PanelAction::CancelProduction);
+                    }
+                    let definition = selected_match
+                        .content
+                        .production_building(kind)
+                        .expect("selected production definition");
+                    insert_panel_action(
+                        &mut slots,
+                        command_slot(definition.train_command_position),
+                        cancel_slot,
+                        PanelAction::TrainUnit,
+                    );
+                    if building.production_queue != Some(0) {
+                        return slots;
+                    }
                     for target in kind
                         .upgrade_targets_for_version(selected_match.content.map_version)
                         .expect("selected bundle must support its production upgrade graph")
@@ -992,6 +1220,24 @@ fn handle_action_panel_buttons(
                     &debug_menu,
                 );
             }
+            PanelAction::TrainUnit => {
+                if production_queue_has_room(&state, &authoritative) {
+                    submit_production_queue_change(
+                        &mut authoritative,
+                        &mut state,
+                        &selected_match,
+                        &debug_menu,
+                        true,
+                    );
+                }
+            }
+            PanelAction::CancelProduction => submit_production_queue_change(
+                &mut authoritative,
+                &mut state,
+                &selected_match,
+                &debug_menu,
+                false,
+            ),
             PanelAction::Target(TargetingAction::Build(kind)) => {
                 try_arm_build_target(&authoritative, &mut state, kind, selected_match.content);
             }
@@ -1125,6 +1371,7 @@ fn style_action_panel_buttons(
                     selected_match.content,
                 )
             }
+            PanelAction::TrainUnit => !production_queue_has_room(&state, &authoritative),
             _ => false,
         });
         disabled_slots[slot.0] = disabled;
@@ -1170,10 +1417,9 @@ fn update_build_tooltip(
     mut commands: Commands,
     buttons: Query<(&Interaction, &SlotAction), With<Button>>,
     selected_match: Res<SelectedMatch>,
-    mut tooltip_state: ResMut<BuildTooltipState>,
-    mut tooltip_visibility: Single<&mut Visibility, With<BuildTooltip>>,
-    tooltip_title: Single<Entity, With<BuildTooltipTitle>>,
-    tooltip_body: Single<Entity, With<BuildTooltipBody>>,
+    state: Res<ActionPanelState>,
+    authoritative: Res<AuthoritativeSimulation>,
+    mut tooltip: BuildTooltipUi<'_, '_>,
 ) {
     let hovered = buttons.iter().find_map(|(interaction, action)| {
         matches!(interaction, Interaction::Hovered | Interaction::Pressed)
@@ -1186,24 +1432,34 @@ fn update_build_tooltip(
                 PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
                     Some(ActionTooltipKind::ProductionUpgrade(target))
                 }
+                PanelAction::TrainUnit => state
+                    .actor
+                    .and_then(|actor| authoritative.simulation.building(actor))
+                    .and_then(|building| {
+                        selected_production_kind_from_content(
+                            building.content,
+                            selected_match.content,
+                        )
+                    })
+                    .map(ActionTooltipKind::TrainUnit),
                 _ => None,
             })
     });
 
-    if tooltip_state.0 == hovered {
+    if tooltip.state.0 == hovered {
         return;
     }
-    tooltip_state.0 = hovered;
+    tooltip.state.0 = hovered;
 
     let Some(kind) = hovered else {
-        **tooltip_visibility = Visibility::Hidden;
+        **tooltip.visibility = Visibility::Hidden;
         return;
     };
 
     let (basic, extended) = kind.tooltips(selected_match.content);
-    set_wc3_text(&mut commands, *tooltip_title, basic, TOOLTIP_TITLE_COLOR);
-    set_wc3_text(&mut commands, *tooltip_body, extended, TOOLTIP_TEXT_COLOR);
-    **tooltip_visibility = Visibility::Visible;
+    set_wc3_text(&mut commands, *tooltip.title, basic, TOOLTIP_TITLE_COLOR);
+    set_wc3_text(&mut commands, *tooltip.body, extended, TOOLTIP_TEXT_COLOR);
+    **tooltip.visibility = Visibility::Visible;
 }
 
 fn set_wc3_text(commands: &mut Commands, entity: Entity, source: &str, default_color: Color) {
@@ -1686,6 +1942,8 @@ fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> Stri
         PanelAction::Production(ProductionPanelAction::Upgrade(target)) => {
             production_upgrade_button_label(target, content)
         }
+        PanelAction::TrainUnit => "Train".into(),
+        PanelAction::CancelProduction => "Cancel\nEsc".into(),
         PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
@@ -1974,7 +2232,7 @@ mod tests {
             actor: Some(barracks_id),
             ..ActionPanelState::default()
         };
-        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
+        let mut authoritative = AuthoritativeSimulation::new(simulation, demo.content);
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,
@@ -1985,6 +2243,24 @@ mod tests {
             .content
             .production_building(stronghold)
             .unwrap();
+        let active_layout = action_layout(&state, &authoritative, &selected_match);
+        assert!(active_layout.contains(&Some(PanelAction::TrainUnit)));
+        assert!(!production_queue_has_room(&state, &authoritative));
+        assert_eq!(
+            active_layout[command_slot(selected_match.content.command_card.cancel_command)],
+            Some(PanelAction::CancelProduction)
+        );
+        assert_eq!(
+            active_layout[command_slot(stronghold_definition.command_card_position)],
+            None
+        );
+        for _ in 0..2 {
+            authoritative
+                .simulation
+                .cancel_production_unit_for_player(PlayerId(0), barracks_id)
+                .unwrap();
+        }
+        assert!(production_queue_has_room(&state, &authoritative));
         let layout = action_layout(&state, &authoritative, &selected_match);
         assert_eq!(
             layout[command_slot(stronghold_definition.command_card_position)],
@@ -2015,7 +2291,7 @@ mod tests {
             members: vec![first, second],
             ..ActionPanelState::default()
         };
-        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
+        let mut authoritative = AuthoritativeSimulation::new(simulation, demo.content);
         let selected_match = SelectedMatch {
             content: demo.content,
             direct_buildings: demo.direct_buildings,
@@ -2027,6 +2303,14 @@ mod tests {
             .production_building(target)
             .unwrap()
             .command_card_position;
+        for building in [first, second] {
+            for _ in 0..2 {
+                authoritative
+                    .simulation
+                    .cancel_production_unit_for_player(PlayerId(0), building)
+                    .unwrap();
+            }
+        }
         let layout = action_layout(&state, &authoritative, &selected_match);
         assert_eq!(
             layout[command_slot(position)],
@@ -2057,12 +2341,18 @@ mod tests {
             direct_buildings: demo.direct_buildings,
             local_player: PlayerId(0),
         };
-        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
+        let mut authoritative = AuthoritativeSimulation::new(simulation, demo.content);
         let stronghold = selected_match
             .content
             .production_building(ProductionKind::Stronghold)
             .unwrap();
         assert_eq!(stronghold.hotkey, 'R');
+        for _ in 0..2 {
+            authoritative
+                .simulation
+                .cancel_production_unit_for_player(PlayerId(0), barracks_id)
+                .unwrap();
+        }
 
         let mut keys = ButtonInput::<KeyCode>::default();
         keys.press(key_code_for_hotkey(stronghold.hotkey).unwrap());

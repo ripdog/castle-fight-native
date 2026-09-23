@@ -315,7 +315,10 @@ impl Simulation {
                 .expect("initial production tick overflow");
             entity.insert((
                 production,
-                ProductionState { next_spawn_tick },
+                ProductionState {
+                    next_spawn_tick,
+                    queued: 2,
+                },
                 ProductionMovementClass(properties.production_unit.movement_class),
                 ProductionUnitRepairMetadata {
                     mechanical: properties.production_unit.mechanical,
@@ -550,6 +553,9 @@ impl Simulation {
         }
         if actual_content != source_properties.content {
             return Err(BuildingUpgradeError::SourceDefinitionMismatch);
+        }
+        if runtime.production.is_some_and(|state| state.queued != 0) {
+            return Err(BuildingUpgradeError::ProductionQueueNotEmpty);
         }
 
         let resources = &mut self

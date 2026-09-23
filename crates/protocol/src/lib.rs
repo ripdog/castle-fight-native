@@ -14,7 +14,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 3;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 4;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -582,6 +582,12 @@ pub enum WirePlayerCommand {
     CancelBuildingConstruction {
         building: u64,
     },
+    QueueProductionUnit {
+        building: u64,
+    },
+    CancelProductionUnit {
+        building: u64,
+    },
     UpgradeBuilding {
         building: u64,
         target: u32,
@@ -638,6 +644,12 @@ impl From<PlayerCommand> for WirePlayerCommand {
                     building: building.0,
                 }
             }
+            PlayerCommand::QueueProductionUnit { building } => Self::QueueProductionUnit {
+                building: building.0,
+            },
+            PlayerCommand::CancelProductionUnit { building } => Self::CancelProductionUnit {
+                building: building.0,
+            },
             PlayerCommand::UpgradeBuilding { building, target } => Self::UpgradeBuilding {
                 building: building.0,
                 target: target.0,
@@ -698,6 +710,12 @@ impl From<WirePlayerCommand> for PlayerCommand {
                     building: SimId(building),
                 }
             }
+            WirePlayerCommand::QueueProductionUnit { building } => Self::QueueProductionUnit {
+                building: SimId(building),
+            },
+            WirePlayerCommand::CancelProductionUnit { building } => Self::CancelProductionUnit {
+                building: SimId(building),
+            },
             WirePlayerCommand::UpgradeBuilding { building, target } => Self::UpgradeBuilding {
                 building: SimId(building),
                 target: CastleFightBuildingId(target),
@@ -1115,6 +1133,7 @@ pub enum WireBuildingUpgradeError {
     SourceNotFound,
     NotOwner,
     SourceUnderConstruction,
+    ProductionQueueNotEmpty,
     SourceDefinitionMismatch,
     TeamMismatch,
     FootprintMismatch,
@@ -1128,6 +1147,7 @@ impl From<BuildingUpgradeError> for WireBuildingUpgradeError {
             BuildingUpgradeError::SourceNotFound => Self::SourceNotFound,
             BuildingUpgradeError::NotOwner => Self::NotOwner,
             BuildingUpgradeError::SourceUnderConstruction => Self::SourceUnderConstruction,
+            BuildingUpgradeError::ProductionQueueNotEmpty => Self::ProductionQueueNotEmpty,
             BuildingUpgradeError::SourceDefinitionMismatch => Self::SourceDefinitionMismatch,
             BuildingUpgradeError::TeamMismatch => Self::TeamMismatch,
             BuildingUpgradeError::FootprintMismatch => Self::FootprintMismatch,
@@ -1145,6 +1165,9 @@ pub enum WireBuildingCommandError {
     SourceNotFound,
     NotAuthorized,
     SourceCannotAttack,
+    SourceCannotProduce,
+    ProductionQueueEmpty,
+    ProductionQueueFull,
     TargetNotFound,
     FriendlyTarget,
     InvalidTargetType,
@@ -1157,6 +1180,9 @@ impl From<BuildingCommandError> for WireBuildingCommandError {
             BuildingCommandError::SourceNotFound => Self::SourceNotFound,
             BuildingCommandError::NotAuthorized => Self::NotAuthorized,
             BuildingCommandError::SourceCannotAttack => Self::SourceCannotAttack,
+            BuildingCommandError::SourceCannotProduce => Self::SourceCannotProduce,
+            BuildingCommandError::ProductionQueueEmpty => Self::ProductionQueueEmpty,
+            BuildingCommandError::ProductionQueueFull => Self::ProductionQueueFull,
             BuildingCommandError::TargetNotFound => Self::TargetNotFound,
             BuildingCommandError::FriendlyTarget => Self::FriendlyTarget,
             BuildingCommandError::InvalidTargetType => Self::InvalidTargetType,
@@ -1355,6 +1381,8 @@ mod tests {
                 position: BuildPosition::new(7, 8),
             },
             PlayerCommand::CancelBuildingConstruction { building: SimId(9) },
+            PlayerCommand::QueueProductionUnit { building: SimId(9) },
+            PlayerCommand::CancelProductionUnit { building: SimId(9) },
             PlayerCommand::UpgradeBuilding {
                 building: SimId(9),
                 target: CastleFightBuildingId(13),

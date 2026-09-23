@@ -14,7 +14,7 @@ const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
 const RANDOM_PURPOSE_DEFEND_DEFLECT: u64 = 0x4445_4645_4e44_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 5;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 6;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -431,6 +431,7 @@ pub struct BuildingView {
     pub production_movement_class: Option<MovementClass>,
     pub production_attack_targets: Option<AttackTargetMask>,
     pub next_spawn_tick: Option<u64>,
+    pub production_queue: Option<u8>,
     pub attack_delivery: Option<AttackDelivery>,
     pub attack_targets: Option<AttackTargetMask>,
     pub damage_type: DamageType,
@@ -503,6 +504,7 @@ pub enum BuildingUpgradeError {
     SourceNotFound,
     NotOwner,
     SourceUnderConstruction,
+    ProductionQueueNotEmpty,
     SourceDefinitionMismatch,
     TeamMismatch,
     FootprintMismatch,
@@ -515,6 +517,9 @@ pub enum BuildingCommandError {
     SourceNotFound,
     NotAuthorized,
     SourceCannotAttack,
+    SourceCannotProduce,
+    ProductionQueueEmpty,
+    ProductionQueueFull,
     TargetNotFound,
     FriendlyTarget,
     InvalidTargetType,
@@ -2242,7 +2247,7 @@ impl Simulation {
         let mut attempts: Vec<_> = query
             .iter(&self.world)
             .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _, _, _)| {
-                state.next_spawn_tick <= self.next_tick
+                state.queued != 0 && state.next_spawn_tick <= self.next_tick
             })
             .map(
                 |(
@@ -2431,11 +2436,12 @@ impl Simulation {
                 .next_spawn_tick
                 .checked_add(u64::from(attempt.profile.interval_ticks))
                 .expect("production tick overflow");
-            self.world
-                .entity_mut(attempt.entity)
+            let mut entity = self.world.entity_mut(attempt.entity);
+            let mut state = entity
                 .get_mut::<ProductionState>()
-                .expect("production state missing")
-                .next_spawn_tick = next;
+                .expect("production state missing");
+            state.next_spawn_tick = next;
+            state.queued = 2;
         }
 
         (spawned, failed)
@@ -3455,6 +3461,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
         next_spawn_tick: entity
             .get::<ProductionState>()
             .map(|state| state.next_spawn_tick),
+        production_queue: entity.get::<ProductionState>().map(|state| state.queued),
         attack_delivery: attack.map(|attack| attack.delivery),
         attack_targets: entity.get::<AttackTargetMask>().copied(),
         damage_type: *entity.get::<DamageType>()?,

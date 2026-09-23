@@ -1,7 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 use castle_fight_sim::{
-    ArmorType, CastleFightBuildingKind, CastleFightContentBundle, DamageType, PlayerId,
-    SUBUNITS_PER_WORLD_UNIT, SimId, Team,
+    ArmorType, CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuildingKind, CastleFightContentBundle,
+    DamageType, PlayerId, SUBUNITS_PER_WORLD_UNIT, SimId, Team,
 };
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
     ui_icons::{UiIconAssets, UiIconKey},
 };
 
-const CONSOLE_HEIGHT: f32 = 248.0;
+const CONSOLE_HEIGHT: f32 = 300.0;
 const MAP_SLOT_WIDTH: f32 = 280.0;
 const ACTION_SLOT_WIDTH: f32 = 310.0;
 const TILE_SIZE: f32 = 43.0;
@@ -123,6 +123,33 @@ pub(crate) struct SelectionDrag {
 struct InspectionText;
 
 #[derive(Component)]
+struct ProductionUiRoot;
+
+#[derive(Component)]
+struct ProductionProgressText;
+
+#[derive(Component)]
+struct ProductionProgressFill;
+
+#[derive(Component)]
+struct ProductionQueueIcon(usize);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CombatTooltipKind {
+    Attack,
+    Armor,
+}
+
+#[derive(Component)]
+struct CombatTypeButton(CombatTooltipKind);
+
+#[derive(Component)]
+struct CombatTypeLabel(CombatTooltipKind);
+
+#[derive(Component)]
+struct CombatTooltip;
+
+#[derive(Component)]
 struct DebugInspectionPanel;
 
 #[derive(Component)]
@@ -210,6 +237,51 @@ struct SelectionTileUi<'w, 's> {
     bars: SelectionBarsQuery<'w, 's>,
 }
 
+#[derive(SystemParam)]
+struct ProductionUi<'w, 's> {
+    icon_assets: ResMut<'w, UiIconAssets>,
+    root: ProductionRootQuery<'w, 's>,
+    label: Single<'w, 's, &'static mut Text, With<ProductionProgressText>>,
+    fill: Single<
+        'w,
+        's,
+        &'static mut Node,
+        (With<ProductionProgressFill>, Without<ProductionUiRoot>),
+    >,
+    icons: Query<
+        'w,
+        's,
+        (
+            &'static ProductionQueueIcon,
+            &'static mut ImageNode,
+            &'static mut Visibility,
+        ),
+        Without<ProductionUiRoot>,
+    >,
+}
+
+type ProductionRootQuery<'w, 's> = Single<
+    'w,
+    's,
+    (&'static mut Node, &'static mut Visibility),
+    (
+        With<ProductionUiRoot>,
+        Without<ProductionQueueIcon>,
+        Without<ProductionProgressFill>,
+    ),
+>;
+
+type CombatTooltipQuery<'w, 's> = Single<
+    'w,
+    's,
+    (&'static mut Text, &'static mut Visibility),
+    (
+        With<CombatTooltip>,
+        Without<CombatTypeButton>,
+        Without<CombatTypeLabel>,
+    ),
+>;
+
 type SelectionTileInteractionQuery<'w, 's> = Query<
     'w,
     's,
@@ -229,6 +301,8 @@ impl Plugin for InspectionPlugin {
                     handle_selection_hotkeys,
                     clear_stale_selection,
                     update_inspector_text,
+                    update_production_ui,
+                    update_combat_tooltip,
                     update_debug_inspector_text,
                     update_selection_tiles,
                     handle_selection_tile_click,
@@ -379,6 +453,91 @@ fn setup_inspector_ui(mut commands: Commands) {
                         },
                         InspectionText,
                     ));
+                    for kind in [CombatTooltipKind::Attack, CombatTooltipKind::Armor] {
+                        details
+                            .spawn((
+                                Button,
+                                Node {
+                                    width: px(180.0),
+                                    height: px(28.0),
+                                    padding: UiRect::horizontal(px(6.0)),
+                                    border: UiRect::all(px(1.0)),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgb(0.10, 0.09, 0.07)),
+                                BorderColor::all(Color::srgb(0.44, 0.35, 0.17)),
+                                Visibility::Hidden,
+                                CombatTypeButton(kind),
+                            ))
+                            .with_child((
+                                Text::new(""),
+                                TextFont::from_font_size(14.0),
+                                TextColor(Color::srgb(0.96, 0.86, 0.56)),
+                                Pickable::IGNORE,
+                                CombatTypeLabel(kind),
+                            ));
+                    }
+                });
+            panel
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(5.0),
+                        width: px(200.0),
+                        display: Display::None,
+                        ..default()
+                    },
+                    Visibility::Hidden,
+                    ProductionUiRoot,
+                ))
+                .with_children(|training| {
+                    training.spawn((
+                        Text::new("Training"),
+                        TextFont::from_font_size(16.0),
+                        TextColor(Color::srgb(0.96, 0.77, 0.18)),
+                        ProductionProgressText,
+                    ));
+                    training
+                        .spawn((
+                            Node {
+                                width: percent(100.0),
+                                height: px(13.0),
+                                border: UiRect::all(px(2.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.06, 0.05, 0.03)),
+                            BorderColor::all(Color::srgb(0.70, 0.55, 0.14)),
+                        ))
+                        .with_child((
+                            Node {
+                                width: percent(0.0),
+                                height: percent(100.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.92, 0.69, 0.13)),
+                            ProductionProgressFill,
+                        ));
+                    training
+                        .spawn((Node {
+                            column_gap: px(5.0),
+                            ..default()
+                        },))
+                        .with_children(|queue| {
+                            for index in 0..2 {
+                                queue.spawn((
+                                    ImageNode::default(),
+                                    Node {
+                                        width: px(32.0),
+                                        height: px(32.0),
+                                        border: UiRect::all(px(2.0)),
+                                        ..default()
+                                    },
+                                    BorderColor::all(Color::srgb(0.70, 0.55, 0.14)),
+                                    Visibility::Hidden,
+                                    ProductionQueueIcon(index),
+                                ));
+                            }
+                        });
                 });
             panel
                 .spawn((
@@ -423,6 +582,26 @@ fn setup_inspector_ui(mut commands: Commands) {
         Pickable::IGNORE,
         GlobalZIndex(1000),
         SelectionRectangle,
+    ));
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            right: px(ACTION_SLOT_WIDTH + 12.0),
+            bottom: px(CONSOLE_HEIGHT + 8.0),
+            width: px(300.0),
+            padding: UiRect::all(px(10.0)),
+            border: UiRect::all(px(2.0)),
+            ..default()
+        },
+        BackgroundColor(PANEL_BACKGROUND),
+        BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+        Visibility::Hidden,
+        GlobalZIndex(1001),
+        Pickable::IGNORE,
+        CombatTooltip,
+        Text::new(""),
+        TextFont::from_font_size(16.0),
+        TextColor(Color::WHITE),
     ));
     commands
         .spawn((
@@ -535,7 +714,15 @@ pub(crate) fn handle_world_selection(
         return;
     };
     if let Some(building) = pick_building_at_ground(world, &state.samples, &metrics).filter(|id| {
-        state.samples.current.buildings[id].owner == Some(input.selected_match.local_player)
+        let building = &state.samples.current.buildings[id];
+        building.owner == Some(input.selected_match.local_player)
+            || (building.production_queue.is_some()
+                && state
+                    .samples
+                    .current
+                    .players
+                    .get(&input.selected_match.local_player)
+                    .is_some_and(|player| player.team == building.team))
     }) {
         select_click(
             building,
@@ -682,12 +869,13 @@ fn same_type_selection(id: SimId, view: &SelectionView<'_>, owner: PlayerId) -> 
             .collect();
     }
     if let Some(building) = samples.current.buildings.get(&id) {
+        let selected_owner = building.owner;
         return samples
             .current
             .buildings
             .values()
             .filter(|candidate| {
-                candidate.owner == Some(owner)
+                candidate.owner == selected_owner
                     && candidate.content.map(|content| content.rawcode)
                         == building.content.map(|content| content.rawcode)
             })
@@ -913,6 +1101,197 @@ fn update_inspector_text(
     }
 }
 
+fn update_production_ui(
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    selected_match: Res<SelectedMatch>,
+    asset_server: Res<AssetServer>,
+    mut ui: ProductionUi<'_, '_>,
+) {
+    let building = (selection.members.len() == 1)
+        .then(|| selection.selected)
+        .flatten()
+        .and_then(|id| samples.current.buildings.get(&id))
+        .filter(|building| building.production_queue.is_some());
+    let Some(building) = building else {
+        ui.root.0.display = Display::None;
+        *ui.root.1 = Visibility::Hidden;
+        return;
+    };
+    ui.root.0.display = Display::Flex;
+    *ui.root.1 = Visibility::Visible;
+    let queued = building.production_queue.unwrap_or(0);
+    let interval = u64::from(building.production_interval_ticks.unwrap_or(0));
+    let remaining = building
+        .next_spawn_tick
+        .unwrap_or(0)
+        .saturating_sub(samples.current.tick);
+    let hz = CASTLE_FIGHT_SIMULATION_HZ as u64;
+    ui.label.0 = if queued == 0 {
+        "Production stopped".into()
+    } else {
+        format!("Training ({}s remaining)", remaining.div_ceil(hz))
+    };
+    ui.fill.width = percent(if queued == 0 || interval == 0 {
+        0.0
+    } else {
+        (1.0 - remaining.min(interval) as f32 / interval as f32) * 100.0
+    });
+    let unit_rawcode = building.content.and_then(|identity| {
+        let CastleFightBuildingKind::Production(kind) = selected_match
+            .content
+            .building_kind_for_rawcode(identity.rawcode)?
+        else {
+            return None;
+        };
+        selected_match
+            .content
+            .production_building(kind)
+            .map(|definition| definition.produced_unit.rawcode)
+    });
+    let handle = unit_rawcode.and_then(|rawcode| {
+        ui.icon_assets
+            .image(UiIconKey::unit_game_interface(rawcode), &asset_server)
+    });
+    for (slot, mut image, mut visibility) in &mut ui.icons {
+        *visibility = if slot.0 < usize::from(queued) {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        *image = handle
+            .clone()
+            .map_or_else(ImageNode::default, ImageNode::new);
+    }
+}
+
+fn update_combat_tooltip(
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    mut buttons: Query<(&CombatTypeButton, &Interaction, &mut Visibility), Without<CombatTooltip>>,
+    mut labels: Query<(&CombatTypeLabel, &mut Text), Without<CombatTooltip>>,
+    mut tooltip: CombatTooltipQuery<'_, '_>,
+) {
+    let selected = (selection.members.len() == 1)
+        .then_some(selection.selected)
+        .flatten();
+    let attack = selected.and_then(|id| {
+        samples
+            .current
+            .units
+            .get(&id)
+            .map(|unit| unit.damage_type)
+            .or_else(|| {
+                samples
+                    .current
+                    .buildings
+                    .get(&id)
+                    .and_then(|building| building.damage_type)
+            })
+    });
+    let armor = selected.and_then(|id| {
+        samples
+            .current
+            .units
+            .get(&id)
+            .map(|unit| unit.armor.armor_type)
+            .or_else(|| {
+                samples
+                    .current
+                    .buildings
+                    .get(&id)
+                    .map(|building| building.armor.armor_type)
+            })
+    });
+    let mut hovered = None;
+    for (button, interaction, mut visibility) in &mut buttons {
+        let visible = match button.0 {
+            CombatTooltipKind::Attack => attack.is_some(),
+            CombatTooltipKind::Armor => armor.is_some(),
+        };
+        *visibility = if visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        if visible && matches!(interaction, Interaction::Hovered | Interaction::Pressed) {
+            hovered = Some(button.0);
+        }
+    }
+    for (label, mut text) in &mut labels {
+        text.0 = match label.0 {
+            CombatTooltipKind::Attack => attack.map_or_else(String::new, |kind| {
+                format!("Attack: {}", damage_type_name(kind))
+            }),
+            CombatTooltipKind::Armor => armor.map_or_else(String::new, |kind| {
+                format!("Armor: {}", armor_type_name(kind))
+            }),
+        };
+    }
+    let (text, visibility) = &mut *tooltip;
+    text.0 = match hovered {
+        Some(CombatTooltipKind::Attack) => {
+            attack.map_or_else(String::new, |kind| attack_matchup_tooltip(kind, &samples))
+        }
+        Some(CombatTooltipKind::Armor) => {
+            armor.map_or_else(String::new, |kind| armor_matchup_tooltip(kind, &samples))
+        }
+        None => String::new(),
+    };
+    **visibility = if hovered.is_some() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+}
+
+fn attack_matchup_tooltip(kind: DamageType, samples: &PresentationSamples) -> String {
+    let mut lines = vec![format!("{} damage against:", damage_type_name(kind))];
+    for armor in [
+        ArmorType::Small,
+        ArmorType::Unarmored,
+        ArmorType::Medium,
+        ArmorType::Large,
+        ArmorType::Hero,
+        ArmorType::Fortified,
+        ArmorType::Divine,
+        ArmorType::Normal,
+    ] {
+        lines.push(format!(
+            "{}: {}",
+            armor_type_name(armor),
+            percent_label(
+                i32::from(samples.current.damage_rules.bonus_per_10k(kind, armor)),
+                false
+            )
+        ));
+    }
+    lines.join("\n")
+}
+
+fn armor_matchup_tooltip(kind: ArmorType, samples: &PresentationSamples) -> String {
+    let mut lines = vec![format!("{} armor receives:", armor_type_name(kind))];
+    for damage in [
+        DamageType::Normal,
+        DamageType::Pierce,
+        DamageType::Siege,
+        DamageType::Magic,
+        DamageType::Chaos,
+        DamageType::Spells,
+        DamageType::Hero,
+    ] {
+        lines.push(format!(
+            "{}: {}",
+            damage_type_name(damage),
+            percent_label(
+                i32::from(samples.current.damage_rules.bonus_per_10k(damage, kind)),
+                false
+            )
+        ));
+    }
+    lines.join("\n")
+}
+
 fn update_debug_inspector_text(
     samples: Res<PresentationSamples>,
     selection: Res<InspectionSelection>,
@@ -964,19 +1343,42 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
                 "Constructing: {} ticks remaining",
                 complete_tick.saturating_sub(samples.current.tick)
             )
-        } else if let Some(next_spawn_tick) = building.next_spawn_tick {
-            format!(
-                "Next unit: {} ticks",
-                next_spawn_tick.saturating_sub(samples.current.tick)
-            )
+        } else if building.production_queue == Some(0) {
+            "Production stopped".into()
+        } else if building.production_queue.is_some() {
+            String::new()
         } else {
             "Ready".into()
         };
+        let training_mana =
+            building
+                .production_interval_ticks
+                .map_or_else(String::new, |interval| {
+                    let remaining = if building.production_queue == Some(0) {
+                        0
+                    } else {
+                        building
+                            .next_spawn_tick
+                            .unwrap_or(0)
+                            .saturating_sub(samples.current.tick)
+                    };
+                    format!(
+                        "\nTraining: {} / {}s",
+                        remaining.div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64),
+                        u64::from(interval).div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
+                    )
+                });
+        let status = if status.is_empty() {
+            String::new()
+        } else {
+            format!("\n{status}")
+        };
         return format!(
-            "{}\nHealth: {} / {}\n{}\n{}",
+            "{}\nHealth: {} / {}{}\n{}{}",
             building.content.map_or("Building", |content| content.name),
             building.health,
             building.health_max,
+            training_mana,
             armor_type_name(building.armor.armor_type),
             status
         );
@@ -1735,6 +2137,22 @@ mod tests {
     fn selection_tile_ui_queries_are_disjoint_at_runtime() {
         let mut world = World::new();
         let _state = SystemState::<SelectionTileUi<'_, '_>>::new(&mut world);
+        let _production = SystemState::<ProductionUi<'_, '_>>::new(&mut world);
+        let _combat = SystemState::<(
+            Query<(&CombatTypeButton, &Interaction, &mut Visibility), Without<CombatTooltip>>,
+            Query<(&CombatTypeLabel, &mut Text), Without<CombatTooltip>>,
+            CombatTooltipQuery<'_, '_>,
+        )>::new(&mut world);
+    }
+
+    #[test]
+    fn combat_tooltip_uses_active_castle_fight_damage_rules() {
+        let mut samples = empty_samples();
+        samples.current.damage_rules = castle_fight_sim::castle_fight_damage_rules();
+        let attack = attack_matchup_tooltip(DamageType::Pierce, &samples);
+        assert!(attack.contains("Light: 175%"));
+        let armor = armor_matchup_tooltip(ArmorType::Small, &samples);
+        assert!(armor.contains("Pierce: 175%"));
     }
 
     #[test]
@@ -1977,6 +2395,7 @@ mod tests {
                 armor: castle_fight_sim::ArmorProfile::new(ArmorType::Fortified, 5),
                 target: None,
                 next_spawn_tick: Some(20),
+                production_queue: Some(2),
                 production_interval_ticks: Some(20),
                 cooldown_remaining: None,
                 mana_current: None,

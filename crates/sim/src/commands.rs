@@ -56,6 +56,12 @@ pub enum PlayerCommand {
     CancelBuildingConstruction {
         building: SimId,
     },
+    QueueProductionUnit {
+        building: SimId,
+    },
+    CancelProductionUnit {
+        building: SimId,
+    },
     UpgradeBuilding {
         building: SimId,
         target: CastleFightBuildingId,
@@ -164,6 +170,8 @@ pub fn admit_player_command(
             Ok(())
         }
         PlayerCommand::CancelBuildingConstruction { building }
+        | PlayerCommand::QueueProductionUnit { building }
+        | PlayerCommand::CancelProductionUnit { building }
         | PlayerCommand::AttackWithBuilding { building, .. } => {
             if simulation.can_player_control_building(player, building) {
                 Ok(())
@@ -248,6 +256,14 @@ pub(crate) fn execute_player_command(
             .cancel_building_construction_for_player(player, building)
             .map(CommandExecutionResult::BuildingConstructionCancelled)
             .map_err(CommandRejectReason::CancelConstruction),
+        PlayerCommand::QueueProductionUnit { building } => simulation
+            .queue_production_unit_for_player(player, building)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Building),
+        PlayerCommand::CancelProductionUnit { building } => simulation
+            .cancel_production_unit_for_player(player, building)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Building),
         PlayerCommand::UpgradeBuilding { building, target } => {
             execute_upgrade_building(simulation, content, player, building, target)
         }

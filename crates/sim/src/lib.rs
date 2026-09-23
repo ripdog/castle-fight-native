@@ -4967,6 +4967,21 @@ mod tests {
         let source_income = sim.player_income(Team(0)).unwrap();
         assert_eq!(sim.building(building).unwrap().next_spawn_tick, Some(5));
 
+        assert_eq!(
+            sim.start_building_upgrade(
+                building,
+                source_spawn,
+                barracks.gameplay_properties(),
+                stronghold.spawn(Team(0), footprint),
+                stronghold.gameplay_properties(),
+            ),
+            Err(BuildingUpgradeError::ProductionQueueNotEmpty)
+        );
+        for _ in 0..2 {
+            sim.cancel_production_unit_for_player(PlayerId(0), building)
+                .unwrap();
+        }
+
         sim.start_building_upgrade(
             building,
             source_spawn,
@@ -5005,12 +5020,13 @@ mod tests {
         assert_eq!(restored.construction_complete_tick, None);
         assert!(restored.production.is_some());
         assert_eq!(restored.next_spawn_tick, Some(5));
+        assert_eq!(restored.production_queue, Some(0));
         assert_eq!(sim.player_resources(Team(0)).unwrap().gold, 250);
         assert_eq!(sim.player_income(Team(0)).unwrap(), source_income);
 
         assert_eq!(sim.step().units_spawned, 0); // tick 3
         assert_eq!(sim.step().units_spawned, 0); // tick 4
-        assert_eq!(sim.step().units_spawned, 1); // original tick-5 deadline survives cancellation
+        assert_eq!(sim.step().units_spawned, 0); // saved deadline is dormant while queue is empty
     }
 
     #[test]
@@ -5034,6 +5050,10 @@ mod tests {
                 .initial_delay_ticks = source_delay_ticks;
             let building =
                 sim.spawn_building_with_properties(source_spawn, barracks.gameplay_properties());
+            for _ in 0..2 {
+                sim.cancel_production_unit_for_player(PlayerId(0), building)
+                    .unwrap();
+            }
             sim.start_building_upgrade(
                 building,
                 source_spawn,
@@ -5073,6 +5093,11 @@ mod tests {
         let building =
             sim.spawn_building_with_properties(source_spawn, barracks.gameplay_properties());
         let source_income = sim.player_income(Team(0)).unwrap();
+
+        for _ in 0..2 {
+            sim.cancel_production_unit_for_player(PlayerId(0), building)
+                .unwrap();
+        }
 
         sim.start_building_upgrade(
             building,
@@ -5423,6 +5448,67 @@ mod tests {
             assert_eq!(sim.step().units_spawned, 0);
         }
         assert_eq!(sim.step().units_spawned, 1);
+    }
+
+    #[test]
+    fn production_queue_cancels_twice_to_stop_and_restarts_with_full_interval() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let building = sim.spawn_building(production_building(
+            0,
+            BuildingFootprint::new(20, 0, 1, 1),
+            2,
+        ));
+        assert_eq!(sim.building(building).unwrap().production_queue, Some(2));
+        sim.cancel_production_unit_for_player(PlayerId(0), building)
+            .unwrap();
+        assert_eq!(sim.building(building).unwrap().production_queue, Some(1));
+        sim.cancel_production_unit_for_player(PlayerId(0), building)
+            .unwrap();
+        assert_eq!(sim.building(building).unwrap().production_queue, Some(0));
+        assert_eq!(
+            sim.cancel_production_unit_for_player(PlayerId(0), building),
+            Err(BuildingCommandError::ProductionQueueEmpty)
+        );
+        for _ in 0..5 {
+            assert_eq!(sim.step().units_spawned, 0);
+        }
+        sim.queue_production_unit_for_player(PlayerId(0), building)
+            .unwrap();
+        assert_eq!(sim.building(building).unwrap().production_queue, Some(1));
+        for _ in 0..10 {
+            assert_eq!(sim.step().units_spawned, 0);
+        }
+        assert_eq!(sim.step().units_spawned, 1);
+        assert_eq!(sim.building(building).unwrap().production_queue, Some(2));
+        assert_eq!(
+            sim.queue_production_unit_for_player(PlayerId(0), building),
+            Err(BuildingCommandError::ProductionQueueFull)
+        );
+    }
+
+    #[test]
+    fn stopped_production_queue_survives_snapshot_and_changes_checksum() {
+        let config = SimulationConfig::default();
+        let mut sim = Simulation::new(config.clone(), 1);
+        let building = sim.spawn_building(production_building(
+            0,
+            BuildingFootprint::new(20, 0, 1, 1),
+            2,
+        ));
+        let running_checksum = sim.checksum();
+        for _ in 0..2 {
+            sim.cancel_production_unit_for_player(PlayerId(0), building)
+                .unwrap();
+        }
+        assert_ne!(sim.checksum(), running_checksum);
+        let snapshot = sim.capture_snapshot();
+        let mut restored = Simulation::new(config, 2);
+        restored.restore_snapshot(&snapshot).unwrap();
+        assert_eq!(
+            restored.building(building).unwrap().production_queue,
+            Some(0)
+        );
+        assert_eq!(restored.checksum(), sim.checksum());
     }
 
     #[test]

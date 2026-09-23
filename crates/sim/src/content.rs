@@ -86,7 +86,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 1;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CastleFightUnitId(pub u32);
@@ -979,6 +979,10 @@ pub struct CastleFightProductionDefinition {
     pub footprint_size_cells: u16,
     pub unit: CastleFightUnitKind,
     pub produced_unit: CastleFightUnitDefinition,
+    pub train_command_position: CommandCardPosition,
+    pub train_hotkey: char,
+    pub train_basic_tooltip: &'static str,
+    pub train_extended_tooltip: &'static str,
     pub command_card_position: CommandCardPosition,
     pub hotkey: char,
     pub map_version: MapVersion,
@@ -1479,6 +1483,9 @@ fn hash_production_definition(
     hash.write_u16(definition.footprint_size_cells);
     hash.write_u32(definition.unit.stable_id().0);
     hash_unit_definition(hash, definition.produced_unit);
+    hash.write_u8(definition.train_command_position.x);
+    hash.write_u8(definition.train_command_position.y);
+    hash.write_u32(definition.train_hotkey as u32);
     hash.write_u8(definition.command_card_position.x);
     hash.write_u8(definition.command_card_position.y);
     hash.write_u32(definition.hotkey as u32);
@@ -1779,6 +1786,8 @@ struct ExtractedBuilding927 {
 #[derive(Debug, Clone, Copy)]
 struct ExtractedUnit927 {
     name: &'static str,
+    basic_tooltip: &'static str,
+    extended_tooltip: &'static str,
     build_time_ticks: u32,
     repair_time_ticks: Option<u32>,
     health_regen_per_second_per_10k: Option<i32>,
@@ -2055,6 +2064,8 @@ impl ExtractedContent927 {
                 .collect::<Result<Vec<_>, String>>()?;
             let row = ExtractedUnit927 {
                 name: columns[3],
+                basic_tooltip: columns[4],
+                extended_tooltip: columns[5],
                 build_time_ticks: build_seconds
                     .checked_mul(CASTLE_FIGHT_SIMULATION_HZ as u32)
                     .ok_or_else(|| format!("unit {rawcode:#010x} build time overflowed"))?,
@@ -3236,6 +3247,26 @@ fn production_definition(
     let produced_unit = unit
         .definition_for_version(MapVersion::CASTLE_FIGHT_9_27)
         .expect("9.27 production unit content must resolve");
+    // Some produced units inherit the stock unit button position; the retained map object
+    // contains no explicit override for those. The WC3 training card starts at (0, 0).
+    let train_command_position = content
+        .command_card_positions
+        .get(&produced_unit.rawcode)
+        .copied()
+        .unwrap_or(CommandCardPosition::new(0, 0));
+    let train_hotkey = *content
+        .building_hotkeys
+        .get(&produced_unit.rawcode)
+        .unwrap_or_else(|| {
+            panic!(
+                "produced unit {:#010x} missing train hotkey",
+                produced_unit.rawcode
+            )
+        });
+    let train_tooltips = content
+        .units
+        .get(&produced_unit.rawcode)
+        .expect("produced unit must exist in retained unit table");
     assert_eq!(
         production.unit_rawcode, produced_unit.rawcode,
         "production link changed in retained 9.27 extraction"
@@ -3273,6 +3304,10 @@ fn production_definition(
         }),
         unit,
         produced_unit,
+        train_command_position,
+        train_hotkey,
+        train_basic_tooltip: train_tooltips.basic_tooltip,
+        train_extended_tooltip: train_tooltips.extended_tooltip,
         command_card_position,
         hotkey,
         map_version: MapVersion::CASTLE_FIGHT_9_27,
@@ -3372,7 +3407,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 0x0bcf_cce0_da4d_9989);
+        assert_eq!(bundle.identity.gameplay_hash, 0xdff0_f42b_7c1d_cd53);
         assert_eq!(bundle.behaviors().len(), 12);
         assert!(
             bundle

@@ -370,6 +370,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             .expect("production profile missing state")
                             .next_spawn_tick,
                     );
+                    hash.write_u8(
+                        building
+                            .production_state
+                            .expect("production profile missing state")
+                            .queued,
+                    );
                     hash_content_identity(&mut hash, building.production_content);
                     match building.production_corpse {
                         Some(corpse) => {
@@ -890,6 +896,7 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
         Some(production) => {
             hash.write_u8(1);
             hash.write_u64(production.next_spawn_tick);
+            hash.write_u8(production.queued);
         }
         None => hash.write_u8(0),
     }

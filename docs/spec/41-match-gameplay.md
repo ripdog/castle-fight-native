@@ -105,7 +105,7 @@ Castle Fight construction duration is authoritative versioned content. The nativ
 
 A freshly constructed building begins blocking navigation and building placement as soon as its site is created. It MUST NOT produce units, attack, cast automatic spells, contribute income, or grant its completion lumber before the completion tick. Production and combat timers begin from completion rather than construction start. The owning player may cancel before completion; 9.27's `ConstructionRefundRate=1.0` fully refunds the committed gold/lumber cost, and cancellation does not grant construction lumber.
 
-An in-place production-building upgrade uses the same authoritative construction timing but has different precursor semantics. It preserves the existing building `SimId`, owner/team, and footprint; the current native upgrade path therefore requires source and target footprints to match. While upgrading, the precursor's active production/attack/spell behavior is suspended and no precursor production deadlines fire, but its already-completed income contribution remains active until the target completes. Health is mapped proportionally from the precursor maximum to the target maximum so starting an upgrade does not implicitly heal or damage the building by changing its content definition. The target content identity and construction presentation are visible during the upgrade window.
+An in-place production-building upgrade uses the same authoritative construction timing but has different precursor semantics. It preserves the existing building `SimId`, owner/team, and footprint; the current native upgrade path therefore requires source and target footprints to match. The production queue MUST be empty before an upgrade can start. While upgrading, the precursor's active production/attack/spell behavior is suspended and no precursor production deadlines fire, but its already-completed income contribution remains active until the target completes. Health is mapped proportionally from the precursor maximum to the target maximum so starting an upgrade does not implicitly heal or damage the building by changing its content definition. The target content identity and construction presentation are visible during the upgrade window.
 
 Cancelling an upgrade fully refunds the committed target upgrade cost and restores the precursor definition in place. Because cancellation can make earlier live state observable again, the upgrade snapshot preserves the precursor's production deadline, attack cooldown/target state, spell mana/readiness, spawn timing, and status state exactly; this saved state participates in canonical checksums. Completion instead activates the target definition, applies its completion lumber/income semantics, and starts the target's production/combat/spell timers from the completion tick. The precursor's paused production timer is discarded on successful completion.
 
@@ -154,11 +154,13 @@ Conceptually:
 ```rust
 pub struct ProductionState {
     pub next_spawn_tick: Tick,
-    pub sequence: u64,
+    pub queued: u8, // 0..=2
 }
 ```
 
 Static produced-unit rules live in content definitions.
+
+A completed production building starts with two queued units. Each production attempt while the queue is nonempty automatically replenishes it to two, preserving continuous production. Cancelling training removes one queue entry; two cancellations stop production. Manually training the map-defined unit adds one entry up to the two-entry limit, and restarting an empty queue begins a fresh full interval. Queue changes are authoritative player commands, require control of the building, and are included in snapshots and checksums. A failed spawn placement still advances the production timer as before.
 
 Production MUST NOT depend on render time or whether the owner is connected.
 

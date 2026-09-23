@@ -695,6 +695,8 @@ pub struct ProductionProfile {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductionState {
     pub next_spawn_tick: u64,
+    /// WC3-style visible training slots. A running producer replenishes to two after each attempt.
+    pub queued: u8,
 }
 
 #[derive(

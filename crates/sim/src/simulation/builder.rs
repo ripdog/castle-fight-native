@@ -130,6 +130,69 @@ impl Simulation {
         self.order_building_attack_target(source, target)
     }
 
+    pub fn queue_production_unit_for_player(
+        &mut self,
+        controller: PlayerId,
+        building: SimId,
+    ) -> Result<(), BuildingCommandError> {
+        self.change_production_queue_as(controller, building, true)
+    }
+
+    pub fn cancel_production_unit_for_player(
+        &mut self,
+        controller: PlayerId,
+        building: SimId,
+    ) -> Result<(), BuildingCommandError> {
+        self.change_production_queue_as(controller, building, false)
+    }
+
+    fn change_production_queue_as(
+        &mut self,
+        controller: PlayerId,
+        building: SimId,
+        enqueue: bool,
+    ) -> Result<(), BuildingCommandError> {
+        if !self.can_player_control_building(controller, building) {
+            return Err(BuildingCommandError::NotAuthorized);
+        }
+        let Some(entity_id) = self
+            .world
+            .iter_entities()
+            .find(|entity| {
+                entity.get::<SimId>().copied() == Some(building)
+                    && entity.get::<BuildingFootprint>().is_some()
+            })
+            .map(|entity| entity.id())
+        else {
+            return Err(BuildingCommandError::SourceNotFound);
+        };
+        let mut entity = self.world.entity_mut(entity_id);
+        let Some(profile) = entity.get::<ProductionProfile>().copied() else {
+            return Err(BuildingCommandError::SourceCannotProduce);
+        };
+        let Some(mut state) = entity.get_mut::<ProductionState>() else {
+            return Err(BuildingCommandError::SourceCannotProduce);
+        };
+        if enqueue {
+            if state.queued == 2 {
+                return Err(BuildingCommandError::ProductionQueueFull);
+            }
+            if state.queued == 0 {
+                state.next_spawn_tick = self
+                    .next_tick
+                    .checked_add(u64::from(profile.interval_ticks))
+                    .expect("production tick overflow");
+            }
+            state.queued += 1;
+        } else {
+            if state.queued == 0 {
+                return Err(BuildingCommandError::ProductionQueueEmpty);
+            }
+            state.queued -= 1;
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn can_builder_afford_building(
         &self,

@@ -1486,6 +1486,8 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
         PlayerCommand::SetBuilderRepairAutocast { .. } => "Repair autocast",
         PlayerCommand::PlaceBuilding { .. } => "Build",
         PlayerCommand::CancelBuildingConstruction { .. } => "Cancel construction",
+        PlayerCommand::QueueProductionUnit { .. } => "Train unit",
+        PlayerCommand::CancelProductionUnit { .. } => "Cancel training",
         PlayerCommand::UpgradeBuilding { .. } => "Upgrade",
         PlayerCommand::AttackWithBuilding { .. } => "Attack",
     };
