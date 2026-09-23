@@ -13,7 +13,7 @@ use crate::{
     build_ui::{ActionPanelState, cursor_over_action_panel},
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     presentation::{
-        WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
+        DebugPresentation, WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
         sim_point_to_terrain_world_lerp, sim_point_to_world, unit_height, unit_visual_altitude,
         unit_visual_center_lerp, viewport_ground_point,
     },
@@ -1123,14 +1123,14 @@ fn update_selection_rectangle(
 }
 
 fn draw_selection_highlight(
-    fixed_time: Res<Time<Fixed>>,
+    world: (Res<Time<Fixed>>, Res<WorldMetrics>, Res<TerrainSurface>),
     playback: Res<SimulationPlayback>,
     samples: Res<PresentationSamples>,
-    metrics: Res<WorldMetrics>,
-    terrain: Res<TerrainSurface>,
     selection: Res<InspectionSelection>,
+    debug: Res<DebugPresentation>,
     mut gizmos: Gizmos,
 ) {
+    let (fixed_time, metrics, terrain) = world;
     let alpha = playback.interpolation_alpha(&fixed_time);
     for &id in &selection.members {
         if let Some(builder) = samples.current.builders.get(&id) {
@@ -1149,7 +1149,8 @@ fn draw_selection_highlight(
                 BUILDER_PICK_RADIUS + SELECTION_RING_PADDING,
                 SELECTION_COLOR,
             );
-            if let Some(target) = builder.repair_target
+            if debug.overlays
+                && let Some(target) = builder.repair_target
                 && let Some(target_position) =
                     current_entity_position(target, &samples, &metrics, &terrain)
             {
@@ -1159,7 +1160,9 @@ fn draw_selection_highlight(
                     SELECTION_COLOR.with_alpha(0.55),
                 );
             }
-            if let Some(footprint) = builder.build_footprint {
+            if debug.overlays
+                && let Some(footprint) = builder.build_footprint
+            {
                 draw_footprint_outline(
                     &mut gizmos,
                     &metrics,
@@ -1185,7 +1188,8 @@ fn draw_selection_highlight(
                 radius,
                 SELECTION_COLOR,
             );
-            if let Some(target) = unit.target
+            if debug.overlays
+                && let Some(target) = unit.target
                 && let Some(target_position) =
                     current_entity_position(target, &samples, &metrics, &terrain)
             {
@@ -1206,7 +1210,8 @@ fn draw_selection_highlight(
                 building.footprint,
                 SELECTION_COLOR,
             );
-            if let Some(target) = building.target
+            if debug.overlays
+                && let Some(target) = building.target
                 && let Some(target_position) =
                     current_entity_position(target, &samples, &metrics, &terrain)
             {

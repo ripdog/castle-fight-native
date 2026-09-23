@@ -25,7 +25,9 @@ use bevy::{
 };
 use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, TickTimings};
 
-use crate::{bridge::PresentationSamples, resource_ui::TOP_BAR_HEIGHT};
+use crate::{
+    bridge::PresentationSamples, presentation::DebugPresentation, resource_ui::TOP_BAR_HEIGHT,
+};
 
 const PANEL_LEFT: f32 = 72.0;
 const PANEL_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
@@ -633,6 +635,9 @@ impl PerformanceReport {
 #[derive(Component)]
 struct PerformancePanelText;
 
+#[derive(Component)]
+struct PerformancePanel;
+
 #[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
 struct PerfFrameStart;
 #[derive(ScheduleLabel, Debug, Hash, PartialEq, Eq, Clone)]
@@ -711,6 +716,8 @@ fn setup_performance_panel(mut commands: Commands) {
             BackgroundColor(PANEL_BACKGROUND),
             BorderColor::all(PANEL_BORDER),
             ZIndex(940),
+            Visibility::Hidden,
+            PerformancePanel,
             Pickable::IGNORE,
         ))
         .with_children(|panel| {
@@ -758,9 +765,16 @@ struct PerformancePanelDiagnostics<'w, 's> {
 fn update_performance_panel(
     counters: Res<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
+    debug: Res<DebugPresentation>,
     mut diagnostics: PerformancePanelDiagnostics<'_, '_>,
+    mut panel: Single<&mut Visibility, With<PerformancePanel>>,
     mut text: Single<&mut Text, With<PerformancePanelText>>,
 ) {
+    **panel = if debug.overlays {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
     let now = Instant::now();
     let frame = average_frame_samples(&counters.frame_samples, now);
     let sim = average_sim_samples(&counters.sim_samples, now);
