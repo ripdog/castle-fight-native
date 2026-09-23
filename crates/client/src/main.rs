@@ -64,7 +64,9 @@ use performance_ui::{
 use presentation::CastlePresentationPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
-use view_state::{ViewState, ViewStatePersistence, persist_view_state, toggle_fullscreen};
+use view_state::{
+    ViewState, ViewStatePersistence, persist_view_state, sync_cursor_grab, toggle_fullscreen,
+};
 
 const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
 
@@ -416,7 +418,10 @@ fn main() {
             DebugMenuPlugin,
         ))
         .add_systems(Startup, setup_simulation_pause_ui)
-        .add_systems(Update, (toggle_fullscreen, persist_view_state).chain())
+        .add_systems(
+            Update,
+            (toggle_fullscreen, sync_cursor_grab, persist_view_state).chain(),
+        )
         .add_systems(
             Update,
             (

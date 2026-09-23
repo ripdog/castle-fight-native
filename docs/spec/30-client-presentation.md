@@ -24,7 +24,7 @@ The authoritative simulation SHOULD remain a separate crate/module that can run 
 
 ### 2.1 Window state
 
-The native client starts in borderless fullscreen when no saved view state exists. Alt+Enter toggles between fullscreen and windowed mode. The client saves the current mode and the last windowed size and position when they change, and restores them on startup. Fullscreen monitor dimensions MUST NOT replace the saved windowed size. View state is client-local presentation data and does not affect authoritative simulation state.
+The native client starts in borderless fullscreen when no saved view state exists. Alt+Enter toggles between fullscreen and windowed mode. In fullscreen, the mouse cursor is confined to the window so it stops at the viewport edge for camera scrolling; windowed mode releases that confinement. The client saves the current mode and the last windowed size and position when they change, and restores them on startup. Fullscreen monitor dimensions MUST NOT replace the saved windowed size. View state is client-local presentation data and does not affect authoritative simulation state.
 
 ## 3. Simulation/presentation boundary
 

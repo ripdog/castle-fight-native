@@ -2,7 +2,10 @@ use std::{fs, path::PathBuf};
 
 use bevy::{
     prelude::*,
-    window::{MonitorSelection, PrimaryWindow, WindowMode, WindowPosition},
+    window::{
+        CursorGrabMode, CursorOptions, MonitorSelection, PrimaryWindow, WindowFocused, WindowMode,
+        WindowPosition,
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -152,6 +155,27 @@ pub(crate) fn toggle_fullscreen(
     }
 }
 
+/// Keep the pointer at the screen edge for camera scrolling while fullscreen.
+pub(crate) fn sync_cursor_grab(
+    mut focus_events: MessageReader<WindowFocused>,
+    window: Single<(Entity, &Window, &mut CursorOptions), With<PrimaryWindow>>,
+) {
+    let (entity, window, mut cursor) = window.into_inner();
+    let desired = if window.mode == WindowMode::Windowed {
+        CursorGrabMode::None
+    } else {
+        CursorGrabMode::Confined
+    };
+    let refocused = focus_events
+        .read()
+        .filter(|event| event.window == entity)
+        .last()
+        .is_some_and(|event| event.focused);
+    if cursor.grab_mode != desired || (refocused && desired == CursorGrabMode::Confined) {
+        cursor.grab_mode = desired;
+    }
+}
+
 pub(crate) fn persist_view_state(
     window: Single<&Window, With<PrimaryWindow>>,
     mut persistence: ResMut<ViewStatePersistence>,
@@ -215,8 +239,9 @@ mod tests {
         let mut app = App::new();
         app.insert_resource(ButtonInput::<KeyCode>::default())
             .insert_resource(ViewStatePersistence::new(ViewState::default()))
-            .add_systems(Update, toggle_fullscreen);
-        let window = app
+            .add_message::<WindowFocused>()
+            .add_systems(Update, (toggle_fullscreen, sync_cursor_grab).chain());
+        let window_entity = app
             .world_mut()
             .spawn((
                 Window {
@@ -227,13 +252,28 @@ mod tests {
                 PrimaryWindow,
             ))
             .id();
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<CursorOptions>(window_entity)
+                .unwrap()
+                .grab_mode,
+            CursorGrabMode::Confined
+        );
         let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
         keys.press(KeyCode::AltLeft);
         keys.press(KeyCode::Enter);
         app.update();
-        let window = app.world().get::<Window>(window).unwrap();
+        let window = app.world().get::<Window>(window_entity).unwrap();
         assert_eq!(window.mode, WindowMode::Windowed);
         assert_eq!(window.resolution.physical_width(), DEFAULT_WIDTH);
         assert_eq!(window.resolution.physical_height(), DEFAULT_HEIGHT);
+        assert_eq!(
+            app.world()
+                .get::<CursorOptions>(window_entity)
+                .unwrap()
+                .grab_mode,
+            CursorGrabMode::None
+        );
     }
 }
