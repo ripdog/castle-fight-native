@@ -318,8 +318,26 @@ mod tests {
     }
 
     #[test]
-    fn embedded_unit_catalog_includes_human_builder_and_defender_art() {
+    fn embedded_unit_catalog_covers_resolved_non_building_objects() {
         let units = load_embedded_units().expect("embedded unit catalog loads");
+        let rawcodes = units
+            .iter()
+            .map(|unit| unit.rawcode.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(rawcodes.len(), units.len(), "unit rawcodes must be unique");
+        assert!(
+            rawcodes.contains("h030"),
+            "runtime Greater Fire Elemental body is outside the production-building roster"
+        );
+        assert!(
+            rawcodes.contains("e008"),
+            "intentionally invisible helper units still belong to the asset inventory"
+        );
+        assert!(
+            !rawcodes.contains("h000"),
+            "building rawcodes must remain in the building asset catalog"
+        );
+
         let builder = units
             .iter()
             .find(|unit| unit.rawcode == "X00C")

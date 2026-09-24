@@ -1,8 +1,8 @@
 # Warcraft III asset extractor
 
-`cf-wc3-assets` converts Warcraft III presentation assets from a local installation into files Castle Fight Native can consume. It supports production-unit and building art, the doodads/destructables actually placed by Castle Fight, map-referenced projectile/spell/buff visual models, and UI textures such as command-card, ability, status, resource, and cursor art. The repository and game build do not contain Warcraft III art; extraction happens from the user's local installation.
+`cf-wc3-assets` converts Warcraft III presentation assets from a local installation into files Castle Fight Native can consume. It supports every resolved non-building Castle Fight unit object, the complete resolved building catalog, the doodads/destructables actually placed by Castle Fight, map-referenced projectile/spell/buff visual models, and UI textures such as command-card, ability, status, resource, and cursor art. The repository and game build do not contain Warcraft III art; extraction happens from the user's local installation.
 
-The production-unit, building, placed-doodad, visual-effect, and UI presentation catalogs are embedded in the executable at build time from the resolved Castle Fight map data. A released extractor therefore does not need the repository, the original map, or the large resolver TSV files at runtime.
+The unit, building, placed-doodad, visual-effect, and UI presentation catalogs are embedded in the executable at build time from the resolved Castle Fight map data. A released extractor therefore does not need the repository, the original map, or the large resolver TSV files at runtime. The normal unit inventory is deliberately broader than the currently implemented gameplay roster so summons, helpers, alternate bodies, and future roster additions are converted before they are enabled in native gameplay.
 
 ## Usage
 
@@ -12,7 +12,17 @@ cf-wc3-assets \
   --output ./wc3-assets
 ```
 
-`WC3_INSTALL` may be used instead of `--wc3`. By default every production unit in the embedded Castle Fight catalog is exported. Repeat `--unit RAWCODE` to export a smaller set while developing, for example:
+`WC3_INSTALL` may be used instead of `--wc3`. For a normal Castle Fight installation, generate the complete presentation pack in one pass:
+
+```sh
+cf-wc3-assets \
+  --wc3 "$WC3_INSTALL" \
+  --map /path/to/Castle_Fight.w3x \
+  --castle-fight \
+  --output assets/wc3
+```
+
+This writes the full embedded unit, building, doodad, effect, and UI catalogs to their normal subdirectories and fails the overall run when any sub-pack has unresolved assets. Narrow modes remain useful while developing. With no mode, every resolved non-building unit object in the embedded Castle Fight catalog is exported. Repeat `--unit RAWCODE` to export a smaller set, for example:
 
 ```sh
 cf-wc3-assets --wc3 "$WC3_INSTALL" -o /tmp/cf-assets --unit hfoo --unit hrif
@@ -99,7 +109,7 @@ cargo run -p castle-fight-wc3-assets -- \
   --unit X00C
 ```
 
-Those rawcodes cover the Human Q/W/E lines, retained combat verification models, and the Human Builder. Builder rawcodes come from the extracted race catalogs and use the same generated unit pack as combat units. If a generated unit or building model is absent, the client retains its normal placeholder visual. Building-pack schema 5 records authored model scale, extractor-resolved Birth/Stand/Death lifecycle sequences, and sequence-scoped particle emitters, while omitting Warcraft's engine-rendered Team Glow and Background geosets, which are billboard/decal geometry rather than ordinary building meshes. Entries that had to substitute inherited base art are deliberately skipped by the client rather than displaying a convincing-but-wrong structure. Newly observed buildings play Birth once before Stand; buildings restored from an initial/rejoin snapshot begin at Stand; authoritative removal may leave a cosmetic-only Death animation without retaining gameplay occupancy. Unit-pack schema 5 retains per-object Warcraft vertex tint and passive ability target art bound to named model attachment points. Marksman uses its extracted RGB tint although it shares the Rifleman mesh with Sniper and Heavy Gunner; Heavy Gunner keeps its Slow Aura target art on the animated weapon point. The Defender activation flash follows the shield-hand point. The pack also selects stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates. The client deliberately rejects older packs so stale exports cannot silently retain outdated animation/geometry contracts.
+Those rawcodes cover the Human Q/W/E lines, retained combat verification models, and the Human Builder as a quick development subset. The default unfiltered unit export is the full resolved non-building Castle Fight inventory. Explicit `no_model.mdl` objects remain intentionally invisible instead of falling back to their base unit's art. If a generated unit or building model is absent, the client retains its normal placeholder visual. Building-pack schema 5 records authored model scale, extractor-resolved Birth/Stand/Death lifecycle sequences, and sequence-scoped particle emitters, while omitting Warcraft's engine-rendered Team Glow and Background geosets, which are billboard/decal geometry rather than ordinary building meshes. Entries that had to substitute inherited base art are deliberately skipped by the client rather than displaying a convincing-but-wrong structure. Newly observed buildings play Birth once before Stand; buildings restored from an initial/rejoin snapshot begin at Stand; authoritative removal may leave a cosmetic-only Death animation without retaining gameplay occupancy. Unit-pack schema 5 retains per-object Warcraft vertex tint and passive ability target art bound to named model attachment points. Marksman uses its extracted RGB tint although it shares the Rifleman mesh with Sniper and Heavy Gunner; Heavy Gunner keeps its Slow Aura target art on the animated weapon point. The Defender activation flash follows the shield-hand point. The pack also selects stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates. The client deliberately rejects older packs so stale exports cannot silently retain outdated animation/geometry contracts.
 
 ## Output
 

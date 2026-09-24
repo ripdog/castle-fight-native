@@ -53,6 +53,32 @@ fn run() -> Result<(), Box<dyn Error>> {
     })?;
     verify_install(&wc3_install)?;
 
+    if args.castle_fight {
+        if args.ui
+            || args.effects
+            || args.buildings
+            || !args.building_filters.is_empty()
+            || args.doodads
+            || !args.doodad_filters.is_empty()
+            || args.production.is_some()
+            || args.object_fields.is_some()
+            || !args.units.is_empty()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--castle-fight cannot be combined with individual asset modes, filters, or development catalog overrides",
+            )
+            .into());
+        }
+        export_castle_fight_pack(
+            &wc3_install,
+            args.map_archive.as_deref(),
+            &output,
+            args.keep_source,
+        )?;
+        return Ok(());
+    }
+
     if args.ui {
         if args.effects
             || args.buildings
@@ -343,6 +369,127 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn export_castle_fight_pack(
+    wc3_install: &Path,
+    map_archive: Option<&Path>,
+    output: &Path,
+    keep_source: bool,
+) -> Result<(), Box<dyn Error>> {
+    let units = load_embedded_units()?;
+    let buildings = load_embedded_buildings()?;
+    let doodads = load_embedded_doodads()?;
+    let visuals = load_embedded_visuals()?;
+    let ui = load_embedded_ui()?;
+    let doodad_placements: usize = doodads.iter().map(|doodad| doodad.placements.len()).sum();
+    let visual_bindings = visuals.assets.len()
+        + visuals.status_visuals.len()
+        + usize::from(visuals.stun_model_path.is_some());
+
+    println!(
+        "Extracting complete Castle Fight presentation pack from {}: {} unit objects, {} buildings, {} doodad objects / {} placements, {} visual bindings, {} UI bindings",
+        wc3_install.display(),
+        units.len(),
+        buildings.len(),
+        doodads.len(),
+        doodad_placements,
+        visual_bindings,
+        ui.assets.len(),
+    );
+
+    let units_output = output.join("units");
+    let mut exporter = Exporter::open(wc3_install, map_archive, &units_output, keep_source)?;
+    let unit_manifest = exporter.export_units(&units)?;
+    write_manifest(&units_output.join("manifest.json"), &unit_manifest)?;
+    let unit_fallbacks = unit_manifest
+        .units
+        .iter()
+        .filter(|unit| unit.fallback_to_base_art && !unit.intentionally_hidden)
+        .count();
+    println!(
+        "  units: {} object(s), {} unique model(s), {} unresolved model(s), {} base-art substitution(s)",
+        unit_manifest.units.len(),
+        unit_manifest.models.len(),
+        unit_manifest.failures.len(),
+        unit_fallbacks
+    );
+
+    let buildings_output = output.join("buildings");
+    exporter.switch_output(&buildings_output)?;
+    let building_manifest = exporter.export_buildings(&buildings)?;
+    write_manifest(&buildings_output.join("manifest.json"), &building_manifest)?;
+    let building_fallbacks = building_manifest
+        .buildings
+        .iter()
+        .filter(|building| building.fallback_to_base_art)
+        .count();
+    println!(
+        "  buildings: {} object(s), {} unique model(s), {} unresolved model(s), {} base-art substitution(s)",
+        building_manifest.buildings.len(),
+        building_manifest.models.len(),
+        building_manifest.failures.len(),
+        building_fallbacks
+    );
+
+    let doodads_output = output.join("doodads");
+    exporter.switch_output(&doodads_output)?;
+    let doodad_manifest = exporter.export_doodads(&doodads)?;
+    write_manifest(&doodads_output.join("manifest.json"), &doodad_manifest)?;
+    let doodad_fallbacks = doodad_manifest
+        .objects
+        .iter()
+        .flat_map(|object| &object.placements)
+        .filter(|placement| placement.fallback_to_base_art)
+        .count();
+    println!(
+        "  doodads: {} object(s), {} unique model(s), {} unresolved model variant(s), {} substituted placement(s)",
+        doodad_manifest.objects.len(),
+        doodad_manifest.models.len(),
+        doodad_manifest.failures.len(),
+        doodad_fallbacks
+    );
+
+    let effects_output = output.join("effects");
+    exporter.switch_output(&effects_output)?;
+    let visual_manifest = exporter.export_visuals(&visuals)?;
+    write_manifest(&effects_output.join("manifest.json"), &visual_manifest)?;
+    println!(
+        "  effects: {} unique model(s), {} unresolved model reference(s)",
+        visual_manifest.models.len(),
+        visual_manifest.failures.len()
+    );
+
+    let ui_output = output.join("ui");
+    exporter.switch_output(&ui_output)?;
+    let ui_manifest = exporter.export_ui(&ui)?;
+    write_manifest(&ui_output.join("manifest.json"), &ui_manifest)?;
+    println!(
+        "  ui: {} unique texture(s), {} unresolved texture reference(s)",
+        ui_manifest.textures.len(),
+        ui_manifest.failures.len()
+    );
+
+    let fidelity_failures = unit_manifest.failures.len()
+        + unit_fallbacks
+        + building_manifest.failures.len()
+        + building_fallbacks
+        + doodad_manifest.failures.len()
+        + doodad_fallbacks
+        + visual_manifest.failures.len()
+        + ui_manifest.failures.len();
+    if fidelity_failures != 0 {
+        return Err(io::Error::other(format!(
+            "complete Castle Fight presentation extraction has {fidelity_failures} unresolved or substituted asset reference(s); inspect the sub-pack manifests"
+        ))
+        .into());
+    }
+
+    println!(
+        "Complete Castle Fight presentation pack exported to {}",
+        output.display()
+    );
+    Ok(())
+}
+
 fn write_manifest<T: serde::Serialize>(path: &Path, manifest: &T) -> Result<(), Box<dyn Error>> {
     let file = File::create(path)?;
     serde_json::to_writer_pretty(BufWriter::new(file), manifest)?;
@@ -370,6 +517,7 @@ struct Args {
     production: Option<PathBuf>,
     object_fields: Option<PathBuf>,
     units: Vec<String>,
+    castle_fight: bool,
     buildings: bool,
     building_filters: Vec<String>,
     doodads: bool,
@@ -390,6 +538,7 @@ impl Args {
             production: None,
             object_fields: None,
             units: Vec::new(),
+            castle_fight: false,
             buildings: false,
             building_filters: Vec::new(),
             doodads: false,
@@ -406,6 +555,7 @@ impl Args {
             match args[i].as_str() {
                 "-h" | "--help" => result.help = true,
                 "--keep-source" => result.keep_source = true,
+                "--castle-fight" => result.castle_fight = true,
                 "--buildings" => result.buildings = true,
                 "--doodads" => result.doodads = true,
                 "--effects" => result.effects = true,
@@ -469,7 +619,8 @@ Options:
   --wc3 PATH            Warcraft III install root (or set WC3_INSTALL)
   --map PATH            Optional Warcraft III map archive for map-imported assets
   -o, --output PATH     Destination directory for converted assets
-  --unit RAWCODE        Export one combat unit or builder; repeat for more units
+  --castle-fight        Export the complete Castle Fight presentation pack
+  --unit RAWCODE        Export one non-building unit; repeat for more units
   --buildings           Export every resolved Castle Fight building model
   --building RAWCODE    Export one building; repeat for more buildings
   --doodads             Export every doodad/destructable placed by Castle Fight
@@ -482,8 +633,9 @@ Options:
   --object-fields PATH  Development override for resolved object-fields.tsv
   -h, --help            Show this help
 
-With no --unit filters, every production unit and race builder in the resolved Castle Fight
-catalog is exported. Use --buildings (or --building RAWCODE) for structures and towers,
+Use --castle-fight for the release-quality full pack under units/, buildings/, doodads/,
+effects/, and ui/. With no mode or --unit filters, every resolved non-building Castle Fight
+unit object is exported. Use --buildings (or --building RAWCODE) for structures and towers,
 --doodads (or --doodad RAWCODE) for map decoration assets and exact placements, and
 --effects for the visual-effects catalog, and --ui for UI/icon textures. Models or textures
 shared by multiple objects are converted once. Particle/ribbon metadata is retained in the model
@@ -554,6 +706,20 @@ mod tests {
             Some(Path::new("/maps/castle-fight.w3x"))
         );
         assert!(args.effects);
+    }
+
+    #[test]
+    fn parses_full_castle_fight_export_mode() {
+        let args = Args::parse(
+            ["--wc3", "/game", "--output", "/out", "--castle-fight"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .unwrap();
+        assert!(args.castle_fight);
+        assert!(!args.effects);
+        assert!(!args.buildings);
+        assert!(args.units.is_empty());
     }
 
     #[test]

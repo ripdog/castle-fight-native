@@ -116,13 +116,11 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let original_map = manifest_dir.join("../../docs/original_map");
     let resolved = original_map.join("extracted/resolved");
-    let production_path = resolved.join("production-buildings.tsv");
-    let race_buildings_path = original_map.join("extracted/script/race-buildings.tsv");
+    let units_path = resolved.join("units.tsv");
     let buildings_path = resolved.join("buildings.tsv");
     let object_fields_path = resolved.join("object-fields.tsv");
     let placed_doodads_path = resolved.join("placed-doodads.tsv");
-    println!("cargo:rerun-if-changed={}", production_path.display());
-    println!("cargo:rerun-if-changed={}", race_buildings_path.display());
+    println!("cargo:rerun-if-changed={}", units_path.display());
     println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
     println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
@@ -131,7 +129,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let catalog_version = parse_catalog_version(&fs::read_to_string(&map_readme)?)?;
     println!("cargo:rustc-env=CF_ASSET_CATALOG_VERSION={catalog_version}");
 
-    let units = load_unit_assets(&production_path, &race_buildings_path, &object_fields_path)?;
+    let units = load_unit_assets(&units_path, &object_fields_path)?;
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
     let visuals = load_visual_assets(&object_fields_path)?;
@@ -158,44 +156,37 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
 }
 
 fn load_unit_assets(
-    production_path: &std::path::Path,
-    race_buildings_path: &std::path::Path,
+    units_path: &std::path::Path,
     object_fields_path: &std::path::Path,
 ) -> Result<Vec<UnitAssetSpec>, Box<dyn Error>> {
-    let mut production = csv::ReaderBuilder::new()
+    let mut unit_rows = csv::ReaderBuilder::new()
         .delimiter(b'\t')
-        .from_path(production_path)?;
-    let prod_headers = production.headers()?.clone();
-    let unit_rawcode = header_index(&prod_headers, "unit_rawcode")?;
-    let unit_names = header_index(&prod_headers, "unit_names")?;
+        .from_path(units_path)?;
+    let unit_headers = unit_rows.headers()?.clone();
+    let unit_rawcode = header_index(&unit_headers, "rawcode")?;
+    let unit_base_rawcode = header_index(&unit_headers, "base_rawcode")?;
+    let unit_name = header_index(&unit_headers, "name")?;
+    let unit_is_building = header_index(&unit_headers, "is_building")?;
 
-    let mut units = BTreeMap::<String, String>::new();
-    for row in production.records() {
+    let mut units = BTreeMap::<String, (String, String)>::new();
+    for row in unit_rows.records() {
         let row = row?;
+        if row.get(unit_is_building) == Some("1") {
+            continue;
+        }
         let rawcode = row.get(unit_rawcode).unwrap_or_default().trim();
         if rawcode.is_empty() {
             continue;
         }
-        units
-            .entry(rawcode.to_owned())
-            .or_insert_with(|| row.get(unit_names).unwrap_or_default().trim().to_owned());
-    }
-
-    let mut race_buildings = csv::ReaderBuilder::new()
-        .delimiter(b'\t')
-        .from_path(race_buildings_path)?;
-    let race_headers = race_buildings.headers()?.clone();
-    let builder_rawcode = header_index(&race_headers, "builder_rawcode")?;
-    let builder_names = header_index(&race_headers, "builder_names")?;
-    for row in race_buildings.records() {
-        let row = row?;
-        let rawcode = row.get(builder_rawcode).unwrap_or_default().trim();
-        if rawcode.is_empty() {
-            continue;
+        let base_rawcode = row.get(unit_base_rawcode).unwrap_or_default().trim();
+        if base_rawcode.is_empty() {
+            return Err(format!("unit {rawcode} has no resolved base rawcode").into());
         }
-        units
-            .entry(rawcode.to_owned())
-            .or_insert_with(|| row.get(builder_names).unwrap_or_default().trim().to_owned());
+        let name = row.get(unit_name).unwrap_or_default().trim();
+        units.insert(
+            rawcode.to_owned(),
+            (base_rawcode.to_owned(), name.to_owned()),
+        );
     }
 
     let mut fields = csv::ReaderBuilder::new()
@@ -208,7 +199,6 @@ fn load_unit_assets(
     let field_id = header_index(&headers, "field_id")?;
     let recovered = header_index(&headers, "recovered_value_json")?;
 
-    let mut base_rawcodes = BTreeMap::<String, String>::new();
     let mut model_paths = BTreeMap::<String, String>::new();
     let mut scales = BTreeMap::<String, f32>::new();
     let mut tints = BTreeMap::<String, [u8; 3]>::new();
@@ -246,11 +236,6 @@ fn load_unit_assets(
         if !units.contains_key(rawcode) {
             continue;
         }
-        if let Some(base_rawcode) = row.get(base_rawcode_col) {
-            base_rawcodes
-                .entry(rawcode.to_owned())
-                .or_insert_with(|| base_rawcode.to_owned());
-        }
         match row.get(field_id) {
             Some("umdl") => {
                 if let Some(path) = parse_json_string(row.get(recovered).unwrap_or_default()) {
@@ -283,10 +268,7 @@ fn load_unit_assets(
     }
 
     let mut result = Vec::with_capacity(units.len());
-    for (rawcode, name) in units {
-        let base_rawcode = base_rawcodes
-            .remove(&rawcode)
-            .ok_or_else(|| format!("unit {rawcode} ({name}) has no base rawcode"))?;
+    for (rawcode, (base_rawcode, name)) in units {
         result.push(UnitAssetSpec {
             model_path: model_paths.remove(&rawcode),
             scale: scales.remove(&rawcode),

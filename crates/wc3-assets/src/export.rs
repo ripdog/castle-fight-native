@@ -72,6 +72,7 @@ pub struct UnitManifest {
     pub requested_model: Option<String>,
     pub source_model: String,
     pub fallback_to_base_art: bool,
+    pub intentionally_hidden: bool,
     pub gltf: Option<String>,
     pub tint_rgb: Option<[u8; 3]>,
     pub attached_visuals: Vec<AttachedVisualSpec>,
@@ -349,6 +350,7 @@ struct ResolvedUnit {
     requested_model: Option<String>,
     source_model: String,
     fallback_to_base_art: bool,
+    intentionally_hidden: bool,
     scale: f32,
     tint_rgb: Option<[u8; 3]>,
     attached_visuals: Vec<AttachedVisualSpec>,
@@ -473,6 +475,18 @@ impl Exporter {
         })
     }
 
+    pub fn switch_output(&mut self, output: &Path) -> Result<(), Box<dyn Error>> {
+        fs::create_dir_all(output.join("models"))?;
+        fs::create_dir_all(output.join("textures"))?;
+        if self.keep_source {
+            fs::create_dir_all(output.join("source/models"))?;
+            fs::create_dir_all(output.join("source/textures"))?;
+        }
+        self.output = output.to_path_buf();
+        self.texture_cache.clear();
+        Ok(())
+    }
+
     pub fn export_units(
         &mut self,
         units: &[UnitAssetSpec],
@@ -483,6 +497,9 @@ impl Exporter {
             .collect::<Result<_, _>>()?;
         let mut grouped = BTreeMap::<String, Vec<&ResolvedUnit>>::new();
         for unit in &resolved {
+            if unit.intentionally_hidden {
+                continue;
+            }
             grouped
                 .entry(unit.source_model.to_ascii_lowercase())
                 .or_default()
@@ -521,6 +538,7 @@ impl Exporter {
                     .cloned(),
                 source_model: unit.source_model.clone(),
                 fallback_to_base_art: unit.fallback_to_base_art,
+                intentionally_hidden: unit.intentionally_hidden,
             })
             .collect();
 
@@ -1006,6 +1024,29 @@ impl Exporter {
     fn resolve_unit(&self, unit: &UnitAssetSpec) -> Result<ResolvedUnit, Box<dyn Error>> {
         let profile = self.unit_skin.get(&unit.base_rawcode.to_ascii_lowercase());
         let requested_model = unit.model_path.as_deref().map(normalize_model_path);
+        let scale = unit
+            .scale
+            .or_else(|| profile.and_then(|profile| profile.model_scale_sd))
+            .or_else(|| profile.and_then(|profile| profile.model_scale))
+            .unwrap_or(1.0);
+        if requested_model
+            .as_deref()
+            .is_some_and(is_intentionally_hidden_model_path)
+        {
+            return Ok(ResolvedUnit {
+                rawcode: unit.rawcode.clone(),
+                name: unit.name.clone(),
+                source_model: requested_model
+                    .clone()
+                    .expect("intentional hidden model path was checked above"),
+                requested_model,
+                fallback_to_base_art: false,
+                intentionally_hidden: true,
+                scale,
+                tint_rgb: unit.tint_rgb,
+                attached_visuals: unit.attached_visuals.clone(),
+            });
+        }
         let base_model = profile
             .and_then(|profile| profile.file_sd.as_deref().or(profile.file.as_deref()))
             .map(normalize_model_path);
@@ -1031,17 +1072,13 @@ impl Exporter {
             ))
             .into());
         };
-        let scale = unit
-            .scale
-            .or_else(|| profile.and_then(|profile| profile.model_scale_sd))
-            .or_else(|| profile.and_then(|profile| profile.model_scale))
-            .unwrap_or(1.0);
         Ok(ResolvedUnit {
             rawcode: unit.rawcode.clone(),
             name: unit.name.clone(),
             requested_model,
             source_model,
             fallback_to_base_art,
+            intentionally_hidden: false,
             scale,
             tint_rgb: unit.tint_rgb,
             attached_visuals: unit.attached_visuals.clone(),
@@ -4295,6 +4332,12 @@ fn doodad_model_candidates(path: &str, variation: u32, num_variations: u32) -> V
     }
 }
 
+fn is_intentionally_hidden_model_path(path: &str) -> bool {
+    path.rsplit('\\')
+        .next()
+        .is_some_and(|name| name.eq_ignore_ascii_case("no_model.mdx"))
+}
+
 pub fn normalize_model_path(path: &str) -> String {
     let mut path = path.trim().replace('/', "\\");
     while path.starts_with('\\') {
@@ -4502,6 +4545,17 @@ mod tests {
             normalize_model_path("units/human/Footman/Footman"),
             r"units\human\Footman\Footman.mdx"
         );
+    }
+
+    #[test]
+    fn explicit_no_model_paths_are_intentionally_hidden() {
+        assert!(is_intentionally_hidden_model_path("no_model.mdx"));
+        assert!(is_intentionally_hidden_model_path(
+            r"war3mapImported\NO_MODEL.MDX"
+        ));
+        assert!(!is_intentionally_hidden_model_path(
+            r"units\human\Footman\Footman.mdx"
+        ));
     }
 
     #[test]
