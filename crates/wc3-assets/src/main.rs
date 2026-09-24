@@ -737,8 +737,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "particle.pe2_animated_tracks_unsupported",
-            FidelityStatus::Unsupported,
+            "particle.pe2_animated_tracks_approximate",
+            FidelityStatus::Approximation,
             features.particle_emitter_2_animated_track_count,
         );
         record_fidelity_finding(
@@ -1089,12 +1089,12 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 8);
-        assert_eq!(summary.unsupported_occurrences, 12);
+        assert_eq!(summary.approximation_occurrences, 12);
+        assert_eq!(summary.unsupported_occurrences, 8);
         assert_eq!(summary.findings.len(), 9);
         assert!(summary.findings.iter().any(|finding| {
-            finding.id == "particle.pe2_animated_tracks_unsupported"
-                && finding.status == FidelityStatus::Unsupported
+            finding.id == "particle.pe2_animated_tracks_approximate"
+                && finding.status == FidelityStatus::Approximation
                 && finding.affected_models == 1
                 && finding.occurrences == 4
         }));

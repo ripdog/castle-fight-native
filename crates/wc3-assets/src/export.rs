@@ -282,6 +282,14 @@ pub struct MaterialSubTextureManifest {
     pub texture_id_track: Option<UnsignedTrackManifest>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ParticleEmitterSequenceManifest {
+    pub name: String,
+    pub start_ms: u32,
+    pub end_ms: u32,
+    pub non_looping: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ParticleEmitter2Manifest {
     pub object_id: u32,
@@ -328,6 +336,8 @@ pub struct ParticleEmitter2Manifest {
     pub texture: Option<String>,
     pub squirt: bool,
     pub replaceable_id: u32,
+    pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
+    pub global_sequence_durations_ms: Vec<u32>,
     /// Whether this emitter is active during the model's ambient Stand sequence. Doodads use this
     /// to avoid replaying death/decay-only debris emitters while still rendering fires/torches.
     pub ambient_enabled: bool,
@@ -2252,6 +2262,17 @@ fn particle_emitter_2_manifests(
     model: &Model,
     textures: &[TextureManifest],
 ) -> Result<Vec<ParticleEmitter2Manifest>, Box<dyn Error>> {
+    let sequence_windows = model
+        .sequences_iter()
+        .map(|sequence| ParticleEmitterSequenceManifest {
+            name: sequence.name(),
+            start_ms: sequence.interval_start(),
+            end_ms: sequence.interval_end(),
+            non_looping: sequence.flags() == SequenceFlag::NonLooping,
+        })
+        .collect::<Vec<_>>();
+    let global_sequence_durations_ms = model.global_sequences().to_vec();
+
     model
         .particle_emitters_2_iter()
         .map(|emitter| {
@@ -2313,6 +2334,8 @@ fn particle_emitter_2_manifests(
                     .and_then(|texture| texture.png.clone()),
                 squirt: emitter.squirt() != 0,
                 replaceable_id: emitter.replaceable_id(),
+                sequence_windows: sequence_windows.clone(),
+                global_sequence_durations_ms: global_sequence_durations_ms.clone(),
                 ambient_enabled,
                 active_sequences,
             })

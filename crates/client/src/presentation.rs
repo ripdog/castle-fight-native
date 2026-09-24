@@ -2624,7 +2624,7 @@ fn spawn_persistent_unit_attachments(
                 .spawn((
                     WorldAssetRoot(visual.model.scene.clone()),
                     Transform::IDENTITY,
-                    Wc3EmitterSource::new(&visual.model.emitters),
+                    visual.model.looping_emitter_source(),
                     Wc3RibbonSource::new(&visual.model.ribbons),
                     Wc3VertexTint([255; 3]),
                     Wc3AttachToNode {
@@ -2838,7 +2838,7 @@ fn sync_render_entities(
             .spawn((
                 WorldAssetRoot(visual.model.scene.clone()),
                 Transform::from_translation(position),
-                Wc3EmitterSource::new(&visual.model.emitters),
+                visual.model.emitter_source(),
                 Wc3RibbonSource::new(&visual.model.ribbons),
             ))
             .id();
@@ -2914,7 +2914,7 @@ fn sync_render_entities(
                 .spawn((
                     WorldAssetRoot(visual.model.scene.clone()),
                     Transform::from_translation(position),
-                    Wc3EmitterSource::new(&visual.model.emitters),
+                    visual.model.emitter_source(),
                     Wc3RibbonSource::new(&visual.model.ribbons),
                 ))
                 .id();
@@ -2972,7 +2972,7 @@ fn sync_render_entities(
                     } else {
                         Transform::from_translation(position)
                     },
-                    Wc3EmitterSource::new(&visual.model.emitters),
+                    visual.model.emitter_source(),
                     Wc3RibbonSource::new(&visual.model.ribbons),
                     Wc3VertexTint([255; 3]),
                 ))
@@ -3394,7 +3394,7 @@ fn sync_render_entities(
                 .spawn((
                     WorldAssetRoot(model.scene.clone()),
                     Transform::from_rotation(Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET)),
-                    Wc3EmitterSource::new(&model.emitters),
+                    model.emitter_source(),
                     Wc3RibbonSource::new(&model.ribbons),
                 ))
                 .id();
@@ -3797,7 +3797,7 @@ fn spawn_unit_status_visuals(
             .spawn((
                 WorldAssetRoot(visual.model.scene.clone()),
                 Transform::from_translation(position),
-                Wc3EmitterSource::new(&visual.model.emitters),
+                visual.model.looping_emitter_source(),
                 Wc3RibbonSource::new(&visual.model.ribbons),
             ))
             .id();
@@ -3831,7 +3831,7 @@ fn spawn_stun_effect(
         .spawn((
             WorldAssetRoot(model.scene.clone()),
             Transform::from_translation(position),
-            Wc3EmitterSource::new(&model.emitters),
+            model.emitter_source(),
             Wc3RibbonSource::new(&model.ribbons),
         ))
         .id();

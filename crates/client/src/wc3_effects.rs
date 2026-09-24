@@ -49,6 +49,7 @@ pub struct Wc3VisualModel {
     pub scene: Handle<WorldAsset>,
     gltf: Handle<Gltf>,
     animation_name: Option<String>,
+    stand_animation_name: Option<String>,
     pub emitters: Vec<Wc3ParticleEmitter>,
     pub ribbons: Vec<Wc3RibbonEmitter>,
 }
@@ -61,7 +62,42 @@ impl Wc3VisualModel {
 
     #[must_use]
     pub fn looping_animation_source(&self) -> Option<Wc3VisualAnimationSource> {
-        self.animation_source_with_looping(true)
+        Some(Wc3VisualAnimationSource {
+            gltf: self.gltf.clone(),
+            animation_name: self
+                .stand_animation_name
+                .as_ref()
+                .or(self.animation_name.as_ref())?
+                .clone(),
+            looping: true,
+        })
+    }
+
+    #[must_use]
+    pub fn emitter_source(&self) -> Wc3EmitterSource {
+        self.emitter_source_for(self.animation_name.as_deref())
+    }
+
+    #[must_use]
+    pub fn looping_emitter_source(&self) -> Wc3EmitterSource {
+        self.emitter_source_for(
+            self.stand_animation_name
+                .as_deref()
+                .or(self.animation_name.as_deref()),
+        )
+    }
+
+    fn emitter_source_for(&self, sequence: Option<&str>) -> Wc3EmitterSource {
+        sequence.map_or_else(
+            || Wc3EmitterSource::new(&self.emitters),
+            |sequence| {
+                Wc3EmitterSource::with_asset_prefix_for_sequence(
+                    &self.emitters,
+                    EFFECT_ASSET_PREFIX,
+                    sequence,
+                )
+            },
+        )
     }
 
     fn animation_source_with_looping(&self, looping: bool) -> Option<Wc3VisualAnimationSource> {
@@ -103,6 +139,35 @@ pub struct Wc3StatusVisual {
     pub kind: Wc3StatusVisualKind,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum Wc3ScalarInterpolation {
+    DontInterp,
+    Linear,
+    Hermite,
+    Bezier,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Wc3ScalarTrack {
+    interpolation: Wc3ScalarInterpolation,
+    global_sequence_id: Option<u32>,
+    timestamps: Vec<u32>,
+    values: Vec<f32>,
+    #[serde(default)]
+    in_tangents: Vec<f32>,
+    #[serde(default)]
+    out_tangents: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Wc3EmitterSequenceWindow {
+    name: String,
+    start_ms: u32,
+    end_ms: u32,
+    non_looping: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Wc3ParticleEmitter {
     #[serde(default)]
@@ -119,6 +184,22 @@ pub struct Wc3ParticleEmitter {
     pub length: f32,
     #[serde(default)]
     pub width: f32,
+    #[serde(default)]
+    pub speed_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub variation_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub latitude_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub gravity_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub emission_rate_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub length_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub width_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub visibility_track: Option<Wc3ScalarTrack>,
     pub rows: u32,
     pub columns: u32,
     #[serde(default)]
@@ -138,6 +219,10 @@ pub struct Wc3ParticleEmitter {
     pub segment_scaling: [f32; 3],
     pub texture: Option<String>,
     pub squirt: bool,
+    #[serde(default)]
+    pub sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(default)]
+    pub global_sequence_durations_ms: Vec<u32>,
     #[serde(default)]
     pub ambient_enabled: bool,
     #[serde(default)]
@@ -228,6 +313,16 @@ pub struct Wc3VisualAnimationGraphs {
 pub struct Wc3EmitterSource {
     emitters: Vec<EmitterRuntime>,
     node_binding_complete: bool,
+    sequence_clock: Option<Wc3EmitterSequenceClock>,
+    global_elapsed_ms: f32,
+}
+
+#[derive(Debug, Clone)]
+struct Wc3EmitterSequenceClock {
+    start_ms: u32,
+    end_ms: u32,
+    non_looping: bool,
+    elapsed_ms: f32,
 }
 
 #[derive(Clone)]
@@ -564,7 +659,7 @@ impl Wc3EmitterSource {
 
     #[must_use]
     pub fn with_asset_prefix(emitters: &[Wc3ParticleEmitter], asset_prefix: &'static str) -> Self {
-        Self::from_filtered(emitters.iter().cloned(), asset_prefix)
+        Self::from_filtered(emitters.iter().cloned(), asset_prefix, None)
     }
 
     #[must_use]
@@ -584,14 +679,28 @@ impl Wc3EmitterSource {
                 })
                 .cloned(),
             asset_prefix,
+            Some(sequence),
         )
     }
 
     fn from_filtered(
         emitters: impl IntoIterator<Item = Wc3ParticleEmitter>,
         asset_prefix: &'static str,
+        sequence: Option<&str>,
     ) -> Self {
-        let emitters = emitters
+        let specs = emitters.into_iter().collect::<Vec<_>>();
+        let sequence_window = sequence
+            .and_then(|sequence| find_emitter_sequence_window(&specs, sequence))
+            .or_else(|| find_emitter_sequence_window(&specs, "Stand"))
+            .or_else(|| find_emitter_sequence_window(&specs, "Birth"))
+            .or_else(|| {
+                specs
+                    .iter()
+                    .flat_map(|emitter| emitter.sequence_windows.iter())
+                    .next()
+                    .cloned()
+            });
+        let emitters = specs
             .into_iter()
             .map(|spec| {
                 let visual = Arc::new(Wc3ParticleVisualSpec {
@@ -618,7 +727,41 @@ impl Wc3EmitterSource {
         Self {
             emitters,
             node_binding_complete,
+            sequence_clock: sequence_window.map(|window| Wc3EmitterSequenceClock {
+                start_ms: window.start_ms,
+                end_ms: window.end_ms,
+                non_looping: window.non_looping,
+                elapsed_ms: 0.0,
+            }),
+            global_elapsed_ms: 0.0,
         }
+    }
+}
+
+fn find_emitter_sequence_window(
+    emitters: &[Wc3ParticleEmitter],
+    sequence: &str,
+) -> Option<Wc3EmitterSequenceWindow> {
+    emitters
+        .iter()
+        .flat_map(|emitter| emitter.sequence_windows.iter())
+        .find(|window| window.name.eq_ignore_ascii_case(sequence))
+        .cloned()
+}
+
+impl Wc3EmitterSequenceClock {
+    fn current_time_ms(&self) -> f32 {
+        let duration = self.end_ms.saturating_sub(self.start_ms).max(1) as f32;
+        let offset = if self.non_looping {
+            self.elapsed_ms.min(duration)
+        } else {
+            self.elapsed_ms.rem_euclid(duration)
+        };
+        self.start_ms as f32 + offset
+    }
+
+    fn advance(&mut self, dt_seconds: f32) {
+        self.elapsed_ms += dt_seconds.max(0.0) * 1000.0;
     }
 }
 
@@ -1480,12 +1623,24 @@ pub fn emit_wc3_particles(
 ) {
     let dt = time.delta_secs().min(0.1);
     for (entity, transform, mut source) in &mut sources {
+        let sequence_time_ms = source
+            .sequence_clock
+            .as_ref()
+            .map(Wc3EmitterSequenceClock::current_time_ms)
+            .unwrap_or(source.global_elapsed_ms);
+        let global_elapsed_ms = source.global_elapsed_ms;
         for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
+            let sample =
+                sample_emitter_parameters(&emitter.spec, sequence_time_ms, global_elapsed_ms);
+            if sample.visibility <= 0.001 {
+                emitter.accumulator = 0.0;
+                continue;
+            }
             let mut count = if emitter.burst_pending {
                 emitter.burst_pending = false;
                 8
             } else {
-                emitter.accumulator += emitter.spec.emission_rate.clamp(0.0, 240.0) * dt;
+                emitter.accumulator += sample.emission_rate.clamp(0.0, 240.0) * dt;
                 let count = emitter.accumulator.floor() as u32;
                 emitter.accumulator -= count as f32;
                 count
@@ -1543,11 +1698,15 @@ pub fn emit_wc3_particles(
                 let sequence = emitter.sequence;
                 emitter.sequence = emitter.sequence.wrapping_add(1);
                 let seed = particle_seed(entity, emitter_index as u32, sequence);
-                let local_spawn =
-                    particle_spawn_offset(seed, emitter.spec.width, emitter.spec.length);
+                let local_spawn = particle_spawn_offset(seed, sample.width, sample.length);
                 let origin = base_origin + source_rotation * (local_spawn * source_scale);
-                let velocity =
-                    particle_velocity(source_rotation, seed, &emitter.spec) * uniform_scale;
+                let velocity = particle_velocity(
+                    source_rotation,
+                    seed,
+                    sample.speed,
+                    sample.variation,
+                    sample.latitude,
+                ) * uniform_scale;
                 commands.spawn((
                     Mesh3d(particle_mesh.clone()),
                     MeshMaterial3d(material.clone()),
@@ -1555,7 +1714,7 @@ pub fn emit_wc3_particles(
                         .with_scale(Vec3::splat(particle_scales[0].max(0.01))),
                     Wc3Particle {
                         velocity,
-                        gravity: emitter.spec.gravity * uniform_scale,
+                        gravity: sample.gravity * uniform_scale,
                         age: 0.0,
                         lifespan: emitter.spec.lifespan.max(0.01),
                         middle_time: emitter.spec.time,
@@ -1568,6 +1727,10 @@ pub fn emit_wc3_particles(
                 ));
             }
         }
+        if let Some(clock) = source.sequence_clock.as_mut() {
+            clock.advance(dt);
+        }
+        source.global_elapsed_ms += dt * 1000.0;
     }
 }
 
@@ -1625,6 +1788,128 @@ pub fn update_wc3_particles(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Wc3EmitterSample {
+    speed: f32,
+    variation: f32,
+    latitude: f32,
+    gravity: f32,
+    emission_rate: f32,
+    length: f32,
+    width: f32,
+    visibility: f32,
+}
+
+fn sample_emitter_parameters(
+    emitter: &Wc3ParticleEmitter,
+    sequence_time_ms: f32,
+    global_elapsed_ms: f32,
+) -> Wc3EmitterSample {
+    let value = |track: Option<&Wc3ScalarTrack>, default: f32| {
+        sample_scalar_track(
+            track,
+            default,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &emitter.global_sequence_durations_ms,
+        )
+    };
+    Wc3EmitterSample {
+        speed: value(emitter.speed_track.as_ref(), emitter.speed),
+        variation: value(emitter.variation_track.as_ref(), emitter.variation),
+        latitude: value(emitter.latitude_track.as_ref(), emitter.latitude),
+        gravity: value(emitter.gravity_track.as_ref(), emitter.gravity),
+        emission_rate: value(emitter.emission_rate_track.as_ref(), emitter.emission_rate),
+        length: value(emitter.length_track.as_ref(), emitter.length),
+        width: value(emitter.width_track.as_ref(), emitter.width),
+        visibility: value(emitter.visibility_track.as_ref(), 1.0),
+    }
+}
+
+fn sample_scalar_track(
+    track: Option<&Wc3ScalarTrack>,
+    default: f32,
+    sequence_time_ms: f32,
+    global_elapsed_ms: f32,
+    global_sequence_durations_ms: &[u32],
+) -> f32 {
+    let Some(track) = track else {
+        return default;
+    };
+    if track.timestamps.is_empty() || track.values.is_empty() {
+        return default;
+    }
+    let count = track.timestamps.len().min(track.values.len());
+    if count == 0 {
+        return default;
+    }
+
+    let time_ms = track
+        .global_sequence_id
+        .and_then(|id| global_sequence_durations_ms.get(id as usize).copied())
+        .filter(|duration| *duration != 0)
+        .map_or(sequence_time_ms, |duration| {
+            global_elapsed_ms.rem_euclid(duration as f32)
+        });
+
+    if time_ms <= track.timestamps[0] as f32 {
+        return track.values[0];
+    }
+    if time_ms >= track.timestamps[count - 1] as f32 {
+        return track.values[count - 1];
+    }
+
+    let upper = track.timestamps[..count].partition_point(|timestamp| *timestamp as f32 <= time_ms);
+    if upper == 0 {
+        return track.values[0];
+    }
+    if upper >= count {
+        return track.values[count - 1];
+    }
+    let lower = upper - 1;
+    if track.interpolation == Wc3ScalarInterpolation::DontInterp {
+        return track.values[lower];
+    }
+
+    let start_ms = track.timestamps[lower] as f32;
+    let end_ms = track.timestamps[upper] as f32;
+    let span = (end_ms - start_ms).max(f32::EPSILON);
+    let t = ((time_ms - start_ms) / span).clamp(0.0, 1.0);
+    let p0 = track.values[lower];
+    let p1 = track.values[upper];
+    match track.interpolation {
+        Wc3ScalarInterpolation::DontInterp => p0,
+        Wc3ScalarInterpolation::Linear => p0 + (p1 - p0) * t,
+        Wc3ScalarInterpolation::Hermite => {
+            let Some(out0) = track.out_tangents.get(lower).copied() else {
+                return p0 + (p1 - p0) * t;
+            };
+            let Some(in1) = track.in_tangents.get(upper).copied() else {
+                return p0 + (p1 - p0) * t;
+            };
+            let t2 = t * t;
+            let t3 = t2 * t;
+            (2.0 * t3 - 3.0 * t2 + 1.0) * p0
+                + (t3 - 2.0 * t2 + t) * out0
+                + (-2.0 * t3 + 3.0 * t2) * p1
+                + (t3 - t2) * in1
+        }
+        Wc3ScalarInterpolation::Bezier => {
+            let Some(out0) = track.out_tangents.get(lower).copied() else {
+                return p0 + (p1 - p0) * t;
+            };
+            let Some(in1) = track.in_tangents.get(upper).copied() else {
+                return p0 + (p1 - p0) * t;
+            };
+            let one_minus_t = 1.0 - t;
+            one_minus_t.powi(3) * p0
+                + 3.0 * one_minus_t.powi(2) * t * out0
+                + 3.0 * one_minus_t * t * t * in1
+                + t.powi(3) * p1
+        }
+    }
+}
+
 fn particle_seed(entity: Entity, emitter_index: u32, sequence: u32) -> u32 {
     (entity.to_bits() as u32).wrapping_mul(0x9e37_79b9)
         ^ emitter_index.wrapping_mul(0x85eb_ca6b)
@@ -1637,11 +1922,16 @@ fn particle_spawn_offset(seed: u32, width: f32, length: f32) -> Vec3 {
     wc3_direction_to_bevy(Vec3::new(x, y, 0.0))
 }
 
-fn particle_velocity(rotation: Quat, seed: u32, emitter: &Wc3ParticleEmitter) -> Vec3 {
+fn particle_velocity(
+    rotation: Quat,
+    seed: u32,
+    speed: f32,
+    variation: f32,
+    latitude_degrees: f32,
+) -> Vec3 {
     let a = hash_unit(seed);
     let b = hash_unit(seed ^ 0xa511_e9b3);
-    let latitude = emitter
-        .latitude
+    let latitude = latitude_degrees
         .to_radians()
         .clamp(0.0, std::f32::consts::PI);
     let cone = latitude * a.sqrt();
@@ -1655,8 +1945,8 @@ fn particle_velocity(rotation: Quat, seed: u32, emitter: &Wc3ParticleEmitter) ->
         cone.cos(),
     );
     let local_direction = wc3_direction_to_bevy(wc3_direction);
-    let variation = 1.0 + (hash_unit(seed ^ 0x63d8_3595) * 2.0 - 1.0) * emitter.variation;
-    rotation * local_direction * emitter.speed * variation.max(0.0)
+    let speed_scale = 1.0 + (hash_unit(seed ^ 0x63d8_3595) * 2.0 - 1.0) * variation;
+    rotation * local_direction * speed * speed_scale.max(0.0)
 }
 
 fn particle_material_step(t: f32) -> u8 {
@@ -1890,6 +2180,11 @@ fn resolve_visual_model(
         scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path.clone())),
         gltf: asset_server.load(asset_path),
         animation_name,
+        stand_animation_name: model
+            .animations
+            .iter()
+            .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
+            .map(|animation| animation.name.clone()),
         emitters: model.particle_emitters.clone(),
         ribbons: model.ribbon_emitters.clone(),
     })
@@ -1969,6 +2264,14 @@ mod tests {
             emission_rate: 1.0,
             length: 0.0,
             width: 0.0,
+            speed_track: None,
+            variation_track: None,
+            latitude_track: None,
+            gravity_track: None,
+            emission_rate_track: None,
+            length_track: None,
+            width_track: None,
+            visibility_track: None,
             rows: 1,
             columns: 1,
             head_or_tail: 0,
@@ -1982,6 +2285,13 @@ mod tests {
             segment_scaling: [1.0; 3],
             texture: None,
             squirt: false,
+            sequence_windows: vec![Wc3EmitterSequenceWindow {
+                name: "Stand".to_owned(),
+                start_ms: 100,
+                end_ms: 1100,
+                non_looping: false,
+            }],
+            global_sequence_durations_ms: vec![500],
             ambient_enabled: true,
             active_sequences: vec!["Stand".to_owned()],
         }
@@ -2003,6 +2313,58 @@ mod tests {
             texture: None,
             gravity: 0.0,
         }
+    }
+
+    #[test]
+    fn visual_model_emitter_clock_matches_selected_animation_sequence() {
+        let mut stand = test_particle_emitter(17);
+        stand.active_sequences = vec!["Stand".to_owned()];
+        stand.sequence_windows = vec![
+            Wc3EmitterSequenceWindow {
+                name: "Birth".to_owned(),
+                start_ms: 0,
+                end_ms: 500,
+                non_looping: true,
+            },
+            Wc3EmitterSequenceWindow {
+                name: "Stand".to_owned(),
+                start_ms: 500,
+                end_ms: 1500,
+                non_looping: false,
+            },
+        ];
+        let mut birth = stand.clone();
+        birth.object_id = Some(18);
+        birth.active_sequences = vec!["Birth".to_owned()];
+
+        let model = Wc3VisualModel {
+            scene: Handle::default(),
+            gltf: Handle::default(),
+            animation_name: Some("Birth".to_owned()),
+            stand_animation_name: Some("Stand".to_owned()),
+            emitters: vec![stand, birth],
+            ribbons: Vec::new(),
+        };
+
+        let birth_source = model.emitter_source();
+        assert_eq!(birth_source.emitters.len(), 1);
+        assert_eq!(birth_source.emitters[0].spec.object_id, Some(18));
+        let birth_clock = birth_source.sequence_clock.expect("birth sequence clock");
+        assert_eq!(birth_clock.start_ms, 0);
+        assert_eq!(birth_clock.end_ms, 500);
+        assert!(birth_clock.non_looping);
+
+        let stand_source = model.looping_emitter_source();
+        assert_eq!(stand_source.emitters.len(), 1);
+        assert_eq!(stand_source.emitters[0].spec.object_id, Some(17));
+        let stand_clock = stand_source.sequence_clock.expect("stand sequence clock");
+        assert_eq!(stand_clock.start_ms, 500);
+        assert_eq!(stand_clock.end_ms, 1500);
+        assert!(!stand_clock.non_looping);
+        assert_eq!(
+            model.looping_animation_source().unwrap().animation_name,
+            "Stand"
+        );
     }
 
     #[test]
@@ -2153,6 +2515,77 @@ mod tests {
         assert_eq!(wc3_direction_to_bevy(Vec3::Z), Vec3::Y);
         assert_eq!(wc3_direction_to_bevy(Vec3::Y), Vec3::NEG_Z);
         assert_eq!(wc3_direction_to_bevy(Vec3::X), Vec3::X);
+    }
+
+    #[test]
+    fn scalar_tracks_sample_sequence_and_global_sequence_time() {
+        let linear = Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::Linear,
+            global_sequence_id: None,
+            timestamps: vec![100, 300],
+            values: vec![10.0, 30.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        };
+        assert_eq!(
+            sample_scalar_track(Some(&linear), 0.0, 100.0, 0.0, &[]),
+            10.0
+        );
+        assert_eq!(
+            sample_scalar_track(Some(&linear), 0.0, 200.0, 0.0, &[]),
+            20.0
+        );
+        assert_eq!(
+            sample_scalar_track(Some(&linear), 0.0, 500.0, 0.0, &[]),
+            30.0
+        );
+
+        let stepped = Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::DontInterp,
+            global_sequence_id: None,
+            timestamps: vec![100, 300],
+            values: vec![4.0, 8.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        };
+        assert_eq!(
+            sample_scalar_track(Some(&stepped), 0.0, 299.0, 0.0, &[]),
+            4.0
+        );
+
+        let global = Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::Linear,
+            global_sequence_id: Some(0),
+            timestamps: vec![0, 500],
+            values: vec![0.0, 10.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        };
+        assert_eq!(
+            sample_scalar_track(Some(&global), 0.0, 9999.0, 750.0, &[500]),
+            5.0
+        );
+    }
+
+    #[test]
+    fn emitter_sequence_clock_loops_or_clamps_from_authored_flags() {
+        let mut looping = Wc3EmitterSequenceClock {
+            start_ms: 1000,
+            end_ms: 1400,
+            non_looping: false,
+            elapsed_ms: 0.0,
+        };
+        looping.advance(0.5);
+        assert_eq!(looping.current_time_ms(), 1100.0);
+
+        let mut one_shot = Wc3EmitterSequenceClock {
+            start_ms: 2000,
+            end_ms: 2300,
+            non_looping: true,
+            elapsed_ms: 0.0,
+        };
+        one_shot.advance(1.0);
+        assert_eq!(one_shot.current_time_ms(), 2300.0);
     }
 
     #[test]
