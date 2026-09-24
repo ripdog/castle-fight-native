@@ -1025,6 +1025,7 @@ mod tests {
                 animations: Vec::new(),
                 textures: Vec::new(),
                 materials: Vec::new(),
+                geoset_animations: Vec::new(),
                 particle_emitters: Vec::new(),
                 model_particle_emitters: Vec::new(),
                 ribbon_emitters: Vec::new(),

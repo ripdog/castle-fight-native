@@ -172,6 +172,7 @@ pub struct ModelManifest {
     pub animations: Vec<AnimationManifest>,
     pub textures: Vec<TextureManifest>,
     pub materials: Vec<MaterialManifest>,
+    pub geoset_animations: Vec<GeosetAnimationManifest>,
     pub particle_emitters: Vec<ParticleEmitter2Manifest>,
     pub model_particle_emitters: Vec<ModelParticleEmitterManifest>,
     pub ribbon_emitters: Vec<RibbonEmitterManifest>,
@@ -248,6 +249,18 @@ pub struct UnsignedTrackManifest {
     pub in_tangents: Vec<u32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub out_tangents: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GeosetAnimationManifest {
+    pub geoset_id: u32,
+    pub flags: String,
+    pub alpha: f32,
+    pub color: [f32; 3],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpha_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_track: Option<Vector3TrackManifest>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1474,6 +1487,7 @@ impl Exporter {
         let animations = animation_manifests_from_gltf(&gltf)?;
         let features = model_feature_manifest(&model);
         let materials = material_manifests(&model)?;
+        let geoset_animations = geoset_animation_manifests(&model)?;
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
         let model_particle_emitters = model_particle_emitter_manifests(&model)?;
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests)?;
@@ -1492,6 +1506,7 @@ impl Exporter {
             animations,
             textures: texture_manifests,
             materials,
+            geoset_animations,
             particle_emitters,
             model_particle_emitters,
             ribbon_emitters,
@@ -2479,6 +2494,25 @@ fn track_interpolation_manifest(
         InterpolationType::Hermite => ScalarTrackInterpolationManifest::Hermite,
         InterpolationType::Bezier => ScalarTrackInterpolationManifest::Bezier,
     }
+}
+
+fn geoset_animation_manifests(
+    model: &Model,
+) -> Result<Vec<GeosetAnimationManifest>, Box<dyn Error>> {
+    model
+        .geoset_animations_iter()
+        .map(|animation| {
+            let color = animation.color();
+            Ok(GeosetAnimationManifest {
+                geoset_id: animation.geoset_id(),
+                flags: format!("{:?}", animation.flags()),
+                alpha: animation.alpha(),
+                color: [color.x, color.y, color.z],
+                alpha_track: scalar_track_manifest(&animation.alpha_tracks())?,
+                color_track: vector3_track_manifest(&animation.color_tracks())?,
+            })
+        })
+        .collect()
 }
 
 fn material_manifests(model: &Model) -> Result<Vec<MaterialManifest>, Box<dyn Error>> {
@@ -6016,6 +6050,67 @@ mod tests {
     }
 
     #[test]
+    fn geoset_animation_manifest_preserves_exact_alpha_and_color_tracks() {
+        let mut model = Model::new();
+        model.resize_geoset_animations(1);
+        {
+            let mut animation = model.geoset_animations_mut(0).expect("geoset animation");
+            animation.set_geoset_id(3);
+            animation.set_alpha(0.6);
+            animation.set_color(whiteout::math::Vector3f {
+                x: 0.2,
+                y: 0.4,
+                z: 0.8,
+            });
+            {
+                let mut alpha = animation.alpha_tracks_mut();
+                alpha.set_is_used(true);
+                alpha.set_interpolation_type(InterpolationType::Linear);
+                alpha.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                alpha.set_key_count(3);
+                alpha.set_timestamps(&[0, 250, 500]);
+                alpha.set_keys(&[0.0, 0.5, 1.0]);
+            }
+            {
+                let mut color = animation.color_tracks_mut();
+                color.set_is_used(true);
+                color.set_interpolation_type(InterpolationType::Linear);
+                color.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                color.set_key_count(2);
+                color.set_timestamps(&[0, 500]);
+                color.set_keys(&[
+                    whiteout::math::Vector3f {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    whiteout::math::Vector3f {
+                        x: 0.0,
+                        y: 1.0,
+                        z: 0.0,
+                    },
+                ]);
+            }
+        }
+
+        let manifests =
+            geoset_animation_manifests(&model).expect("geoset animation should serialize");
+        assert_eq!(manifests.len(), 1);
+        let animation = &manifests[0];
+        assert_eq!(animation.geoset_id, 3);
+        assert_eq!(animation.alpha, 0.6);
+        assert_eq!(animation.color, [0.2, 0.4, 0.8]);
+        assert_eq!(
+            animation.alpha_track.as_ref().expect("alpha").values,
+            [0.0, 0.5, 1.0]
+        );
+        assert_eq!(
+            animation.color_track.as_ref().expect("color").values,
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        );
+    }
+
+    #[test]
     fn geoset_alpha_maps_to_binary_node_visibility() {
         assert_eq!(visibility_scale(0.0), [0.0; 3]);
         assert_eq!(visibility_scale(0.001), [0.0; 3]);
@@ -6092,6 +6187,7 @@ mod tests {
             animations: Vec::new(),
             textures: Vec::new(),
             materials: Vec::new(),
+            geoset_animations: Vec::new(),
             particle_emitters: Vec::new(),
             model_particle_emitters: vec![
                 ModelParticleEmitterManifest {
