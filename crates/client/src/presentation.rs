@@ -53,8 +53,8 @@ use crate::{
         Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
         emit_wc3_particles, fix_wc3_scene_materials, resolve_wc3_emitter_nodes,
         resolve_wc3_visual_attachments, setup_wc3_visual_animation_players,
-        spawn_wc3_ribbon_trails, update_wc3_material_alpha, update_wc3_particles,
-        update_wc3_ribbon_trails,
+        spawn_wc3_ribbon_trails, update_wc3_material_alpha, update_wc3_material_texture,
+        update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
 
@@ -941,6 +941,7 @@ impl Plugin for CastlePresentationPlugin {
                     update_imported_unit_animations,
                     advance_wc3_model_sequence_clocks,
                     update_wc3_material_alpha,
+                    update_wc3_material_texture,
                     spawn_miss_indicators,
                     finish_animation_profile,
                     interpolate_render_transforms,

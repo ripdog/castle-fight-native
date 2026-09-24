@@ -701,8 +701,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "material.animated_texture_unsupported",
-            FidelityStatus::Unsupported,
+            "material.animated_texture_approximate",
+            FidelityStatus::Approximation,
             features.animated_material_texture_layer_count,
         );
         record_fidelity_finding(
@@ -1038,6 +1038,7 @@ mod tests {
             "first",
             ModelFeatureManifest {
                 multilayer_material_count: 2,
+                animated_material_texture_layer_count: 2,
                 global_sequence_count: 1,
                 attachment_count: 1,
                 attachment_models: vec![r"SharedModels\Child.mdl".to_owned()],
@@ -1089,9 +1090,15 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 12);
+        assert_eq!(summary.approximation_occurrences, 14);
         assert_eq!(summary.unsupported_occurrences, 8);
-        assert_eq!(summary.findings.len(), 9);
+        assert_eq!(summary.findings.len(), 10);
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "material.animated_texture_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.affected_models == 1
+                && finding.occurrences == 2
+        }));
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "particle.pe2_animated_tracks_approximate"
                 && finding.status == FidelityStatus::Approximation

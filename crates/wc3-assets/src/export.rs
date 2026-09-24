@@ -4371,6 +4371,27 @@ fn layer_diffuse_texture_id(layer: &Layer) -> u32 {
         )
 }
 
+fn layer_diffuse_texture_id_track(
+    layer: &Layer,
+) -> Result<Option<UnsignedTrackManifest>, Box<dyn Error>> {
+    if let Some(sub_texture) = layer
+        .sub_textures_iter()
+        .find(|sub_texture| sub_texture.slot() == LayerSlotType::DiffuseMap)
+    {
+        unsigned_track_manifest(&sub_texture.tracks())
+    } else {
+        unsigned_track_manifest(&layer.texture_id_tracks())
+    }
+}
+
+fn texture_file_name(texture: &TextureManifest) -> Option<String> {
+    let png = texture.png.as_deref()?;
+    Path::new(png)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+}
+
 fn layer_diffuse_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> bool {
     model
         .textures(layer_diffuse_texture_id(layer) as usize)
@@ -4490,8 +4511,32 @@ fn build_materials(
             }
 
             let alpha_track = scalar_track_manifest(&layer.alpha_tracks())?;
+            let texture_id_track = layer_diffuse_texture_id_track(&layer)?;
             extras.insert("wc3LayerAlpha".into(), json!(layer_alpha));
             if let Some(alpha_track) = alpha_track {
+                extras.insert("wc3AlphaTrack".into(), json!(alpha_track));
+            }
+            if let Some(texture_id_track) = texture_id_track {
+                let mut texture_ids = texture_id_track.values.clone();
+                texture_ids.push(texture_id as u32);
+                texture_ids.sort_unstable();
+                texture_ids.dedup();
+                let texture_paths = texture_ids
+                    .into_iter()
+                    .filter_map(|texture_id| {
+                        let texture = texture_manifests.get(texture_id as usize)?;
+                        let file_name = texture_file_name(texture)?;
+                        Some(json!({
+                            "textureId": texture_id,
+                            "fileName": file_name,
+                        }))
+                    })
+                    .collect::<Vec<_>>();
+                extras.insert("wc3TextureId".into(), json!(texture_id));
+                extras.insert("wc3TextureIdTrack".into(), json!(texture_id_track));
+                extras.insert("wc3TexturePaths".into(), json!(texture_paths));
+            }
+            if extras.contains_key("wc3AlphaTrack") || extras.contains_key("wc3TextureIdTrack") {
                 let sequence_windows = model
                     .sequences_iter()
                     .map(|sequence| ParticleEmitterSequenceManifest {
@@ -4501,7 +4546,6 @@ fn build_materials(
                         non_looping: sequence.flags() == SequenceFlag::NonLooping,
                     })
                     .collect::<Vec<_>>();
-                extras.insert("wc3AlphaTrack".into(), json!(alpha_track));
                 extras.insert("wc3SequenceWindows".into(), json!(sequence_windows));
                 extras.insert(
                     "wc3GlobalSequenceDurationsMs".into(),
@@ -5699,6 +5743,70 @@ mod tests {
             material["extras"]["wc3GlobalSequenceDurationsMs"],
             json!([750])
         );
+    }
+
+    #[test]
+    fn gltf_material_preserves_animated_diffuse_texture_selection() {
+        let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Stand");
+            sequence.set_interval_start(100);
+            sequence.set_interval_end(500);
+            sequence.set_flags(SequenceFlag::None);
+        }
+        model.set_global_sequences(&[400]);
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(1);
+            let mut layer = material.layers_mut(0).expect("layer");
+            layer.set_filter_mode(LayerFilterMode::Blend);
+            layer.set_texture_id(0);
+            layer.resize_sub_textures(1);
+            let mut diffuse = layer.sub_textures_mut(0).expect("diffuse");
+            diffuse.set_slot(LayerSlotType::DiffuseMap);
+            diffuse.set_texture_id(0);
+            let mut texture = diffuse.tracks_mut();
+            texture.set_is_used(true);
+            texture.set_interpolation_type(InterpolationType::None);
+            texture.set_global_sequence_id(0);
+            texture.set_key_count(2);
+            texture.set_timestamps(&[0, 200]);
+            texture.set_keys(&[0, 1]);
+        }
+        let texture_manifests = vec![
+            TextureManifest {
+                source_texture: "Textures\\Frame0.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/frame0.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: true,
+            },
+            TextureManifest {
+                source_texture: "Textures\\Frame1.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/frame1.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: true,
+            },
+        ];
+
+        let (materials, _, _) = build_materials(&model, &[Some(0), Some(1)], &texture_manifests)
+            .expect("materials should build");
+        let extras = &materials[0]["extras"];
+        assert_eq!(extras["wc3TextureId"], json!(0));
+        assert_eq!(extras["wc3TextureIdTrack"]["values"], json!([0, 1]));
+        assert_eq!(
+            extras["wc3TexturePaths"],
+            json!([
+                {"textureId": 0, "fileName": "frame0.png"},
+                {"textureId": 1, "fileName": "frame1.png"},
+            ])
+        );
+        assert_eq!(extras["wc3SequenceWindows"][0]["name"], json!("Stand"));
+        assert_eq!(extras["wc3GlobalSequenceDurationsMs"], json!([400]));
     }
 
     #[test]

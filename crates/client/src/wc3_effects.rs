@@ -373,6 +373,18 @@ pub(crate) struct Wc3AnimatedMaterialAlpha {
     last_alpha_bits: u32,
 }
 
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3AnimatedMaterialTexture {
+    static_texture_id: u32,
+    static_texture: Option<Handle<Image>>,
+    textures: BTreeMap<u32, Handle<Image>>,
+    track: Wc3UnsignedTrack,
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    global_sequence_durations_ms: Vec<u32>,
+    fallback_elapsed_ms: f32,
+    last_texture_id: Option<u32>,
+}
+
 #[derive(Component)]
 pub struct Wc3VisualAnimationController;
 
@@ -918,6 +930,12 @@ struct Wc3MaterialExtras {
     layer_alpha: f32,
     #[serde(rename = "wc3AlphaTrack", default)]
     alpha_track: Option<Wc3ScalarTrack>,
+    #[serde(rename = "wc3TextureId", default)]
+    texture_id: u32,
+    #[serde(rename = "wc3TextureIdTrack", default)]
+    texture_id_track: Option<Wc3UnsignedTrack>,
+    #[serde(rename = "wc3TexturePaths", default)]
+    texture_paths: Vec<Wc3MaterialTexturePath>,
     #[serde(rename = "wc3SequenceWindows", default)]
     sequence_windows: Vec<Wc3EmitterSequenceWindow>,
     #[serde(rename = "wc3GlobalSequenceDurationsMs", default)]
@@ -928,6 +946,13 @@ struct Wc3MaterialExtras {
     team_color_underlay: bool,
     #[serde(rename = "wc3TeamGlowLayer", default)]
     team_glow_layer: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Wc3MaterialTexturePath {
+    texture_id: u32,
+    file_name: String,
 }
 
 const fn default_material_alpha() -> f32 {
@@ -1282,6 +1307,7 @@ pub fn fix_wc3_scene_materials(
         let tint = wc3_vertex_tint(entity, &parents, &tint_roots);
         if extras.filter_mode.is_none()
             && extras.alpha_track.is_none()
+            && extras.texture_id_track.is_none()
             && !extras.team_color_underlay
             && !extras.team_glow_layer
             && tint.is_none()
@@ -1429,24 +1455,70 @@ pub fn fix_wc3_scene_materials(
             material_handle.0 = tinted;
         }
 
-        if let Some(track) = extras.alpha_track {
+        let alpha_track = extras.alpha_track.clone();
+        let texture_id_track = extras.texture_id_track.clone();
+        if alpha_track.is_some() || texture_id_track.is_some() {
             let Some(source) = materials.get(&material_handle.0).cloned() else {
                 continue 'mesh;
             };
-            let unique = materials.add(source);
-            material_handle.0 = unique;
+            material_handle.0 = materials.add(source);
+        }
+
+        if let Some(track) = alpha_track {
             commands.entity(entity).insert(Wc3AnimatedMaterialAlpha {
                 static_alpha: extras.layer_alpha.clamp(0.0, 1.0),
                 track,
-                sequence_windows: extras.sequence_windows,
-                global_sequence_durations_ms: extras.global_sequence_durations_ms,
+                sequence_windows: extras.sequence_windows.clone(),
+                global_sequence_durations_ms: extras.global_sequence_durations_ms.clone(),
                 fallback_elapsed_ms: 0.0,
                 last_alpha_bits: u32::MAX,
             });
         }
 
+        if let Some(track) = texture_id_track {
+            let static_texture = materials
+                .get(&material_handle.0)
+                .and_then(|material| material.base_color_texture.clone());
+            let textures = wc3_material_texture_handles(
+                &asset_server,
+                static_texture.as_ref(),
+                &extras.texture_paths,
+            );
+            commands.entity(entity).insert(Wc3AnimatedMaterialTexture {
+                static_texture_id: extras.texture_id,
+                static_texture,
+                textures,
+                track,
+                sequence_windows: extras.sequence_windows,
+                global_sequence_durations_ms: extras.global_sequence_durations_ms,
+                fallback_elapsed_ms: 0.0,
+                last_texture_id: None,
+            });
+        }
+
         commands.entity(entity).insert(Wc3MaterialProcessed);
     }
+}
+
+fn wc3_material_texture_handles(
+    asset_server: &AssetServer,
+    source_texture: Option<&Handle<Image>>,
+    texture_paths: &[Wc3MaterialTexturePath],
+) -> BTreeMap<u32, Handle<Image>> {
+    let Some(source_texture) = source_texture else {
+        return BTreeMap::new();
+    };
+    let Some(source_path) = asset_server.get_path(source_texture.id()) else {
+        return BTreeMap::new();
+    };
+    texture_paths
+        .iter()
+        .filter_map(|texture| {
+            let path = source_path.resolve_embed_str(&texture.file_name).ok()?;
+            let handle: Handle<Image> = asset_server.load(path);
+            Some((texture.texture_id, handle))
+        })
+        .collect()
 }
 
 pub fn advance_wc3_model_sequence_clocks(
@@ -1505,11 +1577,10 @@ fn inherited_wc3_model_sequence_clock(
 }
 
 fn material_sequence_time_ms(
-    animation: &Wc3AnimatedMaterialAlpha,
+    sequence_windows: &[Wc3EmitterSequenceWindow],
     clock: &Wc3ModelSequenceClock,
 ) -> f32 {
-    let Some(window) = animation
-        .sequence_windows
+    let Some(window) = sequence_windows
         .iter()
         .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
     else {
@@ -1543,7 +1614,7 @@ pub fn update_wc3_material_alpha(
             (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
             |clock| {
                 (
-                    material_sequence_time_ms(&animation, clock),
+                    material_sequence_time_ms(&animation.sequence_windows, clock),
                     clock.global_elapsed_ms,
                 )
             },
@@ -1566,6 +1637,53 @@ pub fn update_wc3_material_alpha(
         let base = material.base_color.to_linear();
         material.base_color = Color::linear_rgba(base.red, base.green, base.blue, alpha);
         animation.last_alpha_bits = alpha_bits;
+    }
+}
+
+pub fn update_wc3_material_texture(
+    time: Res<Time>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut animated: Query<(
+        Entity,
+        &MeshMaterial3d<StandardMaterial>,
+        &mut Wc3AnimatedMaterialTexture,
+    )>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, material_handle, mut animation) in &mut animated {
+        animation.fallback_elapsed_ms += dt_ms;
+        let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
+            (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
+            |clock| {
+                (
+                    material_sequence_time_ms(&animation.sequence_windows, clock),
+                    clock.global_elapsed_ms,
+                )
+            },
+        );
+        let texture_id = sample_unsigned_track(
+            Some(&animation.track),
+            animation.static_texture_id,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+        if animation.last_texture_id == Some(texture_id) {
+            continue;
+        }
+        let selected = animation
+            .textures
+            .get(&texture_id)
+            .cloned()
+            .or_else(|| animation.static_texture.clone());
+        let Some(mut material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        material.base_color_texture = selected;
+        animation.last_texture_id = Some(texture_id);
     }
 }
 
@@ -3220,12 +3338,15 @@ mod tests {
             sequence_elapsed_ms: 1250.0,
             global_elapsed_ms: 9000.0,
         };
-        assert_eq!(material_sequence_time_ms(&animation, &clock), 750.0);
+        assert_eq!(
+            material_sequence_time_ms(&animation.sequence_windows, &clock),
+            750.0
+        );
         assert_eq!(
             sample_scalar_track(
                 Some(&animation.track),
                 animation.static_alpha,
-                material_sequence_time_ms(&animation, &clock),
+                material_sequence_time_ms(&animation.sequence_windows, &clock),
                 clock.global_elapsed_ms,
                 &animation.global_sequence_durations_ms,
             ),
