@@ -78,6 +78,8 @@ struct ModelFeatureSummary {
     corn_emitter_animated_track_count: usize,
     event_object_count: usize,
     light_count: usize,
+    omni_light_count: usize,
+    non_omni_light_count: usize,
     non_inheritance_node_count: usize,
     models_with_more_than_four_classic_skin_influences: usize,
     max_classic_skin_influences: u32,
@@ -679,6 +681,8 @@ fn summarize_model_features<'a>(
         summary.corn_emitter_animated_track_count += features.corn_emitter_animated_track_count;
         summary.event_object_count += features.event_object_count;
         summary.light_count += features.light_count;
+        summary.omni_light_count += features.omni_light_count;
+        summary.non_omni_light_count += features.non_omni_light_count;
         summary.non_inheritance_node_count += features.non_inheritance_node_count;
         if features.max_classic_skin_influences > 4 {
             summary.models_with_more_than_four_classic_skin_influences += 1;
@@ -767,9 +771,15 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "model.parsed_light_unsupported",
+            "model.omni_light_approximate",
+            FidelityStatus::Approximation,
+            features.omni_light_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.non_omni_light_unsupported",
             FidelityStatus::Unsupported,
-            features.light_count,
+            features.non_omni_light_count,
         );
         record_fidelity_finding(
             &mut findings,
@@ -1031,6 +1041,7 @@ mod tests {
                 ribbon_emitters: Vec::new(),
                 attachments: Vec::new(),
                 event_objects: Vec::new(),
+                lights: Vec::new(),
                 warnings: warnings.into_iter().map(str::to_owned).collect(),
             };
 
@@ -1044,6 +1055,8 @@ mod tests {
                 attachment_models: vec![r"SharedModels\Child.mdl".to_owned()],
                 particle_emitter_2_count: 3,
                 particle_emitter_2_animated_track_count: 4,
+                light_count: 2,
+                omni_light_count: 2,
                 max_classic_skin_influences: 5,
                 ..Default::default()
             },
@@ -1060,6 +1073,8 @@ mod tests {
                 ribbon_emitter_count: 1,
                 corn_emitter_count: 2,
                 event_object_count: 3,
+                light_count: 1,
+                non_omni_light_count: 1,
                 ..Default::default()
             },
             vec!["warning two", "warning three"],
@@ -1085,19 +1100,34 @@ mod tests {
         assert_eq!(summary.ribbon_emitter_count, 1);
         assert_eq!(summary.corn_emitter_count, 2);
         assert_eq!(summary.event_object_count, 3);
+        assert_eq!(summary.light_count, 3);
+        assert_eq!(summary.omni_light_count, 2);
+        assert_eq!(summary.non_omni_light_count, 1);
         assert_eq!(
             summary.models_with_more_than_four_classic_skin_influences,
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 14);
-        assert_eq!(summary.unsupported_occurrences, 8);
-        assert_eq!(summary.findings.len(), 10);
+        assert_eq!(summary.approximation_occurrences, 16);
+        assert_eq!(summary.unsupported_occurrences, 9);
+        assert_eq!(summary.findings.len(), 12);
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "material.animated_texture_approximate"
                 && finding.status == FidelityStatus::Approximation
                 && finding.affected_models == 1
                 && finding.occurrences == 2
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "model.omni_light_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.affected_models == 1
+                && finding.occurrences == 2
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "model.non_omni_light_unsupported"
+                && finding.status == FidelityStatus::Unsupported
+                && finding.affected_models == 1
+                && finding.occurrences == 1
         }));
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "particle.pe2_animated_tracks_approximate"

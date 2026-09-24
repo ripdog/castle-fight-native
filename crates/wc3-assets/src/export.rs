@@ -12,9 +12,9 @@ use whiteout::{
     Bytes,
     casc::Storage as CascStorage,
     mdx::{
-        InterpolationType, Layer, LayerFilterMode, LayerShadingFlag, LayerSlotType, Model, Node,
-        NodeFlag, Parser as MdxParser, ParticleEmitter2, SequenceFlag, TrackF32, TrackQuaternion,
-        TrackU32, TrackVector3f,
+        InterpolationType, Layer, LayerFilterMode, LayerShadingFlag, LayerSlotType, Light,
+        LightType, Model, Node, NodeFlag, Parser as MdxParser, ParticleEmitter2, SequenceFlag,
+        TrackF32, TrackQuaternion, TrackU32, TrackVector3f,
     },
     mpq::Storage as MpqStorage,
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
@@ -170,6 +170,7 @@ pub struct ModelManifest {
     pub ribbon_emitters: Vec<RibbonEmitterManifest>,
     pub attachments: Vec<AttachmentManifest>,
     pub event_objects: Vec<EventObjectManifest>,
+    pub lights: Vec<LightManifest>,
     pub warnings: Vec<String>,
 }
 
@@ -194,6 +195,8 @@ pub struct ModelFeatureManifest {
     pub corn_emitter_animated_track_count: usize,
     pub event_object_count: usize,
     pub light_count: usize,
+    pub omni_light_count: usize,
+    pub non_omni_light_count: usize,
     pub non_inheritance_node_count: usize,
     pub max_classic_skin_influences: u32,
 }
@@ -393,6 +396,36 @@ pub struct EventObjectManifest {
     pub position: [f32; 3],
     pub global_sequence_id: Option<u32>,
     pub event_track_times: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LightManifest {
+    pub object_id: u32,
+    pub name: String,
+    pub position: [f32; 3],
+    pub light_type: String,
+    pub attenuation_start: f32,
+    pub attenuation_end: f32,
+    pub color: [f32; 3],
+    pub intensity: f32,
+    pub ambient_color: [f32; 3],
+    pub ambient_intensity: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attenuation_start_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attenuation_end_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_track: Option<Vector3TrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intensity_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ambient_color_track: Option<Vector3TrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ambient_intensity_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_track: Option<ScalarTrackManifest>,
+    pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
+    pub global_sequence_durations_ms: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1511,6 +1544,7 @@ impl Exporter {
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests)?;
         let attachments = attachment_manifests(&model)?;
         let event_objects = event_object_manifests(&model);
+        let lights = light_manifests(&model)?;
 
         Ok(ModelManifest {
             source_model: logical_path.to_owned(),
@@ -1530,6 +1564,7 @@ impl Exporter {
             ribbon_emitters,
             attachments,
             event_objects,
+            lights,
             warnings,
         })
     }
@@ -2015,6 +2050,12 @@ fn model_feature_manifest(model: &Model) -> ModelFeatureManifest {
         .max()
         .unwrap_or(0);
 
+    let omni_light_count = model
+        .lights_iter()
+        .filter(|light| light.type_() == LightType::Omni)
+        .count();
+    let light_count = model.lights_len();
+
     ModelFeatureManifest {
         material_count: model.materials_len(),
         material_layer_count,
@@ -2034,7 +2075,9 @@ fn model_feature_manifest(model: &Model) -> ModelFeatureManifest {
         corn_emitter_count: model.corn_emitters_len(),
         corn_emitter_animated_track_count,
         event_object_count: model.event_objects_len(),
-        light_count: model.lights_len(),
+        light_count,
+        omni_light_count,
+        non_omni_light_count: light_count.saturating_sub(omni_light_count),
         non_inheritance_node_count,
         max_classic_skin_influences,
     }
@@ -2450,6 +2493,56 @@ fn event_object_manifests(model: &Model) -> Vec<EventObjectManifest> {
                 event_track_times: event.event_track_times().to_vec(),
             }
         })
+        .collect()
+}
+
+fn light_manifest(model: &Model, light: &Light) -> Result<LightManifest, Box<dyn Error>> {
+    let node = light.node();
+    let color = light.color();
+    let ambient_color = light.ambient_color();
+    let light_type = match light.type_() {
+        LightType::Omni => "omni",
+        LightType::Directional => "directional",
+        LightType::Ambient => "ambient",
+    }
+    .to_owned();
+    let sequence_windows = model
+        .sequences_iter()
+        .map(|sequence| ParticleEmitterSequenceManifest {
+            name: sequence.name(),
+            start_ms: sequence.interval_start(),
+            end_ms: sequence.interval_end(),
+            non_looping: sequence.flags() == SequenceFlag::NonLooping,
+        })
+        .collect();
+
+    Ok(LightManifest {
+        object_id: node.object_id(),
+        name: node.name(),
+        position: model_node_position(model, &node),
+        light_type,
+        attenuation_start: light.attenuation_start(),
+        attenuation_end: light.attenuation_end(),
+        color: [color.x, color.y, color.z],
+        intensity: light.intensity(),
+        ambient_color: [ambient_color.x, ambient_color.y, ambient_color.z],
+        ambient_intensity: light.ambient_intensity(),
+        attenuation_start_track: scalar_track_manifest(&light.attenuation_start_tracks())?,
+        attenuation_end_track: scalar_track_manifest(&light.attenuation_end_tracks())?,
+        color_track: vector3_track_manifest(&light.color_tracks())?,
+        intensity_track: scalar_track_manifest(&light.intensity_tracks())?,
+        ambient_color_track: vector3_track_manifest(&light.ambient_color_tracks())?,
+        ambient_intensity_track: scalar_track_manifest(&light.ambient_intensity_tracks())?,
+        visibility_track: scalar_track_manifest(&light.visibility_tracks())?,
+        sequence_windows,
+        global_sequence_durations_ms: model.global_sequences().to_vec(),
+    })
+}
+
+fn light_manifests(model: &Model) -> Result<Vec<LightManifest>, Box<dyn Error>> {
+    model
+        .lights_iter()
+        .map(|light| light_manifest(model, &light))
         .collect()
 }
 
@@ -2920,6 +3013,14 @@ fn build_skeleton(
         }
     }
 
+    let light_extras = model
+        .lights_iter()
+        .map(|light| {
+            let object_id = light.node().object_id();
+            Ok((object_id, light_manifest(model, &light)?))
+        })
+        .collect::<Result<BTreeMap<_, _>, Box<dyn Error>>>()?;
+
     for info in infos.values() {
         let node_index = result.node_by_object[&info.object_id];
         let rest = result.rest_translation_by_object[&info.object_id];
@@ -2931,6 +3032,12 @@ fn build_skeleton(
                 "wc3NodeFlags": info.flags.0,
             }
         });
+        if let Some(light) = light_extras.get(&info.object_id) {
+            value["extras"]
+                .as_object_mut()
+                .expect("node extras object")
+                .insert("wc3Light".into(), serde_json::to_value(light)?);
+        }
         if let Some(node_children) = children.remove(&node_index) {
             value
                 .as_object_mut()
@@ -5313,8 +5420,96 @@ mod tests {
         assert_eq!(features.corn_emitter_count, 1);
         assert_eq!(features.event_object_count, 1);
         assert_eq!(features.light_count, 1);
+        assert_eq!(features.omni_light_count, 1);
+        assert_eq!(features.non_omni_light_count, 0);
         assert_eq!(features.non_inheritance_node_count, 1);
         assert_eq!(features.max_classic_skin_influences, 5);
+    }
+
+    #[test]
+    fn light_manifest_preserves_omni_parameters_and_tracks() {
+        let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Stand");
+            sequence.set_interval_start(100);
+            sequence.set_interval_end(1100);
+            sequence.set_flags(SequenceFlag::None);
+        }
+        model.set_global_sequences(&[750]);
+        model.resize_lights(1);
+        {
+            let mut light = model.lights_mut(0).expect("light");
+            light.set_type_(LightType::Omni);
+            light.set_attenuation_start(40.0);
+            light.set_attenuation_end(200.0);
+            light.set_color(whiteout::math::Vector3f {
+                x: 1.0,
+                y: 0.5,
+                z: 0.25,
+            });
+            light.set_intensity(18.0);
+            light.set_ambient_color(whiteout::math::Vector3f {
+                x: 0.1,
+                y: 0.2,
+                z: 0.3,
+            });
+            light.set_ambient_intensity(0.4);
+            {
+                let mut intensity = light.intensity_tracks_mut();
+                intensity.set_is_used(true);
+                intensity.set_interpolation_type(InterpolationType::Linear);
+                intensity.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                intensity.set_key_count(2);
+                intensity.set_timestamps(&[100, 1100]);
+                intensity.set_keys(&[2.0, 18.0]);
+            }
+            {
+                let mut visibility = light.visibility_tracks_mut();
+                visibility.set_is_used(true);
+                visibility.set_interpolation_type(InterpolationType::None);
+                visibility.set_global_sequence_id(0);
+                visibility.set_key_count(2);
+                visibility.set_timestamps(&[0, 500]);
+                visibility.set_keys(&[1.0, 0.0]);
+            }
+            let mut node = light.node_mut();
+            node.set_object_id(0);
+            node.set_name("Omni01");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f {
+            x: 10.0,
+            y: 20.0,
+            z: 30.0,
+        }]);
+
+        let lights = light_manifests(&model).expect("lights should serialize");
+        assert_eq!(lights.len(), 1);
+        let light = &lights[0];
+        assert_eq!(light.object_id, 0);
+        assert_eq!(light.name, "Omni01");
+        assert_eq!(light.position, [10.0, 30.0, -20.0]);
+        assert_eq!(light.light_type, "omni");
+        assert_eq!(light.attenuation_start, 40.0);
+        assert_eq!(light.attenuation_end, 200.0);
+        assert_eq!(light.color, [1.0, 0.5, 0.25]);
+        assert_eq!(light.intensity, 18.0);
+        assert_eq!(light.ambient_color, [0.1, 0.2, 0.3]);
+        assert_eq!(light.ambient_intensity, 0.4);
+        assert_eq!(
+            light
+                .intensity_track
+                .as_ref()
+                .expect("intensity track")
+                .values,
+            [2.0, 18.0]
+        );
+        let visibility = light.visibility_track.as_ref().expect("visibility track");
+        assert_eq!(visibility.global_sequence_id, Some(0));
+        assert_eq!(visibility.values, [1.0, 0.0]);
+        assert_eq!(light.sequence_windows[0].name, "Stand");
+        assert_eq!(light.global_sequence_durations_ms, [750]);
     }
 
     #[test]
@@ -6222,6 +6417,7 @@ mod tests {
                 },
             ],
             event_objects: Vec::new(),
+            lights: Vec::new(),
             warnings: Vec::new(),
         };
 

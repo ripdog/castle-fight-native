@@ -52,9 +52,9 @@ use crate::{
         Wc3ParticleAssets, Wc3RibbonSource, Wc3StatusVisualKind, Wc3TeamTint, Wc3VertexTint,
         Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
         emit_wc3_particles, fix_wc3_scene_materials, resolve_wc3_emitter_nodes,
-        resolve_wc3_visual_attachments, setup_wc3_visual_animation_players,
+        resolve_wc3_visual_attachments, setup_wc3_model_lights, setup_wc3_visual_animation_players,
         spawn_wc3_ribbon_trails, update_wc3_material_alpha, update_wc3_material_texture,
-        update_wc3_particles, update_wc3_ribbon_trails,
+        update_wc3_model_lights, update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
 
@@ -930,6 +930,7 @@ impl Plugin for CastlePresentationPlugin {
                 Update,
                 (
                     fix_wc3_scene_materials,
+                    setup_wc3_model_lights,
                     resolve_wc3_visual_attachments,
                     resolve_wc3_emitter_nodes,
                     setup_wc3_visual_animation_players,
@@ -942,6 +943,7 @@ impl Plugin for CastlePresentationPlugin {
                     advance_wc3_model_sequence_clocks,
                     update_wc3_material_alpha,
                     update_wc3_material_texture,
+                    update_wc3_model_lights,
                     spawn_miss_indicators,
                     finish_animation_profile,
                     interpolate_render_transforms,

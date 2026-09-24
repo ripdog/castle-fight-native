@@ -28,6 +28,9 @@ const PARTICLE_MATERIAL_STEPS: u8 = 31;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
 const GAMEPLAY_ANIMATION_POSE_INTERVAL: f32 = 1.0 / 30.0;
+// Stock WC3 omni lights commonly use intensity 20. Map that to Bevy's 1,000,000-lumen
+// default point light, while retaining WC3 attenuation end as the cutoff radius.
+const WC3_MODEL_LIGHT_LUMENS_PER_INTENSITY: f32 = 50_000.0;
 
 #[derive(Default)]
 pub(crate) struct GameplayAnimationPoseClock {
@@ -483,10 +486,46 @@ pub fn resolve_wc3_visual_attachments(
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct Wc3LightSpec {
+    light_type: String,
+    attenuation_end: f32,
+    color: [f32; 3],
+    intensity: f32,
+    #[serde(default)]
+    attenuation_end_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    color_track: Option<Wc3Vector3Track>,
+    #[serde(default)]
+    intensity_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    visibility_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(default)]
+    global_sequence_durations_ms: Vec<u32>,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3PointLightRuntime {
+    static_color: [f32; 3],
+    static_intensity: f32,
+    static_range: f32,
+    attenuation_end_track: Option<Wc3ScalarTrack>,
+    color_track: Option<Wc3Vector3Track>,
+    intensity_track: Option<Wc3ScalarTrack>,
+    visibility_track: Option<Wc3ScalarTrack>,
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    global_sequence_durations_ms: Vec<u32>,
+    fallback_elapsed_ms: f32,
+}
+
 #[derive(Debug, Deserialize)]
 struct Wc3NodeExtras {
     #[serde(rename = "wc3ObjectId")]
     wc3_object_id: Option<u32>,
+    #[serde(rename = "wc3Light", default)]
+    wc3_light: Option<Wc3LightSpec>,
 }
 
 fn belongs_to_model_root(entity: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
@@ -1593,6 +1632,121 @@ fn material_sequence_time_ms(
         clock.sequence_elapsed_ms.rem_euclid(duration)
     };
     window.start_ms as f32 + offset
+}
+
+fn wc3_model_light_color(color: [f32; 3]) -> Color {
+    Color::srgb(color[0], color[1], color[2])
+}
+
+fn wc3_model_light_lumens(intensity: f32, visibility: f32) -> f32 {
+    intensity.max(0.0) * visibility.max(0.0) * WC3_MODEL_LIGHT_LUMENS_PER_INTENSITY
+}
+
+fn wc3_model_light_range(attenuation_end: f32, source_scale: f32) -> f32 {
+    (attenuation_end * source_scale.abs()).max(0.001)
+}
+
+pub fn setup_wc3_model_lights(
+    mut commands: Commands,
+    nodes: Query<(Entity, &GltfExtras), Added<GltfExtras>>,
+) {
+    for (entity, raw_extras) in &nodes {
+        let Ok(extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
+            continue;
+        };
+        let Some(spec) = extras.wc3_light else {
+            continue;
+        };
+        if !spec.light_type.eq_ignore_ascii_case("omni") {
+            continue;
+        }
+
+        commands.entity(entity).insert(PointLight {
+            color: wc3_model_light_color(spec.color),
+            intensity: wc3_model_light_lumens(spec.intensity, 1.0),
+            range: wc3_model_light_range(spec.attenuation_end, 1.0),
+            shadow_maps_enabled: false,
+            ..default()
+        });
+
+        commands.entity(entity).insert(Wc3PointLightRuntime {
+            static_color: spec.color,
+            static_intensity: spec.intensity,
+            static_range: spec.attenuation_end,
+            attenuation_end_track: spec.attenuation_end_track,
+            color_track: spec.color_track,
+            intensity_track: spec.intensity_track,
+            visibility_track: spec.visibility_track,
+            sequence_windows: spec.sequence_windows,
+            global_sequence_durations_ms: spec.global_sequence_durations_ms,
+            fallback_elapsed_ms: 0.0,
+        });
+    }
+}
+
+pub fn update_wc3_model_lights(
+    time: Res<Time>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut lights: Query<(
+        Entity,
+        &GlobalTransform,
+        &mut PointLight,
+        &mut Wc3PointLightRuntime,
+    )>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, transform, mut light, mut animation) in &mut lights {
+        animation.fallback_elapsed_ms += dt_ms;
+        let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
+            (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
+            |clock| {
+                (
+                    material_sequence_time_ms(&animation.sequence_windows, clock),
+                    clock.global_elapsed_ms,
+                )
+            },
+        );
+        let range = sample_scalar_track(
+            animation.attenuation_end_track.as_ref(),
+            animation.static_range,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+        let color = sample_vector3_track(
+            animation.color_track.as_ref(),
+            animation.static_color,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+        let intensity = sample_scalar_track(
+            animation.intensity_track.as_ref(),
+            animation.static_intensity,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+        let visibility = sample_scalar_track(
+            animation.visibility_track.as_ref(),
+            1.0,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+
+        let source_scale = transform
+            .to_scale_rotation_translation()
+            .0
+            .abs()
+            .max_element()
+            .max(0.000_1);
+        light.color = wc3_model_light_color(color);
+        light.intensity = wc3_model_light_lumens(intensity, visibility);
+        light.range = wc3_model_light_range(range, source_scale);
+    }
 }
 
 pub fn update_wc3_material_alpha(
@@ -3164,6 +3318,52 @@ mod tests {
         assert_eq!(wc3_direction_to_bevy(Vec3::Z), Vec3::Y);
         assert_eq!(wc3_direction_to_bevy(Vec3::Y), Vec3::NEG_Z);
         assert_eq!(wc3_direction_to_bevy(Vec3::X), Vec3::X);
+    }
+
+    #[test]
+    fn wc3_model_light_mapping_preserves_scale_and_visibility() {
+        assert_eq!(wc3_model_light_range(200.0, 0.5), 100.0);
+        assert_eq!(wc3_model_light_range(200.0, 2.0), 400.0);
+        assert_eq!(
+            wc3_model_light_lumens(20.0, 1.0),
+            PointLight::default().intensity
+        );
+        assert_eq!(wc3_model_light_lumens(20.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn wc3_omni_light_extras_are_recognized() {
+        let extras: Wc3NodeExtras = serde_json::from_str(
+            r#"{
+                "wc3ObjectId": 7,
+                "wc3Light": {
+                    "light_type": "omni",
+                    "attenuation_end": 200.0,
+                    "color": [1.0, 0.5, 0.25],
+                    "intensity": 18.0,
+                    "visibility_track": {
+                        "interpolation": "dont_interp",
+                        "global_sequence_id": null,
+                        "timestamps": [0, 500],
+                        "values": [1.0, 0.0]
+                    }
+                }
+            }"#,
+        )
+        .expect("WC3 light node extras should deserialize");
+        assert_eq!(extras.wc3_object_id, Some(7));
+        let light = extras.wc3_light.expect("light extras");
+        assert_eq!(light.light_type, "omni");
+        assert_eq!(light.attenuation_end, 200.0);
+        assert_eq!(light.intensity, 18.0);
+        assert_eq!(
+            light
+                .visibility_track
+                .as_ref()
+                .expect("visibility track")
+                .values,
+            [1.0, 0.0]
+        );
     }
 
     #[test]
