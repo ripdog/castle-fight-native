@@ -167,6 +167,7 @@ pub struct ModelManifest {
     pub bin: String,
     pub geosets: usize,
     pub bones: usize,
+    pub features: ModelFeatureManifest,
     pub overhead_position: Option<[f32; 3]>,
     pub animations: Vec<AnimationManifest>,
     pub textures: Vec<TextureManifest>,
@@ -174,6 +175,31 @@ pub struct ModelManifest {
     pub model_particle_emitters: Vec<ModelParticleEmitterManifest>,
     pub ribbon_emitters: Vec<RibbonEmitterManifest>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct ModelFeatureManifest {
+    pub material_count: usize,
+    pub material_layer_count: usize,
+    pub multilayer_material_count: usize,
+    pub animated_material_alpha_layer_count: usize,
+    pub animated_material_texture_layer_count: usize,
+    pub animated_geoset_alpha_count: usize,
+    pub global_sequence_count: usize,
+    pub attachment_count: usize,
+    pub attachment_models: Vec<String>,
+    pub particle_emitter_count: usize,
+    pub particle_emitter_animated_track_count: usize,
+    pub particle_emitter_2_count: usize,
+    pub particle_emitter_2_animated_track_count: usize,
+    pub ribbon_emitter_count: usize,
+    pub ribbon_emitter_animated_track_count: usize,
+    pub corn_emitter_count: usize,
+    pub corn_emitter_animated_track_count: usize,
+    pub event_object_count: usize,
+    pub light_count: usize,
+    pub non_inheritance_node_count: usize,
+    pub max_classic_skin_influences: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1212,6 +1238,7 @@ impl Exporter {
         serde_json::to_writer_pretty(BufWriter::new(gltf_file), &gltf)?;
 
         let animations = animation_manifests_from_gltf(&gltf)?;
+        let features = model_feature_manifest(&model);
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
         let model_particle_emitters = model_particle_emitter_manifests(&model);
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests);
@@ -1223,6 +1250,7 @@ impl Exporter {
             bin: bin_name,
             geosets: model.geosets_len(),
             bones: model.bones_len(),
+            features,
             overhead_position: model_overhead_position(&model),
             animations,
             textures: texture_manifests,
@@ -1852,6 +1880,208 @@ fn texture_to_png(texture: &Texture) -> Result<Bytes, Box<dyn Error>> {
         .into());
     }
     Ok(bytes)
+}
+
+fn model_feature_manifest(model: &Model) -> ModelFeatureManifest {
+    let mut material_layer_count = 0;
+    let mut multilayer_material_count = 0;
+    let mut animated_material_alpha_layer_count = 0;
+    let mut animated_material_texture_layer_count = 0;
+    for material in model.materials_iter() {
+        material_layer_count += material.layers_len();
+        if material.layers_len() > 1 {
+            multilayer_material_count += 1;
+        }
+        for layer in material.layers_iter() {
+            if layer.alpha_tracks().is_used() {
+                animated_material_alpha_layer_count += 1;
+            }
+            if layer.texture_id_tracks().is_used()
+                || layer
+                    .sub_textures_iter()
+                    .any(|sub_texture| sub_texture.tracks().is_used())
+            {
+                animated_material_texture_layer_count += 1;
+            }
+        }
+    }
+
+    let animated_geoset_alpha_count = model
+        .geoset_animations_iter()
+        .filter(|animation| animation.alpha_tracks().is_used())
+        .count();
+
+    let mut attachment_models = model
+        .attachments_iter()
+        .map(|attachment| attachment.path())
+        .filter(|path| !path.trim().is_empty())
+        .collect::<Vec<_>>();
+    attachment_models.sort_by_key(|path| path.to_ascii_lowercase());
+    attachment_models.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+
+    let particle_emitter_animated_track_count = model
+        .particle_emitters_iter()
+        .map(|emitter| {
+            [
+                emitter.emission_rate_tracks().is_used(),
+                emitter.gravity_tracks().is_used(),
+                emitter.longitude_tracks().is_used(),
+                emitter.latitude_tracks().is_used(),
+                emitter.lifespan_tracks().is_used(),
+                emitter.speed_tracks().is_used(),
+                emitter.visibility_tracks().is_used(),
+            ]
+            .into_iter()
+            .filter(|used| *used)
+            .count()
+        })
+        .sum();
+
+    let particle_emitter_2_animated_track_count = model
+        .particle_emitters_2_iter()
+        .map(|emitter| {
+            [
+                emitter.speed_tracks().is_used(),
+                emitter.variation_tracks().is_used(),
+                emitter.latitude_tracks().is_used(),
+                emitter.gravity_tracks().is_used(),
+                emitter.emission_rate_tracks().is_used(),
+                emitter.length_tracks().is_used(),
+                emitter.width_tracks().is_used(),
+                emitter.visibility_tracks().is_used(),
+            ]
+            .into_iter()
+            .filter(|used| *used)
+            .count()
+        })
+        .sum();
+
+    let ribbon_emitter_animated_track_count = model
+        .ribbon_emitters_iter()
+        .map(|emitter| {
+            [
+                emitter.height_above_tracks().is_used(),
+                emitter.height_below_tracks().is_used(),
+                emitter.alpha_tracks().is_used(),
+                emitter.color_tracks().is_used(),
+                emitter.texture_slot_tracks().is_used(),
+                emitter.visibility_tracks().is_used(),
+            ]
+            .into_iter()
+            .filter(|used| *used)
+            .count()
+        })
+        .sum();
+
+    let corn_emitter_animated_track_count = model
+        .corn_emitters_iter()
+        .map(|emitter| {
+            [
+                emitter.life_span_tracks().is_used(),
+                emitter.emission_rate_tracks().is_used(),
+                emitter.speed_tracks().is_used(),
+                emitter.color_tracks().is_used(),
+                emitter.alpha_tracks().is_used(),
+                emitter.visibility_tracks().is_used(),
+            ]
+            .into_iter()
+            .filter(|used| *used)
+            .count()
+        })
+        .sum();
+
+    let non_inheritance_node_count = model
+        .bones_iter()
+        .map(|bone| node_uses_non_inheritance(&bone.node()))
+        .chain(
+            model
+                .helpers_iter()
+                .map(|helper| node_uses_non_inheritance(&helper.node())),
+        )
+        .chain(
+            model
+                .sound_emitters_iter()
+                .map(|emitter| node_uses_non_inheritance(&emitter.node())),
+        )
+        .chain(
+            model
+                .attachments_iter()
+                .map(|attachment| node_uses_non_inheritance(&attachment.node())),
+        )
+        .chain(
+            model
+                .lights_iter()
+                .map(|light| node_uses_non_inheritance(&light.node())),
+        )
+        .chain(
+            model
+                .particle_emitters_iter()
+                .map(|emitter| node_uses_non_inheritance(&emitter.node())),
+        )
+        .chain(
+            model
+                .particle_emitters_2_iter()
+                .map(|emitter| node_uses_non_inheritance(&emitter.node())),
+        )
+        .chain(
+            model
+                .ribbon_emitters_iter()
+                .map(|emitter| node_uses_non_inheritance(&emitter.node())),
+        )
+        .chain(
+            model
+                .event_objects_iter()
+                .map(|event| node_uses_non_inheritance(&event.node())),
+        )
+        .chain(
+            model
+                .collision_shapes_iter()
+                .map(|shape| node_uses_non_inheritance(&shape.node())),
+        )
+        .chain(
+            model
+                .corn_emitters_iter()
+                .map(|emitter| node_uses_non_inheritance(&emitter.node())),
+        )
+        .filter(|uses| *uses)
+        .count();
+
+    let max_classic_skin_influences = model
+        .geosets_iter()
+        .map(|geoset| geoset.matrix_groups().iter().copied().max().unwrap_or(0))
+        .max()
+        .unwrap_or(0);
+
+    ModelFeatureManifest {
+        material_count: model.materials_len(),
+        material_layer_count,
+        multilayer_material_count,
+        animated_material_alpha_layer_count,
+        animated_material_texture_layer_count,
+        animated_geoset_alpha_count,
+        global_sequence_count: model.global_sequences().len(),
+        attachment_count: model.attachments_len(),
+        attachment_models,
+        particle_emitter_count: model.particle_emitters_len(),
+        particle_emitter_animated_track_count,
+        particle_emitter_2_count: model.particle_emitters_2_len(),
+        particle_emitter_2_animated_track_count,
+        ribbon_emitter_count: model.ribbon_emitters_len(),
+        ribbon_emitter_animated_track_count,
+        corn_emitter_count: model.corn_emitters_len(),
+        corn_emitter_animated_track_count,
+        event_object_count: model.event_objects_len(),
+        light_count: model.lights_len(),
+        non_inheritance_node_count,
+        max_classic_skin_influences,
+    }
+}
+
+fn node_uses_non_inheritance(node: &Node) -> bool {
+    let inherit_mask = NodeFlag::DONT_INHERIT_TRANSLATION
+        | NodeFlag::DONT_INHERIT_ROTATION
+        | NodeFlag::DONT_INHERIT_SCALING;
+    !(node.flags() & inherit_mask).is_empty()
 }
 
 fn particle_emitter_2_manifests(
@@ -4637,6 +4867,85 @@ mod tests {
         assert_eq!(infos.get(&0).expect("node info").pivot, [0.0; 3]);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("no matching pivot point"));
+    }
+
+    #[test]
+    fn model_feature_manifest_inventories_lossy_wc3_primitives() {
+        let mut model = Model::new();
+        model.set_global_sequences(&[1000]);
+
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(2);
+            material
+                .layers_mut(0)
+                .expect("alpha layer")
+                .alpha_tracks_mut()
+                .set_is_used(true);
+            material
+                .layers_mut(1)
+                .expect("texture layer")
+                .texture_id_tracks_mut()
+                .set_is_used(true);
+        }
+
+        model.resize_geoset_animations(1);
+        model
+            .geoset_animations_mut(0)
+            .expect("geoset animation")
+            .alpha_tracks_mut()
+            .set_is_used(true);
+
+        model.resize_geosets(1);
+        model
+            .geosets_mut(0)
+            .expect("geoset")
+            .set_matrix_groups(&[5]);
+
+        model.resize_attachments(1);
+        {
+            let mut attachment = model.attachments_mut(0).expect("attachment");
+            attachment.set_path(r"SharedModels\Child.mdl");
+            attachment
+                .node_mut()
+                .set_flags(NodeFlag::DONT_INHERIT_SCALING);
+        }
+
+        model.resize_particle_emitters_2(1);
+        model
+            .particle_emitters_2_mut(0)
+            .expect("particle emitter 2")
+            .emission_rate_tracks_mut()
+            .set_is_used(true);
+        model.resize_particle_emitters(1);
+        model.resize_ribbon_emitters(1);
+        model.resize_corn_emitters(1);
+        model.resize_event_objects(1);
+        model.resize_lights(1);
+
+        let features = model_feature_manifest(&model);
+        assert_eq!(features.material_count, 1);
+        assert_eq!(features.material_layer_count, 2);
+        assert_eq!(features.multilayer_material_count, 1);
+        assert_eq!(features.animated_material_alpha_layer_count, 1);
+        assert_eq!(features.animated_material_texture_layer_count, 1);
+        assert_eq!(features.animated_geoset_alpha_count, 1);
+        assert_eq!(features.global_sequence_count, 1);
+        assert_eq!(features.attachment_count, 1);
+        assert_eq!(
+            features.attachment_models,
+            [r"SharedModels\Child.mdl".to_owned()]
+        );
+        assert_eq!(features.particle_emitter_count, 1);
+        assert_eq!(features.particle_emitter_2_count, 1);
+        assert_eq!(features.particle_emitter_2_animated_track_count, 1);
+        assert_eq!(features.ribbon_emitter_count, 1);
+        assert_eq!(features.corn_emitter_count, 1);
+        assert_eq!(features.event_object_count, 1);
+        assert_eq!(features.light_count, 1);
+        assert_eq!(features.non_inheritance_node_count, 1);
+        assert_eq!(features.max_classic_skin_influences, 5);
     }
 
     #[test]

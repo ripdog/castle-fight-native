@@ -11,10 +11,62 @@ use std::{
 };
 
 use catalog::{
-    load_embedded_buildings, load_embedded_doodads, load_embedded_ui, load_embedded_units,
-    load_embedded_visuals, load_production_units,
+    CATALOG_VERSION, load_embedded_buildings, load_embedded_doodads, load_embedded_ui,
+    load_embedded_units, load_embedded_visuals, load_production_units,
 };
-use export::Exporter;
+use export::{Exporter, ModelManifest};
+
+#[derive(Debug, serde::Serialize)]
+struct CastleFightPackManifest {
+    schema_version: u32,
+    castle_fight_catalog_version: &'static str,
+    wc3_version: Option<String>,
+    art_mode: &'static str,
+    units: PackSectionManifest,
+    buildings: PackSectionManifest,
+    doodads: PackSectionManifest,
+    effects: PackSectionManifest,
+    ui: PackSectionManifest,
+    fidelity: ModelFeatureSummary,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct PackSectionManifest {
+    schema_version: u32,
+    entries: usize,
+    models: usize,
+    failures: usize,
+    substitutions: usize,
+    intentionally_hidden: usize,
+}
+
+#[derive(Debug, Default, serde::Serialize, PartialEq, Eq)]
+struct ModelFeatureSummary {
+    model_variants: usize,
+    models_with_warnings: usize,
+    warning_count: usize,
+    multilayer_material_models: usize,
+    multilayer_material_count: usize,
+    animated_material_alpha_layer_count: usize,
+    animated_material_texture_layer_count: usize,
+    animated_geoset_alpha_count: usize,
+    global_sequence_count: usize,
+    attachment_count: usize,
+    attachment_models: Vec<String>,
+    particle_emitter_count: usize,
+    particle_emitter_animated_track_count: usize,
+    particle_emitter_2_count: usize,
+    particle_emitter_2_animated_track_count: usize,
+    ribbon_emitter_count: usize,
+    ribbon_emitter_animated_track_count: usize,
+    corn_emitter_count: usize,
+    corn_emitter_animated_track_count: usize,
+    event_object_count: usize,
+    light_count: usize,
+    non_inheritance_node_count: usize,
+    models_with_more_than_four_classic_skin_influences: usize,
+    max_classic_skin_influences: u32,
+}
 
 fn main() {
     if let Err(error) = run() {
@@ -468,6 +520,81 @@ fn export_castle_fight_pack(
         ui_manifest.failures.len()
     );
 
+    let fidelity = summarize_model_features(
+        unit_manifest
+            .models
+            .iter()
+            .chain(building_manifest.models.iter())
+            .chain(doodad_manifest.models.iter())
+            .chain(visual_manifest.models.iter()),
+    );
+    println!(
+        "  fidelity inventory: {} converted model variant(s), {} warning(s), {} multilayer material(s), {} attachment child model(s), {} PE1 / {} PE2 / {} ribbon / {} CORN emitter(s), {} event object(s), {} parsed light(s)",
+        fidelity.model_variants,
+        fidelity.warning_count,
+        fidelity.multilayer_material_count,
+        fidelity.attachment_models.len(),
+        fidelity.particle_emitter_count,
+        fidelity.particle_emitter_2_count,
+        fidelity.ribbon_emitter_count,
+        fidelity.corn_emitter_count,
+        fidelity.event_object_count,
+        fidelity.light_count,
+    );
+
+    let pack_manifest = CastleFightPackManifest {
+        schema_version: 1,
+        castle_fight_catalog_version: CATALOG_VERSION,
+        wc3_version: unit_manifest.wc3_version.clone(),
+        art_mode: "sd",
+        units: PackSectionManifest {
+            schema_version: unit_manifest.schema_version,
+            entries: unit_manifest.units.len(),
+            models: unit_manifest.models.len(),
+            failures: unit_manifest.failures.len(),
+            substitutions: unit_fallbacks,
+            intentionally_hidden: unit_manifest
+                .units
+                .iter()
+                .filter(|unit| unit.intentionally_hidden)
+                .count(),
+        },
+        buildings: PackSectionManifest {
+            schema_version: building_manifest.schema_version,
+            entries: building_manifest.buildings.len(),
+            models: building_manifest.models.len(),
+            failures: building_manifest.failures.len(),
+            substitutions: building_fallbacks,
+            intentionally_hidden: 0,
+        },
+        doodads: PackSectionManifest {
+            schema_version: doodad_manifest.schema_version,
+            entries: doodad_manifest.objects.len(),
+            models: doodad_manifest.models.len(),
+            failures: doodad_manifest.failures.len(),
+            substitutions: doodad_fallbacks,
+            intentionally_hidden: 0,
+        },
+        effects: PackSectionManifest {
+            schema_version: visual_manifest.schema_version,
+            entries: visual_bindings,
+            models: visual_manifest.models.len(),
+            failures: visual_manifest.failures.len(),
+            substitutions: 0,
+            intentionally_hidden: 0,
+        },
+        ui: PackSectionManifest {
+            schema_version: ui_manifest.schema_version,
+            entries: ui_manifest.assets.len(),
+            models: ui_manifest.textures.len(),
+            failures: ui_manifest.failures.len(),
+            substitutions: 0,
+            intentionally_hidden: 0,
+        },
+        fidelity,
+    };
+    write_manifest(&output.join("manifest.json"), &pack_manifest)?;
+
     let fidelity_failures = unit_manifest.failures.len()
         + unit_fallbacks
         + building_manifest.failures.len()
@@ -488,6 +615,55 @@ fn export_castle_fight_pack(
         output.display()
     );
     Ok(())
+}
+
+fn summarize_model_features<'a>(
+    models: impl Iterator<Item = &'a ModelManifest>,
+) -> ModelFeatureSummary {
+    let mut summary = ModelFeatureSummary::default();
+    let mut attachment_models = BTreeSet::new();
+
+    for model in models {
+        let features = &model.features;
+        summary.model_variants += 1;
+        if !model.warnings.is_empty() {
+            summary.models_with_warnings += 1;
+            summary.warning_count += model.warnings.len();
+        }
+        if features.multilayer_material_count != 0 {
+            summary.multilayer_material_models += 1;
+        }
+        summary.multilayer_material_count += features.multilayer_material_count;
+        summary.animated_material_alpha_layer_count += features.animated_material_alpha_layer_count;
+        summary.animated_material_texture_layer_count +=
+            features.animated_material_texture_layer_count;
+        summary.animated_geoset_alpha_count += features.animated_geoset_alpha_count;
+        summary.global_sequence_count += features.global_sequence_count;
+        summary.attachment_count += features.attachment_count;
+        attachment_models.extend(features.attachment_models.iter().cloned());
+        summary.particle_emitter_count += features.particle_emitter_count;
+        summary.particle_emitter_animated_track_count +=
+            features.particle_emitter_animated_track_count;
+        summary.particle_emitter_2_count += features.particle_emitter_2_count;
+        summary.particle_emitter_2_animated_track_count +=
+            features.particle_emitter_2_animated_track_count;
+        summary.ribbon_emitter_count += features.ribbon_emitter_count;
+        summary.ribbon_emitter_animated_track_count += features.ribbon_emitter_animated_track_count;
+        summary.corn_emitter_count += features.corn_emitter_count;
+        summary.corn_emitter_animated_track_count += features.corn_emitter_animated_track_count;
+        summary.event_object_count += features.event_object_count;
+        summary.light_count += features.light_count;
+        summary.non_inheritance_node_count += features.non_inheritance_node_count;
+        if features.max_classic_skin_influences > 4 {
+            summary.models_with_more_than_four_classic_skin_influences += 1;
+        }
+        summary.max_classic_skin_influences = summary
+            .max_classic_skin_influences
+            .max(features.max_classic_skin_influences);
+    }
+
+    summary.attachment_models = attachment_models.into_iter().collect();
+    summary
 }
 
 fn write_manifest<T: serde::Serialize>(path: &Path, manifest: &T) -> Result<(), Box<dyn Error>> {
@@ -648,6 +824,85 @@ manifest for native presentation even though glTF has no particle-emitter primit
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fidelity_summary_aggregates_model_features_and_deduplicates_child_models() {
+        use crate::export::ModelFeatureManifest;
+
+        let model =
+            |source: &str, features: ModelFeatureManifest, warnings: Vec<&str>| ModelManifest {
+                source_model: source.to_owned(),
+                source_casc_path: source.to_owned(),
+                gltf: format!("{source}.gltf"),
+                bin: format!("{source}.bin"),
+                geosets: 0,
+                bones: 0,
+                features,
+                overhead_position: None,
+                animations: Vec::new(),
+                textures: Vec::new(),
+                particle_emitters: Vec::new(),
+                model_particle_emitters: Vec::new(),
+                ribbon_emitters: Vec::new(),
+                warnings: warnings.into_iter().map(str::to_owned).collect(),
+            };
+
+        let first = model(
+            "first",
+            ModelFeatureManifest {
+                multilayer_material_count: 2,
+                global_sequence_count: 1,
+                attachment_count: 1,
+                attachment_models: vec![r"SharedModels\Child.mdl".to_owned()],
+                particle_emitter_2_count: 3,
+                particle_emitter_2_animated_track_count: 4,
+                max_classic_skin_influences: 5,
+                ..Default::default()
+            },
+            vec!["warning one"],
+        );
+        let second = model(
+            "second",
+            ModelFeatureManifest {
+                attachment_count: 2,
+                attachment_models: vec![
+                    r"SharedModels\Child.mdl".to_owned(),
+                    r"SharedModels\Other.mdl".to_owned(),
+                ],
+                ribbon_emitter_count: 1,
+                corn_emitter_count: 2,
+                event_object_count: 3,
+                ..Default::default()
+            },
+            vec!["warning two", "warning three"],
+        );
+
+        let summary = summarize_model_features([&first, &second].into_iter());
+        assert_eq!(summary.model_variants, 2);
+        assert_eq!(summary.models_with_warnings, 2);
+        assert_eq!(summary.warning_count, 3);
+        assert_eq!(summary.multilayer_material_models, 1);
+        assert_eq!(summary.multilayer_material_count, 2);
+        assert_eq!(summary.global_sequence_count, 1);
+        assert_eq!(summary.attachment_count, 3);
+        assert_eq!(
+            summary.attachment_models,
+            [
+                r"SharedModels\Child.mdl".to_owned(),
+                r"SharedModels\Other.mdl".to_owned()
+            ]
+        );
+        assert_eq!(summary.particle_emitter_2_count, 3);
+        assert_eq!(summary.particle_emitter_2_animated_track_count, 4);
+        assert_eq!(summary.ribbon_emitter_count, 1);
+        assert_eq!(summary.corn_emitter_count, 2);
+        assert_eq!(summary.event_object_count, 3);
+        assert_eq!(
+            summary.models_with_more_than_four_classic_skin_influences,
+            1
+        );
+        assert_eq!(summary.max_classic_skin_influences, 5);
+    }
 
     #[test]
     fn parses_repeated_unit_filters() {
