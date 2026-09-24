@@ -43,6 +43,7 @@ const STOCK_BUILDING_ART_CATEGORIES: [&str; 7] = [
 
 type TextureExport = (Vec<TextureManifest>, Vec<Option<usize>>);
 type GltfBuildOutput = (Value, Vec<u8>, Vec<String>);
+type MaterialBuildOutput = (Vec<Value>, Vec<String>, bool);
 
 #[derive(Debug, Serialize)]
 pub struct AssetManifest {
@@ -2726,7 +2727,7 @@ fn build_gltf(
         &mut warnings,
     )?;
     let (materials, material_warnings, uses_unlit) =
-        build_materials(model, texture_indices, texture_manifests);
+        build_materials(model, texture_indices, texture_manifests)?;
     warnings.extend(material_warnings);
     let images: Vec<Value> = texture_manifests
         .iter()
@@ -4419,7 +4420,7 @@ fn build_materials(
     model: &Model,
     texture_indices: &[Option<usize>],
     texture_manifests: &[TextureManifest],
-) -> (Vec<Value>, Vec<String>, bool) {
+) -> Result<MaterialBuildOutput, Box<dyn Error>> {
     let mut result = Vec::with_capacity(model.materials_len());
     let mut warnings = Vec::new();
     let mut uses_unlit = false;
@@ -4465,17 +4466,46 @@ fn build_materials(
 
         if let Some(layer) = layer {
             let texture_id = layer_diffuse_texture_id(&layer) as usize;
+            let layer_alpha = layer.alpha().clamp(0.0, 1.0);
             if let Some(Some(gltf_texture)) = texture_indices.get(texture_id) {
-                pbr.as_object_mut()
-                    .expect("pbr object")
-                    .insert("baseColorTexture".into(), json!({ "index": gltf_texture }));
+                let pbr = pbr.as_object_mut().expect("pbr object");
+                pbr.insert("baseColorTexture".into(), json!({ "index": gltf_texture }));
+                pbr.insert(
+                    "baseColorFactor".into(),
+                    json!([1.0, 1.0, 1.0, layer_alpha]),
+                );
             } else if model
                 .textures(texture_id)
                 .is_some_and(|texture| texture.replaceable_id() != 0)
             {
                 pbr.as_object_mut().expect("pbr object").insert(
                     "baseColorFactor".into(),
-                    json!([0.85, 0.12, 0.12, layer.alpha()]),
+                    json!([0.85, 0.12, 0.12, layer_alpha]),
+                );
+            } else {
+                pbr.as_object_mut().expect("pbr object").insert(
+                    "baseColorFactor".into(),
+                    json!([1.0, 1.0, 1.0, layer_alpha]),
+                );
+            }
+
+            let alpha_track = scalar_track_manifest(&layer.alpha_tracks())?;
+            extras.insert("wc3LayerAlpha".into(), json!(layer_alpha));
+            if let Some(alpha_track) = alpha_track {
+                let sequence_windows = model
+                    .sequences_iter()
+                    .map(|sequence| ParticleEmitterSequenceManifest {
+                        name: sequence.name(),
+                        start_ms: sequence.interval_start(),
+                        end_ms: sequence.interval_end(),
+                        non_looping: sequence.flags() == SequenceFlag::NonLooping,
+                    })
+                    .collect::<Vec<_>>();
+                extras.insert("wc3AlphaTrack".into(), json!(alpha_track));
+                extras.insert("wc3SequenceWindows".into(), json!(sequence_windows));
+                extras.insert(
+                    "wc3GlobalSequenceDurationsMs".into(),
+                    json!(model.global_sequences()),
                 );
             }
 
@@ -4520,7 +4550,7 @@ fn build_materials(
         result.push(value);
     }
 
-    (result, warnings, uses_unlit)
+    Ok((result, warnings, uses_unlit))
 }
 
 fn gltf_alpha_mode(
@@ -5610,6 +5640,68 @@ mod tests {
     }
 
     #[test]
+    fn gltf_material_preserves_static_and_animated_wc3_alpha() {
+        let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Stand");
+            sequence.set_interval_start(100);
+            sequence.set_interval_end(1100);
+            sequence.set_flags(SequenceFlag::None);
+        }
+        model.set_global_sequences(&[750]);
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(1);
+            let mut layer = material.layers_mut(0).expect("layer");
+            layer.set_filter_mode(LayerFilterMode::Blend);
+            layer.set_texture_id(0);
+            layer.set_alpha(0.35);
+            let mut alpha = layer.alpha_tracks_mut();
+            alpha.set_is_used(true);
+            alpha.set_interpolation_type(InterpolationType::Linear);
+            alpha.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+            alpha.set_key_count(2);
+            alpha.set_timestamps(&[100, 1100]);
+            alpha.set_keys(&[0.25, 0.75]);
+        }
+
+        let (materials, _, _) =
+            build_materials(&model, &[Some(0)], &[]).expect("materials should build");
+        let material = &materials[0];
+        let base_color = material["pbrMetallicRoughness"]["baseColorFactor"]
+            .as_array()
+            .expect("baseColorFactor");
+        assert_eq!(&base_color[..3], &[json!(1.0), json!(1.0), json!(1.0)]);
+        assert!(
+            (base_color[3].as_f64().expect("alpha") - 0.35).abs() < 1.0e-6,
+            "static WC3 alpha must survive glTF conversion"
+        );
+        assert!(
+            (material["extras"]["wc3LayerAlpha"]
+                .as_f64()
+                .expect("wc3LayerAlpha")
+                - 0.35)
+                .abs()
+                < 1.0e-6
+        );
+        assert_eq!(
+            material["extras"]["wc3AlphaTrack"]["values"],
+            json!([0.25, 0.75])
+        );
+        assert_eq!(
+            material["extras"]["wc3SequenceWindows"][0]["name"],
+            json!("Stand")
+        );
+        assert_eq!(
+            material["extras"]["wc3GlobalSequenceDurationsMs"],
+            json!([750])
+        );
+    }
+
+    #[test]
     fn material_priority_plane_is_preserved_for_native_depth_ordering() {
         let mut model = Model::new();
         model.resize_materials(1);
@@ -5619,7 +5711,8 @@ mod tests {
             material.resize_layers(1);
             material.layers_mut(0).expect("layer").set_texture_id(0);
         }
-        let (materials, _, _) = build_materials(&model, &[None], &[]);
+        let (materials, _, _) =
+            build_materials(&model, &[None], &[]).expect("materials should build");
         assert_eq!(materials[0]["extras"]["wc3PriorityPlane"], json!(3));
     }
 

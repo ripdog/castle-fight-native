@@ -344,6 +344,35 @@ pub struct Wc3VisualAnimationSource {
     looping: bool,
 }
 
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct Wc3ModelSequenceSelection {
+    name: String,
+}
+
+impl Wc3ModelSequenceSelection {
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3ModelSequenceClock {
+    sequence_name: String,
+    sequence_elapsed_ms: f32,
+    global_elapsed_ms: f32,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3AnimatedMaterialAlpha {
+    static_alpha: f32,
+    track: Wc3ScalarTrack,
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    global_sequence_durations_ms: Vec<u32>,
+    fallback_elapsed_ms: f32,
+    last_alpha_bits: u32,
+}
+
 #[derive(Component)]
 pub struct Wc3VisualAnimationController;
 
@@ -885,12 +914,24 @@ fn find_ribbon_sequence_window(
 struct Wc3MaterialExtras {
     #[serde(rename = "wc3FilterMode")]
     filter_mode: Option<String>,
+    #[serde(rename = "wc3LayerAlpha", default = "default_material_alpha")]
+    layer_alpha: f32,
+    #[serde(rename = "wc3AlphaTrack", default)]
+    alpha_track: Option<Wc3ScalarTrack>,
+    #[serde(rename = "wc3SequenceWindows", default)]
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(rename = "wc3GlobalSequenceDurationsMs", default)]
+    global_sequence_durations_ms: Vec<u32>,
     #[serde(rename = "wc3PriorityPlane", default)]
     priority_plane: i32,
     #[serde(rename = "wc3TeamColorUnderlay", default)]
     team_color_underlay: bool,
     #[serde(rename = "wc3TeamGlowLayer", default)]
     team_glow_layer: bool,
+}
+
+const fn default_material_alpha() -> f32 {
+    1.0
 }
 
 impl Wc3ParticleAssets {
@@ -1054,11 +1095,11 @@ fn wc3_visual_animation_source(
     entity: Entity,
     parents: &Query<&ChildOf>,
     roots: &Query<&Wc3VisualAnimationSource>,
-) -> Option<Wc3VisualAnimationSource> {
+) -> Option<(Entity, Wc3VisualAnimationSource)> {
     let mut current = entity;
     for _ in 0..128 {
         if let Ok(source) = roots.get(current) {
-            return Some(source.clone());
+            return Some((current, source.clone()));
         }
         let Ok(parent) = parents.get(current) else {
             return None;
@@ -1148,7 +1189,8 @@ pub fn setup_wc3_visual_animation_players(
 ) {
     let (gltfs, clips, mut graphs) = animation_assets;
     for (entity, mut player) in &mut players {
-        let Some(source) = wc3_visual_animation_source(entity, &parents, &roots) else {
+        let Some((model_root, source)) = wc3_visual_animation_source(entity, &parents, &roots)
+        else {
             continue;
         };
         let Some(gltf) = gltfs.get(&source.gltf) else {
@@ -1179,6 +1221,9 @@ pub fn setup_wc3_visual_animation_players(
             transitions,
             Wc3VisualAnimationController,
         ));
+        commands
+            .entity(model_root)
+            .insert(Wc3ModelSequenceSelection::new(source.animation_name));
     }
 }
 
@@ -1236,6 +1281,7 @@ pub fn fix_wc3_scene_materials(
         };
         let tint = wc3_vertex_tint(entity, &parents, &tint_roots);
         if extras.filter_mode.is_none()
+            && extras.alpha_track.is_none()
             && !extras.team_color_underlay
             && !extras.team_glow_layer
             && tint.is_none()
@@ -1383,7 +1429,143 @@ pub fn fix_wc3_scene_materials(
             material_handle.0 = tinted;
         }
 
+        if let Some(track) = extras.alpha_track {
+            let Some(source) = materials.get(&material_handle.0).cloned() else {
+                continue 'mesh;
+            };
+            let unique = materials.add(source);
+            material_handle.0 = unique;
+            commands.entity(entity).insert(Wc3AnimatedMaterialAlpha {
+                static_alpha: extras.layer_alpha.clamp(0.0, 1.0),
+                track,
+                sequence_windows: extras.sequence_windows,
+                global_sequence_durations_ms: extras.global_sequence_durations_ms,
+                fallback_elapsed_ms: 0.0,
+                last_alpha_bits: u32::MAX,
+            });
+        }
+
         commands.entity(entity).insert(Wc3MaterialProcessed);
+    }
+}
+
+pub fn advance_wc3_model_sequence_clocks(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut roots: Query<(
+        Entity,
+        &Wc3ModelSequenceSelection,
+        Option<&mut Wc3ModelSequenceClock>,
+    )>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, selection, clock) in &mut roots {
+        if let Some(mut clock) = clock {
+            advance_model_sequence_clock(&mut clock, selection, dt_ms);
+        } else {
+            commands.entity(entity).insert(Wc3ModelSequenceClock {
+                sequence_name: selection.name.clone(),
+                sequence_elapsed_ms: 0.0,
+                global_elapsed_ms: dt_ms,
+            });
+        }
+    }
+}
+
+fn advance_model_sequence_clock(
+    clock: &mut Wc3ModelSequenceClock,
+    selection: &Wc3ModelSequenceSelection,
+    dt_ms: f32,
+) {
+    if clock.sequence_name != selection.name {
+        clock.sequence_name.clone_from(&selection.name);
+        clock.sequence_elapsed_ms = 0.0;
+    } else {
+        clock.sequence_elapsed_ms += dt_ms;
+    }
+    clock.global_elapsed_ms += dt_ms;
+}
+
+fn inherited_wc3_model_sequence_clock(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    clocks: &Query<&Wc3ModelSequenceClock>,
+) -> Option<Wc3ModelSequenceClock> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(clock) = clocks.get(current) {
+            return Some(clock.clone());
+        }
+        let Ok(parent) = parents.get(current) else {
+            return None;
+        };
+        current = parent.parent();
+    }
+    None
+}
+
+fn material_sequence_time_ms(
+    animation: &Wc3AnimatedMaterialAlpha,
+    clock: &Wc3ModelSequenceClock,
+) -> f32 {
+    let Some(window) = animation
+        .sequence_windows
+        .iter()
+        .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
+    else {
+        return clock.sequence_elapsed_ms;
+    };
+    let duration = window.end_ms.saturating_sub(window.start_ms).max(1) as f32;
+    let offset = if window.non_looping {
+        clock.sequence_elapsed_ms.min(duration)
+    } else {
+        clock.sequence_elapsed_ms.rem_euclid(duration)
+    };
+    window.start_ms as f32 + offset
+}
+
+pub fn update_wc3_material_alpha(
+    time: Res<Time>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut animated: Query<(
+        Entity,
+        &MeshMaterial3d<StandardMaterial>,
+        &mut Wc3AnimatedMaterialAlpha,
+    )>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, material_handle, mut animation) in &mut animated {
+        animation.fallback_elapsed_ms += dt_ms;
+        let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
+            (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
+            |clock| {
+                (
+                    material_sequence_time_ms(&animation, clock),
+                    clock.global_elapsed_ms,
+                )
+            },
+        );
+        let alpha = sample_scalar_track(
+            Some(&animation.track),
+            animation.static_alpha,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        )
+        .clamp(0.0, 1.0);
+        let alpha_bits = alpha.to_bits();
+        if alpha_bits == animation.last_alpha_bits {
+            continue;
+        }
+        let Some(mut material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        let base = material.base_color.to_linear();
+        material.base_color = Color::linear_rgba(base.red, base.green, base.blue, alpha);
+        animation.last_alpha_bits = alpha_bits;
     }
 }
 
@@ -2992,6 +3174,63 @@ mod tests {
         assert_eq!(clock.start_ms, 400);
         assert_eq!(clock.end_ms, 1400);
         assert!(!clock.non_looping);
+    }
+
+    #[test]
+    fn model_sequence_clock_preserves_global_time_across_sequence_changes() {
+        let mut clock = Wc3ModelSequenceClock {
+            sequence_name: "Stand".to_owned(),
+            sequence_elapsed_ms: 250.0,
+            global_elapsed_ms: 1000.0,
+        };
+        advance_model_sequence_clock(&mut clock, &Wc3ModelSequenceSelection::new("Stand"), 100.0);
+        assert_eq!(clock.sequence_elapsed_ms, 350.0);
+        assert_eq!(clock.global_elapsed_ms, 1100.0);
+
+        advance_model_sequence_clock(&mut clock, &Wc3ModelSequenceSelection::new("Attack"), 50.0);
+        assert_eq!(clock.sequence_name, "Attack");
+        assert_eq!(clock.sequence_elapsed_ms, 0.0);
+        assert_eq!(clock.global_elapsed_ms, 1150.0);
+    }
+
+    #[test]
+    fn material_sequence_time_uses_selected_wc3_window() {
+        let animation = Wc3AnimatedMaterialAlpha {
+            static_alpha: 1.0,
+            track: Wc3ScalarTrack {
+                interpolation: Wc3ScalarInterpolation::Linear,
+                global_sequence_id: None,
+                timestamps: vec![500, 1500],
+                values: vec![0.0, 1.0],
+                in_tangents: Vec::new(),
+                out_tangents: Vec::new(),
+            },
+            sequence_windows: vec![Wc3EmitterSequenceWindow {
+                name: "Stand".to_owned(),
+                start_ms: 500,
+                end_ms: 1500,
+                non_looping: false,
+            }],
+            global_sequence_durations_ms: Vec::new(),
+            fallback_elapsed_ms: 0.0,
+            last_alpha_bits: u32::MAX,
+        };
+        let clock = Wc3ModelSequenceClock {
+            sequence_name: "Stand".to_owned(),
+            sequence_elapsed_ms: 1250.0,
+            global_elapsed_ms: 9000.0,
+        };
+        assert_eq!(material_sequence_time_ms(&animation, &clock), 750.0);
+        assert_eq!(
+            sample_scalar_track(
+                Some(&animation.track),
+                animation.static_alpha,
+                material_sequence_time_ms(&animation, &clock),
+                clock.global_elapsed_ms,
+                &animation.global_sequence_durations_ms,
+            ),
+            0.25
+        );
     }
 
     #[test]

@@ -695,8 +695,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "material.animated_alpha_unsupported",
-            FidelityStatus::Unsupported,
+            "material.animated_alpha_approximate",
+            FidelityStatus::Approximation,
             features.animated_material_alpha_layer_count,
         );
         record_fidelity_finding(

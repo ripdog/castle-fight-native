@@ -48,11 +48,12 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3AttachToNode, Wc3EmitterSource, Wc3ParticleAssets,
-        Wc3RibbonSource, Wc3StatusVisualKind, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs,
-        Wc3VisualModel, Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials,
-        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
-        setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_particles,
+        Wc3AbilityVisualAnchor, Wc3AttachToNode, Wc3EmitterSource, Wc3ModelSequenceSelection,
+        Wc3ParticleAssets, Wc3RibbonSource, Wc3StatusVisualKind, Wc3TeamTint, Wc3VertexTint,
+        Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
+        emit_wc3_particles, fix_wc3_scene_materials, resolve_wc3_emitter_nodes,
+        resolve_wc3_visual_attachments, setup_wc3_visual_animation_players,
+        spawn_wc3_ribbon_trails, update_wc3_material_alpha, update_wc3_particles,
         update_wc3_ribbon_trails,
     },
 };
@@ -938,6 +939,8 @@ impl Plugin for CastlePresentationPlugin {
                     update_imported_building_animations,
                     trigger_attack_animations,
                     update_imported_unit_animations,
+                    advance_wc3_model_sequence_clocks,
+                    update_wc3_material_alpha,
                     spawn_miss_indicators,
                     finish_animation_profile,
                     interpolate_render_transforms,
@@ -1646,16 +1649,18 @@ fn set_building_emitter_sequence(
         commands
             .entity(model_root)
             .remove::<Wc3EmitterSource>()
-            .remove::<Wc3RibbonSource>();
+            .remove::<Wc3RibbonSource>()
+            .remove::<Wc3ModelSequenceSelection>();
         return;
     };
-    commands
-        .entity(model_root)
-        .insert(Wc3EmitterSource::with_asset_prefix_for_sequence(
+    commands.entity(model_root).insert((
+        Wc3EmitterSource::with_asset_prefix_for_sequence(
             &model.emitters,
             "wc3/buildings",
             sequence,
-        ));
+        ),
+        Wc3ModelSequenceSelection::new(sequence),
+    ));
     if !model.ribbons.is_empty() {
         commands
             .entity(model_root)
@@ -1846,16 +1851,18 @@ fn set_unit_emitter_sequence(
         commands
             .entity(model_root)
             .remove::<Wc3EmitterSource>()
-            .remove::<Wc3RibbonSource>();
+            .remove::<Wc3RibbonSource>()
+            .remove::<Wc3ModelSequenceSelection>();
         return;
     };
-    commands
-        .entity(model_root)
-        .insert(Wc3EmitterSource::with_asset_prefix_for_sequence(
+    commands.entity(model_root).insert((
+        Wc3EmitterSource::with_asset_prefix_for_sequence(
             &model.particle_emitters,
             "wc3/units",
             sequence,
-        ));
+        ),
+        Wc3ModelSequenceSelection::new(sequence),
+    ));
     if !model.ribbon_emitters.is_empty() {
         commands
             .entity(model_root)
