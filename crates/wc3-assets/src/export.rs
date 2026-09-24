@@ -14,7 +14,7 @@ use whiteout::{
     mdx::{
         InterpolationType, Layer, LayerFilterMode, LayerShadingFlag, LayerSlotType, Model, Node,
         NodeFlag, Parser as MdxParser, ParticleEmitter2, SequenceFlag, TrackF32, TrackQuaternion,
-        TrackVector3f,
+        TrackU32, TrackVector3f,
     },
     mpq::Storage as MpqStorage,
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
@@ -225,6 +225,30 @@ pub struct ScalarTrackManifest {
     pub out_tangents: Vec<f32>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Vector3TrackManifest {
+    pub interpolation: ScalarTrackInterpolationManifest,
+    pub global_sequence_id: Option<u32>,
+    pub timestamps: Vec<u32>,
+    pub values: Vec<[f32; 3]>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub in_tangents: Vec<[f32; 3]>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub out_tangents: Vec<[f32; 3]>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct UnsignedTrackManifest {
+    pub interpolation: ScalarTrackInterpolationManifest,
+    pub global_sequence_id: Option<u32>,
+    pub timestamps: Vec<u32>,
+    pub values: Vec<u32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub in_tangents: Vec<u32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub out_tangents: Vec<u32>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ParticleEmitter2Manifest {
     pub object_id: u32,
@@ -286,6 +310,20 @@ pub struct ModelParticleEmitterManifest {
     pub lifespan: f32,
     pub initial_velocity: f32,
     pub spawn_model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emission_rate_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gravity_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longitude_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifespan_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_track: Option<ScalarTrackManifest>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -324,6 +362,18 @@ pub struct RibbonEmitterManifest {
     pub filter_mode: String,
     pub texture: Option<String>,
     pub gravity: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_above_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_below_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpha_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_track: Option<Vector3TrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub texture_slot_track: Option<UnsignedTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_track: Option<ScalarTrackManifest>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1395,8 +1445,8 @@ impl Exporter {
         let animations = animation_manifests_from_gltf(&gltf)?;
         let features = model_feature_manifest(&model);
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
-        let model_particle_emitters = model_particle_emitter_manifests(&model);
-        let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests);
+        let model_particle_emitters = model_particle_emitter_manifests(&model)?;
+        let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests)?;
         let attachments = attachment_manifests(&model)?;
         let event_objects = event_object_manifests(&model);
 
@@ -2273,12 +2323,7 @@ fn scalar_track_manifest(track: &TrackF32) -> Result<Option<ScalarTrackManifest>
         return Ok(None);
     }
     validate_f32_track(track)?;
-    let interpolation = match track.interpolation_type() {
-        InterpolationType::None => ScalarTrackInterpolationManifest::DontInterp,
-        InterpolationType::Linear => ScalarTrackInterpolationManifest::Linear,
-        InterpolationType::Hermite => ScalarTrackInterpolationManifest::Hermite,
-        InterpolationType::Bezier => ScalarTrackInterpolationManifest::Bezier,
-    };
+    let interpolation = track_interpolation_manifest(track.interpolation_type());
     let smooth = matches!(
         interpolation,
         ScalarTrackInterpolationManifest::Hermite | ScalarTrackInterpolationManifest::Bezier
@@ -2310,6 +2355,99 @@ fn scalar_track_manifest(track: &TrackF32) -> Result<Option<ScalarTrackManifest>
         in_tangents,
         out_tangents,
     }))
+}
+
+fn vector3_track_manifest(
+    track: &TrackVector3f,
+) -> Result<Option<Vector3TrackManifest>, Box<dyn Error>> {
+    if !track.is_used() {
+        return Ok(None);
+    }
+    validate_vec3_track(track)?;
+    let interpolation = track_interpolation_manifest(track.interpolation_type());
+    let smooth = matches!(
+        interpolation,
+        ScalarTrackInterpolationManifest::Hermite | ScalarTrackInterpolationManifest::Bezier
+    );
+    let mut values = Vec::with_capacity(track.key_count());
+    let mut in_tangents = if smooth {
+        Vec::with_capacity(track.key_count())
+    } else {
+        Vec::new()
+    };
+    let mut out_tangents = if smooth {
+        Vec::with_capacity(track.key_count())
+    } else {
+        Vec::new()
+    };
+    for key in 0..track.key_count() {
+        values.push(vec3_key(track, key, 0));
+        if smooth {
+            in_tangents.push(vec3_key(track, key, 1));
+            out_tangents.push(vec3_key(track, key, 2));
+        }
+    }
+    Ok(Some(Vector3TrackManifest {
+        interpolation,
+        global_sequence_id: (track.global_sequence_id() != NO_GLOBAL_SEQUENCE)
+            .then_some(track.global_sequence_id()),
+        timestamps: track.timestamps().to_vec(),
+        values,
+        in_tangents,
+        out_tangents,
+    }))
+}
+
+fn unsigned_track_manifest(
+    track: &TrackU32,
+) -> Result<Option<UnsignedTrackManifest>, Box<dyn Error>> {
+    if !track.is_used() {
+        return Ok(None);
+    }
+    validate_u32_track(track)?;
+    let interpolation = track_interpolation_manifest(track.interpolation_type());
+    let smooth = matches!(
+        interpolation,
+        ScalarTrackInterpolationManifest::Hermite | ScalarTrackInterpolationManifest::Bezier
+    );
+    let mut values = Vec::with_capacity(track.key_count());
+    let mut in_tangents = if smooth {
+        Vec::with_capacity(track.key_count())
+    } else {
+        Vec::new()
+    };
+    let mut out_tangents = if smooth {
+        Vec::with_capacity(track.key_count())
+    } else {
+        Vec::new()
+    };
+    for key in 0..track.key_count() {
+        values.push(u32_key(track, key, 0));
+        if smooth {
+            in_tangents.push(u32_key(track, key, 1));
+            out_tangents.push(u32_key(track, key, 2));
+        }
+    }
+    Ok(Some(UnsignedTrackManifest {
+        interpolation,
+        global_sequence_id: (track.global_sequence_id() != NO_GLOBAL_SEQUENCE)
+            .then_some(track.global_sequence_id()),
+        timestamps: track.timestamps().to_vec(),
+        values,
+        in_tangents,
+        out_tangents,
+    }))
+}
+
+fn track_interpolation_manifest(
+    interpolation: InterpolationType,
+) -> ScalarTrackInterpolationManifest {
+    match interpolation {
+        InterpolationType::None => ScalarTrackInterpolationManifest::DontInterp,
+        InterpolationType::Linear => ScalarTrackInterpolationManifest::Linear,
+        InterpolationType::Hermite => ScalarTrackInterpolationManifest::Hermite,
+        InterpolationType::Bezier => ScalarTrackInterpolationManifest::Bezier,
+    }
 }
 
 fn particle_emitter_2_manifests(
@@ -2417,12 +2555,14 @@ fn max_f32_track_value(
     Ok(values.fold(first, f32::max))
 }
 
-fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterManifest> {
+fn model_particle_emitter_manifests(
+    model: &Model,
+) -> Result<Vec<ModelParticleEmitterManifest>, Box<dyn Error>> {
     model
         .particle_emitters_iter()
         .map(|emitter| {
             let node = emitter.node();
-            ModelParticleEmitterManifest {
+            Ok(ModelParticleEmitterManifest {
                 object_id: node.object_id(),
                 name: node.name(),
                 position: model_node_position(model, &node),
@@ -2433,7 +2573,14 @@ fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterMa
                 lifespan: emitter.lifespan(),
                 initial_velocity: emitter.initial_velocity(),
                 spawn_model: emitter.spawn_model_file_name(),
-            }
+                emission_rate_track: scalar_track_manifest(&emitter.emission_rate_tracks())?,
+                gravity_track: scalar_track_manifest(&emitter.gravity_tracks())?,
+                longitude_track: scalar_track_manifest(&emitter.longitude_tracks())?,
+                latitude_track: scalar_track_manifest(&emitter.latitude_tracks())?,
+                lifespan_track: scalar_track_manifest(&emitter.lifespan_tracks())?,
+                speed_track: scalar_track_manifest(&emitter.speed_tracks())?,
+                visibility_track: scalar_track_manifest(&emitter.visibility_tracks())?,
+            })
         })
         .collect()
 }
@@ -2474,7 +2621,7 @@ fn event_object_manifests(model: &Model) -> Vec<EventObjectManifest> {
 fn ribbon_emitter_manifests(
     model: &Model,
     texture_manifests: &[TextureManifest],
-) -> Vec<RibbonEmitterManifest> {
+) -> Result<Vec<RibbonEmitterManifest>, Box<dyn Error>> {
     model
         .ribbon_emitters_iter()
         .map(|emitter| {
@@ -2482,7 +2629,7 @@ fn ribbon_emitter_manifests(
             let color = emitter.color();
             let (filter_mode, texture) =
                 ribbon_material_properties(model, texture_manifests, emitter.material_id());
-            RibbonEmitterManifest {
+            Ok(RibbonEmitterManifest {
                 object_id: node.object_id(),
                 name: node.name(),
                 position: model_node_position(model, &node),
@@ -2498,7 +2645,13 @@ fn ribbon_emitter_manifests(
                 filter_mode,
                 texture,
                 gravity: emitter.gravity(),
-            }
+                height_above_track: scalar_track_manifest(&emitter.height_above_tracks())?,
+                height_below_track: scalar_track_manifest(&emitter.height_below_tracks())?,
+                alpha_track: scalar_track_manifest(&emitter.alpha_tracks())?,
+                color_track: vector3_track_manifest(&emitter.color_tracks())?,
+                texture_slot_track: unsigned_track_manifest(&emitter.texture_slot_tracks())?,
+                visibility_track: scalar_track_manifest(&emitter.visibility_tracks())?,
+            })
         })
         .collect()
 }
@@ -4043,6 +4196,18 @@ fn f32_key(track: &TrackF32, key: usize, component: usize) -> f32 {
     track.keys()[key * stride + component.min(stride - 1)]
 }
 
+fn u32_key(track: &TrackU32, key: usize, component: usize) -> u32 {
+    let stride = if matches!(
+        track.interpolation_type(),
+        InterpolationType::Hermite | InterpolationType::Bezier
+    ) {
+        3
+    } else {
+        1
+    };
+    track.keys()[key * stride + component.min(stride - 1)]
+}
+
 fn vec3_key(track: &TrackVector3f, key: usize, component: usize) -> [f32; 3] {
     let stride = if matches!(
         track.interpolation_type(),
@@ -4070,6 +4235,23 @@ fn quat_key(track: &TrackQuaternion, key: usize, component: usize) -> [f32; 4] {
 }
 
 fn validate_f32_track(track: &TrackF32) -> Result<(), Box<dyn Error>> {
+    let stride = if matches!(
+        track.interpolation_type(),
+        InterpolationType::Hermite | InterpolationType::Bezier
+    ) {
+        3
+    } else {
+        1
+    };
+    validate_track_layout(
+        track.key_count(),
+        track.timestamps().len(),
+        track.keys().len(),
+        stride,
+    )
+}
+
+fn validate_u32_track(track: &TrackU32) -> Result<(), Box<dyn Error>> {
     let stride = if matches!(
         track.interpolation_type(),
         InterpolationType::Hermite | InterpolationType::Bezier
@@ -5390,6 +5572,78 @@ mod tests {
     }
 
     #[test]
+    fn ribbon_manifest_preserves_scalar_color_and_texture_tracks() {
+        let mut model = Model::new();
+        model.resize_ribbon_emitters(1);
+        {
+            let mut emitter = model.ribbon_emitters_mut(0).expect("ribbon emitter");
+            emitter.set_material_id(0);
+            {
+                let mut alpha = emitter.alpha_tracks_mut();
+                alpha.set_is_used(true);
+                alpha.set_interpolation_type(InterpolationType::Linear);
+                alpha.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                alpha.set_key_count(2);
+                alpha.set_timestamps(&[0, 1000]);
+                alpha.set_keys(&[1.0, 0.0]);
+            }
+            {
+                let mut color = emitter.color_tracks_mut();
+                color.set_is_used(true);
+                color.set_interpolation_type(InterpolationType::Linear);
+                color.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                color.set_key_count(2);
+                color.set_timestamps(&[0, 1000]);
+                color.set_keys(&[
+                    whiteout::math::Vector3f {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    whiteout::math::Vector3f {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                    },
+                ]);
+            }
+            {
+                let mut texture = emitter.texture_slot_tracks_mut();
+                texture.set_is_used(true);
+                texture.set_interpolation_type(InterpolationType::None);
+                texture.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                texture.set_key_count(2);
+                texture.set_timestamps(&[0, 500]);
+                texture.set_keys(&[0, 1]);
+            }
+            let mut node = emitter.node_mut();
+            node.set_object_id(0);
+            node.set_name("Ribbon");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f::default()]);
+
+        let ribbons = ribbon_emitter_manifests(&model, &[]).expect("ribbons should serialize");
+        assert_eq!(ribbons.len(), 1);
+        let ribbon = &ribbons[0];
+        assert_eq!(
+            ribbon.alpha_track.as_ref().expect("alpha").values,
+            [1.0, 0.0]
+        );
+        assert_eq!(
+            ribbon.color_track.as_ref().expect("color").values,
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+        );
+        assert_eq!(
+            ribbon
+                .texture_slot_track
+                .as_ref()
+                .expect("texture slot")
+                .values,
+            [0, 1]
+        );
+    }
+
+    #[test]
     fn ribbon_material_properties_resolve_texture_and_filter_mode() {
         let mut model = Model::new();
         model.resize_textures(1);
@@ -5637,6 +5891,47 @@ mod tests {
     }
 
     #[test]
+    fn legacy_particle_manifest_preserves_animated_scalar_tracks() {
+        let mut model = Model::new();
+        model.resize_particle_emitters(1);
+        {
+            let mut emitter = model.particle_emitters_mut(0).expect("particle emitter");
+            emitter.set_emission_rate(7.0);
+            emitter.set_spawn_model_file_name(r"SharedModels\Smoke1_Green.MDL");
+            {
+                let mut track = emitter.emission_rate_tracks_mut();
+                track.set_is_used(true);
+                track.set_interpolation_type(InterpolationType::Linear);
+                track.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                track.set_key_count(2);
+                track.set_timestamps(&[100, 400]);
+                track.set_keys(&[2.0, 9.0]);
+            }
+            let mut node = emitter.node_mut();
+            node.set_object_id(0);
+            node.set_name("Legacy Particle");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f::default()]);
+
+        let emitters =
+            model_particle_emitter_manifests(&model).expect("legacy emitters should serialize");
+        assert_eq!(emitters.len(), 1);
+        let emitter = &emitters[0];
+        assert_eq!(emitter.emission_rate, 7.0);
+        assert_eq!(emitter.spawn_model, r"SharedModels\Smoke1_Green.MDL");
+        let track = emitter
+            .emission_rate_track
+            .as_ref()
+            .expect("animated emission rate should be preserved");
+        assert_eq!(
+            track.interpolation,
+            ScalarTrackInterpolationManifest::Linear
+        );
+        assert_eq!(track.timestamps, [100, 400]);
+        assert_eq!(track.values, [2.0, 9.0]);
+    }
+
+    #[test]
     fn model_dependencies_include_attachment_and_legacy_particle_children() {
         let model = ModelManifest {
             source_model: "root.mdx".to_owned(),
@@ -5662,6 +5957,13 @@ mod tests {
                     lifespan: 1.0,
                     initial_velocity: 0.0,
                     spawn_model: r"SharedModels\Smoke1_Green.MDL".to_owned(),
+                    emission_rate_track: None,
+                    gravity_track: None,
+                    longitude_track: None,
+                    latitude_track: None,
+                    lifespan_track: None,
+                    speed_track: None,
+                    visibility_track: None,
                 },
                 ModelParticleEmitterManifest {
                     object_id: 2,
@@ -5674,6 +5976,13 @@ mod tests {
                     lifespan: 1.0,
                     initial_velocity: 0.0,
                     spawn_model: "none.mdl".to_owned(),
+                    emission_rate_track: None,
+                    gravity_track: None,
+                    longitude_track: None,
+                    latitude_track: None,
+                    lifespan_track: None,
+                    speed_track: None,
+                    visibility_track: None,
                 },
             ],
             ribbon_emitters: Vec::new(),
