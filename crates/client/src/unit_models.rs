@@ -7,7 +7,10 @@ use std::{
 use bevy::{gltf::Gltf, prelude::*};
 use serde::Deserialize;
 
-use crate::terrain::client_asset_root;
+use crate::{
+    terrain::client_asset_root,
+    wc3_effects::{Wc3ParticleEmitter, Wc3RibbonEmitter},
+};
 
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
@@ -25,6 +28,8 @@ pub struct UnitModelAsset {
     pub overhead_height: Option<f32>,
     pub tint_rgb: Option<[u8; 3]>,
     pub attached_visuals: Vec<UnitAttachedVisual>,
+    pub particle_emitters: Vec<Wc3ParticleEmitter>,
+    pub ribbon_emitters: Vec<Wc3RibbonEmitter>,
     animations: Option<UnitAnimationSet>,
 }
 
@@ -41,8 +46,23 @@ pub struct UnitAnimationClip {
 }
 
 #[derive(Debug, Clone)]
+pub struct UnitAnimationSequenceNames {
+    pub stand: String,
+    pub walk: Option<String>,
+    pub attack: Option<String>,
+    pub defend_stand: Option<String>,
+    pub defend_walk: Option<String>,
+    pub defend_attack: Option<String>,
+    pub cast: Option<String>,
+    pub death: Option<String>,
+    pub decay_flesh: Option<String>,
+    pub decay_bone: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct UnitAnimationSet {
     pub graph: Handle<AnimationGraph>,
+    pub sequences: UnitAnimationSequenceNames,
     pub stand: AnimationNodeIndex,
     pub walk: Option<AnimationNodeIndex>,
     pub attack: Option<AnimationNodeIndex>,
@@ -76,9 +96,13 @@ struct UnitAssetManifestEntry {
 struct UnitModelManifestEntry {
     gltf: String,
     overhead_position: Option<[f32; 3]>,
+    #[serde(default)]
+    particle_emitters: Vec<Wc3ParticleEmitter>,
+    #[serde(default)]
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 struct ResolvedUnitAsset {
     rawcode: u32,
     scale: f32,
@@ -86,6 +110,8 @@ struct ResolvedUnitAsset {
     asset_path: String,
     tint_rgb: Option<[u8; 3]>,
     attached_visuals: Vec<UnitAttachedVisual>,
+    particle_emitters: Vec<Wc3ParticleEmitter>,
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
 }
 
 impl UnitModelSet {
@@ -123,6 +149,8 @@ impl UnitModelSet {
                             overhead_height: entry.overhead_height,
                             tint_rgb: entry.tint_rgb,
                             attached_visuals: entry.attached_visuals,
+                            particle_emitters: entry.particle_emitters,
+                            ribbon_emitters: entry.ribbon_emitters,
                             animations: None,
                         },
                     );
@@ -181,21 +209,44 @@ impl UnitModelSet {
             if selected
                 .into_iter()
                 .flatten()
-                .any(|clip| animation_clips.get(clip).is_none())
+                .any(|animation| animation_clips.get(&animation.clip).is_none())
             {
                 continue;
             }
 
-            let mut clips = vec![stand];
-            let walk_slot = append_optional_clip(&mut clips, walk);
-            let attack_slot = append_optional_clip(&mut clips, attack);
-            let defend_stand_slot = append_optional_clip(&mut clips, defend_stand);
-            let defend_walk_slot = append_optional_clip(&mut clips, defend_walk);
-            let defend_attack_slot = append_optional_clip(&mut clips, defend_attack);
-            let cast_slot = append_optional_clip(&mut clips, cast);
-            let death_slot = append_optional_clip(&mut clips, death);
-            let decay_flesh_slot = append_optional_clip(&mut clips, decay_flesh);
-            let decay_bone_slot = append_optional_clip(&mut clips, decay_bone);
+            let sequences = UnitAnimationSequenceNames {
+                stand: stand.name.clone(),
+                walk: walk.as_ref().map(|animation| animation.name.clone()),
+                attack: attack.as_ref().map(|animation| animation.name.clone()),
+                defend_stand: defend_stand
+                    .as_ref()
+                    .map(|animation| animation.name.clone()),
+                defend_walk: defend_walk.as_ref().map(|animation| animation.name.clone()),
+                defend_attack: defend_attack
+                    .as_ref()
+                    .map(|animation| animation.name.clone()),
+                cast: cast.as_ref().map(|animation| animation.name.clone()),
+                death: death.as_ref().map(|animation| animation.name.clone()),
+                decay_flesh: decay_flesh.as_ref().map(|animation| animation.name.clone()),
+                decay_bone: decay_bone.as_ref().map(|animation| animation.name.clone()),
+            };
+            let mut clips = vec![stand.clip];
+            let walk_slot = append_optional_clip(&mut clips, walk.map(|animation| animation.clip));
+            let attack_slot =
+                append_optional_clip(&mut clips, attack.map(|animation| animation.clip));
+            let defend_stand_slot =
+                append_optional_clip(&mut clips, defend_stand.map(|animation| animation.clip));
+            let defend_walk_slot =
+                append_optional_clip(&mut clips, defend_walk.map(|animation| animation.clip));
+            let defend_attack_slot =
+                append_optional_clip(&mut clips, defend_attack.map(|animation| animation.clip));
+            let cast_slot = append_optional_clip(&mut clips, cast.map(|animation| animation.clip));
+            let death_slot =
+                append_optional_clip(&mut clips, death.map(|animation| animation.clip));
+            let decay_flesh_slot =
+                append_optional_clip(&mut clips, decay_flesh.map(|animation| animation.clip));
+            let decay_bone_slot =
+                append_optional_clip(&mut clips, decay_bone.map(|animation| animation.clip));
             let durations: Vec<f32> = clips
                 .iter()
                 .map(|clip| {
@@ -209,6 +260,7 @@ impl UnitModelSet {
             let graph = graphs.add(graph);
             model.animations = Some(UnitAnimationSet {
                 graph,
+                sequences,
                 stand: nodes[0],
                 walk: walk_slot.map(|slot| nodes[slot]),
                 attack: attack_slot.map(|slot| nodes[slot]),
@@ -243,6 +295,12 @@ impl UnitModelSet {
     }
 }
 
+#[derive(Debug, Clone)]
+struct NamedUnitAnimation {
+    name: String,
+    clip: Handle<AnimationClip>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AnimationRole {
     Stand,
@@ -257,12 +315,15 @@ enum AnimationRole {
     DecayBone,
 }
 
-fn find_animation(gltf: &Gltf, role: AnimationRole) -> Option<Handle<AnimationClip>> {
+fn find_animation(gltf: &Gltf, role: AnimationRole) -> Option<NamedUnitAnimation> {
     gltf.named_animations
         .iter()
         .filter_map(|(name, clip)| animation_score(name, role).map(|score| (score, name, clip)))
         .min_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(right.1)))
-        .map(|(_, _, clip)| clip.clone())
+        .map(|(_, name, clip)| NamedUnitAnimation {
+            name: name.to_string(),
+            clip: clip.clone(),
+        })
 }
 
 fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
@@ -358,11 +419,24 @@ fn resolve_manifest_entries(
         ));
     }
 
-    let overhead_by_gltf: BTreeMap<_, _> = manifest
-        .models
-        .into_iter()
-        .map(|model| (model.gltf.replace('\\', "/"), model.overhead_position))
-        .collect();
+    let mut model_metadata = BTreeMap::new();
+    for model in manifest.models {
+        let gltf = model.gltf.replace('\\', "/");
+        validate_relative_asset_path(&gltf)?;
+        if model_metadata
+            .insert(
+                gltf.clone(),
+                (
+                    model.overhead_position,
+                    model.particle_emitters,
+                    model.ribbon_emitters,
+                ),
+            )
+            .is_some()
+        {
+            return Err(format!("duplicate unit model manifest path {gltf}"));
+        }
+    }
 
     let mut resolved = BTreeMap::new();
     for entry in manifest.units {
@@ -378,10 +452,14 @@ fn resolve_manifest_entries(
         }
         let gltf = gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
-        let overhead_height = overhead_by_gltf
-            .get(&gltf)
-            .copied()
-            .flatten()
+        let (overhead_position, particle_emitters, ribbon_emitters) =
+            model_metadata.get(&gltf).cloned().ok_or_else(|| {
+                format!(
+                    "unit {} references missing model manifest {gltf}",
+                    entry.rawcode
+                )
+            })?;
+        let overhead_height = overhead_position
             .map(|position| position[1] * entry.scale)
             .filter(|height| height.is_finite() && *height > 0.0);
         let asset_path = format!("{}/{}", asset_prefix.trim_end_matches('/'), gltf);
@@ -395,6 +473,8 @@ fn resolve_manifest_entries(
                     asset_path,
                     tint_rgb: entry.tint_rgb,
                     attached_visuals: entry.attached_visuals,
+                    particle_emitters,
+                    ribbon_emitters,
                 },
             )
             .is_some()
@@ -475,6 +555,62 @@ mod tests {
             "wc3/units/models/units__human__gryphonrider__gryphonrider.gltf"
         );
         assert_eq!(entries[1].rawcode, u32::from_be_bytes(*b"hfoo"));
+    }
+
+    #[test]
+    fn unit_manifest_preserves_model_local_particles_and_ribbons() {
+        let json = r#"{
+            "schema_version": 5,
+            "units": [{
+                "rawcode": "hfoo",
+                "scale": 1.0,
+                "gltf": "models/footman.gltf"
+            }],
+            "models": [{
+                "gltf": "models/footman.gltf",
+                "overhead_position": null,
+                "particle_emitters": [{
+                    "position": [1.0, 2.0, 3.0],
+                    "filter_mode": 2,
+                    "speed": 10.0,
+                    "variation": 1.0,
+                    "latitude": 0.5,
+                    "gravity": -2.0,
+                    "lifespan": 0.75,
+                    "emission_rate": 12.0,
+                    "rows": 2,
+                    "columns": 4,
+                    "segment_colors": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                    "segment_alpha": [255, 128, 0],
+                    "segment_scaling": [8.0, 12.0, 4.0],
+                    "texture": "textures/smoke.png",
+                    "squirt": false,
+                    "ambient_enabled": true,
+                    "active_sequences": ["Stand"]
+                }],
+                "ribbon_emitters": [{
+                    "position": [0.0, 1.0, 0.0],
+                    "height_above": 4.0,
+                    "height_below": 2.0,
+                    "alpha": 0.5,
+                    "color": [0.25, 0.5, 1.0],
+                    "lifespan": 1.5,
+                    "emission_rate": 20,
+                    "rows": 1,
+                    "columns": 1,
+                    "filter_mode": "Additive",
+                    "texture": "textures/ribbon.png",
+                    "gravity": 0.0
+                }]
+            }]
+        }"#;
+
+        let entries = resolve_manifest_entries(json, "wc3/units").expect("manifest resolves");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].particle_emitters.len(), 1);
+        assert_eq!(entries[0].particle_emitters[0].active_sequences, ["Stand"]);
+        assert_eq!(entries[0].ribbon_emitters.len(), 1);
+        assert_eq!(entries[0].ribbon_emitters[0].emission_rate, 20);
     }
 
     #[test]

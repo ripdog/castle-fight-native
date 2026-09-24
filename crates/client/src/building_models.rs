@@ -7,7 +7,10 @@ use std::{
 use bevy::{gltf::Gltf, prelude::*};
 use serde::Deserialize;
 
-use crate::{terrain::client_asset_root, wc3_effects::Wc3ParticleEmitter};
+use crate::{
+    terrain::client_asset_root,
+    wc3_effects::{Wc3ParticleEmitter, Wc3RibbonEmitter},
+};
 
 const BUILDING_MODEL_MANIFEST: &str = "wc3/buildings/manifest.json";
 const BUILDING_MODEL_ASSET_PREFIX: &str = "wc3/buildings";
@@ -26,6 +29,7 @@ pub struct BuildingModelAsset {
     pub overhead_height: Option<f32>,
     pub lifecycle_animations: BuildingLifecycleAnimationNames,
     pub emitters: Vec<Wc3ParticleEmitter>,
+    pub ribbons: Vec<Wc3RibbonEmitter>,
     animations_prepared: bool,
     animations: Option<BuildingAnimationSet>,
 }
@@ -76,6 +80,8 @@ struct BuildingModelManifestEntry {
     overhead_position: Option<[f32; 3]>,
     #[serde(default)]
     particle_emitters: Vec<Wc3ParticleEmitter>,
+    #[serde(default)]
+    ribbon_emitters: Vec<Wc3RibbonEmitter>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +91,7 @@ struct ResolvedBuildingAsset {
     overhead_height: Option<f32>,
     lifecycle_animations: BuildingLifecycleAnimationNames,
     emitters: Vec<Wc3ParticleEmitter>,
+    ribbons: Vec<Wc3RibbonEmitter>,
     asset_path: String,
 }
 
@@ -123,6 +130,7 @@ impl BuildingModelSet {
                             overhead_height: entry.overhead_height,
                             lifecycle_animations: entry.lifecycle_animations,
                             emitters: entry.emitters,
+                            ribbons: entry.ribbons,
                             animations_prepared: false,
                             animations: None,
                         },
@@ -300,7 +308,11 @@ fn resolve_manifest_entries(
         if model_metadata
             .insert(
                 gltf.clone(),
-                (model.overhead_position, model.particle_emitters),
+                (
+                    model.overhead_position,
+                    model.particle_emitters,
+                    model.ribbon_emitters,
+                ),
             )
             .is_some()
         {
@@ -325,7 +337,7 @@ fn resolve_manifest_entries(
         }
         let gltf = gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
-        let (overhead_position, emitters) =
+        let (overhead_position, emitters, ribbons) =
             model_metadata.get(&gltf).cloned().ok_or_else(|| {
                 format!(
                     "building {} references missing model manifest {gltf}",
@@ -345,6 +357,7 @@ fn resolve_manifest_entries(
                     overhead_height,
                     lifecycle_animations: entry.lifecycle_animations,
                     emitters,
+                    ribbons,
                     asset_path,
                 },
             )
@@ -424,6 +437,43 @@ mod tests {
             entries[1].lifecycle_animations.birth.as_deref(),
             Some("Birth Upgrade First")
         );
+    }
+
+    #[test]
+    fn building_manifest_preserves_ribbon_emitters() {
+        let json = r#"{
+            "schema_version": 5,
+            "buildings": [{
+                "rawcode": "h000",
+                "scale": 1.0,
+                "fallback_to_base_art": false,
+                "gltf": "models/building.gltf"
+            }],
+            "models": [{
+                "gltf": "models/building.gltf",
+                "overhead_position": null,
+                "particle_emitters": [],
+                "ribbon_emitters": [{
+                    "position": [0.0, 1.0, 0.0],
+                    "height_above": 4.0,
+                    "height_below": 2.0,
+                    "alpha": 0.5,
+                    "color": [0.25, 0.5, 1.0],
+                    "lifespan": 1.5,
+                    "emission_rate": 20,
+                    "rows": 1,
+                    "columns": 1,
+                    "filter_mode": "Additive",
+                    "texture": "textures/ribbon.png",
+                    "gravity": 0.0
+                }]
+            }]
+        }"#;
+
+        let entries = resolve_manifest_entries(json, "wc3/buildings").expect("manifest resolves");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ribbons.len(), 1);
+        assert_eq!(entries[0].ribbons[0].emission_rate, 20);
     }
 
     #[test]

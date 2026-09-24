@@ -46,13 +46,14 @@ use crate::{
         finish_presentation_profile, finish_scene_setup_profile, finish_transform_profile,
     },
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
-    unit_models::{UnitAnimationClip, UnitModelAsset, UnitModelSet},
+    unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AttachToNode, Wc3EmitterSource, Wc3ParticleAssets,
         Wc3RibbonSource, Wc3StatusVisualKind, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs,
         Wc3VisualModel, Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials,
-        resolve_wc3_visual_attachments, setup_wc3_visual_animation_players,
-        spawn_wc3_ribbon_trails, update_wc3_particles, update_wc3_ribbon_trails,
+        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
+        setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_particles,
+        update_wc3_ribbon_trails,
     },
 };
 
@@ -700,7 +701,9 @@ enum ImportedUnitAnimationState {
 #[derive(Component, Debug, Clone, Copy)]
 struct ImportedUnitAnimationController {
     sim_id: SimId,
+    rawcode: u32,
     presentation_root: Entity,
+    model_root: Entity,
     stand: AnimationNodeIndex,
     walk: Option<AnimationNodeIndex>,
     attack: Option<AnimationNodeIndex>,
@@ -927,6 +930,7 @@ impl Plugin for CastlePresentationPlugin {
                 (
                     fix_wc3_scene_materials,
                     resolve_wc3_visual_attachments,
+                    resolve_wc3_emitter_nodes,
                     setup_wc3_visual_animation_players,
                     setup_imported_unit_animation_players,
                     setup_imported_building_animation_players,
@@ -1482,7 +1486,7 @@ fn setup_imported_unit_animation_players(
     mut players: Query<(Entity, &mut AnimationPlayer), Without<ImportedUnitAnimationController>>,
 ) {
     for (entity, mut player) in &mut players {
-        let Some(root) = imported_model_root(entity, &parents, &roots) else {
+        let Some((model_root, root)) = imported_model_root(entity, &parents, &roots) else {
             continue;
         };
         let Some(animations) = unit_models.animations(root.rawcode) else {
@@ -1493,12 +1497,21 @@ fn setup_imported_unit_animation_players(
         transitions
             .play(&mut player, animations.stand, Duration::ZERO)
             .repeat();
+        set_unit_emitter_sequence(
+            &mut commands,
+            &unit_models,
+            model_root,
+            root.rawcode,
+            Some(&animations.sequences.stand),
+        );
         commands.entity(entity).insert((
             AnimationGraphHandle(animations.graph.clone()),
             transitions,
             ImportedUnitAnimationController {
                 sim_id: root.sim_id,
+                rawcode: root.rawcode,
                 presentation_root: root.presentation_root,
+                model_root,
                 stand: animations.stand,
                 walk: animations.walk,
                 attack: animations.attack,
@@ -1756,11 +1769,11 @@ fn imported_model_root(
     entity: Entity,
     parents: &Query<&ChildOf>,
     roots: &Query<&ImportedUnitModelRoot>,
-) -> Option<ImportedUnitModelRoot> {
+) -> Option<(Entity, ImportedUnitModelRoot)> {
     let mut current = entity;
     for _ in 0..128 {
         if let Ok(root) = roots.get(current) {
-            return Some(*root);
+            return Some((current, *root));
         }
         let Ok(parent) = parents.get(current) else {
             return None;
@@ -1770,8 +1783,100 @@ fn imported_model_root(
     None
 }
 
+fn unit_animation_sequence_name(
+    animations: &UnitAnimationSet,
+    state: ImportedUnitAnimationState,
+    defend_active: bool,
+) -> Option<&str> {
+    let names = &animations.sequences;
+    match state {
+        ImportedUnitAnimationState::Stand if defend_active => {
+            names.defend_stand.as_deref().or(Some(names.stand.as_str()))
+        }
+        ImportedUnitAnimationState::Walk if defend_active => names
+            .defend_walk
+            .as_deref()
+            .or(names.defend_stand.as_deref())
+            .or(names.walk.as_deref())
+            .or(Some(names.stand.as_str())),
+        ImportedUnitAnimationState::Attack if defend_active => {
+            names.defend_attack.as_deref().or(names.attack.as_deref())
+        }
+        ImportedUnitAnimationState::Stand => Some(names.stand.as_str()),
+        ImportedUnitAnimationState::Walk => names.walk.as_deref().or(Some(names.stand.as_str())),
+        ImportedUnitAnimationState::Attack => names.attack.as_deref(),
+        ImportedUnitAnimationState::Cast => names.cast.as_deref(),
+        ImportedUnitAnimationState::Death => names.death.as_deref(),
+        ImportedUnitAnimationState::DecayFlesh => names
+            .decay_flesh
+            .as_deref()
+            .or(names.decay_bone.as_deref())
+            .or(names.death.as_deref()),
+        ImportedUnitAnimationState::DecayBone => names
+            .decay_bone
+            .as_deref()
+            .or(names.decay_flesh.as_deref())
+            .or(names.death.as_deref()),
+    }
+}
+
+fn set_unit_emitter_sequence(
+    commands: &mut Commands,
+    unit_models: &UnitModelSet,
+    model_root: Entity,
+    rawcode: u32,
+    sequence: Option<&str>,
+) {
+    let Some(model) = unit_models.get(rawcode) else {
+        return;
+    };
+    let Some(sequence) = sequence else {
+        commands.entity(model_root).remove::<Wc3EmitterSource>();
+        return;
+    };
+    commands
+        .entity(model_root)
+        .insert(Wc3EmitterSource::with_asset_prefix_for_sequence(
+            &model.particle_emitters,
+            "wc3/units",
+            sequence,
+        ));
+}
+
+fn sync_unit_emitter_sequence(
+    commands: &mut Commands,
+    unit_models: &UnitModelSet,
+    controller: &ImportedUnitAnimationController,
+) {
+    let sequence = unit_models
+        .animations(controller.rawcode)
+        .and_then(|animations| {
+            unit_animation_sequence_name(animations, controller.state, controller.defend_active)
+        });
+    set_unit_emitter_sequence(
+        commands,
+        unit_models,
+        controller.model_root,
+        controller.rawcode,
+        sequence,
+    );
+}
+
+fn sync_unit_emitter_if_animation_changed(
+    commands: &mut Commands,
+    unit_models: &UnitModelSet,
+    controller: &ImportedUnitAnimationController,
+    previous_state: ImportedUnitAnimationState,
+    previous_defend_active: bool,
+) {
+    if controller.state != previous_state || controller.defend_active != previous_defend_active {
+        sync_unit_emitter_sequence(commands, unit_models, controller);
+    }
+}
+
 fn update_imported_unit_animations(
     mut commands: Commands,
+    unit_models: Res<UnitModelSet>,
     samples: Res<PresentationSamples>,
     dying_roots: Query<(), With<ImportedDeathRemnant>>,
     mut players: Query<(
@@ -1781,6 +1886,8 @@ fn update_imported_unit_animations(
     )>,
 ) {
     for (mut player, mut transitions, mut controller) in &mut players {
+        let previous_state = controller.state;
+        let previous_defend_active = controller.defend_active;
         if let Some(current) = samples.current.builders.get(&controller.sim_id) {
             update_live_imported_builder_animation(
                 &samples,
@@ -1788,6 +1895,13 @@ fn update_imported_unit_animations(
                 &mut player,
                 &mut transitions,
                 &mut controller,
+            );
+            sync_unit_emitter_if_animation_changed(
+                &mut commands,
+                &unit_models,
+                &controller,
+                previous_state,
+                previous_defend_active,
             );
             continue;
         }
@@ -1798,6 +1912,13 @@ fn update_imported_unit_animations(
                 &mut player,
                 &mut transitions,
                 &mut controller,
+            );
+            sync_unit_emitter_if_animation_changed(
+                &mut commands,
+                &unit_models,
+                &controller,
+                previous_state,
+                previous_defend_active,
             );
             continue;
         }
@@ -1815,6 +1936,13 @@ fn update_imported_unit_animations(
                 &mut transitions,
                 &mut controller,
             );
+            sync_unit_emitter_if_animation_changed(
+                &mut commands,
+                &unit_models,
+                &controller,
+                previous_state,
+                previous_defend_active,
+            );
             continue;
         }
 
@@ -1824,6 +1952,13 @@ fn update_imported_unit_animations(
                 &mut player,
                 &mut transitions,
                 &mut controller,
+            );
+            sync_unit_emitter_if_animation_changed(
+                &mut commands,
+                &unit_models,
+                &controller,
+                previous_state,
+                previous_defend_active,
             );
         }
     }
@@ -2893,6 +3028,14 @@ fn sync_render_entities(
             if let Some(tint) = model.tint_rgb {
                 commands.entity(model_root).insert(Wc3VertexTint(tint));
             }
+            if !model.ribbon_emitters.is_empty() {
+                commands
+                    .entity(model_root)
+                    .insert(Wc3RibbonSource::with_asset_prefix(
+                        &model.ribbon_emitters,
+                        "wc3/units",
+                    ));
+            }
             (entity, Some(builder.appearance.rawcode))
         } else {
             let entity = commands
@@ -2952,6 +3095,14 @@ fn sync_render_entities(
             commands.entity(entity).add_child(model_root);
             if let Some(tint) = model.tint_rgb {
                 commands.entity(model_root).insert(Wc3VertexTint(tint));
+            }
+            if !model.ribbon_emitters.is_empty() {
+                commands
+                    .entity(model_root)
+                    .insert(Wc3RibbonSource::with_asset_prefix(
+                        &model.ribbon_emitters,
+                        "wc3/units",
+                    ));
             }
             spawn_persistent_unit_attachments(&mut commands, model_root, model, &wc3_visuals);
             (entity, None, Some(rawcode))
@@ -3141,6 +3292,14 @@ fn sync_render_entities(
                     ),
                 );
             }
+            if !model.ribbons.is_empty() {
+                commands
+                    .entity(model_root)
+                    .insert(Wc3RibbonSource::with_asset_prefix(
+                        &model.ribbons,
+                        "wc3/buildings",
+                    ));
+            }
             commands.entity(entity).add_child(model_root);
             Some(rawcode)
         } else {
@@ -3174,24 +3333,35 @@ fn sync_render_entities(
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .id();
-            commands.entity(entity).with_child((
-                WorldAssetRoot(model.scene.clone()),
-                ImportedUnitModelRoot {
-                    sim_id: corpse.source_unit,
-                    rawcode,
-                    presentation_root: entity,
-                },
-                Wc3TeamTint::new(
-                    corpse.source_owner.0,
-                    player_color(corpse.source_owner),
-                    "wc3/units",
-                ),
-                Transform {
-                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                    scale: Vec3::splat(model.scale),
-                    ..default()
-                },
-            ));
+            let model_root = commands
+                .spawn((
+                    WorldAssetRoot(model.scene.clone()),
+                    ImportedUnitModelRoot {
+                        sim_id: corpse.source_unit,
+                        rawcode,
+                        presentation_root: entity,
+                    },
+                    Wc3TeamTint::new(
+                        corpse.source_owner.0,
+                        player_color(corpse.source_owner),
+                        "wc3/units",
+                    ),
+                    Transform {
+                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                        scale: Vec3::splat(model.scale),
+                        ..default()
+                    },
+                ))
+                .id();
+            if !model.ribbon_emitters.is_empty() {
+                commands
+                    .entity(model_root)
+                    .insert(Wc3RibbonSource::with_asset_prefix(
+                        &model.ribbon_emitters,
+                        "wc3/units",
+                    ));
+            }
+            commands.entity(entity).add_child(model_root);
             entity
         } else {
             let position = corpse_render_position(corpse.position, &terrain);

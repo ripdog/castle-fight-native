@@ -8,7 +8,8 @@ use std::{
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
     camera::visibility::DynamicSkinnedMeshBounds,
-    gltf::{Gltf, GltfMaterialExtras},
+    ecs::system::SystemParam,
+    gltf::{Gltf, GltfExtras, GltfMaterialExtras},
     mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
     prelude::*,
     render::render_resource::TextureFormat,
@@ -102,6 +103,8 @@ pub struct Wc3StatusVisual {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Wc3ParticleEmitter {
+    #[serde(default)]
+    pub object_id: Option<u32>,
     pub position: [f32; 3],
     pub filter_mode: u32,
     pub speed: f32,
@@ -125,6 +128,8 @@ pub struct Wc3ParticleEmitter {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Wc3RibbonEmitter {
+    #[serde(default)]
+    pub object_id: Option<u32>,
     pub position: [f32; 3],
     pub height_above: f32,
     pub height_below: f32,
@@ -201,12 +206,20 @@ pub struct Wc3VisualAnimationGraphs {
 pub struct Wc3EmitterSource {
     emitters: Vec<EmitterRuntime>,
     asset_prefix: &'static str,
+    node_binding_complete: bool,
+}
+
+#[derive(Clone)]
+struct RibbonRuntime {
+    spec: Wc3RibbonEmitter,
+    source_node: Option<Entity>,
 }
 
 #[derive(Component)]
 pub struct Wc3RibbonSource {
-    ribbons: Vec<Wc3RibbonEmitter>,
+    ribbons: Vec<RibbonRuntime>,
     asset_prefix: &'static str,
+    node_binding_complete: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -268,6 +281,112 @@ pub fn resolve_wc3_visual_attachments(
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct Wc3NodeExtras {
+    #[serde(rename = "wc3ObjectId")]
+    wc3_object_id: Option<u32>,
+}
+
+fn belongs_to_model_root(entity: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
+    let mut current = entity;
+    for _ in 0..128 {
+        if current == root {
+            return true;
+        }
+        let Ok(parent) = parents.get(current) else {
+            return false;
+        };
+        current = parent.parent();
+    }
+    false
+}
+
+fn resolve_wc3_object_nodes(
+    root: Entity,
+    requested: &BTreeSet<u32>,
+    extras: &Query<(Entity, &GltfExtras)>,
+    parents: &Query<&ChildOf>,
+) -> BTreeMap<u32, Entity> {
+    let mut resolved = BTreeMap::new();
+    for (entity, raw_extras) in extras.iter() {
+        let Ok(node_extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
+            continue;
+        };
+        let Some(object_id) = node_extras.wc3_object_id else {
+            continue;
+        };
+        if requested.contains(&object_id) && belongs_to_model_root(entity, root, parents) {
+            resolved.entry(object_id).or_insert(entity);
+        }
+    }
+    resolved
+}
+
+pub fn resolve_wc3_emitter_nodes(
+    mut emitter_sources: Query<(Entity, &mut Wc3EmitterSource)>,
+    mut ribbon_sources: Query<(Entity, &mut Wc3RibbonSource)>,
+    extras: Query<(Entity, &GltfExtras)>,
+    parents: Query<&ChildOf>,
+) {
+    for (root, mut source) in &mut emitter_sources {
+        if source.node_binding_complete {
+            continue;
+        }
+        let requested = source
+            .emitters
+            .iter()
+            .filter_map(|emitter| emitter.spec.object_id)
+            .collect::<BTreeSet<_>>();
+        if requested.is_empty() {
+            source.node_binding_complete = true;
+            continue;
+        }
+
+        let resolved = resolve_wc3_object_nodes(root, &requested, &extras, &parents);
+        for emitter in &mut source.emitters {
+            if emitter.source_node.is_none()
+                && let Some(object_id) = emitter.spec.object_id
+                && let Some(entity) = resolved.get(&object_id)
+            {
+                emitter.source_node = Some(*entity);
+            }
+        }
+        source.node_binding_complete = source
+            .emitters
+            .iter()
+            .all(|emitter| emitter.spec.object_id.is_none() || emitter.source_node.is_some());
+    }
+
+    for (root, mut source) in &mut ribbon_sources {
+        if source.node_binding_complete {
+            continue;
+        }
+        let requested = source
+            .ribbons
+            .iter()
+            .filter_map(|ribbon| ribbon.spec.object_id)
+            .collect::<BTreeSet<_>>();
+        if requested.is_empty() {
+            source.node_binding_complete = true;
+            continue;
+        }
+
+        let resolved = resolve_wc3_object_nodes(root, &requested, &extras, &parents);
+        for ribbon in &mut source.ribbons {
+            if ribbon.source_node.is_none()
+                && let Some(object_id) = ribbon.spec.object_id
+                && let Some(entity) = resolved.get(&object_id)
+            {
+                ribbon.source_node = Some(*entity);
+            }
+        }
+        source.node_binding_complete = source
+            .ribbons
+            .iter()
+            .all(|ribbon| ribbon.spec.object_id.is_none() || ribbon.source_node.is_some());
+    }
+}
+
 fn normalize_attachment_name(name: &str) -> String {
     name.chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
@@ -292,6 +411,7 @@ pub(crate) struct Wc3MaterialProcessed;
 #[derive(Clone)]
 struct EmitterRuntime {
     spec: Wc3ParticleEmitter,
+    source_node: Option<Entity>,
     accumulator: f32,
     burst_pending: bool,
     sequence: u32,
@@ -316,7 +436,9 @@ struct RibbonPoint {
 #[derive(Component)]
 pub(crate) struct Wc3RibbonTrail {
     source: Entity,
+    ribbon_index: usize,
     spec: Wc3RibbonEmitter,
+    source_scale: f32,
     points: VecDeque<RibbonPoint>,
     emission_accumulator: f32,
     previous_origin: Option<Vec3>,
@@ -423,17 +545,23 @@ impl Wc3EmitterSource {
         emitters: impl IntoIterator<Item = Wc3ParticleEmitter>,
         asset_prefix: &'static str,
     ) -> Self {
+        let emitters = emitters
+            .into_iter()
+            .map(|spec| EmitterRuntime {
+                burst_pending: spec.squirt,
+                spec,
+                source_node: None,
+                accumulator: 0.0,
+                sequence: 0,
+            })
+            .collect::<Vec<_>>();
+        let node_binding_complete = emitters
+            .iter()
+            .all(|emitter| emitter.spec.object_id.is_none());
         Self {
-            emitters: emitters
-                .into_iter()
-                .map(|spec| EmitterRuntime {
-                    burst_pending: spec.squirt,
-                    spec,
-                    accumulator: 0.0,
-                    sequence: 0,
-                })
-                .collect(),
+            emitters,
             asset_prefix,
+            node_binding_complete,
         }
     }
 }
@@ -446,9 +574,19 @@ impl Wc3RibbonSource {
 
     #[must_use]
     pub fn with_asset_prefix(ribbons: &[Wc3RibbonEmitter], asset_prefix: &'static str) -> Self {
+        let ribbons = ribbons
+            .iter()
+            .cloned()
+            .map(|spec| RibbonRuntime {
+                spec,
+                source_node: None,
+            })
+            .collect::<Vec<_>>();
+        let node_binding_complete = ribbons.iter().all(|ribbon| ribbon.spec.object_id.is_none());
         Self {
-            ribbons: ribbons.to_vec(),
+            ribbons,
             asset_prefix,
+            node_binding_complete,
         }
     }
 }
@@ -1103,14 +1241,15 @@ pub fn spawn_wc3_ribbon_trails(
     sources: Query<(Entity, &Wc3RibbonSource), Added<Wc3RibbonSource>>,
 ) {
     for (source, source_ribbons) in &sources {
-        for spec in &source_ribbons.ribbons {
+        for (ribbon_index, ribbon) in source_ribbons.ribbons.iter().enumerate() {
+            let spec = &ribbon.spec;
             if spec.emission_rate == 0
                 || spec.lifespan <= 0.0
                 || (spec.height_above <= 0.0 && spec.height_below <= 0.0)
             {
                 continue;
             }
-            let mesh = meshes.add(build_wc3_ribbon_mesh(spec, &VecDeque::new()));
+            let mesh = meshes.add(build_wc3_ribbon_mesh(spec, &VecDeque::new(), 1.0));
             let material = ribbon_assets.ribbon_material(
                 spec,
                 source_ribbons.asset_prefix,
@@ -1124,7 +1263,9 @@ pub fn spawn_wc3_ribbon_trails(
                 Visibility::default(),
                 Wc3RibbonTrail {
                     source,
+                    ribbon_index,
                     spec: spec.clone(),
+                    source_scale: 1.0,
                     points: VecDeque::new(),
                     emission_accumulator: 0.0,
                     previous_origin: None,
@@ -1139,7 +1280,8 @@ pub fn spawn_wc3_ribbon_trails(
 pub fn update_wc3_ribbon_trails(
     mut commands: Commands,
     time: Res<Time>,
-    sources: Query<&GlobalTransform, With<Wc3RibbonSource>>,
+    sources: Query<(&GlobalTransform, &Wc3RibbonSource)>,
+    transforms: Query<&GlobalTransform>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut trails: Query<(Entity, &mut Wc3RibbonTrail)>,
 ) {
@@ -1157,9 +1299,21 @@ pub fn update_wc3_ribbon_trails(
         }
 
         let source_transform = sources.get(trail.source).ok();
-        if let Some(transform) = source_transform {
-            let origin = transform.transform_point(Vec3::from_array(trail.spec.position));
-            let up = (transform.rotation() * Vec3::Y).normalize_or(Vec3::Y);
+        if let Some((root_transform, source)) = source_transform
+            && let Some(ribbon) = source.ribbons.get(trail.ribbon_index)
+        {
+            let bound_transform = ribbon
+                .source_node
+                .and_then(|node| transforms.get(node).ok());
+            let transform = bound_transform.unwrap_or(root_transform);
+            let (scale, rotation, translation) = transform.to_scale_rotation_translation();
+            trail.source_scale = scale.abs().max_element().max(0.000_1);
+            let origin = if bound_transform.is_some() {
+                translation
+            } else {
+                root_transform.transform_point(Vec3::from_array(trail.spec.position))
+            };
+            let up = (rotation * Vec3::Y).normalize_or(Vec3::Y);
             if trail.previous_origin.is_none() {
                 trail.points.push_back(RibbonPoint {
                     center: origin,
@@ -1192,7 +1346,7 @@ pub fn update_wc3_ribbon_trails(
             trail.points.pop_front();
         }
         if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
-            *mesh = build_wc3_ribbon_mesh(&trail.spec, &trail.points);
+            *mesh = build_wc3_ribbon_mesh(&trail.spec, &trail.points, trail.source_scale);
         }
 
         if source_transform.is_none() && trail.points.is_empty() {
@@ -1202,7 +1356,11 @@ pub fn update_wc3_ribbon_trails(
     }
 }
 
-fn build_wc3_ribbon_mesh(spec: &Wc3RibbonEmitter, points: &VecDeque<RibbonPoint>) -> Mesh {
+fn build_wc3_ribbon_mesh(
+    spec: &Wc3RibbonEmitter,
+    points: &VecDeque<RibbonPoint>,
+    source_scale: f32,
+) -> Mesh {
     let mut positions = Vec::with_capacity(points.len() * 2);
     let mut normals = Vec::with_capacity(points.len() * 2);
     let mut uvs = Vec::with_capacity(points.len() * 2);
@@ -1213,11 +1371,12 @@ fn build_wc3_ribbon_mesh(spec: &Wc3RibbonEmitter, points: &VecDeque<RibbonPoint>
     let atlas_v = 1.0 / spec.rows.max(1) as f32;
 
     for (index, point) in points.iter().enumerate() {
-        let gravity_offset = Vec3::NEG_Y * (0.5 * spec.gravity * point.age * point.age);
+        let gravity_offset =
+            Vec3::NEG_Y * (0.5 * spec.gravity * source_scale * point.age * point.age);
         let center = point.center + gravity_offset;
         let up = point.up.normalize_or(Vec3::Y);
-        let top = center + up * spec.height_above.max(0.0);
-        let bottom = center - up * spec.height_below.max(0.0);
+        let top = center + up * spec.height_above.max(0.0) * source_scale;
+        let bottom = center - up * spec.height_below.max(0.0) * source_scale;
         positions.push(top.to_array());
         positions.push(bottom.to_array());
         normals.push(Vec3::Z.to_array());
@@ -1248,18 +1407,23 @@ fn build_wc3_ribbon_mesh(spec: &Wc3RibbonEmitter, points: &VecDeque<RibbonPoint>
     .with_inserted_indices(Indices::U32(indices))
 }
 
+#[derive(SystemParam)]
+pub(crate) struct Wc3ParticleRenderAssets<'w> {
+    asset_server: Res<'w, AssetServer>,
+    particle_assets: ResMut<'w, Wc3ParticleAssets>,
+    materials: ResMut<'w, Assets<StandardMaterial>>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+}
+
 pub fn emit_wc3_particles(
     mut commands: Commands,
     time: Res<Time>,
-    asset_server: Res<AssetServer>,
-    mut particle_assets: ResMut<Wc3ParticleAssets>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut assets: Wc3ParticleRenderAssets,
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource)>,
+    transforms: Query<&GlobalTransform>,
 ) {
     let dt = time.delta_secs().min(0.1);
     for (entity, transform, mut source) in &mut sources {
-        let root = transform.compute_transform();
         let asset_prefix = source.asset_prefix;
         for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
             let mut count = if emitter.burst_pending {
@@ -1275,40 +1439,55 @@ pub fn emit_wc3_particles(
             if count == 0 || emitter.spec.lifespan <= 0.0 {
                 continue;
             }
-            let material = particle_assets.material(
+            let material = assets.particle_assets.material(
                 &emitter.spec,
                 asset_prefix,
-                &asset_server,
-                &mut materials,
+                &assets.asset_server,
+                &mut assets.materials,
             );
-            let particle_mesh = particle_assets.particle_mesh(
+            let particle_mesh = assets.particle_assets.particle_mesh(
                 emitter.spec.rows,
                 emitter.spec.columns,
                 0,
-                &mut meshes,
+                &mut assets.meshes,
             );
-            let origin = transform.transform_point(Vec3::from_array(emitter.spec.position));
+            let bound_transform = emitter
+                .source_node
+                .and_then(|node| transforms.get(node).ok());
+            let source_transform = bound_transform.unwrap_or(transform);
+            let (source_scale, source_rotation, source_translation) =
+                source_transform.to_scale_rotation_translation();
+            let uniform_scale = source_scale.abs().max_element().max(0.000_1);
+            let origin = if bound_transform.is_some() {
+                source_translation
+            } else {
+                transform.transform_point(Vec3::from_array(emitter.spec.position))
+            };
+            let particle_scales = emitter
+                .spec
+                .segment_scaling
+                .map(|scale| scale * uniform_scale);
             for _ in 0..count {
                 let sequence = emitter.sequence;
                 emitter.sequence = emitter.sequence.wrapping_add(1);
                 let velocity = particle_velocity(
-                    root.rotation,
+                    source_rotation,
                     entity,
                     emitter_index as u32,
                     sequence,
                     &emitter.spec,
-                );
+                ) * uniform_scale;
                 commands.spawn((
                     Mesh3d(particle_mesh.clone()),
                     MeshMaterial3d(material.clone()),
                     Transform::from_translation(origin)
-                        .with_scale(Vec3::splat(emitter.spec.segment_scaling[0].max(0.01))),
+                        .with_scale(Vec3::splat(particle_scales[0].max(0.01))),
                     Wc3Particle {
                         velocity,
-                        gravity: emitter.spec.gravity,
+                        gravity: emitter.spec.gravity * uniform_scale,
                         age: 0.0,
                         lifespan: emitter.spec.lifespan.max(0.01),
-                        scales: emitter.spec.segment_scaling,
+                        scales: particle_scales,
                     },
                 ));
             }
@@ -1591,6 +1770,123 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn test_particle_emitter(object_id: u32) -> Wc3ParticleEmitter {
+        Wc3ParticleEmitter {
+            object_id: Some(object_id),
+            position: [0.0; 3],
+            filter_mode: 0,
+            speed: 0.0,
+            variation: 0.0,
+            latitude: 0.0,
+            gravity: 0.0,
+            lifespan: 1.0,
+            emission_rate: 1.0,
+            rows: 1,
+            columns: 1,
+            segment_colors: [[1.0; 3]; 3],
+            segment_alpha: [255; 3],
+            segment_scaling: [1.0; 3],
+            texture: None,
+            squirt: false,
+            ambient_enabled: true,
+            active_sequences: vec!["Stand".to_owned()],
+        }
+    }
+
+    fn test_ribbon_emitter(object_id: u32) -> Wc3RibbonEmitter {
+        Wc3RibbonEmitter {
+            object_id: Some(object_id),
+            position: [0.0; 3],
+            height_above: 1.0,
+            height_below: 1.0,
+            alpha: 1.0,
+            color: [1.0; 3],
+            lifespan: 1.0,
+            emission_rate: 1,
+            rows: 1,
+            columns: 1,
+            filter_mode: "Blend".to_owned(),
+            texture: None,
+            gravity: 0.0,
+        }
+    }
+
+    #[test]
+    fn model_local_vfx_object_ids_bind_within_their_own_scene_root() {
+        let mut app = App::new();
+        app.add_systems(Update, resolve_wc3_emitter_nodes);
+
+        let root_a = app
+            .world_mut()
+            .spawn((
+                Wc3EmitterSource::with_asset_prefix(&[test_particle_emitter(17)], "wc3/units"),
+                Wc3RibbonSource::with_asset_prefix(&[test_ribbon_emitter(23)], "wc3/units"),
+            ))
+            .id();
+        let root_b = app
+            .world_mut()
+            .spawn((
+                Wc3EmitterSource::with_asset_prefix(&[test_particle_emitter(17)], "wc3/units"),
+                Wc3RibbonSource::with_asset_prefix(&[test_ribbon_emitter(23)], "wc3/units"),
+            ))
+            .id();
+
+        let emitter_a = app
+            .world_mut()
+            .spawn(GltfExtras {
+                value: r#"{"wc3ObjectId":17}"#.to_owned(),
+            })
+            .id();
+        let ribbon_a = app
+            .world_mut()
+            .spawn(GltfExtras {
+                value: r#"{"wc3ObjectId":23}"#.to_owned(),
+            })
+            .id();
+        let emitter_b = app
+            .world_mut()
+            .spawn(GltfExtras {
+                value: r#"{"wc3ObjectId":17}"#.to_owned(),
+            })
+            .id();
+        let ribbon_b = app
+            .world_mut()
+            .spawn(GltfExtras {
+                value: r#"{"wc3ObjectId":23}"#.to_owned(),
+            })
+            .id();
+        app.world_mut()
+            .entity_mut(root_a)
+            .add_children(&[emitter_a, ribbon_a]);
+        app.world_mut()
+            .entity_mut(root_b)
+            .add_children(&[emitter_b, ribbon_b]);
+
+        app.update();
+
+        let source_a = app
+            .world()
+            .get::<Wc3EmitterSource>(root_a)
+            .expect("root A emitter source");
+        let source_b = app
+            .world()
+            .get::<Wc3EmitterSource>(root_b)
+            .expect("root B emitter source");
+        assert_eq!(source_a.emitters[0].source_node, Some(emitter_a));
+        assert_eq!(source_b.emitters[0].source_node, Some(emitter_b));
+
+        let ribbons_a = app
+            .world()
+            .get::<Wc3RibbonSource>(root_a)
+            .expect("root A ribbon source");
+        let ribbons_b = app
+            .world()
+            .get::<Wc3RibbonSource>(root_b)
+            .expect("root B ribbon source");
+        assert_eq!(ribbons_a.ribbons[0].source_node, Some(ribbon_a));
+        assert_eq!(ribbons_b.ribbons[0].source_node, Some(ribbon_b));
+    }
+
     #[test]
     fn building_team_color_flattens_overlay_and_underlay_into_one_opaque_texture() {
         let source = Image::new(
@@ -1695,6 +1991,7 @@ mod tests {
     #[test]
     fn ribbon_mesh_builds_a_fading_two_vertex_strip() {
         let spec = Wc3RibbonEmitter {
+            object_id: None,
             position: [0.0; 3],
             height_above: 2.0,
             height_below: 3.0,
@@ -1720,7 +2017,7 @@ mod tests {
                 age: 0.0,
             },
         ]);
-        let mesh = build_wc3_ribbon_mesh(&spec, &points);
+        let mesh = build_wc3_ribbon_mesh(&spec, &points, 1.0);
         let positions = mesh
             .attribute(Mesh::ATTRIBUTE_POSITION)
             .expect("ribbon positions")
