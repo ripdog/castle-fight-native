@@ -5474,9 +5474,9 @@ dependencies = [
 
 [[package]]
 name = "whiteoutlib"
-version = "0.1.7"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a66f920968d526face49752074e2a8ab82134921ee115b1bde12c9879dcc258"
+checksum = "0b569b9b20a99ba5a3183e70defea6f265a8694e84574589505ee1da82e4d989"
 dependencies = [
  "cmake",
 ]

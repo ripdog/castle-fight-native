@@ -1,8 +1,8 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
-    fs::{self, File, OpenOptions},
-    io::{self, BufWriter, Seek, SeekFrom, Write},
+    fs::{self, File},
+    io::{self, BufWriter},
     path::{Path, PathBuf},
 };
 
@@ -35,8 +35,6 @@ const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const BUILDING_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const DOODAD_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const UI_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 2;
-const WHITEOUT_STABLE_MAX_MDX_VERSION: u32 = 1200;
-const WC3_3_MDX_VERSION: u32 = 1800;
 const MAX_MDX_INPUT_BYTES: usize = 64 * 1024 * 1024;
 const WC3_PLAYER_COLOR_COUNT: u8 = 24;
 const STOCK_BUILDING_ART_CATEGORIES: [&str; 7] = [
@@ -45,13 +43,6 @@ const STOCK_BUILDING_ART_CATEGORIES: [&str; 7] = [
 
 type TextureExport = (Vec<TextureManifest>, Vec<Option<usize>>);
 type GltfBuildOutput = (Value, Vec<u8>, Vec<String>);
-type WideSkinRewrite = (Option<Vec<u8>>, usize);
-
-#[derive(Debug, Default)]
-struct MdxCompatibilityPlan {
-    patches: Vec<(u64, [u8; 4])>,
-    warnings: Vec<String>,
-}
 
 #[derive(Debug, Serialize)]
 pub struct AssetManifest {
@@ -1479,6 +1470,12 @@ impl Exporter {
             omit_team_glow_geosets,
         )?;
         warnings.extend(material_warnings);
+        if model.geoset_animations_len() != 0 {
+            warnings.push(
+                "whiteoutlib 0.2.1 Rust binding exposes GeosetAnimation::flags() as SequenceFlag; raw geoset-animation flags are intentionally omitted from this manifest until upstream fixes the binding"
+                    .to_owned(),
+            );
+        }
 
         fs::write(self.output.join(&bin_name), &bin)?;
         let gltf_file = File::create(self.output.join(&gltf_name))?;
@@ -1523,51 +1520,30 @@ impl Exporter {
         source_casc_path: &str,
         model_bytes: &[u8],
     ) -> Result<(Model, Vec<String>), Box<dyn Error>> {
-        // whiteoutlib 0.1.7 only understands MDX through v1200. Warcraft III 3.0 ships v1800
-        // models whose camera size word stores an 8-bit variant in the high byte; feeding those
-        // bytes directly to 0.1.7 can make the parser walk tens of megabytes past EOF and allocate
-        // gigabytes from garbage track counts. Preflight the binary and apply only compatibility
-        // transformations whose semantics are known before handing it to native code.
+        if model_bytes.len() > MAX_MDX_INPUT_BYTES {
+            return Err(io::Error::other(format!(
+                "MDX {logical_path} is {} bytes; refusing to parse inputs above {} bytes",
+                model_bytes.len(),
+                MAX_MDX_INPUT_BYTES
+            ))
+            .into());
+        }
+
         let extension = Path::new(logical_path)
             .extension()
             .and_then(|extension| extension.to_str())
             .filter(|extension| extension.eq_ignore_ascii_case("mdl"))
             .map_or("mdx", |_| "mdl");
-        let (rewritten_model, narrowed_skin_streams) = if extension == "mdx" {
-            rewrite_wide_skin_streams(model_bytes, logical_path)?
-        } else {
-            (None, 0)
-        };
-        let staged_bytes = rewritten_model.as_deref().unwrap_or(model_bytes);
-        let mut compatibility = if extension == "mdx" {
-            mdx_compatibility_plan(staged_bytes, logical_path)?
-        } else {
-            MdxCompatibilityPlan::default()
-        };
-        if narrowed_skin_streams != 0 {
-            compatibility.warnings.push(format!(
-                "narrowed {narrowed_skin_streams} v1400+ wide SKIN stream(s) to Whiteout 0.1.7's byte representation; all values fit in u8"
-            ));
-        }
         let staging_path = self.output.join("models").join(format!(
             ".{asset_name}.parse-{}.{}",
             std::process::id(),
             extension
         ));
-        fs::write(&staging_path, staged_bytes)?;
-        if !compatibility.patches.is_empty() {
-            let mut staged = OpenOptions::new().write(true).open(&staging_path)?;
-            for (offset, replacement) in &compatibility.patches {
-                staged.seek(SeekFrom::Start(*offset))?;
-                staged.write_all(replacement)?;
-            }
-            staged.flush()?;
-        }
+        fs::write(&staging_path, model_bytes)?;
 
         let mut parser = MdxParser::new();
         let parsed = parser.parse_file(staging_path.to_string_lossy().as_ref());
-        let mut warnings = parser.issues();
-        warnings.extend(compatibility.warnings);
+        let warnings = parser.issues();
         fs::remove_file(&staging_path)?;
         let model = parsed
             .ok_or_else(|| io::Error::other(format!("failed to parse MDX {source_casc_path}")))?;
@@ -1781,309 +1757,15 @@ impl Exporter {
     }
 }
 
-fn rewrite_wide_skin_streams(
-    bytes: &[u8],
-    logical_path: &str,
-) -> Result<WideSkinRewrite, Box<dyn Error>> {
-    if bytes.len() < 12 || &bytes[..4] != b"MDLX" {
-        return Ok((None, 0));
-    }
-
-    let mut version = None;
-    let mut offset = 4usize;
-    while offset + 8 <= bytes.len() {
-        let size = read_u32_le(bytes, offset + 4)? as usize;
-        let payload_start = offset + 8;
-        let payload_end = payload_start.checked_add(size).ok_or_else(|| {
-            io::Error::other(format!("MDX {logical_path} chunk size overflows usize"))
-        })?;
-        if payload_end > bytes.len() {
-            return Err(io::Error::other(format!(
-                "MDX {logical_path} top-level chunk overruns the file while checking SKIN data"
-            ))
-            .into());
-        }
-        if &bytes[offset..offset + 4] == b"VERS" && size >= 4 {
-            version = Some(read_u32_le(bytes, payload_start)?);
-        }
-        offset = payload_end;
-    }
-    let Some(version) = version else {
-        return Ok((None, 0));
-    };
-    if version < 1400 {
-        return Ok((None, 0));
-    }
-
-    let mut output = Vec::with_capacity(bytes.len());
-    output.extend_from_slice(b"MDLX");
-    let mut rewritten_streams = 0usize;
-    offset = 4;
-    while offset < bytes.len() {
-        let tag = &bytes[offset..offset + 4];
-        let size = read_u32_le(bytes, offset + 4)? as usize;
-        let payload_start = offset + 8;
-        let payload_end = payload_start + size;
-        if tag != b"GEOS" {
-            output.extend_from_slice(&bytes[offset..payload_end]);
-            offset = payload_end;
-            continue;
-        }
-
-        let mut rewritten_geos = Vec::with_capacity(size);
-        let mut geoset_offset = payload_start;
-        while geoset_offset < payload_end {
-            let inclusive_size = read_u32_le(bytes, geoset_offset)? as usize;
-            if inclusive_size < 4 {
-                return Err(io::Error::other(format!(
-                    "MDX {logical_path} has invalid geoset size {inclusive_size} at byte {geoset_offset}"
-                ))
-                .into());
-            }
-            let geoset_end = geoset_offset.checked_add(inclusive_size).ok_or_else(|| {
-                io::Error::other(format!("MDX {logical_path} geoset size overflows usize"))
-            })?;
-            if geoset_end > payload_end {
-                return Err(io::Error::other(format!(
-                    "MDX {logical_path} geoset at byte {geoset_offset} overruns GEOS chunk"
-                ))
-                .into());
-            }
-            let geoset = &bytes[geoset_offset..geoset_end];
-            let mut candidates = Vec::new();
-            for relative in 4..geoset.len().saturating_sub(7) {
-                if &geoset[relative..relative + 4] != b"SKIN" {
-                    continue;
-                }
-                let count = read_u32_le(geoset, relative + 4)? as usize;
-                let Some(wide_bytes) = count.checked_mul(2) else {
-                    continue;
-                };
-                let Some(data_end) = relative
-                    .checked_add(8)
-                    .and_then(|start| start.checked_add(wide_bytes))
-                else {
-                    continue;
-                };
-                if data_end <= geoset.len() {
-                    candidates.push((relative, count, data_end));
-                }
-            }
-            if candidates.len() > 1 {
-                return Err(io::Error::other(format!(
-                    "MDX {logical_path} geoset at byte {geoset_offset} has multiple plausible wide SKIN streams; refusing ambiguous rewrite"
-                ))
-                .into());
-            }
-            let Some((skin_offset, count, skin_end)) = candidates.first().copied() else {
-                rewritten_geos.extend_from_slice(geoset);
-                geoset_offset = geoset_end;
-                continue;
-            };
-
-            let narrowed_size = inclusive_size.checked_sub(count).ok_or_else(|| {
-                io::Error::other(format!("MDX {logical_path} wide SKIN size underflow"))
-            })?;
-            let narrowed_size_u32 = u32::try_from(narrowed_size)
-                .map_err(|_| io::Error::other("rewritten MDX geoset exceeds u32 size"))?;
-            rewritten_geos.extend_from_slice(&narrowed_size_u32.to_le_bytes());
-            rewritten_geos.extend_from_slice(&geoset[4..skin_offset + 8]);
-            for pair in geoset[skin_offset + 8..skin_end].as_chunks::<2>().0 {
-                let value = u16::from_le_bytes(*pair);
-                let narrowed = u8::try_from(value).map_err(|_| {
-                    io::Error::other(format!(
-                        "MDX {logical_path} v{version} SKIN value {value} exceeds Whiteout 0.1.7's u8 representation"
-                    ))
-                })?;
-                rewritten_geos.push(narrowed);
-            }
-            rewritten_geos.extend_from_slice(&geoset[skin_end..]);
-            rewritten_streams += 1;
-            geoset_offset = geoset_end;
-        }
-
-        output.extend_from_slice(b"GEOS");
-        let geos_size = u32::try_from(rewritten_geos.len())
-            .map_err(|_| io::Error::other("rewritten GEOS chunk exceeds u32 size"))?;
-        output.extend_from_slice(&geos_size.to_le_bytes());
-        output.extend_from_slice(&rewritten_geos);
-        offset = payload_end;
-    }
-
-    if rewritten_streams == 0 {
-        Ok((None, 0))
-    } else {
-        Ok((Some(output), rewritten_streams))
-    }
-}
-
-fn mdx_compatibility_plan(
-    bytes: &[u8],
-    logical_path: &str,
-) -> Result<MdxCompatibilityPlan, Box<dyn Error>> {
-    if bytes.len() > MAX_MDX_INPUT_BYTES {
-        return Err(io::Error::other(format!(
-            "MDX {logical_path} is {} bytes; refusing to parse inputs above {} bytes",
-            bytes.len(),
-            MAX_MDX_INPUT_BYTES
-        ))
-        .into());
-    }
-    if bytes.len() < 12 || &bytes[..4] != b"MDLX" {
-        return Err(
-            io::Error::other(format!("MDX {logical_path} is missing the MDLX header")).into(),
-        );
-    }
-
-    #[derive(Clone, Copy)]
-    struct Chunk<'a> {
-        tag: &'a [u8],
-        tag_offset: usize,
-        payload_start: usize,
-        payload_end: usize,
-    }
-
-    let mut chunks = Vec::new();
-    let mut version = None;
-    let mut offset = 4usize;
-    while offset < bytes.len() {
-        if bytes.len() - offset < 8 {
-            return Err(io::Error::other(format!(
-                "MDX {logical_path} has a truncated top-level chunk header at byte {offset}"
-            ))
-            .into());
-        }
-        let size = read_u32_le(bytes, offset + 4)? as usize;
-        let payload_start = offset + 8;
-        let payload_end = payload_start.checked_add(size).ok_or_else(|| {
-            io::Error::other(format!("MDX {logical_path} chunk size overflows usize"))
-        })?;
-        if payload_end > bytes.len() {
-            return Err(io::Error::other(format!(
-                "MDX {logical_path} top-level chunk {:?} overruns the file: end {payload_end}, file {}",
-                String::from_utf8_lossy(&bytes[offset..offset + 4]),
-                bytes.len()
-            ))
-            .into());
-        }
-        let tag = &bytes[offset..offset + 4];
-        if tag == b"VERS" {
-            if size < 4 {
-                return Err(io::Error::other(format!(
-                    "MDX {logical_path} has a truncated VERS chunk"
-                ))
-                .into());
-            }
-            version = Some(read_u32_le(bytes, payload_start)?);
-        }
-        chunks.push(Chunk {
-            tag,
-            tag_offset: offset,
-            payload_start,
-            payload_end,
-        });
-        offset = payload_end;
-    }
-
-    let version =
-        version.ok_or_else(|| io::Error::other(format!("MDX {logical_path} has no VERS chunk")))?;
-    if version <= WHITEOUT_STABLE_MAX_MDX_VERSION {
-        return Ok(MdxCompatibilityPlan::default());
-    }
-    if !matches!(version, 1300 | 1400 | 1600 | WC3_3_MDX_VERSION) {
-        return Err(io::Error::other(format!(
-            "MDX {logical_path} uses unsupported version {version}; stable Whiteout supports through v{WHITEOUT_STABLE_MAX_MDX_VERSION} and this extractor only has bounded compatibility shims through v{WC3_3_MDX_VERSION}"
-        ))
-        .into());
-    }
-
-    let mut plan = MdxCompatibilityPlan::default();
-    for chunk in chunks {
-        if chunk.tag == b"LITE" && version >= 1300 {
-            // v1300+ lights gained fields that Whiteout 0.1.7 does not know about. Castle Fight
-            // does not currently consume model-embedded lights, so turn this into an unknown
-            // chunk and let Whiteout skip it by its trustworthy top-level byte size.
-            plan.patches.push((chunk.tag_offset as u64, *b"XLIT"));
-            plan.warnings.push(format!(
-                "omitted v{version} embedded light chunk; Whiteout 0.1.7 only understands the v1200 light layout"
-            ));
-        }
-
-        if chunk.tag == b"CAMS" && version >= WC3_3_MDX_VERSION {
-            let mut camera_offset = chunk.payload_start;
-            while camera_offset < chunk.payload_end {
-                if chunk.payload_end - camera_offset < 4 {
-                    return Err(io::Error::other(format!(
-                        "MDX {logical_path} has a truncated v{version} camera entry at byte {camera_offset}"
-                    ))
-                    .into());
-                }
-                let size_and_variant = read_u32_le(bytes, camera_offset)?;
-                let size = size_and_variant & 0x00ff_ffff;
-                let variant = size_and_variant >> 24;
-                if size < 120 {
-                    return Err(io::Error::other(format!(
-                        "MDX {logical_path} has invalid v{version} camera size {size} at byte {camera_offset}"
-                    ))
-                    .into());
-                }
-                if matches!(variant, 1 | 2) {
-                    return Err(io::Error::other(format!(
-                        "MDX {logical_path} uses unsupported v{version} camera variant {variant}; variants 1/2 contain extra fixed fields that Whiteout 0.1.7 cannot parse safely"
-                    ))
-                    .into());
-                }
-                if variant > 3 {
-                    return Err(io::Error::other(format!(
-                        "MDX {logical_path} has unknown v{version} camera variant {variant}"
-                    ))
-                    .into());
-                }
-                let camera_end = camera_offset.checked_add(size as usize).ok_or_else(|| {
-                    io::Error::other(format!(
-                        "MDX {logical_path} camera size overflows usize at byte {camera_offset}"
-                    ))
-                })?;
-                if camera_end > chunk.payload_end {
-                    return Err(io::Error::other(format!(
-                        "MDX {logical_path} camera at byte {camera_offset} overruns CAMS chunk: end {camera_end}, chunk end {}",
-                        chunk.payload_end
-                    ))
-                    .into());
-                }
-                if variant == 3 {
-                    plan.patches
-                        .push((camera_offset as u64, size.to_le_bytes()));
-                }
-                camera_offset = camera_end;
-            }
-            plan.warnings.push(format!(
-                "normalized Warcraft III v{version} camera variant size words for bounded Whiteout 0.1.7 parsing"
-            ));
-        }
-    }
-    Ok(plan)
-}
-
-fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32, Box<dyn Error>> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| io::Error::other("u32 offset overflow"))?;
-    let raw: [u8; 4] = bytes
-        .get(offset..end)
-        .ok_or_else(|| io::Error::other(format!("truncated u32 at byte {offset}")))?
-        .try_into()
-        .expect("slice length checked above");
-    Ok(u32::from_le_bytes(raw))
-}
-
 fn texture_has_transparency(texture: &Texture) -> bool {
     match texture.format() {
         PixelFormat::R8
         | PixelFormat::R16
+        | PixelFormat::R16F
         | PixelFormat::R32F
         | PixelFormat::RG8
         | PixelFormat::RG16
+        | PixelFormat::RG16F
         | PixelFormat::RG32F
         | PixelFormat::BC4
         | PixelFormat::BC5
@@ -2109,6 +1791,9 @@ fn texture_has_transparency(texture: &Texture) -> bool {
             .0
             .iter()
             .any(|pixel| f32::from_le_bytes([pixel[12], pixel[13], pixel[14], pixel[15]]) < 1.0),
+        PixelFormat::RGBA16F => texture
+            .copy_as_format(PixelFormat::RGBA32F, None)
+            .is_some_and(|rgba| texture_has_transparency(&rgba)),
         // Block-compressed formats with alpha need decoding to inspect actual coverage. Keep this
         // fallback narrow so the common decoded RGBA8 path never allocates a second full image.
         PixelFormat::BC1 | PixelFormat::BC2 | PixelFormat::BC3 | PixelFormat::BC7 => texture
@@ -2505,7 +2190,7 @@ fn geoset_animation_manifests(
             let color = animation.color();
             Ok(GeosetAnimationManifest {
                 geoset_id: animation.geoset_id(),
-                flags: format!("{:?}", animation.flags()),
+                flags: "unavailable:whiteoutlib-0.2.1-binding".to_owned(),
                 alpha: animation.alpha(),
                 color: [color.x, color.y, color.z],
                 alpha_track: scalar_track_manifest(&animation.alpha_tracks())?,
@@ -3272,7 +2957,7 @@ fn build_geoset_skin(
     if !skin.is_empty() {
         if skin.len() != vertex_count * 8 {
             return Err(io::Error::other(format!(
-                "HD geoset skin has {} bytes for {vertex_count} vertices; expected {}",
+                "HD geoset skin has {} values for {vertex_count} vertices; expected {}",
                 skin.len(),
                 vertex_count * 8
             ))
@@ -5214,100 +4899,6 @@ fn flat_asset_name(path: &str) -> String {
 mod tests {
     use super::*;
 
-    fn mdx_with_chunks(version: u32, chunks: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
-        let mut bytes = b"MDLX".to_vec();
-        bytes.extend_from_slice(b"VERS");
-        bytes.extend_from_slice(&4u32.to_le_bytes());
-        bytes.extend_from_slice(&version.to_le_bytes());
-        for (tag, payload) in chunks {
-            bytes.extend_from_slice(*tag);
-            bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-            bytes.extend_from_slice(payload);
-        }
-        bytes
-    }
-
-    #[test]
-    fn wc3_3_camera_variant_size_is_normalized_before_whiteout_parsing() {
-        let mut camera = vec![0u8; 120];
-        camera[..4].copy_from_slice(&(0x0300_0000u32 | 120).to_le_bytes());
-        let bytes = mdx_with_chunks(1800, &[(b"CAMS", camera)]);
-
-        let plan = mdx_compatibility_plan(&bytes, "camera.mdx").expect("compatibility plan");
-
-        assert_eq!(plan.patches, vec![(24, 120u32.to_le_bytes())]);
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|warning| warning.contains("camera variant size"))
-        );
-    }
-
-    #[test]
-    fn pre_wc3_3_mdx_needs_no_compatibility_patches() {
-        let bytes = mdx_with_chunks(1200, &[]);
-        let plan = mdx_compatibility_plan(&bytes, "classic.mdx").expect("compatibility plan");
-        assert!(plan.patches.is_empty());
-        assert!(plan.warnings.is_empty());
-    }
-
-    #[test]
-    fn wc3_3_wide_skin_is_losslessly_narrowed_for_stable_whiteout() {
-        let mut geoset = vec![0u8; 4];
-        geoset.extend_from_slice(b"ABCD");
-        geoset.extend_from_slice(b"SKIN");
-        geoset.extend_from_slice(&4u32.to_le_bytes());
-        for value in [1u16, 2, 232, 255] {
-            geoset.extend_from_slice(&value.to_le_bytes());
-        }
-        geoset.extend_from_slice(b"TAIL");
-        let geoset_size = geoset.len() as u32;
-        geoset[..4].copy_from_slice(&geoset_size.to_le_bytes());
-        let bytes = mdx_with_chunks(1800, &[(b"GEOS", geoset)]);
-
-        let (rewritten, streams) =
-            rewrite_wide_skin_streams(&bytes, "wide-skin.mdx").expect("rewrite");
-        let rewritten = rewritten.expect("wide stream should be rewritten");
-
-        assert_eq!(streams, 1);
-        let skin = rewritten
-            .windows(4)
-            .position(|window| window == b"SKIN")
-            .expect("SKIN tag");
-        assert_eq!(read_u32_le(&rewritten, skin + 4).expect("count"), 4);
-        assert_eq!(&rewritten[skin + 8..skin + 12], &[1, 2, 232, 255]);
-        assert_eq!(read_u32_le(&rewritten, 20).expect("GEOS size"), 24);
-        assert_eq!(read_u32_le(&rewritten, 24).expect("geoset size"), 24);
-    }
-
-    #[test]
-    fn wc3_3_wide_skin_rejects_values_that_do_not_fit_stable_whiteout() {
-        let mut geoset = vec![0u8; 4];
-        geoset.extend_from_slice(b"SKIN");
-        geoset.extend_from_slice(&1u32.to_le_bytes());
-        geoset.extend_from_slice(&256u16.to_le_bytes());
-        let geoset_size = geoset.len() as u32;
-        geoset[..4].copy_from_slice(&geoset_size.to_le_bytes());
-        let bytes = mdx_with_chunks(1800, &[(b"GEOS", geoset)]);
-
-        let error = rewrite_wide_skin_streams(&bytes, "wide-skin.mdx")
-            .expect_err("out-of-range skin value should fail")
-            .to_string();
-        assert!(error.contains("exceeds Whiteout 0.1.7's u8 representation"));
-    }
-
-    #[test]
-    fn wc3_3_lights_are_skipped_instead_of_parsed_with_old_layout() {
-        let bytes = mdx_with_chunks(1800, &[(b"LITE", vec![0u8; 16])]);
-        let plan = mdx_compatibility_plan(&bytes, "light.mdx").expect("compatibility plan");
-        assert_eq!(plan.patches, vec![(16, *b"XLIT")]);
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|warning| warning.contains("light"))
-        );
-    }
-
     #[test]
     fn casc_asset_paths_probe_base_then_presentation_layers() {
         assert_eq!(
@@ -6022,6 +5613,24 @@ mod tests {
         let selected = select_building_lifecycle_animations(&animations, &[]);
         assert_eq!(selected.birth.as_deref(), Some("Birth Alternate"));
         assert_eq!(selected.death.as_deref(), Some("Death"));
+    }
+
+    #[test]
+    fn wc3_3_hd_skin_preserves_joint_indices_above_255() {
+        let mut geoset = whiteout::mdx::Geoset::new();
+        geoset.set_vertex_positions(&[whiteout::math::Vector3f::default()]);
+        geoset.set_skin_data(&[300, 0, 0, 0, 255, 0, 0, 0]);
+
+        let skeleton = SkeletonBuild {
+            joint_nodes: vec![1; 301],
+            ..Default::default()
+        };
+
+        let skin = build_geoset_skin(&geoset, &skeleton)
+            .unwrap()
+            .expect("v1400+ HD geoset should preserve 16-bit joint indices");
+        assert_eq!(skin.joints_0[0], [300, 0, 0, 0]);
+        assert_eq!(skin.weights_0[0], [1.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]
