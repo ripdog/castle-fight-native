@@ -160,6 +160,31 @@ pub struct Wc3ScalarTrack {
     out_tangents: Vec<f32>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Wc3Vector3Track {
+    interpolation: Wc3ScalarInterpolation,
+    global_sequence_id: Option<u32>,
+    timestamps: Vec<u32>,
+    values: Vec<[f32; 3]>,
+    #[serde(default)]
+    in_tangents: Vec<[f32; 3]>,
+    #[serde(default)]
+    out_tangents: Vec<[f32; 3]>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Wc3UnsignedTrack {
+    #[serde(default = "default_dont_interp")]
+    interpolation: Wc3ScalarInterpolation,
+    global_sequence_id: Option<u32>,
+    timestamps: Vec<u32>,
+    values: Vec<u32>,
+}
+
+const fn default_dont_interp() -> Wc3ScalarInterpolation {
+    Wc3ScalarInterpolation::DontInterp
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Wc3EmitterSequenceWindow {
     name: String,
@@ -246,9 +271,27 @@ pub struct Wc3RibbonEmitter {
     pub emission_rate: u32,
     pub rows: u32,
     pub columns: u32,
+    #[serde(default)]
+    pub texture_slot: u32,
     pub filter_mode: String,
     pub texture: Option<String>,
     pub gravity: f32,
+    #[serde(default)]
+    pub height_above_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub height_below_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub alpha_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub color_track: Option<Wc3Vector3Track>,
+    #[serde(default)]
+    pub texture_slot_track: Option<Wc3UnsignedTrack>,
+    #[serde(default)]
+    pub visibility_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    pub sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(default)]
+    pub global_sequence_durations_ms: Vec<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -336,6 +379,8 @@ pub struct Wc3RibbonSource {
     ribbons: Vec<RibbonRuntime>,
     asset_prefix: &'static str,
     node_binding_complete: bool,
+    sequence_clock: Option<Wc3EmitterSequenceClock>,
+    global_elapsed_ms: f32,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -773,6 +818,34 @@ impl Wc3RibbonSource {
 
     #[must_use]
     pub fn with_asset_prefix(ribbons: &[Wc3RibbonEmitter], asset_prefix: &'static str) -> Self {
+        Self::with_asset_prefix_and_sequence(ribbons, asset_prefix, None)
+    }
+
+    #[must_use]
+    pub fn with_asset_prefix_for_sequence(
+        ribbons: &[Wc3RibbonEmitter],
+        asset_prefix: &'static str,
+        sequence: &str,
+    ) -> Self {
+        Self::with_asset_prefix_and_sequence(ribbons, asset_prefix, Some(sequence))
+    }
+
+    fn with_asset_prefix_and_sequence(
+        ribbons: &[Wc3RibbonEmitter],
+        asset_prefix: &'static str,
+        sequence: Option<&str>,
+    ) -> Self {
+        let sequence_window = sequence
+            .and_then(|sequence| find_ribbon_sequence_window(ribbons, sequence))
+            .or_else(|| find_ribbon_sequence_window(ribbons, "Stand"))
+            .or_else(|| find_ribbon_sequence_window(ribbons, "Birth"))
+            .or_else(|| {
+                ribbons
+                    .iter()
+                    .flat_map(|ribbon| ribbon.sequence_windows.iter())
+                    .next()
+                    .cloned()
+            });
         let ribbons = ribbons
             .iter()
             .cloned()
@@ -786,8 +859,26 @@ impl Wc3RibbonSource {
             ribbons,
             asset_prefix,
             node_binding_complete,
+            sequence_clock: sequence_window.map(|window| Wc3EmitterSequenceClock {
+                start_ms: window.start_ms,
+                end_ms: window.end_ms,
+                non_looping: window.non_looping,
+                elapsed_ms: 0.0,
+            }),
+            global_elapsed_ms: 0.0,
         }
     }
+}
+
+fn find_ribbon_sequence_window(
+    ribbons: &[Wc3RibbonEmitter],
+    sequence: &str,
+) -> Option<Wc3EmitterSequenceWindow> {
+    ribbons
+        .iter()
+        .flat_map(|ribbon| ribbon.sequence_windows.iter())
+        .find(|window| window.name.eq_ignore_ascii_case(sequence))
+        .cloned()
 }
 
 #[derive(Debug, Deserialize)]
@@ -876,10 +967,7 @@ impl Wc3ParticleAssets {
         materials: &mut Assets<StandardMaterial>,
     ) -> Handle<StandardMaterial> {
         let texture_key = ribbon.texture.as_deref().unwrap_or("<none>");
-        let key = format!(
-            "ribbon|{asset_prefix}|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{:.3}",
-            ribbon.filter_mode, ribbon.color[0], ribbon.color[1], ribbon.color[2], ribbon.alpha
-        );
+        let key = format!("ribbon|{asset_prefix}|{texture_key}|{}", ribbon.filter_mode);
         if let Some(handle) = self.materials.get(&key) {
             return handle.clone();
         }
@@ -888,12 +976,7 @@ impl Wc3ParticleAssets {
             .as_ref()
             .map(|texture| asset_server.load(format!("{asset_prefix}/{texture}")));
         let handle = materials.add(StandardMaterial {
-            base_color: Color::srgba(
-                ribbon.color[0],
-                ribbon.color[1],
-                ribbon.color[2],
-                ribbon.alpha.clamp(0.0, 1.0),
-            ),
+            base_color: Color::WHITE,
             base_color_texture,
             alpha_mode: wc3_material_alpha_mode(&ribbon.filter_mode, AlphaMode::Blend),
             unlit: true,
@@ -1440,15 +1523,22 @@ pub fn spawn_wc3_ribbon_trails(
     sources: Query<(Entity, &Wc3RibbonSource), Added<Wc3RibbonSource>>,
 ) {
     for (source, source_ribbons) in &sources {
+        let sequence_time_ms = source_ribbons
+            .sequence_clock
+            .as_ref()
+            .map(Wc3EmitterSequenceClock::current_time_ms)
+            .unwrap_or(source_ribbons.global_elapsed_ms);
         for (ribbon_index, ribbon) in source_ribbons.ribbons.iter().enumerate() {
             let spec = &ribbon.spec;
+            let sample =
+                sample_ribbon_parameters(spec, sequence_time_ms, source_ribbons.global_elapsed_ms);
             if spec.emission_rate == 0
                 || spec.lifespan <= 0.0
                 || (spec.height_above <= 0.0 && spec.height_below <= 0.0)
             {
                 continue;
             }
-            let mesh = meshes.add(build_wc3_ribbon_mesh(spec, &VecDeque::new(), 1.0));
+            let mesh = meshes.add(build_wc3_ribbon_mesh(spec, sample, &VecDeque::new(), 1.0));
             let material = ribbon_assets.ribbon_material(
                 spec,
                 source_ribbons.asset_prefix,
@@ -1479,12 +1569,25 @@ pub fn spawn_wc3_ribbon_trails(
 pub fn update_wc3_ribbon_trails(
     mut commands: Commands,
     time: Res<Time>,
-    sources: Query<(&GlobalTransform, &Wc3RibbonSource)>,
+    mut sources: Query<(Entity, &GlobalTransform, &mut Wc3RibbonSource)>,
     transforms: Query<&GlobalTransform>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut trails: Query<(Entity, &mut Wc3RibbonTrail)>,
 ) {
     let dt = time.delta_secs().min(0.1);
+    let mut source_times = HashMap::new();
+    for (entity, _, mut source) in &mut sources {
+        let sequence_time_ms = source
+            .sequence_clock
+            .as_ref()
+            .map(Wc3EmitterSequenceClock::current_time_ms)
+            .unwrap_or(source.global_elapsed_ms);
+        source_times.insert(entity, (sequence_time_ms, source.global_elapsed_ms));
+        if let Some(clock) = source.sequence_clock.as_mut() {
+            clock.advance(dt);
+        }
+        source.global_elapsed_ms += dt * 1000.0;
+    }
     for (entity, mut trail) in &mut trails {
         for point in &mut trail.points {
             point.age += dt;
@@ -1497,8 +1600,15 @@ pub fn update_wc3_ribbon_trails(
             trail.points.pop_front();
         }
 
-        let source_transform = sources.get(trail.source).ok();
-        if let Some((root_transform, source)) = source_transform
+        let source_transform = sources.get_mut(trail.source).ok();
+        let source_missing = source_transform.is_none();
+        let sample = source_times
+            .get(&trail.source)
+            .map(|(sequence_time_ms, global_elapsed_ms)| {
+                sample_ribbon_parameters(&trail.spec, *sequence_time_ms, *global_elapsed_ms)
+            })
+            .unwrap_or_else(|| sample_ribbon_parameters(&trail.spec, 0.0, 0.0));
+        if let Some((_, root_transform, source)) = source_transform
             && let Some(ribbon) = source.ribbons.get(trail.ribbon_index)
         {
             let bound_transform = ribbon
@@ -1513,29 +1623,33 @@ pub fn update_wc3_ribbon_trails(
                 root_transform.transform_point(Vec3::from_array(trail.spec.position))
             };
             let up = (rotation * Vec3::Y).normalize_or(Vec3::Y);
-            if trail.previous_origin.is_none() {
-                trail.points.push_back(RibbonPoint {
-                    center: origin,
-                    up,
-                    age: 0.0,
-                });
-            }
-
-            trail.emission_accumulator += trail.spec.emission_rate.min(240) as f32 * dt;
-            let due = trail.emission_accumulator.floor() as u32;
-            trail.emission_accumulator -= due as f32;
-            let count = due.min(MAX_RIBBON_SAMPLES_PER_FRAME);
-            if count > 0 {
-                let previous_origin = trail.previous_origin.unwrap_or(origin);
-                let previous_up = trail.previous_up.unwrap_or(up);
-                for sample_index in 1..=count {
-                    let t = sample_index as f32 / count as f32;
+            if sample.visibility > 0.001 {
+                if trail.previous_origin.is_none() {
                     trail.points.push_back(RibbonPoint {
-                        center: previous_origin.lerp(origin, t),
-                        up: previous_up.lerp(up, t).normalize_or(up),
+                        center: origin,
+                        up,
                         age: 0.0,
                     });
                 }
+
+                trail.emission_accumulator += trail.spec.emission_rate.min(240) as f32 * dt;
+                let due = trail.emission_accumulator.floor() as u32;
+                trail.emission_accumulator -= due as f32;
+                let count = due.min(MAX_RIBBON_SAMPLES_PER_FRAME);
+                if count > 0 {
+                    let previous_origin = trail.previous_origin.unwrap_or(origin);
+                    let previous_up = trail.previous_up.unwrap_or(up);
+                    for sample_index in 1..=count {
+                        let t = sample_index as f32 / count as f32;
+                        trail.points.push_back(RibbonPoint {
+                            center: previous_origin.lerp(origin, t),
+                            up: previous_up.lerp(up, t).normalize_or(up),
+                            age: 0.0,
+                        });
+                    }
+                }
+            } else {
+                trail.emission_accumulator = 0.0;
             }
             trail.previous_origin = Some(origin);
             trail.previous_up = Some(up);
@@ -1545,10 +1659,10 @@ pub fn update_wc3_ribbon_trails(
             trail.points.pop_front();
         }
         if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
-            *mesh = build_wc3_ribbon_mesh(&trail.spec, &trail.points, trail.source_scale);
+            *mesh = build_wc3_ribbon_mesh(&trail.spec, sample, &trail.points, trail.source_scale);
         }
 
-        if source_transform.is_none() && trail.points.is_empty() {
+        if source_missing && trail.points.is_empty() {
             meshes.remove(trail.mesh.id());
             commands.entity(entity).despawn();
         }
@@ -1557,6 +1671,7 @@ pub fn update_wc3_ribbon_trails(
 
 fn build_wc3_ribbon_mesh(
     spec: &Wc3RibbonEmitter,
+    sample: Wc3RibbonSample,
     points: &VecDeque<RibbonPoint>,
     source_scale: f32,
 ) -> Mesh {
@@ -1566,26 +1681,37 @@ fn build_wc3_ribbon_mesh(
     let mut colors = Vec::with_capacity(points.len() * 2);
     let mut indices = Vec::with_capacity(points.len().saturating_sub(1) * 6);
     let last = points.len().saturating_sub(1).max(1) as f32;
-    let atlas_u = 1.0 / spec.columns.max(1) as f32;
-    let atlas_v = 1.0 / spec.rows.max(1) as f32;
+    let columns = spec.columns.max(1);
+    let rows = spec.rows.max(1);
+    let frame_count = columns.saturating_mul(rows).max(1);
+    let texture_slot = sample.texture_slot.min(frame_count - 1);
+    let column = texture_slot % columns;
+    let row = texture_slot / columns;
+    let atlas_u = 1.0 / columns as f32;
+    let atlas_v = 1.0 / rows as f32;
+    let u0 = column as f32 * atlas_u;
+    let u1 = (column + 1) as f32 * atlas_u;
+    let v0 = row as f32 * atlas_v;
+    let v1 = (row + 1) as f32 * atlas_v;
 
     for (index, point) in points.iter().enumerate() {
         let gravity_offset =
             Vec3::NEG_Y * (0.5 * spec.gravity * source_scale * point.age * point.age);
         let center = point.center + gravity_offset;
         let up = point.up.normalize_or(Vec3::Y);
-        let top = center + up * spec.height_above.max(0.0) * source_scale;
-        let bottom = center - up * spec.height_below.max(0.0) * source_scale;
+        let top = center + up * sample.height_above.max(0.0) * source_scale;
+        let bottom = center - up * sample.height_below.max(0.0) * source_scale;
         positions.push(top.to_array());
         positions.push(bottom.to_array());
         normals.push(Vec3::Z.to_array());
         normals.push(Vec3::Z.to_array());
-        let v = index as f32 / last * atlas_v;
-        uvs.push([0.0, v]);
-        uvs.push([atlas_u, v]);
+        let v = v0 + index as f32 / last * (v1 - v0);
+        uvs.push([u0, v]);
+        uvs.push([u1, v]);
         let fade = (1.0 - point.age / spec.lifespan.max(0.01)).clamp(0.0, 1.0);
-        colors.push([1.0, 1.0, 1.0, fade]);
-        colors.push([1.0, 1.0, 1.0, fade]);
+        let alpha = sample.alpha * fade;
+        colors.push([sample.color[0], sample.color[1], sample.color[2], alpha]);
+        colors.push([sample.color[0], sample.color[1], sample.color[2], alpha]);
     }
     for segment in 0..points.len().saturating_sub(1) {
         let top = u32::try_from(segment * 2).expect("ribbon vertex count is bounded");
@@ -1907,6 +2033,215 @@ fn sample_scalar_track(
                 + 3.0 * one_minus_t * t * t * in1
                 + t.powi(3) * p1
         }
+    }
+}
+
+fn sample_vector3_track(
+    track: Option<&Wc3Vector3Track>,
+    default: [f32; 3],
+    sequence_time_ms: f32,
+    global_elapsed_ms: f32,
+    global_sequence_durations_ms: &[u32],
+) -> [f32; 3] {
+    let Some(track) = track else {
+        return default;
+    };
+    if track.timestamps.is_empty() || track.values.is_empty() {
+        return default;
+    }
+    let count = track.timestamps.len().min(track.values.len());
+    if count == 0 {
+        return default;
+    }
+    let time_ms = track
+        .global_sequence_id
+        .and_then(|id| global_sequence_durations_ms.get(id as usize).copied())
+        .filter(|duration| *duration != 0)
+        .map_or(sequence_time_ms, |duration| {
+            global_elapsed_ms.rem_euclid(duration as f32)
+        });
+
+    if time_ms <= track.timestamps[0] as f32 {
+        return track.values[0];
+    }
+    if time_ms >= track.timestamps[count - 1] as f32 {
+        return track.values[count - 1];
+    }
+    let upper = track.timestamps[..count].partition_point(|timestamp| *timestamp as f32 <= time_ms);
+    if upper == 0 {
+        return track.values[0];
+    }
+    if upper >= count {
+        return track.values[count - 1];
+    }
+    let lower = upper - 1;
+    if track.interpolation == Wc3ScalarInterpolation::DontInterp {
+        return track.values[lower];
+    }
+
+    let start_ms = track.timestamps[lower] as f32;
+    let end_ms = track.timestamps[upper] as f32;
+    let span = (end_ms - start_ms).max(f32::EPSILON);
+    let t = ((time_ms - start_ms) / span).clamp(0.0, 1.0);
+    let p0 = track.values[lower];
+    let p1 = track.values[upper];
+    match track.interpolation {
+        Wc3ScalarInterpolation::DontInterp => p0,
+        Wc3ScalarInterpolation::Linear => {
+            std::array::from_fn(|channel| p0[channel] + (p1[channel] - p0[channel]) * t)
+        }
+        Wc3ScalarInterpolation::Hermite => {
+            let Some(out0) = track.out_tangents.get(lower).copied() else {
+                return std::array::from_fn(|channel| {
+                    p0[channel] + (p1[channel] - p0[channel]) * t
+                });
+            };
+            let Some(in1) = track.in_tangents.get(upper).copied() else {
+                return std::array::from_fn(|channel| {
+                    p0[channel] + (p1[channel] - p0[channel]) * t
+                });
+            };
+            let t2 = t * t;
+            let t3 = t2 * t;
+            std::array::from_fn(|channel| {
+                (2.0 * t3 - 3.0 * t2 + 1.0) * p0[channel]
+                    + (t3 - 2.0 * t2 + t) * out0[channel]
+                    + (-2.0 * t3 + 3.0 * t2) * p1[channel]
+                    + (t3 - t2) * in1[channel]
+            })
+        }
+        Wc3ScalarInterpolation::Bezier => {
+            let Some(out0) = track.out_tangents.get(lower).copied() else {
+                return std::array::from_fn(|channel| {
+                    p0[channel] + (p1[channel] - p0[channel]) * t
+                });
+            };
+            let Some(in1) = track.in_tangents.get(upper).copied() else {
+                return std::array::from_fn(|channel| {
+                    p0[channel] + (p1[channel] - p0[channel]) * t
+                });
+            };
+            let one_minus_t = 1.0 - t;
+            std::array::from_fn(|channel| {
+                one_minus_t.powi(3) * p0[channel]
+                    + 3.0 * one_minus_t.powi(2) * t * out0[channel]
+                    + 3.0 * one_minus_t * t * t * in1[channel]
+                    + t.powi(3) * p1[channel]
+            })
+        }
+    }
+}
+
+fn sample_unsigned_track(
+    track: Option<&Wc3UnsignedTrack>,
+    default: u32,
+    sequence_time_ms: f32,
+    global_elapsed_ms: f32,
+    global_sequence_durations_ms: &[u32],
+) -> u32 {
+    let Some(track) = track else {
+        return default;
+    };
+    if track.timestamps.is_empty() || track.values.is_empty() {
+        return default;
+    }
+    let count = track.timestamps.len().min(track.values.len());
+    if count == 0 {
+        return default;
+    }
+    let time_ms = track
+        .global_sequence_id
+        .and_then(|id| global_sequence_durations_ms.get(id as usize).copied())
+        .filter(|duration| *duration != 0)
+        .map_or(sequence_time_ms, |duration| {
+            global_elapsed_ms.rem_euclid(duration as f32)
+        });
+    if time_ms <= track.timestamps[0] as f32 {
+        return track.values[0];
+    }
+    if time_ms >= track.timestamps[count - 1] as f32 {
+        return track.values[count - 1];
+    }
+    let upper = track.timestamps[..count].partition_point(|timestamp| *timestamp as f32 <= time_ms);
+    if upper == 0 {
+        return track.values[0];
+    }
+    if upper >= count {
+        return track.values[count - 1];
+    }
+    let lower = upper - 1;
+    if track.interpolation == Wc3ScalarInterpolation::DontInterp {
+        return track.values[lower];
+    }
+    let start_ms = track.timestamps[lower] as f32;
+    let end_ms = track.timestamps[upper] as f32;
+    let span = (end_ms - start_ms).max(f32::EPSILON);
+    let t = ((time_ms - start_ms) / span).clamp(0.0, 1.0);
+    let start = track.values[lower] as f32;
+    let end = track.values[upper] as f32;
+    (start + (end - start) * t).round().max(0.0) as u32
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Wc3RibbonSample {
+    height_above: f32,
+    height_below: f32,
+    alpha: f32,
+    color: [f32; 3],
+    texture_slot: u32,
+    visibility: f32,
+}
+
+fn sample_ribbon_parameters(
+    ribbon: &Wc3RibbonEmitter,
+    sequence_time_ms: f32,
+    global_elapsed_ms: f32,
+) -> Wc3RibbonSample {
+    let durations = &ribbon.global_sequence_durations_ms;
+    Wc3RibbonSample {
+        height_above: sample_scalar_track(
+            ribbon.height_above_track.as_ref(),
+            ribbon.height_above,
+            sequence_time_ms,
+            global_elapsed_ms,
+            durations,
+        ),
+        height_below: sample_scalar_track(
+            ribbon.height_below_track.as_ref(),
+            ribbon.height_below,
+            sequence_time_ms,
+            global_elapsed_ms,
+            durations,
+        ),
+        alpha: sample_scalar_track(
+            ribbon.alpha_track.as_ref(),
+            ribbon.alpha,
+            sequence_time_ms,
+            global_elapsed_ms,
+            durations,
+        )
+        .clamp(0.0, 1.0),
+        color: sample_vector3_track(
+            ribbon.color_track.as_ref(),
+            ribbon.color,
+            sequence_time_ms,
+            global_elapsed_ms,
+            durations,
+        ),
+        texture_slot: sample_unsigned_track(
+            ribbon.texture_slot_track.as_ref(),
+            ribbon.texture_slot,
+            sequence_time_ms,
+            global_elapsed_ms,
+            durations,
+        ),
+        visibility: sample_scalar_track(
+            ribbon.visibility_track.as_ref(),
+            1.0,
+            sequence_time_ms,
+            global_elapsed_ms,
+            durations,
+        ),
     }
 }
 
@@ -2309,9 +2644,23 @@ mod tests {
             emission_rate: 1,
             rows: 1,
             columns: 1,
+            texture_slot: 0,
             filter_mode: "Blend".to_owned(),
             texture: None,
             gravity: 0.0,
+            height_above_track: None,
+            height_below_track: None,
+            alpha_track: None,
+            color_track: None,
+            texture_slot_track: None,
+            visibility_track: None,
+            sequence_windows: vec![Wc3EmitterSequenceWindow {
+                name: "Stand".to_owned(),
+                start_ms: 100,
+                end_ms: 1100,
+                non_looping: false,
+            }],
+            global_sequence_durations_ms: vec![500],
         }
     }
 
@@ -2568,6 +2917,84 @@ mod tests {
     }
 
     #[test]
+    fn ribbon_tracks_sample_sequence_and_global_sequence_time() {
+        let mut ribbon = test_ribbon_emitter(23);
+        ribbon.height_above_track = Some(Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::Linear,
+            global_sequence_id: None,
+            timestamps: vec![100, 1100],
+            values: vec![1.0, 3.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        });
+        ribbon.alpha_track = Some(Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::Linear,
+            global_sequence_id: Some(0),
+            timestamps: vec![0, 500],
+            values: vec![1.0, 0.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        });
+        ribbon.color_track = Some(Wc3Vector3Track {
+            interpolation: Wc3ScalarInterpolation::Linear,
+            global_sequence_id: None,
+            timestamps: vec![100, 1100],
+            values: vec![[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        });
+        ribbon.texture_slot_track = Some(Wc3UnsignedTrack {
+            interpolation: Wc3ScalarInterpolation::DontInterp,
+            global_sequence_id: None,
+            timestamps: vec![100, 600],
+            values: vec![0, 3],
+        });
+        ribbon.visibility_track = Some(Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::DontInterp,
+            global_sequence_id: None,
+            timestamps: vec![100, 800],
+            values: vec![1.0, 0.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        });
+
+        let sample = sample_ribbon_parameters(&ribbon, 600.0, 250.0);
+        assert_eq!(sample.height_above, 2.0);
+        assert!((sample.alpha - 0.5).abs() < 1.0e-6);
+        assert_eq!(sample.color, [0.5, 0.0, 0.5]);
+        assert_eq!(sample.texture_slot, 3);
+        assert_eq!(sample.visibility, 1.0);
+
+        let hidden = sample_ribbon_parameters(&ribbon, 900.0, 250.0);
+        assert_eq!(hidden.visibility, 0.0);
+    }
+
+    #[test]
+    fn ribbon_sequence_clock_uses_selected_animation_window() {
+        let mut ribbon = test_ribbon_emitter(23);
+        ribbon.sequence_windows = vec![
+            Wc3EmitterSequenceWindow {
+                name: "Birth".to_owned(),
+                start_ms: 0,
+                end_ms: 400,
+                non_looping: true,
+            },
+            Wc3EmitterSequenceWindow {
+                name: "Stand".to_owned(),
+                start_ms: 400,
+                end_ms: 1400,
+                non_looping: false,
+            },
+        ];
+        let source =
+            Wc3RibbonSource::with_asset_prefix_for_sequence(&[ribbon], "wc3/units", "Stand");
+        let clock = source.sequence_clock.expect("Stand clock");
+        assert_eq!(clock.start_ms, 400);
+        assert_eq!(clock.end_ms, 1400);
+        assert!(!clock.non_looping);
+    }
+
+    #[test]
     fn emitter_sequence_clock_loops_or_clamps_from_authored_flags() {
         let mut looping = Wc3EmitterSequenceClock {
             start_ms: 1000,
@@ -2684,11 +3111,20 @@ mod tests {
             color: [0.4, 0.5, 0.6],
             lifespan: 1.0,
             emission_rate: 12,
-            rows: 1,
-            columns: 1,
+            rows: 2,
+            columns: 2,
+            texture_slot: 3,
             filter_mode: "AddAlpha".to_owned(),
             texture: Some("textures/ribbon.png".to_owned()),
             gravity: 0.0,
+            height_above_track: None,
+            height_below_track: None,
+            alpha_track: None,
+            color_track: None,
+            texture_slot_track: None,
+            visibility_track: None,
+            sequence_windows: Vec::new(),
+            global_sequence_durations_ms: Vec::new(),
         };
         let points = VecDeque::from([
             RibbonPoint {
@@ -2702,7 +3138,8 @@ mod tests {
                 age: 0.0,
             },
         ]);
-        let mesh = build_wc3_ribbon_mesh(&spec, &points, 1.0);
+        let sample = sample_ribbon_parameters(&spec, 0.0, 0.0);
+        let mesh = build_wc3_ribbon_mesh(&spec, sample, &points, 1.0);
         let positions = mesh
             .attribute(Mesh::ATTRIBUTE_POSITION)
             .expect("ribbon positions")
@@ -2711,7 +3148,20 @@ mod tests {
         assert_eq!(positions.len(), 4);
         assert_eq!(positions[0], [0.0, 2.0, 0.0]);
         assert_eq!(positions[1], [0.0, -3.0, 0.0]);
-        assert!(mesh.attribute(Mesh::ATTRIBUTE_COLOR).is_some());
+        let bevy::mesh::VertexAttributeValues::Float32x2(uvs) =
+            mesh.attribute(Mesh::ATTRIBUTE_UV_0).expect("ribbon uvs")
+        else {
+            panic!("ribbon uvs must be float2");
+        };
+        assert_eq!(uvs, &[[0.5, 0.5], [1.0, 0.5], [0.5, 1.0], [1.0, 1.0]]);
+        let bevy::mesh::VertexAttributeValues::Float32x4(colors) = mesh
+            .attribute(Mesh::ATTRIBUTE_COLOR)
+            .expect("ribbon colors")
+        else {
+            panic!("ribbon colors must be float4");
+        };
+        assert_eq!(colors[0], [0.4, 0.5, 0.6, 0.1]);
+        assert_eq!(colors[2], [0.4, 0.5, 0.6, 0.4]);
     }
 
     #[test]

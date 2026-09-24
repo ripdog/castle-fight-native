@@ -1643,7 +1643,10 @@ fn set_building_emitter_sequence(
         return;
     };
     let Some(sequence) = sequence else {
-        commands.entity(model_root).remove::<Wc3EmitterSource>();
+        commands
+            .entity(model_root)
+            .remove::<Wc3EmitterSource>()
+            .remove::<Wc3RibbonSource>();
         return;
     };
     commands
@@ -1653,6 +1656,15 @@ fn set_building_emitter_sequence(
             "wc3/buildings",
             sequence,
         ));
+    if !model.ribbons.is_empty() {
+        commands
+            .entity(model_root)
+            .insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
+                &model.ribbons,
+                "wc3/buildings",
+                sequence,
+            ));
+    }
 }
 
 fn update_imported_building_animations(
@@ -1831,7 +1843,10 @@ fn set_unit_emitter_sequence(
         return;
     };
     let Some(sequence) = sequence else {
-        commands.entity(model_root).remove::<Wc3EmitterSource>();
+        commands
+            .entity(model_root)
+            .remove::<Wc3EmitterSource>()
+            .remove::<Wc3RibbonSource>();
         return;
     };
     commands
@@ -1841,6 +1856,15 @@ fn set_unit_emitter_sequence(
             "wc3/units",
             sequence,
         ));
+    if !model.ribbon_emitters.is_empty() {
+        commands
+            .entity(model_root)
+            .insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
+                &model.ribbon_emitters,
+                "wc3/units",
+                sequence,
+            ));
+    }
 }
 
 fn sync_unit_emitter_sequence(

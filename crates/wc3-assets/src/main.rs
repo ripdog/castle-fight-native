@@ -749,8 +749,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "ribbon.animated_tracks_unsupported",
-            FidelityStatus::Unsupported,
+            "ribbon.animated_tracks_approximate",
+            FidelityStatus::Approximation,
             features.ribbon_emitter_animated_track_count,
         );
         record_fidelity_finding(

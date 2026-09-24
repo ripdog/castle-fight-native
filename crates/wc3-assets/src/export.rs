@@ -408,9 +408,12 @@ pub struct RibbonEmitterManifest {
     pub rows: u32,
     pub columns: u32,
     pub material_id: u32,
+    pub texture_slot: u32,
     pub filter_mode: String,
     pub texture: Option<String>,
     pub gravity: f32,
+    pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
+    pub global_sequence_durations_ms: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height_above_track: Option<ScalarTrackManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2453,6 +2456,17 @@ fn ribbon_emitter_manifests(
     model: &Model,
     texture_manifests: &[TextureManifest],
 ) -> Result<Vec<RibbonEmitterManifest>, Box<dyn Error>> {
+    let sequence_windows = model
+        .sequences_iter()
+        .map(|sequence| ParticleEmitterSequenceManifest {
+            name: sequence.name(),
+            start_ms: sequence.interval_start(),
+            end_ms: sequence.interval_end(),
+            non_looping: sequence.flags() == SequenceFlag::NonLooping,
+        })
+        .collect::<Vec<_>>();
+    let global_sequence_durations_ms = model.global_sequences().to_vec();
+
     model
         .ribbon_emitters_iter()
         .map(|emitter| {
@@ -2473,9 +2487,12 @@ fn ribbon_emitter_manifests(
                 rows: emitter.rows(),
                 columns: emitter.columns(),
                 material_id: emitter.material_id(),
+                texture_slot: emitter.texture_slot(),
                 filter_mode,
                 texture,
                 gravity: emitter.gravity(),
+                sequence_windows: sequence_windows.clone(),
+                global_sequence_durations_ms: global_sequence_durations_ms.clone(),
                 height_above_track: scalar_track_manifest(&emitter.height_above_tracks())?,
                 height_below_track: scalar_track_manifest(&emitter.height_below_tracks())?,
                 alpha_track: scalar_track_manifest(&emitter.alpha_tracks())?,
@@ -5400,10 +5417,20 @@ mod tests {
     #[test]
     fn ribbon_manifest_preserves_scalar_color_and_texture_tracks() {
         let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Stand");
+            sequence.set_interval_start(100);
+            sequence.set_interval_end(1100);
+            sequence.set_flags(SequenceFlag::None);
+        }
+        model.set_global_sequences(&[750]);
         model.resize_ribbon_emitters(1);
         {
             let mut emitter = model.ribbon_emitters_mut(0).expect("ribbon emitter");
             emitter.set_material_id(0);
+            emitter.set_texture_slot(3);
             {
                 let mut alpha = emitter.alpha_tracks_mut();
                 alpha.set_is_used(true);
@@ -5451,6 +5478,13 @@ mod tests {
         let ribbons = ribbon_emitter_manifests(&model, &[]).expect("ribbons should serialize");
         assert_eq!(ribbons.len(), 1);
         let ribbon = &ribbons[0];
+        assert_eq!(ribbon.texture_slot, 3);
+        assert_eq!(ribbon.sequence_windows.len(), 1);
+        assert_eq!(ribbon.sequence_windows[0].name, "Stand");
+        assert_eq!(ribbon.sequence_windows[0].start_ms, 100);
+        assert_eq!(ribbon.sequence_windows[0].end_ms, 1100);
+        assert!(!ribbon.sequence_windows[0].non_looping);
+        assert_eq!(ribbon.global_sequence_durations_ms, [750]);
         assert_eq!(
             ribbon.alpha_track.as_ref().expect("alpha").values,
             [1.0, 0.0]
