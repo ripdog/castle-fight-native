@@ -1027,6 +1027,7 @@ mod tests {
                 particle_emitters: Vec::new(),
                 model_particle_emitters: Vec::new(),
                 ribbon_emitters: Vec::new(),
+                attachments: Vec::new(),
                 event_objects: Vec::new(),
                 warnings: warnings.into_iter().map(str::to_owned).collect(),
             };

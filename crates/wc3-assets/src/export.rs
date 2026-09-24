@@ -174,6 +174,7 @@ pub struct ModelManifest {
     pub particle_emitters: Vec<ParticleEmitter2Manifest>,
     pub model_particle_emitters: Vec<ModelParticleEmitterManifest>,
     pub ribbon_emitters: Vec<RibbonEmitterManifest>,
+    pub attachments: Vec<AttachmentManifest>,
     pub event_objects: Vec<EventObjectManifest>,
     pub warnings: Vec<String>,
 }
@@ -285,6 +286,16 @@ pub struct ModelParticleEmitterManifest {
     pub lifespan: f32,
     pub initial_velocity: f32,
     pub spawn_model: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AttachmentManifest {
+    pub object_id: u32,
+    pub name: String,
+    pub position: [f32; 3],
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_track: Option<ScalarTrackManifest>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -580,14 +591,24 @@ impl Exporter {
         }
 
         let mut models = Vec::new();
+        let mut emitted_models = BTreeSet::new();
         let mut failures = Vec::new();
         let mut model_outputs = BTreeMap::<String, String>::new();
         for (key, group) in &grouped {
             let source = group[0].source_model.clone();
-            match self.export_model(&source) {
-                Ok(model) => {
-                    model_outputs.insert(key.clone(), model.gltf.clone());
-                    models.push(model);
+            match self.export_model_closure(&source, false) {
+                Ok(model_tree) => {
+                    let root_gltf = model_tree
+                        .first()
+                        .expect("model closure always contains its root")
+                        .gltf
+                        .clone();
+                    model_outputs.insert(key.clone(), root_gltf);
+                    for model in model_tree {
+                        if emitted_models.insert(model.gltf.to_ascii_lowercase()) {
+                            models.push(model);
+                        }
+                    }
                 }
                 Err(error) => failures.push(FailureManifest {
                     source_model: source,
@@ -643,15 +664,22 @@ impl Exporter {
         }
 
         let mut models = Vec::new();
+        let mut emitted_models = BTreeSet::new();
         let mut failures = Vec::new();
         let mut model_outputs = BTreeMap::<String, (String, Vec<AnimationManifest>)>::new();
         for (key, group) in &grouped {
             let source = group[0].source_model.clone();
-            match self.export_building_model(&source) {
-                Ok(model) => {
-                    model_outputs
-                        .insert(key.clone(), (model.gltf.clone(), model.animations.clone()));
-                    models.push(model);
+            match self.export_model_closure(&source, true) {
+                Ok(model_tree) => {
+                    let root = model_tree
+                        .first()
+                        .expect("model closure always contains its root");
+                    model_outputs.insert(key.clone(), (root.gltf.clone(), root.animations.clone()));
+                    for model in model_tree {
+                        if emitted_models.insert(model.gltf.to_ascii_lowercase()) {
+                            models.push(model);
+                        }
+                    }
                 }
                 Err(error) => failures.push(BuildingFailureManifest {
                     source_model: source,
@@ -740,6 +768,7 @@ impl Exporter {
         }
 
         let mut models = Vec::new();
+        let mut emitted_models = BTreeSet::new();
         let mut failures = Vec::new();
         let mut model_outputs = BTreeMap::<String, String>::new();
         for source in sources {
@@ -751,10 +780,19 @@ impl Exporter {
                 });
                 continue;
             }
-            match self.export_model(&source) {
-                Ok(model) => {
-                    model_outputs.insert(source.to_ascii_lowercase(), model.gltf.clone());
-                    models.push(model);
+            match self.export_model_closure(&source, false) {
+                Ok(model_tree) => {
+                    let root_gltf = model_tree
+                        .first()
+                        .expect("model closure always contains its root")
+                        .gltf
+                        .clone();
+                    model_outputs.insert(source.to_ascii_lowercase(), root_gltf);
+                    for model in model_tree {
+                        if emitted_models.insert(model.gltf.to_ascii_lowercase()) {
+                            models.push(model);
+                        }
+                    }
                 }
                 Err(error) => failures.push(VisualFailureManifest {
                     source_model: source,
@@ -910,6 +948,7 @@ impl Exporter {
         }
 
         let mut models = Vec::new();
+        let mut emitted_models = BTreeSet::new();
         let mut model_outputs = BTreeMap::<String, String>::new();
         let mut model_errors = BTreeMap::<String, String>::new();
         for ((rawcode, variation), resolved) in &variants {
@@ -920,14 +959,23 @@ impl Exporter {
             if model_outputs.contains_key(&key) || model_errors.contains_key(&key) {
                 continue;
             }
-            match self.export_model_with_replacements(
+            match self.export_model_closure_with_replacements(
                 source_model,
                 &resolved.replaceable_textures,
                 false,
             ) {
-                Ok(model) => {
-                    model_outputs.insert(key, model.gltf.clone());
-                    models.push(model);
+                Ok(model_tree) => {
+                    let root_gltf = model_tree
+                        .first()
+                        .expect("model closure always contains its root")
+                        .gltf
+                        .clone();
+                    model_outputs.insert(key, root_gltf);
+                    for model in model_tree {
+                        if emitted_models.insert(model.gltf.to_ascii_lowercase()) {
+                            models.push(model);
+                        }
+                    }
                 }
                 Err(error) => {
                     let error = error.to_string();
@@ -1228,15 +1276,75 @@ impl Exporter {
                 .any(|path| self.storage.file_exists(path))
     }
 
-    fn export_model(&mut self, logical_path: &str) -> Result<ModelManifest, Box<dyn Error>> {
-        self.export_model_with_replacements(logical_path, &BTreeMap::new(), false)
-    }
-
-    fn export_building_model(
+    fn export_model_closure(
         &mut self,
         logical_path: &str,
-    ) -> Result<ModelManifest, Box<dyn Error>> {
-        self.export_model_with_replacements(logical_path, &BTreeMap::new(), true)
+        omit_team_glow_geosets: bool,
+    ) -> Result<Vec<ModelManifest>, Box<dyn Error>> {
+        self.export_model_closure_with_replacements(
+            logical_path,
+            &BTreeMap::new(),
+            omit_team_glow_geosets,
+        )
+    }
+
+    fn export_model_closure_with_replacements(
+        &mut self,
+        logical_path: &str,
+        replaceable_textures: &BTreeMap<u32, String>,
+        omit_team_glow_geosets: bool,
+    ) -> Result<Vec<ModelManifest>, Box<dyn Error>> {
+        let mut seen = BTreeSet::new();
+        let mut models = Vec::new();
+        self.export_model_closure_inner(
+            logical_path,
+            replaceable_textures,
+            omit_team_glow_geosets,
+            &mut seen,
+            &mut models,
+        )?;
+        Ok(models)
+    }
+
+    fn export_model_closure_inner(
+        &mut self,
+        logical_path: &str,
+        replaceable_textures: &BTreeMap<u32, String>,
+        omit_team_glow_geosets: bool,
+        seen: &mut BTreeSet<String>,
+        models: &mut Vec<ModelManifest>,
+    ) -> Result<(), Box<dyn Error>> {
+        let normalized = normalize_model_path(logical_path);
+        let mut key = doodad_model_key(&normalized, replaceable_textures);
+        if omit_team_glow_geosets {
+            key.push_str("__omit_engine_planes");
+        }
+        if !seen.insert(key) {
+            return Ok(());
+        }
+
+        let model = self.export_model_with_replacements(
+            &normalized,
+            replaceable_textures,
+            omit_team_glow_geosets,
+        )?;
+        let dependencies = model_dependency_paths(&model);
+        models.push(model);
+
+        let no_replacements = BTreeMap::new();
+        for dependency in dependencies {
+            if !self.model_exists(&dependency) {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!(
+                        "model dependency {dependency} referenced by {normalized} is not present in the map archive or Warcraft III CASC install"
+                    ),
+                )
+                .into());
+            }
+            self.export_model_closure_inner(&dependency, &no_replacements, false, seen, models)?;
+        }
+        Ok(())
     }
 
     fn export_model_with_replacements(
@@ -1289,6 +1397,7 @@ impl Exporter {
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
         let model_particle_emitters = model_particle_emitter_manifests(&model);
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests);
+        let attachments = attachment_manifests(&model)?;
         let event_objects = event_object_manifests(&model);
 
         Ok(ModelManifest {
@@ -1305,6 +1414,7 @@ impl Exporter {
             particle_emitters,
             model_particle_emitters,
             ribbon_emitters,
+            attachments,
             event_objects,
             warnings,
         })
@@ -2133,6 +2243,31 @@ fn node_uses_non_inheritance(node: &Node) -> bool {
     !(node.flags() & inherit_mask).is_empty()
 }
 
+fn model_dependency_paths(model: &ModelManifest) -> Vec<String> {
+    let mut dependencies = BTreeSet::new();
+    for attachment in &model.attachments {
+        let path = attachment.path.trim();
+        if path.is_empty() {
+            continue;
+        }
+        let normalized = normalize_model_path(path);
+        if !is_intentionally_hidden_model_path(&normalized) {
+            dependencies.insert(normalized);
+        }
+    }
+    for emitter in &model.model_particle_emitters {
+        let path = emitter.spawn_model.trim();
+        if path.is_empty() {
+            continue;
+        }
+        let normalized = normalize_model_path(path);
+        if !is_intentionally_hidden_model_path(&normalized) {
+            dependencies.insert(normalized);
+        }
+    }
+    dependencies.into_iter().collect()
+}
+
 fn scalar_track_manifest(track: &TrackF32) -> Result<Option<ScalarTrackManifest>, Box<dyn Error>> {
     if !track.is_used() {
         return Ok(None);
@@ -2299,6 +2434,22 @@ fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterMa
                 initial_velocity: emitter.initial_velocity(),
                 spawn_model: emitter.spawn_model_file_name(),
             }
+        })
+        .collect()
+}
+
+fn attachment_manifests(model: &Model) -> Result<Vec<AttachmentManifest>, Box<dyn Error>> {
+    model
+        .attachments_iter()
+        .map(|attachment| {
+            let node = attachment.node();
+            Ok(AttachmentManifest {
+                object_id: node.object_id(),
+                name: node.name(),
+                position: model_node_position(model, &node),
+                path: attachment.path(),
+                visibility_track: scalar_track_manifest(&attachment.visibility_tracks())?,
+            })
         })
         .collect()
 }
@@ -5483,6 +5634,117 @@ mod tests {
         validate_f32_track(&track).expect("track layout must be valid");
         assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 150), 0.0);
         assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 200), 1.0);
+    }
+
+    #[test]
+    fn model_dependencies_include_attachment_and_legacy_particle_children() {
+        let model = ModelManifest {
+            source_model: "root.mdx".to_owned(),
+            source_casc_path: "root.mdx".to_owned(),
+            gltf: "models/root.gltf".to_owned(),
+            bin: "models/root.bin".to_owned(),
+            geosets: 0,
+            bones: 0,
+            features: ModelFeatureManifest::default(),
+            overhead_position: None,
+            animations: Vec::new(),
+            textures: Vec::new(),
+            particle_emitters: Vec::new(),
+            model_particle_emitters: vec![
+                ModelParticleEmitterManifest {
+                    object_id: 1,
+                    name: "spawn".to_owned(),
+                    position: [0.0; 3],
+                    emission_rate: 1.0,
+                    gravity: 0.0,
+                    longitude: 0.0,
+                    latitude: 0.0,
+                    lifespan: 1.0,
+                    initial_velocity: 0.0,
+                    spawn_model: r"SharedModels\Smoke1_Green.MDL".to_owned(),
+                },
+                ModelParticleEmitterManifest {
+                    object_id: 2,
+                    name: "hidden".to_owned(),
+                    position: [0.0; 3],
+                    emission_rate: 1.0,
+                    gravity: 0.0,
+                    longitude: 0.0,
+                    latitude: 0.0,
+                    lifespan: 1.0,
+                    initial_velocity: 0.0,
+                    spawn_model: "none.mdl".to_owned(),
+                },
+            ],
+            ribbon_emitters: Vec::new(),
+            attachments: vec![
+                AttachmentManifest {
+                    object_id: 3,
+                    name: "birth".to_owned(),
+                    position: [0.0; 3],
+                    path: r"SharedModels\NEBirth.MDL".to_owned(),
+                    visibility_track: None,
+                },
+                AttachmentManifest {
+                    object_id: 4,
+                    name: "duplicate".to_owned(),
+                    position: [0.0; 3],
+                    path: r"SharedModels\NEBirth.mdx".to_owned(),
+                    visibility_track: None,
+                },
+            ],
+            event_objects: Vec::new(),
+            warnings: Vec::new(),
+        };
+
+        assert_eq!(
+            model_dependency_paths(&model),
+            [
+                r"SharedModels\NEBirth.mdx".to_owned(),
+                r"SharedModels\Smoke1_Green.mdx".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn attachment_manifest_preserves_child_path_pivot_and_visibility() {
+        let mut model = Model::new();
+        model.resize_attachments(1);
+        {
+            let mut attachment = model.attachments_mut(0).expect("attachment");
+            attachment.set_path(r"SharedModels\NEBirth.MDL");
+            {
+                let mut visibility = attachment.visibility_tracks_mut();
+                visibility.set_is_used(true);
+                visibility.set_interpolation_type(InterpolationType::None);
+                visibility.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                visibility.set_key_count(2);
+                visibility.set_timestamps(&[0, 500]);
+                visibility.set_keys(&[0.0, 1.0]);
+            }
+            let mut node = attachment.node_mut();
+            node.set_object_id(0);
+            node.set_name("Birth Attachment");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f {
+            x: 10.0,
+            y: 20.0,
+            z: 30.0,
+        }]);
+
+        let attachments = attachment_manifests(&model).expect("attachments should serialize");
+        assert_eq!(attachments.len(), 1);
+        let attachment = &attachments[0];
+        assert_eq!(attachment.object_id, 0);
+        assert_eq!(attachment.name, "Birth Attachment");
+        assert_eq!(attachment.position, [10.0, 30.0, -20.0]);
+        assert_eq!(attachment.path, r"SharedModels\NEBirth.MDL");
+        let visibility = attachment
+            .visibility_track
+            .as_ref()
+            .expect("visibility track should be preserved");
+        assert_eq!(visibility.timestamps, [0, 500]);
+        assert_eq!(visibility.values, [0.0, 1.0]);
     }
 
     #[test]
