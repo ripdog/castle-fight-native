@@ -30,6 +30,7 @@ const CONVERTED_MODEL_PACKS: [(&str, &str); 4] = [
 const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
 const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
+const MAX_MODEL_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const PARTICLE_MATERIAL_STEPS: u8 = 31;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
@@ -567,6 +568,52 @@ pub(crate) struct Wc3ModelAttachmentRuntime {
     child: Option<Entity>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct Wc3LegacyModelEmitterSpec {
+    emission_rate: f32,
+    gravity: f32,
+    longitude: f32,
+    latitude: f32,
+    lifespan: f32,
+    initial_velocity: f32,
+    gltf: String,
+    #[serde(default)]
+    emission_rate_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    gravity_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    longitude_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    latitude_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    lifespan_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    speed_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    visibility_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(default)]
+    global_sequence_durations_ms: Vec<u32>,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3LegacyModelEmitterRuntime {
+    child_model: RegisteredConvertedModel,
+    spec: Wc3LegacyModelEmitterSpec,
+    fallback_elapsed_ms: f32,
+    accumulator: f32,
+    sequence: u32,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct Wc3LegacyModelParticle {
+    velocity: Vec3,
+    gravity: f32,
+    age: f32,
+    lifespan: f32,
+}
+
 #[derive(Debug, Deserialize)]
 struct Wc3NodeExtras {
     #[serde(rename = "wc3ObjectId")]
@@ -575,6 +622,8 @@ struct Wc3NodeExtras {
     wc3_light: Option<Wc3LightSpec>,
     #[serde(rename = "wc3Attachment", default)]
     wc3_attachment: Option<Wc3ModelAttachmentSpec>,
+    #[serde(rename = "wc3ModelParticleEmitter", default)]
+    wc3_model_particle_emitter: Option<Wc3LegacyModelEmitterSpec>,
 }
 
 fn inherited_world_asset_path(
@@ -627,7 +676,23 @@ fn preferred_model_animation(model: &ModelManifest) -> Option<&ModelAnimationMan
         })
 }
 
-pub fn setup_wc3_model_attachments(
+fn registered_child_model_for_node(
+    entity: Entity,
+    child_gltf: &str,
+    asset_server: &AssetServer,
+    registry: &Wc3ConvertedModelRegistry,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&WorldAssetRoot>,
+) -> Option<RegisteredConvertedModel> {
+    let parent_asset_path = inherited_world_asset_path(entity, parents, roots, asset_server)?;
+    let child_asset_path = child_model_asset_path(&parent_asset_path, child_gltf)?;
+    registry.get(&child_asset_path).cloned().or_else(|| {
+        warn!("WC3 model references unregistered converted child model {child_asset_path}");
+        None
+    })
+}
+
+pub fn setup_wc3_model_composed_features(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     registry: Res<Wc3ConvertedModelRegistry>,
@@ -639,105 +704,125 @@ pub fn setup_wc3_model_attachments(
         let Ok(extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
             continue;
         };
-        let Some(spec) = extras.wc3_attachment else {
-            continue;
-        };
-        let Some(parent_asset_path) =
-            inherited_world_asset_path(entity, &parents, &roots, &asset_server)
-        else {
-            continue;
-        };
-        let Some(child_asset_path) = child_model_asset_path(&parent_asset_path, &spec.gltf) else {
-            continue;
-        };
-        let Some(child_model) = registry.get(&child_asset_path).cloned() else {
-            warn!(
-                "WC3 model attachment references unregistered converted child model {child_asset_path}"
-            );
-            continue;
-        };
-        commands.entity(entity).insert(Wc3ModelAttachmentRuntime {
-            child_model,
-            visibility_track: spec.visibility_track,
-            sequence_windows: spec.sequence_windows,
-            global_sequence_durations_ms: spec.global_sequence_durations_ms,
-            fallback_elapsed_ms: 0.0,
-            child: None,
-        });
+        if let Some(spec) = extras.wc3_attachment
+            && let Some(child_model) = registered_child_model_for_node(
+                entity,
+                &spec.gltf,
+                &asset_server,
+                &registry,
+                &parents,
+                &roots,
+            )
+        {
+            commands.entity(entity).insert(Wc3ModelAttachmentRuntime {
+                child_model,
+                visibility_track: spec.visibility_track,
+                sequence_windows: spec.sequence_windows,
+                global_sequence_durations_ms: spec.global_sequence_durations_ms,
+                fallback_elapsed_ms: 0.0,
+                child: None,
+            });
+        }
+        if let Some(spec) = extras.wc3_model_particle_emitter
+            && let Some(child_model) = registered_child_model_for_node(
+                entity,
+                &spec.gltf,
+                &asset_server,
+                &registry,
+                &parents,
+                &roots,
+            )
+        {
+            commands
+                .entity(entity)
+                .insert(Wc3LegacyModelEmitterRuntime {
+                    child_model,
+                    spec,
+                    fallback_elapsed_ms: 0.0,
+                    accumulator: 0.0,
+                    sequence: 0,
+                });
+        }
     }
 }
 
-fn model_attachment_visibility(
-    animation: &Wc3ModelAttachmentRuntime,
+fn sample_model_sequence_scalar(
+    track: Option<&Wc3ScalarTrack>,
+    default: f32,
+    sequence_windows: &[Wc3EmitterSequenceWindow],
+    global_sequence_durations_ms: &[u32],
+    fallback_elapsed_ms: f32,
     clock: Option<&Wc3ModelSequenceClock>,
 ) -> f32 {
-    let Some(track) = animation.visibility_track.as_ref() else {
-        return 1.0;
+    let Some(track) = track else {
+        return default;
     };
     if track.global_sequence_id.is_some() {
-        let (sequence_time_ms, global_elapsed_ms) = clock.map_or(
-            (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
-            |clock| {
+        let (sequence_time_ms, global_elapsed_ms) =
+            clock.map_or((fallback_elapsed_ms, fallback_elapsed_ms), |clock| {
                 (
-                    material_sequence_time_ms(&animation.sequence_windows, clock),
+                    material_sequence_time_ms(sequence_windows, clock),
                     clock.global_elapsed_ms,
                 )
-            },
-        );
+            });
         return sample_scalar_track(
             Some(track),
-            1.0,
+            default,
             sequence_time_ms,
             global_elapsed_ms,
-            &animation.global_sequence_durations_ms,
+            global_sequence_durations_ms,
         );
     }
 
     let Some(clock) = clock else {
-        return 1.0;
+        return default;
     };
-    let Some(window) = animation
-        .sequence_windows
+    let Some(window) = sequence_windows
         .iter()
         .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
     else {
-        return sample_scalar_track(
-            Some(track),
-            1.0,
-            clock.sequence_elapsed_ms,
-            clock.global_elapsed_ms,
-            &animation.global_sequence_durations_ms,
-        );
+        return default;
     };
     if !track
         .timestamps
         .iter()
         .any(|timestamp| *timestamp >= window.start_ms && *timestamp <= window.end_ms)
     {
-        return 1.0;
+        return default;
     }
     sample_scalar_track(
         Some(track),
-        1.0,
-        material_sequence_time_ms(&animation.sequence_windows, clock),
+        default,
+        material_sequence_time_ms(sequence_windows, clock),
         clock.global_elapsed_ms,
+        global_sequence_durations_ms,
+    )
+}
+
+fn model_attachment_visibility(
+    animation: &Wc3ModelAttachmentRuntime,
+    clock: Option<&Wc3ModelSequenceClock>,
+) -> f32 {
+    sample_model_sequence_scalar(
+        animation.visibility_track.as_ref(),
+        1.0,
+        &animation.sequence_windows,
         &animation.global_sequence_durations_ms,
+        animation.fallback_elapsed_ms,
+        clock,
     )
 }
 
 fn spawn_registered_converted_model(
     commands: &mut Commands,
-    parent: Entity,
+    parent: Option<Entity>,
     model: &RegisteredConvertedModel,
     asset_server: &AssetServer,
+    transform: Transform,
 ) -> Entity {
     let scene = asset_server.load(GltfAssetLabel::Scene(0).from_asset(model.asset_path.clone()));
     let gltf = asset_server.load(model.asset_path.clone());
-    let mut child = commands.spawn((
-        WorldAssetRoot(scene),
-        Transform::IDENTITY,
-        Visibility::default(),
-    ));
+    let mut child = commands.spawn((WorldAssetRoot(scene), transform, Visibility::default()));
     if let Some(animation) = preferred_model_animation(&model.manifest) {
         child.insert(Wc3VisualAnimationSource {
             gltf,
@@ -773,7 +858,9 @@ fn spawn_registered_converted_model(
         }
     }
     let child = child.id();
-    commands.entity(parent).add_child(child);
+    if let Some(parent) = parent {
+        commands.entity(parent).add_child(child);
+    }
     child
 }
 
@@ -794,9 +881,10 @@ pub fn update_wc3_model_attachments(
             (true, None) => {
                 attachment.child = Some(spawn_registered_converted_model(
                     &mut commands,
-                    entity,
+                    Some(entity),
                     &attachment.child_model,
                     &asset_server,
+                    Transform::IDENTITY,
                 ));
             }
             (false, Some(child)) => {
@@ -805,6 +893,145 @@ pub fn update_wc3_model_attachments(
             }
             _ => {}
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Wc3LegacyModelEmitterSample {
+    emission_rate: f32,
+    gravity: f32,
+    longitude: f32,
+    latitude: f32,
+    lifespan: f32,
+    speed: f32,
+    visibility: f32,
+}
+
+fn sample_legacy_model_emitter(
+    emitter: &Wc3LegacyModelEmitterRuntime,
+    clock: Option<&Wc3ModelSequenceClock>,
+) -> Wc3LegacyModelEmitterSample {
+    let sample = |track: Option<&Wc3ScalarTrack>, default: f32| {
+        sample_model_sequence_scalar(
+            track,
+            default,
+            &emitter.spec.sequence_windows,
+            &emitter.spec.global_sequence_durations_ms,
+            emitter.fallback_elapsed_ms,
+            clock,
+        )
+    };
+    Wc3LegacyModelEmitterSample {
+        emission_rate: sample(
+            emitter.spec.emission_rate_track.as_ref(),
+            emitter.spec.emission_rate,
+        ),
+        gravity: sample(emitter.spec.gravity_track.as_ref(), emitter.spec.gravity),
+        longitude: sample(
+            emitter.spec.longitude_track.as_ref(),
+            emitter.spec.longitude,
+        ),
+        latitude: sample(emitter.spec.latitude_track.as_ref(), emitter.spec.latitude),
+        lifespan: sample(emitter.spec.lifespan_track.as_ref(), emitter.spec.lifespan),
+        speed: sample(
+            emitter.spec.speed_track.as_ref(),
+            emitter.spec.initial_velocity,
+        ),
+        visibility: sample(emitter.spec.visibility_track.as_ref(), 1.0),
+    }
+}
+
+fn legacy_model_particle_velocity(
+    rotation: Quat,
+    seed: u32,
+    speed: f32,
+    longitude_radians: f32,
+    latitude_radians: f32,
+) -> Vec3 {
+    let cone = latitude_radians.abs().clamp(0.0, std::f32::consts::PI) * hash_unit(seed).sqrt();
+    let longitude = longitude_radians.abs().clamp(0.0, std::f32::consts::PI);
+    let azimuth = (hash_unit(seed ^ 0xa511_e9b3) * 2.0 - 1.0) * longitude;
+    let wc3_direction = Vec3::new(
+        cone.sin() * azimuth.cos(),
+        cone.sin() * azimuth.sin(),
+        cone.cos(),
+    );
+    rotation * wc3_direction_to_bevy(wc3_direction) * speed.max(0.0)
+}
+
+pub fn emit_wc3_model_particles(
+    mut commands: Commands,
+    time: Res<Time>,
+    asset_server: Res<AssetServer>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut emitters: Query<(Entity, &GlobalTransform, &mut Wc3LegacyModelEmitterRuntime)>,
+) {
+    let dt = time.delta_secs().min(0.1);
+    let dt_ms = dt * 1000.0;
+    for (entity, transform, mut emitter) in &mut emitters {
+        let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let sample = sample_legacy_model_emitter(&emitter, clock.as_ref());
+        emitter.fallback_elapsed_ms += dt_ms;
+        if sample.visibility <= 0.001 {
+            emitter.accumulator = 0.0;
+            continue;
+        }
+        emitter.accumulator += sample.emission_rate.clamp(0.0, 240.0) * dt;
+        let mut count = emitter.accumulator.floor() as u32;
+        emitter.accumulator -= count as f32;
+        count = count.min(MAX_MODEL_PARTICLES_PER_EMITTER_PER_FRAME);
+        if count == 0 || sample.lifespan <= 0.0 {
+            continue;
+        }
+
+        let (source_scale, source_rotation, source_translation) =
+            transform.to_scale_rotation_translation();
+        let uniform_scale = source_scale.abs().max_element().max(0.000_1);
+        for _ in 0..count {
+            let sequence = emitter.sequence;
+            emitter.sequence = emitter.sequence.wrapping_add(1);
+            let seed = particle_seed(entity, 0, sequence);
+            let velocity = legacy_model_particle_velocity(
+                source_rotation,
+                seed,
+                sample.speed,
+                sample.longitude,
+                sample.latitude,
+            ) * uniform_scale;
+            let child = spawn_registered_converted_model(
+                &mut commands,
+                None,
+                &emitter.child_model,
+                &asset_server,
+                Transform::from_translation(source_translation)
+                    .with_rotation(source_rotation)
+                    .with_scale(Vec3::splat(uniform_scale)),
+            );
+            commands.entity(child).insert(Wc3LegacyModelParticle {
+                velocity,
+                gravity: sample.gravity * uniform_scale,
+                age: 0.0,
+                lifespan: sample.lifespan.max(0.01),
+            });
+        }
+    }
+}
+
+pub fn update_wc3_model_particles(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut particles: Query<(Entity, &mut Transform, &mut Wc3LegacyModelParticle)>,
+) {
+    let dt = time.delta_secs().min(0.1);
+    for (entity, mut transform, mut particle) in &mut particles {
+        particle.age += dt;
+        if particle.age >= particle.lifespan {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        particle.velocity.y -= particle.gravity * dt;
+        transform.translation += particle.velocity * dt;
     }
 }
 
@@ -3637,6 +3864,17 @@ mod tests {
         assert_eq!(wc3_direction_to_bevy(Vec3::Z), Vec3::Y);
         assert_eq!(wc3_direction_to_bevy(Vec3::Y), Vec3::NEG_Z);
         assert_eq!(wc3_direction_to_bevy(Vec3::X), Vec3::X);
+    }
+
+    #[test]
+    fn legacy_model_particles_use_wc3_radian_cone_and_model_basis() {
+        let straight = legacy_model_particle_velocity(Quat::IDENTITY, 17, 300.0, 0.0, 0.0);
+        assert!((straight - Vec3::Y * 300.0).length() < 1.0e-4);
+
+        let spread =
+            legacy_model_particle_velocity(Quat::IDENTITY, 17, 300.0, std::f32::consts::PI, 0.8);
+        assert!((spread.length() - 300.0).abs() < 1.0e-3);
+        assert!(spread.y < 300.0);
     }
 
     #[test]

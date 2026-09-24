@@ -364,6 +364,8 @@ pub struct ModelParticleEmitterManifest {
     pub initial_velocity: f32,
     pub spawn_model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub gltf: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub emission_rate_track: Option<ScalarTrackManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gravity_track: Option<ScalarTrackManifest>,
@@ -377,6 +379,8 @@ pub struct ModelParticleEmitterManifest {
     pub speed_track: Option<ScalarTrackManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility_track: Option<ScalarTrackManifest>,
+    pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
+    pub global_sequence_durations_ms: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2455,6 +2459,7 @@ fn model_particle_emitter_manifests(
                 lifespan: emitter.lifespan(),
                 initial_velocity: emitter.initial_velocity(),
                 spawn_model: emitter.spawn_model_file_name(),
+                gltf: dependency_child_gltf(&emitter.spawn_model_file_name()),
                 emission_rate_track: scalar_track_manifest(&emitter.emission_rate_tracks())?,
                 gravity_track: scalar_track_manifest(&emitter.gravity_tracks())?,
                 longitude_track: scalar_track_manifest(&emitter.longitude_tracks())?,
@@ -2462,6 +2467,8 @@ fn model_particle_emitter_manifests(
                 lifespan_track: scalar_track_manifest(&emitter.lifespan_tracks())?,
                 speed_track: scalar_track_manifest(&emitter.speed_tracks())?,
                 visibility_track: scalar_track_manifest(&emitter.visibility_tracks())?,
+                sequence_windows: model_sequence_windows(model),
+                global_sequence_durations_ms: model.global_sequences().to_vec(),
             })
         })
         .collect()
@@ -2474,7 +2481,7 @@ fn attachment_manifests(model: &Model) -> Result<Vec<AttachmentManifest>, Box<dy
         .map(|attachment| {
             let node = attachment.node();
             let path = attachment.path();
-            let gltf = attachment_child_gltf(&path);
+            let gltf = dependency_child_gltf(&path);
             Ok(AttachmentManifest {
                 object_id: node.object_id(),
                 name: node.name(),
@@ -2489,7 +2496,7 @@ fn attachment_manifests(model: &Model) -> Result<Vec<AttachmentManifest>, Box<dy
         .collect()
 }
 
-fn attachment_child_gltf(path: &str) -> Option<String> {
+fn dependency_child_gltf(path: &str) -> Option<String> {
     let path = path.trim();
     if path.is_empty() {
         return None;
@@ -3061,6 +3068,10 @@ fn build_skeleton(
         .into_iter()
         .map(|attachment| (attachment.object_id, attachment))
         .collect::<BTreeMap<_, _>>();
+    let model_particle_extras = model_particle_emitter_manifests(model)?
+        .into_iter()
+        .map(|emitter| (emitter.object_id, emitter))
+        .collect::<BTreeMap<_, _>>();
 
     for info in infos.values() {
         let node_index = result.node_by_object[&info.object_id];
@@ -3087,6 +3098,18 @@ fn build_skeleton(
                 .as_object_mut()
                 .expect("node extras object")
                 .insert("wc3Attachment".into(), serde_json::to_value(attachment)?);
+        }
+        if let Some(emitter) = model_particle_extras
+            .get(&info.object_id)
+            .filter(|emitter| emitter.gltf.is_some())
+        {
+            value["extras"]
+                .as_object_mut()
+                .expect("node extras object")
+                .insert(
+                    "wc3ModelParticleEmitter".into(),
+                    serde_json::to_value(emitter)?,
+                );
         }
         if let Some(node_children) = children.remove(&node_index) {
             value
@@ -6355,6 +6378,15 @@ mod tests {
     #[test]
     fn legacy_particle_manifest_preserves_animated_scalar_tracks() {
         let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Death");
+            sequence.set_interval_start(100);
+            sequence.set_interval_end(500);
+            sequence.set_flags(SequenceFlag::NonLooping);
+        }
+        model.set_global_sequences(&[750]);
         model.resize_particle_emitters(1);
         {
             let mut emitter = model.particle_emitters_mut(0).expect("particle emitter");
@@ -6381,6 +6413,14 @@ mod tests {
         let emitter = &emitters[0];
         assert_eq!(emitter.emission_rate, 7.0);
         assert_eq!(emitter.spawn_model, r"SharedModels\Smoke1_Green.MDL");
+        assert_eq!(
+            emitter.gltf.as_deref(),
+            Some("models/sharedmodels__smoke1_green.gltf")
+        );
+        assert_eq!(emitter.sequence_windows.len(), 1);
+        assert_eq!(emitter.sequence_windows[0].name, "Death");
+        assert!(emitter.sequence_windows[0].non_looping);
+        assert_eq!(emitter.global_sequence_durations_ms, [750]);
         let track = emitter
             .emission_rate_track
             .as_ref()
@@ -6391,6 +6431,14 @@ mod tests {
         );
         assert_eq!(track.timestamps, [100, 400]);
         assert_eq!(track.values, [2.0, 9.0]);
+
+        let mut binary = BinaryBuilder::default();
+        let skeleton =
+            build_skeleton(&model, &mut binary, &mut Vec::new()).expect("skeleton should build");
+        assert_eq!(
+            skeleton.nodes[0]["extras"]["wc3ModelParticleEmitter"]["gltf"],
+            json!("models/sharedmodels__smoke1_green.gltf")
+        );
     }
 
     #[test]
@@ -6421,6 +6469,7 @@ mod tests {
                     lifespan: 1.0,
                     initial_velocity: 0.0,
                     spawn_model: r"SharedModels\Smoke1_Green.MDL".to_owned(),
+                    gltf: Some("models/sharedmodels__smoke1_green.gltf".to_owned()),
                     emission_rate_track: None,
                     gravity_track: None,
                     longitude_track: None,
@@ -6428,6 +6477,8 @@ mod tests {
                     lifespan_track: None,
                     speed_track: None,
                     visibility_track: None,
+                    sequence_windows: Vec::new(),
+                    global_sequence_durations_ms: Vec::new(),
                 },
                 ModelParticleEmitterManifest {
                     object_id: 2,
@@ -6440,6 +6491,7 @@ mod tests {
                     lifespan: 1.0,
                     initial_velocity: 0.0,
                     spawn_model: "none.mdl".to_owned(),
+                    gltf: None,
                     emission_rate_track: None,
                     gravity_track: None,
                     longitude_track: None,
@@ -6447,6 +6499,8 @@ mod tests {
                     lifespan_track: None,
                     speed_track: None,
                     visibility_track: None,
+                    sequence_windows: Vec::new(),
+                    global_sequence_durations_ms: Vec::new(),
                 },
             ],
             ribbon_emitters: Vec::new(),

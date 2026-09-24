@@ -729,8 +729,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "particle.pe1_unsupported",
-            FidelityStatus::Unsupported,
+            "particle.pe1_approximate",
+            FidelityStatus::Approximation,
             features.particle_emitter_count,
         );
         record_fidelity_finding(
@@ -1053,6 +1053,7 @@ mod tests {
                 global_sequence_count: 1,
                 attachment_count: 1,
                 attachment_models: vec![r"SharedModels\Child.mdl".to_owned()],
+                particle_emitter_count: 2,
                 particle_emitter_2_count: 3,
                 particle_emitter_2_animated_track_count: 4,
                 light_count: 2,
@@ -1095,6 +1096,7 @@ mod tests {
                 r"SharedModels\Other.mdl".to_owned()
             ]
         );
+        assert_eq!(summary.particle_emitter_count, 2);
         assert_eq!(summary.particle_emitter_2_count, 3);
         assert_eq!(summary.particle_emitter_2_animated_track_count, 4);
         assert_eq!(summary.ribbon_emitter_count, 1);
@@ -1108,9 +1110,9 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 19);
+        assert_eq!(summary.approximation_occurrences, 21);
         assert_eq!(summary.unsupported_occurrences, 6);
-        assert_eq!(summary.findings.len(), 12);
+        assert_eq!(summary.findings.len(), 13);
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "material.animated_texture_approximate"
                 && finding.status == FidelityStatus::Approximation
@@ -1134,6 +1136,12 @@ mod tests {
                 && finding.status == FidelityStatus::Unsupported
                 && finding.affected_models == 1
                 && finding.occurrences == 1
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "particle.pe1_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.affected_models == 1
+                && finding.occurrences == 2
         }));
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "particle.pe2_animated_tracks_approximate"
