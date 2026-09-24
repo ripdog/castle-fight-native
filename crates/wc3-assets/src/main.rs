@@ -1024,6 +1024,7 @@ mod tests {
                 overhead_position: None,
                 animations: Vec::new(),
                 textures: Vec::new(),
+                materials: Vec::new(),
                 particle_emitters: Vec::new(),
                 model_particle_emitters: Vec::new(),
                 ribbon_emitters: Vec::new(),

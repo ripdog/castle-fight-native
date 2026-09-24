@@ -171,6 +171,7 @@ pub struct ModelManifest {
     pub overhead_position: Option<[f32; 3]>,
     pub animations: Vec<AnimationManifest>,
     pub textures: Vec<TextureManifest>,
+    pub materials: Vec<MaterialManifest>,
     pub particle_emitters: Vec<ParticleEmitter2Manifest>,
     pub model_particle_emitters: Vec<ModelParticleEmitterManifest>,
     pub ribbon_emitters: Vec<RibbonEmitterManifest>,
@@ -247,6 +248,34 @@ pub struct UnsignedTrackManifest {
     pub in_tangents: Vec<u32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub out_tangents: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MaterialManifest {
+    pub material_id: usize,
+    pub priority_plane: i32,
+    pub layers: Vec<MaterialLayerManifest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MaterialLayerManifest {
+    pub layer_index: usize,
+    pub filter_mode: String,
+    pub texture_id: u32,
+    pub alpha: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub texture_id_track: Option<UnsignedTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpha_track: Option<ScalarTrackManifest>,
+    pub sub_textures: Vec<MaterialSubTextureManifest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MaterialSubTextureManifest {
+    pub slot: String,
+    pub texture_id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub texture_id_track: Option<UnsignedTrackManifest>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1444,6 +1473,7 @@ impl Exporter {
 
         let animations = animation_manifests_from_gltf(&gltf)?;
         let features = model_feature_manifest(&model);
+        let materials = material_manifests(&model)?;
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
         let model_particle_emitters = model_particle_emitter_manifests(&model)?;
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests)?;
@@ -1461,6 +1491,7 @@ impl Exporter {
             overhead_position: model_overhead_position(&model),
             animations,
             textures: texture_manifests,
+            materials,
             particle_emitters,
             model_particle_emitters,
             ribbon_emitters,
@@ -2448,6 +2479,45 @@ fn track_interpolation_manifest(
         InterpolationType::Hermite => ScalarTrackInterpolationManifest::Hermite,
         InterpolationType::Bezier => ScalarTrackInterpolationManifest::Bezier,
     }
+}
+
+fn material_manifests(model: &Model) -> Result<Vec<MaterialManifest>, Box<dyn Error>> {
+    model
+        .materials_iter()
+        .enumerate()
+        .map(|(material_id, material)| {
+            let layers = material
+                .layers_iter()
+                .enumerate()
+                .map(|(layer_index, layer)| {
+                    let sub_textures = layer
+                        .sub_textures_iter()
+                        .map(|sub_texture| {
+                            Ok(MaterialSubTextureManifest {
+                                slot: format!("{:?}", sub_texture.slot()),
+                                texture_id: sub_texture.texture_id(),
+                                texture_id_track: unsigned_track_manifest(&sub_texture.tracks())?,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+                    Ok(MaterialLayerManifest {
+                        layer_index,
+                        filter_mode: format!("{:?}", layer.filter_mode()),
+                        texture_id: layer.texture_id(),
+                        alpha: layer.alpha(),
+                        texture_id_track: unsigned_track_manifest(&layer.texture_id_tracks())?,
+                        alpha_track: scalar_track_manifest(&layer.alpha_tracks())?,
+                        sub_textures,
+                    })
+                })
+                .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+            Ok(MaterialManifest {
+                material_id,
+                priority_plane: material.priority_plane(),
+                layers,
+            })
+        })
+        .collect()
 }
 
 fn particle_emitter_2_manifests(
@@ -5673,6 +5743,83 @@ mod tests {
     }
 
     #[test]
+    fn material_manifest_preserves_alpha_and_texture_selection_tracks() {
+        let mut model = Model::new();
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.set_priority_plane(2);
+            material.resize_layers(1);
+            let mut layer = material.layers_mut(0).expect("layer");
+            layer.set_filter_mode(LayerFilterMode::AddAlpha);
+            layer.set_texture_id(3);
+            layer.set_alpha(0.75);
+            {
+                let mut alpha = layer.alpha_tracks_mut();
+                alpha.set_is_used(true);
+                alpha.set_interpolation_type(InterpolationType::Linear);
+                alpha.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                alpha.set_key_count(2);
+                alpha.set_timestamps(&[0, 500]);
+                alpha.set_keys(&[0.0, 1.0]);
+            }
+            {
+                let mut texture = layer.texture_id_tracks_mut();
+                texture.set_is_used(true);
+                texture.set_interpolation_type(InterpolationType::None);
+                texture.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                texture.set_key_count(2);
+                texture.set_timestamps(&[0, 500]);
+                texture.set_keys(&[3, 4]);
+            }
+            layer.resize_sub_textures(1);
+            {
+                let mut sub = layer.sub_textures_mut(0).expect("sub texture");
+                sub.set_slot(LayerSlotType::TeamColor);
+                sub.set_texture_id(7);
+                let mut track = sub.tracks_mut();
+                track.set_is_used(true);
+                track.set_interpolation_type(InterpolationType::None);
+                track.set_global_sequence_id(NO_GLOBAL_SEQUENCE);
+                track.set_key_count(2);
+                track.set_timestamps(&[100, 600]);
+                track.set_keys(&[7, 8]);
+            }
+        }
+
+        let materials = material_manifests(&model).expect("materials should serialize");
+        assert_eq!(materials.len(), 1);
+        let material = &materials[0];
+        assert_eq!(material.material_id, 0);
+        assert_eq!(material.priority_plane, 2);
+        let layer = &material.layers[0];
+        assert_eq!(layer.filter_mode, "AddAlpha");
+        assert_eq!(layer.texture_id, 3);
+        assert_eq!(layer.alpha, 0.75);
+        assert_eq!(
+            layer.alpha_track.as_ref().expect("alpha track").values,
+            [0.0, 1.0]
+        );
+        assert_eq!(
+            layer
+                .texture_id_track
+                .as_ref()
+                .expect("texture track")
+                .values,
+            [3, 4]
+        );
+        assert_eq!(layer.sub_textures[0].slot, "TeamColor");
+        assert_eq!(
+            layer.sub_textures[0]
+                .texture_id_track
+                .as_ref()
+                .expect("sub texture track")
+                .values,
+            [7, 8]
+        );
+    }
+
+    #[test]
     fn material_priority_plane_is_preserved_for_native_depth_ordering() {
         let mut model = Model::new();
         model.resize_materials(1);
@@ -5944,6 +6091,7 @@ mod tests {
             overhead_position: None,
             animations: Vec::new(),
             textures: Vec::new(),
+            materials: Vec::new(),
             particle_emitters: Vec::new(),
             model_particle_emitters: vec![
                 ModelParticleEmitterManifest {
