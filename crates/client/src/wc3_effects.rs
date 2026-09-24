@@ -351,6 +351,10 @@ struct ModelManifest {
 struct ModelAnimationManifest {
     name: String,
     #[serde(default)]
+    start_ms: u32,
+    #[serde(default)]
+    end_ms: u32,
+    #[serde(default)]
     non_looping: bool,
 }
 
@@ -619,6 +623,47 @@ pub(crate) struct Wc3LegacyModelParticle {
     lifespan: f32,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum Wc3EventObjectKind {
+    Sound,
+    Splat,
+    Footprint,
+    Spawn,
+    UberSplat,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Wc3EventObjectSpec {
+    kind: Wc3EventObjectKind,
+    #[serde(default)]
+    gltf: Option<String>,
+    #[serde(default)]
+    global_sequence_id: Option<u32>,
+    #[serde(default)]
+    event_track_times: Vec<u32>,
+    #[serde(default)]
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(default)]
+    global_sequence_durations_ms: Vec<u32>,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3SpawnEventRuntime {
+    child_model: RegisteredConvertedModel,
+    spec: Wc3EventObjectSpec,
+    previous_sequence_name: Option<String>,
+    previous_sequence_elapsed_ms: Option<f32>,
+    previous_global_elapsed_ms: Option<f32>,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct Wc3SpawnedEventModel {
+    age: f32,
+    lifespan: f32,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Wc3NonInheritance {
     flags: i32,
@@ -655,6 +700,8 @@ struct Wc3NodeExtras {
     wc3_attachment: Option<Wc3ModelAttachmentSpec>,
     #[serde(rename = "wc3ModelParticleEmitter", default)]
     wc3_model_particle_emitter: Option<Wc3LegacyModelEmitterSpec>,
+    #[serde(rename = "wc3EventObject", default)]
+    wc3_event_object: Option<Wc3EventObjectSpec>,
 }
 
 fn inherited_world_asset_path(
@@ -776,6 +823,26 @@ pub fn setup_wc3_model_composed_features(
                     accumulator: 0.0,
                     sequence: 0,
                 });
+        }
+        if let Some(spec) = extras.wc3_event_object
+            && spec.kind == Wc3EventObjectKind::Spawn
+            && let Some(gltf) = spec.gltf.as_deref()
+            && let Some(child_model) = registered_child_model_for_node(
+                entity,
+                gltf,
+                &asset_server,
+                &registry,
+                &parents,
+                &roots,
+            )
+        {
+            commands.entity(entity).insert(Wc3SpawnEventRuntime {
+                child_model,
+                spec,
+                previous_sequence_name: None,
+                previous_sequence_elapsed_ms: None,
+                previous_global_elapsed_ms: None,
+            });
         }
     }
 }
@@ -1191,6 +1258,162 @@ pub fn update_wc3_model_particles(
         }
         particle.velocity.y -= particle.gravity * dt;
         transform.translation += particle.velocity * dt;
+    }
+}
+
+fn periodic_event_crossings(previous: f32, current: f32, phase: f32, period: f32) -> u32 {
+    if period <= 0.0 || current < phase {
+        return 0;
+    }
+    let first = if previous < phase {
+        0_i64
+    } else {
+        ((previous - phase) / period).floor() as i64 + 1
+    };
+    let last = ((current - phase) / period).floor() as i64;
+    if last < first {
+        0
+    } else {
+        u32::try_from(last - first + 1).unwrap_or(u32::MAX)
+    }
+}
+
+fn wc3_spawn_event_crossings(
+    runtime: &mut Wc3SpawnEventRuntime,
+    clock: &Wc3ModelSequenceClock,
+    dt_ms: f32,
+) -> u32 {
+    if let Some(global_sequence_id) = runtime.spec.global_sequence_id
+        && let Some(duration) = runtime
+            .spec
+            .global_sequence_durations_ms
+            .get(global_sequence_id as usize)
+            .copied()
+            .filter(|duration| *duration != 0)
+    {
+        let current = clock.global_elapsed_ms.max(0.0);
+        let previous = runtime.previous_global_elapsed_ms.unwrap_or_else(|| {
+            let previous = (current - dt_ms).max(0.0);
+            if previous <= f32::EPSILON {
+                -0.001
+            } else {
+                previous
+            }
+        });
+        runtime.previous_global_elapsed_ms = Some(current);
+        return runtime
+            .spec
+            .event_track_times
+            .iter()
+            .copied()
+            .map(|event_time| {
+                periodic_event_crossings(previous, current, event_time as f32, duration as f32)
+            })
+            .sum();
+    }
+
+    let current = clock.sequence_elapsed_ms.max(0.0);
+    let same_sequence = runtime
+        .previous_sequence_name
+        .as_deref()
+        .is_some_and(|name| name.eq_ignore_ascii_case(&clock.sequence_name));
+    let previous = if same_sequence {
+        runtime
+            .previous_sequence_elapsed_ms
+            .unwrap_or((current - dt_ms).max(0.0))
+    } else if runtime.previous_sequence_name.is_some() {
+        -0.001
+    } else {
+        let previous = (current - dt_ms).max(0.0);
+        if previous <= f32::EPSILON {
+            -0.001
+        } else {
+            previous
+        }
+    };
+    runtime.previous_sequence_name = Some(clock.sequence_name.clone());
+    runtime.previous_sequence_elapsed_ms = Some(current);
+
+    let Some(window) = runtime
+        .spec
+        .sequence_windows
+        .iter()
+        .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
+    else {
+        return 0;
+    };
+    let duration = window.end_ms.saturating_sub(window.start_ms).max(1) as f32;
+    runtime
+        .spec
+        .event_track_times
+        .iter()
+        .copied()
+        .filter(|event_time| *event_time >= window.start_ms && *event_time <= window.end_ms)
+        .map(|event_time| {
+            let phase = event_time.saturating_sub(window.start_ms) as f32;
+            if window.non_looping {
+                u32::from(phase > previous && phase <= current.min(duration))
+            } else {
+                periodic_event_crossings(previous, current, phase, duration)
+            }
+        })
+        .sum()
+}
+
+fn registered_model_event_lifespan_seconds(model: &RegisteredConvertedModel) -> f32 {
+    preferred_model_animation(&model.manifest)
+        .map(|animation| animation.end_ms.saturating_sub(animation.start_ms))
+        .filter(|duration_ms| *duration_ms != 0)
+        .map_or(5.0, |duration_ms| duration_ms as f32 / 1000.0)
+        .max(0.01)
+}
+
+pub fn emit_wc3_spawn_events(
+    mut commands: Commands,
+    time: Res<Time>,
+    asset_server: Res<AssetServer>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut events: Query<(Entity, &GlobalTransform, &mut Wc3SpawnEventRuntime)>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, source_transform, mut runtime) in &mut events {
+        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
+            continue;
+        };
+        let count = wc3_spawn_event_crossings(&mut runtime, &clock, dt_ms);
+        if count == 0 {
+            continue;
+        }
+
+        let lifespan = registered_model_event_lifespan_seconds(&runtime.child_model);
+        let transform = source_transform.compute_transform();
+        for _ in 0..count {
+            let child = spawn_registered_converted_model(
+                &mut commands,
+                None,
+                &runtime.child_model,
+                &asset_server,
+                transform,
+            );
+            commands
+                .entity(child)
+                .insert(Wc3SpawnedEventModel { age: 0.0, lifespan });
+        }
+    }
+}
+
+pub fn update_wc3_spawned_event_models(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut spawned: Query<(Entity, &mut Wc3SpawnedEventModel)>,
+) {
+    let dt = time.delta_secs().max(0.0);
+    for (entity, mut spawned) in &mut spawned {
+        spawned.age += dt;
+        if spawned.age >= spawned.lifespan {
+            commands.entity(entity).despawn();
+        }
     }
 }
 
@@ -4291,6 +4514,100 @@ mod tests {
                 flags: WC3_DONT_INHERIT_ROTATION,
             })
         );
+    }
+
+    fn test_spawn_event_runtime(
+        event_track_times: Vec<u32>,
+        sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+        global_sequence_id: Option<u32>,
+        global_sequence_durations_ms: Vec<u32>,
+    ) -> Wc3SpawnEventRuntime {
+        Wc3SpawnEventRuntime {
+            child_model: RegisteredConvertedModel {
+                asset_path: "wc3/units/models/spawn.gltf".to_owned(),
+                asset_prefix: "wc3/units",
+                manifest: ModelManifest {
+                    gltf: "models/spawn.gltf".to_owned(),
+                    animations: Vec::new(),
+                    particle_emitters: Vec::new(),
+                    ribbon_emitters: Vec::new(),
+                },
+            },
+            spec: Wc3EventObjectSpec {
+                kind: Wc3EventObjectKind::Spawn,
+                gltf: Some("models/spawn.gltf".to_owned()),
+                global_sequence_id,
+                event_track_times,
+                sequence_windows,
+                global_sequence_durations_ms,
+            },
+            previous_sequence_name: None,
+            previous_sequence_elapsed_ms: None,
+            previous_global_elapsed_ms: None,
+        }
+    }
+
+    #[test]
+    fn spawn_event_crossing_detects_keys_between_render_frames() {
+        let mut runtime = test_spawn_event_runtime(
+            vec![100, 500],
+            vec![Wc3EmitterSequenceWindow {
+                name: "Death".to_owned(),
+                start_ms: 0,
+                end_ms: 1_000,
+                non_looping: true,
+            }],
+            None,
+            Vec::new(),
+        );
+        let clock = Wc3ModelSequenceClock {
+            sequence_name: "Death".to_owned(),
+            sequence_elapsed_ms: 550.0,
+            global_elapsed_ms: 550.0,
+        };
+        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 100.0), 1);
+
+        let clock = Wc3ModelSequenceClock {
+            sequence_name: "Death".to_owned(),
+            sequence_elapsed_ms: 650.0,
+            global_elapsed_ms: 650.0,
+        };
+        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 100.0), 0);
+    }
+
+    #[test]
+    fn spawn_event_crossing_handles_looping_sequence_wraps() {
+        let mut runtime = test_spawn_event_runtime(
+            vec![1_250],
+            vec![Wc3EmitterSequenceWindow {
+                name: "Stand".to_owned(),
+                start_ms: 1_000,
+                end_ms: 2_000,
+                non_looping: false,
+            }],
+            None,
+            Vec::new(),
+        );
+        runtime.previous_sequence_name = Some("Stand".to_owned());
+        runtime.previous_sequence_elapsed_ms = Some(900.0);
+        let clock = Wc3ModelSequenceClock {
+            sequence_name: "Stand".to_owned(),
+            sequence_elapsed_ms: 1_250.0,
+            global_elapsed_ms: 1_250.0,
+        };
+        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 350.0), 1);
+    }
+
+    #[test]
+    fn spawn_event_crossing_handles_global_sequence_wraps() {
+        let mut runtime = test_spawn_event_runtime(vec![100], Vec::new(), Some(0), vec![1_000]);
+        runtime.previous_global_elapsed_ms = Some(950.0);
+        let clock = Wc3ModelSequenceClock {
+            sequence_name: "Stand".to_owned(),
+            sequence_elapsed_ms: 150.0,
+            global_elapsed_ms: 1_150.0,
+        };
+        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 200.0), 1);
     }
 
     #[test]

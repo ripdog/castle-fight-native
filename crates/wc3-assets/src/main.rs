@@ -14,7 +14,7 @@ use catalog::{
     CATALOG_VERSION, load_embedded_buildings, load_embedded_doodads, load_embedded_ui,
     load_embedded_units, load_embedded_visuals, load_production_units,
 };
-use export::{Exporter, ModelManifest};
+use export::{EventObjectKindManifest, Exporter, ModelManifest};
 
 #[derive(Debug, serde::Serialize)]
 struct CastleFightPackManifest {
@@ -77,6 +77,13 @@ struct ModelFeatureSummary {
     corn_emitter_count: usize,
     corn_emitter_animated_track_count: usize,
     event_object_count: usize,
+    event_sound_count: usize,
+    event_splat_count: usize,
+    event_footprint_count: usize,
+    event_spawn_count: usize,
+    event_spawn_resolved_count: usize,
+    event_uber_splat_count: usize,
+    event_unknown_count: usize,
     light_count: usize,
     omni_light_count: usize,
     non_omni_light_count: usize,
@@ -680,6 +687,33 @@ fn summarize_model_features<'a>(
         summary.corn_emitter_count += features.corn_emitter_count;
         summary.corn_emitter_animated_track_count += features.corn_emitter_animated_track_count;
         summary.event_object_count += features.event_object_count;
+        let mut event_sound_count = 0;
+        let mut event_splat_count = 0;
+        let mut event_footprint_count = 0;
+        let mut event_spawn_resolved_count = 0;
+        let mut event_spawn_unresolved_count = 0;
+        let mut event_uber_splat_count = 0;
+        let mut event_unknown_count = 0;
+        for event in &model.event_objects {
+            match event.kind {
+                EventObjectKindManifest::Sound => event_sound_count += 1,
+                EventObjectKindManifest::Splat => event_splat_count += 1,
+                EventObjectKindManifest::Footprint => event_footprint_count += 1,
+                EventObjectKindManifest::Spawn if event.lookup_resolved => {
+                    event_spawn_resolved_count += 1;
+                }
+                EventObjectKindManifest::Spawn => event_spawn_unresolved_count += 1,
+                EventObjectKindManifest::UberSplat => event_uber_splat_count += 1,
+                EventObjectKindManifest::Unknown => event_unknown_count += 1,
+            }
+        }
+        summary.event_sound_count += event_sound_count;
+        summary.event_splat_count += event_splat_count;
+        summary.event_footprint_count += event_footprint_count;
+        summary.event_spawn_count += event_spawn_resolved_count + event_spawn_unresolved_count;
+        summary.event_spawn_resolved_count += event_spawn_resolved_count;
+        summary.event_uber_splat_count += event_uber_splat_count;
+        summary.event_unknown_count += event_unknown_count;
         summary.light_count += features.light_count;
         summary.omni_light_count += features.omni_light_count;
         summary.non_omni_light_count += features.non_omni_light_count;
@@ -765,9 +799,45 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "model.event_object_unsupported",
+            "model.event_spawn_approximate",
+            FidelityStatus::Approximation,
+            event_spawn_resolved_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_spawn_unresolved",
             FidelityStatus::Unsupported,
-            features.event_object_count,
+            event_spawn_unresolved_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_sound_unsupported",
+            FidelityStatus::Unsupported,
+            event_sound_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_splat_unsupported",
+            FidelityStatus::Unsupported,
+            event_splat_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_footprint_unsupported",
+            FidelityStatus::Unsupported,
+            event_footprint_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_uber_splat_unsupported",
+            FidelityStatus::Unsupported,
+            event_uber_splat_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_unknown_unsupported",
+            FidelityStatus::Unsupported,
+            event_unknown_count,
         );
         record_fidelity_finding(
             &mut findings,
@@ -1020,7 +1090,7 @@ mod tests {
 
     #[test]
     fn fidelity_summary_aggregates_model_features_and_deduplicates_child_models() {
-        use crate::export::ModelFeatureManifest;
+        use crate::export::{EventObjectManifest, ModelFeatureManifest};
 
         let model =
             |source: &str, features: ModelFeatureManifest, warnings: Vec<&str>| ModelManifest {
@@ -1064,7 +1134,7 @@ mod tests {
             },
             vec!["warning one"],
         );
-        let second = model(
+        let mut second = model(
             "second",
             ModelFeatureManifest {
                 attachment_count: 2,
@@ -1081,6 +1151,50 @@ mod tests {
             },
             vec!["warning two", "warning three"],
         );
+        second.event_objects = vec![
+            EventObjectManifest {
+                object_id: 0,
+                name: "SPNxUDIS".to_owned(),
+                position: [0.0; 3],
+                kind: EventObjectKindManifest::Spawn,
+                event_code: Some("UDIS".to_owned()),
+                lookup_resolved: true,
+                spawn_model: Some("spawn.mdx".to_owned()),
+                gltf: Some("models/spawn.gltf".to_owned()),
+                global_sequence_id: None,
+                event_track_times: vec![100],
+                sequence_windows: Vec::new(),
+                global_sequence_durations_ms: Vec::new(),
+            },
+            EventObjectManifest {
+                object_id: 1,
+                name: "SNDxTEST".to_owned(),
+                position: [0.0; 3],
+                kind: EventObjectKindManifest::Sound,
+                event_code: Some("TEST".to_owned()),
+                lookup_resolved: false,
+                spawn_model: None,
+                gltf: None,
+                global_sequence_id: None,
+                event_track_times: vec![200],
+                sequence_windows: Vec::new(),
+                global_sequence_durations_ms: Vec::new(),
+            },
+            EventObjectManifest {
+                object_id: 2,
+                name: "Point01".to_owned(),
+                position: [0.0; 3],
+                kind: EventObjectKindManifest::Unknown,
+                event_code: None,
+                lookup_resolved: false,
+                spawn_model: None,
+                gltf: None,
+                global_sequence_id: None,
+                event_track_times: vec![300],
+                sequence_windows: Vec::new(),
+                global_sequence_durations_ms: Vec::new(),
+            },
+        ];
 
         let summary = summarize_model_features([&first, &second].into_iter());
         assert_eq!(summary.model_variants, 2);
@@ -1103,6 +1217,10 @@ mod tests {
         assert_eq!(summary.ribbon_emitter_count, 1);
         assert_eq!(summary.corn_emitter_count, 2);
         assert_eq!(summary.event_object_count, 3);
+        assert_eq!(summary.event_spawn_count, 1);
+        assert_eq!(summary.event_spawn_resolved_count, 1);
+        assert_eq!(summary.event_sound_count, 1);
+        assert_eq!(summary.event_unknown_count, 1);
         assert_eq!(summary.light_count, 3);
         assert_eq!(summary.omni_light_count, 2);
         assert_eq!(summary.non_omni_light_count, 1);
@@ -1111,9 +1229,9 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 23);
-        assert_eq!(summary.unsupported_occurrences, 6);
-        assert_eq!(summary.findings.len(), 14);
+        assert_eq!(summary.approximation_occurrences, 24);
+        assert_eq!(summary.unsupported_occurrences, 5);
+        assert_eq!(summary.findings.len(), 16);
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "material.animated_texture_approximate"
                 && finding.status == FidelityStatus::Approximation
@@ -1131,6 +1249,24 @@ mod tests {
                 && finding.status == FidelityStatus::Approximation
                 && finding.affected_models == 2
                 && finding.occurrences == 3
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "model.event_spawn_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.affected_models == 1
+                && finding.occurrences == 1
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "model.event_sound_unsupported"
+                && finding.status == FidelityStatus::Unsupported
+                && finding.affected_models == 1
+                && finding.occurrences == 1
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "model.event_unknown_unsupported"
+                && finding.status == FidelityStatus::Unsupported
+                && finding.affected_models == 1
+                && finding.occurrences == 1
         }));
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "model.omni_light_approximate"

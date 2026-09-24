@@ -397,13 +397,34 @@ pub struct AttachmentManifest {
     pub global_sequence_durations_ms: Vec<u32>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventObjectKindManifest {
+    Sound,
+    Splat,
+    Footprint,
+    Spawn,
+    UberSplat,
+    Unknown,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct EventObjectManifest {
     pub object_id: u32,
     pub name: String,
     pub position: [f32; 3],
+    pub kind: EventObjectKindManifest,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_code: Option<String>,
+    pub lookup_resolved: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spawn_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gltf: Option<String>,
     pub global_sequence_id: Option<u32>,
     pub event_track_times: Vec<u32>,
+    pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
+    pub global_sequence_durations_ms: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -568,6 +589,7 @@ pub struct Exporter {
     unit_skin: UnitSkinCatalog,
     doodad_skin: DoodadSkinCatalog,
     destructable_skin: DoodadSkinCatalog,
+    spawn_event_models: BTreeMap<String, String>,
     texture_cache: BTreeMap<String, TextureManifest>,
 }
 
@@ -680,6 +702,7 @@ impl Exporter {
             storage.flush_cache();
             parsed
         };
+        let spawn_event_models = read_spawn_event_catalog(&mut storage, map_storage.as_ref())?;
         // Whiteout's CASC reader keeps decoded data containers in an internal cache.
         // Asset extraction is a streaming workload and does not benefit enough from retaining
         // those potentially-large containers to justify letting the cache grow across models.
@@ -699,6 +722,7 @@ impl Exporter {
             unit_skin,
             doodad_skin,
             destructable_skin,
+            spawn_event_models,
             texture_cache: BTreeMap::new(),
         })
     }
@@ -1523,7 +1547,7 @@ impl Exporter {
             self.export_model_textures(&model, replaceable_textures)?;
         let gltf_name = format!("models/{asset_name}.gltf");
         let bin_name = format!("models/{asset_name}.bin");
-        let (gltf, bin, material_warnings) = build_gltf(
+        let (mut gltf, bin, material_warnings) = build_gltf(
             &model,
             logical_path,
             &asset_name,
@@ -1540,8 +1564,6 @@ impl Exporter {
         }
 
         fs::write(self.output.join(&bin_name), &bin)?;
-        let gltf_file = File::create(self.output.join(&gltf_name))?;
-        serde_json::to_writer_pretty(BufWriter::new(gltf_file), &gltf)?;
 
         let animations = animation_manifests_from_gltf(&gltf)?;
         let features = model_feature_manifest(&model);
@@ -1551,8 +1573,14 @@ impl Exporter {
         let model_particle_emitters = model_particle_emitter_manifests(&model)?;
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests)?;
         let attachments = attachment_manifests(&model)?;
-        let event_objects = event_object_manifests(&model);
+        let event_objects = event_object_manifests(&model, &self.spawn_event_models, |path| {
+            self.model_exists(path)
+        });
+        attach_event_object_extras(&mut gltf, &event_objects)?;
         let lights = light_manifests(&model)?;
+
+        let gltf_file = File::create(self.output.join(&gltf_name))?;
+        serde_json::to_writer_pretty(BufWriter::new(gltf_file), &gltf)?;
 
         Ok(ModelManifest {
             source_model: logical_path.to_owned(),
@@ -2120,6 +2148,18 @@ fn model_dependency_paths(model: &ModelManifest) -> Vec<String> {
             dependencies.insert(normalized);
         }
     }
+    for event in &model.event_objects {
+        if event.gltf.is_none() {
+            continue;
+        }
+        let Some(path) = event.spawn_model.as_deref() else {
+            continue;
+        };
+        let normalized = normalize_model_path(path);
+        if !is_intentionally_hidden_model_path(&normalized) {
+            dependencies.insert(normalized);
+        }
+    }
     dependencies.into_iter().collect()
 }
 
@@ -2523,21 +2563,99 @@ fn model_sequence_windows(model: &Model) -> Vec<ParticleEmitterSequenceManifest>
         .collect()
 }
 
-fn event_object_manifests(model: &Model) -> Vec<EventObjectManifest> {
+fn classify_event_object_name(name: &str) -> (EventObjectKindManifest, Option<String>) {
+    let bytes = name.as_bytes();
+    let kind = match bytes.get(..3).map(|prefix| prefix.to_ascii_uppercase()) {
+        Some(prefix) if prefix == b"SND" => EventObjectKindManifest::Sound,
+        Some(prefix) if prefix == b"SPL" => EventObjectKindManifest::Splat,
+        Some(prefix) if prefix == b"FPT" => EventObjectKindManifest::Footprint,
+        Some(prefix) if prefix == b"SPN" => EventObjectKindManifest::Spawn,
+        Some(prefix) if prefix == b"UBR" => EventObjectKindManifest::UberSplat,
+        _ => EventObjectKindManifest::Unknown,
+    };
+    let event_code = (kind != EventObjectKindManifest::Unknown && bytes.len() >= 8)
+        .then(|| String::from_utf8_lossy(&bytes[4..8]).to_ascii_uppercase());
+    (kind, event_code)
+}
+
+fn event_object_manifests(
+    model: &Model,
+    spawn_event_models: &BTreeMap<String, String>,
+    model_exists: impl Fn(&str) -> bool,
+) -> Vec<EventObjectManifest> {
+    let sequence_windows = model_sequence_windows(model);
     model
         .event_objects_iter()
         .map(|event| {
             let node = event.node();
+            let name = node.name();
+            let (kind, event_code) = classify_event_object_name(&name);
+            let spawn_model = (kind == EventObjectKindManifest::Spawn)
+                .then(|| {
+                    event_code
+                        .as_ref()
+                        .and_then(|code| spawn_event_models.get(code))
+                })
+                .flatten()
+                .cloned();
+            let spawn_asset_exists = spawn_model.as_deref().is_some_and(&model_exists);
+            let gltf = spawn_model
+                .as_deref()
+                .filter(|_| spawn_asset_exists)
+                .and_then(dependency_child_gltf);
+            let lookup_resolved = match kind {
+                EventObjectKindManifest::Spawn => spawn_asset_exists,
+                EventObjectKindManifest::Unknown => false,
+                _ => false,
+            };
             EventObjectManifest {
                 object_id: node.object_id(),
-                name: node.name(),
+                name,
                 position: model_node_position(model, &node),
+                kind,
+                event_code,
+                lookup_resolved,
+                spawn_model,
+                gltf,
                 global_sequence_id: (event.global_sequence_id() != NO_GLOBAL_SEQUENCE)
                     .then_some(event.global_sequence_id()),
                 event_track_times: event.event_track_times().to_vec(),
+                sequence_windows: sequence_windows.clone(),
+                global_sequence_durations_ms: model.global_sequences().to_vec(),
             }
         })
         .collect()
+}
+
+fn attach_event_object_extras(
+    gltf: &mut Value,
+    event_objects: &[EventObjectManifest],
+) -> Result<(), Box<dyn Error>> {
+    let by_object_id = event_objects
+        .iter()
+        .map(|event| (event.object_id, event))
+        .collect::<BTreeMap<_, _>>();
+    let Some(nodes) = gltf.get_mut("nodes").and_then(Value::as_array_mut) else {
+        return Ok(());
+    };
+    for node in nodes {
+        let Some(object_id) = node
+            .get("extras")
+            .and_then(|extras| extras.get("wc3ObjectId"))
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+        else {
+            continue;
+        };
+        let Some(event) = by_object_id.get(&object_id) else {
+            continue;
+        };
+        node["extras"]
+            .as_object_mut()
+            .expect("WC3 skeleton nodes always carry object extras")
+            .insert("wc3EventObject".into(), serde_json::to_value(event)?);
+    }
+    Ok(())
 }
 
 fn light_manifest(model: &Model, light: &Light) -> Result<LightManifest, Box<dyn Error>> {
@@ -4978,6 +5096,97 @@ fn read_wc3_version(install: &Path) -> Option<String> {
     None
 }
 
+fn read_game_data_table(
+    storage: &mut CascStorage,
+    map_storage: Option<&MpqStorage>,
+    logical_path: &str,
+) -> Result<String, Box<dyn Error>> {
+    if let Some(map_storage) = map_storage
+        && let Some(bytes) = map_storage.read_file(logical_path)
+    {
+        return Ok(String::from_utf8_lossy(&bytes).into_owned());
+    }
+    let casc_path = format!("war3.w3mod:{logical_path}");
+    let bytes = storage.read_file(&casc_path).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("WC3 game-data table not found: {logical_path}"),
+        )
+    })?;
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    drop(bytes);
+    storage.flush_cache();
+    Ok(text)
+}
+
+fn parse_sylk_cells(text: &str) -> BTreeMap<usize, BTreeMap<usize, String>> {
+    let mut rows = BTreeMap::<usize, BTreeMap<usize, String>>::new();
+    let mut current_y = None;
+    for raw_line in text.lines() {
+        let line = raw_line.trim_end_matches('\r');
+        if !line.starts_with("C;") {
+            continue;
+        }
+        let mut x = None;
+        let mut y = None;
+        let mut value = None;
+        for field in line.split(';').skip(1) {
+            if let Some(raw) = field.strip_prefix('X') {
+                x = raw.parse::<usize>().ok();
+            } else if let Some(raw) = field.strip_prefix('Y') {
+                y = raw.parse::<usize>().ok();
+            } else if let Some(raw) = field.strip_prefix('K') {
+                let raw = raw.trim();
+                value = Some(
+                    raw.strip_prefix('"')
+                        .and_then(|raw| raw.strip_suffix('"'))
+                        .unwrap_or(raw)
+                        .replace("\"\"", "\""),
+                );
+            }
+        }
+        if y.is_some() {
+            current_y = y;
+        }
+        let Some(x) = x else {
+            continue;
+        };
+        let Some(y) = current_y else {
+            continue;
+        };
+        let Some(value) = value else {
+            continue;
+        };
+        rows.entry(y).or_default().insert(x, value);
+    }
+    rows
+}
+
+fn read_spawn_event_catalog(
+    storage: &mut CascStorage,
+    map_storage: Option<&MpqStorage>,
+) -> Result<BTreeMap<String, String>, Box<dyn Error>> {
+    let text = read_game_data_table(storage, map_storage, r"splats\spawndata.slk")?;
+    let rows = parse_sylk_cells(&text);
+    let mut result = BTreeMap::new();
+    for (row_id, row) in rows {
+        if row_id == 1 {
+            continue;
+        }
+        let Some(code) = row.get(&1).map(|value| value.trim()) else {
+            continue;
+        };
+        let Some(model) = row.get(&2).map(|value| value.trim()) else {
+            continue;
+        };
+        if code.is_empty() || model.is_empty() || model.eq_ignore_ascii_case("INIT") {
+            continue;
+        }
+        result.insert(code.to_ascii_uppercase(), normalize_model_path(model));
+    }
+    Ok(result)
+}
+
 fn parse_doodad_skin(text: &str) -> DoodadSkinCatalog {
     let mut result = DoodadSkinCatalog::new();
     let mut current: Option<String> = None;
@@ -6430,7 +6639,7 @@ mod tests {
     }
 
     #[test]
-    fn model_dependencies_include_attachment_and_legacy_particle_children() {
+    fn model_dependencies_include_attachment_particle_and_event_children() {
         let model = ModelManifest {
             source_model: "root.mdx".to_owned(),
             source_casc_path: "root.mdx".to_owned(),
@@ -6514,7 +6723,38 @@ mod tests {
                     global_sequence_durations_ms: Vec::new(),
                 },
             ],
-            event_objects: Vec::new(),
+            event_objects: vec![
+                EventObjectManifest {
+                    object_id: 5,
+                    name: "SPNxUDIS".to_owned(),
+                    position: [0.0; 3],
+                    kind: EventObjectKindManifest::Spawn,
+                    event_code: Some("UDIS".to_owned()),
+                    lookup_resolved: true,
+                    spawn_model: Some(r"Objects\Spawnmodels\Undead\UndeadDissipate.mdx".to_owned()),
+                    gltf: Some(
+                        "models/objects__spawnmodels__undead__undeaddissipate.gltf".to_owned(),
+                    ),
+                    global_sequence_id: None,
+                    event_track_times: vec![100],
+                    sequence_windows: Vec::new(),
+                    global_sequence_durations_ms: Vec::new(),
+                },
+                EventObjectManifest {
+                    object_id: 6,
+                    name: "SPNxMISS".to_owned(),
+                    position: [0.0; 3],
+                    kind: EventObjectKindManifest::Spawn,
+                    event_code: Some("MISS".to_owned()),
+                    lookup_resolved: false,
+                    spawn_model: Some(r"Objects\Missing.mdx".to_owned()),
+                    gltf: None,
+                    global_sequence_id: None,
+                    event_track_times: vec![100],
+                    sequence_windows: Vec::new(),
+                    global_sequence_durations_ms: Vec::new(),
+                },
+            ],
             lights: Vec::new(),
             warnings: Vec::new(),
         };
@@ -6522,6 +6762,7 @@ mod tests {
         assert_eq!(
             model_dependency_paths(&model),
             [
+                r"Objects\Spawnmodels\Undead\UndeadDissipate.mdx".to_owned(),
                 r"SharedModels\NEBirth.mdx".to_owned(),
                 r"SharedModels\Smoke1_Green.mdx".to_owned(),
             ]
@@ -6616,14 +6857,76 @@ mod tests {
             z: 6.0,
         }]);
 
-        let manifests = event_object_manifests(&model);
+        let manifests = event_object_manifests(&model, &BTreeMap::new(), |_| false);
         assert_eq!(manifests.len(), 1);
         let event = &manifests[0];
         assert_eq!(event.object_id, 0);
         assert_eq!(event.name, "SNDxFootstep");
         assert_eq!(event.position, [4.0, 6.0, -5.0]);
+        assert_eq!(event.kind, EventObjectKindManifest::Sound);
+        assert_eq!(event.event_code.as_deref(), Some("FOOT"));
+        assert!(!event.lookup_resolved);
         assert_eq!(event.global_sequence_id, Some(3));
         assert_eq!(event.event_track_times, [120, 480, 900]);
+    }
+
+    #[test]
+    fn spawn_event_manifest_resolves_child_model_and_gltf() {
+        let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Death");
+            sequence.set_interval_start(1_000);
+            sequence.set_interval_end(2_000);
+            sequence.set_flags(SequenceFlag::NonLooping);
+        }
+        model.resize_event_objects(1);
+        {
+            let mut event = model.event_objects_mut(0).expect("event object");
+            event.set_event_track_times(&[1_500]);
+            let mut node = event.node_mut();
+            node.set_object_id(0);
+            node.set_name("SPNxUDIS");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f::default()]);
+
+        let spawn_catalog = BTreeMap::from([(
+            "UDIS".to_owned(),
+            r"Objects\Spawnmodels\Undead\UndeadDissipate\UndeadDissipate.mdx".to_owned(),
+        )]);
+        let manifests = event_object_manifests(&model, &spawn_catalog, |_| true);
+        let event = &manifests[0];
+        assert_eq!(event.kind, EventObjectKindManifest::Spawn);
+        assert_eq!(event.event_code.as_deref(), Some("UDIS"));
+        assert!(event.lookup_resolved);
+        assert_eq!(
+            event.spawn_model.as_deref(),
+            Some(r"Objects\Spawnmodels\Undead\UndeadDissipate\UndeadDissipate.mdx")
+        );
+        assert_eq!(
+            event.gltf.as_deref(),
+            Some("models/objects__spawnmodels__undead__undeaddissipate__undeaddissipate.gltf")
+        );
+        assert_eq!(event.sequence_windows.len(), 1);
+        assert_eq!(event.sequence_windows[0].name, "Death");
+
+        let unresolved = event_object_manifests(&model, &spawn_catalog, |_| false);
+        let unresolved = &unresolved[0];
+        assert!(!unresolved.lookup_resolved);
+        assert!(unresolved.spawn_model.is_some());
+        assert!(unresolved.gltf.is_none());
+    }
+
+    #[test]
+    fn sylk_parser_preserves_sparse_row_coordinates() {
+        let table = parse_sylk_cells(
+            "ID;PWXL;N;E\nC;X1;Y1;K\"Name\"\nC;X2;K\"Model\"\nC;X1;Y2;K\"UDIS\"\nC;X2;K\"Objects\\Spawn.mdl\"\n",
+        );
+        assert_eq!(table[&1][&1], "Name");
+        assert_eq!(table[&1][&2], "Model");
+        assert_eq!(table[&2][&1], "UDIS");
+        assert_eq!(table[&2][&2], r"Objects\Spawn.mdl");
     }
 
     #[test]
