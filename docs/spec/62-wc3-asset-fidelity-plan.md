@@ -25,6 +25,16 @@ The retained 9.27 extraction already provides broad source inventories:
 
 The audit also found that successful conversion can still discard visible WC3 features: model-local particles on units, PE2 atlas/color/alpha/head-tail semantics, animated emitter-node transforms, legacy model particles, model attachments, CORN emitters, event objects, lights, material layers/tracks, partial geoset alpha, global-sequence timing, and some hierarchy/skin semantics. These losses currently appear mostly as manifest warnings or are not surfaced at all.
 
+## Implementation progress — 2026-09-24
+
+Steps 1–3 are implemented in the current worktree: the embedded unit catalog covers all 288 resolved non-building unit objects, `--castle-fight` generates the complete unit/building/doodad/effect/UI pack, nested model dependencies are traversed, and the root manifest carries typed fidelity findings that fail on unsupported presentation semantics. The extractor also preserves PE2 scalar tracks, PE1/ribbon tracks, event timelines, material alpha/texture-selection tracks, and geoset alpha/color tracks for later native runtime consumption.
+
+The parser baseline is now `whiteoutlib 0.2.1`. Its native MDX parser supports Warcraft III 3.0/v1800 directly, so the old camera-size rewriting, v1300+ light suppression, and v1400+ SKIN narrowing have been deleted. On the full 9.27 Castle Fight closure this recovered 98 embedded lights instead of 10, exposed 13 additional child-model dependencies, and removed all 755 unsupported-v1800, 144 camera-rewrite, and 87 omitted-light warning occurrences from the old 0.1.7 run. One upstream Rust-binding defect remains explicit: `GeosetAnimation::flags()` is generated with the wrong enum type, so those diagnostic flag values are temporarily marked unavailable rather than guessed; rendering does not currently consume that field.
+
+The current full-pack gate after the parser upgrade reports the remaining implementation work rather than parser loss: 2,735 animated PE2-track occurrences, 2,006 event-object occurrences, 535 animated material-alpha tracks, 253 animated ribbon tracks, 98 parsed lights, 62 non-inheritance occurrences, 34 attachment child models, and 23 PE1 emitters are still classified unsupported at runtime. Steps 4–8 should burn these counts down rather than introducing per-model fixes.
+
+Step 4 is substantially implemented. Unit and building loaders retain model-local PE2/ribbon metadata; units, buildings, corpses, doodads, projectiles, and effect models use the common runtime emitter/ribbon components; exported WC3 object IDs bind emitters/ribbons to the corresponding animated glTF scene node; unit animation state switches active emitter sequences; and particle/ribbon origin, orientation, dimensions, velocity, and gravity inherit the resolved source-node transform scale. The remaining Step 4 cleanup is to consolidate the still-duplicated per-domain manifest/runtime descriptor types, not to add more per-model rendering exceptions.
+
 ## Invariants
 
 1. **Castle Fight closure, not Warcraft-wide dumping.** The normal pack is derived from the retained Castle Fight extraction and its referenced stock/imported dependencies. It must not crawl and convert unrelated CASC content merely because it exists in the Warcraft install.

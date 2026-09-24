@@ -1351,12 +1351,13 @@ impl Exporter {
     }
 
     fn model_exists(&self, logical_path: &str) -> bool {
-        self.map_storage
-            .as_ref()
-            .is_some_and(|storage| storage.file_exists(logical_path))
-            || casc_asset_paths(logical_path)
+        self.map_storage.as_ref().is_some_and(|storage| {
+            map_model_candidates(logical_path)
                 .iter()
-                .any(|path| self.storage.file_exists(path))
+                .any(|candidate| storage.file_exists(candidate))
+        }) || casc_asset_paths(logical_path)
+            .iter()
+            .any(|path| self.storage.file_exists(path))
     }
 
     fn export_model_closure(
@@ -1551,10 +1552,12 @@ impl Exporter {
     }
 
     fn read_model(&mut self, logical_path: &str) -> Result<(String, Bytes), Box<dyn Error>> {
-        if let Some(storage) = &self.map_storage
-            && let Some(bytes) = storage.read_file(logical_path)
-        {
-            return Ok((format!("map:{logical_path}"), bytes));
+        if let Some(storage) = &self.map_storage {
+            for candidate in map_model_candidates(logical_path) {
+                if let Some(bytes) = storage.read_file(&candidate) {
+                    return Ok((format!("map:{candidate}"), bytes));
+                }
+            }
         }
         for casc_path in casc_asset_paths(logical_path) {
             if let Some(bytes) = self.storage.read_file(&casc_path) {
@@ -4808,6 +4811,29 @@ fn is_intentionally_hidden_model_path(path: &str) -> bool {
     })
 }
 
+fn map_model_candidates(logical_path: &str) -> Vec<String> {
+    let normalized = logical_path.trim().replace('/', "\\");
+    let lower = normalized.to_ascii_lowercase();
+    let mut candidates = vec![normalized.clone()];
+    let alternate_extension = if lower.ends_with(".mdx") {
+        Some(format!("{}.mdl", &normalized[..normalized.len() - 4]))
+    } else if lower.ends_with(".mdl") {
+        Some(format!("{}.mdx", &normalized[..normalized.len() - 4]))
+    } else {
+        None
+    };
+    if let Some(alternate) = &alternate_extension {
+        candidates.push(alternate.clone());
+    }
+    if !normalized.contains('\\') {
+        candidates.push(format!(r"war3mapImported\{normalized}"));
+        if let Some(alternate) = alternate_extension {
+            candidates.push(format!(r"war3mapImported\{alternate}"));
+        }
+    }
+    candidates
+}
+
 pub fn normalize_model_path(path: &str) -> String {
     let mut path = path.trim().replace('/', "\\");
     while path.starts_with('\\') {
@@ -4907,6 +4933,26 @@ mod tests {
                 r"war3.w3mod:Textures\Water\Foam.dds".to_owned(),
                 r"war3.w3mod:_de.w3mod:Textures\Water\Foam.dds".to_owned(),
                 r"war3.w3mod:_hd.w3mod:Textures\Water\Foam.dds".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn bare_map_models_probe_import_directory_and_alternate_extension() {
+        assert_eq!(
+            map_model_candidates("Progressbar.mdx"),
+            [
+                "Progressbar.mdx".to_owned(),
+                "Progressbar.mdl".to_owned(),
+                r"war3mapImported\Progressbar.mdx".to_owned(),
+                r"war3mapImported\Progressbar.mdl".to_owned(),
+            ]
+        );
+        assert_eq!(
+            map_model_candidates(r"war3mapImported\Model.mdx"),
+            [
+                r"war3mapImported\Model.mdx".to_owned(),
+                r"war3mapImported\Model.mdl".to_owned(),
             ]
         );
     }
