@@ -4563,9 +4563,9 @@ fn doodad_model_candidates(path: &str, variation: u32, num_variations: u32) -> V
 }
 
 fn is_intentionally_hidden_model_path(path: &str) -> bool {
-    path.rsplit('\\')
-        .next()
-        .is_some_and(|name| name.eq_ignore_ascii_case("no_model.mdx"))
+    path.rsplit('\\').next().is_some_and(|name| {
+        name.eq_ignore_ascii_case("no_model.mdx") || name.eq_ignore_ascii_case("none.mdx")
+    })
 }
 
 pub fn normalize_model_path(path: &str) -> String {
@@ -4783,6 +4783,7 @@ mod tests {
         assert!(is_intentionally_hidden_model_path(
             r"war3mapImported\NO_MODEL.MDX"
         ));
+        assert!(is_intentionally_hidden_model_path("none.mdx"));
         assert!(!is_intentionally_hidden_model_path(
             r"units\human\Footman\Footman.mdx"
         ));
