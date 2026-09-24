@@ -2,7 +2,7 @@ mod catalog;
 mod export;
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     env,
     error::Error,
     fs::File,
@@ -40,6 +40,21 @@ struct PackSectionManifest {
     intentionally_hidden: usize,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum FidelityStatus {
+    Approximation,
+    Unsupported,
+}
+
+#[derive(Debug, serde::Serialize, PartialEq, Eq)]
+struct FidelityFindingSummary {
+    id: String,
+    status: FidelityStatus,
+    affected_models: usize,
+    occurrences: usize,
+}
+
 #[derive(Debug, Default, serde::Serialize, PartialEq, Eq)]
 struct ModelFeatureSummary {
     model_variants: usize,
@@ -66,6 +81,9 @@ struct ModelFeatureSummary {
     non_inheritance_node_count: usize,
     models_with_more_than_four_classic_skin_influences: usize,
     max_classic_skin_influences: u32,
+    approximation_occurrences: usize,
+    unsupported_occurrences: usize,
+    findings: Vec<FidelityFindingSummary>,
 }
 
 fn main() {
@@ -541,6 +559,13 @@ fn export_castle_fight_pack(
         fidelity.event_object_count,
         fidelity.light_count,
     );
+    println!(
+        "  fidelity gate: {} unsupported occurrence(s), {} accepted approximation occurrence(s), {} typed finding class(es)",
+        fidelity.unsupported_occurrences,
+        fidelity.approximation_occurrences,
+        fidelity.findings.len(),
+    );
+    let unsupported_semantics = fidelity.unsupported_occurrences;
 
     let pack_manifest = CastleFightPackManifest {
         schema_version: 1,
@@ -595,7 +620,7 @@ fn export_castle_fight_pack(
     };
     write_manifest(&output.join("manifest.json"), &pack_manifest)?;
 
-    let fidelity_failures = unit_manifest.failures.len()
+    let reference_failures = unit_manifest.failures.len()
         + unit_fallbacks
         + building_manifest.failures.len()
         + building_fallbacks
@@ -603,9 +628,9 @@ fn export_castle_fight_pack(
         + doodad_fallbacks
         + visual_manifest.failures.len()
         + ui_manifest.failures.len();
-    if fidelity_failures != 0 {
+    if reference_failures != 0 || unsupported_semantics != 0 {
         return Err(io::Error::other(format!(
-            "complete Castle Fight presentation extraction has {fidelity_failures} unresolved or substituted asset reference(s); inspect the sub-pack manifests"
+            "complete Castle Fight presentation extraction has {reference_failures} unresolved or substituted asset reference(s) and {unsupported_semantics} unsupported presentation-semantic occurrence(s); inspect the root and sub-pack manifests"
         ))
         .into());
     }
@@ -622,6 +647,7 @@ fn summarize_model_features<'a>(
 ) -> ModelFeatureSummary {
     let mut summary = ModelFeatureSummary::default();
     let mut attachment_models = BTreeSet::new();
+    let mut findings = BTreeMap::<&'static str, (FidelityStatus, usize, usize)>::new();
 
     for model in models {
         let features = &model.features;
@@ -660,10 +686,167 @@ fn summarize_model_features<'a>(
         summary.max_classic_skin_influences = summary
             .max_classic_skin_influences
             .max(features.max_classic_skin_influences);
+
+        record_fidelity_finding(
+            &mut findings,
+            "material.multilayer_flattened",
+            FidelityStatus::Approximation,
+            features.multilayer_material_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "material.animated_alpha_unsupported",
+            FidelityStatus::Unsupported,
+            features.animated_material_alpha_layer_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "material.animated_texture_unsupported",
+            FidelityStatus::Unsupported,
+            features.animated_material_texture_layer_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "geoset.alpha_binary",
+            FidelityStatus::Approximation,
+            features.animated_geoset_alpha_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "animation.global_sequence_reset",
+            FidelityStatus::Approximation,
+            features.global_sequence_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.attachment_child_unsupported",
+            FidelityStatus::Unsupported,
+            features.attachment_models.len(),
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "particle.pe1_unsupported",
+            FidelityStatus::Unsupported,
+            features.particle_emitter_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "particle.pe2_approximate",
+            FidelityStatus::Approximation,
+            features.particle_emitter_2_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "particle.pe2_animated_tracks_unsupported",
+            FidelityStatus::Unsupported,
+            features.particle_emitter_2_animated_track_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "ribbon.approximate",
+            FidelityStatus::Approximation,
+            features.ribbon_emitter_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "ribbon.animated_tracks_unsupported",
+            FidelityStatus::Unsupported,
+            features.ribbon_emitter_animated_track_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "particle.corn_unsupported",
+            FidelityStatus::Unsupported,
+            features.corn_emitter_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_object_unsupported",
+            FidelityStatus::Unsupported,
+            features.event_object_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.parsed_light_unsupported",
+            FidelityStatus::Unsupported,
+            features.light_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "hierarchy.non_inheritance_unsupported",
+            FidelityStatus::Unsupported,
+            features.non_inheritance_node_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "skin.more_than_four_influences",
+            FidelityStatus::Approximation,
+            usize::from(features.max_classic_skin_influences > 4),
+        );
+
+        let omitted_v1800_lights = model
+            .warnings
+            .iter()
+            .filter(|warning| {
+                warning.contains("omitted v") && warning.contains("embedded light chunk")
+            })
+            .count();
+        record_fidelity_finding(
+            &mut findings,
+            "model.v1300_plus_light_chunk_unsupported",
+            FidelityStatus::Unsupported,
+            omitted_v1800_lights,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "parser.post_v1200_compatibility",
+            FidelityStatus::Approximation,
+            model
+                .warnings
+                .iter()
+                .filter(|warning| warning.starts_with("Unsupported MDX version:"))
+                .count(),
+        );
     }
 
     summary.attachment_models = attachment_models.into_iter().collect();
+    summary.findings = findings
+        .into_iter()
+        .map(
+            |(id, (status, affected_models, occurrences))| FidelityFindingSummary {
+                id: id.to_owned(),
+                status,
+                affected_models,
+                occurrences,
+            },
+        )
+        .collect();
+    for finding in &summary.findings {
+        match finding.status {
+            FidelityStatus::Approximation => {
+                summary.approximation_occurrences += finding.occurrences;
+            }
+            FidelityStatus::Unsupported => {
+                summary.unsupported_occurrences += finding.occurrences;
+            }
+        }
+    }
     summary
+}
+
+fn record_fidelity_finding(
+    findings: &mut BTreeMap<&'static str, (FidelityStatus, usize, usize)>,
+    id: &'static str,
+    status: FidelityStatus,
+    occurrences: usize,
+) {
+    if occurrences == 0 {
+        return;
+    }
+    let entry = findings.entry(id).or_insert((status, 0, 0));
+    debug_assert_eq!(entry.0, status);
+    entry.1 += 1;
+    entry.2 += occurrences;
 }
 
 fn write_manifest<T: serde::Serialize>(path: &Path, manifest: &T) -> Result<(), Box<dyn Error>> {
@@ -902,6 +1085,20 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
+        assert_eq!(summary.approximation_occurrences, 8);
+        assert_eq!(summary.unsupported_occurrences, 12);
+        assert_eq!(summary.findings.len(), 9);
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "particle.pe2_animated_tracks_unsupported"
+                && finding.status == FidelityStatus::Unsupported
+                && finding.affected_models == 1
+                && finding.occurrences == 4
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "particle.pe2_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.occurrences == 3
+        }));
     }
 
     #[test]
