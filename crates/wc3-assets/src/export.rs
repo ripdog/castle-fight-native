@@ -316,6 +316,12 @@ pub struct ParticleEmitter2Manifest {
     pub columns: u32,
     pub head_or_tail: u32,
     pub tail_length: f32,
+    pub time: f32,
+    pub head_interval: [u32; 3],
+    pub head_decay_interval: [u32; 3],
+    pub tail_interval: [u32; 3],
+    pub tail_decay_interval: [u32; 3],
+    pub priority_plane: i32,
     pub segment_colors: [[f32; 3]; 3],
     pub segment_alpha: [u8; 3],
     pub segment_scaling: [f32; 3],
@@ -2289,6 +2295,16 @@ fn particle_emitter_2_manifests(
                 columns: emitter.columns(),
                 head_or_tail: emitter.head_or_tail(),
                 tail_length: emitter.tail_length(),
+                time: emitter.time(),
+                head_interval: std::array::from_fn(|index| emitter.head_interval(index)),
+                head_decay_interval: std::array::from_fn(|index| {
+                    emitter.head_decay_interval(index)
+                }),
+                tail_interval: std::array::from_fn(|index| emitter.tail_interval(index)),
+                tail_decay_interval: std::array::from_fn(|index| {
+                    emitter.tail_decay_interval(index)
+                }),
+                priority_plane: emitter.priority_plane(),
                 segment_colors,
                 segment_alpha: std::array::from_fn(|index| emitter.segment_alpha(index)),
                 segment_scaling: std::array::from_fn(|index| emitter.segment_scaling(index)),
@@ -5060,6 +5076,52 @@ mod tests {
         assert_eq!(infos.get(&0).expect("node info").pivot, [0.0; 3]);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("no matching pivot point"));
+    }
+
+    #[test]
+    fn pe2_manifest_preserves_lifecycle_and_uv_animation_fields() {
+        let mut model = Model::new();
+        model.resize_particle_emitters_2(1);
+        {
+            let mut emitter = model
+                .particle_emitters_2_mut(0)
+                .expect("particle emitter 2");
+            emitter.set_length(20.0);
+            emitter.set_width(10.0);
+            emitter.set_head_or_tail(2);
+            emitter.set_tail_length(48.0);
+            emitter.set_time(0.35);
+            for (index, value) in [0, 3, 2].into_iter().enumerate() {
+                emitter.set_head_interval(index, value);
+            }
+            for (index, value) in [4, 7, 1].into_iter().enumerate() {
+                emitter.set_head_decay_interval(index, value);
+            }
+            for (index, value) in [8, 11, 3].into_iter().enumerate() {
+                emitter.set_tail_interval(index, value);
+            }
+            for (index, value) in [12, 15, 1].into_iter().enumerate() {
+                emitter.set_tail_decay_interval(index, value);
+            }
+            emitter.set_priority_plane(4);
+            emitter.set_replaceable_id(2);
+        }
+
+        let manifests =
+            particle_emitter_2_manifests(&model, &[]).expect("PE2 manifest should export");
+        assert_eq!(manifests.len(), 1);
+        let emitter = &manifests[0];
+        assert_eq!(emitter.length, 20.0);
+        assert_eq!(emitter.width, 10.0);
+        assert_eq!(emitter.head_or_tail, 2);
+        assert_eq!(emitter.tail_length, 48.0);
+        assert_eq!(emitter.time, 0.35);
+        assert_eq!(emitter.head_interval, [0, 3, 2]);
+        assert_eq!(emitter.head_decay_interval, [4, 7, 1]);
+        assert_eq!(emitter.tail_interval, [8, 11, 3]);
+        assert_eq!(emitter.tail_decay_interval, [12, 15, 1]);
+        assert_eq!(emitter.priority_plane, 4);
+        assert_eq!(emitter.replaceable_id, 2);
     }
 
     #[test]

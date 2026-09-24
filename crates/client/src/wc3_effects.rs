@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fs,
     path::{Component, Path},
+    sync::Arc,
     time::Duration,
 };
 
@@ -23,6 +24,7 @@ const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
 const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
 const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
+const PARTICLE_MATERIAL_STEPS: u8 = 31;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
 const GAMEPLAY_ANIMATION_POSE_INTERVAL: f32 = 1.0 / 30.0;
@@ -113,8 +115,24 @@ pub struct Wc3ParticleEmitter {
     pub gravity: f32,
     pub lifespan: f32,
     pub emission_rate: f32,
+    #[serde(default)]
+    pub length: f32,
+    #[serde(default)]
+    pub width: f32,
     pub rows: u32,
     pub columns: u32,
+    #[serde(default)]
+    pub head_or_tail: u32,
+    #[serde(default = "default_particle_middle_time")]
+    pub time: f32,
+    #[serde(default)]
+    pub head_interval: [u32; 3],
+    #[serde(default)]
+    pub head_decay_interval: [u32; 3],
+    #[serde(default)]
+    pub tail_interval: [u32; 3],
+    #[serde(default)]
+    pub tail_decay_interval: [u32; 3],
     pub segment_colors: [[f32; 3]; 3],
     pub segment_alpha: [u8; 3],
     pub segment_scaling: [f32; 3],
@@ -124,6 +142,10 @@ pub struct Wc3ParticleEmitter {
     pub ambient_enabled: bool,
     #[serde(default)]
     pub active_sequences: Vec<String>,
+}
+
+const fn default_particle_middle_time() -> f32 {
+    0.5
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -205,7 +227,6 @@ pub struct Wc3VisualAnimationGraphs {
 #[derive(Component)]
 pub struct Wc3EmitterSource {
     emitters: Vec<EmitterRuntime>,
-    asset_prefix: &'static str,
     node_binding_complete: bool,
 }
 
@@ -411,10 +432,30 @@ pub(crate) struct Wc3MaterialProcessed;
 #[derive(Clone)]
 struct EmitterRuntime {
     spec: Wc3ParticleEmitter,
+    visual: Arc<Wc3ParticleVisualSpec>,
     source_node: Option<Entity>,
     accumulator: f32,
     burst_pending: bool,
     sequence: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Wc3ParticleAtlasAnimation {
+    rows: u32,
+    columns: u32,
+    middle_time: f32,
+    life_interval: [u32; 3],
+    decay_interval: [u32; 3],
+}
+
+#[derive(Debug)]
+struct Wc3ParticleVisualSpec {
+    filter_mode: u32,
+    middle_time: f32,
+    segment_colors: [[f32; 3]; 3],
+    segment_alpha: [u8; 3],
+    texture: Option<String>,
+    asset_prefix: &'static str,
 }
 
 #[derive(Component)]
@@ -423,7 +464,12 @@ pub struct Wc3Particle {
     gravity: f32,
     age: f32,
     lifespan: f32,
+    middle_time: f32,
     scales: [f32; 3],
+    atlas: Wc3ParticleAtlasAnimation,
+    atlas_frame: u32,
+    visual: Arc<Wc3ParticleVisualSpec>,
+    material_step: u8,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -547,12 +593,23 @@ impl Wc3EmitterSource {
     ) -> Self {
         let emitters = emitters
             .into_iter()
-            .map(|spec| EmitterRuntime {
-                burst_pending: spec.squirt,
-                spec,
-                source_node: None,
-                accumulator: 0.0,
-                sequence: 0,
+            .map(|spec| {
+                let visual = Arc::new(Wc3ParticleVisualSpec {
+                    filter_mode: spec.filter_mode,
+                    middle_time: spec.time,
+                    segment_colors: spec.segment_colors,
+                    segment_alpha: spec.segment_alpha,
+                    texture: spec.texture.clone(),
+                    asset_prefix,
+                });
+                EmitterRuntime {
+                    burst_pending: spec.squirt,
+                    spec,
+                    visual,
+                    source_node: None,
+                    accumulator: 0.0,
+                    sequence: 0,
+                }
             })
             .collect::<Vec<_>>();
         let node_binding_complete = emitters
@@ -560,7 +617,6 @@ impl Wc3EmitterSource {
             .all(|emitter| emitter.spec.object_id.is_none());
         Self {
             emitters,
-            asset_prefix,
             node_binding_complete,
         }
     }
@@ -636,31 +692,31 @@ impl Wc3ParticleAssets {
 
     fn material(
         &mut self,
-        emitter: &Wc3ParticleEmitter,
-        asset_prefix: &str,
+        visual: &Wc3ParticleVisualSpec,
+        material_step: u8,
         asset_server: &AssetServer,
         materials: &mut Assets<StandardMaterial>,
     ) -> Handle<StandardMaterial> {
-        let color = emitter.segment_colors[0];
-        let alpha = f32::from(emitter.segment_alpha[0]) / 255.0;
-        let texture_key = emitter.texture.as_deref().unwrap_or("<none>");
+        let t = f32::from(material_step) / f32::from(PARTICLE_MATERIAL_STEPS);
+        let (color, alpha) = particle_lifecycle_color_alpha(visual, t);
+        let texture_key = visual.texture.as_deref().unwrap_or("<none>");
         let key = format!(
-            "{asset_prefix}|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{alpha:.3}",
-            emitter.filter_mode, color[0], color[1], color[2]
+            "{}|{texture_key}|{}|{:.3}|{:.3}|{:.3}|{alpha:.3}",
+            visual.asset_prefix, visual.filter_mode, color[0], color[1], color[2]
         );
         if let Some(handle) = self.materials.get(&key) {
             return handle.clone();
         }
-        let base_color = Color::srgba(color[0], color[1], color[2], alpha.max(0.05));
-        let base_color_texture = emitter
+        let base_color = Color::srgba(color[0], color[1], color[2], alpha);
+        let base_color_texture = visual
             .texture
             .as_ref()
-            .map(|texture| asset_server.load(format!("{asset_prefix}/{texture}")));
+            .map(|texture| asset_server.load(format!("{}/{texture}", visual.asset_prefix)));
         let handle = materials.add(StandardMaterial {
             base_color,
             base_color_texture,
             emissive: LinearRgba::new(color[0], color[1], color[2], 1.0),
-            alpha_mode: particle_alpha_mode(emitter.filter_mode),
+            alpha_mode: particle_alpha_mode(visual.filter_mode),
             unlit: true,
             double_sided: true,
             ..default()
@@ -1424,7 +1480,6 @@ pub fn emit_wc3_particles(
 ) {
     let dt = time.delta_secs().min(0.1);
     for (entity, transform, mut source) in &mut sources {
-        let asset_prefix = source.asset_prefix;
         for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
             let mut count = if emitter.burst_pending {
                 emitter.burst_pending = false;
@@ -1439,16 +1494,33 @@ pub fn emit_wc3_particles(
             if count == 0 || emitter.spec.lifespan <= 0.0 {
                 continue;
             }
+            let material_step = particle_material_step(0.0);
             let material = assets.particle_assets.material(
-                &emitter.spec,
-                asset_prefix,
+                &emitter.visual,
+                material_step,
                 &assets.asset_server,
                 &mut assets.materials,
             );
+            let atlas = Wc3ParticleAtlasAnimation {
+                rows: emitter.spec.rows,
+                columns: emitter.spec.columns,
+                middle_time: emitter.spec.time,
+                life_interval: if emitter.spec.head_or_tail == 1 {
+                    emitter.spec.tail_interval
+                } else {
+                    emitter.spec.head_interval
+                },
+                decay_interval: if emitter.spec.head_or_tail == 1 {
+                    emitter.spec.tail_decay_interval
+                } else {
+                    emitter.spec.head_decay_interval
+                },
+            };
+            let initial_frame = particle_atlas_frame(atlas, 0.0);
             let particle_mesh = assets.particle_assets.particle_mesh(
                 emitter.spec.rows,
                 emitter.spec.columns,
-                0,
+                initial_frame,
                 &mut assets.meshes,
             );
             let bound_transform = emitter
@@ -1458,7 +1530,7 @@ pub fn emit_wc3_particles(
             let (source_scale, source_rotation, source_translation) =
                 source_transform.to_scale_rotation_translation();
             let uniform_scale = source_scale.abs().max_element().max(0.000_1);
-            let origin = if bound_transform.is_some() {
+            let base_origin = if bound_transform.is_some() {
                 source_translation
             } else {
                 transform.transform_point(Vec3::from_array(emitter.spec.position))
@@ -1470,13 +1542,12 @@ pub fn emit_wc3_particles(
             for _ in 0..count {
                 let sequence = emitter.sequence;
                 emitter.sequence = emitter.sequence.wrapping_add(1);
-                let velocity = particle_velocity(
-                    source_rotation,
-                    entity,
-                    emitter_index as u32,
-                    sequence,
-                    &emitter.spec,
-                ) * uniform_scale;
+                let seed = particle_seed(entity, emitter_index as u32, sequence);
+                let local_spawn =
+                    particle_spawn_offset(seed, emitter.spec.width, emitter.spec.length);
+                let origin = base_origin + source_rotation * (local_spawn * source_scale);
+                let velocity =
+                    particle_velocity(source_rotation, seed, &emitter.spec) * uniform_scale;
                 commands.spawn((
                     Mesh3d(particle_mesh.clone()),
                     MeshMaterial3d(material.clone()),
@@ -1487,7 +1558,12 @@ pub fn emit_wc3_particles(
                         gravity: emitter.spec.gravity * uniform_scale,
                         age: 0.0,
                         lifespan: emitter.spec.lifespan.max(0.01),
+                        middle_time: emitter.spec.time,
                         scales: particle_scales,
+                        atlas,
+                        atlas_frame: initial_frame,
+                        visual: emitter.visual.clone(),
+                        material_step,
                     },
                 ));
             }
@@ -1499,11 +1575,18 @@ pub fn update_wc3_particles(
     mut commands: Commands,
     time: Res<Time>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
-    mut particles: Query<(Entity, &mut Transform, &mut Wc3Particle)>,
+    mut assets: Wc3ParticleRenderAssets,
+    mut particles: Query<(
+        Entity,
+        &mut Transform,
+        &mut Mesh3d,
+        &mut MeshMaterial3d<StandardMaterial>,
+        &mut Wc3Particle,
+    )>,
 ) {
     let dt = time.delta_secs().min(0.1);
     let camera_rotation = cameras.iter().next().map(GlobalTransform::rotation);
-    for (entity, mut transform, mut particle) in &mut particles {
+    for (entity, mut transform, mut mesh, mut material, mut particle) in &mut particles {
         particle.age += dt;
         if particle.age >= particle.lifespan {
             commands.entity(entity).despawn();
@@ -1514,26 +1597,47 @@ pub fn update_wc3_particles(
         if let Some(rotation) = camera_rotation {
             transform.rotation = rotation;
         }
-        let t = particle.age / particle.lifespan;
-        let scale = if t < 0.5 {
-            particle.scales[0] + (particle.scales[1] - particle.scales[0]) * (t * 2.0)
-        } else {
-            particle.scales[1] + (particle.scales[2] - particle.scales[1]) * ((t - 0.5) * 2.0)
-        };
+        let t = (particle.age / particle.lifespan).clamp(0.0, 1.0);
+        let scale = three_stage_lerp(particle.scales, t, particle.middle_time);
         transform.scale = Vec3::splat(scale.max(0.01));
+
+        let atlas_frame = particle_atlas_frame(particle.atlas, t);
+        if atlas_frame != particle.atlas_frame {
+            mesh.0 = assets.particle_assets.particle_mesh(
+                particle.atlas.rows,
+                particle.atlas.columns,
+                atlas_frame,
+                &mut assets.meshes,
+            );
+            particle.atlas_frame = atlas_frame;
+        }
+
+        let material_step = particle_material_step(t);
+        if material_step != particle.material_step {
+            material.0 = assets.particle_assets.material(
+                &particle.visual,
+                material_step,
+                &assets.asset_server,
+                &mut assets.materials,
+            );
+            particle.material_step = material_step;
+        }
     }
 }
 
-fn particle_velocity(
-    rotation: Quat,
-    entity: Entity,
-    emitter_index: u32,
-    sequence: u32,
-    emitter: &Wc3ParticleEmitter,
-) -> Vec3 {
-    let seed = (entity.to_bits() as u32).wrapping_mul(0x9e37_79b9)
+fn particle_seed(entity: Entity, emitter_index: u32, sequence: u32) -> u32 {
+    (entity.to_bits() as u32).wrapping_mul(0x9e37_79b9)
         ^ emitter_index.wrapping_mul(0x85eb_ca6b)
-        ^ sequence.wrapping_mul(0xc2b2_ae35);
+        ^ sequence.wrapping_mul(0xc2b2_ae35)
+}
+
+fn particle_spawn_offset(seed: u32, width: f32, length: f32) -> Vec3 {
+    let x = (hash_unit(seed ^ 0x2c92_7a2d) - 0.5) * width.max(0.0);
+    let y = (hash_unit(seed ^ 0x1656_67b1) - 0.5) * length.max(0.0);
+    wc3_direction_to_bevy(Vec3::new(x, y, 0.0))
+}
+
+fn particle_velocity(rotation: Quat, seed: u32, emitter: &Wc3ParticleEmitter) -> Vec3 {
     let a = hash_unit(seed);
     let b = hash_unit(seed ^ 0xa511_e9b3);
     let latitude = emitter
@@ -1553,6 +1657,88 @@ fn particle_velocity(
     let local_direction = wc3_direction_to_bevy(wc3_direction);
     let variation = 1.0 + (hash_unit(seed ^ 0x63d8_3595) * 2.0 - 1.0) * emitter.variation;
     rotation * local_direction * emitter.speed * variation.max(0.0)
+}
+
+fn particle_material_step(t: f32) -> u8 {
+    (t.clamp(0.0, 1.0) * f32::from(PARTICLE_MATERIAL_STEPS)).round() as u8
+}
+
+fn particle_lifecycle_color_alpha(visual: &Wc3ParticleVisualSpec, t: f32) -> ([f32; 3], f32) {
+    let color = std::array::from_fn(|channel| {
+        three_stage_lerp(
+            [
+                visual.segment_colors[0][channel],
+                visual.segment_colors[1][channel],
+                visual.segment_colors[2][channel],
+            ],
+            t,
+            visual.middle_time,
+        )
+    });
+    let alpha = three_stage_lerp(
+        visual.segment_alpha.map(|alpha| f32::from(alpha) / 255.0),
+        t,
+        visual.middle_time,
+    )
+    .clamp(0.0, 1.0);
+    (color, alpha)
+}
+
+fn three_stage_lerp(values: [f32; 3], t: f32, middle_time: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let middle = middle_time.clamp(0.0, 1.0);
+    if middle <= f32::EPSILON {
+        return values[1] + (values[2] - values[1]) * t;
+    }
+    if middle >= 1.0 - f32::EPSILON {
+        return values[0] + (values[1] - values[0]) * t;
+    }
+    if t <= middle {
+        values[0] + (values[1] - values[0]) * (t / middle)
+    } else {
+        values[1] + (values[2] - values[1]) * ((t - middle) / (1.0 - middle))
+    }
+}
+
+fn particle_atlas_frame(atlas: Wc3ParticleAtlasAnimation, t: f32) -> u32 {
+    let middle = atlas.middle_time.clamp(0.0, 1.0);
+    let (interval, phase) = if middle <= f32::EPSILON {
+        (atlas.decay_interval, t.clamp(0.0, 1.0))
+    } else if middle >= 1.0 - f32::EPSILON || t <= middle {
+        (
+            atlas.life_interval,
+            (t / middle.max(f32::EPSILON)).clamp(0.0, 1.0),
+        )
+    } else {
+        (
+            atlas.decay_interval,
+            ((t - middle) / (1.0 - middle)).clamp(0.0, 1.0),
+        )
+    };
+    let frame_count = atlas
+        .rows
+        .max(1)
+        .saturating_mul(atlas.columns.max(1))
+        .max(1);
+    atlas_interval_frame(interval, phase).min(frame_count - 1)
+}
+
+fn atlas_interval_frame(interval: [u32; 3], phase: f32) -> u32 {
+    let start = interval[0];
+    let end = interval[1];
+    if start == end {
+        return start;
+    }
+    let frame_span = start.abs_diff(end).saturating_add(1);
+    let repeats = interval[2].max(1);
+    let total_steps = frame_span.saturating_mul(repeats).max(1);
+    let phase = phase.clamp(0.0, 1.0 - f32::EPSILON);
+    let step = ((phase * total_steps as f32).floor() as u32) % frame_span;
+    if end >= start {
+        start.saturating_add(step)
+    } else {
+        start.saturating_sub(step)
+    }
 }
 
 fn wc3_direction_to_bevy(direction: Vec3) -> Vec3 {
@@ -1781,8 +1967,16 @@ mod tests {
             gravity: 0.0,
             lifespan: 1.0,
             emission_rate: 1.0,
+            length: 0.0,
+            width: 0.0,
             rows: 1,
             columns: 1,
+            head_or_tail: 0,
+            time: 0.5,
+            head_interval: [0, 0, 1],
+            head_decay_interval: [0, 0, 1],
+            tail_interval: [0, 0, 1],
+            tail_decay_interval: [0, 0, 1],
             segment_colors: [[1.0; 3]; 3],
             segment_alpha: [255; 3],
             segment_scaling: [1.0; 3],
@@ -1959,6 +2153,64 @@ mod tests {
         assert_eq!(wc3_direction_to_bevy(Vec3::Z), Vec3::Y);
         assert_eq!(wc3_direction_to_bevy(Vec3::Y), Vec3::NEG_Z);
         assert_eq!(wc3_direction_to_bevy(Vec3::X), Vec3::X);
+    }
+
+    #[test]
+    fn particle_spawn_rectangle_uses_wc3_xy_plane_in_client_basis() {
+        let offset = particle_spawn_offset(0x1234_5678, 20.0, 10.0);
+        assert!(offset.x.abs() <= 10.0);
+        assert_eq!(offset.y, 0.0);
+        assert!(offset.z.abs() <= 5.0);
+    }
+
+    #[test]
+    fn particle_three_stage_lifecycle_uses_authored_middle_time() {
+        let values = [0.0, 10.0, 20.0];
+        assert_eq!(three_stage_lerp(values, 0.0, 0.25), 0.0);
+        assert_eq!(three_stage_lerp(values, 0.25, 0.25), 10.0);
+        assert!((three_stage_lerp(values, 0.625, 0.25) - 15.0).abs() < 1.0e-6);
+        assert_eq!(three_stage_lerp(values, 1.0, 0.25), 20.0);
+    }
+
+    #[test]
+    fn particle_color_and_alpha_follow_the_same_authored_middle_time() {
+        let visual = Wc3ParticleVisualSpec {
+            filter_mode: 0,
+            middle_time: 0.25,
+            segment_colors: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            segment_alpha: [255, 128, 0],
+            texture: None,
+            asset_prefix: "wc3/units",
+        };
+        let (middle_color, middle_alpha) = particle_lifecycle_color_alpha(&visual, 0.25);
+        assert_eq!(middle_color, [0.0, 1.0, 0.0]);
+        assert!((middle_alpha - 128.0 / 255.0).abs() < 1.0e-6);
+
+        let (end_color, end_alpha) = particle_lifecycle_color_alpha(&visual, 1.0);
+        assert_eq!(end_color, [0.0, 0.0, 1.0]);
+        assert_eq!(end_alpha, 0.0);
+        assert_eq!(particle_material_step(0.0), 0);
+        assert_eq!(particle_material_step(1.0), PARTICLE_MATERIAL_STEPS);
+    }
+
+    #[test]
+    fn particle_atlas_uses_authored_life_and_decay_intervals() {
+        let atlas = Wc3ParticleAtlasAnimation {
+            rows: 2,
+            columns: 4,
+            middle_time: 0.5,
+            life_interval: [0, 3, 1],
+            decay_interval: [4, 7, 1],
+        };
+        assert_eq!(particle_atlas_frame(atlas, 0.0), 0);
+        assert_eq!(particle_atlas_frame(atlas, 0.49), 3);
+        assert_eq!(particle_atlas_frame(atlas, 0.5), 3);
+        assert_eq!(particle_atlas_frame(atlas, 0.51), 4);
+        assert_eq!(particle_atlas_frame(atlas, 1.0), 7);
+
+        assert_eq!(atlas_interval_frame([0, 1, 2], 0.0), 0);
+        assert_eq!(atlas_interval_frame([0, 1, 2], 0.25), 1);
+        assert_eq!(atlas_interval_frame([0, 1, 2], 0.5), 0);
     }
 
     #[test]
