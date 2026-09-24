@@ -174,6 +174,7 @@ pub struct ModelManifest {
     pub particle_emitters: Vec<ParticleEmitter2Manifest>,
     pub model_particle_emitters: Vec<ModelParticleEmitterManifest>,
     pub ribbon_emitters: Vec<RibbonEmitterManifest>,
+    pub event_objects: Vec<EventObjectManifest>,
     pub warnings: Vec<String>,
 }
 
@@ -284,6 +285,15 @@ pub struct ModelParticleEmitterManifest {
     pub lifespan: f32,
     pub initial_velocity: f32,
     pub spawn_model: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EventObjectManifest {
+    pub object_id: u32,
+    pub name: String,
+    pub position: [f32; 3],
+    pub global_sequence_id: Option<u32>,
+    pub event_track_times: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1279,6 +1289,7 @@ impl Exporter {
         let particle_emitters = particle_emitter_2_manifests(&model, &texture_manifests)?;
         let model_particle_emitters = model_particle_emitter_manifests(&model);
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests);
+        let event_objects = event_object_manifests(&model);
 
         Ok(ModelManifest {
             source_model: logical_path.to_owned(),
@@ -1294,6 +1305,7 @@ impl Exporter {
             particle_emitters,
             model_particle_emitters,
             ribbon_emitters,
+            event_objects,
             warnings,
         })
     }
@@ -2286,6 +2298,23 @@ fn model_particle_emitter_manifests(model: &Model) -> Vec<ModelParticleEmitterMa
                 lifespan: emitter.lifespan(),
                 initial_velocity: emitter.initial_velocity(),
                 spawn_model: emitter.spawn_model_file_name(),
+            }
+        })
+        .collect()
+}
+
+fn event_object_manifests(model: &Model) -> Vec<EventObjectManifest> {
+    model
+        .event_objects_iter()
+        .map(|event| {
+            let node = event.node();
+            EventObjectManifest {
+                object_id: node.object_id(),
+                name: node.name(),
+                position: model_node_position(model, &node),
+                global_sequence_id: (event.global_sequence_id() != NO_GLOBAL_SEQUENCE)
+                    .then_some(event.global_sequence_id()),
+                event_track_times: event.event_track_times().to_vec(),
             }
         })
         .collect()
@@ -5454,6 +5483,34 @@ mod tests {
         validate_f32_track(&track).expect("track layout must be valid");
         assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 150), 0.0);
         assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 200), 1.0);
+    }
+
+    #[test]
+    fn event_object_manifest_preserves_timeline_and_global_sequence() {
+        let mut model = Model::new();
+        model.resize_event_objects(1);
+        {
+            let mut event = model.event_objects_mut(0).expect("event object");
+            event.set_global_sequence_id(3);
+            event.set_event_track_times(&[120, 480, 900]);
+            let mut node = event.node_mut();
+            node.set_object_id(0);
+            node.set_name("SNDxFootstep");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f {
+            x: 4.0,
+            y: 5.0,
+            z: 6.0,
+        }]);
+
+        let manifests = event_object_manifests(&model);
+        assert_eq!(manifests.len(), 1);
+        let event = &manifests[0];
+        assert_eq!(event.object_id, 0);
+        assert_eq!(event.name, "SNDxFootstep");
+        assert_eq!(event.position, [4.0, 6.0, -5.0]);
+        assert_eq!(event.global_sequence_id, Some(3));
+        assert_eq!(event.event_track_times, [120, 480, 900]);
     }
 
     #[test]
