@@ -202,6 +202,27 @@ pub struct ModelFeatureManifest {
     pub max_classic_skin_influences: u32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScalarTrackInterpolationManifest {
+    DontInterp,
+    Linear,
+    Hermite,
+    Bezier,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ScalarTrackManifest {
+    pub interpolation: ScalarTrackInterpolationManifest,
+    pub global_sequence_id: Option<u32>,
+    pub timestamps: Vec<u32>,
+    pub values: Vec<f32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub in_tangents: Vec<f32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub out_tangents: Vec<f32>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ParticleEmitter2Manifest {
     pub object_id: u32,
@@ -215,6 +236,22 @@ pub struct ParticleEmitter2Manifest {
     pub emission_rate: f32,
     pub length: f32,
     pub width: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variation_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gravity_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emission_rate_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width_track: Option<ScalarTrackManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_track: Option<ScalarTrackManifest>,
     pub filter_mode: u32,
     pub rows: u32,
     pub columns: u32,
@@ -2084,6 +2121,50 @@ fn node_uses_non_inheritance(node: &Node) -> bool {
     !(node.flags() & inherit_mask).is_empty()
 }
 
+fn scalar_track_manifest(track: &TrackF32) -> Result<Option<ScalarTrackManifest>, Box<dyn Error>> {
+    if !track.is_used() {
+        return Ok(None);
+    }
+    validate_f32_track(track)?;
+    let interpolation = match track.interpolation_type() {
+        InterpolationType::None => ScalarTrackInterpolationManifest::DontInterp,
+        InterpolationType::Linear => ScalarTrackInterpolationManifest::Linear,
+        InterpolationType::Hermite => ScalarTrackInterpolationManifest::Hermite,
+        InterpolationType::Bezier => ScalarTrackInterpolationManifest::Bezier,
+    };
+    let smooth = matches!(
+        interpolation,
+        ScalarTrackInterpolationManifest::Hermite | ScalarTrackInterpolationManifest::Bezier
+    );
+    let mut values = Vec::with_capacity(track.key_count());
+    let mut in_tangents = if smooth {
+        Vec::with_capacity(track.key_count())
+    } else {
+        Vec::new()
+    };
+    let mut out_tangents = if smooth {
+        Vec::with_capacity(track.key_count())
+    } else {
+        Vec::new()
+    };
+    for key in 0..track.key_count() {
+        values.push(f32_key(track, key, 0));
+        if smooth {
+            in_tangents.push(f32_key(track, key, 1));
+            out_tangents.push(f32_key(track, key, 2));
+        }
+    }
+    Ok(Some(ScalarTrackManifest {
+        interpolation,
+        global_sequence_id: (track.global_sequence_id() != NO_GLOBAL_SEQUENCE)
+            .then_some(track.global_sequence_id()),
+        timestamps: track.timestamps().to_vec(),
+        values,
+        in_tangents,
+        out_tangents,
+    }))
+}
+
 fn particle_emitter_2_manifests(
     model: &Model,
     textures: &[TextureManifest],
@@ -2118,6 +2199,14 @@ fn particle_emitter_2_manifests(
                 emission_rate: emitter.emission_rate(),
                 length: emitter.length(),
                 width: emitter.width(),
+                speed_track: scalar_track_manifest(&emitter.speed_tracks())?,
+                variation_track: scalar_track_manifest(&emitter.variation_tracks())?,
+                latitude_track: scalar_track_manifest(&emitter.latitude_tracks())?,
+                gravity_track: scalar_track_manifest(&emitter.gravity_tracks())?,
+                emission_rate_track: scalar_track_manifest(&emitter.emission_rate_tracks())?,
+                length_track: scalar_track_manifest(&emitter.length_tracks())?,
+                width_track: scalar_track_manifest(&emitter.width_tracks())?,
+                visibility_track: scalar_track_manifest(&emitter.visibility_tracks())?,
                 filter_mode: emitter.filter_mode(),
                 rows: emitter.rows(),
                 columns: emitter.columns(),
@@ -5365,6 +5454,40 @@ mod tests {
         validate_f32_track(&track).expect("track layout must be valid");
         assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 150), 0.0);
         assert_eq!(evaluate_f32(&track, &[0, 1], 100, 200, 200), 1.0);
+    }
+
+    #[test]
+    fn scalar_track_manifest_preserves_smooth_keys_tangents_and_global_sequence() {
+        let mut track = TrackF32::new();
+        track.set_is_used(true);
+        track.set_interpolation_type(InterpolationType::Hermite);
+        track.set_global_sequence_id(7);
+        track.set_key_count(2);
+        track.set_timestamps(&[100, 250]);
+        track.set_keys(&[1.0, 0.5, 1.5, 2.0, 1.7, 2.3]);
+
+        let manifest = scalar_track_manifest(&track)
+            .expect("track should serialize")
+            .expect("used track should be retained");
+        assert_eq!(
+            manifest.interpolation,
+            ScalarTrackInterpolationManifest::Hermite
+        );
+        assert_eq!(manifest.global_sequence_id, Some(7));
+        assert_eq!(manifest.timestamps, [100, 250]);
+        assert_eq!(manifest.values, [1.0, 2.0]);
+        assert_eq!(manifest.in_tangents, [0.5, 1.7]);
+        assert_eq!(manifest.out_tangents, [1.5, 2.3]);
+    }
+
+    #[test]
+    fn scalar_track_manifest_omits_unused_tracks() {
+        let track = TrackF32::new();
+        assert!(
+            scalar_track_manifest(&track)
+                .expect("unused track should be valid")
+                .is_none()
+        );
     }
 
     #[test]
