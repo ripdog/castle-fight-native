@@ -21,6 +21,12 @@ use crate::terrain::client_asset_root;
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
+const CONVERTED_MODEL_PACKS: [(&str, &str); 4] = [
+    ("wc3/units/manifest.json", "wc3/units"),
+    ("wc3/buildings/manifest.json", "wc3/buildings"),
+    ("wc3/doodads/manifest.json", "wc3/doodads"),
+    ("wc3/effects/manifest.json", "wc3/effects"),
+];
 const TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET: f32 = 2.0;
 const TEAM_COLOR_UNDERLAY_DEPTH_BIAS_OFFSET: f32 = -1.0;
 const MAX_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
@@ -324,7 +330,7 @@ struct VisualBinding {
     missile_arc: Option<f32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ModelManifest {
     gltf: String,
     #[serde(default)]
@@ -338,6 +344,26 @@ struct ModelManifest {
 #[derive(Debug, Clone, Deserialize)]
 struct ModelAnimationManifest {
     name: String,
+    #[serde(default)]
+    non_looping: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConvertedModelPackManifest {
+    #[serde(default)]
+    models: Vec<ModelManifest>,
+}
+
+#[derive(Debug, Clone)]
+struct RegisteredConvertedModel {
+    asset_path: String,
+    asset_prefix: &'static str,
+    manifest: ModelManifest,
+}
+
+#[derive(Resource, Default)]
+pub struct Wc3ConvertedModelRegistry {
+    models: BTreeMap<String, RegisteredConvertedModel>,
 }
 
 #[derive(Component, Clone)]
@@ -520,12 +546,266 @@ pub(crate) struct Wc3PointLightRuntime {
     fallback_elapsed_ms: f32,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct Wc3ModelAttachmentSpec {
+    gltf: String,
+    #[serde(default)]
+    visibility_track: Option<Wc3ScalarTrack>,
+    #[serde(default)]
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    #[serde(default)]
+    global_sequence_durations_ms: Vec<u32>,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3ModelAttachmentRuntime {
+    child_model: RegisteredConvertedModel,
+    visibility_track: Option<Wc3ScalarTrack>,
+    sequence_windows: Vec<Wc3EmitterSequenceWindow>,
+    global_sequence_durations_ms: Vec<u32>,
+    fallback_elapsed_ms: f32,
+    child: Option<Entity>,
+}
+
 #[derive(Debug, Deserialize)]
 struct Wc3NodeExtras {
     #[serde(rename = "wc3ObjectId")]
     wc3_object_id: Option<u32>,
     #[serde(rename = "wc3Light", default)]
     wc3_light: Option<Wc3LightSpec>,
+    #[serde(rename = "wc3Attachment", default)]
+    wc3_attachment: Option<Wc3ModelAttachmentSpec>,
+}
+
+fn inherited_world_asset_path(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&WorldAssetRoot>,
+    asset_server: &AssetServer,
+) -> Option<String> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(root) = roots.get(current) {
+            return asset_server
+                .get_path(root.0.id())
+                .map(|path| path.path().to_string_lossy().replace('\\', "/"));
+        }
+        current = parents.get(current).ok()?.parent();
+    }
+    None
+}
+
+fn child_model_asset_path(parent_asset_path: &str, child_gltf: &str) -> Option<String> {
+    let child_gltf = child_gltf.replace('\\', "/");
+    validate_relative_asset_path(&child_gltf).ok()?;
+    let child_file = Path::new(&child_gltf).file_name()?;
+    let parent_dir = Path::new(parent_asset_path).parent()?;
+    Some(
+        parent_dir
+            .join(child_file)
+            .to_string_lossy()
+            .replace('\\', "/"),
+    )
+}
+
+fn preferred_model_animation(model: &ModelManifest) -> Option<&ModelAnimationManifest> {
+    model
+        .animations
+        .iter()
+        .find(|animation| animation.name.eq_ignore_ascii_case("Birth"))
+        .or_else(|| {
+            model
+                .animations
+                .iter()
+                .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
+        })
+        .or_else(|| {
+            model
+                .animations
+                .iter()
+                .find(|animation| !animation.name.eq_ignore_ascii_case("Nothing"))
+        })
+}
+
+pub fn setup_wc3_model_attachments(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    registry: Res<Wc3ConvertedModelRegistry>,
+    nodes: Query<(Entity, &GltfExtras), Added<GltfExtras>>,
+    parents: Query<&ChildOf>,
+    roots: Query<&WorldAssetRoot>,
+) {
+    for (entity, raw_extras) in &nodes {
+        let Ok(extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
+            continue;
+        };
+        let Some(spec) = extras.wc3_attachment else {
+            continue;
+        };
+        let Some(parent_asset_path) =
+            inherited_world_asset_path(entity, &parents, &roots, &asset_server)
+        else {
+            continue;
+        };
+        let Some(child_asset_path) = child_model_asset_path(&parent_asset_path, &spec.gltf) else {
+            continue;
+        };
+        let Some(child_model) = registry.get(&child_asset_path).cloned() else {
+            warn!(
+                "WC3 model attachment references unregistered converted child model {child_asset_path}"
+            );
+            continue;
+        };
+        commands.entity(entity).insert(Wc3ModelAttachmentRuntime {
+            child_model,
+            visibility_track: spec.visibility_track,
+            sequence_windows: spec.sequence_windows,
+            global_sequence_durations_ms: spec.global_sequence_durations_ms,
+            fallback_elapsed_ms: 0.0,
+            child: None,
+        });
+    }
+}
+
+fn model_attachment_visibility(
+    animation: &Wc3ModelAttachmentRuntime,
+    clock: Option<&Wc3ModelSequenceClock>,
+) -> f32 {
+    let Some(track) = animation.visibility_track.as_ref() else {
+        return 1.0;
+    };
+    if track.global_sequence_id.is_some() {
+        let (sequence_time_ms, global_elapsed_ms) = clock.map_or(
+            (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
+            |clock| {
+                (
+                    material_sequence_time_ms(&animation.sequence_windows, clock),
+                    clock.global_elapsed_ms,
+                )
+            },
+        );
+        return sample_scalar_track(
+            Some(track),
+            1.0,
+            sequence_time_ms,
+            global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+    }
+
+    let Some(clock) = clock else {
+        return 1.0;
+    };
+    let Some(window) = animation
+        .sequence_windows
+        .iter()
+        .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
+    else {
+        return sample_scalar_track(
+            Some(track),
+            1.0,
+            clock.sequence_elapsed_ms,
+            clock.global_elapsed_ms,
+            &animation.global_sequence_durations_ms,
+        );
+    };
+    if !track
+        .timestamps
+        .iter()
+        .any(|timestamp| *timestamp >= window.start_ms && *timestamp <= window.end_ms)
+    {
+        return 1.0;
+    }
+    sample_scalar_track(
+        Some(track),
+        1.0,
+        material_sequence_time_ms(&animation.sequence_windows, clock),
+        clock.global_elapsed_ms,
+        &animation.global_sequence_durations_ms,
+    )
+}
+
+fn spawn_registered_converted_model(
+    commands: &mut Commands,
+    parent: Entity,
+    model: &RegisteredConvertedModel,
+    asset_server: &AssetServer,
+) -> Entity {
+    let scene = asset_server.load(GltfAssetLabel::Scene(0).from_asset(model.asset_path.clone()));
+    let gltf = asset_server.load(model.asset_path.clone());
+    let mut child = commands.spawn((
+        WorldAssetRoot(scene),
+        Transform::IDENTITY,
+        Visibility::default(),
+    ));
+    if let Some(animation) = preferred_model_animation(&model.manifest) {
+        child.insert(Wc3VisualAnimationSource {
+            gltf,
+            animation_name: animation.name.clone(),
+            looping: !animation.non_looping,
+        });
+        if !model.manifest.particle_emitters.is_empty() {
+            child.insert(Wc3EmitterSource::with_asset_prefix_for_sequence(
+                &model.manifest.particle_emitters,
+                model.asset_prefix,
+                &animation.name,
+            ));
+        }
+        if !model.manifest.ribbon_emitters.is_empty() {
+            child.insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
+                &model.manifest.ribbon_emitters,
+                model.asset_prefix,
+                &animation.name,
+            ));
+        }
+    } else {
+        if !model.manifest.particle_emitters.is_empty() {
+            child.insert(Wc3EmitterSource::with_asset_prefix(
+                &model.manifest.particle_emitters,
+                model.asset_prefix,
+            ));
+        }
+        if !model.manifest.ribbon_emitters.is_empty() {
+            child.insert(Wc3RibbonSource::with_asset_prefix(
+                &model.manifest.ribbon_emitters,
+                model.asset_prefix,
+            ));
+        }
+    }
+    let child = child.id();
+    commands.entity(parent).add_child(child);
+    child
+}
+
+pub fn update_wc3_model_attachments(
+    mut commands: Commands,
+    time: Res<Time>,
+    asset_server: Res<AssetServer>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut attachments: Query<(Entity, &mut Wc3ModelAttachmentRuntime)>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, mut attachment) in &mut attachments {
+        attachment.fallback_elapsed_ms += dt_ms;
+        let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let visible = model_attachment_visibility(&attachment, clock.as_ref()) > 0.001;
+        match (visible, attachment.child) {
+            (true, None) => {
+                attachment.child = Some(spawn_registered_converted_model(
+                    &mut commands,
+                    entity,
+                    &attachment.child_model,
+                    &asset_server,
+                ));
+            }
+            (false, Some(child)) => {
+                commands.entity(child).try_despawn();
+                attachment.child = None;
+            }
+            _ => {}
+        }
+    }
 }
 
 fn belongs_to_model_root(entity: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
@@ -716,6 +996,45 @@ pub(crate) struct Wc3RibbonTrail {
 pub struct Wc3ParticleAssets {
     particle_quads: HashMap<(u32, u32, u32), Handle<Mesh>>,
     materials: HashMap<String, Handle<StandardMaterial>>,
+}
+
+impl Wc3ConvertedModelRegistry {
+    #[must_use]
+    pub fn load_default() -> Self {
+        let asset_root = client_asset_root();
+        let mut models = BTreeMap::new();
+        for (manifest_relative, asset_prefix) in CONVERTED_MODEL_PACKS {
+            let manifest_path = asset_root.join(manifest_relative);
+            if !manifest_path.is_file() {
+                continue;
+            }
+            let Ok(json) = fs::read_to_string(&manifest_path) else {
+                continue;
+            };
+            let Ok(manifest) = serde_json::from_str::<ConvertedModelPackManifest>(&json) else {
+                continue;
+            };
+            for model in manifest.models {
+                let gltf = model.gltf.replace('\\', "/");
+                if validate_relative_asset_path(&gltf).is_err() {
+                    continue;
+                }
+                let asset_path = format!("{asset_prefix}/{gltf}");
+                models
+                    .entry(asset_path.clone())
+                    .or_insert(RegisteredConvertedModel {
+                        asset_path,
+                        asset_prefix,
+                        manifest: model,
+                    });
+            }
+        }
+        Self { models }
+    }
+
+    fn get(&self, asset_path: &str) -> Option<&RegisteredConvertedModel> {
+        self.models.get(asset_path)
+    }
 }
 
 impl Wc3VisualSet {
@@ -3509,6 +3828,81 @@ mod tests {
         assert_eq!(clock.sequence_name, "Attack");
         assert_eq!(clock.sequence_elapsed_ms, 0.0);
         assert_eq!(clock.global_elapsed_ms, 1150.0);
+    }
+
+    #[test]
+    fn attachment_child_path_stays_inside_parent_model_pack() {
+        assert_eq!(
+            child_model_asset_path(
+                "wc3/buildings/models/altar.gltf",
+                "models/sharedmodels__nagabirth.gltf"
+            )
+            .as_deref(),
+            Some("wc3/buildings/models/sharedmodels__nagabirth.gltf")
+        );
+        assert!(
+            child_model_asset_path("wc3/buildings/models/altar.gltf", "../escape.gltf").is_none()
+        );
+    }
+
+    #[test]
+    fn attachment_visibility_does_not_leak_keys_from_other_sequences() {
+        let animation = Wc3ModelAttachmentRuntime {
+            child_model: RegisteredConvertedModel {
+                asset_path: "wc3/buildings/models/sharedmodels__nagabirth.gltf".to_owned(),
+                asset_prefix: "wc3/buildings",
+                manifest: ModelManifest {
+                    gltf: "models/sharedmodels__nagabirth.gltf".to_owned(),
+                    animations: Vec::new(),
+                    particle_emitters: Vec::new(),
+                    ribbon_emitters: Vec::new(),
+                },
+            },
+            visibility_track: Some(Wc3ScalarTrack {
+                interpolation: Wc3ScalarInterpolation::DontInterp,
+                global_sequence_id: None,
+                timestamps: vec![61_667, 65_000],
+                values: vec![0.0, 0.0],
+                in_tangents: Vec::new(),
+                out_tangents: Vec::new(),
+            }),
+            sequence_windows: vec![
+                Wc3EmitterSequenceWindow {
+                    name: "Birth".to_owned(),
+                    start_ms: 0,
+                    end_ms: 60_000,
+                    non_looping: true,
+                },
+                Wc3EmitterSequenceWindow {
+                    name: "Stand".to_owned(),
+                    start_ms: 61_667,
+                    end_ms: 64_333,
+                    non_looping: false,
+                },
+            ],
+            global_sequence_durations_ms: Vec::new(),
+            fallback_elapsed_ms: 0.0,
+            child: None,
+        };
+        let birth_clock = Wc3ModelSequenceClock {
+            sequence_name: "Birth".to_owned(),
+            sequence_elapsed_ms: 30_000.0,
+            global_elapsed_ms: 30_000.0,
+        };
+        assert_eq!(
+            model_attachment_visibility(&animation, Some(&birth_clock)),
+            1.0
+        );
+
+        let stand_clock = Wc3ModelSequenceClock {
+            sequence_name: "Stand".to_owned(),
+            sequence_elapsed_ms: 0.0,
+            global_elapsed_ms: 61_667.0,
+        };
+        assert_eq!(
+            model_attachment_visibility(&animation, Some(&stand_clock)),
+            0.0
+        );
     }
 
     #[test]

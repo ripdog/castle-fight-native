@@ -723,8 +723,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "model.attachment_child_unsupported",
-            FidelityStatus::Unsupported,
+            "model.attachment_child_approximate",
+            FidelityStatus::Approximation,
             features.attachment_models.len(),
         );
         record_fidelity_finding(
@@ -1108,14 +1108,20 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 16);
-        assert_eq!(summary.unsupported_occurrences, 9);
+        assert_eq!(summary.approximation_occurrences, 19);
+        assert_eq!(summary.unsupported_occurrences, 6);
         assert_eq!(summary.findings.len(), 12);
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "material.animated_texture_approximate"
                 && finding.status == FidelityStatus::Approximation
                 && finding.affected_models == 1
                 && finding.occurrences == 2
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "model.attachment_child_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.affected_models == 2
+                && finding.occurrences == 3
         }));
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "model.omni_light_approximate"

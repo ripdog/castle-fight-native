@@ -48,12 +48,13 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3AttachToNode, Wc3EmitterSource, Wc3ModelSequenceSelection,
-        Wc3ParticleAssets, Wc3RibbonSource, Wc3StatusVisualKind, Wc3TeamTint, Wc3VertexTint,
-        Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
-        emit_wc3_particles, fix_wc3_scene_materials, resolve_wc3_emitter_nodes,
-        resolve_wc3_visual_attachments, setup_wc3_model_lights, setup_wc3_visual_animation_players,
-        spawn_wc3_ribbon_trails, update_wc3_material_alpha, update_wc3_material_texture,
+        Wc3AbilityVisualAnchor, Wc3AttachToNode, Wc3ConvertedModelRegistry, Wc3EmitterSource,
+        Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3StatusVisualKind,
+        Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet,
+        advance_wc3_model_sequence_clocks, emit_wc3_particles, fix_wc3_scene_materials,
+        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments, setup_wc3_model_attachments,
+        setup_wc3_model_lights, setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails,
+        update_wc3_material_alpha, update_wc3_material_texture, update_wc3_model_attachments,
         update_wc3_model_lights, update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
@@ -895,6 +896,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<UnitModelSet>()
             .init_resource::<BuildingModelSet>()
             .init_resource::<Wc3VisualSet>()
+            .init_resource::<Wc3ConvertedModelRegistry>()
             .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<FpsDisplay>()
             .init_resource::<MapGridState>()
@@ -930,7 +932,7 @@ impl Plugin for CastlePresentationPlugin {
                 Update,
                 (
                     fix_wc3_scene_materials,
-                    setup_wc3_model_lights,
+                    (setup_wc3_model_lights, setup_wc3_model_attachments),
                     resolve_wc3_visual_attachments,
                     resolve_wc3_emitter_nodes,
                     setup_wc3_visual_animation_players,
@@ -941,6 +943,7 @@ impl Plugin for CastlePresentationPlugin {
                     trigger_attack_animations,
                     update_imported_unit_animations,
                     advance_wc3_model_sequence_clocks,
+                    update_wc3_model_attachments,
                     update_wc3_material_alpha,
                     update_wc3_material_texture,
                     update_wc3_model_lights,
@@ -1008,6 +1011,7 @@ fn setup_scene(
         ResMut<UnitModelSet>,
         ResMut<BuildingModelSet>,
         ResMut<Wc3VisualSet>,
+        ResMut<Wc3ConvertedModelRegistry>,
     ),
     selected_match: Res<SelectedMatch>,
     samples: Res<PresentationSamples>,
@@ -1020,7 +1024,7 @@ fn setup_scene(
     assets: SceneAssetResources<'_>,
     mut gizmo_configs: ResMut<GizmoConfigStore>,
 ) {
-    let (mut unit_models, mut building_models, mut wc3_visuals) = model_sets;
+    let (mut unit_models, mut building_models, mut wc3_visuals, mut converted_models) = model_sets;
     let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
     let SceneAssetResources {
         asset_server,
@@ -1055,6 +1059,7 @@ fn setup_scene(
         .collect::<Vec<_>>();
     *building_models = BuildingModelSet::load_selected(&asset_server, &selected_building_models);
     *wc3_visuals = Wc3VisualSet::load_default(&asset_server);
+    *converted_models = Wc3ConvertedModelRegistry::load_default();
 
     let health_bar_buffer_data = vec![[0.0; 4]; 1 + HEALTH_BAR_BATCH_MIN_BUFFER_RECTS * 2];
     let health_bar_buffer = shader_buffers.add(ShaderBuffer::from(health_bar_buffer_data.clone()));

@@ -386,7 +386,11 @@ pub struct AttachmentManifest {
     pub position: [f32; 3],
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub gltf: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility_track: Option<ScalarTrackManifest>,
+    pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
+    pub global_sequence_durations_ms: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2464,17 +2468,50 @@ fn model_particle_emitter_manifests(
 }
 
 fn attachment_manifests(model: &Model) -> Result<Vec<AttachmentManifest>, Box<dyn Error>> {
+    let sequence_windows = model_sequence_windows(model);
     model
         .attachments_iter()
         .map(|attachment| {
             let node = attachment.node();
+            let path = attachment.path();
+            let gltf = attachment_child_gltf(&path);
             Ok(AttachmentManifest {
                 object_id: node.object_id(),
                 name: node.name(),
                 position: model_node_position(model, &node),
-                path: attachment.path(),
+                path,
+                gltf,
                 visibility_track: scalar_track_manifest(&attachment.visibility_tracks())?,
+                sequence_windows: sequence_windows.clone(),
+                global_sequence_durations_ms: model.global_sequences().to_vec(),
             })
+        })
+        .collect()
+}
+
+fn attachment_child_gltf(path: &str) -> Option<String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return None;
+    }
+    let normalized = normalize_model_path(path);
+    if is_intentionally_hidden_model_path(&normalized) {
+        return None;
+    }
+    Some(format!(
+        "models/{}.gltf",
+        doodad_asset_name(&normalized, &BTreeMap::new())
+    ))
+}
+
+fn model_sequence_windows(model: &Model) -> Vec<ParticleEmitterSequenceManifest> {
+    model
+        .sequences_iter()
+        .map(|sequence| ParticleEmitterSequenceManifest {
+            name: sequence.name(),
+            start_ms: sequence.interval_start(),
+            end_ms: sequence.interval_end(),
+            non_looping: sequence.flags() == SequenceFlag::NonLooping,
         })
         .collect()
 }
@@ -3020,6 +3057,10 @@ fn build_skeleton(
             Ok((object_id, light_manifest(model, &light)?))
         })
         .collect::<Result<BTreeMap<_, _>, Box<dyn Error>>>()?;
+    let attachment_extras = attachment_manifests(model)?
+        .into_iter()
+        .map(|attachment| (attachment.object_id, attachment))
+        .collect::<BTreeMap<_, _>>();
 
     for info in infos.values() {
         let node_index = result.node_by_object[&info.object_id];
@@ -3037,6 +3078,15 @@ fn build_skeleton(
                 .as_object_mut()
                 .expect("node extras object")
                 .insert("wc3Light".into(), serde_json::to_value(light)?);
+        }
+        if let Some(attachment) = attachment_extras
+            .get(&info.object_id)
+            .filter(|attachment| attachment.gltf.is_some())
+        {
+            value["extras"]
+                .as_object_mut()
+                .expect("node extras object")
+                .insert("wc3Attachment".into(), serde_json::to_value(attachment)?);
         }
         if let Some(node_children) = children.remove(&node_index) {
             value
@@ -6406,14 +6456,20 @@ mod tests {
                     name: "birth".to_owned(),
                     position: [0.0; 3],
                     path: r"SharedModels\NEBirth.MDL".to_owned(),
+                    gltf: Some("models/sharedmodels__nebirth.gltf".to_owned()),
                     visibility_track: None,
+                    sequence_windows: Vec::new(),
+                    global_sequence_durations_ms: Vec::new(),
                 },
                 AttachmentManifest {
                     object_id: 4,
                     name: "duplicate".to_owned(),
                     position: [0.0; 3],
                     path: r"SharedModels\NEBirth.mdx".to_owned(),
+                    gltf: Some("models/sharedmodels__nebirth.gltf".to_owned()),
                     visibility_track: None,
+                    sequence_windows: Vec::new(),
+                    global_sequence_durations_ms: Vec::new(),
                 },
             ],
             event_objects: Vec::new(),
@@ -6433,6 +6489,15 @@ mod tests {
     #[test]
     fn attachment_manifest_preserves_child_path_pivot_and_visibility() {
         let mut model = Model::new();
+        model.resize_sequences(1);
+        {
+            let mut sequence = model.sequences_mut(0).expect("sequence");
+            sequence.set_name("Birth");
+            sequence.set_interval_start(0);
+            sequence.set_interval_end(600);
+            sequence.set_flags(SequenceFlag::NonLooping);
+        }
+        model.set_global_sequences(&[750]);
         model.resize_attachments(1);
         {
             let mut attachment = model.attachments_mut(0).expect("attachment");
@@ -6463,12 +6528,32 @@ mod tests {
         assert_eq!(attachment.name, "Birth Attachment");
         assert_eq!(attachment.position, [10.0, 30.0, -20.0]);
         assert_eq!(attachment.path, r"SharedModels\NEBirth.MDL");
+        assert_eq!(
+            attachment.gltf.as_deref(),
+            Some("models/sharedmodels__nebirth.gltf")
+        );
+        assert_eq!(attachment.sequence_windows.len(), 1);
+        assert_eq!(attachment.sequence_windows[0].name, "Birth");
+        assert!(attachment.sequence_windows[0].non_looping);
+        assert_eq!(attachment.global_sequence_durations_ms, [750]);
         let visibility = attachment
             .visibility_track
             .as_ref()
             .expect("visibility track should be preserved");
         assert_eq!(visibility.timestamps, [0, 500]);
         assert_eq!(visibility.values, [0.0, 1.0]);
+
+        let mut binary = BinaryBuilder::default();
+        let skeleton =
+            build_skeleton(&model, &mut binary, &mut Vec::new()).expect("skeleton should build");
+        assert_eq!(
+            skeleton.nodes[0]["extras"]["wc3Attachment"]["gltf"],
+            json!("models/sharedmodels__nebirth.gltf")
+        );
+        assert_eq!(
+            skeleton.nodes[0]["extras"]["wc3Attachment"]["sequence_windows"][0]["name"],
+            json!("Birth")
+        );
     }
 
     #[test]
