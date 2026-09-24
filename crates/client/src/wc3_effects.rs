@@ -34,6 +34,11 @@ const MAX_MODEL_PARTICLES_PER_EMITTER_PER_FRAME: u32 = 12;
 const PARTICLE_MATERIAL_STEPS: u8 = 31;
 const MAX_RIBBON_SAMPLES_PER_FRAME: u32 = 16;
 const MAX_RIBBON_POINTS: usize = 512;
+const WC3_DONT_INHERIT_TRANSLATION: i32 = 1;
+const WC3_DONT_INHERIT_SCALING: i32 = 2;
+const WC3_DONT_INHERIT_ROTATION: i32 = 4;
+const WC3_NON_INHERITANCE_MASK: i32 =
+    WC3_DONT_INHERIT_TRANSLATION | WC3_DONT_INHERIT_SCALING | WC3_DONT_INHERIT_ROTATION;
 const GAMEPLAY_ANIMATION_POSE_INTERVAL: f32 = 1.0 / 30.0;
 // Stock WC3 omni lights commonly use intensity 20. Map that to Bevy's 1,000,000-lumen
 // default point light, while retaining WC3 attenuation end as the cutoff radius.
@@ -614,10 +619,36 @@ pub(crate) struct Wc3LegacyModelParticle {
     lifespan: f32,
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Wc3NonInheritance {
+    flags: i32,
+}
+
+impl Wc3NonInheritance {
+    fn from_node_flags(flags: i32) -> Option<Self> {
+        let flags = flags & WC3_NON_INHERITANCE_MASK;
+        (flags != 0).then_some(Self { flags })
+    }
+
+    fn skips_translation(self) -> bool {
+        self.flags & WC3_DONT_INHERIT_TRANSLATION != 0
+    }
+
+    fn skips_scaling(self) -> bool {
+        self.flags & WC3_DONT_INHERIT_SCALING != 0
+    }
+
+    fn skips_rotation(self) -> bool {
+        self.flags & WC3_DONT_INHERIT_ROTATION != 0
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct Wc3NodeExtras {
     #[serde(rename = "wc3ObjectId")]
     wc3_object_id: Option<u32>,
+    #[serde(rename = "wc3NodeFlags", default)]
+    wc3_node_flags: i32,
     #[serde(rename = "wc3Light", default)]
     wc3_light: Option<Wc3LightSpec>,
     #[serde(rename = "wc3Attachment", default)]
@@ -704,6 +735,9 @@ pub fn setup_wc3_model_composed_features(
         let Ok(extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
             continue;
         };
+        if let Some(non_inheritance) = Wc3NonInheritance::from_node_flags(extras.wc3_node_flags) {
+            commands.entity(entity).insert(non_inheritance);
+        }
         if let Some(spec) = extras.wc3_attachment
             && let Some(child_model) = registered_child_model_for_node(
                 entity,
@@ -743,6 +777,131 @@ pub fn setup_wc3_model_composed_features(
                     sequence: 0,
                 });
         }
+    }
+}
+
+fn corrected_wc3_global_transform(
+    root_global: GlobalTransform,
+    parent_global: GlobalTransform,
+    local: Transform,
+    non_inheritance: Option<Wc3NonInheritance>,
+) -> GlobalTransform {
+    let Some(non_inheritance) = non_inheritance else {
+        return parent_global * GlobalTransform::from(local);
+    };
+
+    // Warcraft's non-inheritance bits suppress components of the model-node parent transform,
+    // not the game object's placement/model scale outside the MDX hierarchy. Re-express the
+    // parent relative to the nearest spawned WorldAssetRoot, mask the authored inheritance there,
+    // then restore the external root transform.
+    let mut parent_in_model = parent_global.reparented_to(&root_global);
+    if non_inheritance.skips_translation() {
+        parent_in_model.translation = Vec3::ZERO;
+    }
+    if non_inheritance.skips_rotation() {
+        parent_in_model.rotation = Quat::IDENTITY;
+    }
+    if non_inheritance.skips_scaling() {
+        parent_in_model.scale = Vec3::ONE;
+    }
+
+    root_global * GlobalTransform::from(parent_in_model) * GlobalTransform::from(local)
+}
+
+fn apply_wc3_non_inheritance_subtree(
+    entity: Entity,
+    root_global: GlobalTransform,
+    parent_global: GlobalTransform,
+    nodes: &Query<(&Transform, Option<&Children>, Option<&Wc3NonInheritance>)>,
+    roots: &Query<(), With<WorldAssetRoot>>,
+    globals: &mut Query<&mut GlobalTransform>,
+) {
+    let Ok((local, children, non_inheritance)) = nodes.get(entity) else {
+        return;
+    };
+    let local = *local;
+    let non_inheritance = non_inheritance.copied();
+    let children = children
+        .map(|children| children.iter().collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    let corrected =
+        corrected_wc3_global_transform(root_global, parent_global, local, non_inheritance);
+    if let Ok(mut global) = globals.get_mut(entity) {
+        *global = corrected;
+    }
+
+    // A nested converted child model gets its own WC3 hierarchy. Its external attachment transform
+    // must remain inherited, while non-inheritance inside that child is relative to this new root.
+    let child_root_global = if roots.get(entity).is_ok() {
+        corrected
+    } else {
+        root_global
+    };
+    for child in children {
+        apply_wc3_non_inheritance_subtree(
+            child,
+            child_root_global,
+            corrected,
+            nodes,
+            roots,
+            globals,
+        );
+    }
+}
+
+pub fn apply_wc3_non_inheritance(
+    parents: Query<&ChildOf>,
+    roots: Query<(), With<WorldAssetRoot>>,
+    flagged: Query<Entity, With<Wc3NonInheritance>>,
+    nodes: Query<(&Transform, Option<&Children>, Option<&Wc3NonInheritance>)>,
+    mut globals: ParamSet<(Query<&GlobalTransform>, Query<&mut GlobalTransform>)>,
+) {
+    for entity in &flagged {
+        let Ok(parent) = parents.get(entity) else {
+            continue;
+        };
+        let parent = parent.parent();
+
+        let mut current = parent;
+        let root = loop {
+            // Another corrected node higher in the same hierarchy will recurse through us, so do
+            // not process the subtree twice.
+            if flagged.get(current).is_ok() {
+                break None;
+            }
+            if roots.get(current).is_ok() {
+                break Some(current);
+            }
+            let Ok(next) = parents.get(current) else {
+                break None;
+            };
+            current = next.parent();
+        };
+        let Some(root) = root else {
+            continue;
+        };
+
+        let (root_global, parent_global) = {
+            let globals = globals.p0();
+            let Ok(root_global) = globals.get(root) else {
+                continue;
+            };
+            let Ok(parent_global) = globals.get(parent) else {
+                continue;
+            };
+            (*root_global, *parent_global)
+        };
+
+        let mut writable_globals = globals.p1();
+        apply_wc3_non_inheritance_subtree(
+            entity,
+            root_global,
+            parent_global,
+            &nodes,
+            &roots,
+            &mut writable_globals,
+        );
     }
 }
 
@@ -4080,6 +4239,57 @@ mod tests {
         );
         assert!(
             child_model_asset_path("wc3/buildings/models/altar.gltf", "../escape.gltf").is_none()
+        );
+    }
+
+    #[test]
+    fn wc3_non_inheritance_keeps_external_model_scale() {
+        let root = GlobalTransform::from(
+            Transform::from_translation(Vec3::new(100.0, 0.0, 0.0)).with_scale(Vec3::splat(0.5)),
+        );
+        let parent = root
+            * GlobalTransform::from(
+                Transform::from_translation(Vec3::new(10.0, 0.0, 0.0)).with_scale(Vec3::splat(2.0)),
+            );
+        let local =
+            Transform::from_translation(Vec3::new(4.0, 0.0, 0.0)).with_scale(Vec3::splat(3.0));
+        let corrected = corrected_wc3_global_transform(
+            root,
+            parent,
+            local,
+            Wc3NonInheritance::from_node_flags(WC3_DONT_INHERIT_SCALING),
+        );
+        let (scale, _, translation) = corrected.to_scale_rotation_translation();
+        assert!((translation.x - 107.0).abs() < 0.001);
+        assert!((scale.x - 1.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn wc3_non_inheritance_suppresses_parent_rotation_but_not_root_rotation() {
+        let root_rotation = Quat::from_rotation_y(0.4);
+        let parent_rotation = Quat::from_rotation_y(1.1);
+        let local_rotation = Quat::from_rotation_x(0.3);
+        let root = GlobalTransform::from(Transform::from_rotation(root_rotation));
+        let parent = root * GlobalTransform::from(Transform::from_rotation(parent_rotation));
+        let corrected = corrected_wc3_global_transform(
+            root,
+            parent,
+            Transform::from_rotation(local_rotation),
+            Wc3NonInheritance::from_node_flags(WC3_DONT_INHERIT_ROTATION),
+        );
+        let (_, rotation, _) = corrected.to_scale_rotation_translation();
+        let expected = root_rotation * local_rotation;
+        assert!(rotation.angle_between(expected) < 0.0001);
+    }
+
+    #[test]
+    fn wc3_non_inheritance_mask_ignores_other_node_flags() {
+        assert!(Wc3NonInheritance::from_node_flags(256).is_none());
+        assert_eq!(
+            Wc3NonInheritance::from_node_flags(260),
+            Some(Wc3NonInheritance {
+                flags: WC3_DONT_INHERIT_ROTATION,
+            })
         );
     }
 

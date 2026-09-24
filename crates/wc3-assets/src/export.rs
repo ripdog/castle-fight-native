@@ -3043,18 +3043,6 @@ fn build_skeleton(
         } else {
             result.scene_roots.push(node_index);
         }
-
-        let inherit_mask = NodeFlag::DONT_INHERIT_TRANSLATION
-            | NodeFlag::DONT_INHERIT_ROTATION
-            | NodeFlag::DONT_INHERIT_SCALING;
-        if !(info.flags & inherit_mask).is_empty() {
-            warnings.push(format!(
-                "node {} ({}) uses WC3 non-inheritance flags {:?}; glTF hierarchy cannot represent those flags exactly",
-                info.object_id,
-                info.name,
-                info.flags & inherit_mask
-            ));
-        }
     }
 
     let light_extras = model

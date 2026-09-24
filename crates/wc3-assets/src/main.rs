@@ -783,8 +783,8 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "hierarchy.non_inheritance_unsupported",
-            FidelityStatus::Unsupported,
+            "hierarchy.non_inheritance_approximate",
+            FidelityStatus::Approximation,
             features.non_inheritance_node_count,
         );
         record_fidelity_finding(
@@ -1058,6 +1058,7 @@ mod tests {
                 particle_emitter_2_animated_track_count: 4,
                 light_count: 2,
                 omni_light_count: 2,
+                non_inheritance_node_count: 2,
                 max_classic_skin_influences: 5,
                 ..Default::default()
             },
@@ -1110,11 +1111,17 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 21);
+        assert_eq!(summary.approximation_occurrences, 23);
         assert_eq!(summary.unsupported_occurrences, 6);
-        assert_eq!(summary.findings.len(), 13);
+        assert_eq!(summary.findings.len(), 14);
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "material.animated_texture_approximate"
+                && finding.status == FidelityStatus::Approximation
+                && finding.affected_models == 1
+                && finding.occurrences == 2
+        }));
+        assert!(summary.findings.iter().any(|finding| {
+            finding.id == "hierarchy.non_inheritance_approximate"
                 && finding.status == FidelityStatus::Approximation
                 && finding.affected_models == 1
                 && finding.occurrences == 2
