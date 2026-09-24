@@ -778,7 +778,10 @@ impl Simulation {
         {
             return false;
         }
-        let in_attack_range = distance_sq <= source.attack.range_sq();
+        let Some((attack, _, _)) = source.attack_for_unit(target.movement_class) else {
+            return false;
+        };
+        let in_attack_range = distance_sq <= attack.range_sq();
         if source.movement_class == MovementClass::Air {
             return in_attack_range || source.movement.speed_per_tick > 0;
         }
@@ -795,19 +798,20 @@ impl Simulation {
                     source_cell,
                     source.position,
                     target.position,
-                    source.attack.range,
+                    attack.range,
                     source.collision_radius_override,
                 )
                 .is_some();
         }
-        match source.attack.delivery {
+        match attack.delivery {
             AttackDelivery::Melee => {
                 self.topology.same_component(
                     self.topology.cell_of_point(source.position),
                     self.topology.cell_of_point(target.position),
                 ) && (in_attack_range || source.movement.speed_per_tick > 0)
             }
-            AttackDelivery::RangedGuaranteedHit { .. }
+            AttackDelivery::RangedInstant
+            | AttackDelivery::RangedGuaranteedHit { .. }
             | AttackDelivery::RangedBallistic { .. }
             | AttackDelivery::Bounce { .. } => {
                 in_attack_range
@@ -834,13 +838,17 @@ impl Simulation {
         {
             return false;
         }
-        let in_attack_range = distance_sq <= source.attack.range_sq();
+        let Some((attack, _, _)) = source.attack_for_building() else {
+            return false;
+        };
+        let in_attack_range = distance_sq <= attack.range_sq();
         if source.movement_class == MovementClass::Air {
             return in_attack_range || source.movement.speed_per_tick > 0;
         }
         if matches!(
-            source.attack.delivery,
-            AttackDelivery::RangedGuaranteedHit { .. }
+            attack.delivery,
+            AttackDelivery::RangedInstant
+                | AttackDelivery::RangedGuaranteedHit { .. }
                 | AttackDelivery::RangedBallistic { .. }
                 | AttackDelivery::Bounce { .. }
         ) && in_attack_range

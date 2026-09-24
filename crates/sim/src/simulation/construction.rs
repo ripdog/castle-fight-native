@@ -339,6 +339,9 @@ impl Simulation {
             if let Some(collision_radius) = properties.production_unit.collision_radius {
                 entity.insert(ProductionCollisionRadius(collision_radius));
             }
+            if let Some(secondary_attack) = properties.production_unit.secondary_attack {
+                entity.insert(ProductionSecondaryAttack(secondary_attack));
+            }
             entity.insert((
                 ProductionDamageType(properties.production_unit.damage_type),
                 ProductionArmorProfile(properties.production_unit.armor),
@@ -387,6 +390,7 @@ impl Simulation {
         entity.remove::<ProductionMovementClass>();
         entity.remove::<ProductionUnitRepairMetadata>();
         entity.remove::<ProductionAttackTargets>();
+        entity.remove::<ProductionSecondaryAttack>();
         entity.remove::<ProductionHealthRegeneration>();
         entity.remove::<ProductionDamageType>();
         entity.remove::<ProductionArmorProfile>();

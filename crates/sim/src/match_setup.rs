@@ -292,7 +292,7 @@ pub fn resolve_castle_fight_match(
         terrain,
         simulation_config,
         combat_rules,
-        direct_buildings: content.direct_building_kinds(),
+        direct_buildings: content.playable_human_direct_building_kinds(),
     })
 }
 
@@ -1046,7 +1046,7 @@ mod tests {
         assert_eq!(first.simulation.tick(), 0);
         assert_eq!(first.simulation.building_count(), 2);
         assert_eq!(first.content.identity, config.content_identity);
-        assert_eq!(first.direct_buildings.len(), 7);
+        assert_eq!(first.direct_buildings.len(), 3);
     }
 
     #[test]

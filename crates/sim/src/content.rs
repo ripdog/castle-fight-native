@@ -13,7 +13,8 @@ use crate::{
         BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity,
         CorpseDefinitionId, CorpseProfile, GameplayBundleIdentity, MovementClass, MovementProfile,
         PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, ResolvedUnitDefinition,
-        SpellcastingProfile, Team, TriggeredAttackEffect, UnitGameplayProperties, UnitTemplate,
+        SecondaryAttackProfile, SpellcastingProfile, SplashFalloffProfile, Team,
+        TriggeredAttackEffect, UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     economy::{BuildingEconomyProfile, EconomyRules, RESOURCE_FIXED_SCALE},
@@ -27,7 +28,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r4";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r5";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -289,6 +290,29 @@ impl CastleFightContentBundle {
                     .filter(|kind| self.tower(*kind).is_some())
                     .map(CastleFightBuildingKind::Tower),
             )
+            .collect()
+    }
+
+    #[must_use]
+    pub fn playable_human_direct_building_kinds(&self) -> Vec<CastleFightBuildingKind> {
+        let builder = self
+            .builder(CastleFightBuilderRace::Human)
+            .expect("Human builder must belong to playable content bundle");
+        let available = match self.map_version {
+            MapVersion::CASTLE_FIGHT_9_27 => [
+                CastleFightProductionKind::Barracks,
+                CastleFightProductionKind::SniperNest,
+                CastleFightProductionKind::WeaponLab,
+            ],
+            _ => unreachable!("unsupported Castle Fight content bundle version"),
+        };
+        available
+            .into_iter()
+            .filter(|kind| {
+                self.production_building(*kind)
+                    .is_some_and(|definition| builder.build_catalog.contains(&definition.rawcode))
+            })
+            .map(CastleFightBuildingKind::Production)
             .collect()
     }
 }
@@ -691,6 +715,10 @@ impl CastleFightBuilderDefinition {
 pub enum CastleFightUnitKind {
     Footman,
     Defender,
+    Sniper,
+    Mortar,
+    HeavyGunner,
+    Marksman,
     Ranger,
     Catapult,
     IceTrollShadowPriest,
@@ -703,6 +731,10 @@ impl CastleFightUnitKind {
         CastleFightUnitId(match self {
             Self::Footman => 0x1000_0001,
             Self::Defender => 0x1000_0002,
+            Self::Sniper => 0x1000_0007,
+            Self::Mortar => 0x1000_0008,
+            Self::HeavyGunner => 0x1000_0009,
+            Self::Marksman => 0x1000_000a,
             Self::Ranger => 0x1000_0003,
             Self::Catapult => 0x1000_0004,
             Self::IceTrollShadowPriest => 0x1000_0005,
@@ -710,9 +742,13 @@ impl CastleFightUnitKind {
         })
     }
 
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 10] = [
         Self::Footman,
         Self::Defender,
+        Self::Sniper,
+        Self::Mortar,
+        Self::HeavyGunner,
+        Self::Marksman,
         Self::Ranger,
         Self::Catapult,
         Self::IceTrollShadowPriest,
@@ -744,7 +780,15 @@ impl CastleFightUnitKind {
             });
         let mechanics = native_unit_mechanics_for(version, definition.rawcode, abilities)
             .expect("supported Castle Fight version must have native-effect tuning");
-        definition.passive_effects = mechanics.passive_effects;
+        let mut passive_effects = mechanics.passive_effects.iter().collect::<Vec<_>>();
+        if let Some(profile) = extracted_content_927()
+            .units
+            .get(&definition.rawcode)
+            .and_then(|unit| unit.splash_falloff)
+        {
+            passive_effects.push(PassiveUnitEffect::SplashFalloff(profile));
+        }
+        definition.passive_effects = PassiveUnitEffects::from_slice(&passive_effects);
         definition.spellcasting = mechanics.spellcasting;
         Ok(definition)
     }
@@ -753,6 +797,10 @@ impl CastleFightUnitKind {
         let (rawcode, name, expose_corpse) = match self {
             Self::Footman => (u32::from_be_bytes(*b"hfoo"), "Footman", true),
             Self::Defender => (u32::from_be_bytes(*b"h03A"), "Defender", true),
+            Self::Sniper => (u32::from_be_bytes(*b"hrif"), "Sniper", true),
+            Self::Mortar => (u32::from_be_bytes(*b"hmtm"), "Mortar", true),
+            Self::HeavyGunner => (u32::from_be_bytes(*b"h0A2"), "Heavy Gunner", true),
+            Self::Marksman => (u32::from_be_bytes(*b"h05C"), "Marksman", true),
             Self::Ranger => (u32::from_be_bytes(*b"e003"), "Ranger", true),
             Self::Catapult => (u32::from_be_bytes(*b"o001"), "Catapult", false),
             Self::IceTrollShadowPriest => (
@@ -779,6 +827,7 @@ pub struct CastleFightUnitDefinition {
     pub spellcasting: Option<SpellcastingProfile>,
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub movement_class: MovementClass,
     pub mechanical: bool,
     pub collision_radius: CollisionRadius,
@@ -820,7 +869,12 @@ impl CastleFightUnitDefinition {
             mechanical: self.mechanical,
             build_time_ticks: Some(self.build_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
-            attack_targets: self.attack_targets,
+            attack_targets: if let Some(secondary) = self.secondary_attack {
+                self.attack_targets.union(secondary.targets)
+            } else {
+                self.attack_targets
+            },
+            secondary_attack: self.secondary_attack,
             damage_type: self.damage_type,
             armor: self.armor,
             passive_effects: self.passive_effects,
@@ -832,6 +886,10 @@ impl CastleFightUnitDefinition {
 pub enum CastleFightProductionKind {
     Barracks,
     Stronghold,
+    SniperNest,
+    WeaponLab,
+    GunnersHall,
+    MarksmensEncampment,
     RangersHall,
     OrcishSiegeFactory,
     IceTrollHut,
@@ -844,6 +902,10 @@ impl CastleFightProductionKind {
         CastleFightBuildingId(match self {
             Self::Barracks => 0x2000_0001,
             Self::Stronghold => 0x2000_0002,
+            Self::SniperNest => 0x2000_0007,
+            Self::WeaponLab => 0x2000_0008,
+            Self::GunnersHall => 0x2000_0009,
+            Self::MarksmensEncampment => 0x2000_000a,
             Self::RangersHall => 0x2000_0003,
             Self::OrcishSiegeFactory => 0x2000_0004,
             Self::IceTrollHut => 0x2000_0005,
@@ -851,9 +913,13 @@ impl CastleFightProductionKind {
         })
     }
 
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 10] = [
         Self::Barracks,
         Self::Stronghold,
+        Self::SniperNest,
+        Self::WeaponLab,
+        Self::GunnersHall,
+        Self::MarksmensEncampment,
         Self::RangersHall,
         Self::OrcishSiegeFactory,
         Self::IceTrollHut,
@@ -876,6 +942,10 @@ impl CastleFightProductionKind {
         Ok(match rawcode {
             value if value == u32::from_be_bytes(*b"h000") => Some(Self::Barracks),
             value if value == u32::from_be_bytes(*b"h039") => Some(Self::Stronghold),
+            value if value == u32::from_be_bytes(*b"h003") => Some(Self::SniperNest),
+            value if value == u32::from_be_bytes(*b"h004") => Some(Self::WeaponLab),
+            value if value == u32::from_be_bytes(*b"h05D") => Some(Self::GunnersHall),
+            value if value == u32::from_be_bytes(*b"h0A1") => Some(Self::MarksmensEncampment),
             value if value == u32::from_be_bytes(*b"h03D") => Some(Self::RangersHall),
             value if value == u32::from_be_bytes(*b"h02I") => Some(Self::OrcishSiegeFactory),
             value if value == u32::from_be_bytes(*b"h03K") => Some(Self::IceTrollHut),
@@ -945,6 +1015,15 @@ impl CastleFightProductionKind {
         let (rawcode, unit) = match self {
             Self::Barracks => (u32::from_be_bytes(*b"h000"), CastleFightUnitKind::Footman),
             Self::Stronghold => (u32::from_be_bytes(*b"h039"), CastleFightUnitKind::Defender),
+            Self::SniperNest => (u32::from_be_bytes(*b"h003"), CastleFightUnitKind::Sniper),
+            Self::WeaponLab => (u32::from_be_bytes(*b"h004"), CastleFightUnitKind::Mortar),
+            Self::GunnersHall => (
+                u32::from_be_bytes(*b"h05D"),
+                CastleFightUnitKind::HeavyGunner,
+            ),
+            Self::MarksmensEncampment => {
+                (u32::from_be_bytes(*b"h0A1"), CastleFightUnitKind::Marksman)
+            }
             Self::RangersHall => (u32::from_be_bytes(*b"h03D"), CastleFightUnitKind::Ranger),
             Self::OrcishSiegeFactory => {
                 (u32::from_be_bytes(*b"h02I"), CastleFightUnitKind::Catapult)
@@ -1146,6 +1225,7 @@ impl CastleFightTowerDefinition {
                 build_time_ticks: None,
                 repair_time_ticks: None,
                 attack_targets: AttackTargetMask::ALL,
+                secondary_attack: None,
                 health_regen_per_second_per_10k: 0,
                 damage_type: DamageType::Normal,
                 armor: ArmorProfile::UNARMORED,
@@ -1330,6 +1410,21 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A09A") => {
             0x4000_000c
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A02L") => {
+            0x4000_000d
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06F") => {
+            0x4000_000e
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06G") => {
+            0x4000_000f
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06L") => {
+            0x4000_0010
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A07E") => {
+            0x4000_0011
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1442,6 +1537,15 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash_optional_spellcasting(hash, definition.spellcasting);
     hash.write_u8(definition.damage_type.stable_tag());
     hash.write_u8(definition.attack_targets.bits());
+    if let Some(secondary) = definition.secondary_attack {
+        hash.write_u8(1);
+        hash_attack_profile(hash, secondary.attack);
+        hash.write_u8(secondary.primary_targets.bits());
+        hash.write_u8(secondary.targets.bits());
+        hash.write_u8(secondary.damage_type.stable_tag());
+    } else {
+        hash.write_u8(0);
+    }
     hash.write_u8(match definition.movement_class {
         MovementClass::Ground => 0,
         MovementClass::Air => 1,
@@ -1568,7 +1672,7 @@ fn hash_building_economy(hash: &mut ContentHash64, economy: BuildingEconomyProfi
 fn hash_attack_profile(hash: &mut ContentHash64, attack: AttackProfile) {
     hash.write_u8(attack.delivery.stable_tag());
     match attack.delivery {
-        AttackDelivery::Melee => {}
+        AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
         AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
             hash.write_i32(speed_per_tick);
         }
@@ -1604,6 +1708,22 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
     hash.write_u64(effects.len() as u64);
     for effect in effects {
         match effect {
+            PassiveUnitEffect::CriticalStrike(profile) => {
+                hash.write_u8(5);
+                hash.write_u32(profile.ability.0);
+                hash.write_u16(profile.chance_per_10k);
+                hash.write_u16(profile.damage_multiplier_per_10k);
+                hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::SplashFalloff(profile) => {
+                hash.write_u8(6);
+                hash.write_i32(profile.full_radius);
+                hash.write_i32(profile.medium_radius);
+                hash.write_i32(profile.outer_radius);
+                hash.write_u16(profile.medium_damage_per_10k);
+                hash.write_u16(profile.outer_damage_per_10k);
+                hash.write_u8(profile.targets.bits());
+            }
             PassiveUnitEffect::Bash(profile) => {
                 hash.write_u8(0);
                 hash.write_u32(profile.ability.0);
@@ -1799,6 +1919,7 @@ struct ExtractedUnit927 {
     acquisition_range: Option<i32>,
     projectile_speed_per_tick: Option<i32>,
     outer_splash_radius: Option<i32>,
+    splash_falloff: Option<SplashFalloffProfile>,
     attack1_damage_type: Option<DamageType>,
     attack1_weapon_kind: Option<ExtractedWeaponKind927>,
     attack1_targets: Option<AttackTargetMask>,
@@ -1812,6 +1933,9 @@ struct ExtractedProtectedStats927 {
     attack1_damage: Option<i32>,
     attack1_cooldown_ticks: Option<u16>,
     attack1_range: Option<i32>,
+    attack2_damage: Option<i32>,
+    attack2_cooldown_ticks: Option<u16>,
+    attack2_range: Option<i32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1903,6 +2027,7 @@ struct ExtractedContent927 {
     unit_abilities: BTreeMap<u32, Vec<u32>>,
     protected_stats: BTreeMap<u32, ExtractedProtectedStats927>,
     primary_attacks: BTreeMap<u32, ExtractedAttack927>,
+    secondary_attacks: BTreeMap<u32, ExtractedAttack927>,
     production: BTreeMap<u32, ExtractedProduction927>,
     corpses: BTreeMap<u32, ExtractedCorpse927>,
     repair_time_ticks: BTreeMap<u32, u32>,
@@ -2024,6 +2149,37 @@ impl ExtractedContent927 {
             let projectile_speed_per_tick =
                 parse_optional_i32_927(columns[45])?.map(projectile_speed);
             let outer_splash_radius = parse_optional_i32_927(columns[41])?.map(world);
+            let splash_falloff = match (
+                parse_optional_i32_927(columns[39])?,
+                parse_optional_i32_927(columns[40])?,
+                parse_optional_i32_927(columns[41])?,
+            ) {
+                (Some(full), Some(medium), Some(outer)) if outer > 0 => {
+                    let medium_factor = parse_optional_decimal_scaled_i32_927(columns[42], 10_000)?
+                        .ok_or_else(|| {
+                            format!("unit {rawcode:#010x} lacks medium splash factor")
+                        })?;
+                    let outer_factor = parse_optional_decimal_scaled_i32_927(columns[43], 10_000)?
+                        .ok_or_else(|| format!("unit {rawcode:#010x} lacks outer splash factor"))?;
+                    if !(0 <= full && full <= medium && medium <= outer)
+                        || !(0..=10_000).contains(&medium_factor)
+                        || !(0..=10_000).contains(&outer_factor)
+                    {
+                        return Err(format!("unit {rawcode:#010x} has invalid splash bands"));
+                    }
+                    Some(SplashFalloffProfile {
+                        full_radius: world(full),
+                        medium_radius: world(medium),
+                        outer_radius: world(outer),
+                        medium_damage_per_10k: u16::try_from(medium_factor)
+                            .expect("validated splash factor"),
+                        outer_damage_per_10k: u16::try_from(outer_factor)
+                            .expect("validated splash factor"),
+                        targets: parse_attack_targets_927(columns[44]),
+                    })
+                }
+                _ => None,
+            };
             let attack1_enabled = columns[26] == "True";
             let attack1_damage_type = if attack1_enabled && columns[27] != "unknown" {
                 Some(parse_damage_type_927(columns[27])?)
@@ -2079,6 +2235,7 @@ impl ExtractedContent927 {
                 acquisition_range,
                 projectile_speed_per_tick,
                 outer_splash_radius,
+                splash_falloff,
                 attack1_damage_type,
                 attack1_weapon_kind,
                 attack1_targets,
@@ -2115,6 +2272,9 @@ impl ExtractedContent927 {
             let attack1_damage = parse_optional_decimal_rounded_i32_927(columns[42])?;
             let attack1_cooldown_ticks = parse_optional_seconds_to_ticks_u16_927(columns[34])?;
             let attack1_range = parse_optional_i32_927(columns[38])?.map(world);
+            let attack2_damage = parse_optional_decimal_rounded_i32_927(columns[66])?;
+            let attack2_cooldown_ticks = parse_optional_seconds_to_ticks_u16_927(columns[58])?;
+            let attack2_range = parse_optional_i32_927(columns[62])?.map(world);
             let row = ExtractedProtectedStats927 {
                 health,
                 armor: ArmorProfile::new(parse_armor_type_927(columns[14])?, armor_points),
@@ -2122,6 +2282,9 @@ impl ExtractedContent927 {
                 attack1_damage,
                 attack1_cooldown_ticks,
                 attack1_range,
+                attack2_damage,
+                attack2_cooldown_ticks,
+                attack2_range,
             };
             if protected_stats.insert(rawcode, row).is_some() {
                 return Err(format!(
@@ -2131,12 +2294,21 @@ impl ExtractedContent927 {
         }
 
         let mut primary_attacks = BTreeMap::new();
+        let mut secondary_attacks = BTreeMap::new();
         for line in PRODUCTION_UNIT_ATTACKS_927_TSV.lines().skip(1) {
             let columns = line.split('\t').collect::<Vec<_>>();
-            if columns.len() <= 26 || columns[4] != "1" || columns[5] != "default" {
+            if columns.len() <= 26 || columns[5] != "default" {
                 continue;
             }
             let rawcode = parse_rawcode(columns[2]);
+            let Some(range_world) = parse_optional_i32_927(columns[22])? else {
+                if columns[4] == "2" {
+                    continue;
+                }
+                return Err(format!(
+                    "unit {rawcode:#010x} has invalid primary attack range"
+                ));
+            };
             let weapon_kind = parse_weapon_kind_927(columns[12])?;
             let row = ExtractedAttack927 {
                 damage_type: parse_damage_type_927(columns[11])?,
@@ -2144,14 +2316,18 @@ impl ExtractedContent927 {
                 targets: parse_attack_targets_927(columns[13]),
                 damage: parse_optional_decimal_rounded_i32_927(columns[26])?,
                 cooldown_ticks: parse_seconds_to_ticks_u16_927(columns[20])?,
-                range: world(
-                    columns[22]
-                        .parse::<i32>()
-                        .map_err(|_| format!("unit {rawcode:#010x} has invalid attack range"))?,
-                ),
+                range: world(range_world),
             };
-            if primary_attacks.insert(rawcode, row).is_some() {
-                return Err(format!("duplicate primary attack row for {rawcode:#010x}"));
+            let selected = match columns[4] {
+                "1" => &mut primary_attacks,
+                "2" => &mut secondary_attacks,
+                _ => continue,
+            };
+            if selected.insert(rawcode, row).is_some() {
+                return Err(format!(
+                    "duplicate attack {} row for {rawcode:#010x}",
+                    columns[4]
+                ));
             }
         }
 
@@ -2402,6 +2578,7 @@ impl ExtractedContent927 {
             unit_abilities,
             protected_stats,
             primary_attacks,
+            secondary_attacks,
             production,
             corpses,
             repair_time_ticks,
@@ -3054,6 +3231,7 @@ fn extracted_tower_definition_927(
         .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing attack weapon type"));
     let delivery = match weapon_kind {
         ExtractedWeaponKind927::Melee => AttackDelivery::Melee,
+        ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
         ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
             speed_per_tick: unit
                 .projectile_speed_per_tick
@@ -3069,9 +3247,7 @@ fn extracted_tower_definition_927(
                     .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing splash radius")),
             }
         }
-        ExtractedWeaponKind927::Instant
-        | ExtractedWeaponKind927::Bounce
-        | ExtractedWeaponKind927::Line => panic!(
+        ExtractedWeaponKind927::Bounce | ExtractedWeaponKind927::Line => panic!(
             "tower {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
         ),
     };
@@ -3147,6 +3323,7 @@ fn extracted_unit_definition_927(
         .unwrap_or_else(|| panic!("unit {rawcode:#010x} is missing acquisition range"));
     let delivery = match attack.weapon_kind {
         ExtractedWeaponKind927::Melee => AttackDelivery::Melee,
+        ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
         ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
             speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
                 panic!("missile unit {rawcode:#010x} is missing projectile speed")
@@ -3162,9 +3339,7 @@ fn extracted_unit_definition_927(
                 }),
             }
         }
-        ExtractedWeaponKind927::Instant
-        | ExtractedWeaponKind927::Bounce
-        | ExtractedWeaponKind927::Line => panic!(
+        ExtractedWeaponKind927::Bounce | ExtractedWeaponKind927::Line => panic!(
             "unit {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
         ),
     };
@@ -3183,6 +3358,34 @@ fn extracted_unit_definition_927(
     } else {
         None
     };
+    let secondary_attack = content.secondary_attacks.get(&rawcode).map(|second| {
+        let delivery = match second.weapon_kind {
+            ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
+            ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: unit
+                    .projectile_speed_per_tick
+                    .expect("secondary missile speed"),
+            },
+            other => panic!("unit {rawcode:#010x} has unsupported secondary weapon {other:?}"),
+        };
+        SecondaryAttackProfile {
+            primary_targets: attack.targets,
+            attack: AttackProfile {
+                delivery,
+                damage: protected
+                    .attack2_damage
+                    .or(second.damage)
+                    .expect("secondary attack damage"),
+                range: protected.attack2_range.unwrap_or(second.range),
+                acquisition_range,
+                cooldown_ticks: protected
+                    .attack2_cooldown_ticks
+                    .unwrap_or(second.cooldown_ticks),
+            },
+            targets: second.targets,
+            damage_type: second.damage_type,
+        }
+    });
 
     CastleFightUnitDefinition {
         rawcode,
@@ -3205,6 +3408,7 @@ fn extracted_unit_definition_927(
         spellcasting: None,
         damage_type: attack.damage_type,
         attack_targets: attack.targets,
+        secondary_attack,
         movement_class: unit
             .movement_class
             .unwrap_or_else(|| panic!("unit {rawcode:#010x} is missing retained movement class")),
@@ -3407,8 +3611,8 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 0xdff0_f42b_7c1d_cd53);
-        assert_eq!(bundle.behaviors().len(), 12);
+        assert_eq!(bundle.identity.gameplay_hash, 0x6bcb_fec0_2360_147c);
+        assert_eq!(bundle.behaviors().len(), 17);
         assert!(
             bundle
                 .behaviors()

@@ -209,7 +209,7 @@ The verification implementation authors ballistic delivery with positive integer
 
 The projectile then follows presentation toward that fixed destination and does **not** follow the original target. Its vertical arc is presentation-only in this slice because only the 2D destination and due impact tick affect gameplay.
 
-When the projectile becomes due, its impact resolves in a dedicated subphase **after movement** for that simulation tick. The simulation builds a fresh spatial index from living units' post-movement positions and evaluates the authored circular zone. The current provisional splash rule damages every living hostile unit whose center lies within the radius and every living hostile building whose footprint intersects the radius; there is no friendly fire in this verification rule. A landing counts as a projectile impact even when the zone is empty, while each successfully damaged entity is counted as a separate projectile effect.
+When the projectile becomes due, its impact resolves in a dedicated subphase **after movement** for that simulation tick. The simulation builds a fresh spatial index from living units' post-movement positions and evaluates the authored circular zone. An authored splash profile applies full, medium, or outer damage according to target distance from the captured impact point and filters targets by the profile mask. Without such a profile, the verification rule damages every living hostile unit whose center lies within the radius and every living hostile building whose footprint intersects the radius. Neither path has friendly fire in the current slice. A landing counts as a projectile impact even when the zone is empty, while each successfully damaged entity is counted as a separate projectile effect.
 
 Due ballistic projectiles resolve in ascending projectile `SimId`; targets inside each impact resolve in ascending target `SimId`. Spatial enumeration order and worker completion order MUST NOT affect effect order. Therefore:
 
@@ -219,7 +219,7 @@ Due ballistic projectiles resolve in ascending projectile `SimId`; targets insid
 - an empty destination still consumes/resolves the projectile without retargeting;
 - the projectile destination and impact timing remain authoritative and participate in canonical checksums.
 
-The exact Castle Fight-compatible zone shape, friendly-fire policy, building interaction, splash falloff, and presentation arc remain compatibility-tunable content/rule details, but replacements MUST preserve explicit deterministic impact-time semantics.
+The exact Castle Fight-compatible zone shape, friendly-fire policy, building interaction, and presentation arc remain compatibility-tunable content/rule details, but replacements MUST preserve explicit deterministic impact-time semantics.
 
 ### 9.4 Bounce
 

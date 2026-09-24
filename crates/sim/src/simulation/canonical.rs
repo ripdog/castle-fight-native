@@ -238,6 +238,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
                 hash.write_u16(unit.attack.cooldown_ticks);
+                hash_secondary_attack(&mut hash, unit.secondary_attack);
                 hash.write_i32(unit.movement.speed_per_tick);
                 hash.write_u16(unit.cooldown.remaining);
                 hash.write_u64(unit.attack_sequence.0);
@@ -413,6 +414,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             .expect("production building missing attack target mask")
                             .bits(),
                     );
+                    hash_secondary_attack(&mut hash, building.production_secondary_attack);
                     hash.write_u32(
                         building
                             .production_health_regen_per_second_per_10k
@@ -543,6 +545,13 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     Some(profile) => {
                         hash.write_u8(1);
                         hash_burning_oil_profile(&mut hash, profile);
+                    }
+                    None => hash.write_u8(0),
+                }
+                match projectile.projectile.splash_falloff {
+                    Some(profile) => {
+                        hash.write_u8(1);
+                        hash_splash_falloff_profile(&mut hash, profile);
                     }
                     None => hash.write_u8(0),
                 }
@@ -748,6 +757,7 @@ pub(super) struct CanonicalUnit {
     pub(super) health: Health,
     pub(super) health_regeneration: HealthRegeneration,
     pub(super) attack: AttackProfile,
+    pub(super) secondary_attack: Option<SecondaryAttackProfile>,
     pub(super) attack_targets: AttackTargetMask,
     pub(super) damage_type: DamageType,
     pub(super) armor: ArmorProfile,
@@ -790,6 +800,7 @@ pub(super) struct CanonicalBuilding {
     pub(super) production_movement_class: Option<MovementClass>,
     pub(super) production_repair_metadata: Option<ProductionUnitRepairMetadata>,
     pub(super) production_attack_targets: Option<AttackTargetMask>,
+    pub(super) production_secondary_attack: Option<SecondaryAttackProfile>,
     pub(super) production_health_regen_per_second_per_10k: Option<u32>,
     pub(super) production_damage_type: Option<DamageType>,
     pub(super) production_armor: Option<ArmorProfile>,
@@ -1038,6 +1049,7 @@ fn hash_building_definition(
         hash_optional_u32(hash, unit.build_time_ticks);
         hash_optional_u32(hash, unit.repair_time_ticks);
         hash.write_u8(unit.attack_targets.bits());
+        hash_secondary_attack(hash, unit.secondary_attack);
         hash.write_u32(unit.health_regen_per_second_per_10k);
         hash.write_u8(unit.damage_type.stable_tag());
         hash.write_u8(unit.armor.armor_type.stable_tag());
@@ -1095,6 +1107,17 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
     hash.write_u8(u8::try_from(effects.len()).expect("passive effect count fits u8"));
     for effect in effects {
         match effect {
+            PassiveUnitEffect::SplashFalloff(profile) => {
+                hash.write_u8(6);
+                hash_splash_falloff_profile(hash, profile);
+            }
+            PassiveUnitEffect::CriticalStrike(profile) => {
+                hash.write_u8(5);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_u16(profile.chance_per_10k);
+                hash.write_u16(profile.damage_multiplier_per_10k);
+                hash.write_u8(profile.targets.bits());
+            }
             PassiveUnitEffect::Bash(profile) => {
                 hash.write_u8(0);
                 hash.write_u64(u64::from(profile.ability.0));
@@ -1166,6 +1189,15 @@ fn hash_burning_oil_profile(hash: &mut Fnv64, profile: crate::components::Burnin
     hash.write_u8(u8::from(profile.target_buildings));
 }
 
+fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::SplashFalloffProfile) {
+    hash.write_i32(profile.full_radius);
+    hash.write_i32(profile.medium_radius);
+    hash.write_i32(profile.outer_radius);
+    hash.write_u16(profile.medium_damage_per_10k);
+    hash.write_u16(profile.outer_damage_per_10k);
+    hash.write_u8(profile.targets.bits());
+}
+
 fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
     hash.write_u16(effects.stun_duration_ticks);
     match effects.triggered_spell {
@@ -1179,6 +1211,13 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
         Some(profile) => {
             hash.write_u8(1);
             hash_burning_oil_profile(hash, profile);
+        }
+        None => hash.write_u8(0),
+    }
+    match effects.splash_falloff {
+        Some(profile) => {
+            hash.write_u8(1);
+            hash_splash_falloff_profile(hash, profile);
         }
         None => hash.write_u8(0),
     }
@@ -1225,10 +1264,26 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     }
 }
 
+fn hash_secondary_attack(hash: &mut Fnv64, secondary: Option<SecondaryAttackProfile>) {
+    if let Some(profile) = secondary {
+        hash.write_u8(1);
+        hash_attack_delivery(hash, profile.attack.delivery);
+        hash.write_i32(profile.attack.damage);
+        hash.write_i32(profile.attack.range);
+        hash.write_i32(profile.attack.acquisition_range);
+        hash.write_u16(profile.attack.cooldown_ticks);
+        hash.write_u8(profile.primary_targets.bits());
+        hash.write_u8(profile.targets.bits());
+        hash.write_u8(profile.damage_type.stable_tag());
+    } else {
+        hash.write_u8(0);
+    }
+}
+
 fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
     hash.write_u8(delivery.stable_tag());
     match delivery {
-        AttackDelivery::Melee => {}
+        AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
         AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
             hash.write_i32(speed_per_tick);
         }

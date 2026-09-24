@@ -96,6 +96,46 @@
       "valid_from": "9.27",
       "valid_through": "9.27",
       "notes": "Ice Troll native Frost Armor autocast, including armor buff and melee frost retaliation slow."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02L",
+      "implementation": "warcraft-critical-strike-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Sniper 10% critical chance and 1.5x damage."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06F",
+      "implementation": "warcraft-critical-strike-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Marksman 40% critical chance and 3x damage."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06L",
+      "implementation": "warcraft-critical-strike-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Heavy Gunner 20% critical chance and 2x damage."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06G",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Heavy Gunner Slow Aura has zero movement and attack speed factors in 9.27."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07E",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Sniper building Channel marker has no directly configured effect."
     }
   ]
 }

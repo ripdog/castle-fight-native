@@ -27,9 +27,9 @@ use bevy::{
     window::PrimaryWindow,
 };
 use castle_fight_sim::{
-    AbilityCastTarget, AbilityEffect, BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CorpseView,
-    MovementClass, PlayerId, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId,
-    SimPoint, SimulationConfig, Team,
+    AbilityCastTarget, AbilityEffect, AttackDelivery, BuildingFootprint,
+    CASTLE_FIGHT_SIMULATION_HZ, CorpseView, MovementClass, PlayerId, ProjectileView,
+    ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig, Team,
 };
 
 use crate::{
@@ -46,11 +46,12 @@ use crate::{
         finish_presentation_profile, finish_scene_setup_profile, finish_transform_profile,
     },
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
-    unit_models::{UnitAnimationClip, UnitModelSet},
+    unit_models::{UnitAnimationClip, UnitModelAsset, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3EmitterSource, Wc3ParticleAssets, Wc3RibbonSource,
-        Wc3StatusVisualKind, Wc3TeamTint, Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet,
-        emit_wc3_particles, fix_wc3_scene_materials, setup_wc3_visual_animation_players,
+        Wc3AbilityVisualAnchor, Wc3AttachToNode, Wc3EmitterSource, Wc3ParticleAssets,
+        Wc3RibbonSource, Wc3StatusVisualKind, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs,
+        Wc3VisualModel, Wc3VisualSet, emit_wc3_particles, fix_wc3_scene_materials,
+        resolve_wc3_visual_attachments, setup_wc3_visual_animation_players,
         spawn_wc3_ribbon_trails, update_wc3_particles, update_wc3_ribbon_trails,
     },
 };
@@ -727,6 +728,7 @@ struct MissIndicator {
     target: SimId,
     fallback_position: SimPoint,
     remaining: f32,
+    critical: bool,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -924,6 +926,7 @@ impl Plugin for CastlePresentationPlugin {
                 Update,
                 (
                     fix_wc3_scene_materials,
+                    resolve_wc3_visual_attachments,
                     setup_wc3_visual_animation_players,
                     setup_imported_unit_animation_players,
                     setup_imported_building_animation_players,
@@ -2115,12 +2118,17 @@ fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSample
         .current
         .attacks
         .iter()
-        .filter(|attack| attack.missed)
+        .filter(|attack| attack.missed || attack.critical)
     {
+        let critical = attack.critical;
         commands.spawn((
-            Text::new("MISS"),
+            Text::new(if critical { "CRIT!" } else { "MISS" }),
             TextFont::from_font_size(24.0),
-            TextColor(Color::srgb(1.0, 0.88, 0.20)),
+            TextColor(if critical {
+                Color::srgb(1.0, 0.30, 0.10)
+            } else {
+                Color::srgb(1.0, 0.88, 0.20)
+            }),
             Node {
                 position_type: PositionType::Absolute,
                 left: px(-10_000.0),
@@ -2132,6 +2140,7 @@ fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSample
                 target: attack.target,
                 fallback_position: attack.target_position,
                 remaining: MISS_INDICATOR_SECONDS,
+                critical,
             },
         ));
     }
@@ -2180,7 +2189,11 @@ fn update_miss_indicators(
         };
         node.left = px(viewport.x - 28.0);
         node.top = px(viewport.y - 16.0 - (1.0 - life) * MISS_INDICATOR_RISE_PIXELS);
-        color.0 = Color::srgba(1.0, 0.88, 0.20, life.min(0.95));
+        color.0 = if indicator.critical {
+            Color::srgba(1.0, 0.30, 0.10, life.min(0.95))
+        } else {
+            Color::srgba(1.0, 0.88, 0.20, life.min(0.95))
+        };
     }
 }
 
@@ -2458,12 +2471,48 @@ type SyncRenderEffects<'w> = (
     ResMut<'w, Assets<StandardMaterial>>,
 );
 
+fn spawn_persistent_unit_attachments(
+    commands: &mut Commands,
+    model_root: Entity,
+    model: &UnitModelAsset,
+    visuals: &Wc3VisualSet,
+) {
+    for attachment in &model.attached_visuals {
+        let Ok(rawcode) = <[u8; 4]>::try_from(attachment.ability_rawcode.as_bytes()) else {
+            continue;
+        };
+        for visual in visuals.ability(u32::from_be_bytes(rawcode)) {
+            if visual.anchor != Wc3AbilityVisualAnchor::Target {
+                continue;
+            }
+            let effect = commands
+                .spawn((
+                    WorldAssetRoot(visual.model.scene.clone()),
+                    Transform::IDENTITY,
+                    Wc3EmitterSource::new(&visual.model.emitters),
+                    Wc3RibbonSource::new(&visual.model.ribbons),
+                    Wc3VertexTint([255; 3]),
+                    Wc3AttachToNode {
+                        owner_root: model_root,
+                        attachment_point: attachment.attachment_point.clone(),
+                    },
+                ))
+                .id();
+            if let Some(animation) = visual.model.looping_animation_source() {
+                commands.entity(effect).insert(animation);
+            }
+            commands.entity(model_root).add_child(effect);
+        }
+    }
+}
+
 fn sync_render_entities(
     mut commands: Commands,
     samples: Res<PresentationSamples>,
     world: SyncRenderWorld<'_>,
     mut render_map: ResMut<RenderMap>,
     effects: SyncRenderEffects<'_>,
+    imported_roots: Query<(Entity, &ImportedUnitModelRoot)>,
 ) {
     let (metrics, terrain, assets, unit_models, building_models, wc3_visuals) = world;
     let (
@@ -2635,6 +2684,41 @@ fn sync_render_entities(
         }
     }
 
+    for attack in &samples.current.attacks {
+        if attack.missed || attack.delivery != AttackDelivery::RangedInstant {
+            continue;
+        }
+        let rawcode = samples
+            .current
+            .units
+            .get(&attack.source)
+            .or_else(|| samples.previous.units.get(&attack.source))
+            .and_then(|unit| unit.content)
+            .map(|content| content.rawcode);
+        let Some(visual) = rawcode.and_then(|rawcode| wc3_visuals.projectile(rawcode)) else {
+            continue;
+        };
+        let position = sim_point_to_terrain_world(attack.target_position, &terrain) + Vec3::Y * 8.0;
+        let entity = commands
+            .spawn((
+                WorldAssetRoot(visual.model.scene.clone()),
+                Transform::from_translation(position),
+                Wc3EmitterSource::new(&visual.model.emitters),
+                Wc3RibbonSource::new(&visual.model.ribbons),
+            ))
+            .id();
+        if let Some(animation) = visual.model.animation_source() {
+            commands.entity(entity).insert(animation);
+        }
+        timed_effects.0.push(TimedWc3Effect {
+            entity,
+            remaining: ABILITY_MODEL_EFFECT_SECONDS,
+            lifetime: ABILITY_MODEL_EFFECT_SECONDS,
+            mesh: None,
+            fade_material: None,
+        });
+    }
+
     for chain in &samples.current.chain_lightnings {
         if !wc3_visuals.is_chain_lightning(chain.ability.0) {
             continue;
@@ -2742,14 +2826,29 @@ fn sync_render_entities(
             continue;
         };
         for visual in wc3_visuals.ability(ability.0) {
+            let owner_model_root = imported_roots
+                .iter()
+                .find_map(|(entity, root)| (root.sim_id == unit.id).then_some(entity));
             let entity = commands
                 .spawn((
                     WorldAssetRoot(visual.model.scene.clone()),
-                    Transform::from_translation(position),
+                    if owner_model_root.is_some() {
+                        Transform::IDENTITY
+                    } else {
+                        Transform::from_translation(position)
+                    },
                     Wc3EmitterSource::new(&visual.model.emitters),
                     Wc3RibbonSource::new(&visual.model.ribbons),
+                    Wc3VertexTint([255; 3]),
                 ))
                 .id();
+            if let Some(root) = owner_model_root {
+                commands.entity(root).add_child(entity);
+                commands.entity(entity).insert(Wc3AttachToNode {
+                    owner_root: root,
+                    attachment_point: "hand left".to_owned(),
+                });
+            }
             if let Some(animation) = visual.model.animation_source() {
                 commands.entity(entity).insert(animation);
             }
@@ -2774,20 +2873,26 @@ fn sync_render_entities(
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .id();
-            commands.entity(entity).with_child((
-                WorldAssetRoot(model.scene.clone()),
-                ImportedUnitModelRoot {
-                    sim_id: builder.id,
-                    rawcode: builder.appearance.rawcode,
-                    presentation_root: entity,
-                },
-                Wc3TeamTint::new(builder.owner.0, player_color(builder.owner), "wc3/units"),
-                Transform {
-                    translation: Vec3::NEG_Y * BUILDER_HEIGHT * 0.5,
-                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                    scale: Vec3::splat(model.scale),
-                },
-            ));
+            let model_root = commands
+                .spawn((
+                    WorldAssetRoot(model.scene.clone()),
+                    ImportedUnitModelRoot {
+                        sim_id: builder.id,
+                        rawcode: builder.appearance.rawcode,
+                        presentation_root: entity,
+                    },
+                    Wc3TeamTint::new(builder.owner.0, player_color(builder.owner), "wc3/units"),
+                    Transform {
+                        translation: Vec3::NEG_Y * BUILDER_HEIGHT * 0.5,
+                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                        scale: Vec3::splat(model.scale),
+                    },
+                ))
+                .id();
+            commands.entity(entity).add_child(model_root);
+            if let Some(tint) = model.tint_rgb {
+                commands.entity(model_root).insert(Wc3VertexTint(tint));
+            }
             (entity, Some(builder.appearance.rawcode))
         } else {
             let entity = commands
@@ -2828,20 +2933,27 @@ fn sync_render_entities(
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .id();
-            commands.entity(entity).with_child((
-                WorldAssetRoot(model.scene.clone()),
-                ImportedUnitModelRoot {
-                    sim_id: unit.id,
-                    rawcode,
-                    presentation_root: entity,
-                },
-                Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
-                Transform {
-                    translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
-                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                    scale: Vec3::splat(model.scale),
-                },
-            ));
+            let model_root = commands
+                .spawn((
+                    WorldAssetRoot(model.scene.clone()),
+                    ImportedUnitModelRoot {
+                        sim_id: unit.id,
+                        rawcode,
+                        presentation_root: entity,
+                    },
+                    Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
+                    Transform {
+                        translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
+                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                        scale: Vec3::splat(model.scale),
+                    },
+                ))
+                .id();
+            commands.entity(entity).add_child(model_root);
+            if let Some(tint) = model.tint_rgb {
+                commands.entity(model_root).insert(Wc3VertexTint(tint));
+            }
+            spawn_persistent_unit_attachments(&mut commands, model_root, model, &wc3_visuals);
             (entity, None, Some(rawcode))
         } else {
             let entity = commands

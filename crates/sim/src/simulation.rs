@@ -63,11 +63,11 @@ use crate::{
         ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
         ProductionCorpseProfile, ProductionDamageType, ProductionHealthRegeneration,
         ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
-        ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
-        ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition, RetaliationState, SimId,
-        SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
-        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
-        UnitGameplayProperties, UnitSpawn,
+        ProductionSecondaryAttack, ProductionSpellcastingProfile, ProductionState,
+        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition,
+        RetaliationState, SecondaryAttackProfile, SimId, SpawnTick, SpellcastingProfile,
+        StatusState, TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier,
+        TimedDamageOverTime, TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -294,6 +294,7 @@ pub struct AttackEvent {
     pub target_position: SimPoint,
     pub delivery: AttackDelivery,
     pub missed: bool,
+    pub critical: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -2102,6 +2103,9 @@ impl Simulation {
             properties.armor,
             properties.passive_effects,
         ));
+        if let Some(secondary_attack) = properties.secondary_attack {
+            entity.insert(secondary_attack);
+        }
         if let Some(spellcasting) = spellcasting {
             entity.insert((
                 spellcasting,
@@ -2296,6 +2300,9 @@ impl Simulation {
                         build_time_ticks: repair_metadata.build_time_ticks,
                         repair_time_ticks: repair_metadata.repair_time_ticks,
                         attack_targets: attack_targets.0,
+                        secondary_attack: entity_ref
+                            .get::<ProductionSecondaryAttack>()
+                            .map(|profile| profile.0),
                         health_regen_per_second_per_10k: health_regeneration.0,
                         damage_type: damage_type.0,
                         armor: armor.0,
@@ -2419,6 +2426,7 @@ impl Simulation {
                         build_time_ticks: attempt.build_time_ticks,
                         repair_time_ticks: attempt.repair_time_ticks,
                         attack_targets: attempt.attack_targets,
+                        secondary_attack: attempt.secondary_attack,
                         damage_type: attempt.damage_type,
                         armor: attempt.armor,
                         passive_effects: attempt.passive_effects,
@@ -2498,6 +2506,7 @@ impl Simulation {
                     let attack_targets = *entity_ref
                         .get::<AttackTargetMask>()
                         .expect("unit attack target mask missing");
+                    let secondary_attack = entity_ref.get::<SecondaryAttackProfile>().copied();
                     let damage_type = *entity_ref
                         .get::<DamageType>()
                         .expect("unit damage type missing");
@@ -2536,6 +2545,7 @@ impl Simulation {
                         collision_radius_override: collision_radius.map(|radius| radius.0),
                         movement_class,
                         attack_targets,
+                        secondary_attack,
                         damage_type,
                         armor,
                         passive_effects,
@@ -2650,12 +2660,52 @@ struct UnitSnapshot {
     collision_radius_override: Option<i32>,
     movement_class: MovementClass,
     attack_targets: AttackTargetMask,
+    secondary_attack: Option<SecondaryAttackProfile>,
     damage_type: DamageType,
     armor: ArmorProfile,
     passive_effects: PassiveUnitEffects,
     spellcasting: Option<SpellcastingProfile>,
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
+}
+
+impl UnitSnapshot {
+    fn attack_for_unit(
+        self,
+        movement_class: MovementClass,
+    ) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        if let Some(secondary) = self.secondary_attack
+            && !self
+                .primary_attack_targets()
+                .can_target_unit(movement_class)
+            && secondary.targets.can_target_unit(movement_class)
+        {
+            return Some((secondary.attack, secondary.targets, secondary.damage_type));
+        }
+        self.primary_attack_targets()
+            .can_target_unit(movement_class)
+            .then_some((self.attack, self.primary_attack_targets(), self.damage_type))
+    }
+
+    fn attack_for_building(self) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        if let Some(secondary) = self.secondary_attack
+            && !self.primary_attack_targets().can_target_buildings()
+            && secondary.targets.can_target_buildings()
+        {
+            return Some((secondary.attack, secondary.targets, secondary.damage_type));
+        }
+        self.primary_attack_targets()
+            .can_target_buildings()
+            .then_some((self.attack, self.primary_attack_targets(), self.damage_type))
+    }
+
+    fn primary_attack_targets(self) -> AttackTargetMask {
+        if let Some(secondary) = self.secondary_attack {
+            secondary.primary_targets
+        } else {
+            self.attack_targets
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2694,6 +2744,7 @@ struct ProductionAttempt {
     build_time_ticks: Option<u32>,
     repair_time_ticks: Option<u32>,
     attack_targets: AttackTargetMask,
+    secondary_attack: Option<SecondaryAttackProfile>,
     health_regen_per_second_per_10k: u32,
     damage_type: DamageType,
     armor: ArmorProfile,
@@ -2880,6 +2931,7 @@ struct BallisticProjectileLaunch {
     target_mask: AttackTargetMask,
     damage: i32,
     burning_oil: Option<crate::components::BurningOilEffectProfile>,
+    splash_falloff: Option<crate::components::SplashFalloffProfile>,
     damage_type: DamageType,
     launch_position: SimPoint,
     destination: SimPoint,
@@ -3166,7 +3218,7 @@ fn validate_attack_profile(attack: AttackProfile) {
     assert!(attack.range >= 0);
     assert!(attack.acquisition_range >= attack.range);
     match attack.delivery {
-        AttackDelivery::Melee => {}
+        AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
         AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
             assert!(speed_per_tick > 0);
         }

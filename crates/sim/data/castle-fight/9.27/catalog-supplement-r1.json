@@ -5,20 +5,166 @@
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
   "source_object_fields_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
   "objects": [
-    {"rawcode":"e003","repair_time_seconds":20,"button_x":0,"button_y":0,"hotkey":"Q"},
-    {"rawcode":"h000","repair_time_seconds":70,"button_x":0,"button_y":0,"hotkey":"Q"},
-    {"rawcode":"h006","repair_time_seconds":110,"button_x":0,"button_y":2,"hotkey":"Y"},
-    {"rawcode":"h015","repair_time_seconds":70,"button_x":3,"button_y":0,"hotkey":"R"},
-    {"rawcode":"h016","repair_time_seconds":45,"button_x":1,"button_y":0,"hotkey":"Q"},
-    {"rawcode":"h02I","repair_time_seconds":70,"button_x":1,"button_y":1,"hotkey":"S"},
-    {"rawcode":"h039","repair_time_seconds":70,"button_x":3,"button_y":0,"hotkey":"R"},
-    {"rawcode":"h03A","repair_time_seconds":20,"button_x":0,"button_y":0,"hotkey":"Q"},
-    {"rawcode":"h03D","repair_time_seconds":70,"button_x":3,"button_y":0,"hotkey":"R"},
-    {"rawcode":"h03K","repair_time_seconds":70,"button_x":2,"button_y":0,"hotkey":"E"},
-    {"rawcode":"h07P","repair_time_seconds":110,"button_x":0,"button_y":2,"hotkey":"Y"},
-    {"rawcode":"hcas","repair_time_seconds":700,"button_x":0,"button_y":2,"hotkey":"U"},
-    {"rawcode":"hfoo","repair_time_seconds":20,"button_x":0,"button_y":0,"hotkey":"Q"},
-    {"rawcode":"n015","repair_time_seconds":25,"button_x":null,"button_y":null,"hotkey":"Q"},
-    {"rawcode":"o001","repair_time_seconds":36,"button_x":0,"button_y":0,"hotkey":"Q"}
+    {
+      "rawcode": "e003",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h000",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h003",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W"
+    },
+    {
+      "rawcode": "h004",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E"
+    },
+    {
+      "rawcode": "h006",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y"
+    },
+    {
+      "rawcode": "h015",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R"
+    },
+    {
+      "rawcode": "h016",
+      "repair_time_seconds": 45,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h02I",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S"
+    },
+    {
+      "rawcode": "h039",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R"
+    },
+    {
+      "rawcode": "h03A",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h03D",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R"
+    },
+    {
+      "rawcode": "h03K",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E"
+    },
+    {
+      "rawcode": "h05C",
+      "repair_time_seconds": 26,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h05D",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E"
+    },
+    {
+      "rawcode": "h07P",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y"
+    },
+    {
+      "rawcode": "h0A1",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R"
+    },
+    {
+      "rawcode": "h0A2",
+      "repair_time_seconds": 26,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "hcas",
+      "repair_time_seconds": 700,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "U"
+    },
+    {
+      "rawcode": "hfoo",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "hmtm",
+      "repair_time_seconds": 32,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "hrif",
+      "repair_time_seconds": 26,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "n015",
+      "repair_time_seconds": 25,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "o001",
+      "repair_time_seconds": 36,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    }
   ]
 }

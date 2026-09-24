@@ -1999,6 +1999,10 @@ fn build_button_label(kind: BuildKind, content: &CastleFightContentBundle) -> St
     let name = match kind {
         BuildKind::Production(ProductionKind::Barracks) => "Barracks",
         BuildKind::Production(ProductionKind::Stronghold) => "Stronghold",
+        BuildKind::Production(ProductionKind::SniperNest) => "Sniper Nest",
+        BuildKind::Production(ProductionKind::WeaponLab) => "Weapon Lab",
+        BuildKind::Production(ProductionKind::GunnersHall) => "Gunner Hall",
+        BuildKind::Production(ProductionKind::MarksmensEncampment) => "Marksmen",
         BuildKind::Production(ProductionKind::RangersHall) => "Rngrs Hall",
         BuildKind::Production(ProductionKind::OrcishSiegeFactory) => "Siege Fac.",
         BuildKind::Production(ProductionKind::IceTrollHut) => "Ice Hut",
@@ -2230,7 +2234,7 @@ mod tests {
     }
 
     #[test]
-    fn build_menu_uses_authored_slots_and_resolves_only_mixed_demo_collisions() {
+    fn build_menu_uses_authored_human_qwe_slots() {
         let demo = create_demo_world(1, Some(0));
         let actor = demo.simulation.builder_for_team(Team(0)).unwrap().id;
         let state = ActionPanelState {
@@ -2246,14 +2250,19 @@ mod tests {
         let authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
         let layout = action_layout(&state, &authoritative, &selected_match);
         let barracks = BuildKind::Production(ProductionKind::Barracks);
-        let siege_factory = BuildKind::Production(ProductionKind::OrcishSiegeFactory);
+        let sniper_nest = BuildKind::Production(ProductionKind::SniperNest);
+        let weapon_lab = BuildKind::Production(ProductionKind::WeaponLab);
         assert_eq!(
             layout[command_slot(barracks.command_card_position(selected_match.content))],
             Some(PanelAction::Target(TargetingAction::Build(barracks)))
         );
         assert_eq!(
-            layout[command_slot(siege_factory.command_card_position(selected_match.content))],
-            Some(PanelAction::Target(TargetingAction::Build(siege_factory)))
+            layout[command_slot(sniper_nest.command_card_position(selected_match.content))],
+            Some(PanelAction::Target(TargetingAction::Build(sniper_nest)))
+        );
+        assert_eq!(
+            layout[command_slot(weapon_lab.command_card_position(selected_match.content))],
+            Some(PanelAction::Target(TargetingAction::Build(weapon_lab)))
         );
         assert_eq!(
             layout[command_slot(selected_match.content.command_card.cancel_command)],

@@ -190,13 +190,13 @@ impl Simulation {
                 if unit_health[target_index] <= 0 {
                     return None;
                 }
+                let (attack, _, _) = unit.attack_for_unit(units[target_index].movement_class)?;
                 let target_position = units[target_index].position;
-                if current.distance_sq(target_position) <= unit.attack.range_sq() {
+                if current.distance_sq(target_position) <= attack.range_sq() {
                     attack_goal = Some(current);
                     return Some(source_cell);
                 }
-                let mut goal =
-                    point_attack_envelope_goal(current, target_position, unit.attack.range);
+                let mut goal = point_attack_envelope_goal(current, target_position, attack.range);
                 let mut cell = self.topology.cell_of_point(goal);
                 let goal_is_traversable = self.position_is_traversable_from(
                     source_cell,
@@ -215,7 +215,7 @@ impl Simulation {
                             source_cell,
                             current,
                             target_position,
-                            unit.attack.range,
+                            attack.range,
                             unit.collision_radius_override,
                         )?;
                         goal = self.topology.center_of_cell(cell);
@@ -234,12 +234,13 @@ impl Simulation {
                 if building_health[target_index] <= 0 {
                     return None;
                 }
+                let (attack, _, _) = unit.attack_for_building()?;
                 let footprint = buildings[target_index].footprint;
                 if point_to_footprint_distance_sq(
                     current,
                     footprint,
                     self.config.navigation_cell_size,
-                ) <= unit.attack.range_sq()
+                ) <= attack.range_sq()
                 {
                     attack_goal = Some(current);
                     return Some(source_cell);
@@ -247,7 +248,7 @@ impl Simulation {
                 let mut goal = building_attack_envelope_goal(
                     current,
                     footprint,
-                    unit.attack.range,
+                    attack.range,
                     self.config.navigation_cell_size,
                 );
                 let mut cell = self.topology.cell_of_point(goal);
@@ -268,7 +269,7 @@ impl Simulation {
                             source_cell,
                             current,
                             footprint,
-                            unit.attack.range,
+                            attack.range,
                             unit.collision_radius_override,
                         )?;
                         goal = self.topology.center_of_cell(cell);
@@ -279,7 +280,7 @@ impl Simulation {
                         goal = building_attack_envelope_goal(
                             self.topology.center_of_cell(cell),
                             footprint,
-                            unit.attack.range,
+                            attack.range,
                             self.config.navigation_cell_size,
                         );
                     }
@@ -586,26 +587,28 @@ impl Simulation {
                     if unit_health[target_index] <= 0 {
                         return None;
                     }
+                    let (attack, _, _) =
+                        unit.attack_for_unit(units[target_index].movement_class)?;
                     let target_position = units[target_index].position;
-                    if current.distance_sq(target_position) <= unit.attack.range_sq() {
+                    if current.distance_sq(target_position) <= attack.range_sq() {
                         attack_goal = Some(current);
                         return Some(current);
                     }
                     pursuit_target = Some(target_id);
-                    let goal =
-                        point_attack_envelope_goal(current, target_position, unit.attack.range);
+                    let goal = point_attack_envelope_goal(current, target_position, attack.range);
                     attack_goal = Some(goal);
                     Some(goal)
                 } else if let Some(target_index) = find_building_index(buildings, target_id) {
                     if building_health[target_index] <= 0 {
                         return None;
                     }
+                    let (attack, _, _) = unit.attack_for_building()?;
                     let footprint = buildings[target_index].footprint;
                     if point_to_footprint_distance_sq(
                         current,
                         footprint,
                         self.config.navigation_cell_size,
-                    ) <= unit.attack.range_sq()
+                    ) <= attack.range_sq()
                     {
                         attack_goal = Some(current);
                         return Some(current);
@@ -614,7 +617,7 @@ impl Simulation {
                     let goal = building_attack_envelope_goal(
                         current,
                         footprint,
-                        unit.attack.range,
+                        attack.range,
                         self.config.navigation_cell_size,
                     );
                     attack_goal = Some(goal);

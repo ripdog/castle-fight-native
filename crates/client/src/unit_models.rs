@@ -11,7 +11,7 @@ use crate::terrain::client_asset_root;
 
 const UNIT_MODEL_MANIFEST: &str = "wc3/units/manifest.json";
 const UNIT_MODEL_ASSET_PREFIX: &str = "wc3/units";
-const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 4;
+const UNIT_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 5;
 #[derive(Resource, Default)]
 pub struct UnitModelSet {
     models: BTreeMap<u32, UnitModelAsset>,
@@ -23,7 +23,15 @@ pub struct UnitModelAsset {
     gltf: Handle<Gltf>,
     pub scale: f32,
     pub overhead_height: Option<f32>,
+    pub tint_rgb: Option<[u8; 3]>,
+    pub attached_visuals: Vec<UnitAttachedVisual>,
     animations: Option<UnitAnimationSet>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct UnitAttachedVisual {
+    pub ability_rawcode: String,
+    pub attachment_point: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +67,9 @@ struct UnitAssetManifestEntry {
     rawcode: String,
     scale: f32,
     gltf: Option<String>,
+    tint_rgb: Option<[u8; 3]>,
+    #[serde(default)]
+    attached_visuals: Vec<UnitAttachedVisual>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +84,8 @@ struct ResolvedUnitAsset {
     scale: f32,
     overhead_height: Option<f32>,
     asset_path: String,
+    tint_rgb: Option<[u8; 3]>,
+    attached_visuals: Vec<UnitAttachedVisual>,
 }
 
 impl UnitModelSet {
@@ -108,6 +121,8 @@ impl UnitModelSet {
                             gltf,
                             scale: entry.scale,
                             overhead_height: entry.overhead_height,
+                            tint_rgb: entry.tint_rgb,
+                            attached_visuals: entry.attached_visuals,
                             animations: None,
                         },
                     );
@@ -378,6 +393,8 @@ fn resolve_manifest_entries(
                     scale: entry.scale,
                     overhead_height,
                     asset_path,
+                    tint_rgb: entry.tint_rgb,
+                    attached_visuals: entry.attached_visuals,
                 },
             )
             .is_some()
@@ -418,7 +435,7 @@ mod tests {
     #[test]
     fn resolves_generated_unit_manifest_paths_and_scales() {
         let json = r#"{
-            "schema_version": 4,
+            "schema_version": 5,
             "units": [
                 {
                     "rawcode": "hfoo",
@@ -477,7 +494,7 @@ mod tests {
         for path in ["../escape.gltf", "..\\\\escape.gltf"] {
             let json = format!(
                 r#"{{
-                    "schema_version": 4,
+                    "schema_version": 5,
                     "units": [{{"rawcode": "hfoo", "scale": 1.0, "gltf": {path:?}}}],
                     "models": []
                 }}"#
@@ -519,7 +536,7 @@ mod tests {
     #[test]
     fn rejects_invalid_rawcodes_and_scales() {
         let bad_rawcode = r#"{
-            "schema_version": 4,
+            "schema_version": 5,
             "units": [{"rawcode": "foo", "scale": 1.0, "gltf": "models/foo.gltf"}],
             "models": []
         }"#;
@@ -530,7 +547,7 @@ mod tests {
         );
 
         let bad_scale = r#"{
-            "schema_version": 4,
+            "schema_version": 5,
             "units": [{"rawcode": "hfoo", "scale": 0.0, "gltf": "models/foo.gltf"}],
             "models": []
         }"#;

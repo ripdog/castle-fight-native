@@ -16,6 +16,14 @@ struct UnitAssetSpec {
     name: String,
     model_path: Option<String>,
     scale: Option<f32>,
+    tint_rgb: Option<[u8; 3]>,
+    attached_visuals: Vec<AttachedVisualSpec>,
+}
+
+#[derive(Clone, Serialize)]
+struct AttachedVisualSpec {
+    ability_rawcode: String,
+    attachment_point: String,
 }
 
 #[derive(Serialize)]
@@ -203,14 +211,38 @@ fn load_unit_assets(
     let mut base_rawcodes = BTreeMap::<String, String>::new();
     let mut model_paths = BTreeMap::<String, String>::new();
     let mut scales = BTreeMap::<String, f32>::new();
+    let mut tints = BTreeMap::<String, [u8; 3]>::new();
+    let mut unit_abilities = BTreeMap::<String, Vec<String>>::new();
+    let mut ability_base = BTreeMap::<String, String>::new();
+    let mut ability_target_art = BTreeSet::<String>::new();
+    let mut ability_attachment = BTreeMap::<String, String>::new();
     for row in fields.records() {
         let row = row?;
-        if row.get(category) != Some("units") {
-            continue;
-        }
         let Some(rawcode) = row.get(rawcode_col) else {
             continue;
         };
+        if row.get(category) == Some("abilities") {
+            if let Some(base) = row.get(base_rawcode_col) {
+                ability_base.insert(rawcode.to_owned(), base.to_owned());
+            }
+            match row.get(field_id) {
+                Some("atat")
+                    if parse_json_string(row.get(recovered).unwrap_or_default()).is_some() =>
+                {
+                    ability_target_art.insert(rawcode.to_owned());
+                }
+                Some("ata0") => {
+                    if let Some(point) = parse_json_string(row.get(recovered).unwrap_or_default()) {
+                        ability_attachment.insert(rawcode.to_owned(), point);
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        if row.get(category) != Some("units") {
+            continue;
+        }
         if !units.contains_key(rawcode) {
             continue;
         }
@@ -230,6 +262,22 @@ fn load_unit_assets(
                     scales.insert(rawcode.to_owned(), scale);
                 }
             }
+            Some("uabi") => {
+                unit_abilities.insert(
+                    rawcode.to_owned(),
+                    parse_json_comma_list(row.get(recovered).unwrap_or_default()),
+                );
+            }
+            Some("uclr" | "uclg" | "uclb") => {
+                let channel = match row.get(field_id) {
+                    Some("uclr") => 0,
+                    Some("uclg") => 1,
+                    _ => 2,
+                };
+                if let Some(value) = parse_json_u8(row.get(recovered).unwrap_or_default()) {
+                    tints.entry(rawcode.to_owned()).or_insert([255; 3])[channel] = value;
+                }
+            }
             _ => {}
         }
     }
@@ -242,6 +290,25 @@ fn load_unit_assets(
         result.push(UnitAssetSpec {
             model_path: model_paths.remove(&rawcode),
             scale: scales.remove(&rawcode),
+            tint_rgb: tints.remove(&rawcode).filter(|tint| *tint != [255; 3]),
+            attached_visuals: unit_abilities
+                .remove(&rawcode)
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|ability_rawcode| {
+                    (ability_base
+                        .get(&ability_rawcode)
+                        .is_some_and(|base| base == "Aasl")
+                        && ability_target_art.contains(&ability_rawcode))
+                    .then(|| AttachedVisualSpec {
+                        attachment_point: ability_attachment
+                            .get(&ability_rawcode)
+                            .cloned()
+                            .unwrap_or_else(|| "origin".to_owned()),
+                        ability_rawcode,
+                    })
+                })
+                .collect(),
             rawcode,
             base_rawcode,
             name,
@@ -805,6 +872,14 @@ fn parse_json_string(value: &str) -> Option<String> {
         .ok()?
         .as_str()
         .map(str::to_owned)
+}
+
+fn parse_json_u8(value: &str) -> Option<u8> {
+    let value = serde_json::from_str::<serde_json::Value>(value).ok()?;
+    value
+        .as_u64()
+        .and_then(|value| u8::try_from(value).ok())
+        .or_else(|| value.as_str()?.parse().ok())
 }
 
 fn parse_json_comma_list(value: &str) -> Vec<String> {

@@ -32,10 +32,14 @@ cargo run -p castle-fight-wc3-assets -- \
   --building h03K \
   --building h015 \
   --building h006 \
-  --building h07P
+  --building h07P \
+  --building h003 \
+  --building h004 \
+  --building h05D \
+  --building h0A1
 ```
 
-These are the Main Castle, the current production buildings (including Footman's Stronghold upgrade), Watch Tower, and Poof Tower. Building art comes from the resolved Warcraft unit-object `umdl`/`usca` fields, not the inherited profile `ifil`/`isca` fields. The extractor combines each object's `uani` required-animation properties with the sequences actually present in its shared model and records the selected `Birth`, ambient `Stand`, and `Death` sequence names in the building manifest. This handles shared models such as Town Hall and Human Tower without per-building renderer mappings, including upgrade-qualified lifecycle clips. Particle emitters also carry the exact model sequences in which they are active so construction/destruction effects can follow the selected clip. Future native building content only needs a matching rawcode in the generated building manifest. Poof Tower references `war3mapImported\\PandarenTower.mdl`; supply the matching map with `--map` to export that exact model.
+These are the Main Castle, the Human Q/W/E production buildings and upgrades, retained verification buildings, Watch Tower, and Poof Tower. Building art comes from the resolved Warcraft unit-object `umdl`/`usca` fields, not the inherited profile `ifil`/`isca` fields. The extractor combines each object's `uani` required-animation properties with the sequences actually present in its shared model and records the selected `Birth`, ambient `Stand`, and `Death` sequence names in the building manifest. This handles shared models such as Town Hall and Human Tower without per-building renderer mappings, including upgrade-qualified lifecycle clips. Particle emitters also carry the exact model sequences in which they are active so construction/destruction effects can follow the selected clip. Future native building content only needs a matching rawcode in the generated building manifest. Poof Tower references `war3mapImported\\PandarenTower.mdl`; supply the matching map with `--map` to export that exact model.
 
 To export the map decorations for the native 3D client, use the doodad mode and the client's expected generated-asset directory:
 
@@ -84,6 +88,10 @@ cargo run -p castle-fight-wc3-assets -- \
   --output assets/wc3/units \
   --unit hfoo \
   --unit h03A \
+  --unit hrif \
+  --unit hmtm \
+  --unit h0A2 \
+  --unit h05C \
   --unit e003 \
   --unit o001 \
   --unit n015 \
@@ -91,7 +99,7 @@ cargo run -p castle-fight-wc3-assets -- \
   --unit X00C
 ```
 
-Those rawcodes cover the current Human/combat verification slice plus the Human Builder used by the playable demo: Footman, Defender, Ranger, Catapult, Ice Troll Shadow Priest, Gryphon Rider, and Human Builder. Builder rawcodes come from the extracted race catalogs and use the same generated unit pack as combat units. If a generated unit or building model is absent, the client retains its normal placeholder visual. Building-pack schema 5 records authored model scale, extractor-resolved Birth/Stand/Death lifecycle sequences, and sequence-scoped particle emitters, while omitting Warcraft's engine-rendered Team Glow and Background geosets, which are billboard/decal geometry rather than ordinary building meshes. Entries that had to substitute inherited base art are deliberately skipped by the client rather than displaying a convincing-but-wrong structure. Newly observed buildings play Birth once before Stand; buildings restored from an initial/rejoin snapshot begin at Stand; authoritative removal may leave a cosmetic-only Death animation without retaining gameplay occupancy. Unit-pack schema 4 continues to select stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates. The client deliberately rejects older packs so stale exports cannot silently retain outdated animation/geometry contracts.
+Those rawcodes cover the Human Q/W/E lines, retained combat verification models, and the Human Builder. Builder rawcodes come from the extracted race catalogs and use the same generated unit pack as combat units. If a generated unit or building model is absent, the client retains its normal placeholder visual. Building-pack schema 5 records authored model scale, extractor-resolved Birth/Stand/Death lifecycle sequences, and sequence-scoped particle emitters, while omitting Warcraft's engine-rendered Team Glow and Background geosets, which are billboard/decal geometry rather than ordinary building meshes. Entries that had to substitute inherited base art are deliberately skipped by the client rather than displaying a convincing-but-wrong structure. Newly observed buildings play Birth once before Stand; buildings restored from an initial/rejoin snapshot begin at Stand; authoritative removal may leave a cosmetic-only Death animation without retaining gameplay occupancy. Unit-pack schema 5 retains per-object Warcraft vertex tint and passive ability target art bound to named model attachment points. Marksman uses its extracted RGB tint although it shares the Rifleman mesh with Sniper and Heavy Gunner; Heavy Gunner keeps its Slow Aura target art on the animated weapon point. The Defender activation flash follows the shield-hand point. The pack also selects stand, walk, attack, spell-cast, death, flesh-decay, and bone-decay clips as appropriate. Movement, attacks, and casts are driven by authoritative simulation snapshots; corpse animation phase is synchronized to the authoritative corpse lifetime. Re-run the extractor after exporter updates. The client deliberately rejects older packs so stale exports cannot silently retain outdated animation/geometry contracts.
 
 ## Output
 

@@ -5,7 +5,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 2;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -374,6 +374,7 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     health,
                     health_regeneration: *entity.get::<HealthRegeneration>()?,
                     attack: *entity.get::<AttackProfile>()?,
+                    secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
                     attack_targets: *entity.get::<AttackTargetMask>()?,
                     damage_type: *entity.get::<DamageType>()?,
                     armor: *entity.get::<ArmorProfile>()?,
@@ -427,6 +428,9 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     production_attack_targets: entity
                         .get::<ProductionAttackTargets>()
                         .map(|targets| targets.0),
+                    production_secondary_attack: entity
+                        .get::<ProductionSecondaryAttack>()
+                        .map(|profile| profile.0),
                     production_health_regen_per_second_per_10k: entity
                         .get::<ProductionHealthRegeneration>()
                         .map(|regeneration| regeneration.0),
@@ -504,6 +508,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(content) = unit.content {
                     entity.insert(content);
                 }
+                if let Some(secondary_attack) = unit.secondary_attack {
+                    entity.insert(secondary_attack);
+                }
                 if unit.mechanical {
                     entity.insert(MechanicalUnit);
                 }
@@ -576,6 +583,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if let Some(targets) = building.production_attack_targets {
                     entity.insert(ProductionAttackTargets(targets));
+                }
+                if let Some(secondary_attack) = building.production_secondary_attack {
+                    entity.insert(ProductionSecondaryAttack(secondary_attack));
                 }
                 if let Some(regeneration) = building.production_health_regen_per_second_per_10k {
                     entity.insert(ProductionHealthRegeneration(regeneration));

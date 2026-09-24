@@ -69,16 +69,18 @@ impl Simulation {
 
             let missed = self.uphill_attack_misses(&intent, target_position, completed_tick, units)
                 || self.attack_is_evaded(&intent, units, completed_tick);
+            let mut critical = false;
             if !missed {
-                let (bonus_damage, on_hit) =
+                let (bonus_damage, on_hit, critical_strike) =
                     self.resolve_passive_attack_effects(&intent, units, completed_tick);
+                critical = critical_strike;
                 let damage = intent
                     .attack
                     .damage
                     .checked_add(bonus_damage)
                     .expect("attack plus passive bonus damage overflowed");
                 match intent.attack.delivery {
-                    AttackDelivery::Melee => {
+                    AttackDelivery::Melee | AttackDelivery::RangedInstant => {
                         let applied = apply_damage_to_target(
                             intent.target,
                             intent.source_id,
@@ -120,10 +122,11 @@ impl Simulation {
                         if let Some(state) = pending.chain_state {
                             chain_lightning_launches.push(state);
                         }
-                        if let (
-                            AttackSourceIndex::Unit(source_index),
-                            TargetIndex::Unit(target_index),
-                        ) = (intent.source, intent.target)
+                        if matches!(intent.attack.delivery, AttackDelivery::Melee)
+                            && let (
+                                AttackSourceIndex::Unit(source_index),
+                                TargetIndex::Unit(target_index),
+                            ) = (intent.source, intent.target)
                         {
                             apply_melee_reactive_armor_effects(
                                 source_index,
@@ -162,10 +165,6 @@ impl Simulation {
                         impact_radius,
                     } => {
                         assert_eq!(
-                            bonus_damage, 0,
-                            "ballistic passive bonus damage is unsupported"
-                        );
-                        assert_eq!(
                             (on_hit.stun_duration_ticks, on_hit.triggered_spell),
                             (0, None),
                             "ballistic stun/triggered-spell passives are unsupported"
@@ -179,8 +178,9 @@ impl Simulation {
                             source: intent.source_id,
                             source_team: intent.source_team,
                             target_mask: intent.attack_targets,
-                            damage: intent.attack.damage,
+                            damage,
                             burning_oil: on_hit.burning_oil,
+                            splash_falloff: on_hit.splash_falloff,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,
@@ -250,6 +250,7 @@ impl Simulation {
                 target_position,
                 delivery: intent.attack.delivery,
                 missed,
+                critical,
             });
             attacks_resolved += 1;
         }
@@ -346,11 +347,39 @@ impl Simulation {
         intent: &AttackIntent,
         units: &[UnitSnapshot],
         completed_tick: u64,
-    ) -> (i32, PendingAttackEffects) {
+    ) -> (i32, PendingAttackEffects, bool) {
         let mut bonus_damage = 0i32;
         let mut on_hit = PendingAttackEffects::default();
+        let mut critical = false;
         for effect in intent.passive_effects.iter() {
             match effect {
+                PassiveUnitEffect::CriticalStrike(profile) => {
+                    let target_matches = match intent.target {
+                        TargetIndex::Unit(index) => {
+                            profile.targets.can_target_unit(units[index].movement_class)
+                        }
+                        TargetIndex::Building(_) => profile.targets.can_target_buildings(),
+                    };
+                    if profile.chance_per_10k == 0 || !target_matches {
+                        continue;
+                    }
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        completed_tick,
+                        intent.source_id,
+                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                        intent.attack_sequence,
+                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                    if roll < u64::from(profile.chance_per_10k) {
+                        critical = true;
+                        let extra = i64::from(intent.attack.damage)
+                            * i64::from(profile.damage_multiplier_per_10k - 10_000)
+                            / 10_000;
+                        bonus_damage = bonus_damage
+                            .checked_add(i32::try_from(extra).expect("critical bonus overflowed"))
+                            .expect("critical attack damage overflowed");
+                    }
+                }
                 PassiveUnitEffect::Bash(profile) => {
                     let target_matches = match intent.target {
                         TargetIndex::Unit(index) => {
@@ -409,10 +438,17 @@ impl Simulation {
                     );
                     on_hit.burning_oil = Some(profile);
                 }
+                PassiveUnitEffect::SplashFalloff(profile) => {
+                    assert!(
+                        on_hit.splash_falloff.is_none(),
+                        "multiple splash profiles on one attack"
+                    );
+                    on_hit.splash_falloff = Some(profile);
+                }
                 PassiveUnitEffect::Evasion(_) | PassiveUnitEffect::Defend(_) => {}
             }
         }
-        (bonus_damage, on_hit)
+        (bonus_damage, on_hit, critical)
     }
 
     pub(super) fn attack_intents(
@@ -432,22 +468,19 @@ impl Simulation {
                         return None;
                     }
                     let target_id = source.target?;
-                    let (target, distance_sq) =
+                    let (target, distance_sq, attack, attack_targets, damage_type) =
                         if let Some(index) = find_unit_index(units, target_id) {
-                            if !source
-                                .attack_targets
-                                .can_target_unit(units[index].movement_class)
-                            {
-                                return None;
-                            }
+                            let (attack, targets, damage_type) =
+                                source.attack_for_unit(units[index].movement_class)?;
                             (
                                 TargetIndex::Unit(index),
                                 source.position.distance_sq(units[index].position),
+                                attack,
+                                targets,
+                                damage_type,
                             )
                         } else {
-                            if !source.attack_targets.can_target_buildings() {
-                                return None;
-                            }
+                            let (attack, targets, damage_type) = source.attack_for_building()?;
                             let index = find_building_index(buildings, target_id)?;
                             (
                                 TargetIndex::Building(index),
@@ -456,9 +489,12 @@ impl Simulation {
                                     buildings[index].footprint,
                                     self.config.navigation_cell_size,
                                 ),
+                                attack,
+                                targets,
+                                damage_type,
                             )
                         };
-                    if distance_sq > source.attack.range_sq() {
+                    if distance_sq > attack.range_sq() {
                         return None;
                     }
                     Some(AttackIntent {
@@ -468,9 +504,9 @@ impl Simulation {
                         source_team: source.team,
                         source_position: source.position,
                         target_id,
-                        attack: source.attack,
-                        attack_targets: source.attack_targets,
-                        damage_type: source.damage_type,
+                        attack,
+                        attack_targets,
+                        damage_type,
                         passive_effects: source.passive_effects,
                         attack_sequence: source.attack_sequence,
                         distance_sq,

@@ -580,6 +580,10 @@ impl Simulation {
                     .checked_sub(snapshot.projectile.source_team.0)
                     .expect("verification slice supports teams 0 and 1 only");
                 let radius_sq = square_i32(snapshot.projectile.impact_radius);
+                let splash_targets = snapshot
+                    .projectile
+                    .splash_falloff
+                    .map_or(snapshot.projectile.target_mask, |profile| profile.targets);
                 let mut targets = Vec::new();
                 impact_grid.for_each_candidate(
                     SpatialPartition::global(enemy_team),
@@ -588,10 +592,7 @@ impl Simulation {
                     |unit_index| {
                         candidate_checks += 1;
                         if unit_health[unit_index] > 0
-                            && snapshot
-                                .projectile
-                                .target_mask
-                                .can_target_unit(units[unit_index].movement_class)
+                            && splash_targets.can_target_unit(units[unit_index].movement_class)
                             && snapshot
                                 .projectile
                                 .destination
@@ -603,7 +604,7 @@ impl Simulation {
                     },
                 );
                 for (building_index, building) in buildings.iter().enumerate() {
-                    if !snapshot.projectile.target_mask.can_target_buildings()
+                    if !splash_targets.can_target_buildings()
                         || building.team.0 != enemy_team
                         || building_health[building_index] <= 0
                     {
@@ -621,9 +622,36 @@ impl Simulation {
                 }
                 targets.sort_unstable_by_key(|target| target_sim_id(*target, units, buildings));
                 for target in targets {
+                    let distance_sq = match target {
+                        TargetIndex::Unit(index) => snapshot
+                            .projectile
+                            .destination
+                            .distance_sq(positions[index]),
+                        TargetIndex::Building(index) => point_to_footprint_distance_sq(
+                            snapshot.projectile.destination,
+                            buildings[index].footprint,
+                            self.config.navigation_cell_size,
+                        ),
+                    };
+                    let scaled_damage = snapshot.projectile.splash_falloff.map_or(
+                        snapshot.projectile.damage,
+                        |profile| {
+                            let factor = if distance_sq <= square_i32(profile.full_radius) {
+                                10_000
+                            } else if distance_sq <= square_i32(profile.medium_radius) {
+                                i32::from(profile.medium_damage_per_10k)
+                            } else {
+                                i32::from(profile.outer_damage_per_10k)
+                            };
+                            i32::try_from(
+                                i64::from(snapshot.projectile.damage) * i64::from(factor) / 10_000,
+                            )
+                            .expect("splash damage overflowed")
+                        },
+                    );
                     let damage = ranged_projectile_damage_after_defend(
                         target,
-                        snapshot.projectile.damage,
+                        scaled_damage,
                         completed_tick,
                         units,
                     );
@@ -772,6 +800,7 @@ impl Simulation {
                     target_mask: launch.target_mask,
                     damage: launch.damage,
                     burning_oil: launch.burning_oil,
+                    splash_falloff: launch.splash_falloff,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,

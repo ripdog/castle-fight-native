@@ -740,51 +740,6 @@ mod tests {
     }
 
     #[test]
-    fn build_menu_hotkey_collision_uses_last_eligible_building() {
-        let demo = crate::demo::create_demo_world(1, None);
-        let builder = demo
-            .simulation
-            .builder_for_team(castle_fight_sim::Team(0))
-            .unwrap();
-        let collision_hotkey = demo
-            .direct_buildings
-            .iter()
-            .copied()
-            .map(|kind| kind.hotkey(demo.content))
-            .find(|hotkey| {
-                demo.direct_buildings
-                    .iter()
-                    .filter(|kind| kind.hotkey(demo.content) == *hotkey)
-                    .count()
-                    > 1
-            })
-            .expect("mixed demo catalog should exercise a hotkey collision");
-        let expected = demo
-            .direct_buildings
-            .iter()
-            .copied()
-            .rfind(|kind| {
-                builder
-                    .configuration
-                    .allows_building(kind.rawcode(demo.content))
-                    && kind.hotkey(demo.content) == collision_hotkey
-            })
-            .expect("collision hotkey must have an eligible claimant");
-
-        let mut keys = ButtonInput::<KeyCode>::default();
-        keys.press(crate::build_ui::key_code_for_hotkey(collision_hotkey).unwrap());
-        assert_eq!(
-            build_menu_hotkey_target(
-                &keys,
-                &demo.direct_buildings,
-                &builder.configuration,
-                demo.content,
-            ),
-            Some(expected)
-        );
-    }
-
-    #[test]
     fn right_click_with_build_ghost_only_clears_the_build_cursor() {
         let mut state = ActionPanelState {
             mode: ActionPanelMode::Targeting(TargetingAction::Build(

@@ -46,6 +46,7 @@ pub(crate) struct HealthRegeneration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AttackDelivery {
     Melee,
+    RangedInstant,
     RangedGuaranteedHit {
         speed_per_tick: i32,
     },
@@ -67,6 +68,7 @@ impl AttackDelivery {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::Melee => 0,
+            Self::RangedInstant => 4,
             Self::RangedGuaranteedHit { .. } => 1,
             Self::RangedBallistic { .. } => 2,
             Self::Bounce { .. } => 3,
@@ -97,11 +99,20 @@ impl AttackProfile {
     }
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecondaryAttackProfile {
+    pub primary_targets: AttackTargetMask,
+    pub attack: AttackProfile,
+    pub targets: AttackTargetMask,
+    pub damage_type: DamageType,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct PendingAttackEffects {
     pub stun_duration_ticks: u16,
     pub triggered_spell: Option<TriggeredAttackEffect>,
     pub burning_oil: Option<BurningOilEffectProfile>,
+    pub splash_falloff: Option<SplashFalloffProfile>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -141,6 +152,7 @@ pub(crate) struct BallisticProjectile {
     pub target_mask: AttackTargetMask,
     pub damage: i32,
     pub burning_oil: Option<BurningOilEffectProfile>,
+    pub splash_falloff: Option<SplashFalloffProfile>,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,
@@ -240,6 +252,11 @@ impl AttackTargetMask {
     #[must_use]
     pub const fn bits(self) -> u8 {
         self.0
+    }
+
+    #[must_use]
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
     }
 }
 
@@ -341,8 +358,28 @@ pub struct BurningOilEffectProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CriticalStrikeEffectProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    pub damage_multiplier_per_10k: u16,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SplashFalloffProfile {
+    pub full_radius: i32,
+    pub medium_radius: i32,
+    pub outer_radius: i32,
+    pub medium_damage_per_10k: u16,
+    pub outer_damage_per_10k: u16,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
     Bash(BashEffectProfile),
+    CriticalStrike(CriticalStrikeEffectProfile),
+    SplashFalloff(SplashFalloffProfile),
     Evasion(EvasionEffectProfile),
     Defend(DefendEffectProfile),
     TriggeredSpellProc(TriggeredSpellProcProfile),
@@ -413,6 +450,7 @@ pub struct UnitGameplayProperties {
     pub build_time_ticks: Option<u32>,
     pub repair_time_ticks: Option<u32>,
     pub attack_targets: AttackTargetMask,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
     pub passive_effects: PassiveUnitEffects,
@@ -451,6 +489,9 @@ pub(crate) struct ProductionUnitRepairMetadata {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionAttackTargets(pub AttackTargetMask);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionSecondaryAttack(pub SecondaryAttackProfile);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionDamageType(pub DamageType);

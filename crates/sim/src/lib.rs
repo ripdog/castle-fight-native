@@ -22,10 +22,11 @@ pub use components::{
     AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
     BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
-    CorpseDefinitionId, CorpseProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
-    EvasionEffectProfile, GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass,
-    MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects, PlayerId, ProductionProfile,
-    ResolvedUnitDefinition, SimId, SpellcastingProfile, StatusState, Team, TriggeredAttackEffect,
+    CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile, DefendEffectProfile,
+    EntanglingRootsEffectProfile, EvasionEffectProfile, GameplayBundleIdentity, ManaProfile,
+    ModifierId, MovementClass, MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects,
+    PlayerId, ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile, SimId,
+    SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
     TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
@@ -576,6 +577,92 @@ mod tests {
         let target = sim.unit(target).unwrap();
         assert_eq!(target.health, 65);
         assert_eq!(target.stunned_until_tick, 3);
+    }
+
+    #[test]
+    fn instant_critical_strike_applies_bonus_on_the_attack_tick() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedInstant,
+                    damage: 20,
+                    range: 10 * world,
+                    acquisition_range: 10 * world,
+                    cooldown_ticks: 100,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::CriticalStrike(
+                    CriticalStrikeEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"CRIT")),
+                        chance_per_10k: 10_000,
+                        damage_multiplier_per_10k: 15_000,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let target = sim.spawn_unit(passive_unit(1, 45 * world));
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, 9_970);
+        assert!(
+            sim.attacks_last_tick()
+                .iter()
+                .any(|event| event.target == target && event.critical)
+        );
+        assert!(sim.projectiles().is_empty());
+    }
+
+    #[test]
+    fn second_weapon_uses_its_own_target_mask_and_damage() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedInstant,
+                    damage: 999,
+                    range: 500 * world,
+                    acquisition_range: 500 * world,
+                    cooldown_ticks: 100,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                attack_targets: AttackTargetMask::AIR_UNITS.union(AttackTargetMask::BUILDINGS),
+                secondary_attack: Some(SecondaryAttackProfile {
+                    primary_targets: AttackTargetMask::AIR_UNITS,
+                    attack: AttackProfile {
+                        delivery: AttackDelivery::RangedInstant,
+                        damage: 28,
+                        range: 500 * world,
+                        acquisition_range: 500 * world,
+                        cooldown_ticks: 100,
+                    },
+                    targets: AttackTargetMask::BUILDINGS,
+                    damage_type: DamageType::Normal,
+                }),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let building = sim.spawn_building(passive_building(1, BuildingFootprint::new(70, 0, 1, 1)));
+        sim.step();
+        sim.step();
+        assert_eq!(sim.building(building).unwrap().health, 9_972);
+        assert!(sim.attacks_last_tick().iter().any(
+            |event| event.target == building && event.delivery == AttackDelivery::RangedInstant
+        ));
     }
 
     #[test]
@@ -1242,6 +1329,55 @@ mod tests {
             sim.step();
         }
         assert_eq!(sim.unit(target).unwrap().health, 949);
+    }
+
+    #[test]
+    fn ballistic_splash_uses_extracted_distance_bands() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(40 * world, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedBallistic {
+                        speed_per_tick: 20 * world,
+                        impact_radius: 10 * world,
+                    },
+                    damage: 20,
+                    range: 20 * world,
+                    acquisition_range: 20 * world,
+                    cooldown_ticks: 1_000,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::SplashFalloff(
+                    SplashFalloffProfile {
+                        full_radius: 2 * world,
+                        medium_radius: 6 * world,
+                        outer_radius: 10 * world,
+                        medium_damage_per_10k: 5_000,
+                        outer_damage_per_10k: 2_000,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let full = sim.spawn_unit(passive_unit(1, 50 * world));
+        let medium = sim.spawn_unit(passive_unit(1, 54 * world));
+        let outer = sim.spawn_unit(passive_unit(1, 59 * world));
+        sim.step();
+        sim.step();
+        let impact_tick = sim.projectiles()[0].impact_tick;
+        while sim.tick() <= impact_tick {
+            sim.step();
+        }
+        assert_eq!(sim.unit(full).unwrap().health, 9_980);
+        assert_eq!(sim.unit(medium).unwrap().health, 9_990);
+        assert_eq!(sim.unit(outer).unwrap().health, 9_996);
     }
 
     #[test]

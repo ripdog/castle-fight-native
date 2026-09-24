@@ -550,6 +550,13 @@ mod tests {
             .simulation
             .builder_for_player(PlayerId(0))
             .expect("western builder");
+        let mut configuration = builder.configuration.clone();
+        configuration
+            .build_catalog
+            .push(CastleFightTowerKind::WatchTower.definition().rawcode);
+        game.simulation
+            .configure_builder(builder.id, builder.profile, configuration)
+            .unwrap();
         let before = game.simulation.player_resources_for(PlayerId(0)).unwrap();
         let command = PlayerCommand::PlaceBuilding {
             builder: builder.id,

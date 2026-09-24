@@ -21,8 +21,8 @@ use whiteout::{
 };
 
 use crate::catalog::{
-    BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, StatusVisualSpec, UiAssetCatalog,
-    UnitAssetSpec, VisualAssetCatalog, VisualAssetSpec,
+    AttachedVisualSpec, BuildingAssetSpec, CATALOG_VERSION, DoodadAssetSpec, StatusVisualSpec,
+    UiAssetCatalog, UnitAssetSpec, VisualAssetCatalog, VisualAssetSpec,
 };
 
 const GL_ARRAY_BUFFER: u32 = 34_962;
@@ -31,7 +31,7 @@ const GL_FLOAT: u32 = 5_126;
 const GL_UNSIGNED_SHORT: u32 = 5_123;
 const NO_PARENT: u32 = u32::MAX;
 const NO_GLOBAL_SEQUENCE: u32 = u32::MAX;
-const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 4;
+const ASSET_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const BUILDING_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const DOODAD_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const UI_ASSET_MANIFEST_SCHEMA_VERSION: u32 = 2;
@@ -73,6 +73,8 @@ pub struct UnitManifest {
     pub source_model: String,
     pub fallback_to_base_art: bool,
     pub gltf: Option<String>,
+    pub tint_rgb: Option<[u8; 3]>,
+    pub attached_visuals: Vec<AttachedVisualSpec>,
 }
 
 #[derive(Debug, Serialize)]
@@ -348,6 +350,8 @@ struct ResolvedUnit {
     source_model: String,
     fallback_to_base_art: bool,
     scale: f32,
+    tint_rgb: Option<[u8; 3]>,
+    attached_visuals: Vec<AttachedVisualSpec>,
 }
 
 #[derive(Debug)]
@@ -509,6 +513,8 @@ impl Exporter {
                 rawcode: unit.rawcode.clone(),
                 name: unit.name.clone(),
                 scale: unit.scale,
+                tint_rgb: unit.tint_rgb,
+                attached_visuals: unit.attached_visuals.clone(),
                 requested_model: unit.requested_model.clone(),
                 gltf: model_outputs
                     .get(&unit.source_model.to_ascii_lowercase())
@@ -1037,6 +1043,8 @@ impl Exporter {
             source_model,
             fallback_to_base_art,
             scale,
+            tint_rgb: unit.tint_rgb,
+            attached_visuals: unit.attached_visuals.clone(),
         })
     }
 

@@ -216,6 +216,65 @@ pub struct Wc3TeamTint {
     asset_prefix: &'static str,
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Wc3VertexTint(pub [u8; 3]);
+
+#[derive(Component)]
+pub struct Wc3AttachToNode {
+    pub owner_root: Entity,
+    pub attachment_point: String,
+}
+
+pub fn resolve_wc3_visual_attachments(
+    mut commands: Commands,
+    pending: Query<(Entity, &Wc3AttachToNode)>,
+    names: Query<(Entity, &Name)>,
+    parents: Query<&ChildOf>,
+) {
+    for (effect, binding) in &pending {
+        let requested = normalize_attachment_name(&binding.attachment_point);
+        let target = names
+            .iter()
+            .filter_map(|(entity, name)| {
+                let normalized = normalize_attachment_name(name.as_str());
+                if !normalized.starts_with(&requested) {
+                    return None;
+                }
+                let priority = if normalized.strip_prefix(&requested) == Some("ref") {
+                    0
+                } else if normalized == requested {
+                    1
+                } else {
+                    2
+                };
+                let mut current = entity;
+                for _ in 0..128 {
+                    if current == effect {
+                        return None;
+                    }
+                    if current == binding.owner_root {
+                        return Some((priority, entity));
+                    }
+                    current = parents.get(current).ok()?.parent();
+                }
+                None
+            })
+            .min_by_key(|(priority, _)| *priority)
+            .map(|(_, entity)| entity);
+        if let Some(node) = target {
+            commands.entity(node).add_child(effect);
+            commands.entity(effect).remove::<Wc3AttachToNode>();
+        }
+    }
+}
+
+fn normalize_attachment_name(name: &str) -> String {
+    name.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 impl Wc3TeamTint {
     #[must_use]
     pub const fn new(index: u8, color: Color, asset_prefix: &'static str) -> Self {
@@ -710,6 +769,7 @@ type Wc3MaterialWorld<'w, 's> = (
     Res<'w, AssetServer>,
     Query<'w, 's, &'static ChildOf>,
     Query<'w, 's, &'static Wc3TeamTint>,
+    Query<'w, 's, &'static Wc3VertexTint>,
 );
 
 type Wc3MaterialAssets<'w, 's> = (
@@ -718,6 +778,7 @@ type Wc3MaterialAssets<'w, 's> = (
     Local<'s, TeamMaterialCache>,
     Local<'s, TeamMaterialCache>,
     Local<'s, TeamImageCache>,
+    Local<'s, HashMap<(AssetId<StandardMaterial>, [u8; 3]), Handle<StandardMaterial>>>,
 );
 
 type Wc3MaterialMeshQuery<'w, 's> = Query<
@@ -739,15 +800,26 @@ pub fn fix_wc3_scene_materials(
     material_assets: Wc3MaterialAssets<'_, '_>,
     mut meshes: Wc3MaterialMeshQuery<'_, '_>,
 ) {
-    let (asset_server, parents, team_roots) = world;
-    let (mut materials, mut images, mut team_materials, mut team_glow_materials, mut team_images) =
-        material_assets;
+    let (asset_server, parents, team_roots, tint_roots) = world;
+    let (
+        mut materials,
+        mut images,
+        mut team_materials,
+        mut team_glow_materials,
+        mut team_images,
+        mut tinted_materials,
+    ) = material_assets;
     'mesh: for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
             commands.entity(entity).insert(Wc3MaterialProcessed);
             continue;
         };
-        if extras.filter_mode.is_none() && !extras.team_color_underlay && !extras.team_glow_layer {
+        let tint = wc3_vertex_tint(entity, &parents, &tint_roots);
+        if extras.filter_mode.is_none()
+            && !extras.team_color_underlay
+            && !extras.team_glow_layer
+            && tint.is_none()
+        {
             commands.entity(entity).insert(Wc3MaterialProcessed);
             continue;
         }
@@ -867,6 +939,30 @@ pub fn fix_wc3_scene_materials(
             }
         }
 
+        if let Some(tint) = tint {
+            let key = (material_handle.0.id(), tint);
+            let tinted = if let Some(handle) = tinted_materials.get(&key) {
+                handle.clone()
+            } else {
+                let Some(source) = materials.get(&material_handle.0) else {
+                    continue 'mesh;
+                };
+                let mut tinted = source.clone();
+                let base = tinted.base_color.to_linear();
+                let rgb = Color::srgb_u8(tint[0], tint[1], tint[2]).to_linear();
+                tinted.base_color = Color::linear_rgba(
+                    base.red * rgb.red,
+                    base.green * rgb.green,
+                    base.blue * rgb.blue,
+                    base.alpha,
+                );
+                let handle = materials.add(tinted);
+                tinted_materials.insert(key, handle.clone());
+                handle
+            };
+            material_handle.0 = tinted;
+        }
+
         commands.entity(entity).insert(Wc3MaterialProcessed);
     }
 }
@@ -979,6 +1075,21 @@ fn wc3_team_tint(
             return None;
         };
         current = parent.parent();
+    }
+    None
+}
+
+fn wc3_vertex_tint(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    tint_roots: &Query<&Wc3VertexTint>,
+) -> Option<[u8; 3]> {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(tint) = tint_roots.get(current) {
+            return (tint.0 != [255; 3]).then_some(tint.0);
+        }
+        current = parents.get(current).ok()?.parent();
     }
     None
 }
