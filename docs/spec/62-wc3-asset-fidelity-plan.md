@@ -1,0 +1,205 @@
+# WC3 Asset Conversion Fidelity Plan
+
+Status: **active implementation plan**
+
+Prepared: **2026-09-24**, after auditing the Castle Fight Native WC3 asset extractor and client presentation pipeline.
+
+## Objective
+
+Make Warcraft III presentation conversion a Castle Fight-wide capability rather than a per-unit onboarding task.
+
+A supported Castle Fight release MUST have one deterministic, version-scoped presentation asset inventory derived from the retained map extraction. The normal asset-generation workflow SHOULD convert that entire inventory. Unit/building filters remain development accelerators only.
+
+The target end state is that enabling another already-extracted Castle Fight unit or building in gameplay requires no model-specific conversion work unless that object introduces a genuinely new Warcraft presentation primitive. Unsupported or approximated primitives must be explicit and measurable; producing a glTF file is not by itself a successful fidelity result.
+
+## Current baseline
+
+The retained 9.27 extraction already provides broad source inventories:
+
+- `units.tsv` contains 613 map-relevant unit objects, of which 288 are non-building units and 325 are buildings.
+- `buildings.tsv` already drives the embedded building asset catalog, so `--buildings` covers all 325 resolved building objects.
+- placed doodads/destructables already drive the doodad catalog.
+- model-valued object fields across units, abilities, and buffs already drive the projectile/effect catalog.
+- icon-valued object fields already drive the UI catalog.
+- the remaining unit-art whitelist is the important exception: the embedded unit catalog currently starts from production-spawn units plus race builders instead of every resolved non-building unit object.
+
+The audit also found that successful conversion can still discard visible WC3 features: model-local particles on units, PE2 atlas/color/alpha/head-tail semantics, animated emitter-node transforms, legacy model particles, model attachments, CORN emitters, event objects, lights, material layers/tracks, partial geoset alpha, global-sequence timing, and some hierarchy/skin semantics. These losses currently appear mostly as manifest warnings or are not surfaced at all.
+
+## Invariants
+
+1. **Castle Fight closure, not Warcraft-wide dumping.** The normal pack is derived from the retained Castle Fight extraction and its referenced stock/imported dependencies. It must not crawl and convert unrelated CASC content merely because it exists in the Warcraft install.
+2. **Version scoped.** A pack records the Castle Fight extraction/catalog revision and Warcraft art source. Adding another retained map release must not silently alter an older pack's inventory.
+3. **No convincing wrong fallbacks.** Explicit invisible/no-model objects remain invisible. Missing imported custom art is a classified failure unless a source-proven fallback is correct.
+4. **Shared model semantics.** Units, buildings, doodads, projectiles, and spell/status effects should consume the same converted-model metadata and native WC3 presentation primitives rather than independently approximating them.
+5. **Every visible primitive is classified.** A source feature is either faithfully implemented, intentionally approximated with a documented rule, intentionally irrelevant for Castle Fight, or unsupported. Silent omission is a bug.
+6. **Filters are diagnostic only.** `--unit`, `--building`, etc. may speed iteration, but release-quality extraction and fidelity gates run over the complete Castle Fight presentation closure.
+
+## 1. Canonical Castle Fight presentation inventory
+
+Replace the unit production whitelist with the resolved non-building unit inventory from `units.tsv`. Preserve rawcode, base rawcode, authored model path, scale, tint, abilities/attachment art, and explicit no-model state.
+
+Keep the already-broad building, doodad, effect, and UI inventories. Add tests that pin inventory relationships rather than fragile exact counts where possible:
+
+- every non-building resolved unit has exactly one unit asset-spec row;
+- no building rawcode appears in the unit model catalog;
+- every resolved building has one building asset-spec row;
+- intentionally invisible models such as `no_model.mdl` do not fall back to unrelated base art;
+- shared source models remain deduplicated after resolution.
+
+The asset inventory should eventually expose source provenance for why each asset is reachable (object field, placed doodad, attachment child model, legacy particle child model, or another converted-model dependency).
+
+**Acceptance:** the default unit catalog is no longer tied to the currently implemented production roster, and expanding the gameplay roster cannot reveal a unit whose authored base model was never considered by extraction.
+
+## 2. One full-pack workflow
+
+Add a first-class full Castle Fight extraction command, rooted at a common output directory, that generates the normal client layout in one run:
+
+- `units/`
+- `buildings/`
+- `doodads/`
+- `effects/`
+- `ui/`
+- terrain/presentation inputs that belong to the same release where practical
+
+The command should reuse one WC3/map source configuration but keep per-domain manifests so client loading remains modular. Existing narrow modes remain available for debugging.
+
+A top-level pack manifest should record the Castle Fight catalog/revision, Warcraft build/art mode, sub-pack schemas, inventory counts, unresolved assets, and fidelity summary.
+
+**Acceptance:** regenerating the normal Castle Fight presentation pack does not require maintaining a hand-written list of currently enabled units/buildings.
+
+## 3. Fidelity inventory and gating
+
+Extend converted model metadata with a source-feature inventory. At minimum count/classify:
+
+- geosets, skin influence widths, geoset alpha tracks;
+- material layer counts, filter modes, animated alpha and texture IDs;
+- bones/helpers and non-inheritance flags;
+- global sequences;
+- attachments and attachment child-model paths;
+- ParticleEmitter/ParticleEmitter2/CORN emitters;
+- ribbons;
+- event objects;
+- lights;
+- other parsed MDX chunks that affect presentation.
+
+Warnings must become typed fidelity findings rather than free-form strings where possible. The full-pack command prints a summary and can fail a release-quality fidelity gate on unclassified visible losses.
+
+Approximations that remain temporarily acceptable must have stable IDs and tests. A new source primitive appearing in a later map/Warcraft build should therefore fail loudly instead of silently joining an existing warning string.
+
+**Acceptance:** a clean exit means "all encountered visible primitives are implemented or explicitly accepted approximations", not merely "all files parsed."
+
+## 4. Unify model-local VFX consumption
+
+Move ParticleEmitter2/ribbon/model-local metadata into a shared converted-model runtime descriptor consumed by units, buildings, doodads, projectiles, and spell/status effects.
+
+Unit models must consume emitter/ribbon metadata already present in their manifests. Emitters and ribbons must bind to their authored MDX/glTF object node rather than a static root-space position. Sequence selection must control both mesh animation and emitter activation.
+
+Transform semantics must be correct under authored unit/building scale, including dimensions, velocity, gravity, and explicit WC3 non-inheritance behavior.
+
+**Acceptance:** model-local effects no longer disappear solely because the model is being rendered as a unit, and attached effects follow animated bones/helpers through stand/walk/attack/death sequences.
+
+## 5. Complete ParticleEmitter2 and ribbon semantics
+
+Implement the PE2 fields already preserved by extraction instead of discarding them:
+
+- source width/length;
+- head/tail/both and tail length;
+- texture atlas lifecycle;
+- three-stage color, alpha, and scale;
+- animated visibility/emission and other relevant tracks;
+- authored squirt behavior;
+- replaceable texture handling where encountered;
+- correct local/source transform scale.
+
+Improve ribbons similarly: animated source node, authored color/alpha behavior, texture-slot/atlas semantics, transform scale, and track-driven parameters.
+
+**Acceptance:** representative PE2/ribbon-heavy WC3 models match reference captures closely enough that size, origin, lifetime, color/opacity, and motion are recognizably the same effect without per-model tuning.
+
+## 6. Restore composed/triggered model features
+
+Implement or explicitly classify:
+
+- legacy model-particle emitters, including recursive child-model dependencies;
+- model attachment child paths and visibility tracks;
+- CORN emitters;
+- presentation-relevant event objects;
+- model-embedded lights;
+- any additional v1800 chunks encountered by the Castle Fight closure.
+
+Dependency traversal must be cycle-safe and deduplicate shared child assets.
+
+**Acceptance:** a model that visually composes itself from child models/effects is not reduced to only its base geosets.
+
+## 7. Material and animation fidelity
+
+Replace the one-representative-layer material flattening where Castle Fight assets rely on multiple layers. Preserve/filter/order additive, alpha, modulate, team-color/glow, animated alpha, and animated texture selection with WC3-compatible semantics.
+
+Improve animation fidelity for:
+
+- partial geoset alpha instead of binary node scaling;
+- global-sequence clocks that continue across clip changes;
+- hierarchy non-inheritance;
+- skin influence widths beyond Bevy's directly consumed four influences, using a representation that does not visibly deform affected SD models.
+
+**Acceptance:** multilayer/glowing/fading models do not require model-specific material patches, and models with global sequences do not visibly reset secondary animation whenever their main sequence changes.
+
+## 8. Close extracted-art to runtime-event coverage
+
+The effect manifest is an inventory, not proof that the client uses every binding. Add explicit runtime coverage for every relevant role, including:
+
+- attack 1 and attack 2 projectile/impact art;
+- ability missile art with authoritative travel paths;
+- ability caster/effect/target/special art;
+- buff effect/target/special art tied to authoritative status lifetime;
+- passive/always-on unit ability art without hardcoding one ability base family.
+
+Unconsumed bindings must be reported by the fidelity/coverage gate rather than falling through a wildcard match.
+
+**Acceptance:** adding a gameplay implementation for an already-extracted ability cannot silently omit its known visual bindings.
+
+## 9. Reference validation
+
+Build a small reference suite of representative models/effects covering each supported primitive. Prefer deterministic camera/animation snapshots or structured render diagnostics over manual memory.
+
+At minimum keep fixtures for:
+
+- ordinary skinned unit + team color;
+- multi-layer unit material;
+- scaled unit with model-local particles;
+- PE2 atlas/color/alpha/head-tail model;
+- ribbon projectile;
+- model attachment child;
+- legacy model-particle child;
+- global-sequence model;
+- non-inheritance model;
+- status/buff visual;
+- birth/stand/death building lifecycle.
+
+For a newly retained map release, run the full pack and fidelity gate before calling its presentation assets supported.
+
+## Execution order
+
+Work in this order unless a discovered dependency requires adjustment:
+
+1. canonical full unit/building/object inventory;
+2. full-pack command + top-level manifest;
+3. typed fidelity inventory/report;
+4. shared model-local VFX runtime and unit consumption;
+5. PE2/ribbon fidelity;
+6. child-model/attachment/CORN/event/light support;
+7. material/animation fidelity;
+8. complete runtime binding coverage;
+9. reference rendering gate and cleanup of remaining accepted approximations.
+
+Early steps deliberately expose more broken assets. That is desirable: the goal is to discover the finite Castle Fight problem set now, then burn it down once, instead of discovering one missing renderer feature every time a gameplay unit is added.
+
+## Definition of done
+
+For a supported Castle Fight release:
+
+- the full presentation pack is generated from retained map data without a hand-maintained gameplay slice;
+- every Castle Fight-relevant unit/building/doodad/effect/UI asset is present or explicitly classified as intentionally invisible/unresolved;
+- every visible MDX primitive encountered by that closure is faithfully handled or carries an intentional, reviewed approximation;
+- the client has no silent wildcard drop of extracted presentation bindings;
+- fidelity reports contain no unclassified visible losses;
+- enabling an already-extracted unit/building in gameplay normally requires no asset-conversion or renderer changes.
