@@ -119,11 +119,13 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let units_path = resolved.join("units.tsv");
     let buildings_path = resolved.join("buildings.tsv");
     let object_fields_path = resolved.join("object-fields.tsv");
+    let unit_spell_semantics_path = resolved.join("unit-spell-semantics.tsv");
     let placed_doodads_path = resolved.join("placed-doodads.tsv");
     let map_skin_path = original_map.join("extracted/war3mapSkin.txt");
     println!("cargo:rerun-if-changed={}", units_path.display());
     println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
+    println!("cargo:rerun-if-changed={}", unit_spell_semantics_path.display());
     println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
     println!("cargo:rerun-if-changed={}", map_skin_path.display());
     let map_readme = original_map.join("README.md");
@@ -134,7 +136,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let units = load_unit_assets(&units_path, &object_fields_path)?;
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
-    let visuals = load_visual_assets(&object_fields_path)?;
+    let visuals = load_visual_assets(&object_fields_path, &unit_spell_semantics_path)?;
     let ui = load_ui_assets(&object_fields_path, &map_skin_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
@@ -503,6 +505,7 @@ fn load_placed_doodads(
 
 fn load_visual_assets(
     object_fields_path: &std::path::Path,
+    unit_spell_semantics_path: &std::path::Path,
 ) -> Result<VisualAssetCatalog, Box<dyn Error>> {
     let mut fields = csv::ReaderBuilder::new()
         .delimiter(b'\t')
@@ -603,6 +606,38 @@ fn load_visual_assets(
         }
     }
 
+    // Map-script spell bundles invoke child Warcraft abilities through dummy carriers.
+    // Keep their authored visuals tied to the visible parent cast without per-unit renderer rules.
+    let mut semantics = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(unit_spell_semantics_path)?;
+    let semantic_headers = semantics.headers()?.clone();
+    let ability_column = header_index(&semantic_headers, "ability_rawcode")?;
+    let effects_column = header_index(&semantic_headers, "effect_rawcodes")?;
+    let mut bundled_art = Vec::new();
+    for row in semantics.records() {
+        let row = row?;
+        let parent = row.get(ability_column).unwrap_or_default();
+        for child in row.get(effects_column).unwrap_or_default().split(',') {
+            if child == parent {
+                continue;
+            }
+            bundled_art.extend(
+                assets
+                    .iter()
+                    .filter(|(kind, rawcode, role, _)| {
+                        kind == "abilities"
+                            && rawcode == child
+                            && matches!(role.as_str(), "caster" | "effect" | "target" | "special")
+                    })
+                    .map(|(kind, _, role, path)| {
+                        (kind.clone(), parent.to_owned(), role.clone(), path.clone())
+                    }),
+            );
+        }
+    }
+    assets.extend(bundled_art);
+
     let mut status_visuals = Vec::new();
     for (ability_rawcode, buffs) in ability_buff_ids {
         let Some(base_rawcode) = ability_base_rawcodes
@@ -616,6 +651,8 @@ fn load_visual_assets(
             "Aenr" => &["movement"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
+            // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
+            "Ainf" | "AIrr" | "AHad" => &["armor"],
             _ => continue,
         };
         for (buff_rawcode, status_kind) in buffs.iter().zip(status_kinds.iter().copied()) {
@@ -731,8 +768,8 @@ fn load_ui_assets(
         ));
     }
 
-    // These are the stock War3Skins InfoPanelIconDamage/Armor bindings. The map's CustomSkin
-    // overrides are applied below, notably Castle Fight's imported Hero armor artwork.
+    // The Neutral info-panel family has no upgrade-level box in the lower-right corner.
+    // Apply map CustomSkin overrides, notably Castle Fight's imported Hero armor artwork.
     let skin = fs::read_to_string(map_skin_path)?;
     let overrides = skin
         .split("[CustomSkin]")
@@ -746,78 +783,78 @@ fn load_ui_assets(
     for (key, skin_key, stock_path) in [
         (
             "damage_normal",
-            "InfoPanelIconDamageNormal",
-            r"UI\Widgets\Console\Human\infocard-attack-melee.blp",
+            "InfoPanelIconDamageNormalNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-melee.blp",
         ),
         (
             "damage_pierce",
-            "InfoPanelIconDamagePierce",
-            r"UI\Widgets\Console\Human\infocard-attack-piercing.blp",
+            "InfoPanelIconDamagePierceNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-piercing.blp",
         ),
         (
             "damage_siege",
-            "InfoPanelIconDamageSiege",
-            r"UI\Widgets\Console\Human\infocard-attack-siege.blp",
+            "InfoPanelIconDamageSiegeNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-siege.blp",
         ),
         (
             "damage_magic",
-            "InfoPanelIconDamageMagic",
-            r"UI\Widgets\Console\Human\infocard-attack-magic.blp",
+            "InfoPanelIconDamageMagicNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-magic.blp",
         ),
         (
             "damage_chaos",
-            "InfoPanelIconDamageChaos",
-            r"UI\Widgets\Console\Human\infocard-attack-chaos.blp",
+            "InfoPanelIconDamageChaosNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-chaos.blp",
         ),
         (
             "damage_hero",
-            "InfoPanelIconDamageHero",
-            r"UI\Widgets\Console\Human\infocard-attack-hero.blp",
+            "InfoPanelIconDamageHeroNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-hero.blp",
         ),
         (
             "damage_spells",
-            "InfoPanelIconDamageMagic",
-            r"UI\Widgets\Console\Human\infocard-attack-magic.blp",
+            "InfoPanelIconDamageMagicNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-attack-magic.blp",
         ),
         (
             "armor_small",
-            "InfoPanelIconArmorSmall",
-            r"UI\Widgets\Console\Human\infocard-armor-small.blp",
+            "InfoPanelIconArmorSmallNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-small.blp",
         ),
         (
             "armor_unarmored",
-            "InfoPanelIconArmorNone",
-            r"UI\Widgets\Console\Human\infocard-armor-unarmored.blp",
+            "InfoPanelIconArmorNoneNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-unarmored.blp",
         ),
         (
             "armor_medium",
-            "InfoPanelIconArmorMedium",
-            r"UI\Widgets\Console\Human\infocard-armor-medium.blp",
+            "InfoPanelIconArmorMediumNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-medium.blp",
         ),
         (
             "armor_large",
-            "InfoPanelIconArmorLarge",
-            r"UI\Widgets\Console\Human\infocard-armor-large.blp",
+            "InfoPanelIconArmorLargeNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-large.blp",
         ),
         (
             "armor_hero",
-            "InfoPanelIconArmorHero",
-            r"UI\Widgets\Console\Human\infocard-armor-hero.blp",
+            "InfoPanelIconArmorHeroNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-hero.blp",
         ),
         (
             "armor_fortified",
-            "InfoPanelIconArmorFort",
-            r"UI\Widgets\Console\Human\infocard-armor-fortified.blp",
+            "InfoPanelIconArmorFortNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-fortified.blp",
         ),
         (
             "armor_divine",
-            "InfoPanelIconArmorDivine",
-            r"UI\Widgets\Console\Human\infocard-armor-hero.blp",
+            "InfoPanelIconArmorDivineNeutral",
+            r"UI\Widgets\Console\Human\infocard-armor-divine.blp",
         ),
         (
             "armor_normal",
-            "InfoPanelIconArmorNormal",
-            r"UI\Widgets\Console\Human\infocard-armor-small.blp",
+            "InfoPanelIconArmorNormalNeutral",
+            r"UI\Widgets\Console\Human\infocard-neutral-armor-small.blp",
         ),
     ] {
         assets.insert((

@@ -466,13 +466,20 @@ mod tests {
             asset.owner_kind == "info_panel"
                 && asset.owner_rawcode == "damage_pierce"
                 && asset.role == "icon"
-                && asset.texture_path == r"UI\Widgets\Console\Human\infocard-attack-piercing.blp"
+                && asset.texture_path
+                    == r"UI\Widgets\Console\Human\infocard-neutral-attack-piercing.blp"
         }));
         assert!(catalog.assets.iter().any(|asset| {
             asset.owner_kind == "info_panel"
                 && asset.owner_rawcode == "armor_hero"
                 && asset.role == "icon"
                 && asset.texture_path == r"war3mapimported\infocard-neutral-armor-hero.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "info_panel"
+                && asset.owner_rawcode == "armor_medium"
+                && asset.role == "icon"
+                && asset.texture_path == r"UI\Widgets\Console\Human\infocard-neutral-armor-medium.blp"
         }));
         assert!(catalog.assets.iter().any(|asset| {
             asset.owner_kind == "cursors"

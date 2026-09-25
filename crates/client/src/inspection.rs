@@ -463,48 +463,53 @@ fn setup_inspector_ui(mut commands: Commands) {
                         },
                         InspectionText,
                     ));
-                    for kind in [
-                        CombatTooltipKind::Attack(0),
-                        CombatTooltipKind::Attack(1),
-                        CombatTooltipKind::Armor,
-                    ] {
-                        details
-                            .spawn((
-                                Button,
-                                Node {
-                                    width: px(220.0),
-                                    height: px(36.0),
-                                    padding: UiRect::all(px(2.0)),
-                                    border: UiRect::all(px(1.0)),
-                                    align_items: AlignItems::Center,
-                                    column_gap: px(5.0),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgb(0.10, 0.09, 0.07)),
-                                BorderColor::all(Color::srgb(0.44, 0.35, 0.17)),
-                                Visibility::Hidden,
-                                CombatTypeButton(kind),
-                            ))
-                            .with_children(|badge| {
-                                badge.spawn((
-                                    ImageNode::default(),
-                                    Node {
-                                        width: px(30.0),
-                                        height: px(30.0),
-                                        ..default()
-                                    },
-                                    Pickable::IGNORE,
-                                    CombatTypeIcon(kind),
-                                ));
-                                badge.spawn((
-                                    Text::new(""),
-                                    TextFont::from_font_size(13.0),
-                                    TextColor(Color::srgb(0.96, 0.86, 0.56)),
-                                    Pickable::IGNORE,
-                                    CombatTypeLabel(kind),
-                                ));
-                            });
-                    }
+                    details
+                        .spawn((Node {
+                            flex_direction: FlexDirection::Row,
+                            column_gap: px(12.0),
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },))
+                        .with_children(|combat_row| {
+                            for kind in [
+                                CombatTooltipKind::Attack(0),
+                                CombatTooltipKind::Attack(1),
+                                CombatTooltipKind::Armor,
+                            ] {
+                                combat_row
+                                    .spawn((
+                                        Button,
+                                        Node {
+                                            width: px(98.0),
+                                            height: px(56.0),
+                                            display: Display::None,
+                                            align_items: AlignItems::Center,
+                                            column_gap: px(5.0),
+                                            ..default()
+                                        },
+                                        CombatTypeButton(kind),
+                                    ))
+                                    .with_children(|badge| {
+                                        badge.spawn((
+                                            ImageNode::default(),
+                                            Node {
+                                                width: px(48.0),
+                                                height: px(48.0),
+                                                ..default()
+                                            },
+                                            Pickable::IGNORE,
+                                            CombatTypeIcon(kind),
+                                        ));
+                                        badge.spawn((
+                                            Text::new(""),
+                                            TextFont::from_font_size(18.0),
+                                            TextColor(Color::srgb(0.96, 0.86, 0.56)),
+                                            Pickable::IGNORE,
+                                            CombatTypeLabel(kind),
+                                        ));
+                                    });
+                            }
+                        });
                 });
             panel
                 .spawn((
@@ -1291,7 +1296,7 @@ fn update_combat_tooltip(
     selection: Res<InspectionSelection>,
     samples: Res<PresentationSamples>,
     mut badge_icons: CombatBadgeIcons<'_, '_>,
-    mut buttons: Query<(&CombatTypeButton, &Interaction, &mut Visibility), Without<CombatTooltip>>,
+    mut buttons: Query<(&CombatTypeButton, &Interaction, &mut Node), Without<CombatTooltip>>,
     mut labels: Query<(&CombatTypeLabel, &mut Text), Without<CombatTooltip>>,
     mut tooltip: CombatTooltipQuery<'_, '_>,
 ) {
@@ -1301,15 +1306,15 @@ fn update_combat_tooltip(
     let (attacks, armor) =
         selected.map_or(([None; 2], None), |id| selected_combat_badges(id, &samples));
     let mut hovered = None;
-    for (button, interaction, mut visibility) in &mut buttons {
+    for (button, interaction, mut node) in &mut buttons {
         let visible = match button.0 {
             CombatTooltipKind::Attack(slot) => attacks[slot].is_some(),
             CombatTooltipKind::Armor => armor.is_some(),
         };
-        *visibility = if visible {
-            Visibility::Visible
+        node.display = if visible {
+            Display::Flex
         } else {
-            Visibility::Hidden
+            Display::None
         };
         if visible && matches!(interaction, Interaction::Hovered | Interaction::Pressed) {
             hovered = Some(button.0);
@@ -1317,20 +1322,11 @@ fn update_combat_tooltip(
     }
     for (label, mut text) in &mut labels {
         text.0 = match label.0 {
-            CombatTooltipKind::Attack(slot) => attacks[slot].map_or_else(String::new, |attack| {
-                format!(
-                    "Attack {}: {} {}",
-                    slot + 1,
-                    attack.profile.damage,
-                    damage_type_name(attack.damage_type)
-                )
-            }),
+            CombatTooltipKind::Attack(slot) => {
+                attacks[slot].map_or_else(String::new, |attack| attack.profile.damage.to_string())
+            }
             CombatTooltipKind::Armor => armor.map_or_else(String::new, |armor| {
-                format!(
-                    "Armor: {} {}",
-                    armor_points_label(armor.points_per_100),
-                    armor_type_name(armor.armor_type)
-                )
+                armor_points_label(armor.points_per_100)
             }),
         };
     }
@@ -1367,8 +1363,7 @@ fn update_combat_tooltip(
     text.0 = match hovered {
         Some(CombatTooltipKind::Attack(slot)) => attacks[slot].map_or_else(String::new, |attack| {
             format!(
-                "Attack {} — {} damage, {:.0} range, {:.2}s cooldown\n{}",
-                slot + 1,
+                "{} damage, {:.0} range, {:.2}s cooldown\n{}",
                 attack.profile.damage,
                 attack.profile.range as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
                 f32::from(attack.profile.cooldown_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32,
