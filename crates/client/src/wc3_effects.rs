@@ -18,7 +18,7 @@ use bevy::{
 };
 use serde::Deserialize;
 
-use crate::terrain::client_asset_root;
+use crate::terrain::{TerrainSurface, client_asset_root};
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
@@ -44,6 +44,8 @@ const GAMEPLAY_ANIMATION_POSE_INTERVAL: f32 = 1.0 / 30.0;
 // Stock WC3 omni lights commonly use intensity 20. Map that to Bevy's 1,000,000-lumen
 // default point light, while retaining WC3 attenuation end as the cutoff radius.
 const WC3_MODEL_LIGHT_LUMENS_PER_INTENSITY: f32 = 50_000.0;
+const WC3_SPLAT_TERRAIN_SUBDIVISIONS: u32 = 4;
+const WC3_SPLAT_TERRAIN_OFFSET: f32 = 0.2;
 
 #[derive(Default)]
 pub(crate) struct GameplayAnimationPoseClock {
@@ -1723,12 +1725,88 @@ fn splat_color(color: [u8; 4]) -> Color {
     Color::srgba_u8(color[0], color[1], color[2], color[3])
 }
 
+fn splat_terrain_uvs(rows: u32, columns: u32, frame: u32) -> Vec<[f32; 2]> {
+    let [u0, v0, u1, v1] = particle_atlas_uv_rect(rows, columns, frame);
+    let count = WC3_SPLAT_TERRAIN_SUBDIVISIONS;
+    let mut uvs = Vec::with_capacity(((count + 1) * (count + 1)) as usize);
+    for z in 0..=count {
+        let v = z as f32 / count as f32;
+        for x in 0..=count {
+            let u = x as f32 / count as f32;
+            uvs.push([u0 + (u1 - u0) * u, v1 + (v0 - v1) * v]);
+        }
+    }
+    uvs
+}
+
+fn build_splat_terrain_mesh(
+    terrain: &TerrainSurface,
+    center: Vec3,
+    rotation: Quat,
+    scale: f32,
+    rows: u32,
+    columns: u32,
+    frame: u32,
+) -> Mesh {
+    let count = WC3_SPLAT_TERRAIN_SUBDIVISIONS;
+    let row_width = count + 1;
+    let mut positions = Vec::with_capacity((row_width * row_width) as usize);
+    let mut indices = Vec::with_capacity((count * count * 6) as usize);
+    for z in 0..=count {
+        for x in 0..=count {
+            let offset = Vec3::new(
+                (x as f32 / count as f32 - 0.5) * scale,
+                0.0,
+                (z as f32 / count as f32 - 0.5) * scale,
+            );
+            let rotated = rotation * offset;
+            let x = center.x + rotated.x;
+            let z = center.z + rotated.z;
+            positions.push([
+                x - center.x,
+                terrain.height_at_world(Vec2::new(x, z)) + WC3_SPLAT_TERRAIN_OFFSET,
+                z - center.z,
+            ]);
+        }
+    }
+    for z in 0..count {
+        for x in 0..count {
+            let a = z * row_width + x;
+            let b = a + 1;
+            let c = a + row_width;
+            let d = c + 1;
+            indices.extend_from_slice(&[a, c, b, b, c, d]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_NORMAL,
+        vec![[0.0, 1.0, 0.0]; (row_width * row_width) as usize],
+    )
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        splat_terrain_uvs(rows, columns, frame),
+    )
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+#[derive(SystemParam)]
+pub(crate) struct Wc3SplatSpawnAssets<'w> {
+    terrain: Res<'w, TerrainSurface>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+    materials: ResMut<'w, Assets<StandardMaterial>>,
+}
+
 pub fn emit_wc3_splat_events(
     mut commands: Commands,
     time: Res<Time>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
-    mut assets: Wc3ParticleRenderAssets,
+    mut assets: Wc3SplatSpawnAssets,
     mut events: Query<(Entity, &GlobalTransform, &mut Wc3SplatEventRuntime)>,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
@@ -1751,17 +1829,18 @@ pub fn emit_wc3_splat_events(
             continue;
         }
         let (rgba, frame) = splat_sample(&runtime.splat, 0.0);
-        let mesh = assets.particle_assets.particle_mesh(
-            runtime.splat.rows,
-            runtime.splat.columns,
-            frame,
-            &mut assets.meshes,
-        );
-        let source_scale = source_transform.to_scale_rotation_translation().0;
+        let (source_scale, rotation, center) = source_transform.to_scale_rotation_translation();
         let scale = runtime.splat.scale.max(0.01) * source_scale.x.abs().max(source_scale.z.abs());
-        let mut position = source_transform.translation();
-        position.y += 0.1;
         for _ in 0..count {
+            let mesh = assets.meshes.add(build_splat_terrain_mesh(
+                &assets.terrain,
+                center,
+                rotation,
+                scale,
+                runtime.splat.rows,
+                runtime.splat.columns,
+                frame,
+            ));
             let material = assets.materials.add(StandardMaterial {
                 base_color: splat_color(rgba),
                 base_color_texture: Some(runtime.texture.clone()),
@@ -1771,11 +1850,9 @@ pub fn emit_wc3_splat_events(
                 ..default()
             });
             commands.spawn((
-                Mesh3d(mesh.clone()),
+                Mesh3d(mesh),
                 MeshMaterial3d(material),
-                Transform::from_translation(position)
-                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
-                    .with_scale(Vec3::splat(scale)),
+                Transform::from_translation(Vec3::new(center.x, 0.0, center.z)),
                 Wc3SpawnedSplat {
                     spec: runtime.splat.clone(),
                     age: 0.0,
@@ -1789,32 +1866,34 @@ pub fn emit_wc3_splat_events(
 pub fn update_wc3_spawned_splats(
     mut commands: Commands,
     time: Res<Time>,
-    mut assets: Wc3ParticleRenderAssets,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut splats: Query<(
         Entity,
-        &mut Mesh3d,
+        &Mesh3d,
         &MeshMaterial3d<StandardMaterial>,
         &mut Wc3SpawnedSplat,
     )>,
 ) {
-    for (entity, mut mesh, material, mut splat) in &mut splats {
+    for (entity, mesh, material, mut splat) in &mut splats {
         splat.age += time.delta_secs().max(0.0);
         if splat.age >= splat_lifespan(&splat.spec) {
-            assets.materials.remove(material.0.id());
+            materials.remove(material.0.id());
+            meshes.remove(mesh.0.id());
             commands.entity(entity).despawn();
             continue;
         }
         let (color, frame) = splat_sample(&splat.spec, splat.age);
-        if let Some(mut material) = assets.materials.get_mut(&material.0) {
+        if let Some(mut material) = materials.get_mut(&material.0) {
             material.base_color = splat_color(color);
         }
         if frame != splat.frame {
-            mesh.0 = assets.particle_assets.particle_mesh(
-                splat.spec.rows,
-                splat.spec.columns,
-                frame,
-                &mut assets.meshes,
-            );
+            if let Some(mut mesh_asset) = meshes.get_mut(&mesh.0) {
+                mesh_asset.insert_attribute(
+                    Mesh::ATTRIBUTE_UV_0,
+                    splat_terrain_uvs(splat.spec.rows, splat.spec.columns, frame),
+                );
+            }
             splat.frame = frame;
         }
     }
@@ -5016,6 +5095,36 @@ mod tests {
         assert_eq!(splat_sample(&spec, 1.0), ([60, 120, 20, 228], 2));
         assert_eq!(splat_sample(&spec, 2.5), ([60, 120, 20, 100], 6));
         assert_eq!(splat_lifespan(&spec), 3.0);
+    }
+
+    #[test]
+    fn splat_mesh_samples_terrain_instead_of_source_node_height() {
+        let terrain = TerrainSurface::new(
+            castle_fight_sim::TerrainElevationMap::from_wc3_terrain_json(include_str!(
+                "../../../docs/original_map/extracted/terrain.json"
+            ))
+            .unwrap(),
+        );
+        let center = Vec3::new(0.0, 1_000.0, 0.0);
+        let mesh = build_splat_terrain_mesh(&terrain, center, Quat::IDENTITY, 256.0, 4, 4, 5);
+        let positions = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+        assert_eq!(positions.len(), 25);
+        for position in positions {
+            let xz = Vec2::new(center.x + position[0], center.z + position[2]);
+            assert!(
+                (position[1] - terrain.height_at_world(xz) - WC3_SPLAT_TERRAIN_OFFSET).abs()
+                    < 0.001
+            );
+            assert!((position[1] - center.y).abs() > 100.0);
+        }
+        assert_eq!(
+            mesh.attribute(Mesh::ATTRIBUTE_UV_0).unwrap().len(),
+            positions.len()
+        );
     }
 
     #[test]
