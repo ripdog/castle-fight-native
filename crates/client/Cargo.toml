@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-bevy = { workspace = true, features = ["3d", "png", "ui", "custom_cursor"] }
+bevy = { workspace = true, features = ["3d", "png", "ui", "custom_cursor", "bevy_audio", "flac", "vorbis"] }
 castle-fight-protocol = { path = "../protocol" }
 castle-fight-sim = { path = "../sim" }
 serde.workspace = true

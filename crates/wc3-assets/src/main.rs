@@ -78,6 +78,7 @@ struct ModelFeatureSummary {
     corn_emitter_animated_track_count: usize,
     event_object_count: usize,
     event_sound_count: usize,
+    event_sound_resolved_count: usize,
     event_splat_count: usize,
     event_footprint_count: usize,
     event_spawn_count: usize,
@@ -687,7 +688,8 @@ fn summarize_model_features<'a>(
         summary.corn_emitter_count += features.corn_emitter_count;
         summary.corn_emitter_animated_track_count += features.corn_emitter_animated_track_count;
         summary.event_object_count += features.event_object_count;
-        let mut event_sound_count = 0;
+        let mut event_sound_resolved_count = 0;
+        let mut event_sound_unresolved_count = 0;
         let mut event_splat_count = 0;
         let mut event_footprint_count = 0;
         let mut event_spawn_resolved_count = 0;
@@ -696,7 +698,10 @@ fn summarize_model_features<'a>(
         let mut event_unknown_count = 0;
         for event in &model.event_objects {
             match event.kind {
-                EventObjectKindManifest::Sound => event_sound_count += 1,
+                EventObjectKindManifest::Sound if event.lookup_resolved => {
+                    event_sound_resolved_count += 1;
+                }
+                EventObjectKindManifest::Sound => event_sound_unresolved_count += 1,
                 EventObjectKindManifest::Splat => event_splat_count += 1,
                 EventObjectKindManifest::Footprint => event_footprint_count += 1,
                 EventObjectKindManifest::Spawn if event.lookup_resolved => {
@@ -707,7 +712,8 @@ fn summarize_model_features<'a>(
                 EventObjectKindManifest::Unknown => event_unknown_count += 1,
             }
         }
-        summary.event_sound_count += event_sound_count;
+        summary.event_sound_count += event_sound_resolved_count + event_sound_unresolved_count;
+        summary.event_sound_resolved_count += event_sound_resolved_count;
         summary.event_splat_count += event_splat_count;
         summary.event_footprint_count += event_footprint_count;
         summary.event_spawn_count += event_spawn_resolved_count + event_spawn_unresolved_count;
@@ -811,9 +817,15 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "model.event_sound_unsupported",
+            "model.event_sound_approximate",
+            FidelityStatus::Approximation,
+            event_sound_resolved_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_sound_unresolved",
             FidelityStatus::Unsupported,
-            event_sound_count,
+            event_sound_unresolved_count,
         );
         record_fidelity_finding(
             &mut findings,
@@ -1090,7 +1102,7 @@ mod tests {
 
     #[test]
     fn fidelity_summary_aggregates_model_features_and_deduplicates_child_models() {
-        use crate::export::{EventObjectManifest, ModelFeatureManifest};
+        use crate::export::{EventObjectManifest, EventSoundManifest, ModelFeatureManifest};
 
         let model =
             |source: &str, features: ModelFeatureManifest, warnings: Vec<&str>| ModelManifest {
@@ -1161,6 +1173,7 @@ mod tests {
                 lookup_resolved: true,
                 spawn_model: Some("spawn.mdx".to_owned()),
                 gltf: Some("models/spawn.gltf".to_owned()),
+                sound: None,
                 global_sequence_id: None,
                 event_track_times: vec![100],
                 sequence_windows: Vec::new(),
@@ -1172,9 +1185,28 @@ mod tests {
                 position: [0.0; 3],
                 kind: EventObjectKindManifest::Sound,
                 event_code: Some("TEST".to_owned()),
-                lookup_resolved: false,
+                lookup_resolved: true,
                 spawn_model: None,
                 gltf: None,
+                sound: Some(EventSoundManifest {
+                    sound_name: "TestSound".to_owned(),
+                    source_files: vec![r"Sound\Test.flac".to_owned()],
+                    files: vec!["audio/sound__test.flac".to_owned()],
+                    silent: false,
+                    volume: 127.0,
+                    volume_variance: 0.0,
+                    pitch: 1.0,
+                    pitch_variance: 0.0,
+                    maximum_concurrent_instances: -1,
+                    priority: 5,
+                    channel: 11,
+                    flags: "WANT3D".to_owned(),
+                    min_distance: 600.0,
+                    max_distance: 3500.0,
+                    distance_cutoff: 3000.0,
+                    eax_flags: "DefaultEAXON".to_owned(),
+                    rolloff_points: "_".to_owned(),
+                }),
                 global_sequence_id: None,
                 event_track_times: vec![200],
                 sequence_windows: Vec::new(),
@@ -1189,6 +1221,7 @@ mod tests {
                 lookup_resolved: false,
                 spawn_model: None,
                 gltf: None,
+                sound: None,
                 global_sequence_id: None,
                 event_track_times: vec![300],
                 sequence_windows: Vec::new(),
@@ -1220,6 +1253,7 @@ mod tests {
         assert_eq!(summary.event_spawn_count, 1);
         assert_eq!(summary.event_spawn_resolved_count, 1);
         assert_eq!(summary.event_sound_count, 1);
+        assert_eq!(summary.event_sound_resolved_count, 1);
         assert_eq!(summary.event_unknown_count, 1);
         assert_eq!(summary.light_count, 3);
         assert_eq!(summary.omni_light_count, 2);
@@ -1229,8 +1263,8 @@ mod tests {
             1
         );
         assert_eq!(summary.max_classic_skin_influences, 5);
-        assert_eq!(summary.approximation_occurrences, 24);
-        assert_eq!(summary.unsupported_occurrences, 5);
+        assert_eq!(summary.approximation_occurrences, 25);
+        assert_eq!(summary.unsupported_occurrences, 4);
         assert_eq!(summary.findings.len(), 16);
         assert!(summary.findings.iter().any(|finding| {
             finding.id == "material.animated_texture_approximate"
@@ -1257,8 +1291,8 @@ mod tests {
                 && finding.occurrences == 1
         }));
         assert!(summary.findings.iter().any(|finding| {
-            finding.id == "model.event_sound_unsupported"
-                && finding.status == FidelityStatus::Unsupported
+            finding.id == "model.event_sound_approximate"
+                && finding.status == FidelityStatus::Approximation
                 && finding.affected_models == 1
                 && finding.occurrences == 1
         }));

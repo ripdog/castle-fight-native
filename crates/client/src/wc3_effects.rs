@@ -8,6 +8,7 @@ use std::{
 
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
+    audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialListener, SpatialScale, Volume},
     camera::visibility::DynamicSkinnedMeshBounds,
     ecs::system::SystemParam,
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
@@ -635,10 +636,42 @@ enum Wc3EventObjectKind {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+struct Wc3EventSoundSpec {
+    #[serde(default)]
+    files: Vec<String>,
+    #[serde(default = "default_wc3_sound_volume")]
+    volume: f32,
+    #[serde(default)]
+    volume_variance: f32,
+    #[serde(default = "default_wc3_sound_pitch")]
+    pitch: f32,
+    #[serde(default)]
+    pitch_variance: f32,
+    #[serde(default)]
+    flags: String,
+    #[serde(default)]
+    min_distance: f32,
+    #[serde(default)]
+    max_distance: f32,
+    #[serde(default)]
+    distance_cutoff: f32,
+}
+
+const fn default_wc3_sound_volume() -> f32 {
+    127.0
+}
+
+const fn default_wc3_sound_pitch() -> f32 {
+    1.0
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct Wc3EventObjectSpec {
     kind: Wc3EventObjectKind,
     #[serde(default)]
     gltf: Option<String>,
+    #[serde(default)]
+    sound: Option<Wc3EventSoundSpec>,
     #[serde(default)]
     global_sequence_id: Option<u32>,
     #[serde(default)]
@@ -662,6 +695,17 @@ pub(crate) struct Wc3SpawnEventRuntime {
 pub(crate) struct Wc3SpawnedEventModel {
     age: f32,
     lifespan: f32,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3SoundEventRuntime {
+    spec: Wc3EventObjectSpec,
+    sound: Wc3EventSoundSpec,
+    files: Vec<Handle<AudioSource>>,
+    previous_sequence_name: Option<String>,
+    previous_sequence_elapsed_ms: Option<f32>,
+    previous_global_elapsed_ms: Option<f32>,
+    sequence: u32,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -730,6 +774,19 @@ fn child_model_asset_path(parent_asset_path: &str, child_gltf: &str) -> Option<S
     Some(
         parent_dir
             .join(child_file)
+            .to_string_lossy()
+            .replace('\\', "/"),
+    )
+}
+
+fn pack_relative_asset_path(parent_asset_path: &str, relative: &str) -> Option<String> {
+    let relative = relative.replace('\\', "/");
+    validate_relative_asset_path(&relative).ok()?;
+    let model_dir = Path::new(parent_asset_path).parent()?;
+    let pack_root = model_dir.parent()?;
+    Some(
+        pack_root
+            .join(relative)
             .to_string_lossy()
             .replace('\\', "/"),
     )
@@ -824,25 +881,54 @@ pub fn setup_wc3_model_composed_features(
                     sequence: 0,
                 });
         }
-        if let Some(spec) = extras.wc3_event_object
-            && spec.kind == Wc3EventObjectKind::Spawn
-            && let Some(gltf) = spec.gltf.as_deref()
-            && let Some(child_model) = registered_child_model_for_node(
-                entity,
-                gltf,
-                &asset_server,
-                &registry,
-                &parents,
-                &roots,
-            )
-        {
-            commands.entity(entity).insert(Wc3SpawnEventRuntime {
-                child_model,
-                spec,
-                previous_sequence_name: None,
-                previous_sequence_elapsed_ms: None,
-                previous_global_elapsed_ms: None,
-            });
+        if let Some(spec) = extras.wc3_event_object {
+            match spec.kind {
+                Wc3EventObjectKind::Spawn => {
+                    if let Some(gltf) = spec.gltf.as_deref()
+                        && let Some(child_model) = registered_child_model_for_node(
+                            entity,
+                            gltf,
+                            &asset_server,
+                            &registry,
+                            &parents,
+                            &roots,
+                        )
+                    {
+                        commands.entity(entity).insert(Wc3SpawnEventRuntime {
+                            child_model,
+                            spec,
+                            previous_sequence_name: None,
+                            previous_sequence_elapsed_ms: None,
+                            previous_global_elapsed_ms: None,
+                        });
+                    }
+                }
+                Wc3EventObjectKind::Sound => {
+                    if let Some(sound) = spec.sound.clone()
+                        && let Some(parent_asset_path) =
+                            inherited_world_asset_path(entity, &parents, &roots, &asset_server)
+                    {
+                        let files = sound
+                            .files
+                            .iter()
+                            .filter_map(|file| pack_relative_asset_path(&parent_asset_path, file))
+                            .map(|path| asset_server.load::<AudioSource>(path))
+                            .collect::<Vec<_>>();
+                        if !files.is_empty() {
+                            commands.entity(entity).insert(Wc3SoundEventRuntime {
+                                spec,
+                                sound,
+                                files,
+                                previous_sequence_name: None,
+                                previous_sequence_elapsed_ms: None,
+                                previous_global_elapsed_ms: None,
+                                sequence: 0,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -1278,21 +1364,23 @@ fn periodic_event_crossings(previous: f32, current: f32, phase: f32, period: f32
     }
 }
 
-fn wc3_spawn_event_crossings(
-    runtime: &mut Wc3SpawnEventRuntime,
+fn wc3_event_crossings(
+    spec: &Wc3EventObjectSpec,
+    previous_sequence_name: &mut Option<String>,
+    previous_sequence_elapsed_ms: &mut Option<f32>,
+    previous_global_elapsed_ms: &mut Option<f32>,
     clock: &Wc3ModelSequenceClock,
     dt_ms: f32,
 ) -> u32 {
-    if let Some(global_sequence_id) = runtime.spec.global_sequence_id
-        && let Some(duration) = runtime
-            .spec
+    if let Some(global_sequence_id) = spec.global_sequence_id
+        && let Some(duration) = spec
             .global_sequence_durations_ms
             .get(global_sequence_id as usize)
             .copied()
             .filter(|duration| *duration != 0)
     {
         let current = clock.global_elapsed_ms.max(0.0);
-        let previous = runtime.previous_global_elapsed_ms.unwrap_or_else(|| {
+        let previous = (*previous_global_elapsed_ms).unwrap_or_else(|| {
             let previous = (current - dt_ms).max(0.0);
             if previous <= f32::EPSILON {
                 -0.001
@@ -1300,9 +1388,8 @@ fn wc3_spawn_event_crossings(
                 previous
             }
         });
-        runtime.previous_global_elapsed_ms = Some(current);
-        return runtime
-            .spec
+        *previous_global_elapsed_ms = Some(current);
+        return spec
             .event_track_times
             .iter()
             .copied()
@@ -1313,15 +1400,12 @@ fn wc3_spawn_event_crossings(
     }
 
     let current = clock.sequence_elapsed_ms.max(0.0);
-    let same_sequence = runtime
-        .previous_sequence_name
+    let same_sequence = previous_sequence_name
         .as_deref()
         .is_some_and(|name| name.eq_ignore_ascii_case(&clock.sequence_name));
     let previous = if same_sequence {
-        runtime
-            .previous_sequence_elapsed_ms
-            .unwrap_or((current - dt_ms).max(0.0))
-    } else if runtime.previous_sequence_name.is_some() {
+        (*previous_sequence_elapsed_ms).unwrap_or((current - dt_ms).max(0.0))
+    } else if previous_sequence_name.is_some() {
         -0.001
     } else {
         let previous = (current - dt_ms).max(0.0);
@@ -1331,11 +1415,10 @@ fn wc3_spawn_event_crossings(
             previous
         }
     };
-    runtime.previous_sequence_name = Some(clock.sequence_name.clone());
-    runtime.previous_sequence_elapsed_ms = Some(current);
+    *previous_sequence_name = Some(clock.sequence_name.clone());
+    *previous_sequence_elapsed_ms = Some(current);
 
-    let Some(window) = runtime
-        .spec
+    let Some(window) = spec
         .sequence_windows
         .iter()
         .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
@@ -1343,9 +1426,7 @@ fn wc3_spawn_event_crossings(
         return 0;
     };
     let duration = window.end_ms.saturating_sub(window.start_ms).max(1) as f32;
-    runtime
-        .spec
-        .event_track_times
+    spec.event_track_times
         .iter()
         .copied()
         .filter(|event_time| *event_time >= window.start_ms && *event_time <= window.end_ms)
@@ -1358,6 +1439,21 @@ fn wc3_spawn_event_crossings(
             }
         })
         .sum()
+}
+
+fn wc3_spawn_event_crossings(
+    runtime: &mut Wc3SpawnEventRuntime,
+    clock: &Wc3ModelSequenceClock,
+    dt_ms: f32,
+) -> u32 {
+    wc3_event_crossings(
+        &runtime.spec,
+        &mut runtime.previous_sequence_name,
+        &mut runtime.previous_sequence_elapsed_ms,
+        &mut runtime.previous_global_elapsed_ms,
+        clock,
+        dt_ms,
+    )
 }
 
 fn registered_model_event_lifespan_seconds(model: &RegisteredConvertedModel) -> f32 {
@@ -1399,6 +1495,114 @@ pub fn emit_wc3_spawn_events(
             commands
                 .entity(child)
                 .insert(Wc3SpawnedEventModel { age: 0.0, lifespan });
+        }
+    }
+}
+
+fn wc3_sound_is_spatial(sound: &Wc3EventSoundSpec) -> bool {
+    sound
+        .flags
+        .split(',')
+        .any(|flag| flag.trim().eq_ignore_ascii_case("WANT3D"))
+}
+
+fn wc3_sound_cutoff(sound: &Wc3EventSoundSpec) -> f32 {
+    let min_distance = sound.min_distance.max(0.0);
+    if sound.distance_cutoff > min_distance {
+        sound.distance_cutoff
+    } else {
+        sound.max_distance.max(min_distance)
+    }
+}
+
+fn wc3_sound_volume(sound: &Wc3EventSoundSpec, random: f32, distance: Option<f32>) -> f32 {
+    let authored =
+        (sound.volume + (random * 2.0 - 1.0) * sound.volume_variance).clamp(0.0, 127.0) / 127.0;
+    if !wc3_sound_is_spatial(sound) {
+        return authored;
+    }
+    let Some(distance) = distance else {
+        return authored;
+    };
+    let min_distance = sound.min_distance.max(0.0);
+    let cutoff = wc3_sound_cutoff(sound);
+    if cutoff <= min_distance || distance <= min_distance {
+        return authored;
+    }
+    if distance >= cutoff {
+        return 0.0;
+    }
+    authored * (1.0 - (distance - min_distance) / (cutoff - min_distance))
+}
+
+fn wc3_sound_pitch(sound: &Wc3EventSoundSpec, random: f32) -> f32 {
+    (sound.pitch + (random * 2.0 - 1.0) * sound.pitch_variance).max(0.01)
+}
+
+pub fn emit_wc3_sound_events(
+    mut commands: Commands,
+    time: Res<Time>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    listeners: Query<&GlobalTransform, With<SpatialListener>>,
+    mut events: Query<(Entity, &GlobalTransform, &mut Wc3SoundEventRuntime)>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    let listener_position = listeners.iter().next().map(GlobalTransform::translation);
+    for (entity, source_transform, mut runtime) in &mut events {
+        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
+            continue;
+        };
+        let count = {
+            let runtime = &mut *runtime;
+            wc3_event_crossings(
+                &runtime.spec,
+                &mut runtime.previous_sequence_name,
+                &mut runtime.previous_sequence_elapsed_ms,
+                &mut runtime.previous_global_elapsed_ms,
+                &clock,
+                dt_ms,
+            )
+        };
+        if count == 0 || runtime.files.is_empty() {
+            continue;
+        }
+
+        let source_position = source_transform.translation();
+        let distance = listener_position.map(|listener| listener.distance(source_position));
+        for _ in 0..count {
+            let sequence = runtime.sequence;
+            runtime.sequence = runtime.sequence.wrapping_add(1);
+            let variant_seed = particle_seed(entity, 0x534e_4400, sequence);
+            let variant = (variant_seed as usize) % runtime.files.len();
+            let volume = wc3_sound_volume(
+                &runtime.sound,
+                hash_unit(variant_seed ^ 0x13a5_c7d1),
+                distance,
+            );
+            if volume <= f32::EPSILON {
+                continue;
+            }
+            let pitch = wc3_sound_pitch(&runtime.sound, hash_unit(variant_seed ^ 0x7f4a_7c15));
+            let spatial = wc3_sound_is_spatial(&runtime.sound);
+            let mut playback = PlaybackSettings::DESPAWN
+                .with_volume(Volume::Linear(volume))
+                .with_speed(pitch)
+                .with_spatial(spatial);
+            if spatial {
+                let cutoff = wc3_sound_cutoff(&runtime.sound);
+                if cutoff > f32::EPSILON {
+                    // Rodio's spatializer also applies inverse-square distance attenuation.
+                    // Scaling the authored cutoff to one keeps that extra attenuation inactive
+                    // throughout WC3's audible range while retaining stereo panning.
+                    playback = playback.with_spatial_scale(SpatialScale::new(1.0 / cutoff));
+                }
+            }
+            commands.spawn((
+                AudioPlayer::new(runtime.files[variant].clone()),
+                playback,
+                Transform::from_translation(source_position),
+            ));
         }
     }
 }
@@ -4536,6 +4740,7 @@ mod tests {
             spec: Wc3EventObjectSpec {
                 kind: Wc3EventObjectKind::Spawn,
                 gltf: Some("models/spawn.gltf".to_owned()),
+                sound: None,
                 global_sequence_id,
                 event_track_times,
                 sequence_windows,
@@ -4608,6 +4813,35 @@ mod tests {
             global_elapsed_ms: 1_150.0,
         };
         assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 200.0), 1);
+    }
+
+    #[test]
+    fn sound_event_applies_authored_variance_and_distance_window() {
+        let spatial = Wc3EventSoundSpec {
+            files: vec!["audio/test.flac".to_owned()],
+            volume: 127.0,
+            volume_variance: 0.0,
+            pitch: 1.0,
+            pitch_variance: 0.1,
+            flags: "WANT3D".to_owned(),
+            min_distance: 600.0,
+            max_distance: 3_500.0,
+            distance_cutoff: 3_000.0,
+        };
+        assert!(wc3_sound_is_spatial(&spatial));
+        assert_eq!(wc3_sound_cutoff(&spatial), 3_000.0);
+        assert!((wc3_sound_volume(&spatial, 0.5, Some(600.0)) - 1.0).abs() < 1e-6);
+        assert!((wc3_sound_volume(&spatial, 0.5, Some(1_800.0)) - 0.5).abs() < 1e-6);
+        assert_eq!(wc3_sound_volume(&spatial, 0.5, Some(3_000.0)), 0.0);
+        assert!((wc3_sound_pitch(&spatial, 0.0) - 0.9).abs() < 1e-6);
+        assert!((wc3_sound_pitch(&spatial, 1.0) - 1.1).abs() < 1e-6);
+
+        let non_spatial = Wc3EventSoundSpec {
+            flags: String::new(),
+            ..spatial
+        };
+        assert!(!wc3_sound_is_spatial(&non_spatial));
+        assert!((wc3_sound_volume(&non_spatial, 0.5, Some(30_000.0)) - 1.0).abs() < 1e-6);
     }
 
     #[test]

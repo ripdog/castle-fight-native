@@ -409,6 +409,47 @@ pub enum EventObjectKindManifest {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct EventSoundManifest {
+    pub sound_name: String,
+    pub source_files: Vec<String>,
+    pub files: Vec<String>,
+    pub silent: bool,
+    pub volume: f32,
+    pub volume_variance: f32,
+    pub pitch: f32,
+    pub pitch_variance: f32,
+    pub maximum_concurrent_instances: i32,
+    pub priority: i32,
+    pub channel: i32,
+    pub flags: String,
+    pub min_distance: f32,
+    pub max_distance: f32,
+    pub distance_cutoff: f32,
+    pub eax_flags: String,
+    pub rolloff_points: String,
+}
+
+#[derive(Debug, Clone)]
+struct AnimationSoundSpec {
+    sound_name: String,
+    source_files: Vec<String>,
+    silent: bool,
+    volume: f32,
+    volume_variance: f32,
+    pitch: f32,
+    pitch_variance: f32,
+    maximum_concurrent_instances: i32,
+    priority: i32,
+    channel: i32,
+    flags: String,
+    min_distance: f32,
+    max_distance: f32,
+    distance_cutoff: f32,
+    eax_flags: String,
+    rolloff_points: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct EventObjectManifest {
     pub object_id: u32,
     pub name: String,
@@ -421,6 +462,8 @@ pub struct EventObjectManifest {
     pub spawn_model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gltf: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sound: Option<EventSoundManifest>,
     pub global_sequence_id: Option<u32>,
     pub event_track_times: Vec<u32>,
     pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
@@ -590,6 +633,9 @@ pub struct Exporter {
     doodad_skin: DoodadSkinCatalog,
     destructable_skin: DoodadSkinCatalog,
     spawn_event_models: BTreeMap<String, String>,
+    animation_sounds: BTreeMap<String, AnimationSoundSpec>,
+    sound_cache: BTreeMap<String, Option<String>>,
+    sound_file_index: Option<BTreeMap<String, Vec<String>>>,
     texture_cache: BTreeMap<String, TextureManifest>,
 }
 
@@ -703,6 +749,7 @@ impl Exporter {
             parsed
         };
         let spawn_event_models = read_spawn_event_catalog(&mut storage, map_storage.as_ref())?;
+        let animation_sounds = read_animation_sound_catalog(&mut storage, map_storage.as_ref())?;
         // Whiteout's CASC reader keeps decoded data containers in an internal cache.
         // Asset extraction is a streaming workload and does not benefit enough from retaining
         // those potentially-large containers to justify letting the cache grow across models.
@@ -723,6 +770,9 @@ impl Exporter {
             doodad_skin,
             destructable_skin,
             spawn_event_models,
+            animation_sounds,
+            sound_cache: BTreeMap::new(),
+            sound_file_index: None,
             texture_cache: BTreeMap::new(),
         })
     }
@@ -735,6 +785,7 @@ impl Exporter {
             fs::create_dir_all(output.join("source/textures"))?;
         }
         self.output = output.to_path_buf();
+        self.sound_cache.clear();
         self.texture_cache.clear();
         Ok(())
     }
@@ -1573,9 +1624,13 @@ impl Exporter {
         let model_particle_emitters = model_particle_emitter_manifests(&model)?;
         let ribbon_emitters = ribbon_emitter_manifests(&model, &texture_manifests)?;
         let attachments = attachment_manifests(&model)?;
-        let event_objects = event_object_manifests(&model, &self.spawn_event_models, |path| {
-            self.model_exists(path)
-        });
+        let mut event_objects = event_object_manifests(
+            &model,
+            &self.spawn_event_models,
+            &self.animation_sounds,
+            |path| self.model_exists(path),
+        );
+        self.export_event_sound_assets(&mut event_objects)?;
         attach_event_object_extras(&mut gltf, &event_objects)?;
         let lights = light_manifests(&model)?;
 
@@ -1661,6 +1716,109 @@ impl Exporter {
             format!("WC3 model not found in map archive or CASC for logical path {logical_path}"),
         )
         .into())
+    }
+
+    fn export_event_sound_assets(
+        &mut self,
+        event_objects: &mut [EventObjectManifest],
+    ) -> Result<(), Box<dyn Error>> {
+        for event in event_objects {
+            let Some(sound) = event.sound.as_mut() else {
+                continue;
+            };
+            if sound.silent {
+                sound.files.clear();
+                event.lookup_resolved = true;
+                continue;
+            }
+            let mut files = Vec::new();
+            for source in &sound.source_files {
+                if let Some(output) = self.export_sound_file(source)? {
+                    files.push(output);
+                }
+            }
+            files.sort();
+            files.dedup();
+            sound.files = files;
+            event.lookup_resolved = !sound.files.is_empty();
+        }
+        Ok(())
+    }
+
+    fn export_sound_file(&mut self, logical_path: &str) -> Result<Option<String>, Box<dyn Error>> {
+        let normalized = logical_path
+            .trim()
+            .replace('/', "\\")
+            .trim_start_matches('\\')
+            .to_owned();
+        if normalized.is_empty() || normalized == "_" {
+            return Ok(None);
+        }
+        let cache_key = normalized.to_ascii_lowercase();
+        if let Some(cached) = self.sound_cache.get(&cache_key) {
+            return Ok(cached.clone());
+        }
+
+        let mut resolved_source = normalized.clone();
+        let bytes = if let Some(storage) = &self.map_storage {
+            storage.read_file(&normalized)
+        } else {
+            None
+        };
+        let bytes = if let Some(bytes) = bytes {
+            bytes
+        } else {
+            let mut resolved = None;
+            for casc_path in casc_asset_paths(&normalized) {
+                for candidate in [casc_path.clone(), casc_path.to_ascii_lowercase()] {
+                    if let Some(bytes) = self.storage.read_file(&candidate) {
+                        resolved_source = candidate;
+                        resolved = Some(bytes);
+                        break;
+                    }
+                }
+                if resolved.is_some() {
+                    break;
+                }
+            }
+            if resolved.is_none()
+                && let Some(candidate) = self.resolve_legacy_sound_path(&normalized)
+                && let Some(bytes) = self.storage.read_file(&candidate)
+            {
+                resolved_source = candidate;
+                resolved = Some(bytes);
+            }
+            let Some(bytes) = resolved else {
+                self.sound_cache.insert(cache_key, None);
+                return Ok(None);
+            };
+            bytes
+        };
+
+        let Some(extension) = Path::new(&resolved_source)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+        else {
+            self.sound_cache.insert(cache_key, None);
+            return Ok(None);
+        };
+        let output = format!("audio/{}.{}", flat_asset_name(&normalized), extension);
+        let output_path = self.output.join(&output);
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&output_path, bytes.as_ref())?;
+        self.storage.flush_cache();
+        self.sound_cache.insert(cache_key, Some(output.clone()));
+        Ok(Some(output))
+    }
+
+    fn resolve_legacy_sound_path(&mut self, logical_path: &str) -> Option<String> {
+        if self.sound_file_index.is_none() {
+            self.sound_file_index = Some(build_sound_file_index(self.storage.list_files()));
+        }
+        select_legacy_sound_path(logical_path, self.sound_file_index.as_ref()?)
     }
 
     fn export_model_textures(
@@ -2581,6 +2739,7 @@ fn classify_event_object_name(name: &str) -> (EventObjectKindManifest, Option<St
 fn event_object_manifests(
     model: &Model,
     spawn_event_models: &BTreeMap<String, String>,
+    animation_sounds: &BTreeMap<String, AnimationSoundSpec>,
     model_exists: impl Fn(&str) -> bool,
 ) -> Vec<EventObjectManifest> {
     let sequence_windows = model_sequence_windows(model);
@@ -2603,8 +2762,35 @@ fn event_object_manifests(
                 .as_deref()
                 .filter(|_| spawn_asset_exists)
                 .and_then(dependency_child_gltf);
+            let sound = (kind == EventObjectKindManifest::Sound)
+                .then(|| {
+                    event_code
+                        .as_ref()
+                        .and_then(|code| animation_sounds.get(code))
+                })
+                .flatten()
+                .map(|sound| EventSoundManifest {
+                    sound_name: sound.sound_name.clone(),
+                    source_files: sound.source_files.clone(),
+                    files: Vec::new(),
+                    silent: sound.silent,
+                    volume: sound.volume,
+                    volume_variance: sound.volume_variance,
+                    pitch: sound.pitch,
+                    pitch_variance: sound.pitch_variance,
+                    maximum_concurrent_instances: sound.maximum_concurrent_instances,
+                    priority: sound.priority,
+                    channel: sound.channel,
+                    flags: sound.flags.clone(),
+                    min_distance: sound.min_distance,
+                    max_distance: sound.max_distance,
+                    distance_cutoff: sound.distance_cutoff,
+                    eax_flags: sound.eax_flags.clone(),
+                    rolloff_points: sound.rolloff_points.clone(),
+                });
             let lookup_resolved = match kind {
                 EventObjectKindManifest::Spawn => spawn_asset_exists,
+                EventObjectKindManifest::Sound => sound.is_some(),
                 EventObjectKindManifest::Unknown => false,
                 _ => false,
             };
@@ -2617,6 +2803,7 @@ fn event_object_manifests(
                 lookup_resolved,
                 spawn_model,
                 gltf,
+                sound,
                 global_sequence_id: (event.global_sequence_id() != NO_GLOBAL_SEQUENCE)
                     .then_some(event.global_sequence_id()),
                 event_track_times: event.event_track_times().to_vec(),
@@ -5106,17 +5293,19 @@ fn read_game_data_table(
     {
         return Ok(String::from_utf8_lossy(&bytes).into_owned());
     }
-    let casc_path = format!("war3.w3mod:{logical_path}");
-    let bytes = storage.read_file(&casc_path).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("WC3 game-data table not found: {logical_path}"),
-        )
-    })?;
-    let text = String::from_utf8_lossy(&bytes).into_owned();
-    drop(bytes);
-    storage.flush_cache();
-    Ok(text)
+    for casc_path in casc_asset_paths(logical_path) {
+        if let Some(bytes) = storage.read_file(&casc_path) {
+            let text = String::from_utf8_lossy(&bytes).into_owned();
+            drop(bytes);
+            storage.flush_cache();
+            return Ok(text);
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("WC3 game-data table not found: {logical_path}"),
+    )
+    .into())
 }
 
 fn parse_sylk_cells(text: &str) -> BTreeMap<usize, BTreeMap<usize, String>> {
@@ -5160,6 +5349,119 @@ fn parse_sylk_cells(text: &str) -> BTreeMap<usize, BTreeMap<usize, String>> {
         rows.entry(y).or_default().insert(x, value);
     }
     rows
+}
+
+fn sylk_header_column(
+    rows: &BTreeMap<usize, BTreeMap<usize, String>>,
+    header: &str,
+) -> Option<usize> {
+    rows.get(&1)?
+        .iter()
+        .find_map(|(column, value)| value.eq_ignore_ascii_case(header).then_some(*column))
+}
+
+fn parse_animation_sound_catalog(
+    text: &str,
+) -> Result<BTreeMap<String, AnimationSoundSpec>, Box<dyn Error>> {
+    let rows = parse_sylk_cells(text);
+    let event_code_col = sylk_header_column(&rows, "AnimationEventCode")
+        .ok_or_else(|| io::Error::other("AnimSounds.slk is missing AnimationEventCode"))?;
+    let sound_name_col = sylk_header_column(&rows, "SoundName")
+        .ok_or_else(|| io::Error::other("AnimSounds.slk is missing SoundName"))?;
+    let file_names_col = sylk_header_column(&rows, "FileNames")
+        .ok_or_else(|| io::Error::other("AnimSounds.slk is missing FileNames"))?;
+    let volume_col = sylk_header_column(&rows, "Volume");
+    let volume_variance_col = sylk_header_column(&rows, "VolumeVariance");
+    let pitch_col = sylk_header_column(&rows, "Pitch");
+    let pitch_variance_col = sylk_header_column(&rows, "PitchVariance");
+    let maximum_concurrent_instances_col = sylk_header_column(&rows, "MaximumConcurrentInstances");
+    let priority_col = sylk_header_column(&rows, "Priority");
+    let channel_col = sylk_header_column(&rows, "Channel");
+    let flags_col = sylk_header_column(&rows, "Flags");
+    let min_distance_col = sylk_header_column(&rows, "MinDistance");
+    let max_distance_col = sylk_header_column(&rows, "MaxDistance");
+    let distance_cutoff_col = sylk_header_column(&rows, "DistanceCutoff");
+    let eax_flags_col = sylk_header_column(&rows, "EAXFlags");
+    let rolloff_points_col = sylk_header_column(&rows, "RolloffPoints");
+
+    let scalar = |row: &BTreeMap<usize, String>, column: Option<usize>, default: f32| {
+        column
+            .and_then(|column| row.get(&column))
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(default)
+    };
+    let integer = |row: &BTreeMap<usize, String>, column: Option<usize>, default: i32| {
+        column
+            .and_then(|column| row.get(&column))
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(default)
+    };
+
+    let mut result = BTreeMap::new();
+    for (row_id, row) in rows {
+        if row_id == 1 {
+            continue;
+        }
+        let Some(event_code) = row.get(&event_code_col).map(|value| value.trim()) else {
+            continue;
+        };
+        if event_code.len() != 4 {
+            continue;
+        }
+        let file_names = row.get(&file_names_col).map(String::as_str).unwrap_or("");
+        let silent = file_names.trim() == "_";
+        let source_files = file_names
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && *value != "_")
+            .map(|value| value.replace('/', "\\"))
+            .collect::<Vec<_>>();
+        if source_files.is_empty() && !silent {
+            continue;
+        }
+        result.insert(
+            event_code.to_ascii_uppercase(),
+            AnimationSoundSpec {
+                sound_name: row
+                    .get(&sound_name_col)
+                    .cloned()
+                    .unwrap_or_else(|| event_code.to_owned()),
+                source_files,
+                silent,
+                volume: scalar(&row, volume_col, 127.0),
+                volume_variance: scalar(&row, volume_variance_col, 0.0),
+                pitch: scalar(&row, pitch_col, 1.0),
+                pitch_variance: scalar(&row, pitch_variance_col, 0.0),
+                maximum_concurrent_instances: integer(&row, maximum_concurrent_instances_col, -1),
+                priority: integer(&row, priority_col, 0),
+                channel: integer(&row, channel_col, 0),
+                flags: flags_col
+                    .and_then(|column| row.get(&column))
+                    .cloned()
+                    .unwrap_or_default(),
+                min_distance: scalar(&row, min_distance_col, 0.0),
+                max_distance: scalar(&row, max_distance_col, 0.0),
+                distance_cutoff: scalar(&row, distance_cutoff_col, 0.0),
+                eax_flags: eax_flags_col
+                    .and_then(|column| row.get(&column))
+                    .cloned()
+                    .unwrap_or_default(),
+                rolloff_points: rolloff_points_col
+                    .and_then(|column| row.get(&column))
+                    .cloned()
+                    .unwrap_or_default(),
+            },
+        );
+    }
+    Ok(result)
+}
+
+fn read_animation_sound_catalog(
+    storage: &mut CascStorage,
+    map_storage: Option<&MpqStorage>,
+) -> Result<BTreeMap<String, AnimationSoundSpec>, Box<dyn Error>> {
+    let text = read_game_data_table(storage, map_storage, r"ui\soundinfo\animsounds.slk")?;
+    parse_animation_sound_catalog(&text)
 }
 
 fn read_spawn_event_catalog(
@@ -5397,6 +5699,126 @@ fn casc_asset_paths(logical_path: &str) -> [String; 3] {
     ]
 }
 
+fn sound_file_name(path: &str) -> &str {
+    path.rsplit(['\\', '/', ':']).next().unwrap_or(path)
+}
+
+fn sound_stem(path: &str) -> Option<String> {
+    Path::new(sound_file_name(path))
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(str::to_ascii_lowercase)
+        .filter(|stem| !stem.is_empty())
+}
+
+fn sound_logical_stem(path: &str) -> Option<String> {
+    let logical = path.rsplit(':').next()?.trim().replace('/', "\\");
+    let extension = Path::new(sound_file_name(&logical)).extension()?.to_str()?;
+    let without_extension = logical.strip_suffix(&format!(".{extension}"))?;
+    (!without_extension.is_empty()).then(|| without_extension.to_ascii_lowercase())
+}
+
+fn sound_path_index_key(path: &str) -> Option<String> {
+    sound_logical_stem(path).map(|stem| format!("path:{stem}"))
+}
+
+fn sound_name_index_key(path: &str) -> Option<String> {
+    sound_stem(path).map(|stem| format!("name:{stem}"))
+}
+
+fn is_audio_file(path: &str) -> bool {
+    Path::new(sound_file_name(path))
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "flac" | "ogg" | "wav" | "mp3"
+            )
+        })
+}
+
+fn build_sound_file_index(paths: Vec<String>) -> BTreeMap<String, Vec<String>> {
+    let mut index = BTreeMap::<String, Vec<String>>::new();
+    for path in paths {
+        if !is_audio_file(&path) {
+            continue;
+        }
+        if let Some(key) = sound_path_index_key(&path) {
+            index.entry(key).or_default().push(path.clone());
+        }
+        if let Some(key) = sound_name_index_key(&path) {
+            index.entry(key).or_default().push(path);
+        }
+    }
+    for candidates in index.values_mut() {
+        candidates.sort_by(|left, right| {
+            sound_namespace_rank(left)
+                .cmp(&sound_namespace_rank(right))
+                .then_with(|| left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()))
+        });
+        candidates.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    }
+    index
+}
+
+fn sound_namespace_rank(path: &str) -> u8 {
+    let path = path.to_ascii_lowercase();
+    if path.starts_with("war3.w3mod:_de.w3mod:") {
+        1
+    } else if path.starts_with("war3.w3mod:_hd.w3mod:") {
+        2
+    } else if path.starts_with("war3.w3mod:") {
+        0
+    } else {
+        3
+    }
+}
+
+fn select_sound_candidate(candidates: &[String]) -> Option<String> {
+    let first = candidates.first()?;
+    let rank = sound_namespace_rank(first);
+    let mut same_rank = candidates
+        .iter()
+        .filter(|candidate| sound_namespace_rank(candidate) == rank);
+    let selected = same_rank.next()?;
+    if same_rank.next().is_some() {
+        return None;
+    }
+    Some(selected.clone())
+}
+
+fn select_legacy_sound_path(
+    logical_path: &str,
+    index: &BTreeMap<String, Vec<String>>,
+) -> Option<String> {
+    let normalized = logical_path.trim().replace('/', "\\");
+    if normalized.is_empty() || normalized == "_" {
+        return None;
+    }
+
+    if normalized.contains('\\') {
+        let key = sound_path_index_key(&normalized)?;
+        return index
+            .get(&key)
+            .and_then(|candidates| select_sound_candidate(candidates));
+    }
+    if Path::new(&normalized).extension().is_some() {
+        return None;
+    }
+
+    let stem = normalized.to_ascii_lowercase();
+    let key = format!("name:{stem}");
+    if let Some(candidates) = index.get(&key)
+        && let Some(candidate) = select_sound_candidate(candidates)
+    {
+        return Some(candidate);
+    }
+    let stripped = stem.strip_suffix('1')?;
+    let candidates = index.get(&format!("name:{stripped}"))?;
+    select_sound_candidate(candidates)
+}
+
 fn team_glow_texture_logical(player_index: u8) -> String {
     format!(r"ReplaceableTextures\TeamGlow\TeamGlow{player_index:02}.blp")
 }
@@ -5442,6 +5864,37 @@ mod tests {
                 r"war3.w3mod:_hd.w3mod:Textures\Water\Foam.dds".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn legacy_sound_lookup_prefers_base_namespace_and_trailing_one_fallback() {
+        let index = build_sound_file_index(vec![
+            r"war3.w3mod:_hd.w3mod:units\nightelf\archer\archerdeath1_hd.flac".to_owned(),
+            r"war3.w3mod:_de.w3mod:units\nightelf\archer\archerdeath1.flac".to_owned(),
+            r"war3.w3mod:units\nightelf\archer\archerdeath1.ogg".to_owned(),
+            r"war3.w3mod:units\human\footman\footmandeath.ogg".to_owned(),
+        ]);
+        assert_eq!(
+            select_legacy_sound_path("ArcherDeath1", &index).as_deref(),
+            Some(r"war3.w3mod:units\nightelf\archer\archerdeath1.ogg")
+        );
+        assert_eq!(
+            select_legacy_sound_path("FootmanDeath1", &index).as_deref(),
+            Some(r"war3.w3mod:units\human\footman\footmandeath.ogg")
+        );
+        assert_eq!(
+            select_legacy_sound_path(r"Units\NightElf\Archer\ArcherDeath1.flac", &index).as_deref(),
+            Some(r"war3.w3mod:units\nightelf\archer\archerdeath1.ogg")
+        );
+    }
+
+    #[test]
+    fn legacy_sound_lookup_rejects_ambiguous_same_namespace_matches() {
+        let index = build_sound_file_index(vec![
+            r"war3.w3mod:units\human\foo\death.ogg".to_owned(),
+            r"war3.w3mod:units\orc\bar\death.ogg".to_owned(),
+        ]);
+        assert!(select_legacy_sound_path("Death1", &index).is_none());
     }
 
     #[test]
@@ -6735,6 +7188,7 @@ mod tests {
                     gltf: Some(
                         "models/objects__spawnmodels__undead__undeaddissipate.gltf".to_owned(),
                     ),
+                    sound: None,
                     global_sequence_id: None,
                     event_track_times: vec![100],
                     sequence_windows: Vec::new(),
@@ -6749,6 +7203,7 @@ mod tests {
                     lookup_resolved: false,
                     spawn_model: Some(r"Objects\Missing.mdx".to_owned()),
                     gltf: None,
+                    sound: None,
                     global_sequence_id: None,
                     event_track_times: vec![100],
                     sequence_windows: Vec::new(),
@@ -6857,7 +7312,8 @@ mod tests {
             z: 6.0,
         }]);
 
-        let manifests = event_object_manifests(&model, &BTreeMap::new(), |_| false);
+        let manifests =
+            event_object_manifests(&model, &BTreeMap::new(), &BTreeMap::new(), |_| false);
         assert_eq!(manifests.len(), 1);
         let event = &manifests[0];
         assert_eq!(event.object_id, 0);
@@ -6868,6 +7324,57 @@ mod tests {
         assert!(!event.lookup_resolved);
         assert_eq!(event.global_sequence_id, Some(3));
         assert_eq!(event.event_track_times, [120, 480, 900]);
+    }
+
+    #[test]
+    fn sound_event_manifest_resolves_animation_sound_metadata() {
+        let mut model = Model::new();
+        model.resize_event_objects(1);
+        {
+            let mut event = model.event_objects_mut(0).expect("event object");
+            event.set_event_track_times(&[250]);
+            let mut node = event.node_mut();
+            node.set_object_id(0);
+            node.set_name("SNDxFDFR");
+        }
+        model.set_pivot_points(&[whiteout::math::Vector3f::default()]);
+
+        let sounds = BTreeMap::from([(
+            "FDFR".to_owned(),
+            AnimationSoundSpec {
+                sound_name: "DeepFootstep2".to_owned(),
+                source_files: vec![
+                    r"Sound\Units\Footsteps\Step1.flac".to_owned(),
+                    r"Sound\Units\Footsteps\Step2.flac".to_owned(),
+                ],
+                silent: false,
+                volume: 40.0,
+                volume_variance: 0.0,
+                pitch: 1.0,
+                pitch_variance: 0.1,
+                maximum_concurrent_instances: -1,
+                priority: 3,
+                channel: 11,
+                flags: "WANT3D,RANDOMPITCH".to_owned(),
+                min_distance: 300.0,
+                max_distance: 3_500.0,
+                distance_cutoff: 3_000.0,
+                eax_flags: "SpellsEAX".to_owned(),
+                rolloff_points: "_".to_owned(),
+            },
+        )]);
+        let manifests = event_object_manifests(&model, &BTreeMap::new(), &sounds, |_| false);
+        let event = &manifests[0];
+        assert!(event.lookup_resolved);
+        let sound = event.sound.as_ref().expect("sound metadata");
+        assert_eq!(sound.sound_name, "DeepFootstep2");
+        assert_eq!(sound.source_files.len(), 2);
+        assert!(!sound.silent);
+        assert_eq!(sound.volume, 40.0);
+        assert_eq!(sound.pitch_variance, 0.1);
+        assert_eq!(sound.flags, "WANT3D,RANDOMPITCH");
+        assert_eq!(sound.min_distance, 300.0);
+        assert_eq!(sound.distance_cutoff, 3_000.0);
     }
 
     #[test]
@@ -6895,7 +7402,7 @@ mod tests {
             "UDIS".to_owned(),
             r"Objects\Spawnmodels\Undead\UndeadDissipate\UndeadDissipate.mdx".to_owned(),
         )]);
-        let manifests = event_object_manifests(&model, &spawn_catalog, |_| true);
+        let manifests = event_object_manifests(&model, &spawn_catalog, &BTreeMap::new(), |_| true);
         let event = &manifests[0];
         assert_eq!(event.kind, EventObjectKindManifest::Spawn);
         assert_eq!(event.event_code.as_deref(), Some("UDIS"));
@@ -6911,11 +7418,96 @@ mod tests {
         assert_eq!(event.sequence_windows.len(), 1);
         assert_eq!(event.sequence_windows[0].name, "Death");
 
-        let unresolved = event_object_manifests(&model, &spawn_catalog, |_| false);
+        let unresolved =
+            event_object_manifests(&model, &spawn_catalog, &BTreeMap::new(), |_| false);
         let unresolved = &unresolved[0];
         assert!(!unresolved.lookup_resolved);
         assert!(unresolved.spawn_model.is_some());
         assert!(unresolved.gltf.is_none());
+    }
+
+    #[test]
+    #[ignore = "diagnostic helper for a local Warcraft install"]
+    fn dump_wc3_animation_sound_tables() {
+        let install = std::env::var("WC3_INSTALL").expect("WC3_INSTALL");
+        let storage = CascStorage::open(&install, None).expect("open Warcraft III CASC storage");
+        let text = storage
+            .read_file(r"war3.w3mod:ui\soundinfo\animsounds.slk")
+            .expect("read AnimSounds");
+        let rows = parse_sylk_cells(&String::from_utf8_lossy(&text));
+        for (row, cells) in rows.iter().take(8) {
+            eprintln!("{row}: {cells:?}");
+        }
+        for (row, cells) in &rows {
+            if cells.values().any(|value| {
+                value.eq_ignore_ascii_case("DHLS")
+                    || value.eq_ignore_ascii_case("DOLS")
+                    || value.eq_ignore_ascii_case("FDFR")
+            }) {
+                eprintln!("MATCH {row}: {cells:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn animation_sound_catalog_parses_variants_and_authored_parameters() {
+        let text = concat!(
+            "ID;PWXL;N;E\n",
+            "C;X1;Y1;K\"SoundName\"\n",
+            "C;X2;K\"AnimationEventCode\"\n",
+            "C;X3;K\"FileNames\"\n",
+            "C;X4;K\"Volume\"\n",
+            "C;X5;K\"PitchVariance\"\n",
+            "C;X6;K\"Priority\"\n",
+            "C;X7;K\"Channel\"\n",
+            "C;X8;K\"Flags\"\n",
+            "C;X9;K\"MinDistance\"\n",
+            "C;X10;K\"MaxDistance\"\n",
+            "C;X11;K\"DistanceCutoff\"\n",
+            "C;X12;K\"EAXFlags\"\n",
+            "C;X13;K\"RolloffPoints\"\n",
+            "C;X1;Y2;K\"DeepFootstep2\"\n",
+            "C;X2;KFDFR\n",
+            "C;X3;K\"Sound/Units/Footsteps/Step1.flac, Sound/Units/Footsteps/Step2.flac\"\n",
+            "C;X4;K40\n",
+            "C;X5;K0.1\n",
+            "C;X6;K3\n",
+            "C;X7;K11\n",
+            "C;X8;K\"WANT3D,RANDOMPITCH\"\n",
+            "C;X9;K300\n",
+            "C;X10;K3500\n",
+            "C;X11;K3000\n",
+            "C;X12;K\"SpellsEAX\"\n",
+            "C;X13;K_\n",
+            "C;X1;Y3;K\"SentinelMissileHit\"\n",
+            "C;X2;KMSEH\n",
+            "C;X3;K_\n",
+        );
+        let catalog = parse_animation_sound_catalog(text).expect("sound catalog");
+        let sound = &catalog["FDFR"];
+        assert_eq!(sound.sound_name, "DeepFootstep2");
+        assert_eq!(
+            sound.source_files,
+            [
+                r"Sound\Units\Footsteps\Step1.flac",
+                r"Sound\Units\Footsteps\Step2.flac"
+            ]
+        );
+        assert_eq!(sound.volume, 40.0);
+        assert_eq!(sound.pitch_variance, 0.1);
+        assert_eq!(sound.priority, 3);
+        assert_eq!(sound.channel, 11);
+        assert_eq!(sound.flags, "WANT3D,RANDOMPITCH");
+        assert_eq!(sound.min_distance, 300.0);
+        assert_eq!(sound.max_distance, 3_500.0);
+        assert_eq!(sound.distance_cutoff, 3_000.0);
+        assert_eq!(sound.eax_flags, "SpellsEAX");
+        assert_eq!(sound.rolloff_points, "_");
+        assert!(!sound.silent);
+
+        let silent = &catalog["MSEH"];
+        assert!(silent.silent);
+        assert!(silent.source_files.is_empty());
     }
 
     #[test]
