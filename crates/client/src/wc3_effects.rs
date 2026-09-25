@@ -4686,6 +4686,63 @@ mod tests {
     }
 
     #[test]
+    fn looping_visual_uses_stand_particles_instead_of_death_explosion() {
+        let emitter = |sequence: &str, size: f32| Wc3ParticleEmitter {
+            object_id: None,
+            position: [0.0; 3],
+            filter_mode: 1,
+            speed: 0.0,
+            variation: 0.0,
+            latitude: 0.0,
+            gravity: 0.0,
+            lifespan: 1.0,
+            emission_rate: 1.0,
+            length: 0.0,
+            width: 0.0,
+            speed_track: None,
+            variation_track: None,
+            latitude_track: None,
+            gravity_track: None,
+            emission_rate_track: None,
+            length_track: None,
+            width_track: None,
+            visibility_track: None,
+            rows: 1,
+            columns: 1,
+            head_or_tail: 0,
+            time: 0.5,
+            head_interval: [0; 3],
+            head_decay_interval: [0; 3],
+            tail_interval: [0; 3],
+            tail_decay_interval: [0; 3],
+            segment_colors: [[1.0; 3]; 3],
+            segment_alpha: [255; 3],
+            segment_scaling: [size; 3],
+            texture: None,
+            squirt: false,
+            sequence_windows: Vec::new(),
+            global_sequence_durations_ms: Vec::new(),
+            ambient_enabled: sequence == "Stand",
+            active_sequences: vec![sequence.to_owned()],
+        };
+        let model = Wc3VisualModel {
+            scene: Handle::default(),
+            gltf: Handle::default(),
+            animation_name: Some("Birth".to_owned()),
+            stand_animation_name: Some("Stand".to_owned()),
+            emitters: vec![emitter("Stand", 16.0), emitter("Death", 160.0)],
+            ribbons: Vec::new(),
+        };
+        let source = model.looping_emitter_source();
+        assert_eq!(source.emitters.len(), 1);
+        assert_eq!(source.emitters[0].spec.segment_scaling, [16.0; 3]);
+        assert_eq!(
+            model.looping_animation_source().unwrap().animation_name,
+            "Stand"
+        );
+    }
+
+    #[test]
     fn building_team_color_flattens_overlay_and_underlay_into_one_opaque_texture() {
         let source = Image::new(
             bevy::render::render_resource::Extent3d {

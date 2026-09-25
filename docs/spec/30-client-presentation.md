@@ -284,7 +284,7 @@ Persistent Warcraft buff/status art MUST follow authoritative status state rathe
 
 Classic WC3 model events for SPL/FPT/UBR MUST resolve through the version-scoped splat service tables and use the parent model's sequence/global event-crossing clock. Generated metadata MUST retain the table's texture, atlas, blend, scale, timing, and RGBA fields; unresolved service rows or textures remain explicit fidelity findings. Their decal vertices MUST sample the client terrain surface so source-node height does not leave a ground splat floating above or buried below terrain.
 
-Generated unit packs SHOULD retain per-object tint and passive ability target art attached to named model points, even when multiple rawcodes share a source mesh. Transient unit effects SHOULD follow the appropriate animated attachment node when the effect belongs to a held item or shield. These details remain cosmetic and never affect authoritative combat.
+Generated unit packs SHOULD retain per-object tint and passive ability target art attached to named model points, even when multiple rawcodes share a source mesh. Transient unit effects SHOULD follow the appropriate animated attachment node when the effect belongs to a held item or shield. An effect's particle emitters MUST follow its selected model sequence; a looping Stand effect must not emit Birth or Death particles. These details remain cosmetic and never affect authoritative combat.
 
 An authoritative ordinary-attack miss SHOULD produce clear transient client feedback. The current client renders `MISS` above the missed target for approximately one second when the corresponding authoritative `AttackEvent` has `missed = true`. This text is cosmetic and MUST NOT perform or infer its own accuracy roll.
 
