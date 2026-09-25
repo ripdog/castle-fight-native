@@ -443,7 +443,7 @@ pub struct Wc3EmitterSource {
     global_elapsed_ms: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct Wc3EmitterSequenceClock {
     start_ms: u32,
     end_ms: u32,
@@ -3632,10 +3632,15 @@ pub fn emit_wc3_particles(
             .as_ref()
             .map(Wc3EmitterSequenceClock::current_time_ms)
             .unwrap_or(source.global_elapsed_ms);
+        let sequence_clock = source.sequence_clock;
         let global_elapsed_ms = source.global_elapsed_ms;
         for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
-            let sample =
-                sample_emitter_parameters(&emitter.spec, sequence_time_ms, global_elapsed_ms);
+            let sample = sample_emitter_parameters(
+                &emitter.spec,
+                sequence_time_ms,
+                global_elapsed_ms,
+                sequence_clock.as_ref(),
+            );
             if sample.visibility <= 0.001 {
                 emitter.accumulator = 0.0;
                 continue;
@@ -3808,8 +3813,18 @@ fn sample_emitter_parameters(
     emitter: &Wc3ParticleEmitter,
     sequence_time_ms: f32,
     global_elapsed_ms: f32,
+    sequence_clock: Option<&Wc3EmitterSequenceClock>,
 ) -> Wc3EmitterSample {
     let value = |track: Option<&Wc3ScalarTrack>, default: f32| {
+        if let (Some(track), Some(clock)) = (track, sequence_clock)
+            && track.global_sequence_id.is_none()
+            && !track
+                .timestamps
+                .iter()
+                .any(|&time| time >= clock.start_ms && time <= clock.end_ms)
+        {
+            return default;
+        }
         sample_scalar_track(
             track,
             default,
@@ -5313,6 +5328,41 @@ mod tests {
         };
         one_shot.advance(1.0);
         assert_eq!(one_shot.current_time_ms(), 2300.0);
+    }
+
+    #[test]
+    fn emitter_tracks_from_other_sequences_do_not_hide_stand_smoke() {
+        let mut emitter = test_particle_emitter(14);
+        emitter.visibility_track = Some(Wc3ScalarTrack {
+            interpolation: Wc3ScalarInterpolation::DontInterp,
+            global_sequence_id: None,
+            timestamps: vec![90_400, 92_700, 95_200],
+            values: vec![0.0, 0.0, 0.0],
+            in_tangents: Vec::new(),
+            out_tangents: Vec::new(),
+        });
+        let stand = Wc3EmitterSequenceClock {
+            start_ms: 86_667,
+            end_ms: 87_000,
+            non_looping: false,
+            elapsed_ms: 0.0,
+        };
+        assert_eq!(
+            sample_emitter_parameters(&emitter, stand.current_time_ms(), 0.0, Some(&stand))
+                .visibility,
+            1.0
+        );
+        let death = Wc3EmitterSequenceClock {
+            start_ms: 90_400,
+            end_ms: 92_000,
+            non_looping: true,
+            elapsed_ms: 0.0,
+        };
+        assert_eq!(
+            sample_emitter_parameters(&emitter, death.current_time_ms(), 0.0, Some(&death))
+                .visibility,
+            0.0
+        );
     }
 
     #[test]

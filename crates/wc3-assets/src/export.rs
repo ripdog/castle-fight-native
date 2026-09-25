@@ -2808,7 +2808,7 @@ fn max_f32_track_value(
     end: u32,
     default: f32,
 ) -> Result<f32, Box<dyn Error>> {
-    let Some(samples) = sample_f32_track(model, track, start, end)? else {
+    let Some(samples) = sample_f32_track(model, track, start, end, end - start)? else {
         return Ok(default);
     };
     let mut values = samples.values.into_iter().filter(|value| value.is_finite());
@@ -4008,6 +4008,19 @@ fn build_animations(
         if end <= start {
             continue;
         }
+        // WC3 global sequences keep their own clock while short Stand clips loop.
+        // Keep sampling until the global motion completes before repeating the glTF clip.
+        let output_duration = if sequence.flags() == SequenceFlag::NonLooping {
+            end - start
+        } else {
+            model
+                .global_sequences()
+                .iter()
+                .copied()
+                .max()
+                .unwrap_or(0)
+                .max(end - start)
+        };
         let mut samplers = Vec::new();
         let mut channels = Vec::new();
 
@@ -4019,6 +4032,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4033,6 +4047,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4047,6 +4062,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4061,6 +4077,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4075,6 +4092,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4089,6 +4107,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4103,6 +4122,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4117,6 +4137,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4131,6 +4152,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4145,6 +4167,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4159,6 +4182,7 @@ fn build_animations(
                 skeleton,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4176,6 +4200,7 @@ fn build_animations(
                 gltf_node,
                 start,
                 end,
+                output_duration,
                 binary,
                 &mut samplers,
                 &mut channels,
@@ -4214,6 +4239,7 @@ fn append_node_animation(
     skeleton: &SkeletonBuild,
     start: u32,
     end: u32,
+    output_duration: u32,
     binary: &mut BinaryBuilder,
     samplers: &mut Vec<Value>,
     channels: &mut Vec<Value>,
@@ -4233,11 +4259,15 @@ fn append_node_animation(
     if translation_track.global_sequence_id() != NO_GLOBAL_SEQUENCE && translation_track.is_used() {
         *baked_global_sequences = true;
     }
-    if let Some(samples) =
-        sample_vec3_track(model, &translation_track, start, end, [0.0; 3], |value| {
-            add3(rest_translation, wc3_vec3(value[0], value[1], value[2]))
-        })?
-    {
+    if let Some(samples) = sample_vec3_track(
+        model,
+        &translation_track,
+        start,
+        end,
+        output_duration,
+        [0.0; 3],
+        |value| add3(rest_translation, wc3_vec3(value[0], value[1], value[2])),
+    )? {
         push_vec3_animation_channel(
             binary,
             samplers,
@@ -4252,7 +4282,7 @@ fn append_node_animation(
     if rotation_track.global_sequence_id() != NO_GLOBAL_SEQUENCE && rotation_track.is_used() {
         *baked_global_sequences = true;
     }
-    if let Some(samples) = sample_quat_track(model, &rotation_track, start, end)? {
+    if let Some(samples) = sample_quat_track(model, &rotation_track, start, end, output_duration)? {
         push_quat_animation_channel(binary, samplers, channels, gltf_node, samples);
     }
 
@@ -4265,6 +4295,7 @@ fn append_node_animation(
         &scaling_track,
         start,
         end,
+        output_duration,
         [1.0, 1.0, 1.0],
         |value| [value[0], value[2], value[1]],
     )? {
@@ -4312,6 +4343,7 @@ fn append_geoset_visibility_animation(
     gltf_node: usize,
     start: u32,
     end: u32,
+    output_duration: u32,
     binary: &mut BinaryBuilder,
     samplers: &mut Vec<Value>,
     channels: &mut Vec<Value>,
@@ -4321,23 +4353,24 @@ fn append_geoset_visibility_animation(
     if track.global_sequence_id() != NO_GLOBAL_SEQUENCE && track.is_used() {
         *baked_global_sequences = true;
     }
-    let duration = end.saturating_sub(start) as f32 / 1000.0;
-    let samples = if let Some(samples) = sample_f32_track(model, &track, start, end)? {
-        Vec3Samples {
-            times: samples.times,
-            values: samples.values.into_iter().map(visibility_scale).collect(),
-            // glTF cannot animate primitive/material visibility. Use a binary node-scale
-            // approximation rather than shrinking the mesh through partial alpha values.
-            interpolation: "STEP",
-        }
-    } else {
-        let scale = visibility_scale(animation.alpha());
-        Vec3Samples {
-            times: vec![0.0, duration],
-            values: vec![scale, scale],
-            interpolation: "STEP",
-        }
-    };
+    let duration = output_duration as f32 / 1000.0;
+    let samples =
+        if let Some(samples) = sample_f32_track(model, &track, start, end, output_duration)? {
+            Vec3Samples {
+                times: samples.times,
+                values: samples.values.into_iter().map(visibility_scale).collect(),
+                // glTF cannot animate primitive/material visibility. Use a binary node-scale
+                // approximation rather than shrinking the mesh through partial alpha values.
+                interpolation: "STEP",
+            }
+        } else {
+            let scale = visibility_scale(animation.alpha());
+            Vec3Samples {
+                times: vec![0.0, duration],
+                values: vec![scale, scale],
+                interpolation: "STEP",
+            }
+        };
     push_vec3_animation_channel(binary, samplers, channels, gltf_node, "scale", samples);
     Ok(())
 }
@@ -4347,6 +4380,7 @@ fn sample_f32_track(
     track: &TrackF32,
     sequence_start: u32,
     sequence_end: u32,
+    output_duration: u32,
 ) -> Result<Option<F32Samples>, Box<dyn Error>> {
     if !track.is_used() || track.key_count() == 0 {
         return Ok(None);
@@ -4358,6 +4392,7 @@ fn sample_f32_track(
         model.global_sequences(),
         sequence_start,
         sequence_end,
+        output_duration,
     );
     let Some(window) = window else {
         return Ok(None);
@@ -4378,10 +4413,16 @@ fn sample_f32_track(
             frame,
         ));
     }
-    let times = local_times
+    let mut times: Vec<f32> = local_times
         .iter()
         .map(|time| *time as f32 / 1000.0)
         .collect();
+    close_extended_loop(
+        &mut times,
+        &mut values,
+        sequence_end - sequence_start,
+        output_duration,
+    );
     Ok(Some(F32Samples { times, values }))
 }
 
@@ -4390,6 +4431,7 @@ fn sample_vec3_track(
     track: &TrackVector3f,
     sequence_start: u32,
     sequence_end: u32,
+    output_duration: u32,
     default: [f32; 3],
     convert: impl Fn([f32; 3]) -> [f32; 3],
 ) -> Result<Option<Vec3Samples>, Box<dyn Error>> {
@@ -4403,6 +4445,7 @@ fn sample_vec3_track(
         model.global_sequences(),
         sequence_start,
         sequence_end,
+        output_duration,
     );
     let Some(window) = window else {
         return Ok(None);
@@ -4425,10 +4468,16 @@ fn sample_vec3_track(
         );
         values.push(convert(value));
     }
-    let times = local_times
+    let mut times: Vec<f32> = local_times
         .iter()
         .map(|time| *time as f32 / 1000.0)
         .collect();
+    close_extended_loop(
+        &mut times,
+        &mut values,
+        sequence_end - sequence_start,
+        output_duration,
+    );
     Ok(Some(Vec3Samples {
         times,
         values,
@@ -4445,6 +4494,7 @@ fn sample_quat_track(
     track: &TrackQuaternion,
     sequence_start: u32,
     sequence_end: u32,
+    output_duration: u32,
 ) -> Result<Option<QuatSamples>, Box<dyn Error>> {
     if !track.is_used() || track.key_count() == 0 {
         return Ok(None);
@@ -4456,6 +4506,7 @@ fn sample_quat_track(
         model.global_sequences(),
         sequence_start,
         sequence_end,
+        output_duration,
     );
     let Some(window) = window else {
         return Ok(None);
@@ -4477,10 +4528,16 @@ fn sample_quat_track(
         );
         values.push(wc3_quat(value));
     }
-    let times = local_times
+    let mut times: Vec<f32> = local_times
         .iter()
         .map(|time| *time as f32 / 1000.0)
         .collect();
+    close_extended_loop(
+        &mut times,
+        &mut values,
+        sequence_end - sequence_start,
+        output_duration,
+    );
     Ok(Some(QuatSamples {
         times,
         values,
@@ -4492,12 +4549,29 @@ fn sample_quat_track(
     }))
 }
 
+fn close_extended_loop<T: Clone>(
+    times: &mut Vec<f32>,
+    values: &mut Vec<T>,
+    sequence_duration: u32,
+    output_duration: u32,
+) {
+    if output_duration > sequence_duration
+        && let Some(first) = values.first().cloned()
+    {
+        // Distinct WC3 global periods rarely share a short common multiple. A short
+        // return to the initial pose avoids a visible reset at the glTF loop seam.
+        times.push((output_duration + 500) as f32 / 1000.0);
+        values.push(first);
+    }
+}
+
 #[derive(Debug)]
 struct TrackWindow {
     indices: Vec<usize>,
     track_start: u32,
     track_end: u32,
     clip_duration: u32,
+    sequence_duration: u32,
     global_duration: Option<u32>,
     sequence_start: u32,
 }
@@ -4511,7 +4585,12 @@ impl TrackWindow {
                 local_ms % duration
             }
         } else {
-            self.sequence_start.saturating_add(local_ms)
+            let local = if local_ms == self.sequence_duration {
+                local_ms
+            } else {
+                local_ms % self.sequence_duration.max(1)
+            };
+            self.sequence_start.saturating_add(local)
         }
     }
 }
@@ -4522,8 +4601,10 @@ fn track_window(
     global_sequences: &[u32],
     sequence_start: u32,
     sequence_end: u32,
+    output_duration: u32,
 ) -> Option<TrackWindow> {
-    let clip_duration = sequence_end.checked_sub(sequence_start)?;
+    let sequence_duration = sequence_end.checked_sub(sequence_start)?;
+    let clip_duration = output_duration.max(sequence_duration);
     if global_sequence_id != NO_GLOBAL_SEQUENCE {
         let duration = *global_sequences.get(global_sequence_id as usize)?;
         if duration == 0 {
@@ -4542,6 +4623,7 @@ fn track_window(
             track_start: 0,
             track_end: duration,
             clip_duration,
+            sequence_duration,
             global_duration: Some(duration),
             sequence_start,
         })
@@ -4561,6 +4643,7 @@ fn track_window(
             track_start: sequence_start,
             track_end: sequence_end,
             clip_duration,
+            sequence_duration,
             global_duration: None,
             sequence_start,
         })
@@ -4572,6 +4655,9 @@ fn sample_times(
     timestamps: &[u32],
     window: &TrackWindow,
 ) -> Vec<u32> {
+    if window.indices.len() == 1 {
+        return vec![0, window.clip_duration];
+    }
     let mut times = std::collections::BTreeSet::new();
     times.insert(0);
     times.insert(window.clip_duration);
@@ -4592,8 +4678,19 @@ fn sample_times(
             }
         }
     } else {
-        for &index in &window.indices {
-            times.insert(timestamps[index].saturating_sub(window.sequence_start));
+        let mut cycle = 0u32;
+        while cycle <= window.clip_duration {
+            for &index in &window.indices {
+                let local =
+                    cycle.saturating_add(timestamps[index].saturating_sub(window.sequence_start));
+                if local <= window.clip_duration {
+                    times.insert(local);
+                }
+            }
+            match cycle.checked_add(window.sequence_duration) {
+                Some(next) if next > cycle => cycle = next,
+                _ => break,
+            }
         }
     }
 
@@ -6480,6 +6577,33 @@ mod tests {
         assert_eq!(features.non_omni_light_count, 0);
         assert_eq!(features.non_inheritance_node_count, 1);
         assert_eq!(features.max_classic_skin_influences, 5);
+    }
+
+    #[test]
+    fn global_rotation_track_spans_its_cycle_beyond_short_stand_sequence() {
+        let window = track_window(&[0, 500, 1000], 0, &[1000], 2000, 2333, 1000)
+            .expect("global track has a valid sequence window");
+        assert_eq!(window.clip_duration, 1000);
+        assert_eq!(window.frame_for_local(500), 500);
+        assert_eq!(window.frame_for_local(1000), 0);
+        assert_eq!(
+            sample_times(InterpolationType::Linear, &[0, 500, 1000], &window),
+            [0, 500, 1000]
+        );
+
+        let local = track_window(
+            &[2000, 2166, 2333],
+            NO_GLOBAL_SEQUENCE,
+            &[],
+            2000,
+            2333,
+            1000,
+        )
+        .expect("local track has a valid sequence window");
+        assert_eq!(local.frame_for_local(500), 2167);
+        assert!(
+            sample_times(InterpolationType::Linear, &[2000, 2166, 2333], &local).contains(&666)
+        );
     }
 
     #[test]
