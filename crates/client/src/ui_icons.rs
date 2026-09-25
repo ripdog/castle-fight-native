@@ -6,7 +6,7 @@ use std::{
 };
 
 use bevy::prelude::*;
-use castle_fight_sim::MapVersion;
+use castle_fight_sim::{ArmorType, DamageType, MapVersion};
 use serde::Deserialize;
 
 use crate::terrain::client_asset_root;
@@ -67,6 +67,8 @@ pub(crate) enum UiIconKey {
     },
     Command(UiCommandIcon),
     Resource(UiResourceIcon),
+    InfoDamage(DamageType),
+    InfoArmor(ArmorType),
 }
 
 impl UiIconKey {
@@ -349,6 +351,32 @@ fn parse_icon_key(entry: &UiBindingManifest) -> Result<UiIconKey, String> {
             };
             Ok(UiIconKey::Resource(resource))
         }
+        "info_panel" => {
+            if entry.role != "icon" {
+                return Err(format!(
+                    "info-panel icon {} has unexpected role {:?}",
+                    entry.owner_rawcode, entry.role
+                ));
+            }
+            match entry.owner_rawcode.as_str() {
+                "damage_normal" => Ok(UiIconKey::InfoDamage(DamageType::Normal)),
+                "damage_pierce" => Ok(UiIconKey::InfoDamage(DamageType::Pierce)),
+                "damage_siege" => Ok(UiIconKey::InfoDamage(DamageType::Siege)),
+                "damage_magic" => Ok(UiIconKey::InfoDamage(DamageType::Magic)),
+                "damage_chaos" => Ok(UiIconKey::InfoDamage(DamageType::Chaos)),
+                "damage_spells" => Ok(UiIconKey::InfoDamage(DamageType::Spells)),
+                "damage_hero" => Ok(UiIconKey::InfoDamage(DamageType::Hero)),
+                "armor_small" => Ok(UiIconKey::InfoArmor(ArmorType::Small)),
+                "armor_unarmored" => Ok(UiIconKey::InfoArmor(ArmorType::Unarmored)),
+                "armor_medium" => Ok(UiIconKey::InfoArmor(ArmorType::Medium)),
+                "armor_large" => Ok(UiIconKey::InfoArmor(ArmorType::Large)),
+                "armor_hero" => Ok(UiIconKey::InfoArmor(ArmorType::Hero)),
+                "armor_fortified" => Ok(UiIconKey::InfoArmor(ArmorType::Fortified)),
+                "armor_divine" => Ok(UiIconKey::InfoArmor(ArmorType::Divine)),
+                "armor_normal" => Ok(UiIconKey::InfoArmor(ArmorType::Normal)),
+                other => Err(format!("unknown info-panel icon {other:?}")),
+            }
+        }
         other => Err(format!("unknown UI icon owner kind {other:?}")),
     }
 }
@@ -424,6 +452,18 @@ mod tests {
                     "png": "textures/gold.png"
                 },
                 {
+                    "owner_kind": "info_panel",
+                    "owner_rawcode": "damage_pierce",
+                    "role": "icon",
+                    "png": "textures/piercing.png"
+                },
+                {
+                    "owner_kind": "info_panel",
+                    "owner_rawcode": "armor_small",
+                    "role": "icon",
+                    "png": "textures/light_armor.png"
+                },
+                {
                     "owner_kind": "cursors",
                     "owner_rawcode": "human",
                     "role": "atlas",
@@ -455,6 +495,14 @@ mod tests {
         assert_eq!(
             resolved.paths[&UiIconKey::Resource(UiResourceIcon::Gold)],
             "wc3/ui/textures/gold.png"
+        );
+        assert_eq!(
+            resolved.paths[&UiIconKey::InfoDamage(DamageType::Pierce)],
+            "wc3/ui/textures/piercing.png"
+        );
+        assert_eq!(
+            resolved.paths[&UiIconKey::InfoArmor(ArmorType::Small)],
+            "wc3/ui/textures/light_armor.png"
         );
         assert_eq!(
             resolved.cursor_paths[&UiCursorTheme::Human],

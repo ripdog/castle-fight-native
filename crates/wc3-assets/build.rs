@@ -120,10 +120,12 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let buildings_path = resolved.join("buildings.tsv");
     let object_fields_path = resolved.join("object-fields.tsv");
     let placed_doodads_path = resolved.join("placed-doodads.tsv");
+    let map_skin_path = original_map.join("extracted/war3mapSkin.txt");
     println!("cargo:rerun-if-changed={}", units_path.display());
     println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
     println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
+    println!("cargo:rerun-if-changed={}", map_skin_path.display());
     let map_readme = original_map.join("README.md");
     println!("cargo:rerun-if-changed={}", map_readme.display());
     let catalog_version = parse_catalog_version(&fs::read_to_string(&map_readme)?)?;
@@ -133,7 +135,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
     let visuals = load_visual_assets(&object_fields_path)?;
-    let ui = load_ui_assets(&object_fields_path)?;
+    let ui = load_ui_assets(&object_fields_path, &map_skin_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
         out_dir.join("unit-assets.json"),
@@ -661,7 +663,10 @@ fn load_visual_assets(
     })
 }
 
-fn load_ui_assets(object_fields_path: &std::path::Path) -> Result<UiAssetCatalog, Box<dyn Error>> {
+fn load_ui_assets(
+    object_fields_path: &std::path::Path,
+    map_skin_path: &std::path::Path,
+) -> Result<UiAssetCatalog, Box<dyn Error>> {
     let mut fields = csv::ReaderBuilder::new()
         .delimiter(b'\t')
         .from_path(object_fields_path)?;
@@ -723,6 +728,107 @@ fn load_ui_assets(object_fields_path: &std::path::Path) -> Result<UiAssetCatalog
             resource.to_owned(),
             "bar".to_owned(),
             texture_path.to_owned(),
+        ));
+    }
+
+    // These are the stock War3Skins InfoPanelIconDamage/Armor bindings. The map's CustomSkin
+    // overrides are applied below, notably Castle Fight's imported Hero armor artwork.
+    let skin = fs::read_to_string(map_skin_path)?;
+    let overrides = skin
+        .split("[CustomSkin]")
+        .nth(1)
+        .and_then(|section| section.split('[').next())
+        .ok_or("map skin is missing [CustomSkin]")?
+        .lines()
+        .filter_map(|line| line.trim().split_once('='))
+        .map(|(key, value)| (key.trim(), value.trim()))
+        .collect::<BTreeMap<_, _>>();
+    for (key, skin_key, stock_path) in [
+        (
+            "damage_normal",
+            "InfoPanelIconDamageNormal",
+            r"UI\Widgets\Console\Human\infocard-attack-melee.blp",
+        ),
+        (
+            "damage_pierce",
+            "InfoPanelIconDamagePierce",
+            r"UI\Widgets\Console\Human\infocard-attack-piercing.blp",
+        ),
+        (
+            "damage_siege",
+            "InfoPanelIconDamageSiege",
+            r"UI\Widgets\Console\Human\infocard-attack-siege.blp",
+        ),
+        (
+            "damage_magic",
+            "InfoPanelIconDamageMagic",
+            r"UI\Widgets\Console\Human\infocard-attack-magic.blp",
+        ),
+        (
+            "damage_chaos",
+            "InfoPanelIconDamageChaos",
+            r"UI\Widgets\Console\Human\infocard-attack-chaos.blp",
+        ),
+        (
+            "damage_hero",
+            "InfoPanelIconDamageHero",
+            r"UI\Widgets\Console\Human\infocard-attack-hero.blp",
+        ),
+        (
+            "damage_spells",
+            "InfoPanelIconDamageMagic",
+            r"UI\Widgets\Console\Human\infocard-attack-magic.blp",
+        ),
+        (
+            "armor_small",
+            "InfoPanelIconArmorSmall",
+            r"UI\Widgets\Console\Human\infocard-armor-small.blp",
+        ),
+        (
+            "armor_unarmored",
+            "InfoPanelIconArmorNone",
+            r"UI\Widgets\Console\Human\infocard-armor-unarmored.blp",
+        ),
+        (
+            "armor_medium",
+            "InfoPanelIconArmorMedium",
+            r"UI\Widgets\Console\Human\infocard-armor-medium.blp",
+        ),
+        (
+            "armor_large",
+            "InfoPanelIconArmorLarge",
+            r"UI\Widgets\Console\Human\infocard-armor-large.blp",
+        ),
+        (
+            "armor_hero",
+            "InfoPanelIconArmorHero",
+            r"UI\Widgets\Console\Human\infocard-armor-hero.blp",
+        ),
+        (
+            "armor_fortified",
+            "InfoPanelIconArmorFort",
+            r"UI\Widgets\Console\Human\infocard-armor-fortified.blp",
+        ),
+        (
+            "armor_divine",
+            "InfoPanelIconArmorDivine",
+            r"UI\Widgets\Console\Human\infocard-armor-hero.blp",
+        ),
+        (
+            "armor_normal",
+            "InfoPanelIconArmorNormal",
+            r"UI\Widgets\Console\Human\infocard-armor-small.blp",
+        ),
+    ] {
+        assets.insert((
+            "info_panel".to_owned(),
+            key.to_owned(),
+            "icon".to_owned(),
+            overrides
+                .get(skin_key)
+                .copied()
+                .unwrap_or(stock_path)
+                .to_owned(),
         ));
     }
 

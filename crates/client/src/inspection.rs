@@ -1,7 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 use castle_fight_sim::{
-    ArmorType, CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuildingKind, CastleFightContentBundle,
-    DamageType, PlayerId, SUBUNITS_PER_WORLD_UNIT, SimId, Team,
+    ArmorType, AttackProfile, CASTLE_FIGHT_SIMULATION_HZ, CastleFightBuildingKind,
+    CastleFightContentBundle, DamageType, PlayerId, SUBUNITS_PER_WORLD_UNIT, SimId, Team,
 };
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
     },
     resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
-    ui_icons::{UiIconAssets, UiIconKey},
+    ui_icons::{UiCommandIcon, UiIconAssets, UiIconKey, UiIconRole},
 };
 
 const CONSOLE_HEIGHT: f32 = 300.0;
@@ -136,7 +136,7 @@ struct ProductionQueueIcon(usize);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CombatTooltipKind {
-    Attack,
+    Attack(usize),
     Armor,
 }
 
@@ -147,7 +147,17 @@ struct CombatTypeButton(CombatTooltipKind);
 struct CombatTypeLabel(CombatTooltipKind);
 
 #[derive(Component)]
+struct CombatTypeIcon(CombatTooltipKind);
+
+#[derive(Component)]
 struct CombatTooltip;
+
+#[derive(SystemParam)]
+struct CombatBadgeIcons<'w, 's> {
+    asset_server: Res<'w, AssetServer>,
+    icon_assets: ResMut<'w, UiIconAssets>,
+    images: Query<'w, 's, (&'static CombatTypeIcon, &'static mut ImageNode)>,
+}
 
 #[derive(Component)]
 struct DebugInspectionPanel;
@@ -453,15 +463,21 @@ fn setup_inspector_ui(mut commands: Commands) {
                         },
                         InspectionText,
                     ));
-                    for kind in [CombatTooltipKind::Attack, CombatTooltipKind::Armor] {
+                    for kind in [
+                        CombatTooltipKind::Attack(0),
+                        CombatTooltipKind::Attack(1),
+                        CombatTooltipKind::Armor,
+                    ] {
                         details
                             .spawn((
                                 Button,
                                 Node {
-                                    width: px(180.0),
-                                    height: px(28.0),
-                                    padding: UiRect::horizontal(px(6.0)),
+                                    width: px(220.0),
+                                    height: px(36.0),
+                                    padding: UiRect::all(px(2.0)),
                                     border: UiRect::all(px(1.0)),
+                                    align_items: AlignItems::Center,
+                                    column_gap: px(5.0),
                                     ..default()
                                 },
                                 BackgroundColor(Color::srgb(0.10, 0.09, 0.07)),
@@ -469,13 +485,25 @@ fn setup_inspector_ui(mut commands: Commands) {
                                 Visibility::Hidden,
                                 CombatTypeButton(kind),
                             ))
-                            .with_child((
-                                Text::new(""),
-                                TextFont::from_font_size(14.0),
-                                TextColor(Color::srgb(0.96, 0.86, 0.56)),
-                                Pickable::IGNORE,
-                                CombatTypeLabel(kind),
-                            ));
+                            .with_children(|badge| {
+                                badge.spawn((
+                                    ImageNode::default(),
+                                    Node {
+                                        width: px(30.0),
+                                        height: px(30.0),
+                                        ..default()
+                                    },
+                                    Pickable::IGNORE,
+                                    CombatTypeIcon(kind),
+                                ));
+                                badge.spawn((
+                                    Text::new(""),
+                                    TextFont::from_font_size(13.0),
+                                    TextColor(Color::srgb(0.96, 0.86, 0.56)),
+                                    Pickable::IGNORE,
+                                    CombatTypeLabel(kind),
+                                ));
+                            });
                     }
                 });
             panel
@@ -1262,6 +1290,7 @@ fn update_production_ui(
 fn update_combat_tooltip(
     selection: Res<InspectionSelection>,
     samples: Res<PresentationSamples>,
+    mut badge_icons: CombatBadgeIcons<'_, '_>,
     mut buttons: Query<(&CombatTypeButton, &Interaction, &mut Visibility), Without<CombatTooltip>>,
     mut labels: Query<(&CombatTypeLabel, &mut Text), Without<CombatTooltip>>,
     mut tooltip: CombatTooltipQuery<'_, '_>,
@@ -1269,38 +1298,12 @@ fn update_combat_tooltip(
     let selected = (selection.members.len() == 1)
         .then_some(selection.selected)
         .flatten();
-    let attack = selected.and_then(|id| {
-        samples
-            .current
-            .units
-            .get(&id)
-            .map(|unit| unit.damage_type)
-            .or_else(|| {
-                samples
-                    .current
-                    .buildings
-                    .get(&id)
-                    .and_then(|building| building.damage_type)
-            })
-    });
-    let armor = selected.and_then(|id| {
-        samples
-            .current
-            .units
-            .get(&id)
-            .map(|unit| unit.armor.armor_type)
-            .or_else(|| {
-                samples
-                    .current
-                    .buildings
-                    .get(&id)
-                    .map(|building| building.armor.armor_type)
-            })
-    });
+    let (attacks, armor) =
+        selected.map_or(([None; 2], None), |id| selected_combat_badges(id, &samples));
     let mut hovered = None;
     for (button, interaction, mut visibility) in &mut buttons {
         let visible = match button.0 {
-            CombatTooltipKind::Attack => attack.is_some(),
+            CombatTooltipKind::Attack(slot) => attacks[slot].is_some(),
             CombatTooltipKind::Armor => armor.is_some(),
         };
         *visibility = if visible {
@@ -1314,22 +1317,72 @@ fn update_combat_tooltip(
     }
     for (label, mut text) in &mut labels {
         text.0 = match label.0 {
-            CombatTooltipKind::Attack => attack.map_or_else(String::new, |kind| {
-                format!("Attack: {}", damage_type_name(kind))
+            CombatTooltipKind::Attack(slot) => attacks[slot].map_or_else(String::new, |attack| {
+                format!(
+                    "Attack {}: {} {}",
+                    slot + 1,
+                    attack.profile.damage,
+                    damage_type_name(attack.damage_type)
+                )
             }),
-            CombatTooltipKind::Armor => armor.map_or_else(String::new, |kind| {
-                format!("Armor: {}", armor_type_name(kind))
+            CombatTooltipKind::Armor => armor.map_or_else(String::new, |armor| {
+                format!(
+                    "Armor: {} {}",
+                    armor_points_label(armor.points_per_100),
+                    armor_type_name(armor.armor_type)
+                )
             }),
         };
     }
+    for (slot, mut image) in &mut badge_icons.images {
+        let key = match slot.0 {
+            CombatTooltipKind::Attack(index) => {
+                attacks[index].map(|attack| UiIconKey::InfoDamage(attack.damage_type))
+            }
+            CombatTooltipKind::Armor => armor.map(|armor| UiIconKey::InfoArmor(armor.armor_type)),
+        };
+        *image = key
+            .and_then(|key| {
+                badge_icons
+                    .icon_assets
+                    .image(key, &badge_icons.asset_server)
+                    .or_else(|| {
+                        // Older local UI packs predate the info-panel bindings. Keep a visible
+                        // Warcraft icon until the player re-runs UI extraction for exact art.
+                        let fallback = match key {
+                            UiIconKey::InfoDamage(_) => UiIconKey::Command(UiCommandIcon::Attack),
+                            UiIconKey::InfoArmor(_) => {
+                                UiIconKey::ability(u32::from_be_bytes(*b"AM08"), UiIconRole::Normal)
+                            }
+                            _ => return None,
+                        };
+                        badge_icons
+                            .icon_assets
+                            .image(fallback, &badge_icons.asset_server)
+                    })
+            })
+            .map_or_else(ImageNode::default, ImageNode::new);
+    }
     let (text, visibility) = &mut *tooltip;
     text.0 = match hovered {
-        Some(CombatTooltipKind::Attack) => {
-            attack.map_or_else(String::new, |kind| attack_matchup_tooltip(kind, &samples))
-        }
-        Some(CombatTooltipKind::Armor) => {
-            armor.map_or_else(String::new, |kind| armor_matchup_tooltip(kind, &samples))
-        }
+        Some(CombatTooltipKind::Attack(slot)) => attacks[slot].map_or_else(String::new, |attack| {
+            format!(
+                "Attack {} — {} damage, {:.0} range, {:.2}s cooldown\n{}",
+                slot + 1,
+                attack.profile.damage,
+                attack.profile.range as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
+                f32::from(attack.profile.cooldown_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32,
+                attack_matchup_tooltip(attack.damage_type, &samples)
+            )
+        }),
+        Some(CombatTooltipKind::Armor) => armor.map_or_else(String::new, |armor| {
+            format!(
+                "{} armor: {}\n{}",
+                armor_type_name(armor.armor_type),
+                armor_points_label(armor.points_per_100),
+                armor_matchup_tooltip(armor.armor_type, &samples)
+            )
+        }),
         None => String::new(),
     };
     **visibility = if hovered.is_some() {
@@ -1337,6 +1390,61 @@ fn update_combat_tooltip(
     } else {
         Visibility::Hidden
     };
+}
+
+#[derive(Clone, Copy)]
+struct AttackBadgeData {
+    profile: AttackProfile,
+    damage_type: DamageType,
+}
+
+#[derive(Clone, Copy)]
+struct ArmorBadgeData {
+    armor_type: ArmorType,
+    points_per_100: i32,
+}
+
+fn selected_combat_badges(
+    id: SimId,
+    samples: &PresentationSamples,
+) -> ([Option<AttackBadgeData>; 2], Option<ArmorBadgeData>) {
+    if let Some(unit) = samples.current.units.get(&id) {
+        return (
+            [
+                Some(AttackBadgeData {
+                    profile: unit.attack,
+                    damage_type: unit.damage_type,
+                }),
+                unit.secondary_attack.map(|attack| AttackBadgeData {
+                    profile: attack.attack,
+                    damage_type: attack.damage_type,
+                }),
+            ],
+            Some(ArmorBadgeData {
+                armor_type: unit.armor.armor_type,
+                points_per_100: unit.status.effective_armor_points_per_100(unit.armor),
+            }),
+        );
+    }
+    if let Some(building) = samples.current.buildings.get(&id) {
+        return (
+            [
+                building
+                    .attack
+                    .zip(building.damage_type)
+                    .map(|(profile, damage_type)| AttackBadgeData {
+                        profile,
+                        damage_type,
+                    }),
+                None,
+            ],
+            Some(ArmorBadgeData {
+                armor_type: building.armor.armor_type,
+                points_per_100: i32::from(building.armor.armor_points) * 100,
+            }),
+        );
+    }
+    ([None; 2], None)
 }
 
 fn attack_matchup_tooltip(kind: DamageType, samples: &PresentationSamples) -> String {
@@ -1424,13 +1532,11 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
     }
     if let Some(unit) = samples.current.units.get(&id) {
         return format!(
-            "{} (Player {})\nHealth: {} / {}\n{} armor\n{} attack\n{}",
+            "{} (Player {})\nHealth: {} / {}\n{}",
             unit.content.map_or("Unit", |content| content.name),
             unit.owner.0 + 1,
             unit.health,
             unit.health_max,
-            armor_type_name(unit.armor.armor_type),
-            damage_type_name(unit.damage_type),
             status_effect_summary(unit, samples.current.tick)
         );
     }
@@ -1482,7 +1588,7 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
                 )
             });
         return format!(
-            "{} ({})\nHealth: {} / {}{}\n{}{}{}",
+            "{} ({})\nHealth: {} / {}{}{}{}",
             building.content.map_or("Building", |content| content.name),
             building.owner.map_or_else(
                 || "Neutral".to_owned(),
@@ -1491,7 +1597,6 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
             building.health,
             building.health_max,
             training_mana,
-            armor_type_name(building.armor.armor_type),
             status,
             stun
         );
@@ -2416,6 +2521,16 @@ mod tests {
         )
     }
 
+    fn test_attack() -> AttackProfile {
+        AttackProfile {
+            delivery: castle_fight_sim::AttackDelivery::Melee,
+            damage: 25,
+            range: 100 * SUBUNITS_PER_WORLD_UNIT,
+            acquisition_range: 500 * SUBUNITS_PER_WORLD_UNIT,
+            cooldown_ticks: 30,
+        }
+    }
+
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
             tick: 10,
@@ -2524,6 +2639,8 @@ mod tests {
                 mechanical: false,
                 health: 50,
                 health_max: 100,
+                attack: test_attack(),
+                secondary_attack: None,
                 damage_type: DamageType::Normal,
                 armor: castle_fight_sim::ArmorProfile::new(ArmorType::Medium, 2),
                 target: None,
@@ -2563,6 +2680,21 @@ mod tests {
         selected.status.armor_modifiers[0].expires_tick = 20;
         selected.status.armor_modifier_count = 1;
         selected.target = Some(SimId(8));
+        let mut second = test_attack();
+        second.damage = 13;
+        selected.secondary_attack = Some(castle_fight_sim::SecondaryAttackProfile {
+            primary_targets: castle_fight_sim::AttackTargetMask::GROUND_UNITS,
+            attack: second,
+            targets: castle_fight_sim::AttackTargetMask::BUILDINGS,
+            damage_type: DamageType::Siege,
+        });
+
+        let (attacks, armor) = selected_combat_badges(SimId(7), &samples);
+        assert_eq!(attacks[0].unwrap().profile.damage, 25);
+        assert_eq!(attacks[0].unwrap().damage_type, DamageType::Pierce);
+        assert_eq!(attacks[1].unwrap().profile.damage, 13);
+        assert_eq!(attacks[1].unwrap().damage_type, DamageType::Siege);
+        assert_eq!(armor.unwrap().points_per_100, 300);
 
         let text = format_unit_inspector(&samples.current.units[&SimId(7)], 10, &samples);
         assert!(text.contains("Attack type: Pierce -> Light: 200% (+100%)"));
@@ -2622,6 +2754,7 @@ mod tests {
                 health_max: 1_000,
                 construction_started_tick: None,
                 construction_complete_tick: None,
+                attack: None,
                 damage_type: None,
                 armor: castle_fight_sim::ArmorProfile::new(ArmorType::Fortified, 5),
                 target: None,
@@ -2649,6 +2782,9 @@ mod tests {
                 .contains("Name: Barracks")
         );
         assert!(selection_summary(SimId(9), &samples).contains("Player 7"));
+        let (attacks, armor) = selected_combat_badges(SimId(9), &samples);
+        assert!(attacks.into_iter().all(|attack| attack.is_none()));
+        assert_eq!(armor.unwrap().armor_type, ArmorType::Fortified);
     }
 
     #[test]
@@ -2673,6 +2809,8 @@ mod tests {
                 mechanical: false,
                 health: 50,
                 health_max: 100,
+                attack: test_attack(),
+                secondary_attack: None,
                 damage_type: DamageType::Normal,
                 armor: castle_fight_sim::ArmorProfile::new(ArmorType::Large, 4),
                 target: None,

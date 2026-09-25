@@ -382,6 +382,8 @@ pub struct UnitView {
     pub mechanical: bool,
     pub health: i32,
     pub health_max: i32,
+    pub attack: AttackProfile,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub attack_delivery: AttackDelivery,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
@@ -433,6 +435,7 @@ pub struct BuildingView {
     pub production_attack_targets: Option<AttackTargetMask>,
     pub next_spawn_tick: Option<u64>,
     pub production_queue: Option<u8>,
+    pub attack: Option<AttackProfile>,
     pub attack_delivery: Option<AttackDelivery>,
     pub attack_targets: Option<AttackTargetMask>,
     pub damage_type: DamageType,
@@ -3456,6 +3459,7 @@ fn unit_view_from_entity(
     let active_defend_ability = active_defend_profile(passive_effects, spawn_tick, current_tick)
         .map(|profile| profile.ability);
     let status = *entity.get::<StatusState>()?;
+    let attack = *entity.get::<AttackProfile>()?;
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -3469,7 +3473,9 @@ fn unit_view_from_entity(
         mechanical: entity.get::<MechanicalUnit>().is_some(),
         health: entity.get::<Health>()?.current,
         health_max: entity.get::<Health>()?.max,
-        attack_delivery: entity.get::<AttackProfile>()?.delivery,
+        attack,
+        secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
+        attack_delivery: attack.delivery,
         attack_targets: *entity.get::<AttackTargetMask>()?,
         damage_type: *entity.get::<DamageType>()?,
         armor: *entity.get::<ArmorProfile>()?,
@@ -3514,6 +3520,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
             .get::<ProductionState>()
             .map(|state| state.next_spawn_tick),
         production_queue: entity.get::<ProductionState>().map(|state| state.queued),
+        attack,
         attack_delivery: attack.map(|attack| attack.delivery),
         attack_targets: entity.get::<AttackTargetMask>().copied(),
         damage_type: *entity.get::<DamageType>()?,

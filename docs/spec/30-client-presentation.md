@@ -257,6 +257,8 @@ The player's builder is the sole directly controlled unit and should be visually
 
 Picking may use render/GPU/scene data to identify a `SimId`, but displayed authoritative stats should be resolved from the latest simulation state. When authoritative content identity is available, inspection UI SHOULD show the canonical imported unit/building name rather than only a presentation-role label.
 
+The single-entity inspection panel MUST show a separate combat badge for every authoritative attack profile (including a unit's second weapon where present) and a separate armor badge. Each badge uses the selected map version's extracted Warcraft info-panel icon for that attack damage type or armor type, including map skin overrides. Hovering an attack or armor badge shows the applicable damage/armor matchup percentages from the active simulation rules, not hardcoded presentation values. Attack badges show their own damage, range, and cooldown; the armor badge shows effective armor after active modifiers. Buildings without an attack show armor only.
+
 A stale/dead `SimId` must fail gracefully.
 
 ## 15. Presentation events

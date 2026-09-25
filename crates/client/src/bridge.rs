@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
-    AbilityCastEvent, AbilityId, ArmorProfile, AttackDelivery, AttackEvent, BuilderLocomotion,
-    BuildingFootprint, ChainLightningEvent, ContentIdentity, CorpseView, DamageRules, DamageType,
-    MovementClass, PlayerEconomyView, PlayerId, PlayerView, ProjectileView, SimId, SimPoint,
-    Simulation, StatusState, Team,
+    AbilityCastEvent, AbilityId, ArmorProfile, AttackDelivery, AttackEvent, AttackProfile,
+    BuilderLocomotion, BuildingFootprint, ChainLightningEvent, ContentIdentity, CorpseView,
+    DamageRules, DamageType, MovementClass, PlayerEconomyView, PlayerId, PlayerView,
+    ProjectileView, SecondaryAttackProfile, SimId, SimPoint, Simulation, StatusState, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +95,8 @@ pub struct UnitSample {
     pub mechanical: bool,
     pub health: i32,
     pub health_max: i32,
+    pub attack: AttackProfile,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
     pub target: Option<SimId>,
@@ -137,6 +139,7 @@ pub struct BuildingSample {
     pub health_max: i32,
     pub construction_started_tick: Option<u64>,
     pub construction_complete_tick: Option<u64>,
+    pub attack: Option<AttackProfile>,
     pub damage_type: Option<DamageType>,
     pub armor: ArmorProfile,
     pub target: Option<SimId>,
@@ -187,6 +190,8 @@ impl PresentationSnapshot {
                         mechanical: unit.mechanical,
                         health: unit.health,
                         health_max: unit.health_max,
+                        attack: unit.attack,
+                        secondary_attack: unit.secondary_attack,
                         damage_type: unit.damage_type,
                         armor: unit.armor,
                         target: unit.target,
@@ -251,6 +256,7 @@ impl PresentationSnapshot {
                         health_max: building.health_max,
                         construction_started_tick: building.construction_started_tick,
                         construction_complete_tick: building.construction_complete_tick,
+                        attack: building.attack,
                         damage_type: building.attack_delivery.map(|_| building.damage_type),
                         armor: building.armor,
                         target: building.target,

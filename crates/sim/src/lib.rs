@@ -625,7 +625,7 @@ mod tests {
     fn second_weapon_uses_its_own_target_mask_and_damage() {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
-        sim.spawn_unit_with_properties(
+        let attacker = sim.spawn_unit_with_properties(
             UnitSpawn {
                 team: Team(0),
                 position: SimPoint::new(40 * world, 0),
@@ -656,6 +656,9 @@ mod tests {
                 ..UnitGameplayProperties::default()
             },
         );
+        let view = sim.unit(attacker).unwrap();
+        assert_eq!(view.attack.damage, 999);
+        assert_eq!(view.secondary_attack.unwrap().attack.damage, 28);
         let building = sim.spawn_building(passive_building(1, BuildingFootprint::new(70, 0, 1, 1)));
         sim.step();
         sim.step();
