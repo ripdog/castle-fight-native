@@ -451,6 +451,43 @@ struct AnimationSoundSpec {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct EventSplatManifest {
+    pub texture: String,
+    pub source_texture: String,
+    pub rows: u32,
+    pub columns: u32,
+    pub blend_mode: u32,
+    pub scale: f32,
+    pub lifespan: f32,
+    pub decay: f32,
+    pub birth_time: f32,
+    pub pause_time: f32,
+    pub uv_lifespan: [u32; 2],
+    pub lifespan_repeat: u32,
+    pub uv_decay: [u32; 2],
+    pub decay_repeat: u32,
+    pub colors: [[u8; 4]; 3],
+}
+
+#[derive(Debug, Clone)]
+struct SplatServiceSpec {
+    source_texture: String,
+    rows: u32,
+    columns: u32,
+    blend_mode: u32,
+    scale: f32,
+    lifespan: f32,
+    decay: f32,
+    birth_time: f32,
+    pause_time: f32,
+    uv_lifespan: [u32; 2],
+    lifespan_repeat: u32,
+    uv_decay: [u32; 2],
+    decay_repeat: u32,
+    colors: [[u8; 4]; 3],
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct EventObjectManifest {
     pub object_id: u32,
     pub name: String,
@@ -465,6 +502,8 @@ pub struct EventObjectManifest {
     pub gltf: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sound: Option<EventSoundManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub splat: Option<EventSplatManifest>,
     pub global_sequence_id: Option<u32>,
     pub event_track_times: Vec<u32>,
     pub sequence_windows: Vec<ParticleEmitterSequenceManifest>,
@@ -635,6 +674,8 @@ pub struct Exporter {
     destructable_skin: DoodadSkinCatalog,
     spawn_event_models: BTreeMap<String, String>,
     animation_sounds: BTreeMap<String, AnimationSoundSpec>,
+    splat_services: BTreeMap<String, SplatServiceSpec>,
+    uber_splat_services: BTreeMap<String, SplatServiceSpec>,
     sound_cache: BTreeMap<String, Option<String>>,
     sound_file_index: Option<BTreeMap<String, Vec<String>>>,
     texture_cache: BTreeMap<String, TextureManifest>,
@@ -751,6 +792,9 @@ impl Exporter {
         };
         let spawn_event_models = read_spawn_event_catalog(&mut storage, map_storage.as_ref())?;
         let animation_sounds = read_animation_sound_catalog(&mut storage, map_storage.as_ref())?;
+        let splat_services = read_splat_service_catalog(&mut storage, map_storage.as_ref(), false)?;
+        let uber_splat_services =
+            read_splat_service_catalog(&mut storage, map_storage.as_ref(), true)?;
         // Whiteout's CASC reader keeps decoded data containers in an internal cache.
         // Asset extraction is a streaming workload and does not benefit enough from retaining
         // those potentially-large containers to justify letting the cache grow across models.
@@ -772,6 +816,8 @@ impl Exporter {
             destructable_skin,
             spawn_event_models,
             animation_sounds,
+            splat_services,
+            uber_splat_services,
             sound_cache: BTreeMap::new(),
             sound_file_index: None,
             texture_cache: BTreeMap::new(),
@@ -1630,9 +1676,12 @@ impl Exporter {
             &model,
             &self.spawn_event_models,
             &self.animation_sounds,
+            &self.splat_services,
+            &self.uber_splat_services,
             |path| self.model_exists(path),
         );
         self.export_event_sound_assets(&mut event_objects)?;
+        self.export_event_splat_assets(&mut event_objects);
         attach_event_object_extras(&mut gltf, &event_objects)?;
         let lights = light_manifests(&model)?;
 
@@ -1745,6 +1794,32 @@ impl Exporter {
             event.lookup_resolved = !sound.files.is_empty();
         }
         Ok(())
+    }
+
+    fn export_event_splat_assets(&mut self, events: &mut [EventObjectManifest]) {
+        for event in events {
+            let Some(splat) = event.splat.as_mut() else {
+                continue;
+            };
+            let key = splat.source_texture.to_ascii_lowercase();
+            let exported = if let Some(cached) = self.texture_cache.get(&key) {
+                Some(cached.clone())
+            } else {
+                match self.export_texture(&splat.source_texture) {
+                    Ok(texture) => {
+                        self.texture_cache.insert(key, texture.clone());
+                        Some(texture)
+                    }
+                    Err(_) => None,
+                }
+            };
+            if let Some(png) = exported.and_then(|texture| texture.png) {
+                splat.texture = png;
+                event.lookup_resolved = true;
+            } else {
+                event.lookup_resolved = false;
+            }
+        }
     }
 
     fn export_sound_file(&mut self, logical_path: &str) -> Result<Option<String>, Box<dyn Error>> {
@@ -2844,6 +2919,8 @@ fn event_object_manifests(
     model: &Model,
     spawn_event_models: &BTreeMap<String, String>,
     animation_sounds: &BTreeMap<String, AnimationSoundSpec>,
+    splat_services: &BTreeMap<String, SplatServiceSpec>,
+    uber_splat_services: &BTreeMap<String, SplatServiceSpec>,
     model_exists: impl Fn(&str) -> bool,
 ) -> Vec<EventObjectManifest> {
     let sequence_windows = model_sequence_windows(model);
@@ -2892,6 +2969,32 @@ fn event_object_manifests(
                     eax_flags: sound.eax_flags.clone(),
                     rolloff_points: sound.rolloff_points.clone(),
                 });
+            let service = match kind {
+                EventObjectKindManifest::Splat | EventObjectKindManifest::Footprint => event_code
+                    .as_ref()
+                    .and_then(|code| splat_services.get(code)),
+                EventObjectKindManifest::UberSplat => event_code
+                    .as_ref()
+                    .and_then(|code| uber_splat_services.get(code)),
+                _ => None,
+            };
+            let splat = service.map(|service| EventSplatManifest {
+                texture: String::new(),
+                source_texture: service.source_texture.clone(),
+                rows: service.rows,
+                columns: service.columns,
+                blend_mode: service.blend_mode,
+                scale: service.scale,
+                lifespan: service.lifespan,
+                decay: service.decay,
+                birth_time: service.birth_time,
+                pause_time: service.pause_time,
+                uv_lifespan: service.uv_lifespan,
+                lifespan_repeat: service.lifespan_repeat,
+                uv_decay: service.uv_decay,
+                decay_repeat: service.decay_repeat,
+                colors: service.colors,
+            });
             let lookup_resolved = match kind {
                 EventObjectKindManifest::Spawn => spawn_asset_exists,
                 EventObjectKindManifest::Sound => sound.is_some(),
@@ -2908,6 +3011,7 @@ fn event_object_manifests(
                 spawn_model,
                 gltf,
                 sound,
+                splat,
                 global_sequence_id: (event.global_sequence_id() != NO_GLOBAL_SEQUENCE)
                     .then_some(event.global_sequence_id()),
                 event_track_times: event.event_track_times().to_vec(),
@@ -5619,6 +5723,105 @@ fn read_spawn_event_catalog(
     Ok(result)
 }
 
+fn read_splat_service_catalog(
+    storage: &mut CascStorage,
+    map_storage: Option<&MpqStorage>,
+    uber: bool,
+) -> Result<BTreeMap<String, SplatServiceSpec>, Box<dyn Error>> {
+    let path = if uber {
+        r"splats\ubersplatdata.slk"
+    } else {
+        r"splats\splatdata.slk"
+    };
+    let text = read_game_data_table(storage, map_storage, path)?;
+    parse_splat_service_catalog(&text, uber)
+}
+
+fn parse_splat_service_catalog(
+    text: &str,
+    uber: bool,
+) -> Result<BTreeMap<String, SplatServiceSpec>, Box<dyn Error>> {
+    let rows = parse_sylk_cells(text);
+    let column = |name: &str| {
+        sylk_header_column(&rows, name)
+            .ok_or_else(|| io::Error::other(format!("splat service is missing {name}")))
+    };
+    let name = column("Name")?;
+    let dir = column("Dir")?;
+    let file = column("file")?;
+    let blend = column("BlendMode")?;
+    let scale = column("Scale")?;
+    let get = |row: &BTreeMap<usize, String>, key: &str, default: f32| -> f32 {
+        sylk_header_column(&rows, key)
+            .and_then(|col| row.get(&col))
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default)
+    };
+    let color = |row: &BTreeMap<usize, String>, prefix: &str| -> [u8; 4] {
+        let channel =
+            |suffix: &str| get(row, &format!("{prefix}{suffix}"), 255.0).clamp(0.0, 255.0) as u8;
+        [channel("R"), channel("G"), channel("B"), channel("A")]
+    };
+    let mut result = BTreeMap::new();
+    for (row_id, row) in &rows {
+        if *row_id == 1 {
+            continue;
+        }
+        let Some(code) = row.get(&name).map(String::as_str) else {
+            continue;
+        };
+        if code.len() != 4 || code.eq_ignore_ascii_case("INIT") {
+            continue;
+        }
+        let (Some(directory), Some(filename)) = (row.get(&dir), row.get(&file)) else {
+            continue;
+        };
+        if directory.is_empty() || filename.is_empty() {
+            continue;
+        }
+        let source_texture = format!(r"{}\{}", directory.trim_end_matches(['\\', '/']), filename);
+        let number = |col: usize, default: f32| {
+            row.get(&col)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+        };
+        result.insert(
+            code.to_ascii_uppercase(),
+            SplatServiceSpec {
+                source_texture,
+                rows: if uber {
+                    1
+                } else {
+                    get(row, "Rows", 1.0).max(1.0) as u32
+                },
+                columns: if uber {
+                    1
+                } else {
+                    get(row, "Columns", 1.0).max(1.0) as u32
+                },
+                blend_mode: number(blend, 0.0).max(0.0) as u32,
+                scale: number(scale, 1.0),
+                lifespan: get(row, "Lifespan", 0.0),
+                decay: get(row, "Decay", 0.0),
+                birth_time: get(row, "BirthTime", 0.0),
+                pause_time: get(row, "PauseTime", 0.0),
+                uv_lifespan: [
+                    get(row, "UVLifespanStart", 0.0) as u32,
+                    get(row, "UVLifespanEnd", 0.0) as u32,
+                ],
+                lifespan_repeat: get(row, "LifespanRepeat", 1.0).max(1.0) as u32,
+                uv_decay: [
+                    get(row, "UVDecayStart", 0.0) as u32,
+                    get(row, "UVDecayEnd", 0.0) as u32,
+                ],
+                decay_repeat: get(row, "DecayRepeat", 1.0).max(1.0) as u32,
+                colors: [color(row, "Start"), color(row, "Middle"), color(row, "End")],
+            },
+        );
+    }
+    Ok(result)
+}
+
 fn parse_doodad_skin(text: &str) -> DoodadSkinCatalog {
     let mut result = DoodadSkinCatalog::new();
     let mut current: Option<String> = None;
@@ -7383,6 +7586,7 @@ mod tests {
                         "models/objects__spawnmodels__undead__undeaddissipate.gltf".to_owned(),
                     ),
                     sound: None,
+                    splat: None,
                     global_sequence_id: None,
                     event_track_times: vec![100],
                     sequence_windows: Vec::new(),
@@ -7398,6 +7602,7 @@ mod tests {
                     spawn_model: Some(r"Objects\Missing.mdx".to_owned()),
                     gltf: None,
                     sound: None,
+                    splat: None,
                     global_sequence_id: None,
                     event_track_times: vec![100],
                     sequence_windows: Vec::new(),
@@ -7506,8 +7711,14 @@ mod tests {
             z: 6.0,
         }]);
 
-        let manifests =
-            event_object_manifests(&model, &BTreeMap::new(), &BTreeMap::new(), |_| false);
+        let manifests = event_object_manifests(
+            &model,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            |_| false,
+        );
         assert_eq!(manifests.len(), 1);
         let event = &manifests[0];
         assert_eq!(event.object_id, 0);
@@ -7557,7 +7768,14 @@ mod tests {
                 rolloff_points: "_".to_owned(),
             },
         )]);
-        let manifests = event_object_manifests(&model, &BTreeMap::new(), &sounds, |_| false);
+        let manifests = event_object_manifests(
+            &model,
+            &BTreeMap::new(),
+            &sounds,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            |_| false,
+        );
         let event = &manifests[0];
         assert!(event.lookup_resolved);
         let sound = event.sound.as_ref().expect("sound metadata");
@@ -7596,7 +7814,14 @@ mod tests {
             "UDIS".to_owned(),
             r"Objects\Spawnmodels\Undead\UndeadDissipate\UndeadDissipate.mdx".to_owned(),
         )]);
-        let manifests = event_object_manifests(&model, &spawn_catalog, &BTreeMap::new(), |_| true);
+        let manifests = event_object_manifests(
+            &model,
+            &spawn_catalog,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            |_| true,
+        );
         let event = &manifests[0];
         assert_eq!(event.kind, EventObjectKindManifest::Spawn);
         assert_eq!(event.event_code.as_deref(), Some("UDIS"));
@@ -7612,8 +7837,14 @@ mod tests {
         assert_eq!(event.sequence_windows.len(), 1);
         assert_eq!(event.sequence_windows[0].name, "Death");
 
-        let unresolved =
-            event_object_manifests(&model, &spawn_catalog, &BTreeMap::new(), |_| false);
+        let unresolved = event_object_manifests(
+            &model,
+            &spawn_catalog,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            |_| false,
+        );
         let unresolved = &unresolved[0];
         assert!(!unresolved.lookup_resolved);
         assert!(unresolved.spawn_model.is_some());
@@ -7702,6 +7933,57 @@ mod tests {
         let silent = &catalog["MSEH"];
         assert!(silent.silent);
         assert!(silent.source_files.is_empty());
+    }
+
+    #[test]
+    fn splat_catalog_preserves_classic_atlas_and_lifecycle() {
+        let text = concat!(
+            "ID;PWXL;N;E\n",
+            "C;X1;Y1;K\"Name\"\nC;X2;K\"Dir\"\nC;X3;K\"file\"\n",
+            "C;X4;K\"Rows\"\nC;X5;K\"Columns\"\nC;X6;K\"BlendMode\"\n",
+            "C;X7;K\"Scale\"\nC;X8;K\"Lifespan\"\nC;X9;K\"Decay\"\n",
+            "C;X10;K\"UVLifespanStart\"\nC;X11;K\"UVLifespanEnd\"\n",
+            "C;X12;K\"StartR\"\nC;X13;K\"StartA\"\n",
+            "C;X1;Y2;K\"DBL0\"\nC;X2;K\"ReplaceableTextures\\Splats\"\n",
+            "C;X3;K\"Splat01Mature\"\nC;X4;K16\nC;X5;K16\nC;X6;K1\n",
+            "C;X7;K50\nC;X8;K2\nC;X9;K120\nC;X10;K0\nC;X11;K15\n",
+            "C;X12;K60\nC;X13;K200\n"
+        );
+        let catalog = parse_splat_service_catalog(text, false).unwrap();
+        let splat = &catalog["DBL0"];
+        assert_eq!(
+            splat.source_texture,
+            r"ReplaceableTextures\Splats\Splat01Mature"
+        );
+        assert_eq!((splat.rows, splat.columns), (16, 16));
+        assert_eq!(splat.uv_lifespan, [0, 15]);
+        assert_eq!(splat.colors[0], [60, 255, 255, 200]);
+    }
+
+    #[test]
+    fn uber_splat_catalog_preserves_birth_pause_and_decay() {
+        let text = concat!(
+            "ID;PWXL;N;E\n",
+            "C;X1;Y1;K\"Name\"\nC;X2;K\"Dir\"\nC;X3;K\"file\"\n",
+            "C;X4;K\"BlendMode\"\nC;X5;K\"Scale\"\n",
+            "C;X6;K\"BirthTime\"\nC;X7;K\"PauseTime\"\nC;X8;K\"Decay\"\n",
+            "C;X9;K\"StartA\"\nC;X10;K\"MiddleA\"\nC;X11;K\"EndA\"\n",
+            "C;X1;Y2;K\"LSDS\"\nC;X2;K\"ReplaceableTextures\\Splats\"\n",
+            "C;X3;K\"DirtUberSplat\"\nC;X4;K0\nC;X5;K110\n",
+            "C;X6;K1\nC;X7;K5\nC;X8;K2\n",
+            "C;X9;K0\nC;X10;K255\nC;X11;K0\n",
+        );
+        let catalog = parse_splat_service_catalog(text, true).unwrap();
+        let splat = &catalog["LSDS"];
+        assert_eq!((splat.rows, splat.columns), (1, 1));
+        assert_eq!(
+            (splat.birth_time, splat.pause_time, splat.decay),
+            (1.0, 5.0, 2.0)
+        );
+        assert_eq!(
+            [splat.colors[0][3], splat.colors[1][3], splat.colors[2][3]],
+            [0, 255, 0]
+        );
     }
 
     #[test]

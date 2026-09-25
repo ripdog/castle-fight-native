@@ -53,13 +53,13 @@ use crate::{
         Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3StatusVisualKind,
         Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet,
         advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
-        emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, fix_wc3_scene_materials,
-        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
+        emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
+        fix_wc3_scene_materials, resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
         setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
         update_wc3_model_particles, update_wc3_particles, update_wc3_ribbon_trails,
-        update_wc3_spawned_event_models,
+        update_wc3_spawned_event_models, update_wc3_spawned_splats,
     },
 };
 
@@ -950,6 +950,7 @@ impl Plugin for CastlePresentationPlugin {
                     (
                         emit_wc3_spawn_events,
                         emit_wc3_sound_events,
+                        emit_wc3_splat_events,
                         update_wc3_model_attachments,
                     ),
                     update_wc3_material_alpha,
@@ -979,7 +980,11 @@ impl Plugin for CastlePresentationPlugin {
                     age_timed_wc3_effects,
                     spawn_wc3_ribbon_trails,
                     update_wc3_ribbon_trails,
-                    (update_wc3_model_particles, update_wc3_spawned_event_models),
+                    (
+                        update_wc3_model_particles,
+                        update_wc3_spawned_event_models,
+                        update_wc3_spawned_splats,
+                    ),
                     update_wc3_particles,
                     emit_wc3_model_particles,
                     emit_wc3_particles,

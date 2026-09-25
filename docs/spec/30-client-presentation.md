@@ -282,6 +282,8 @@ Presentation events are derived from authoritative outcomes. They need not thems
 
 Persistent Warcraft buff/status art MUST follow authoritative status state rather than a presentation-side timer. Generated effect metadata binds an ability modifier and status category (for example movement or armor) to the corresponding WC3 target model; the client creates that visual only while the matching authoritative modifier is active and keeps it attached to the affected unit as it moves. This covers effects such as the Ice Troll Priest's Frozen target art, Frost Armor shell, and the reactive frost slow without duplicating their gameplay duration or proc logic in presentation.
 
+Classic WC3 model events for SPL/FPT/UBR MUST resolve through the version-scoped splat service tables and use the parent model's sequence/global event-crossing clock. Generated metadata MUST retain the table's texture, atlas, blend, scale, timing, and RGBA fields; unresolved service rows or textures remain explicit fidelity findings.
+
 Generated unit packs SHOULD retain per-object tint and passive ability target art attached to named model points, even when multiple rawcodes share a source mesh. Transient unit effects SHOULD follow the appropriate animated attachment node when the effect belongs to a held item or shield. These details remain cosmetic and never affect authoritative combat.
 
 An authoritative ordinary-attack miss SHOULD produce clear transient client feedback. The current client renders `MISS` above the missed target for approximately one second when the corresponding authoritative `AttackEvent` has `missed = true`. This text is cosmetic and MUST NOT perform or infer its own accuracy roll.

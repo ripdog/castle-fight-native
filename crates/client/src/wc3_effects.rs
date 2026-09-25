@@ -657,6 +657,24 @@ struct Wc3EventSoundSpec {
     distance_cutoff: f32,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct Wc3EventSplatSpec {
+    texture: String,
+    rows: u32,
+    columns: u32,
+    blend_mode: u32,
+    scale: f32,
+    lifespan: f32,
+    decay: f32,
+    birth_time: f32,
+    pause_time: f32,
+    uv_lifespan: [u32; 2],
+    lifespan_repeat: u32,
+    uv_decay: [u32; 2],
+    decay_repeat: u32,
+    colors: [[u8; 4]; 3],
+}
+
 const fn default_wc3_sound_volume() -> f32 {
     127.0
 }
@@ -672,6 +690,8 @@ struct Wc3EventObjectSpec {
     gltf: Option<String>,
     #[serde(default)]
     sound: Option<Wc3EventSoundSpec>,
+    #[serde(default)]
+    splat: Option<Wc3EventSplatSpec>,
     #[serde(default)]
     global_sequence_id: Option<u32>,
     #[serde(default)]
@@ -706,6 +726,23 @@ pub(crate) struct Wc3SoundEventRuntime {
     previous_sequence_elapsed_ms: Option<f32>,
     previous_global_elapsed_ms: Option<f32>,
     sequence: u32,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3SplatEventRuntime {
+    spec: Wc3EventObjectSpec,
+    splat: Wc3EventSplatSpec,
+    texture: Handle<Image>,
+    previous_sequence_name: Option<String>,
+    previous_sequence_elapsed_ms: Option<f32>,
+    previous_global_elapsed_ms: Option<f32>,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3SpawnedSplat {
+    spec: Wc3EventSplatSpec,
+    age: f32,
+    frame: u32,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -925,6 +962,26 @@ pub fn setup_wc3_model_composed_features(
                                 sequence: 0,
                             });
                         }
+                    }
+                }
+                Wc3EventObjectKind::Splat
+                | Wc3EventObjectKind::Footprint
+                | Wc3EventObjectKind::UberSplat => {
+                    if let Some(splat) = spec.splat.clone()
+                        && !splat.texture.is_empty()
+                        && let Some(parent_asset_path) =
+                            inherited_world_asset_path(entity, &parents, &roots, &asset_server)
+                        && let Some(path) =
+                            pack_relative_asset_path(&parent_asset_path, &splat.texture)
+                    {
+                        commands.entity(entity).insert(Wc3SplatEventRuntime {
+                            spec,
+                            splat,
+                            texture: asset_server.load(path),
+                            previous_sequence_name: None,
+                            previous_sequence_elapsed_ms: None,
+                            previous_global_elapsed_ms: None,
+                        });
                     }
                 }
                 _ => {}
@@ -1603,6 +1660,162 @@ pub fn emit_wc3_sound_events(
                 playback,
                 Transform::from_translation(source_position),
             ));
+        }
+    }
+}
+
+fn splat_lifespan(spec: &Wc3EventSplatSpec) -> f32 {
+    (spec.lifespan + spec.birth_time + spec.pause_time + spec.decay).max(0.01)
+}
+
+fn splat_sample(spec: &Wc3EventSplatSpec, age: f32) -> ([u8; 4], u32) {
+    let (colors, t, start, end, repeat) = if spec.lifespan > 0.0 {
+        let life = spec.lifespan.max(0.01);
+        if age < life {
+            (
+                [spec.colors[0], spec.colors[1]],
+                (age / life).clamp(0.0, 1.0),
+                spec.uv_lifespan[0],
+                spec.uv_lifespan[1],
+                spec.lifespan_repeat,
+            )
+        } else {
+            let t = ((age - life) / spec.decay.max(0.01)).clamp(0.0, 1.0);
+            (
+                [spec.colors[1], spec.colors[2]],
+                t,
+                spec.uv_decay[0],
+                spec.uv_decay[1],
+                spec.decay_repeat,
+            )
+        }
+    } else {
+        let birth = spec.birth_time.max(0.0);
+        let pause = spec.pause_time.max(0.0);
+        let (colors, t) = if age < birth && birth > 0.0 {
+            ([spec.colors[0], spec.colors[1]], age / birth)
+        } else if age < birth + pause {
+            ([spec.colors[1], spec.colors[1]], 0.0)
+        } else {
+            (
+                [spec.colors[1], spec.colors[2]],
+                ((age - birth - pause) / spec.decay.max(0.01)).clamp(0.0, 1.0),
+            )
+        };
+        (colors, t, 0, 0, 1)
+    };
+    let color = std::array::from_fn(|channel| {
+        (f32::from(colors[0][channel])
+            + (f32::from(colors[1][channel]) - f32::from(colors[0][channel])) * t)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    });
+    let span = end.saturating_sub(start).saturating_add(1).max(1);
+    let steps = span.saturating_mul(repeat.max(1));
+    let frame = start.saturating_add(((t * steps as f32) as u32).min(steps - 1) % span);
+    (
+        color,
+        frame.min(spec.rows.max(1).saturating_mul(spec.columns.max(1)) - 1),
+    )
+}
+
+fn splat_color(color: [u8; 4]) -> Color {
+    Color::srgba_u8(color[0], color[1], color[2], color[3])
+}
+
+pub fn emit_wc3_splat_events(
+    mut commands: Commands,
+    time: Res<Time>,
+    parents: Query<&ChildOf>,
+    clocks: Query<&Wc3ModelSequenceClock>,
+    mut assets: Wc3ParticleRenderAssets,
+    mut events: Query<(Entity, &GlobalTransform, &mut Wc3SplatEventRuntime)>,
+) {
+    let dt_ms = time.delta_secs().max(0.0) * 1000.0;
+    for (entity, source_transform, mut runtime) in &mut events {
+        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
+            continue;
+        };
+        let count = {
+            let runtime = &mut *runtime;
+            wc3_event_crossings(
+                &runtime.spec,
+                &mut runtime.previous_sequence_name,
+                &mut runtime.previous_sequence_elapsed_ms,
+                &mut runtime.previous_global_elapsed_ms,
+                &clock,
+                dt_ms,
+            )
+        };
+        if count == 0 {
+            continue;
+        }
+        let (rgba, frame) = splat_sample(&runtime.splat, 0.0);
+        let mesh = assets.particle_assets.particle_mesh(
+            runtime.splat.rows,
+            runtime.splat.columns,
+            frame,
+            &mut assets.meshes,
+        );
+        let source_scale = source_transform.to_scale_rotation_translation().0;
+        let scale = runtime.splat.scale.max(0.01) * source_scale.x.abs().max(source_scale.z.abs());
+        let mut position = source_transform.translation();
+        position.y += 0.1;
+        for _ in 0..count {
+            let material = assets.materials.add(StandardMaterial {
+                base_color: splat_color(rgba),
+                base_color_texture: Some(runtime.texture.clone()),
+                alpha_mode: particle_alpha_mode(runtime.splat.blend_mode),
+                unlit: true,
+                double_sided: true,
+                ..default()
+            });
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material),
+                Transform::from_translation(position)
+                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+                    .with_scale(Vec3::splat(scale)),
+                Wc3SpawnedSplat {
+                    spec: runtime.splat.clone(),
+                    age: 0.0,
+                    frame,
+                },
+            ));
+        }
+    }
+}
+
+pub fn update_wc3_spawned_splats(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut assets: Wc3ParticleRenderAssets,
+    mut splats: Query<(
+        Entity,
+        &mut Mesh3d,
+        &MeshMaterial3d<StandardMaterial>,
+        &mut Wc3SpawnedSplat,
+    )>,
+) {
+    for (entity, mut mesh, material, mut splat) in &mut splats {
+        splat.age += time.delta_secs().max(0.0);
+        if splat.age >= splat_lifespan(&splat.spec) {
+            assets.materials.remove(material.0.id());
+            commands.entity(entity).despawn();
+            continue;
+        }
+        let (color, frame) = splat_sample(&splat.spec, splat.age);
+        if let Some(mut material) = assets.materials.get_mut(&material.0) {
+            material.base_color = splat_color(color);
+        }
+        if frame != splat.frame {
+            mesh.0 = assets.particle_assets.particle_mesh(
+                splat.spec.rows,
+                splat.spec.columns,
+                frame,
+                &mut assets.meshes,
+            );
+            splat.frame = frame;
         }
     }
 }
@@ -4741,6 +4954,7 @@ mod tests {
                 kind: Wc3EventObjectKind::Spawn,
                 gltf: Some("models/spawn.gltf".to_owned()),
                 sound: None,
+                splat: None,
                 global_sequence_id,
                 event_track_times,
                 sequence_windows,
@@ -4778,6 +4992,30 @@ mod tests {
             global_elapsed_ms: 650.0,
         };
         assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 100.0), 0);
+    }
+
+    #[test]
+    fn splat_lifecycle_uses_authored_atlas_and_rgba() {
+        let spec = Wc3EventSplatSpec {
+            texture: "textures/splat.png".to_owned(),
+            rows: 4,
+            columns: 4,
+            blend_mode: 1,
+            scale: 50.0,
+            lifespan: 2.0,
+            decay: 1.0,
+            birth_time: 0.0,
+            pause_time: 0.0,
+            uv_lifespan: [0, 3],
+            lifespan_repeat: 1,
+            uv_decay: [4, 7],
+            decay_repeat: 1,
+            colors: [[60, 120, 20, 255], [60, 120, 20, 200], [60, 120, 20, 0]],
+        };
+        assert_eq!(splat_sample(&spec, 0.0), (spec.colors[0], 0));
+        assert_eq!(splat_sample(&spec, 1.0), ([60, 120, 20, 228], 2));
+        assert_eq!(splat_sample(&spec, 2.5), ([60, 120, 20, 100], 6));
+        assert_eq!(splat_lifespan(&spec), 3.0);
     }
 
     #[test]

@@ -691,10 +691,13 @@ fn summarize_model_features<'a>(
         let mut event_sound_resolved_count = 0;
         let mut event_sound_unresolved_count = 0;
         let mut event_splat_count = 0;
+        let mut event_splat_resolved_count = 0;
         let mut event_footprint_count = 0;
+        let mut event_footprint_resolved_count = 0;
         let mut event_spawn_resolved_count = 0;
         let mut event_spawn_unresolved_count = 0;
         let mut event_uber_splat_count = 0;
+        let mut event_uber_splat_resolved_count = 0;
         let mut event_unknown_count = 0;
         for event in &model.event_objects {
             match event.kind {
@@ -702,13 +705,22 @@ fn summarize_model_features<'a>(
                     event_sound_resolved_count += 1;
                 }
                 EventObjectKindManifest::Sound => event_sound_unresolved_count += 1,
-                EventObjectKindManifest::Splat => event_splat_count += 1,
-                EventObjectKindManifest::Footprint => event_footprint_count += 1,
+                EventObjectKindManifest::Splat => {
+                    event_splat_count += 1;
+                    event_splat_resolved_count += usize::from(event.lookup_resolved);
+                }
+                EventObjectKindManifest::Footprint => {
+                    event_footprint_count += 1;
+                    event_footprint_resolved_count += usize::from(event.lookup_resolved);
+                }
                 EventObjectKindManifest::Spawn if event.lookup_resolved => {
                     event_spawn_resolved_count += 1;
                 }
                 EventObjectKindManifest::Spawn => event_spawn_unresolved_count += 1,
-                EventObjectKindManifest::UberSplat => event_uber_splat_count += 1,
+                EventObjectKindManifest::UberSplat => {
+                    event_uber_splat_count += 1;
+                    event_uber_splat_resolved_count += usize::from(event.lookup_resolved);
+                }
                 EventObjectKindManifest::Unknown => event_unknown_count += 1,
             }
         }
@@ -829,21 +841,39 @@ fn summarize_model_features<'a>(
         );
         record_fidelity_finding(
             &mut findings,
-            "model.event_splat_unsupported",
-            FidelityStatus::Unsupported,
-            event_splat_count,
+            "model.event_splat_approximate",
+            FidelityStatus::Approximation,
+            event_splat_resolved_count,
         );
         record_fidelity_finding(
             &mut findings,
-            "model.event_footprint_unsupported",
+            "model.event_splat_unresolved",
             FidelityStatus::Unsupported,
-            event_footprint_count,
+            event_splat_count - event_splat_resolved_count,
         );
         record_fidelity_finding(
             &mut findings,
-            "model.event_uber_splat_unsupported",
+            "model.event_footprint_approximate",
+            FidelityStatus::Approximation,
+            event_footprint_resolved_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_footprint_unresolved",
             FidelityStatus::Unsupported,
-            event_uber_splat_count,
+            event_footprint_count - event_footprint_resolved_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_uber_splat_approximate",
+            FidelityStatus::Approximation,
+            event_uber_splat_resolved_count,
+        );
+        record_fidelity_finding(
+            &mut findings,
+            "model.event_uber_splat_unresolved",
+            FidelityStatus::Unsupported,
+            event_uber_splat_count - event_uber_splat_resolved_count,
         );
         record_fidelity_finding(
             &mut findings,
@@ -1174,6 +1204,7 @@ mod tests {
                 spawn_model: Some("spawn.mdx".to_owned()),
                 gltf: Some("models/spawn.gltf".to_owned()),
                 sound: None,
+                splat: None,
                 global_sequence_id: None,
                 event_track_times: vec![100],
                 sequence_windows: Vec::new(),
@@ -1207,6 +1238,7 @@ mod tests {
                     eax_flags: "DefaultEAXON".to_owned(),
                     rolloff_points: "_".to_owned(),
                 }),
+                splat: None,
                 global_sequence_id: None,
                 event_track_times: vec![200],
                 sequence_windows: Vec::new(),
@@ -1222,6 +1254,7 @@ mod tests {
                 spawn_model: None,
                 gltf: None,
                 sound: None,
+                splat: None,
                 global_sequence_id: None,
                 event_track_times: vec![300],
                 sequence_windows: Vec::new(),
