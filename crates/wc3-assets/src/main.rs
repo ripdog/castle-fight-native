@@ -111,7 +111,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     if args.art_mode != "sd" {
         return Err(io::Error::other(
-            "only --art sd is implemented in the initial exporter; HD/Reforged PBR materials need a separate material mapping",
+            "only --art sd is supported; Reforged/HD and Definitive presentation are intentionally out of scope for the Classic pipeline",
         )
         .into());
     }
@@ -1078,7 +1078,7 @@ Options:
   --effects             Export projectile/spell/buff models referenced by Castle Fight
   --ui                  Export resolved unit/ability/buff/item icons and WC3 resource icons
   --doodad RAWCODE      Export one placed doodad type; repeat for more types
-  --art sd              Art mode. SD/classic is currently implemented
+  --art sd              Art mode. Classic/SD only; Reforged/Definitive are out of scope
   --keep-source         Also retain extracted MDX and source texture files
   --production PATH     Development override for production-buildings.tsv
   --object-fields PATH  Development override for resolved object-fields.tsv

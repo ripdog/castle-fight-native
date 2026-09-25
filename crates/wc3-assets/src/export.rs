@@ -12,9 +12,9 @@ use whiteout::{
     Bytes,
     casc::Storage as CascStorage,
     mdx::{
-        InterpolationType, Layer, LayerFilterMode, LayerShadingFlag, LayerSlotType, Light,
-        LightType, Model, Node, NodeFlag, Parser as MdxParser, ParticleEmitter2, SequenceFlag,
-        TrackF32, TrackQuaternion, TrackU32, TrackVector3f,
+        InterpolationType, Layer, LayerFilterMode, LayerShaderType, LayerShadingFlag,
+        LayerSlotType, Light, LightType, Model, Node, NodeFlag, Parser as MdxParser,
+        ParticleEmitter2, SequenceFlag, TrackF32, TrackQuaternion, TrackU32, TrackVector3f,
     },
     mpq::Storage as MpqStorage,
     textures::{BlpParser, DdsParser, PixelFormat, PngParser, PngWriter, Texture, TgaParser},
@@ -268,6 +268,7 @@ pub struct MaterialManifest {
 #[derive(Debug, Clone, Serialize)]
 pub struct MaterialLayerManifest {
     pub layer_index: usize,
+    pub shader: String,
     pub filter_mode: String,
     pub texture_id: u32,
     pub alpha: f32,
@@ -1589,6 +1590,7 @@ impl Exporter {
             &source_casc_path,
             model_bytes.as_ref(),
         )?;
+        validate_classic_renderable_materials(&model, logical_path)?;
 
         // The parsed Model owns its data. Do not keep a second native buffer containing the
         // source MDX alive while textures and glTF buffers are built.
@@ -1826,14 +1828,16 @@ impl Exporter {
         model: &Model,
         replaceable_textures: &BTreeMap<u32, String>,
     ) -> Result<TextureExport, Box<dyn Error>> {
+        let relevant_texture_ids = classic_relevant_texture_ids(model);
         let mut manifests = Vec::with_capacity(model.textures_len());
         let mut gltf_indices = Vec::with_capacity(model.textures_len());
         let mut next_gltf_index = 0usize;
 
-        if model
-            .textures_iter()
-            .any(|texture| texture.replaceable_id() == 2)
-        {
+        if relevant_texture_ids.iter().any(|&texture_id| {
+            model
+                .textures(texture_id)
+                .is_some_and(|texture| texture.replaceable_id() == 2)
+        }) {
             // Replaceable ID 2 is player team glow. Export the complete modern WC3 player-colour
             // set once so runtime presentation can select the texture from the authoritative
             // PlayerId/slot instead of baking a red/blue placeholder into each converted model.
@@ -1847,9 +1851,20 @@ impl Exporter {
             }
         }
 
-        for texture in model.textures_iter() {
+        for (texture_id, texture) in model.textures_iter().enumerate() {
             let replaceable_id = texture.replaceable_id();
             let model_logical = normalize_texture_path(&texture.file_name());
+            if !relevant_texture_ids.contains(&texture_id) {
+                manifests.push(TextureManifest {
+                    source_texture: model_logical,
+                    source_casc_path: None,
+                    png: None,
+                    replaceable_id,
+                    has_transparency: false,
+                });
+                gltf_indices.push(None);
+                continue;
+            }
             let logical = if replaceable_id == 0 {
                 (!model_logical.is_empty()).then_some(model_logical.clone())
             } else {
@@ -2074,17 +2089,104 @@ fn texture_to_png(texture: &Texture) -> Result<Bytes, Box<dyn Error>> {
     Ok(bytes)
 }
 
+fn is_classic_material_layer(layer: &Layer) -> bool {
+    layer.shader() == LayerShaderType::SD
+}
+
+fn classic_relevant_texture_ids(model: &Model) -> BTreeSet<usize> {
+    let mut texture_ids = BTreeSet::new();
+    for material in model.materials_iter() {
+        for layer in material
+            .layers_iter()
+            .filter(|layer| is_classic_material_layer(layer))
+        {
+            texture_ids.insert(layer_diffuse_texture_id(&layer) as usize);
+            if let Some(diffuse) = layer
+                .sub_textures_iter()
+                .find(|sub_texture| sub_texture.slot() == LayerSlotType::DiffuseMap)
+            {
+                texture_ids.extend(diffuse.tracks().keys().iter().map(|&id| id as usize));
+            } else {
+                texture_ids.extend(
+                    layer
+                        .texture_id_tracks()
+                        .keys()
+                        .iter()
+                        .map(|&id| id as usize),
+                );
+            }
+        }
+    }
+    texture_ids.extend(
+        model
+            .particle_emitters_2_iter()
+            .map(|emitter| emitter.texture_id() as usize),
+    );
+    texture_ids
+}
+
+fn validate_classic_renderable_materials(
+    model: &Model,
+    logical_path: &str,
+) -> Result<(), Box<dyn Error>> {
+    let mut material_uses = BTreeMap::<usize, Vec<String>>::new();
+    for (geoset_index, geoset) in model.geosets_iter().enumerate() {
+        if geoset.vertex_positions().is_empty() || geoset.faces().is_empty() {
+            continue;
+        }
+        material_uses
+            .entry(geoset.material_id() as usize)
+            .or_default()
+            .push(format!("geoset {geoset_index}"));
+    }
+    for (ribbon_index, ribbon) in model.ribbon_emitters_iter().enumerate() {
+        material_uses
+            .entry(ribbon.material_id() as usize)
+            .or_default()
+            .push(format!("ribbon emitter {ribbon_index}"));
+    }
+
+    for (material_id, uses) in material_uses {
+        let material = model.materials(material_id).ok_or_else(|| {
+            io::Error::other(format!(
+                "Classic/SD model {logical_path} references missing material {material_id} from {}",
+                uses.join(", ")
+            ))
+        })?;
+        if !material
+            .layers_iter()
+            .any(|layer| is_classic_material_layer(&layer))
+        {
+            return Err(io::Error::other(format!(
+                "Classic/SD model {logical_path} has no SD layer in material {material_id} used by {}; HD/Reforged/Definitive material rendering is out of scope",
+                uses.join(", ")
+            ))
+            .into());
+        }
+    }
+    Ok(())
+}
+
 fn model_feature_manifest(model: &Model) -> ModelFeatureManifest {
+    let mut material_count = 0;
     let mut material_layer_count = 0;
     let mut multilayer_material_count = 0;
     let mut animated_material_alpha_layer_count = 0;
     let mut animated_material_texture_layer_count = 0;
     for material in model.materials_iter() {
-        material_layer_count += material.layers_len();
-        if material.layers_len() > 1 {
+        let classic_layers = material
+            .layers_iter()
+            .filter(|layer| is_classic_material_layer(layer))
+            .collect::<Vec<_>>();
+        if classic_layers.is_empty() {
+            continue;
+        }
+        material_count += 1;
+        material_layer_count += classic_layers.len();
+        if classic_layers.len() > 1 {
             multilayer_material_count += 1;
         }
-        for layer in material.layers_iter() {
+        for layer in classic_layers {
             if layer.alpha_tracks().is_used() {
                 animated_material_alpha_layer_count += 1;
             }
@@ -2251,7 +2353,7 @@ fn model_feature_manifest(model: &Model) -> ModelFeatureManifest {
     let light_count = model.lights_len();
 
     ModelFeatureManifest {
-        material_count: model.materials_len(),
+        material_count,
         material_layer_count,
         multilayer_material_count,
         animated_material_alpha_layer_count,
@@ -2480,6 +2582,7 @@ fn material_manifests(model: &Model) -> Result<Vec<MaterialManifest>, Box<dyn Er
             let layers = material
                 .layers_iter()
                 .enumerate()
+                .filter(|(_, layer)| is_classic_material_layer(layer))
                 .map(|(layer_index, layer)| {
                     let sub_textures = layer
                         .sub_textures_iter()
@@ -2493,6 +2596,7 @@ fn material_manifests(model: &Model) -> Result<Vec<MaterialManifest>, Box<dyn Er
                         .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
                     Ok(MaterialLayerManifest {
                         layer_index,
+                        shader: format!("{:?}", layer.shader()),
                         filter_mode: format!("{:?}", layer.filter_mode()),
                         texture_id: layer.texture_id(),
                         alpha: layer.alpha(),
@@ -2955,13 +3059,20 @@ fn ribbon_material_properties(
     let Some(material) = model.materials(material_id as usize) else {
         return ("Blend".to_owned(), None);
     };
-    let selected = material.layers_iter().find(|layer| {
-        texture_manifests
-            .get(layer_diffuse_texture_id(layer) as usize)
-            .and_then(|texture| texture.png.as_ref())
-            .is_some()
+    let selected = material
+        .layers_iter()
+        .filter(|layer| is_classic_material_layer(layer))
+        .find(|layer| {
+            texture_manifests
+                .get(layer_diffuse_texture_id(layer) as usize)
+                .and_then(|texture| texture.png.as_ref())
+                .is_some()
+        });
+    let layer = selected.or_else(|| {
+        material
+            .layers_iter()
+            .find(|layer| is_classic_material_layer(layer))
     });
-    let layer = selected.or_else(|| material.layers(0));
     let Some(layer) = layer else {
         return ("Blend".to_owned(), None);
     };
@@ -3001,7 +3112,10 @@ fn material_is_building_engine_plane(
         return false;
     };
     let mut saw_layer = false;
-    for layer in material.layers_iter() {
+    for layer in material
+        .layers_iter()
+        .filter(|layer| is_classic_material_layer(layer))
+    {
         saw_layer = true;
         let Some(texture) = texture_manifests.get(layer_diffuse_texture_id(&layer) as usize) else {
             return false;
@@ -3021,13 +3135,20 @@ fn material_selected_diffuse_is_background(
     let Some(material) = model.materials(material_id) else {
         return false;
     };
-    let selected = material.layers_iter().find(|layer| {
-        texture_manifests
-            .get(layer_diffuse_texture_id(layer) as usize)
-            .and_then(|texture| texture.png.as_ref())
-            .is_some()
+    let selected = material
+        .layers_iter()
+        .filter(|layer| is_classic_material_layer(layer))
+        .find(|layer| {
+            texture_manifests
+                .get(layer_diffuse_texture_id(layer) as usize)
+                .and_then(|texture| texture.png.as_ref())
+                .is_some()
+        });
+    let layer = selected.or_else(|| {
+        material
+            .layers_iter()
+            .find(|layer| is_classic_material_layer(layer))
     });
-    let layer = selected.or_else(|| material.layers(0));
     let Some(layer) = layer else {
         return false;
     };
@@ -4920,19 +5041,27 @@ fn build_materials(
     let mut uses_unlit = false;
 
     for (material_index, material) in model.materials_iter().enumerate() {
-        if material.layers_len() > 1 {
+        let classic_layer_count = material
+            .layers_iter()
+            .filter(|layer| is_classic_material_layer(layer))
+            .count();
+        if classic_layer_count > 1 {
             warnings.push(format!(
-                "material {material_index} has {} WC3 layers; glTF uses one representative layer",
-                material.layers_len()
+                "material {material_index} has {classic_layer_count} Classic/SD WC3 layers; glTF uses one representative layer"
             ));
         }
-        let selected = material.layers_iter().find(|layer| {
-            texture_indices
-                .get(layer_diffuse_texture_id(layer) as usize)
-                .and_then(|index| *index)
-                .is_some()
-        });
-        let fallback = material.layers(0);
+        let selected = material
+            .layers_iter()
+            .filter(|layer| is_classic_material_layer(layer))
+            .find(|layer| {
+                texture_indices
+                    .get(layer_diffuse_texture_id(layer) as usize)
+                    .and_then(|index| *index)
+                    .is_some()
+            });
+        let fallback = material
+            .layers_iter()
+            .find(|layer| is_classic_material_layer(layer));
         let layer = selected.or(fallback);
 
         let mut pbr = json!({
@@ -4947,6 +5076,7 @@ fn build_materials(
 
         let has_team_color_underlay = material
             .layers_iter()
+            .filter(|layer| is_classic_material_layer(layer))
             .any(|layer| layer_static_uses_replaceable(model, &layer, 1));
         let has_team_glow_layer = layer
             .as_ref()
@@ -5042,7 +5172,7 @@ fn build_materials(
                 "wc3FilterMode".into(),
                 json!(format!("{:?}", layer.filter_mode())),
             );
-            extras.insert("wc3LayerCount".into(), json!(material.layers_len()));
+            extras.insert("wc3LayerCount".into(), json!(classic_layer_count));
         }
 
         let mut value = json!({
@@ -5688,15 +5818,19 @@ fn normalize_texture_path(path: &str) -> String {
         .to_owned()
 }
 
-fn casc_asset_paths(logical_path: &str) -> [String; 3] {
-    // Warcraft III 3.x keeps some presentation payloads referenced by base-namespace models in
-    // layered CASC mods. Probe the base namespace first so classic assets retain their historical
-    // source, then the DE/HD presentation layers used by current models and texture flipbooks.
-    [
-        format!("war3.w3mod:{logical_path}"),
-        format!("war3.w3mod:_de.w3mod:{logical_path}"),
-        format!("war3.w3mod:_hd.w3mod:{logical_path}"),
-    ]
+fn casc_asset_paths(logical_path: &str) -> [String; 1] {
+    // Castle Fight Native currently targets Classic/SD Warcraft III presentation only. Modern
+    // installs also contain DE/HD presentation mods, but those are a separate rendering target
+    // and must never be used as transparent fallbacks for missing Classic assets.
+    [format!("war3.w3mod:{logical_path}")]
+}
+
+fn is_classic_sound_casc_asset_path(path: &str) -> bool {
+    let path = path.to_ascii_lowercase();
+    let Some(logical_path) = path.strip_prefix("war3.w3mod:") else {
+        return false;
+    };
+    !logical_path.contains(".w3mod:") || logical_path.starts_with("_locales\\")
 }
 
 fn sound_file_name(path: &str) -> &str {
@@ -5741,7 +5875,7 @@ fn is_audio_file(path: &str) -> bool {
 fn build_sound_file_index(paths: Vec<String>) -> BTreeMap<String, Vec<String>> {
     let mut index = BTreeMap::<String, Vec<String>>::new();
     for path in paths {
-        if !is_audio_file(&path) {
+        if !is_classic_sound_casc_asset_path(&path) || !is_audio_file(&path) {
             continue;
         }
         if let Some(key) = sound_path_index_key(&path) {
@@ -5752,39 +5886,16 @@ fn build_sound_file_index(paths: Vec<String>) -> BTreeMap<String, Vec<String>> {
         }
     }
     for candidates in index.values_mut() {
-        candidates.sort_by(|left, right| {
-            sound_namespace_rank(left)
-                .cmp(&sound_namespace_rank(right))
-                .then_with(|| left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()))
-        });
+        candidates.sort_by_key(|path| path.to_ascii_lowercase());
         candidates.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
     }
     index
 }
 
-fn sound_namespace_rank(path: &str) -> u8 {
-    let path = path.to_ascii_lowercase();
-    if path.starts_with("war3.w3mod:_de.w3mod:") {
-        1
-    } else if path.starts_with("war3.w3mod:_hd.w3mod:") {
-        2
-    } else if path.starts_with("war3.w3mod:") {
-        0
-    } else {
-        3
-    }
-}
-
 fn select_sound_candidate(candidates: &[String]) -> Option<String> {
-    let first = candidates.first()?;
-    let rank = sound_namespace_rank(first);
-    let mut same_rank = candidates
-        .iter()
-        .filter(|candidate| sound_namespace_rank(candidate) == rank);
-    let selected = same_rank.next()?;
-    if same_rank.next().is_some() {
+    let [selected] = candidates else {
         return None;
-    }
+    };
     Some(selected.clone())
 }
 
@@ -5855,24 +5966,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn casc_asset_paths_probe_base_then_presentation_layers() {
+    fn casc_asset_paths_are_classic_only() {
         assert_eq!(
             casc_asset_paths(r"Textures\Water\Foam.dds"),
-            [
-                r"war3.w3mod:Textures\Water\Foam.dds".to_owned(),
-                r"war3.w3mod:_de.w3mod:Textures\Water\Foam.dds".to_owned(),
-                r"war3.w3mod:_hd.w3mod:Textures\Water\Foam.dds".to_owned(),
-            ]
+            [r"war3.w3mod:Textures\Water\Foam.dds".to_owned()]
         );
     }
 
     #[test]
-    fn legacy_sound_lookup_prefers_base_namespace_and_trailing_one_fallback() {
+    fn legacy_sound_lookup_ignores_modern_presentation_namespaces() {
+        let index = build_sound_file_index(vec![
+            r"war3.w3mod:_hd.w3mod:units\nightelf\archer\archerdeath1_hd.flac".to_owned(),
+            r"war3.w3mod:_de.w3mod:units\nightelf\archer\archerdeath1.flac".to_owned(),
+            r"war3.w3mod:_teen.w3mod:units\nightelf\archer\archerdeath1.flac".to_owned(),
+        ]);
+        assert!(select_legacy_sound_path("ArcherDeath1", &index).is_none());
+    }
+
+    #[test]
+    fn legacy_sound_lookup_uses_classic_namespace_and_trailing_one_fallback() {
         let index = build_sound_file_index(vec![
             r"war3.w3mod:_hd.w3mod:units\nightelf\archer\archerdeath1_hd.flac".to_owned(),
             r"war3.w3mod:_de.w3mod:units\nightelf\archer\archerdeath1.flac".to_owned(),
             r"war3.w3mod:units\nightelf\archer\archerdeath1.ogg".to_owned(),
             r"war3.w3mod:units\human\footman\footmandeath.ogg".to_owned(),
+            r"war3.w3mod:_locales\enus.w3mod:units\human\gyrocopter\gyrocopterdeath1.ogg"
+                .to_owned(),
         ]);
         assert_eq!(
             select_legacy_sound_path("ArcherDeath1", &index).as_deref(),
@@ -5885,6 +6004,11 @@ mod tests {
         assert_eq!(
             select_legacy_sound_path(r"Units\NightElf\Archer\ArcherDeath1.flac", &index).as_deref(),
             Some(r"war3.w3mod:units\nightelf\archer\archerdeath1.ogg")
+        );
+        assert_eq!(
+            select_legacy_sound_path(r"Units\Human\Gyrocopter\GyrocopterDeath1.flac", &index)
+                .as_deref(),
+            Some(r"war3.w3mod:_locales\enus.w3mod:units\human\gyrocopter\gyrocopterdeath1.ogg")
         );
     }
 
@@ -6076,7 +6200,7 @@ mod tests {
         model.resize_materials(1);
         {
             let mut material = model.materials_mut(0).expect("material");
-            material.resize_layers(2);
+            material.resize_layers(3);
             material
                 .layers_mut(0)
                 .expect("alpha layer")
@@ -6087,6 +6211,12 @@ mod tests {
                 .expect("texture layer")
                 .texture_id_tracks_mut()
                 .set_is_used(true);
+            {
+                let mut hd = material.layers_mut(2).expect("out-of-scope HD layer");
+                hd.set_shader(LayerShaderType::HD);
+                hd.alpha_tracks_mut().set_is_used(true);
+                hd.texture_id_tracks_mut().set_is_used(true);
+            }
         }
 
         model.resize_geoset_animations(1);
@@ -6254,7 +6384,71 @@ mod tests {
     }
 
     #[test]
-    fn reforged_subtextures_resolve_diffuse_and_team_color_slots() {
+    fn classic_texture_inventory_ignores_hd_layers_but_keeps_particle_textures() {
+        let mut model = Model::new();
+        model.resize_textures(3);
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(2);
+            material.layers_mut(0).expect("SD layer").set_texture_id(0);
+            {
+                let mut hd = material.layers_mut(1).expect("HD layer");
+                hd.set_shader(LayerShaderType::HD);
+                hd.set_texture_id(1);
+            }
+        }
+        model.resize_particle_emitters_2(1);
+        model
+            .particle_emitters_2_mut(0)
+            .expect("particle emitter")
+            .set_texture_id(2);
+
+        assert_eq!(classic_relevant_texture_ids(&model), BTreeSet::from([0, 2]));
+    }
+
+    #[test]
+    fn classic_material_validation_rejects_hd_only_visible_materials() {
+        let mut model = Model::new();
+        model.resize_materials(1);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(1);
+            material
+                .layers_mut(0)
+                .expect("HD layer")
+                .set_shader(LayerShaderType::HD);
+        }
+        model.resize_geosets(1);
+        {
+            let mut geoset = model.geosets_mut(0).expect("geoset");
+            geoset.set_vertex_positions(&[
+                whiteout::math::Vector3f::default(),
+                whiteout::math::Vector3f::default(),
+                whiteout::math::Vector3f::default(),
+            ]);
+            geoset.set_faces(&[0, 1, 2]);
+            geoset.set_material_id(0);
+        }
+
+        let error = validate_classic_renderable_materials(&model, "HDOnly.mdx")
+            .expect_err("HD-only geoset material must not enter the Classic pipeline")
+            .to_string();
+        assert!(error.contains("no SD layer"));
+        assert!(error.contains("HD/Reforged/Definitive"));
+
+        model
+            .materials_mut(0)
+            .expect("material")
+            .layers_mut(0)
+            .expect("layer")
+            .set_shader(LayerShaderType::SD);
+        validate_classic_renderable_materials(&model, "Classic.mdx")
+            .expect("SD geoset material should be accepted");
+    }
+
+    #[test]
+    fn layered_subtextures_resolve_diffuse_and_team_color_slots() {
         let mut model = Model::new();
         model.resize_textures(3);
         model
@@ -6900,7 +7094,7 @@ mod tests {
     }
 
     #[test]
-    fn wc3_3_hd_skin_preserves_joint_indices_above_255() {
+    fn wide_skin_data_preserves_joint_indices_above_255() {
         let mut geoset = whiteout::mdx::Geoset::new();
         geoset.set_vertex_positions(&[whiteout::math::Vector3f::default()]);
         geoset.set_skin_data(&[300, 0, 0, 0, 255, 0, 0, 0]);
@@ -6912,7 +7106,7 @@ mod tests {
 
         let skin = build_geoset_skin(&geoset, &skeleton)
             .unwrap()
-            .expect("v1400+ HD geoset should preserve 16-bit joint indices");
+            .expect("wide skin data should preserve 16-bit joint indices");
         assert_eq!(skin.joints_0[0], [300, 0, 0, 0]);
         assert_eq!(skin.weights_0[0], [1.0, 0.0, 0.0, 0.0]);
     }
