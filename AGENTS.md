@@ -6,6 +6,7 @@
 - Always commit completed work automatically in logical, reviewable chunks with clear commit messages.
 - Keep commits narrowly scoped; do not mix unrelated refactors, formatting, and behavior changes unless they are inseparable.
 - Preserve and update the specifications under `docs/spec` when implementation decisions change normative behavior.
+- When implementing or auditing a Warcraft III-derived unit/building, use `docs/verification/unit-implementation-checklist.md` as the per-entity fidelity checklist. Reconcile resolved object data with map-script control flow, including hidden/proxy abilities, trigger vs effect target semantics, timing, AI behavior, authoritative delayed state, and negative-case tests; do not implement from tooltips alone.
 - When using Devspace worktrees, remove a completed worktree after merging its changes instead of leaving it on disk.
 
 ## Rust expectations
