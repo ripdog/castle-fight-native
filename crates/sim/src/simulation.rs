@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 9;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 10;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -2224,9 +2224,16 @@ impl Simulation {
                         return None;
                     };
                     if profile.suspend_during_spell_cooldown
-                        && unit.ability_state.is_some_and(|state| {
-                            state.cast_sequence > 0 && state.ready_tick > self.next_tick
-                        })
+                        && unit.status.warlock_retreat_end_tick > 0
+                        && self.next_tick
+                            < unit
+                                .status
+                                .warlock_retreat_end_tick
+                                .checked_add(
+                                    u64::try_from(66 * CASTLE_FIGHT_SIMULATION_HZ / 10)
+                                        .expect("simulation Hz must be positive"),
+                                )
+                                .expect("Warlock aura recovery tick overflow")
                     {
                         return None;
                     }
@@ -2693,6 +2700,7 @@ impl Simulation {
                     let movement_class = *entity_ref
                         .get::<MovementClass>()
                         .expect("unit movement class missing");
+                    let mechanical = entity_ref.get::<MechanicalUnit>().is_some();
                     let attack_targets = *entity_ref
                         .get::<AttackTargetMask>()
                         .expect("unit attack target mask missing");
@@ -2735,6 +2743,7 @@ impl Simulation {
                             .map_or(default_collision_radius, |radius| radius.0),
                         collision_radius_override: collision_radius.map(|radius| radius.0),
                         movement_class,
+                        mechanical,
                         attack_targets,
                         secondary_attack,
                         damage_type,
@@ -2851,6 +2860,7 @@ struct UnitSnapshot {
     collision_radius: i32,
     collision_radius_override: Option<i32>,
     movement_class: MovementClass,
+    mechanical: bool,
     attack_targets: AttackTargetMask,
     secondary_attack: Option<SecondaryAttackProfile>,
     damage_type: DamageType,
@@ -3513,13 +3523,22 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             permanent_max_health_bonus,
             resurrection_count,
             resurrection_radius,
+            resurrection_mana_cost,
+            resurrection_cooldown_ticks,
+            resurrection_delay_ticks,
             modifier: _,
         } => {
             assert!(healing >= 0);
             assert!(armor_bonus_per_100 >= 0);
             assert!(duration_ticks > 0);
             assert!(permanent_max_health_bonus >= 0);
-            assert!(resurrection_count == 0 || resurrection_radius > 0);
+            assert!(
+                resurrection_count == 0
+                    || (resurrection_radius > 0
+                        && resurrection_mana_cost > 0
+                        && resurrection_cooldown_ticks > 0
+                        && resurrection_delay_ticks > 0)
+            );
             assert_eq!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::WoundedFriendlyUnit

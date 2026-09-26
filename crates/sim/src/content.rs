@@ -876,6 +876,9 @@ impl CastleFightUnitKind {
                         permanent_max_health_bonus: 0,
                         resurrection_count: 0,
                         resurrection_radius: 0,
+                        resurrection_mana_cost: 0,
+                        resurrection_cooldown_ticks: 0,
+                        resurrection_delay_ticks: 0,
                     },
                 },
             ),
@@ -900,6 +903,9 @@ impl CastleFightUnitKind {
                         permanent_max_health_bonus: 100,
                         resurrection_count: 1,
                         resurrection_radius: world(900),
+                        resurrection_mana_cost: 70,
+                        resurrection_cooldown_ticks: 40 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                        resurrection_delay_ticks: CASTLE_FIGHT_SIMULATION_HZ as u16,
                     },
                 },
             ),
@@ -943,7 +949,7 @@ impl CastleFightUnitKind {
                     effect: AbilityEffect::AreaDamage {
                         amount: 270,
                         radius: world(370),
-                        origin: AreaDamageOrigin::Caster,
+                        origin: AreaDamageOrigin::Target,
                     },
                 },
             ),
@@ -2343,6 +2349,9 @@ fn hash_optional_spellcasting(hash: &mut ContentHash64, spellcasting: Option<Spe
             permanent_max_health_bonus,
             resurrection_count,
             resurrection_radius,
+            resurrection_mana_cost,
+            resurrection_cooldown_ticks,
+            resurrection_delay_ticks,
         } => {
             hash.write_u32(modifier.0);
             hash.write_i32(healing);
@@ -2352,6 +2361,9 @@ fn hash_optional_spellcasting(hash: &mut ContentHash64, spellcasting: Option<Spe
             hash.write_i32(permanent_max_health_bonus);
             hash.write_u8(resurrection_count);
             hash.write_i32(resurrection_radius);
+            hash.write_i32(resurrection_mana_cost);
+            hash.write_u16(resurrection_cooldown_ticks);
+            hash.write_u16(resurrection_delay_ticks);
         }
         AbilityEffect::Prayer {
             modifier,
@@ -4265,7 +4277,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 13953548431698480665);
+        assert_eq!(bundle.identity.gameplay_hash, 10983885818666937429);
         assert_eq!(bundle.behaviors().len(), 41);
         assert!(
             bundle

@@ -83,6 +83,9 @@ pub(super) fn apply_ability_effect_to_unit(
             permanent_max_health_bonus,
             resurrection_count: _,
             resurrection_radius: _,
+            resurrection_mana_cost: _,
+            resurrection_cooldown_ticks: _,
+            resurrection_delay_ticks: _,
         } => {
             if permanent_max_health_bonus > 0 && !target.status.permanent_holy_health_bonus {
                 target.status.permanent_holy_health_bonus = true;

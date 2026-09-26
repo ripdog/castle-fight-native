@@ -845,6 +845,9 @@ pub enum AbilityEffect {
         permanent_max_health_bonus: i32,
         resurrection_count: u8,
         resurrection_radius: i32,
+        resurrection_mana_cost: i32,
+        resurrection_cooldown_ticks: u16,
+        resurrection_delay_ticks: u16,
     },
     Prayer {
         modifier: ModifierId,
@@ -1003,6 +1006,8 @@ pub struct StatusState {
     pub stunned_until_tick: u64,
     pub warlock_retreat_start_tick: u64,
     pub warlock_retreat_end_tick: u64,
+    pub paladin_resurrection_due_tick: u64,
+    pub paladin_resurrection_ready_tick: u64,
     pub permanent_holy_health_bonus: bool,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
     pub movement_modifier_count: u8,

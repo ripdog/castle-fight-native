@@ -7,6 +7,7 @@ impl Simulation {
         units: &mut [UnitSnapshot],
         grid: &SpatialGrid,
     ) -> AbilityMetrics {
+        let delayed_effects = self.resolve_delayed_human_support_effects(units);
         let building_evaluations: Vec<_> = self.pool.install(|| {
             buildings
                 .par_iter()
@@ -69,6 +70,7 @@ impl Simulation {
                 .chain(&unit_evaluations)
                 .map(|evaluation| evaluation.candidate_checks)
                 .sum(),
+            effects: delayed_effects,
             ..AbilityMetrics::default()
         };
         let mut intents: Vec<_> = building_evaluations
@@ -163,6 +165,18 @@ impl Simulation {
                 AbilitySourceIndex::Unit(index) => {
                     units[index].mana_current = Some(remaining_mana);
                     units[index].ability_state = Some(state);
+                    if let AbilityEffect::HolyAid {
+                        resurrection_count,
+                        resurrection_delay_ticks,
+                        ..
+                    } = intent.ability.effect
+                        && resurrection_count > 0
+                    {
+                        units[index].status.paladin_resurrection_due_tick = self
+                            .next_tick
+                            .checked_add(u64::from(resurrection_delay_ticks))
+                            .expect("Paladin resurrection delay overflow");
+                    }
                     if intent.ability.id == AbilityId(u32::from_be_bytes(*b"A00K")) {
                         let retreat_start = self
                             .next_tick
@@ -241,11 +255,14 @@ impl Simulation {
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
                     if let AbilityEffect::Prayer { radius, .. } = intent.ability.effect {
-                        let center = units[index].position;
+                        let AbilitySourceOrigin::Unit(center) = source.origin else {
+                            unreachable!("Prayer must originate from a unit")
+                        };
                         let radius_sq = square_i32(radius);
                         for target in units.iter_mut() {
                             if target.health <= 0
                                 || target.team != source.team
+                                || target.mechanical
                                 || center.distance_sq(target.position) > radius_sq
                             {
                                 continue;
@@ -435,22 +452,11 @@ impl Simulation {
                 }
             }
             let resurrection = match intent.ability.effect {
-                AbilityEffect::HolyAid {
-                    resurrection_count,
-                    resurrection_radius,
-                    ..
-                } => Some((resurrection_count, resurrection_radius, source.origin)),
                 AbilityEffect::Prayer {
                     resurrection_count,
                     resurrection_radius,
                     ..
-                } => target_position.map(|position| {
-                    (
-                        resurrection_count,
-                        resurrection_radius,
-                        AbilitySourceOrigin::Unit(position),
-                    )
-                }),
+                } => Some((resurrection_count, resurrection_radius, source.origin)),
                 _ => None,
             };
             if let Some((count, radius, origin)) = resurrection {
@@ -468,6 +474,64 @@ impl Simulation {
         }
 
         metrics
+    }
+
+    fn resolve_delayed_human_support_effects(&mut self, units: &mut [UnitSnapshot]) -> usize {
+        let mut effects = 0usize;
+        for unit in units.iter_mut() {
+            let due_tick = unit.status.paladin_resurrection_due_tick;
+            if due_tick == 0 || due_tick > self.next_tick {
+                continue;
+            }
+            unit.status.paladin_resurrection_due_tick = 0;
+
+            let Some(spellcasting) = unit.spellcasting else {
+                continue;
+            };
+            let AbilityEffect::HolyAid {
+                resurrection_count,
+                resurrection_radius,
+                resurrection_mana_cost,
+                resurrection_cooldown_ticks,
+                ..
+            } = spellcasting.ability.effect
+            else {
+                continue;
+            };
+            if resurrection_count == 0
+                || unit.health <= 0
+                || unit.status.paladin_resurrection_ready_tick > self.next_tick
+                || unit
+                    .mana_current
+                    .is_none_or(|mana| mana < resurrection_mana_cost)
+            {
+                continue;
+            }
+
+            let revived = self.resurrect_friendly_corpses(
+                unit.team,
+                AbilitySourceOrigin::Unit(unit.position),
+                resurrection_radius,
+                resurrection_count,
+            );
+            if revived == 0 {
+                continue;
+            }
+
+            let mana = unit
+                .mana_current
+                .as_mut()
+                .expect("validated Paladin resurrection mana");
+            *mana = mana
+                .checked_sub(resurrection_mana_cost)
+                .expect("validated Paladin resurrection mana cost");
+            unit.status.paladin_resurrection_ready_tick = self
+                .next_tick
+                .checked_add(u64::from(resurrection_cooldown_ticks))
+                .expect("Paladin resurrection cooldown overflow");
+            effects += revived;
+        }
+        effects
     }
 
     fn resurrect_friendly_corpses(
@@ -805,6 +869,8 @@ impl Simulation {
                 (candidate.health > 0
                     && candidate.health < candidate.health_max
                     && candidate.team == source.team
+                    && !candidate.mechanical
+                    && candidate.movement_class == MovementClass::Ground
                     && self.ability_source_distance_sq(source.origin, candidate.position)
                         <= range_sq)
                     .then_some((candidate.health, candidate.id, index))
@@ -902,6 +968,8 @@ impl Simulation {
                         AbilityTargetPolicy::WoundedFriendlyUnit => {
                             target.team == source.team
                                 && target.health < target.health_max
+                                && !target.mechanical
+                                && target.movement_class == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }

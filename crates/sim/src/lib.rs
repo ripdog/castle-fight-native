@@ -1519,10 +1519,26 @@ mod tests {
         while sim.tick() < 357 {
             assert_eq!(sim.step().ability_casts, 0);
         }
+        let brilliance_id = ModifierId(u32::from_be_bytes(*b"A00F"));
+        let has_brilliance = |status: StatusState| {
+            status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                .iter()
+                .any(|modifier| modifier.id == brilliance_id)
+        };
+        assert!(
+            !has_brilliance(sim.unit(caster).unwrap().status),
+            "Warlock Brilliance must remain removed through the scripted 11.9s recovery"
+        );
+        assert_eq!(sim.step().ability_casts, 0);
+        assert!(
+            has_brilliance(sim.unit(caster).unwrap().status),
+            "Warlock Brilliance must return at the 11.9s script point, before Chamber is ready at 12s"
+        );
+
         let recovery_position = sim.unit(caster).unwrap().position;
         let mut resumed_advancing = false;
         let mut second_cast_tick = None;
-        for _ in 0..600 {
+        for _ in 0..599 {
             let report = sim.step();
             resumed_advancing |= sim.unit(caster).unwrap().position.x > recovery_position.x;
             if report.ability_casts > 0 {
@@ -1541,7 +1557,7 @@ mod tests {
     }
 
     #[test]
-    fn area_damage_uses_caster_position_and_melee_trigger_range() {
+    fn warlock_frost_nova_uses_selected_target_position_and_melee_trigger_range() {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(
             SimulationConfig {
@@ -1573,11 +1589,166 @@ mod tests {
         assert_eq!(sim.ability_casts_last_tick()[0].source, caster);
         assert_eq!(
             sim.ability_casts_last_tick()[0].target_position,
-            Some(SimPoint::new(400 * world, 0))
+            Some(SimPoint::new(490 * world, 0))
         );
         assert_eq!(sim.unit(trigger).unwrap().health, 730);
-        assert_eq!(sim.unit(behind).unwrap().health, 730);
-        assert_eq!(sim.unit(beyond_caster).unwrap().health, 1_000);
+        assert_eq!(sim.unit(behind).unwrap().health, 1_000);
+        assert_eq!(sim.unit(beyond_caster).unwrap().health, 730);
+    }
+
+    #[test]
+    fn human_support_spells_use_ground_trigger_and_caster_centered_organic_prayer() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_min: NavCell::new(-1_000, -64),
+                navigation_max: NavCell::new(1_000, 64),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let warrior = CastleFightUnitKind::HolyWarrior.definition();
+        let caster =
+            sim.spawn_resolved_unit(Team(0), SimPoint::new(500 * world, 0), warrior.resolved());
+
+        let passive = |x, health| UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(x * world, 0),
+            health,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let trigger = sim.spawn_unit(passive(750, 100));
+        let rear_ally = sim.spawn_unit(passive(100, 200));
+        let mechanical = sim.spawn_unit_with_properties(
+            passive(200, 50),
+            UnitGameplayProperties {
+                mechanical: true,
+                build_time_ticks: Some(30),
+                repair_time_ticks: Some(30),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let air_ally = sim.spawn_unit_with_properties(
+            passive(600, 25),
+            UnitGameplayProperties {
+                movement_class: MovementClass::Air,
+                ..UnitGameplayProperties::default()
+            },
+        );
+
+        assert_eq!(sim.debug_damage_all_units(1), 5);
+        assert_eq!(sim.step().ability_casts, 1);
+        let cast = sim.ability_casts_last_tick()[0];
+        assert_eq!(cast.source, caster);
+        assert_eq!(cast.ability, AbilityId(u32::from_be_bytes(*b"A0I0")));
+        assert_eq!(cast.target, AbilityCastTarget::Unit(trigger));
+
+        assert_eq!(sim.unit(trigger).unwrap().health, 100);
+        assert_eq!(
+            sim.unit(air_ally).unwrap().health,
+            25,
+            "air allies cannot trigger Prayer but are valid organic carrier targets"
+        );
+        assert_eq!(sim.unit(rear_ally).unwrap().health, 200);
+        assert!(
+            sim.unit(rear_ally).unwrap().status.armor_modifier_count > 0,
+            "Prayer must use the caster-centered 450-unit carrier area"
+        );
+        assert_eq!(sim.unit(mechanical).unwrap().health, 49);
+        let mechanical_status = sim.unit(mechanical).unwrap().status;
+        assert!(
+            !mechanical_status.armor_modifiers
+                [..usize::from(mechanical_status.armor_modifier_count)]
+                .iter()
+                .any(|modifier| modifier.id == ModifierId(u32::from_be_bytes(*b"A0I2"))),
+            "Prayer carrier targets organic allies only"
+        );
+    }
+
+    #[test]
+    fn paladin_resurrection_uses_delayed_separate_mana_and_cooldown() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_min: NavCell::new(-1_000, -64),
+                navigation_max: NavCell::new(1_000, 64),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let footman = CastleFightUnitKind::Footman.definition();
+        sim.spawn_resolved_unit(Team(0), SimPoint::new(650 * world, 0), footman.resolved());
+        assert_eq!(sim.debug_damage_all_units(99_999), 1);
+        assert_eq!(sim.corpses().len(), 1);
+
+        let paladin = CastleFightUnitKind::Paladin.definition();
+        let mut paladin_spellcasting = paladin.spellcasting.unwrap();
+        paladin_spellcasting.mana.starting = 140;
+        let caster = sim.spawn_unit_with_properties_and_spellcasting(
+            UnitSpawn::from_template(Team(0), SimPoint::new(500 * world, 0), paladin.template()),
+            paladin.gameplay_properties(),
+            paladin_spellcasting,
+        );
+
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(600 * world, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        assert_eq!(sim.debug_damage_all_units(1), 2);
+
+        let cast_tick = sim.tick();
+        assert_eq!(sim.step().ability_casts, 1);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].ability,
+            AbilityId(u32::from_be_bytes(*b"A03K"))
+        );
+        assert!(matches!(
+            sim.ability_casts_last_tick()[0].target,
+            AbilityCastTarget::Unit(_)
+        ));
+        assert_eq!(sim.corpses().len(), 1, "Resurrection is delayed by 1s");
+
+        let due_tick = sim
+            .unit(caster)
+            .unwrap()
+            .status
+            .paladin_resurrection_due_tick;
+        assert_eq!(due_tick, cast_tick + CASTLE_FIGHT_SIMULATION_HZ as u64);
+        while sim.tick() < due_tick {
+            sim.step();
+            assert_eq!(sim.corpses().len(), 1);
+        }
+        sim.step();
+        assert!(
+            sim.corpses().is_empty(),
+            "Paladin must raise one eligible corpse after the scripted precheck delay"
+        );
+
+        let state = sim.unit(caster).unwrap();
+        assert_eq!(
+            state.status.paladin_resurrection_ready_tick,
+            due_tick + 40 * CASTLE_FIGHT_SIMULATION_HZ as u64
+        );
+        assert!(
+            state.mana_current.unwrap() < 10,
+            "A03H must spend its separate 70 mana after the 66-mana Blessing"
+        );
     }
 
     #[test]

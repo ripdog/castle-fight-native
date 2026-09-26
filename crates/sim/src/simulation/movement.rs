@@ -200,15 +200,10 @@ impl Simulation {
                 let approach_range = unit
                     .spellcasting
                     .filter(|profile| {
-                        matches!(
-                            profile.ability.effect,
-                            AbilityEffect::AreaDamage {
-                                origin: AreaDamageOrigin::Caster,
-                                ..
-                            }
-                        ) && unit
-                            .mana_current
-                            .is_some_and(|mana| mana >= profile.ability.mana_cost)
+                        profile.ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
+                            && unit
+                                .mana_current
+                                .is_some_and(|mana| mana >= profile.ability.mana_cost)
                             && unit
                                 .ability_state
                                 .is_some_and(|state| state.ready_tick <= self.next_tick)

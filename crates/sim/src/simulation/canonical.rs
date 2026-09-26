@@ -1025,6 +1025,8 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
     hash.write_u64(status.warlock_retreat_start_tick);
     hash.write_u64(status.warlock_retreat_end_tick);
+    hash.write_u64(status.paladin_resurrection_due_tick);
+    hash.write_u64(status.paladin_resurrection_ready_tick);
     hash.write_u8(u8::from(status.permanent_holy_health_bonus));
     hash.write_u8(status.movement_modifier_count);
     let count = usize::from(status.movement_modifier_count);
@@ -1366,6 +1368,9 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             permanent_max_health_bonus,
             resurrection_count,
             resurrection_radius,
+            resurrection_mana_cost,
+            resurrection_cooldown_ticks,
+            resurrection_delay_ticks,
         } => {
             hash.write_u64(u64::from(modifier.0));
             hash.write_i32(healing);
@@ -1375,6 +1380,9 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(permanent_max_health_bonus);
             hash.write_u8(resurrection_count);
             hash.write_i32(resurrection_radius);
+            hash.write_i32(resurrection_mana_cost);
+            hash.write_u16(resurrection_cooldown_ticks);
+            hash.write_u16(resurrection_delay_ticks);
         }
         AbilityEffect::Prayer {
             modifier,
