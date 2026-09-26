@@ -14,7 +14,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 4;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 5;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -596,6 +596,13 @@ pub enum WirePlayerCommand {
         building: u64,
         target: u64,
     },
+    CastBuildingSpell {
+        building: u64,
+    },
+    SetBuildingSpellAutocast {
+        building: u64,
+        enabled: bool,
+    },
 }
 
 impl From<PlayerCommand> for WirePlayerCommand {
@@ -658,6 +665,15 @@ impl From<PlayerCommand> for WirePlayerCommand {
                 building: building.0,
                 target: target.0,
             },
+            PlayerCommand::CastBuildingSpell { building } => Self::CastBuildingSpell {
+                building: building.0,
+            },
+            PlayerCommand::SetBuildingSpellAutocast { building, enabled } => {
+                Self::SetBuildingSpellAutocast {
+                    building: building.0,
+                    enabled,
+                }
+            }
         }
     }
 }
@@ -724,6 +740,15 @@ impl From<WirePlayerCommand> for PlayerCommand {
                 Self::AttackWithBuilding {
                     building: SimId(building),
                     target: SimId(target),
+                }
+            }
+            WirePlayerCommand::CastBuildingSpell { building } => Self::CastBuildingSpell {
+                building: SimId(building),
+            },
+            WirePlayerCommand::SetBuildingSpellAutocast { building, enabled } => {
+                Self::SetBuildingSpellAutocast {
+                    building: SimId(building),
+                    enabled,
                 }
             }
         }
@@ -1166,6 +1191,9 @@ pub enum WireBuildingCommandError {
     NotAuthorized,
     SourceCannotAttack,
     SourceCannotProduce,
+    SourceCannotCast,
+    InsufficientMana,
+    AbilityOnCooldown,
     ProductionQueueEmpty,
     ProductionQueueFull,
     TargetNotFound,
@@ -1181,6 +1209,9 @@ impl From<BuildingCommandError> for WireBuildingCommandError {
             BuildingCommandError::NotAuthorized => Self::NotAuthorized,
             BuildingCommandError::SourceCannotAttack => Self::SourceCannotAttack,
             BuildingCommandError::SourceCannotProduce => Self::SourceCannotProduce,
+            BuildingCommandError::SourceCannotCast => Self::SourceCannotCast,
+            BuildingCommandError::InsufficientMana => Self::InsufficientMana,
+            BuildingCommandError::AbilityOnCooldown => Self::AbilityOnCooldown,
             BuildingCommandError::ProductionQueueEmpty => Self::ProductionQueueEmpty,
             BuildingCommandError::ProductionQueueFull => Self::ProductionQueueFull,
             BuildingCommandError::TargetNotFound => Self::TargetNotFound,
@@ -1398,6 +1429,11 @@ mod tests {
             PlayerCommand::AttackWithBuilding {
                 building: SimId(9),
                 target: SimId(10),
+            },
+            PlayerCommand::CastBuildingSpell { building: SimId(9) },
+            PlayerCommand::SetBuildingSpellAutocast {
+                building: SimId(9),
+                enabled: false,
             },
         ];
         for command in commands {

@@ -1510,6 +1510,8 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
         PlayerCommand::CancelProductionUnit { .. } => "Cancel training",
         PlayerCommand::UpgradeBuilding { .. } => "Upgrade",
         PlayerCommand::AttackWithBuilding { .. } => "Attack",
+        PlayerCommand::CastBuildingSpell { .. } => "Cast spell",
+        PlayerCommand::SetBuildingSpellAutocast { .. } => "Spell autocast",
     };
     match execution.outcome {
         CommandOutcome::Executed(CommandExecutionResult::BuilderBlinkedTo(position)) => format!(

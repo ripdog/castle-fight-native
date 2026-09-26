@@ -305,6 +305,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         .expect("spellcasting unit missing ability state");
                     hash.write_u64(state.ready_tick);
                     hash.write_u64(state.cast_sequence);
+                    hash.write_u8(u8::from(state.autocast_enabled));
+                    hash.write_u8(u8::from(state.manual_cast_requested));
                 } else {
                     hash.write_u8(0);
                 }
@@ -515,6 +517,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         .expect("spellcasting building missing ability state");
                     hash.write_u64(state.ready_tick);
                     hash.write_u64(state.cast_sequence);
+                    hash.write_u8(u8::from(state.autocast_enabled));
+                    hash.write_u8(u8::from(state.manual_cast_requested));
                 } else {
                     hash.write_u8(0);
                 }
@@ -1003,6 +1007,8 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
             hash.write_u8(1);
             hash.write_u64(state.ready_tick);
             hash.write_u64(state.cast_sequence);
+            hash.write_u8(u8::from(state.autocast_enabled));
+            hash.write_u8(u8::from(state.manual_cast_requested));
         }
         None => hash.write_u8(0),
     }
@@ -1324,9 +1330,17 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(i32::from(percent_delta));
             hash.write_u16(duration_ticks);
         }
-        AbilityEffect::AreaDamage { amount, radius } => {
+        AbilityEffect::AreaDamage {
+            amount,
+            radius,
+            origin,
+        } => {
             hash.write_i32(amount);
             hash.write_i32(radius);
+            hash.write_u8(match origin {
+                AreaDamageOrigin::Caster => 0,
+                AreaDamageOrigin::Target => 1,
+            });
         }
         AbilityEffect::FrostArmor {
             modifier,

@@ -2004,14 +2004,19 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
                         .div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
                 )
             });
+        let mana = match (building.mana_current, building.mana_maximum) {
+            (Some(current), Some(maximum)) => format!("\nMana: {current} / {maximum}"),
+            _ => String::new(),
+        };
         return format!(
-            "{}\nHealth: {} / {}{}{}{}",
+            "{}\nHealth: {} / {}{}{}{}{}",
             building.owner.map_or_else(
                 || "Neutral".to_owned(),
                 |owner| format!("Player {}", owner.0 + 1)
             ),
             building.health,
             building.health_max,
+            mana,
             training_mana,
             status,
             stun
@@ -2732,6 +2737,12 @@ fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
     if let (Some(current), Some(maximum)) = (building.mana_current, building.mana_maximum) {
         lines.push(format!("Mana: {current}/{maximum}"));
     }
+    if let Some(enabled) = building.ability_autocast_enabled {
+        lines.push(format!(
+            "Spell autocast: {}",
+            if enabled { "On" } else { "Off" }
+        ));
+    }
     if let Some(ready_tick) = building.ability_ready_tick {
         lines.push(format!(
             "Ability ready: {} ticks",
@@ -3310,6 +3321,7 @@ mod tests {
                 mana_current: None,
                 mana_maximum: None,
                 ability_ready_tick: None,
+                ability_autocast_enabled: None,
                 stunned_until_tick: None,
                 visual_kind: BuildingVisualKind::Production,
             },

@@ -70,6 +70,13 @@ pub enum PlayerCommand {
         building: SimId,
         target: SimId,
     },
+    CastBuildingSpell {
+        building: SimId,
+    },
+    SetBuildingSpellAutocast {
+        building: SimId,
+        enabled: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,7 +179,9 @@ pub fn admit_player_command(
         PlayerCommand::CancelBuildingConstruction { building }
         | PlayerCommand::QueueProductionUnit { building }
         | PlayerCommand::CancelProductionUnit { building }
-        | PlayerCommand::AttackWithBuilding { building, .. } => {
+        | PlayerCommand::AttackWithBuilding { building, .. }
+        | PlayerCommand::CastBuildingSpell { building }
+        | PlayerCommand::SetBuildingSpellAutocast { building, .. } => {
             if simulation.can_player_control_building(player, building) {
                 Ok(())
             } else {
@@ -267,6 +276,14 @@ pub(crate) fn execute_player_command(
         }
         PlayerCommand::AttackWithBuilding { building, target } => simulation
             .order_building_attack_target_as(player, building, target)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Building),
+        PlayerCommand::CastBuildingSpell { building } => simulation
+            .cast_building_spell_for_player(player, building)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Building),
+        PlayerCommand::SetBuildingSpellAutocast { building, enabled } => simulation
+            .set_building_spell_autocast_for_player(player, building, enabled)
             .map(|()| CommandExecutionResult::Applied)
             .map_err(CommandRejectReason::Building),
     };

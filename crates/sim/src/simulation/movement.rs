@@ -197,11 +197,30 @@ impl Simulation {
                 }
                 let (attack, _, _) = unit.attack_for_unit(units[target_index].movement_class)?;
                 let target_position = units[target_index].position;
-                if current.distance_sq(target_position) <= attack.range_sq() {
+                let approach_range = unit
+                    .spellcasting
+                    .filter(|profile| {
+                        matches!(
+                            profile.ability.effect,
+                            AbilityEffect::AreaDamage {
+                                origin: AreaDamageOrigin::Caster,
+                                ..
+                            }
+                        ) && unit
+                            .mana_current
+                            .is_some_and(|mana| mana >= profile.ability.mana_cost)
+                            && unit
+                                .ability_state
+                                .is_some_and(|state| state.ready_tick <= self.next_tick)
+                    })
+                    .map_or(attack.range, |profile| {
+                        attack.range.min(profile.ability.range)
+                    });
+                if current.distance_sq(target_position) <= square_i32(approach_range) {
                     attack_goal = Some(current);
                     return Some(source_cell);
                 }
-                let mut goal = point_attack_envelope_goal(current, target_position, attack.range);
+                let mut goal = point_attack_envelope_goal(current, target_position, approach_range);
                 let mut cell = self.topology.cell_of_point(goal);
                 let goal_is_traversable = self.position_is_traversable_from(
                     source_cell,
@@ -220,7 +239,7 @@ impl Simulation {
                             source_cell,
                             current,
                             target_position,
-                            attack.range,
+                            approach_range,
                             unit.collision_radius_override,
                         )?;
                         goal = self.topology.center_of_cell(cell);

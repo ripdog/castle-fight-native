@@ -28,7 +28,7 @@ use crate::{
         cursor_over_map_controls,
     },
     terrain::TerrainSurface,
-    ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey},
+    ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey, UiIconRole},
     wc3_effects::{Wc3MaterialProcessed, Wc3TeamTint, fix_wc3_scene_materials},
     wc3_text::{Wc3Color, parse_wc3_text},
 };
@@ -152,6 +152,7 @@ enum PanelAction {
     CancelConstruction,
     TrainUnit,
     CancelProduction,
+    GjallarhornSpell,
     Cancel,
 }
 
@@ -187,6 +188,7 @@ enum ActionTooltipKind {
     Build(BuildKind),
     BuildingUpgrade(BuildKind),
     TrainUnit(ProductionKind),
+    GjallarhornSpell,
 }
 
 impl ActionTooltipKind {
@@ -203,6 +205,10 @@ impl ActionTooltipKind {
                     definition.train_extended_tooltip,
                 )
             }
+            Self::GjallarhornSpell => (
+                "Holy Power",
+                "Holy Fervour: gives nearby allies 40–55% attack speed for 60 seconds. Costs 7 mana. Left-click to cast; right-click to toggle autocast.",
+            ),
         }
     }
 }
@@ -834,6 +840,7 @@ fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Opt
         PanelAction::Target(TargetingAction::Build(kind)) => Some(kind.hotkey(content)),
         PanelAction::Building(BuildingPanelAction::Upgrade(target)) => Some(target.hotkey(content)),
         PanelAction::TrainUnit => None,
+        PanelAction::GjallarhornSpell => None,
         _ => None,
     }
 }
@@ -968,6 +975,20 @@ fn action_icon_key(
                 .produced_unit
                 .rawcode,
         ),
+        PanelAction::GjallarhornSpell => {
+            let role = if state.actor.is_some_and(|actor| {
+                authoritative
+                    .simulation
+                    .building(actor)
+                    .and_then(|building| building.ability_autocast_enabled)
+                    == Some(true)
+            }) {
+                UiIconRole::TurnOff
+            } else {
+                UiIconRole::Normal
+            };
+            UiIconKey::ability(u32::from_be_bytes(*b"A01K"), role)
+        }
         PanelAction::CancelProduction => presentation.cancel_command,
         PanelAction::CancelConstruction | PanelAction::Cancel => presentation.cancel_command,
         PanelAction::Target(TargetingAction::Move) => presentation.move_command,
@@ -1162,6 +1183,20 @@ fn action_layout(
                             Some(PanelAction::Target(TargetingAction::Attack));
                     }
 
+                    if matches!(
+                        kind,
+                        Some(CastleFightBuildingKind::Tower(
+                            castle_fight_sim::CastleFightTowerKind::Gjallarhorn
+                        ))
+                    ) {
+                        insert_panel_action(
+                            &mut slots,
+                            0,
+                            cancel_slot,
+                            PanelAction::GjallarhornSpell,
+                        );
+                    }
+
                     if building.production_queue.is_none_or(|count| count == 0)
                         && let Some(kind) = kind
                     {
@@ -1260,6 +1295,23 @@ fn handle_action_panel_buttons(
                     );
                 }
             }
+            PanelAction::GjallarhornSpell => {
+                if let Some(actor) = state.actor {
+                    let controller = debug_menu.controller_for_actor(
+                        &authoritative.simulation,
+                        selected_match.local_player,
+                        actor,
+                    );
+                    state.status = submission_status(
+                        authoritative.submit_local_command(
+                            controller,
+                            PlayerCommand::CastBuildingSpell { building: actor },
+                        ),
+                        "Holy Power cast queued.",
+                        "Holy Power cast rejected",
+                    );
+                }
+            }
             PanelAction::CancelProduction => submit_production_queue_change(
                 &mut authoritative,
                 &mut state,
@@ -1333,6 +1385,38 @@ fn handle_action_panel_right_click(
     let Some(actor) = state.actor else {
         return;
     };
+    let spell_hovered = buttons.iter().any(|(interaction, action)| {
+        matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+            && action.0 == Some(PanelAction::GjallarhornSpell)
+    });
+    if spell_hovered {
+        let enabled = !authoritative
+            .simulation
+            .building(actor)
+            .and_then(|building| building.ability_autocast_enabled)
+            .unwrap_or(false);
+        let controller = debug_menu.controller_for_actor(
+            &authoritative.simulation,
+            selected_match.local_player,
+            actor,
+        );
+        state.status = submission_status(
+            authoritative.submit_local_command(
+                controller,
+                PlayerCommand::SetBuildingSpellAutocast {
+                    building: actor,
+                    enabled,
+                },
+            ),
+            if enabled {
+                "Holy Power autocast enable queued."
+            } else {
+                "Holy Power autocast disable queued."
+            },
+            "Holy Power autocast command rejected",
+        );
+        return;
+    }
     let repair_hovered = buttons
         .iter()
         .any(|(interaction, action)| repair_autocast_button_hovered(*interaction, action.0));
@@ -1396,6 +1480,22 @@ fn style_action_panel_buttons(
                 !can_afford_building_upgrade(&authoritative, &state, target, selected_match.content)
             }
             PanelAction::TrainUnit => !production_queue_has_room(&state, &authoritative),
+            PanelAction::GjallarhornSpell => state
+                .actor
+                .and_then(|actor| authoritative.simulation.building(actor))
+                .is_none_or(|building| {
+                    let mana_cost = selected_match
+                        .content
+                        .tower(castle_fight_sim::CastleFightTowerKind::Gjallarhorn)
+                        .and_then(|definition| definition.spellcasting)
+                        .expect("selected Gjallarhorn must retain its versioned spell")
+                        .ability
+                        .mana_cost;
+                    building.mana_current.unwrap_or(0) < mana_cost
+                        || building
+                            .ability_ready_tick
+                            .is_some_and(|ready| ready > authoritative.simulation.tick())
+                }),
             _ => false,
         });
         disabled_slots[slot.0] = disabled;
@@ -1406,13 +1506,19 @@ fn style_action_panel_buttons(
         } else {
             BUTTON_NORMAL
         });
-        let autocast_active = action.0 == Some(PanelAction::Target(TargetingAction::Repair))
-            && state.actor.is_some_and(|actor| {
-                authoritative
-                    .simulation
-                    .builder(actor)
-                    .is_some_and(|builder| builder.repair_autocast_enabled)
-            });
+        let autocast_active = (action.0 == Some(PanelAction::GjallarhornSpell)
+            && state
+                .actor
+                .and_then(|actor| authoritative.simulation.building(actor))
+                .and_then(|building| building.ability_autocast_enabled)
+                .unwrap_or(false))
+            || action.0 == Some(PanelAction::Target(TargetingAction::Repair))
+                && state.actor.is_some_and(|actor| {
+                    authoritative
+                        .simulation
+                        .builder(actor)
+                        .is_some_and(|builder| builder.repair_autocast_enabled)
+                });
         *border = BorderColor::all(if disabled {
             BUTTON_DISABLED_BORDER
         } else if autocast_active {
@@ -1466,6 +1572,7 @@ fn update_build_tooltip(
                         )
                     })
                     .map(ActionTooltipKind::TrainUnit),
+                PanelAction::GjallarhornSpell => Some(ActionTooltipKind::GjallarhornSpell),
                 _ => None,
             })
     });
@@ -1952,6 +2059,7 @@ fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> Stri
             building_upgrade_button_label(target, content)
         }
         PanelAction::TrainUnit => "Train".into(),
+        PanelAction::GjallarhornSpell => "Holy Power".into(),
         PanelAction::CancelProduction => "Cancel\nEsc".into(),
         PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
@@ -2529,7 +2637,7 @@ mod tests {
     }
 
     #[test]
-    fn repair_button_is_the_only_right_click_autocast_action() {
+    fn repair_autocast_hit_test_ignores_other_actions() {
         assert!(repair_autocast_button_hovered(
             Interaction::Hovered,
             Some(PanelAction::Target(TargetingAction::Repair)),

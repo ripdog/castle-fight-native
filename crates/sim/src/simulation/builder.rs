@@ -146,6 +146,72 @@ impl Simulation {
         self.change_production_queue_as(controller, building, false)
     }
 
+    pub fn set_building_spell_autocast_for_player(
+        &mut self,
+        controller: PlayerId,
+        building: SimId,
+        enabled: bool,
+    ) -> Result<(), BuildingCommandError> {
+        if !self.can_player_control_building(controller, building) {
+            return Err(BuildingCommandError::NotAuthorized);
+        }
+        let entity_id = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(building)
+                    && entity.get::<AutomaticAbilityState>().is_some())
+                .then_some(entity.id())
+            })
+            .ok_or(BuildingCommandError::SourceCannotCast)?;
+        self.world
+            .entity_mut(entity_id)
+            .get_mut::<AutomaticAbilityState>()
+            .expect("spellcasting building state disappeared")
+            .autocast_enabled = enabled;
+        Ok(())
+    }
+
+    pub fn cast_building_spell_for_player(
+        &mut self,
+        controller: PlayerId,
+        building: SimId,
+    ) -> Result<(), BuildingCommandError> {
+        if !self.can_player_control_building(controller, building) {
+            return Err(BuildingCommandError::NotAuthorized);
+        }
+        let entity_id = self
+            .world
+            .iter_entities()
+            .find_map(|entity| {
+                (entity.get::<SimId>().copied() == Some(building)
+                    && entity.get::<AutomaticAbilityState>().is_some())
+                .then_some(entity.id())
+            })
+            .ok_or(BuildingCommandError::SourceCannotCast)?;
+        let mut entity = self.world.entity_mut(entity_id);
+        let profile = entity
+            .get::<SpellcastingProfile>()
+            .ok_or(BuildingCommandError::SourceCannotCast)?;
+        if entity
+            .get::<ManaState>()
+            .is_none_or(|mana| mana.current < profile.ability.mana_cost)
+        {
+            return Err(BuildingCommandError::InsufficientMana);
+        }
+        if entity
+            .get::<AutomaticAbilityState>()
+            .is_some_and(|state| state.ready_tick > self.next_tick)
+        {
+            return Err(BuildingCommandError::AbilityOnCooldown);
+        }
+        entity
+            .get_mut::<AutomaticAbilityState>()
+            .expect("spellcasting building state disappeared")
+            .manual_cast_requested = true;
+        Ok(())
+    }
+
     fn change_production_queue_as(
         &mut self,
         controller: PlayerId,

@@ -404,6 +404,8 @@ impl Simulation {
                 AutomaticAbilityState {
                     ready_tick: self.next_tick,
                     cast_sequence: 0,
+                    autocast_enabled: true,
+                    manual_cast_requested: false,
                 },
             ));
         }

@@ -150,6 +150,7 @@ pub struct BuildingSample {
     pub mana_current: Option<i32>,
     pub mana_maximum: Option<i32>,
     pub ability_ready_tick: Option<u64>,
+    pub ability_autocast_enabled: Option<bool>,
     pub stunned_until_tick: Option<u64>,
     pub visual_kind: BuildingVisualKind,
 }
@@ -269,6 +270,7 @@ impl PresentationSnapshot {
                         mana_current: building.mana_current,
                         mana_maximum: building.mana_maximum,
                         ability_ready_tick: building.ability_ready_tick,
+                        ability_autocast_enabled: building.ability_autocast_enabled,
                         stunned_until_tick: building.stunned_until_tick,
                         visual_kind,
                     },

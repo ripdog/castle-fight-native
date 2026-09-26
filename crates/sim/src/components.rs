@@ -805,6 +805,12 @@ impl AbilityTargetPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AreaDamageOrigin {
+    Caster,
+    Target,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
     Damage {
         amount: i32,
@@ -820,6 +826,7 @@ pub enum AbilityEffect {
     AreaDamage {
         amount: i32,
         radius: i32,
+        origin: AreaDamageOrigin,
     },
     FrostArmor {
         modifier: ModifierId,
@@ -923,6 +930,8 @@ pub struct ManaState {
 pub struct AutomaticAbilityState {
     pub ready_tick: u64,
     pub cast_sequence: u64,
+    pub autocast_enabled: bool,
+    pub manual_cast_requested: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

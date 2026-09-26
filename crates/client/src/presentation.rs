@@ -3261,6 +3261,21 @@ fn sync_render_entities(
                 &terrain,
             );
         }
+        let attack_speed_count = usize::from(unit.status.attack_speed_modifier_count);
+        for modifier in unit.status.attack_speed_modifiers[..attack_speed_count]
+            .iter()
+            .filter(|modifier| modifier.expires_tick > samples.current.tick)
+        {
+            spawn_unit_status_visuals(
+                &mut commands,
+                &mut render_map,
+                &wc3_visuals,
+                unit,
+                modifier.id.0,
+                Wc3StatusVisualKind::AttackSpeed,
+                &terrain,
+            );
+        }
     }
 
     let stale_stun_effects: Vec<_> = render_map
@@ -3841,6 +3856,12 @@ fn unit_status_visual_is_active(
         Wc3StatusVisualKind::Armor => {
             let count = usize::from(unit.status.armor_modifier_count);
             unit.status.armor_modifiers[..count]
+                .iter()
+                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+        }
+        Wc3StatusVisualKind::AttackSpeed => {
+            let count = usize::from(unit.status.attack_speed_modifier_count);
+            unit.status.attack_speed_modifiers[..count]
                 .iter()
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
@@ -5976,6 +5997,7 @@ mod tests {
             mana_current: None,
             mana_maximum: None,
             ability_ready_tick: None,
+            ability_autocast_enabled: None,
             stunned_until_tick: None,
             visual_kind: BuildingVisualKind::Production,
         };
@@ -6012,6 +6034,7 @@ mod tests {
             mana_current: None,
             mana_maximum: None,
             ability_ready_tick: None,
+            ability_autocast_enabled: None,
             stunned_until_tick: None,
             visual_kind: BuildingVisualKind::Production,
         };

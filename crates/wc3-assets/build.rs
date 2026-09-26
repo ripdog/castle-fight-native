@@ -527,7 +527,7 @@ fn load_visual_assets(
     let mut missile_arcs = BTreeMap::<(String, String), f32>::new();
     let mut ability_base_rawcodes = BTreeMap::<String, String>::new();
     let mut ability_buff_ids = BTreeMap::<String, Vec<String>>::new();
-    let mut buff_target_art = BTreeMap::<String, String>::new();
+    let mut buff_target_art = BTreeMap::<String, Vec<String>>::new();
     let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
     let mut stun_model_path = None;
     for row in fields.records() {
@@ -554,13 +554,14 @@ fn load_visual_assets(
                 );
             }
         }
-        if kind == "buffs"
-            && field == "ftat"
-            && let Some(path) = parse_json_model_paths(row.get(recovered).unwrap_or_default())
+        if kind == "buffs" && field == "ftat" {
+            let paths = parse_json_model_paths(row.get(recovered).unwrap_or_default())
                 .into_iter()
-                .find(|path| is_renderable_model_path(path))
-        {
-            buff_target_art.insert(rawcode.to_owned(), path);
+                .filter(|path| is_renderable_model_path(path))
+                .collect::<Vec<_>>();
+            if !paths.is_empty() {
+                buff_target_art.insert(rawcode.to_owned(), paths);
+            }
         }
 
         let role = match (kind, field) {
@@ -664,21 +665,26 @@ fn load_visual_assets(
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
             "Ainf" | "AIrr" | "AHad" => &["armor"],
+            // Bloodlust-family effects persist for the attack-speed buff lifetime.
+            "Ablo" => &["attack_speed"],
             _ => continue,
         };
         for (buff_rawcode, status_kind) in buffs.iter().zip(status_kinds.iter().copied()) {
-            let model_path = buff_target_art
-                .get(buff_rawcode)
-                .cloned()
-                .or_else(|| stock_buff_target_art(buff_rawcode));
-            let Some(model_path) = model_path else {
-                continue;
-            };
-            status_visuals.push(StatusVisualSpec {
-                ability_rawcode: ability_rawcode.clone(),
-                status_kind: status_kind.to_owned(),
-                model_path,
-            });
+            if let Some(model_paths) = buff_target_art.get(buff_rawcode) {
+                for model_path in model_paths {
+                    status_visuals.push(StatusVisualSpec {
+                        ability_rawcode: ability_rawcode.clone(),
+                        status_kind: status_kind.to_owned(),
+                        model_path: model_path.clone(),
+                    });
+                }
+            } else if let Some(model_path) = stock_buff_target_art(buff_rawcode) {
+                status_visuals.push(StatusVisualSpec {
+                    ability_rawcode: ability_rawcode.clone(),
+                    status_kind: status_kind.to_owned(),
+                    model_path,
+                });
+            }
         }
     }
     status_visuals.sort_by(|left, right| {

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 8;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 9;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -51,8 +51,8 @@ use status::{
 
 use crate::{
     components::{
-        AbilityEffect, AbilityId, AbilityTargetPolicy, AttackCooldown, AttackDelivery,
-        AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
+        AbilityEffect, AbilityId, AbilityTargetPolicy, AreaDamageOrigin, AttackCooldown,
+        AttackDelivery, AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
         AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder,
         BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn,
         BuilderState, BuildingConstruction, BuildingFootprint, BuildingGameplayProperties,
@@ -458,6 +458,7 @@ pub struct BuildingView {
     pub mana_maximum: Option<i32>,
     pub ability_ready_tick: Option<u64>,
     pub ability_cast_sequence: Option<u64>,
+    pub ability_autocast_enabled: Option<bool>,
     pub stunned_until_tick: Option<u64>,
 }
 
@@ -534,6 +535,9 @@ pub enum BuildingCommandError {
     NotAuthorized,
     SourceCannotAttack,
     SourceCannotProduce,
+    SourceCannotCast,
+    InsufficientMana,
+    AbilityOnCooldown,
     ProductionQueueEmpty,
     ProductionQueueFull,
     TargetNotFound,
@@ -2177,6 +2181,8 @@ impl Simulation {
                 AutomaticAbilityState {
                     ready_tick: self.next_tick,
                     cast_sequence: 0,
+                    autocast_enabled: true,
+                    manual_cast_requested: false,
                 },
             ));
         }
@@ -3472,13 +3478,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert_ne!(percent_delta, 0);
             assert!(duration_ticks > 0);
         }
-        AbilityEffect::AreaDamage { amount, radius } => {
+        AbilityEffect::AreaDamage { amount, radius, .. } => {
             assert!(amount >= 0);
             assert!(radius >= 0);
             assert_ne!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::AllEnemyUnits,
-                "area damage requires a selected enemy unit as its center"
+                "area damage requires a selected enemy unit to trigger the cast"
             );
         }
         AbilityEffect::FrostArmor {
@@ -3819,6 +3825,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
         mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
         ability_ready_tick: ability_state.map(|state| state.ready_tick),
         ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
+        ability_autocast_enabled: ability_state.map(|state| state.autocast_enabled),
         stunned_until_tick: entity
             .get::<StatusState>()
             .map(|state| state.stunned_until_tick),

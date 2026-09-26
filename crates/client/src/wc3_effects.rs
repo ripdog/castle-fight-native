@@ -150,6 +150,7 @@ pub struct Wc3AbilityVisual {
 pub enum Wc3StatusVisualKind {
     Movement,
     Armor,
+    AttackSpeed,
 }
 
 #[derive(Clone)]
@@ -4417,6 +4418,7 @@ fn parse_status_visual_kind(value: &str) -> Result<Wc3StatusVisualKind, String> 
     match value {
         "movement" => Ok(Wc3StatusVisualKind::Movement),
         "armor" => Ok(Wc3StatusVisualKind::Armor),
+        "attack_speed" => Ok(Wc3StatusVisualKind::AttackSpeed),
         other => Err(format!("unsupported WC3 status visual kind {other:?}")),
     }
 }

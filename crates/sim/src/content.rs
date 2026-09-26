@@ -8,9 +8,9 @@ use serde::Deserialize;
 
 use crate::{
     components::{
-        AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-        AttackTargetMask, AuraEffectProfile, AutomaticAbilityProfile, BuilderConfiguration,
-        BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint,
+        AbilityEffect, AbilityId, AbilityTargetPolicy, AreaDamageOrigin, AttackDelivery,
+        AttackProfile, AttackTargetMask, AuraEffectProfile, AutomaticAbilityProfile,
+        BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint,
         BuildingGameplayProperties, BuildingSpawn, BurningOilEffectProfile, CleaveEffectProfile,
         CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile,
         GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass, MovementProfile,
@@ -938,11 +938,12 @@ impl CastleFightUnitKind {
                     id: AbilityId(u32::from_be_bytes(*b"A00K")),
                     mana_cost: 35,
                     cooldown_ticks: 12 * CASTLE_FIGHT_SIMULATION_HZ as u16,
-                    range: world(500),
+                    range: world(90),
                     target_policy: AbilityTargetPolicy::RandomGroundEnemyUnit,
                     effect: AbilityEffect::AreaDamage {
                         amount: 270,
                         radius: world(370),
+                        origin: AreaDamageOrigin::Caster,
                     },
                 },
             ),
@@ -2306,9 +2307,17 @@ fn hash_optional_spellcasting(hash: &mut ContentHash64, spellcasting: Option<Spe
             hash.write_i32(i32::from(percent_delta));
             hash.write_u16(duration_ticks);
         }
-        AbilityEffect::AreaDamage { amount, radius } => {
+        AbilityEffect::AreaDamage {
+            amount,
+            radius,
+            origin,
+        } => {
             hash.write_i32(amount);
             hash.write_i32(radius);
+            hash.write_u8(match origin {
+                AreaDamageOrigin::Caster => 0,
+                AreaDamageOrigin::Target => 1,
+            });
         }
         AbilityEffect::FrostArmor {
             modifier,
@@ -4256,7 +4265,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 18320159385802044175);
+        assert_eq!(bundle.identity.gameplay_hash, 13953548431698480665);
         assert_eq!(bundle.behaviors().len(), 41);
         assert!(
             bundle

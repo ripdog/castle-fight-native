@@ -18,16 +18,17 @@ pub use commands::{
     CommandRejectReason, PlayerCommand, admit_player_command,
 };
 pub use components::{
-    AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile, AttackTargetMask,
-    AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
-    BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
-    BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
-    CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile, DefendEffectProfile,
-    EntanglingRootsEffectProfile, EvasionEffectProfile, GameplayBundleIdentity, ManaProfile,
-    ModifierId, MovementClass, MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects,
-    PlayerId, ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile, SimId,
-    SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    AbilityEffect, AbilityId, AbilityTargetPolicy, AreaDamageOrigin, AttackDelivery, AttackProfile,
+    AttackTargetMask, AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration,
+    BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties,
+    BuildingSpawn, BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius,
+    ContentIdentity, CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile,
+    DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile,
+    GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass, MovementProfile, Owner,
+    PassiveUnitEffect, PassiveUnitEffects, PlayerId, ProductionProfile, ResolvedUnitDefinition,
+    SecondaryAttackProfile, SimId, SpellcastingProfile, SplashFalloffProfile, StatusState, Team,
+    TriggeredAttackEffect, TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn,
+    UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
@@ -1454,13 +1455,20 @@ mod tests {
     #[test]
     fn imported_warlock_reproduces_post_cast_retreat_and_sleep_window() {
         let world = SUBUNITS_PER_WORLD_UNIT;
-        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_max: NavCell::new(600, 64),
+                team_objective: [SimPoint::new(600 * world, 0), SimPoint::new(0, 0)],
+                ..SimulationConfig::default()
+            },
+            1,
+        );
         let warlock = CastleFightUnitKind::Warlock.definition();
         let start = SimPoint::new(30 * world, 0);
         let caster = sim.spawn_resolved_unit(Team(0), start, warlock.resolved());
         sim.spawn_unit(UnitSpawn {
             team: Team(1),
-            position: SimPoint::new(60 * world, 0),
+            position: SimPoint::new(120 * world, 0),
             health: 10_000,
             attack: AttackProfile {
                 delivery: AttackDelivery::Melee,
@@ -1507,6 +1515,69 @@ mod tests {
             sleep_position,
             "Warlock must stop moving for the scripted 6.6s sleep window"
         );
+
+        while sim.tick() < 357 {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        let recovery_position = sim.unit(caster).unwrap().position;
+        let mut resumed_advancing = false;
+        let mut second_cast_tick = None;
+        for _ in 0..600 {
+            let report = sim.step();
+            resumed_advancing |= sim.unit(caster).unwrap().position.x > recovery_position.x;
+            if report.ability_casts > 0 {
+                second_cast_tick = Some(sim.tick());
+                break;
+            }
+        }
+        assert!(
+            resumed_advancing,
+            "Warlock must resume advancing after its scripted recovery window"
+        );
+        assert!(
+            second_cast_tick.is_some_and(|tick| tick >= 360),
+            "Warlock must re-engage and cast again once its 12s spell cycle is ready"
+        );
+    }
+
+    #[test]
+    fn area_damage_uses_caster_position_and_melee_trigger_range() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_max: NavCell::new(1_000, 64),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let warlock = CastleFightUnitKind::Warlock.definition();
+        let caster =
+            sim.spawn_resolved_unit(Team(0), SimPoint::new(400 * world, 0), warlock.resolved());
+        let enemy = |position| UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(position * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let trigger = sim.spawn_unit(enemy(490));
+        let behind = sim.spawn_unit(enemy(70));
+        let beyond_caster = sim.spawn_unit(enemy(780));
+        assert_eq!(sim.step().ability_casts, 1);
+        assert_eq!(sim.ability_casts_last_tick()[0].source, caster);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].target_position,
+            Some(SimPoint::new(400 * world, 0))
+        );
+        assert_eq!(sim.unit(trigger).unwrap().health, 730);
+        assert_eq!(sim.unit(behind).unwrap().health, 730);
+        assert_eq!(sim.unit(beyond_caster).unwrap().health, 1_000);
     }
 
     #[test]
@@ -1632,6 +1703,45 @@ mod tests {
         assert_eq!(second.completed_tick, 419);
         assert_eq!(second.ability_casts, 1);
         assert_eq!(sim.building(source).unwrap().mana_current, Some(0));
+    }
+
+    #[test]
+    fn building_spell_autocast_toggle_and_manual_request_share_cast_path() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let horn = CastleFightTowerKind::Gjallarhorn.definition();
+        let source = sim.spawn_building_with_properties(
+            horn.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4)),
+            horn.gameplay_properties(),
+        );
+        let ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(30 * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        sim.set_building_spell_autocast_for_player(PlayerId(0), source, false)
+            .unwrap();
+        for _ in 0..220 {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        assert_eq!(sim.building(source).unwrap().mana_current, Some(7));
+        sim.cast_building_spell_for_player(PlayerId(0), source)
+            .unwrap();
+        assert_eq!(sim.step().ability_casts, 1);
+        assert_eq!(sim.building(source).unwrap().mana_current, Some(0));
+        assert!(sim.unit(ally).unwrap().status.attack_speed_modifier_count > 0);
+        sim.set_building_spell_autocast_for_player(PlayerId(0), source, true)
+            .unwrap();
+        let recasts = (0..210).map(|_| sim.step().ability_casts).sum::<usize>();
+        assert_eq!(recasts, 1);
     }
 
     #[test]
@@ -3385,6 +3495,7 @@ mod tests {
                     effect: AbilityEffect::AreaDamage {
                         amount: 3,
                         radius: 2 * cell,
+                        origin: AreaDamageOrigin::Target,
                     },
                 },
             },
@@ -3459,6 +3570,7 @@ mod tests {
                     effect: AbilityEffect::AreaDamage {
                         amount: 2,
                         radius: cell,
+                        origin: AreaDamageOrigin::Target,
                     },
                 },
             },
@@ -3480,6 +3592,7 @@ mod tests {
                 effect: AbilityEffect::AreaDamage {
                     amount: 2,
                     radius: cell,
+                    origin: AreaDamageOrigin::Target,
                 },
             }]
         );
@@ -3509,6 +3622,7 @@ mod tests {
                 effect: AbilityEffect::AreaDamage {
                     amount: 1,
                     radius: SUBUNITS_PER_WORLD_UNIT,
+                    origin: AreaDamageOrigin::Target,
                 },
             },
         };
@@ -4030,6 +4144,7 @@ mod tests {
                     effect: AbilityEffect::AreaDamage {
                         amount: 1,
                         radius: 2 * cell,
+                        origin: AreaDamageOrigin::Target,
                     },
                 },
             };
@@ -4048,6 +4163,7 @@ mod tests {
                     effect: AbilityEffect::AreaDamage {
                         amount: 1,
                         radius: 2 * cell,
+                        origin: AreaDamageOrigin::Target,
                     },
                 },
             };

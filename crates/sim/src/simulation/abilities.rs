@@ -140,6 +140,7 @@ impl Simulation {
             };
             if state.cast_sequence != intent.cast_sequence
                 || state.ready_tick > self.next_tick
+                || (!state.autocast_enabled && !state.manual_cast_requested)
                 || mana < intent.ability.mana_cost
                 || !self.ability_target_is_valid(source, intent.target, intent.ability, units)
             {
@@ -157,6 +158,7 @@ impl Simulation {
                 .cast_sequence
                 .checked_add(1)
                 .expect("ability cast sequence exhausted");
+            state.manual_cast_requested = false;
             match intent.source {
                 AbilitySourceIndex::Unit(index) => {
                     units[index].mana_current = Some(remaining_mana);
@@ -218,6 +220,23 @@ impl Simulation {
                 | AbilityIntentTarget::Point { position } => Some(position),
                 AbilityIntentTarget::AllEnemyUnits | AbilityIntentTarget::AllFriendlyUnits => None,
             };
+            let target_position = if matches!(
+                intent.ability.effect,
+                AbilityEffect::AreaDamage {
+                    origin: AreaDamageOrigin::Caster,
+                    ..
+                }
+            ) {
+                match source.origin {
+                    AbilitySourceOrigin::Unit(position) => Some(position),
+                    AbilitySourceOrigin::Building(footprint) => Some(footprint_center_point(
+                        footprint,
+                        self.config.navigation_cell_size,
+                    )),
+                }
+            } else {
+                target_position
+            };
 
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
@@ -240,8 +259,21 @@ impl Simulation {
                                 metrics.effects += 1;
                             }
                         }
-                    } else if let AbilityEffect::AreaDamage { radius, .. } = intent.ability.effect {
-                        let center = units[index].position;
+                    } else if let AbilityEffect::AreaDamage { radius, origin, .. } =
+                        intent.ability.effect
+                    {
+                        let center = match (origin, source.origin) {
+                            (AreaDamageOrigin::Target, _) => units[index].position,
+                            (AreaDamageOrigin::Caster, AbilitySourceOrigin::Unit(position)) => {
+                                position
+                            }
+                            (
+                                AreaDamageOrigin::Caster,
+                                AbilitySourceOrigin::Building(footprint),
+                            ) => {
+                                footprint_center_point(footprint, self.config.navigation_cell_size)
+                            }
+                        };
                         let radius_sq = square_i32(radius);
                         for target in units.iter_mut() {
                             if target.health <= 0
@@ -503,7 +535,10 @@ impl Simulation {
         let Some(mana) = source.mana_current else {
             return AbilityEvaluation::default();
         };
-        if state.ready_tick > self.next_tick || mana < spellcasting.ability.mana_cost {
+        if state.ready_tick > self.next_tick
+            || mana < spellcasting.ability.mana_cost
+            || (!state.autocast_enabled && !state.manual_cast_requested)
+        {
             return AbilityEvaluation::default();
         }
 
@@ -564,18 +599,7 @@ impl Simulation {
                     index,
                     id: units[index].id,
                 }),
-            AbilityTargetPolicy::AllFriendlyUnits => {
-                candidate_checks = units.len();
-                units
-                    .iter()
-                    .any(|target| {
-                        target.health > 0
-                            && target.team == source.team
-                            && self.ability_source_distance_sq(source.origin, target.position)
-                                <= square_i32(spellcasting.ability.range)
-                    })
-                    .then_some(AbilityIntentTarget::AllFriendlyUnits)
-            }
+            AbilityTargetPolicy::AllFriendlyUnits => Some(AbilityIntentTarget::AllFriendlyUnits),
             AbilityTargetPolicy::RandomCorpse => {
                 let mut best = None;
                 for entity in self.world.iter_entities() {
@@ -891,12 +915,6 @@ impl Simulation {
             }
             AbilityIntentTarget::AllFriendlyUnits => {
                 ability.target_policy == AbilityTargetPolicy::AllFriendlyUnits
-                    && units.iter().any(|target| {
-                        target.health > 0
-                            && target.team == source.team
-                            && self.ability_source_distance_sq(source.origin, target.position)
-                                <= square_i32(ability.range)
-                    })
             }
             AbilityIntentTarget::Corpse { id, position } => {
                 ability.target_policy == AbilityTargetPolicy::RandomCorpse

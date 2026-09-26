@@ -40,7 +40,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 expires_tick,
             );
         }
-        AbilityEffect::AreaDamage { amount, radius: _ } => {
+        AbilityEffect::AreaDamage { amount, .. } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
             target.health = target
