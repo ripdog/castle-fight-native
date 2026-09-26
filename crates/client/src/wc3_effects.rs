@@ -2098,6 +2098,7 @@ pub(crate) struct Wc3RibbonTrail {
     previous_origin: Option<Vec3>,
     previous_up: Option<Vec3>,
     mesh: Handle<Mesh>,
+    has_rendered_strip: bool,
 }
 
 #[derive(Resource)]
@@ -3453,6 +3454,7 @@ pub fn spawn_wc3_ribbon_trails(
                     previous_origin: None,
                     previous_up: None,
                     mesh,
+                    has_rendered_strip: false,
                 },
             ));
         }
@@ -3551,13 +3553,19 @@ pub fn update_wc3_ribbon_trails(
         while trail.points.len() > MAX_RIBBON_POINTS {
             trail.points.pop_front();
         }
-        if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
-            *mesh = build_wc3_ribbon_mesh(&trail.spec, sample, &trail.points, trail.source_scale);
-        }
-
         if source_missing && trail.points.is_empty() {
             meshes.remove(trail.mesh.id());
             commands.entity(entity).despawn();
+            continue;
+        }
+
+        let has_strip = trail.points.len() >= 2;
+        if has_strip || trail.has_rendered_strip {
+            if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
+                *mesh =
+                    build_wc3_ribbon_mesh(&trail.spec, sample, &trail.points, trail.source_scale);
+            }
+            trail.has_rendered_strip = has_strip;
         }
     }
 }
@@ -3568,6 +3576,20 @@ fn build_wc3_ribbon_mesh(
     points: &VecDeque<RibbonPoint>,
     source_scale: f32,
 ) -> Mesh {
+    if points.len() < 2 {
+        // Bevy's mesh allocator skips zero-byte vertex/index buffers but still tries to
+        // upload them. Keep an invisible, allocatable triangle until a strip exists.
+        return Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0; 3]; 3])
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; 3])
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; 3])
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.0; 4]; 3])
+        .with_inserted_indices(Indices::U32(vec![0, 1, 2]));
+    }
+
     let mut positions = Vec::with_capacity(points.len() * 2);
     let mut normals = Vec::with_capacity(points.len() * 2);
     let mut uvs = Vec::with_capacity(points.len() * 2);
@@ -5589,6 +5611,33 @@ mod tests {
         };
         assert_eq!(colors[0], [0.4, 0.5, 0.6, 0.1]);
         assert_eq!(colors[2], [0.4, 0.5, 0.6, 0.4]);
+    }
+
+    #[test]
+    fn ribbon_without_a_strip_has_allocatable_invisible_geometry() {
+        let spec = test_ribbon_emitter(23);
+        let sample = sample_ribbon_parameters(&spec, 0.0, 0.0);
+        let mut points = VecDeque::new();
+        for _ in 0..2 {
+            let mesh = build_wc3_ribbon_mesh(&spec, sample, &points, 1.0);
+            assert!(mesh.get_vertex_buffer_size() > 0);
+            assert!(
+                mesh.get_index_buffer_bytes()
+                    .is_some_and(|bytes| !bytes.is_empty())
+            );
+            let colors = mesh
+                .attribute(Mesh::ATTRIBUTE_COLOR)
+                .expect("placeholder colors");
+            let bevy::mesh::VertexAttributeValues::Float32x4(colors) = colors else {
+                panic!("placeholder colors must be float4");
+            };
+            assert!(colors.iter().all(|color| color[3] == 0.0));
+            points.push_back(RibbonPoint {
+                center: Vec3::ZERO,
+                up: Vec3::Y,
+                age: 0.0,
+            });
+        }
     }
 
     #[test]
