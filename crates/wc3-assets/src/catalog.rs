@@ -547,6 +547,15 @@ mod tests {
                 && asset.role == "caster"
                 && asset.model_path == r"Abilities\Spells\Human\Defend\DefendCaster.mdl"
         }));
+        for role in ["caster", "target"] {
+            assert!(catalog.assets.iter().any(|asset| {
+                asset.owner_kind == "abilities"
+                    && asset.owner_rawcode == "A0HN"
+                    && asset.source_unit_rawcode.as_deref() == Some("h07U")
+                    && asset.role == role
+                    && asset.model_path == r"HolyBlast.mdx"
+            }));
+        }
         assert!(catalog.status_visuals.iter().any(|visual| {
             visual.ability_rawcode == "A03W"
                 && visual.status_kind == "movement"
