@@ -6,9 +6,9 @@ use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
     build_ui::{
-        ActionPanelMode, ActionPanelState, TargetingAction, cursor_over_action_panel,
-        hotkey_just_pressed, placement_footprint, production_upgrade_hotkey_target,
-        queue_production_upgrade, try_arm_build_target,
+        ActionPanelMode, ActionPanelState, TargetingAction, building_upgrade_hotkey_target,
+        cursor_over_action_panel, hotkey_just_pressed, placement_footprint, queue_building_upgrade,
+        try_arm_build_target,
     },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::BuildKind,
@@ -86,14 +86,14 @@ fn handle_selection_commands(
 
     if !opened_build_menu
         && resources.action_panel.mode == ActionPanelMode::Actions
-        && let Some(target) = production_upgrade_hotkey_target(
+        && let Some(target) = building_upgrade_hotkey_target(
             &resources.keys,
             &resources.action_panel,
             &resources.authoritative,
             &resources.selected_match,
         )
     {
-        queue_production_upgrade(
+        queue_building_upgrade(
             &mut resources.authoritative,
             &mut resources.action_panel,
             target,

@@ -2959,15 +2959,27 @@ fn sync_render_entities(
                     entity_render_position(target, &samples, &metrics, &terrain, 1.0)
                 }
                 AbilityCastTarget::AllEnemyUnits => None,
+                AbilityCastTarget::AllFriendlyUnits => source_position,
+                AbilityCastTarget::Point(position) => {
+                    Some(sim_point_to_terrain_world(position, &terrain))
+                }
             });
 
-        let source_unit_rawcode = samples
+        let source_rawcode = samples
             .current
             .units
             .get(&cast.source)
             .or_else(|| samples.previous.units.get(&cast.source))
-            .and_then(|unit| unit.content.map(|content| content.rawcode));
-        for visual in wc3_visuals.ability_for_source(cast.ability.0, source_unit_rawcode) {
+            .and_then(|unit| unit.content.map(|content| content.rawcode))
+            .or_else(|| {
+                samples
+                    .current
+                    .buildings
+                    .get(&cast.source)
+                    .or_else(|| samples.previous.buildings.get(&cast.source))
+                    .and_then(|building| building.content.map(|content| content.rawcode))
+            });
+        for visual in wc3_visuals.ability_for_source(cast.ability.0, source_rawcode) {
             let position = match visual.anchor {
                 Wc3AbilityVisualAnchor::Source => source_position,
                 Wc3AbilityVisualAnchor::Target => target_position,

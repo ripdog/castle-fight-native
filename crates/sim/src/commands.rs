@@ -183,15 +183,13 @@ pub fn admit_player_command(
             if !simulation.can_player_control_building(player, building) {
                 return Err(CommandAdmissionError::BuildingNotControllable(building));
             }
-            let Some(CastleFightBuildingKind::Production(target_kind)) =
-                content.building_kind(target)
-            else {
+            let Some(target_kind) = content.building_kind(target) else {
                 return Err(CommandAdmissionError::UnknownBuildingDefinition(target));
             };
             let Some(source) = simulation.building(building) else {
                 return Err(CommandAdmissionError::BuildingNotControllable(building));
             };
-            let Some(CastleFightBuildingKind::Production(source_kind)) = source
+            let Some(source_kind) = source
                 .content
                 .and_then(|identity| content.building_kind_for_rawcode(identity.rawcode))
             else {
@@ -359,17 +357,9 @@ fn execute_upgrade_building(
     let source_kind = source
         .content
         .and_then(|identity| content.building_kind_for_rawcode(identity.rawcode))
-        .and_then(|kind| match kind {
-            CastleFightBuildingKind::Production(kind) => Some(kind),
-            CastleFightBuildingKind::Tower(_) => None,
-        })
         .ok_or(CommandRejectReason::SourceDefinitionMismatch)?;
     let target_kind = content
         .building_kind(target)
-        .and_then(|kind| match kind {
-            CastleFightBuildingKind::Production(kind) => Some(kind),
-            CastleFightBuildingKind::Tower(_) => None,
-        })
         .ok_or(CommandRejectReason::UnknownBuildingDefinition(target))?;
     if !source_kind
         .upgrade_targets_for_version(content.map_version)
@@ -379,20 +369,34 @@ fn execute_upgrade_building(
         return Err(CommandRejectReason::SourceDefinitionMismatch);
     }
 
-    let source_definition = content
-        .production_building(source_kind)
-        .ok_or(CommandRejectReason::SourceDefinitionMismatch)?;
-    let target_definition = content
-        .production_building(target_kind)
-        .ok_or(CommandRejectReason::UnknownBuildingDefinition(target))?;
+    let resolve = |kind| match kind {
+        CastleFightBuildingKind::Production(kind) => {
+            let definition = content.production_building(kind)?;
+            Some((
+                definition.spawn(source.team, source.footprint),
+                definition.gameplay_properties(),
+            ))
+        }
+        CastleFightBuildingKind::Tower(kind) => {
+            let definition = content.tower(kind)?;
+            Some((
+                definition.spawn(source.team, source.footprint),
+                definition.gameplay_properties(),
+            ))
+        }
+    };
+    let (source_spawn, source_properties) =
+        resolve(source_kind).ok_or(CommandRejectReason::SourceDefinitionMismatch)?;
+    let (target_spawn, target_properties) =
+        resolve(target_kind).ok_or(CommandRejectReason::UnknownBuildingDefinition(target))?;
     simulation
         .start_building_upgrade_as(
             player,
             building,
-            source_definition.spawn(source.team, source.footprint),
-            source_definition.gameplay_properties(),
-            target_definition.spawn(source.team, source.footprint),
-            target_definition.gameplay_properties(),
+            source_spawn,
+            source_properties,
+            target_spawn,
+            target_properties,
         )
         .map(|()| CommandExecutionResult::Applied)
         .map_err(CommandRejectReason::Upgrade)
@@ -449,6 +453,41 @@ mod tests {
                 .gold,
             150
         );
+    }
+
+    #[test]
+    fn tower_upgrade_command_accepts_tiny_watch_to_multishot_edge() {
+        let mut game = match_927();
+        let source = CastleFightTowerKind::TinyWatchTower.definition();
+        let target = CastleFightTowerKind::TinyMultishotTower.definition();
+        let footprint = BuildingFootprint::new(
+            -138,
+            16,
+            source.footprint_size_cells,
+            source.footprint_size_cells,
+        );
+        let building = game.simulation.spawn_building_with_properties(
+            source.spawn(Team(0), footprint),
+            source.gameplay_properties(),
+        );
+        game.simulation
+            .debug_grant_player_resources(Team(0), 1_000, 1_000);
+        let command = PlayerCommand::UpgradeBuilding {
+            building,
+            target: CastleFightTowerKind::TinyMultishotTower.stable_id(),
+        };
+
+        assert_eq!(
+            admit_player_command(&game.simulation, game.content, PlayerId(0), command),
+            Ok(())
+        );
+        assert_eq!(
+            execute_player_command(&mut game.simulation, game.content, PlayerId(0), command),
+            CommandOutcome::Executed(CommandExecutionResult::Applied)
+        );
+        let upgrading = game.simulation.building(building).unwrap();
+        assert_eq!(upgrading.content.unwrap().rawcode, target.rawcode);
+        assert!(upgrading.construction_complete_tick.is_some());
     }
 
     #[test]

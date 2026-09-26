@@ -61,6 +61,15 @@ pub(super) fn canonical_configuration_identity(
     for regions in &config.team_build_regions {
         hash_footprint_list(&mut hash, regions);
     }
+    for region in config.team_castle_regions {
+        match region {
+            Some(region) => {
+                hash.write_u8(1);
+                hash_building_footprint(&mut hash, region);
+            }
+            None => hash.write_u8(0),
+        }
+    }
     match config.targetless_lane {
         Some(lane) => {
             hash.write_u8(1);
@@ -147,6 +156,7 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) players: &'a [PlayerState],
     pub(super) lifecycle: MatchLifecycle,
     pub(super) team_objectives: [Option<SimId>; 2],
+    pub(super) gjallarhorn_constructed_count: [u32; 2],
 }
 
 pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
@@ -158,6 +168,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         players,
         lifecycle,
         team_objectives,
+        gjallarhorn_constructed_count,
     } = state;
     let entities = super::snapshot::canonical_entities(world);
 
@@ -192,6 +203,9 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     }
     for objective in team_objectives {
         hash_optional_sim_id(&mut hash, objective);
+    }
+    for count in gjallarhorn_constructed_count {
+        hash.write_u32(count);
     }
     hash.write_u64(players.len() as u64);
     for player in players {
@@ -1003,6 +1017,8 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
+    hash.write_u64(status.warlock_retreat_start_tick);
+    hash.write_u64(status.warlock_retreat_end_tick);
     hash.write_u8(u8::from(status.permanent_holy_health_bonus));
     hash.write_u8(status.movement_modifier_count);
     let count = usize::from(status.movement_modifier_count);
@@ -1366,6 +1382,50 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(radius);
             hash.write_u8(resurrection_count);
             hash.write_i32(resurrection_radius);
+        }
+        AbilityEffect::HolyFervour {
+            modifier,
+            radius,
+            duration_ticks,
+        } => {
+            hash.write_u64(u64::from(modifier.0));
+            hash.write_i32(radius);
+            hash.write_u16(duration_ticks);
+        }
+        AbilityEffect::Purification {
+            damage,
+            radius,
+            consume_radius,
+            reveal_radius,
+            reveal_duration_ticks,
+        } => {
+            hash.write_i32(damage);
+            hash.write_i32(radius);
+            hash.write_i32(consume_radius);
+            hash.write_i32(reveal_radius);
+            hash.write_u16(reveal_duration_ticks);
+        }
+        AbilityEffect::ArtilleryBombardment {
+            min_damage,
+            max_damage,
+            speed_per_tick,
+            splash,
+            burning_oil,
+        } => {
+            hash.write_i32(min_damage);
+            hash.write_i32(max_damage);
+            hash.write_i32(speed_per_tick);
+            hash_splash_falloff_profile(hash, splash);
+            hash.write_u64(u64::from(burning_oil.ability.0));
+            hash.write_i32(burning_oil.radius);
+            hash.write_i32(burning_oil.full_damage);
+            hash.write_u16(burning_oil.full_interval_millis);
+            hash.write_i32(burning_oil.half_damage);
+            hash.write_u16(burning_oil.half_interval_millis);
+            hash.write_u16(burning_oil.full_duration_millis);
+            hash.write_u16(burning_oil.total_duration_millis);
+            hash.write_u8(u8::from(burning_oil.target_ground_units));
+            hash.write_u8(u8::from(burning_oil.target_buildings));
         }
     }
 }

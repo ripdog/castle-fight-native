@@ -647,6 +647,58 @@ impl Simulation {
                 })
                 .collect()
         });
+        let multishot_rawcode = crate::content::CastleFightTowerKind::TinyMultishotTower
+            .definition()
+            .rawcode;
+        let mut multishot_intents = Vec::new();
+        for intent in &building_intents {
+            let AttackSourceIndex::Building(source_index) = intent.source else {
+                continue;
+            };
+            let source = &buildings[source_index];
+            if self
+                .world
+                .entity(source.entity)
+                .get::<ContentIdentity>()
+                .map(|identity| identity.rawcode)
+                != Some(multishot_rawcode)
+            {
+                continue;
+            }
+            let mut candidates = units
+                .iter()
+                .enumerate()
+                .filter_map(|(index, target)| {
+                    if target.health <= 0
+                        || target.team == source.team
+                        || target.id == intent.target_id
+                        || !intent.attack_targets.can_target_unit(target.movement_class)
+                    {
+                        return None;
+                    }
+                    let distance_sq = point_to_footprint_distance_sq(
+                        target.position,
+                        source.footprint,
+                        self.config.navigation_cell_size,
+                    );
+                    (distance_sq <= intent.attack.range_sq()).then_some((
+                        distance_sq,
+                        target.id,
+                        index,
+                    ))
+                })
+                .collect::<Vec<_>>();
+            candidates.sort_unstable_by_key(|(distance, id, _)| (*distance, *id));
+            for (distance_sq, target_id, index) in candidates.into_iter().take(2) {
+                multishot_intents.push(AttackIntent {
+                    target: TargetIndex::Unit(index),
+                    target_id,
+                    distance_sq,
+                    ..*intent
+                });
+            }
+        }
+        building_intents.extend(multishot_intents);
         unit_intents.append(&mut building_intents);
         unit_intents
     }

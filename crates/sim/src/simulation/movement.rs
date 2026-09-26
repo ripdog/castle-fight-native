@@ -165,10 +165,15 @@ impl Simulation {
     ) -> MovementDecision {
         let current = unit.position;
         let movement_speed = effective_movement_speed(unit);
-        if unit_health[index] <= 0
-            || movement_speed == 0
-            || self.next_tick < unit.status.stunned_until_tick
+        if unit_health[index] <= 0 || movement_speed == 0 {
+            return MovementDecision::stationary(current);
+        }
+        if self.next_tick >= unit.status.warlock_retreat_start_tick
+            && self.next_tick < unit.status.warlock_retreat_end_tick
         {
+            return self.desired_warlock_retreat_position(unit, movement_speed);
+        }
+        if self.next_tick < unit.status.stunned_until_tick {
             return MovementDecision::stationary(current);
         }
         if unit.movement_class == MovementClass::Air {
@@ -566,6 +571,66 @@ impl Simulation {
             _ => current_x,
         };
         Some(SimPoint::new(i32::try_from(goal_x).ok()?, goal_y))
+    }
+
+    fn desired_warlock_retreat_position(
+        &self,
+        unit: &UnitSnapshot,
+        movement_speed: i32,
+    ) -> MovementDecision {
+        debug_assert_eq!(unit.movement_class, MovementClass::Ground);
+        let current = unit.position;
+        let own_objective_team = 1u8
+            .checked_sub(unit.team.0)
+            .expect("Castle Fight teams must be 0 or 1");
+        let goal = self.config.team_objective[usize::from(own_objective_team)];
+        if current == goal {
+            return MovementDecision::stationary(current);
+        }
+
+        let source_cell = self.topology.cell_of_point(current);
+        let direct = current.step_towards(goal, movement_speed);
+        if self.position_is_traversable_from(source_cell, direct, unit.collision_radius_override) {
+            return MovementDecision {
+                position: direct,
+                pursuit_step: false,
+                pursuit_target: None,
+                attack_goal: None,
+                navigation_route_step: false,
+                used_a_star: false,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+                cache_insert: None,
+            };
+        }
+
+        let route_bias = sidestep_sign(unit.id);
+        if let Some(next_cell) =
+            self.topology
+                .objective_step_with_bias(own_objective_team, source_cell, route_bias)
+        {
+            let candidate =
+                current.step_towards(self.topology.center_of_cell(next_cell), movement_speed);
+            if self.position_is_traversable_from(
+                source_cell,
+                candidate,
+                unit.collision_radius_override,
+            ) {
+                return MovementDecision {
+                    position: candidate,
+                    pursuit_step: false,
+                    pursuit_target: None,
+                    attack_goal: None,
+                    navigation_route_step: true,
+                    used_a_star: false,
+                    a_star_cache_hit: false,
+                    a_star_expanded_nodes: 0,
+                    cache_insert: None,
+                };
+            }
+        }
+
+        MovementDecision::stationary(current)
     }
 
     fn desired_air_position(

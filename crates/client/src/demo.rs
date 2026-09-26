@@ -212,7 +212,7 @@ mod tests {
             ..
         } = create_demo_world(1, None);
         let builder = simulation.builder_for_team(Team(0)).expect("blue builder");
-        assert_eq!(direct_buildings.len(), 3);
+        assert_eq!(direct_buildings.len(), 12);
         for kind in direct_buildings {
             assert!(builder.configuration.allows_building(kind.rawcode(content)));
         }

@@ -288,6 +288,46 @@
       "valid_from": "9.27",
       "valid_through": "9.27",
       "notes": "Version-scoped Castle Fight 9.27 automatic spell bundle resolved into a spellcasting profile."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02K",
+      "implementation": "warcraft-human-utility-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped 9.27 Human utility building effect."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01K",
+      "implementation": "warcraft-human-utility-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped 9.27 Human utility building effect."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HN",
+      "implementation": "warcraft-human-utility-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped 9.27 Human utility building effect."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "AM05",
+      "implementation": "warcraft-human-utility-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped 9.27 Human utility building effect."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06M",
+      "implementation": "warcraft-human-utility-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped 9.27 Human utility building effect."
     }
   ]
 }

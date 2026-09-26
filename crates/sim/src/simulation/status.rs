@@ -135,6 +135,9 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
+        AbilityEffect::HolyFervour { .. }
+        | AbilityEffect::Purification { .. }
+        | AbilityEffect::ArtilleryBombardment { .. } => return false,
     }
     true
 }
@@ -248,7 +251,7 @@ pub(super) fn apply_timed_movement_modifier(
     }
 }
 
-fn apply_timed_attack_speed_modifier(
+pub(super) fn apply_timed_attack_speed_modifier(
     status: &mut StatusState,
     modifier_id: ModifierId,
     percent_delta: i16,
@@ -260,10 +263,7 @@ fn apply_timed_attack_speed_modifier(
     match active.binary_search_by_key(&modifier_id, |modifier| modifier.id) {
         Ok(index) => {
             let modifier = &mut status.attack_speed_modifiers[index];
-            assert_eq!(
-                modifier.percent_delta, percent_delta,
-                "same ModifierId authored with conflicting attack-speed percentages"
-            );
+            modifier.percent_delta = percent_delta;
             modifier.expires_tick = modifier.expires_tick.max(expires_tick);
         }
         Err(index) => {

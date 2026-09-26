@@ -343,7 +343,7 @@ pub struct TriggeredSpellProcProfile {
     pub effect: TriggeredAttackEffect,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BurningOilEffectProfile {
     pub ability: AbilityId,
     pub radius: i32,
@@ -365,7 +365,7 @@ pub struct CriticalStrikeEffectProfile {
     pub targets: AttackTargetMask,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SplashFalloffProfile {
     pub full_radius: i32,
     pub medium_radius: i32,
@@ -782,6 +782,9 @@ pub enum AbilityTargetPolicy {
     RecentlyAttackedFriendlyUnit,
     WoundedFriendlyUnit,
     RandomGroundEnemyUnit,
+    AllFriendlyUnits,
+    RandomCorpse,
+    RandomEnemyBasePoint,
 }
 
 impl AbilityTargetPolicy {
@@ -794,6 +797,9 @@ impl AbilityTargetPolicy {
             Self::RecentlyAttackedFriendlyUnit => 3,
             Self::WoundedFriendlyUnit => 4,
             Self::RandomGroundEnemyUnit => 5,
+            Self::AllFriendlyUnits => 6,
+            Self::RandomCorpse => 7,
+            Self::RandomEnemyBasePoint => 8,
         }
     }
 }
@@ -844,6 +850,25 @@ pub enum AbilityEffect {
         resurrection_count: u8,
         resurrection_radius: i32,
     },
+    HolyFervour {
+        modifier: ModifierId,
+        radius: i32,
+        duration_ticks: u16,
+    },
+    Purification {
+        damage: i32,
+        radius: i32,
+        consume_radius: i32,
+        reveal_radius: i32,
+        reveal_duration_ticks: u16,
+    },
+    ArtilleryBombardment {
+        min_damage: i32,
+        max_damage: i32,
+        speed_per_tick: i32,
+        splash: SplashFalloffProfile,
+        burning_oil: BurningOilEffectProfile,
+    },
 }
 
 impl AbilityEffect {
@@ -857,6 +882,9 @@ impl AbilityEffect {
             Self::FrostArmor { .. } => 4,
             Self::HolyAid { .. } => 5,
             Self::Prayer { .. } => 6,
+            Self::HolyFervour { .. } => 7,
+            Self::Purification { .. } => 8,
+            Self::ArtilleryBombardment { .. } => 9,
         }
     }
 }
@@ -964,6 +992,8 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
+    pub warlock_retreat_start_tick: u64,
+    pub warlock_retreat_end_tick: u64,
     pub permanent_holy_health_bonus: bool,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
     pub movement_modifier_count: u8,

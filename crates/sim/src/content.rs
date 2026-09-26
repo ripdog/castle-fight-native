@@ -11,12 +11,12 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
         AttackTargetMask, AuraEffectProfile, AutomaticAbilityProfile, BuilderConfiguration,
         BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, CleaveEffectProfile, CollisionRadius,
-        ContentIdentity, CorpseDefinitionId, CorpseProfile, GameplayBundleIdentity, ManaProfile,
-        ModifierId, MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects,
-        ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile,
-        SpellResistanceEffectProfile, SpellcastingProfile, SplashFalloffProfile, Team,
-        TriggeredAttackEffect, UnitGameplayProperties, UnitTemplate,
+        BuildingGameplayProperties, BuildingSpawn, BurningOilEffectProfile, CleaveEffectProfile,
+        CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile,
+        GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass, MovementProfile,
+        PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, ResolvedUnitDefinition,
+        SecondaryAttackProfile, SpellResistanceEffectProfile, SpellcastingProfile,
+        SplashFalloffProfile, Team, TriggeredAttackEffect, UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     economy::{BuildingEconomyProfile, EconomyRules, RESOURCE_FIXED_SCALE},
@@ -30,7 +30,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r6";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r7";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -327,6 +327,23 @@ impl CastleFightContentBundle {
                     .is_some_and(|definition| builder.build_catalog.contains(&definition.rawcode))
             })
             .map(CastleFightBuildingKind::Production)
+            .chain(
+                [
+                    CastleFightTowerKind::Gjallarhorn,
+                    CastleFightTowerKind::Artillery,
+                    CastleFightTowerKind::VesselOfPurity,
+                    CastleFightTowerKind::WatchTower,
+                    CastleFightTowerKind::TreasureBox,
+                    CastleFightTowerKind::HeroicShrine,
+                ]
+                .into_iter()
+                .filter(|kind| {
+                    self.tower(*kind).is_some_and(|definition| {
+                        builder.build_catalog.contains(&definition.rawcode)
+                    })
+                })
+                .map(CastleFightBuildingKind::Tower),
+            )
             .collect()
     }
 }
@@ -448,6 +465,20 @@ impl CastleFightBuildingKind {
         match self {
             Self::Production(kind) => kind.stable_id(),
             Self::Tower(kind) => kind.stable_id(),
+        }
+    }
+
+    pub fn upgrade_targets_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<Vec<Self>, UnsupportedCastleFightMapVersion> {
+        match self {
+            Self::Production(kind) => kind
+                .upgrade_targets_for_version(version)
+                .map(|targets| targets.into_iter().map(Self::Production).collect()),
+            Self::Tower(kind) => kind
+                .upgrade_targets_for_version(version)
+                .map(|targets| targets.into_iter().map(Self::Tower).collect()),
         }
     }
 
@@ -1315,6 +1346,13 @@ impl CastleFightProductionDefinition {
 pub enum CastleFightTowerKind {
     WatchTower,
     PoofTower,
+    Artillery,
+    Gjallarhorn,
+    VesselOfPurity,
+    HeroicShrine,
+    TreasureBox,
+    TinyWatchTower,
+    TinyMultishotTower,
 }
 
 impl CastleFightTowerKind {
@@ -1323,10 +1361,27 @@ impl CastleFightTowerKind {
         CastleFightBuildingId(match self {
             Self::WatchTower => 0x2100_0001,
             Self::PoofTower => 0x2100_0002,
+            Self::Artillery => 0x2100_0003,
+            Self::Gjallarhorn => 0x2100_0004,
+            Self::VesselOfPurity => 0x2100_0005,
+            Self::HeroicShrine => 0x2100_0006,
+            Self::TinyWatchTower => 0x2100_0007,
+            Self::TinyMultishotTower => 0x2100_0008,
+            Self::TreasureBox => 0x2100_0009,
         })
     }
 
-    pub const ALL: [Self; 2] = [Self::WatchTower, Self::PoofTower];
+    pub const ALL: [Self; 9] = [
+        Self::WatchTower,
+        Self::PoofTower,
+        Self::Artillery,
+        Self::Gjallarhorn,
+        Self::VesselOfPurity,
+        Self::HeroicShrine,
+        Self::TreasureBox,
+        Self::TinyWatchTower,
+        Self::TinyMultishotTower,
+    ];
 
     #[must_use]
     pub fn from_rawcode(rawcode: u32) -> Option<Self> {
@@ -1344,8 +1399,32 @@ impl CastleFightTowerKind {
         Ok(match rawcode {
             value if value == u32::from_be_bytes(*b"h006") => Some(Self::WatchTower),
             value if value == u32::from_be_bytes(*b"h07P") => Some(Self::PoofTower),
+            value if value == u32::from_be_bytes(*b"h001") => Some(Self::Artillery),
+            value if value == u32::from_be_bytes(*b"h010") => Some(Self::Gjallarhorn),
+            value if value == u32::from_be_bytes(*b"h07U") => Some(Self::VesselOfPurity),
+            value if value == u32::from_be_bytes(*b"h05G") => Some(Self::HeroicShrine),
+            value if value == u32::from_be_bytes(*b"h008") => Some(Self::TreasureBox),
+            value if value == u32::from_be_bytes(*b"h081") => Some(Self::TinyWatchTower),
+            value if value == u32::from_be_bytes(*b"h082") => Some(Self::TinyMultishotTower),
             _ => None,
         })
+    }
+
+    pub fn upgrade_targets_for_version(
+        self,
+        version: MapVersion,
+    ) -> Result<Vec<Self>, UnsupportedCastleFightMapVersion> {
+        let definition = self.definition_for_version(version)?;
+        let (_, targets) = extracted_building_upgrade_links_927(definition.rawcode);
+        targets
+            .into_iter()
+            .map(|rawcode| Self::from_rawcode_for_version(rawcode, version))
+            .filter_map(|result| match result {
+                Ok(Some(kind)) => Some(Ok(kind)),
+                Ok(None) => None,
+                Err(error) => Some(Err(error)),
+            })
+            .collect()
     }
 
     #[must_use]
@@ -1368,8 +1447,113 @@ impl CastleFightTowerKind {
         let (rawcode, expected_name) = match self {
             Self::WatchTower => (u32::from_be_bytes(*b"h006"), "Watch Tower"),
             Self::PoofTower => (u32::from_be_bytes(*b"h07P"), "Poof Tower"),
+            Self::Artillery => (u32::from_be_bytes(*b"h001"), "Artillery"),
+            Self::Gjallarhorn => (u32::from_be_bytes(*b"h010"), "Gjallarhorn"),
+            Self::VesselOfPurity => (u32::from_be_bytes(*b"h07U"), "Vessel of Purity"),
+            Self::HeroicShrine => (u32::from_be_bytes(*b"h05G"), "Heroic Shrine"),
+            Self::TreasureBox => (u32::from_be_bytes(*b"h008"), "Treasure Box"),
+            Self::TinyWatchTower => (u32::from_be_bytes(*b"h081"), "Tiny Watch Tower"),
+            Self::TinyMultishotTower => (u32::from_be_bytes(*b"h082"), "Tiny Multishot Tower"),
         };
-        extracted_tower_definition_927(rawcode, expected_name)
+        let mut definition = extracted_tower_definition_927(rawcode, expected_name);
+        definition.spellcasting = match self {
+            Self::Artillery => {
+                let speed_per_tick = match definition
+                    .attack
+                    .expect("Artillery retains its authored ballistic weapon")
+                    .delivery
+                {
+                    AttackDelivery::RangedBallistic { speed_per_tick, .. } => speed_per_tick,
+                    _ => panic!("9.27 Artillery must use a ballistic weapon"),
+                };
+                definition.attack = None;
+                Some(SpellcastingProfile {
+                    mana: ManaProfile {
+                        maximum: 0,
+                        starting: 0,
+                        regen_per_tick_per_10k: 0,
+                    },
+                    ability: AutomaticAbilityProfile {
+                        id: AbilityId(u32::from_be_bytes(*b"A02K")),
+                        mana_cost: 0,
+                        cooldown_ticks: 15 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                        range: 0,
+                        target_policy: AbilityTargetPolicy::RandomEnemyBasePoint,
+                        effect: AbilityEffect::ArtilleryBombardment {
+                            min_damage: 300,
+                            max_damage: 400,
+                            speed_per_tick,
+                            splash: SplashFalloffProfile {
+                                full_radius: world(60),
+                                medium_radius: world(150),
+                                outer_radius: world(320),
+                                medium_damage_per_10k: 5_000,
+                                outer_damage_per_10k: 2_000,
+                                targets: AttackTargetMask::ALL,
+                            },
+                            burning_oil: BurningOilEffectProfile {
+                                ability: AbilityId(u32::from_be_bytes(*b"A02K")),
+                                radius: world(150),
+                                full_damage: 5,
+                                full_interval_millis: 250,
+                                half_damage: 3,
+                                half_interval_millis: 1_000,
+                                full_duration_millis: 1_010,
+                                total_duration_millis: 1_010,
+                                target_ground_units: true,
+                                target_buildings: true,
+                            },
+                        },
+                    },
+                })
+            }
+            Self::Gjallarhorn => Some(SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 10,
+                    starting: 0,
+                    // Ceil 1 mana/sec into the 30 Hz fixed-point tick rate so the map's
+                    // mana-gated 7-second cadence lands on the authored whole-second boundary.
+                    regen_per_tick_per_10k: 334,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(u32::from_be_bytes(*b"A01K")),
+                    mana_cost: 7,
+                    cooldown_ticks: CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    range: world(500),
+                    target_policy: AbilityTargetPolicy::AllFriendlyUnits,
+                    effect: AbilityEffect::HolyFervour {
+                        modifier: ModifierId(u32::from_be_bytes(*b"A016")),
+                        radius: world(500),
+                        duration_ticks: 60 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    },
+                },
+            }),
+            Self::VesselOfPurity => Some(SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: 18,
+                    starting: 0,
+                    // As above, preserve the 15-second mana cadence while retaining the
+                    // separately recovered 1-second WC3 cooldown.
+                    regen_per_tick_per_10k: 334,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(u32::from_be_bytes(*b"A0HN")),
+                    mana_cost: 15,
+                    cooldown_ticks: CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    range: world(99_999),
+                    target_policy: AbilityTargetPolicy::RandomCorpse,
+                    effect: AbilityEffect::Purification {
+                        damage: 150,
+                        radius: world(300),
+                        consume_radius: world(220),
+                        reveal_radius: world(400),
+                        reveal_duration_ticks: 7 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    },
+                },
+            }),
+            _ => None,
+        };
+        definition
     }
 }
 
@@ -1391,7 +1575,8 @@ pub struct CastleFightTowerDefinition {
     pub footprint_size_cells: u16,
     pub command_card_position: CommandCardPosition,
     pub hotkey: char,
-    pub attack: AttackProfile,
+    pub attack: Option<AttackProfile>,
+    pub spellcasting: Option<SpellcastingProfile>,
     pub map_version: MapVersion,
 }
 
@@ -1403,8 +1588,8 @@ impl CastleFightTowerDefinition {
             footprint,
             health: self.health,
             production: None,
-            attack: Some(self.attack),
-            spellcasting: None,
+            attack: self.attack,
+            spellcasting: self.spellcasting,
         }
     }
 
@@ -1687,6 +1872,21 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00K") => {
             0x4000_0024
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A02K") => {
+            0x4000_0025
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A01K") => {
+            0x4000_0026
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0HN") => {
+            0x4000_0027
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"AM05") => {
+            0x4000_0028
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06M") => {
+            0x4000_0029
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1897,7 +2097,13 @@ fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerD
     hash.write_u8(definition.command_card_position.x);
     hash.write_u8(definition.command_card_position.y);
     hash.write_u32(definition.hotkey as u32);
-    hash_attack_profile(hash, definition.attack);
+    if let Some(attack) = definition.attack {
+        hash.write_u8(1);
+        hash_attack_profile(hash, attack);
+    } else {
+        hash.write_u8(0);
+    }
+    hash_optional_spellcasting(hash, definition.spellcasting);
 }
 
 fn hash_builder_definition(hash: &mut ContentHash64, definition: &CastleFightBuilderDefinition) {
@@ -2159,6 +2365,55 @@ fn hash_optional_spellcasting(hash: &mut ContentHash64, spellcasting: Option<Spe
             hash.write_u8(resurrection_count);
             hash.write_i32(resurrection_radius);
         }
+        AbilityEffect::HolyFervour {
+            modifier,
+            radius,
+            duration_ticks,
+        } => {
+            hash.write_u32(modifier.0);
+            hash.write_i32(radius);
+            hash.write_u16(duration_ticks);
+        }
+        AbilityEffect::Purification {
+            damage,
+            radius,
+            consume_radius,
+            reveal_radius,
+            reveal_duration_ticks,
+        } => {
+            hash.write_i32(damage);
+            hash.write_i32(radius);
+            hash.write_i32(consume_radius);
+            hash.write_i32(reveal_radius);
+            hash.write_u16(reveal_duration_ticks);
+        }
+        AbilityEffect::ArtilleryBombardment {
+            min_damage,
+            max_damage,
+            speed_per_tick,
+            splash,
+            burning_oil,
+        } => {
+            hash.write_i32(min_damage);
+            hash.write_i32(max_damage);
+            hash.write_i32(speed_per_tick);
+            hash.write_i32(splash.full_radius);
+            hash.write_i32(splash.medium_radius);
+            hash.write_i32(splash.outer_radius);
+            hash.write_u16(splash.medium_damage_per_10k);
+            hash.write_u16(splash.outer_damage_per_10k);
+            hash.write_u8(splash.targets.bits());
+            hash.write_u32(burning_oil.ability.0);
+            hash.write_i32(burning_oil.radius);
+            hash.write_i32(burning_oil.full_damage);
+            hash.write_u16(burning_oil.full_interval_millis);
+            hash.write_i32(burning_oil.half_damage);
+            hash.write_u16(burning_oil.half_interval_millis);
+            hash.write_u16(burning_oil.full_duration_millis);
+            hash.write_u16(burning_oil.total_duration_millis);
+            hash.write_u8(u8::from(burning_oil.target_ground_units));
+            hash.write_u8(u8::from(burning_oil.target_buildings));
+        }
     }
 }
 
@@ -2237,12 +2492,17 @@ struct ExtractedUnit927 {
     builder_locomotion: Option<BuilderLocomotion>,
     move_speed_per_tick: Option<i32>,
     mechanical: bool,
+    sapper: bool,
+    undead: bool,
     collision_radius: CollisionRadius,
     acquisition_range: Option<i32>,
     projectile_speed_per_tick: Option<i32>,
     outer_splash_radius: Option<i32>,
     splash_falloff: Option<SplashFalloffProfile>,
     attack1_damage_type: Option<DamageType>,
+    attack1_damage: Option<i32>,
+    attack1_cooldown_ticks: Option<u16>,
+    attack1_range: Option<i32>,
     attack1_weapon_kind: Option<ExtractedWeaponKind927>,
     attack1_targets: Option<AttackTargetMask>,
 }
@@ -2285,7 +2545,6 @@ enum ExtractedWeaponKind927 {
 struct ExtractedProduction927 {
     unit_rawcode: u32,
     spawn_interval_ticks: u16,
-    legendary_points_cost: u16,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2352,6 +2611,7 @@ struct ExtractedContent927 {
     primary_attacks: BTreeMap<u32, ExtractedAttack927>,
     secondary_attacks: BTreeMap<u32, ExtractedAttack927>,
     production: BTreeMap<u32, ExtractedProduction927>,
+    legendary_points_costs: BTreeMap<u32, u16>,
     corpses: BTreeMap<u32, ExtractedCorpse927>,
     repair_time_ticks: BTreeMap<u32, u32>,
     command_card_positions: BTreeMap<u32, CommandCardPosition>,
@@ -2527,9 +2787,16 @@ impl ExtractedContent927 {
             };
             let move_speed_per_tick =
                 parse_optional_i32_927(columns[20])?.map(|speed| movement(speed).speed_per_tick);
-            let mechanical = columns[24]
-                .split(',')
+            let classifications = columns[24].split(',').map(str::trim).collect::<Vec<_>>();
+            let mechanical = classifications
+                .iter()
                 .any(|classification| classification.eq_ignore_ascii_case("mechanical"));
+            let sapper = classifications
+                .iter()
+                .any(|classification| classification.eq_ignore_ascii_case("sapper"));
+            let undead = classifications
+                .iter()
+                .any(|classification| classification.eq_ignore_ascii_case("undead"));
             let abilities = columns[23]
                 .split(',')
                 .map(str::trim)
@@ -2554,12 +2821,17 @@ impl ExtractedContent927 {
                 builder_locomotion,
                 move_speed_per_tick,
                 mechanical,
+                sapper,
+                undead,
                 collision_radius: CollisionRadius(world(collision_world)),
                 acquisition_range,
                 projectile_speed_per_tick,
                 outer_splash_radius,
                 splash_falloff,
                 attack1_damage_type,
+                attack1_damage: parse_optional_decimal_rounded_i32_927(columns[36])?,
+                attack1_cooldown_ticks: parse_optional_seconds_to_ticks_u16_927(columns[30])?,
+                attack1_range: parse_optional_i32_927(columns[29])?.map(world),
                 attack1_weapon_kind,
                 attack1_targets,
             };
@@ -2678,28 +2950,30 @@ impl ExtractedContent927 {
         .expect("production field list must not be empty");
 
         let mut production = BTreeMap::new();
+        let mut legendary_points_costs = BTreeMap::new();
         for line in PRODUCTION_BUILDINGS_927_TSV.lines().skip(1) {
             let columns = line.split('\t').collect::<Vec<_>>();
             if columns.len() <= production_required_max {
                 return Err("9.27 production-buildings row is missing required columns".to_owned());
             }
+            let building_rawcode = parse_rawcode(columns[production_building_rawcode]);
+            let legendary_points_cost = if columns[production_is_legendary] == "1" {
+                columns[production_food_used]
+                    .parse::<u16>()
+                    .map_err(|error| error.to_string())?
+            } else {
+                0
+            };
+            legendary_points_costs.insert(building_rawcode, legendary_points_cost);
             if columns[production_kind] != "production" {
                 continue;
             }
-            let building_rawcode = parse_rawcode(columns[production_building_rawcode]);
             let unit_rawcode = parse_rawcode(columns[production_unit_rawcode]);
             let spawn_interval_ticks =
                 parse_seconds_to_ticks_u16_927(columns[production_spawn_time])?;
             let row = ExtractedProduction927 {
                 unit_rawcode,
                 spawn_interval_ticks,
-                legendary_points_cost: if columns[production_is_legendary] == "1" {
-                    columns[production_food_used]
-                        .parse::<u16>()
-                        .map_err(|error| error.to_string())?
-                } else {
-                    0
-                },
             };
             if production.insert(building_rawcode, row).is_some() {
                 return Err(format!(
@@ -2914,6 +3188,7 @@ impl ExtractedContent927 {
             primary_attacks,
             secondary_attacks,
             production,
+            legendary_points_costs,
             corpses,
             repair_time_ticks,
             command_card_positions,
@@ -3235,7 +3510,20 @@ fn extracted_builder_definition_927(race: CastleFightBuilderRace) -> CastleFight
         // Critter Builder still has Repair in its ability list but leaves `udaa` blank.
         repair_autocast_enabled_by_default: !matches!(race, CastleFightBuilderRace::Critter),
         profile: builder_profile(speed_per_tick),
-        build_catalog: catalog.direct_buildings.clone(),
+        build_catalog: if race == CastleFightBuilderRace::Human {
+            // The race-registration table also contains the Towerless perk's h081 -> h082 line.
+            // The actual 9.27 Human builder command list (`X00C.ubui`) instead contains the
+            // shared Treasure Box and excludes the perk-only tiny tower.
+            [
+                b"h07U", b"h05G", b"h037", b"h015", b"h010", b"h00K", b"h008", b"h006", b"h004",
+                b"h003", b"h000", b"h001",
+            ]
+            .into_iter()
+            .map(|rawcode| u32::from_be_bytes(*rawcode))
+            .collect()
+        } else {
+            catalog.direct_buildings.clone()
+        },
         map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
 }
@@ -3304,8 +3592,33 @@ pub fn castle_fight_economy_rules_for_version(
     })
 }
 
+pub(crate) fn vessel_corpse_qualifies_927(definition: CorpseDefinitionId) -> bool {
+    extracted_content_927()
+        .units
+        .get(&definition.0)
+        .is_some_and(|unit| unit.sapper && !unit.undead)
+}
+
+pub(crate) fn unit_has_ability_927(rawcode: u32, ability: AbilityId) -> bool {
+    extracted_content_927()
+        .unit_abilities
+        .get(&rawcode)
+        .is_some_and(|abilities| abilities.contains(&ability.0))
+}
+
 fn extracted_building_economy_927(rawcode: u32) -> BuildingEconomyProfile {
     let (gold_cost, lumber_cost) = extracted_building_costs_927(rawcode);
+    if rawcode == u32::from_be_bytes(*b"h008") {
+        return BuildingEconomyProfile {
+            gold_cost: u32::from(gold_cost),
+            lumber_cost: u32::from(lumber_cost),
+            lumber_refund: 0,
+            legendary_points_cost: 0,
+            // Treasure Box multiplies the owner's aggregate raw income instead of contributing
+            // a standalone income term.
+            income_per_10k: 0,
+        };
+    }
     let (_, is_siege, _) = extracted_building_income_semantics_927(rawcode);
     let lumber_refund = if lumber_cost == 0 {
         if is_siege {
@@ -3321,9 +3634,10 @@ fn extracted_building_economy_927(rawcode: u32) -> BuildingEconomyProfile {
         lumber_cost: u32::from(lumber_cost),
         lumber_refund,
         legendary_points_cost: extracted_content_927()
-            .production
+            .legendary_points_costs
             .get(&rawcode)
-            .map_or(0, |row| row.legendary_points_cost),
+            .copied()
+            .unwrap_or(0),
         income_per_10k: extracted_building_income_per_10k_927(rawcode),
     }
 }
@@ -3554,19 +3868,8 @@ fn extracted_tower_definition_927(
         .units
         .get(&rawcode)
         .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing retained 9.27 unit metadata"));
-    let protected = content
-        .protected_stats
-        .get(&rawcode)
-        .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing retained 9.27 protected stats"));
-    let damage_type = unit
-        .attack1_damage_type
-        .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing attack damage type"));
-    let targets = unit
-        .attack1_targets
-        .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing attack target mask"));
-    let weapon_kind = unit
-        .attack1_weapon_kind
-        .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing attack weapon type"));
+    let protected = content.protected_stats.get(&rawcode);
+    let attack = unit.attack1_weapon_kind.map(|weapon_kind| {
     let delivery = match weapon_kind {
         ExtractedWeaponKind927::Melee => AttackDelivery::Melee,
         ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
@@ -3589,21 +3892,24 @@ fn extracted_tower_definition_927(
             "tower {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
         ),
     };
-    let attack = AttackProfile {
+    AttackProfile {
         delivery,
         damage: protected
-            .attack1_damage
+            .and_then(|stats| stats.attack1_damage)
+            .or(unit.attack1_damage)
             .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing effective attack damage")),
         range: protected
-            .attack1_range
+            .and_then(|stats| stats.attack1_range)
+            .or(unit.attack1_range)
             .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing effective attack range")),
         acquisition_range: unit
             .acquisition_range
             .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing acquisition range")),
-        cooldown_ticks: protected.attack1_cooldown_ticks.unwrap_or_else(|| {
+        cooldown_ticks: protected.and_then(|stats| stats.attack1_cooldown_ticks).or(unit.attack1_cooldown_ticks).unwrap_or_else(|| {
             panic!("tower {rawcode:#010x} is missing effective attack cooldown")
         }),
-    };
+    }
+    });
     let command_card_position = *content
         .command_card_positions
         .get(&rawcode)
@@ -3621,20 +3927,21 @@ fn extracted_tower_definition_927(
         gold_cost: building.gold_cost,
         lumber_cost: building.lumber_cost,
         economy: extracted_building_economy_927(rawcode),
-        health: protected.health,
+        health: protected.map_or(building.health, |stats| stats.health),
         construction_time_ticks: building.construction_time_ticks,
         repair_time_ticks: unit
             .repair_time_ticks
             .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing retained repair time")),
-        armor: building.armor,
-        damage_type,
-        attack_targets: targets,
+        armor: protected.map_or(building.armor, |stats| stats.armor),
+        damage_type: unit.attack1_damage_type.unwrap_or(DamageType::Normal),
+        attack_targets: unit.attack1_targets.unwrap_or(AttackTargetMask::ALL),
         footprint_size_cells: building.footprint_size_cells.unwrap_or_else(|| {
             panic!("tower {rawcode:#010x} has no square retained 9.27 footprint")
         }),
         command_card_position,
         hotkey,
         attack,
+        spellcasting: None,
         map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
 }
@@ -3949,8 +4256,8 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 15148639712578998569);
-        assert_eq!(bundle.behaviors().len(), 36);
+        assert_eq!(bundle.identity.gameplay_hash, 18320159385802044175);
+        assert_eq!(bundle.behaviors().len(), 41);
         assert!(
             bundle
                 .behaviors()
@@ -4331,6 +4638,41 @@ mod tests {
         let human = CastleFightBuilderRace::Human.definition();
         assert!(human.build_catalog.contains(&u32::from_be_bytes(*b"h000")));
         assert!(!human.build_catalog.contains(&u32::from_be_bytes(*b"h039")));
+
+        assert_eq!(
+            CastleFightTowerKind::TinyWatchTower
+                .upgrade_targets_for_version(MapVersion::CASTLE_FIGHT_9_27)
+                .unwrap(),
+            vec![CastleFightTowerKind::TinyMultishotTower]
+        );
+        assert!(
+            CastleFightTowerKind::TinyMultishotTower
+                .upgrade_targets_for_version(MapVersion::CASTLE_FIGHT_9_27)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn human_direct_catalog_exposes_all_authored_927_build_slots() {
+        let bundle = castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
+        let direct = bundle.playable_human_direct_building_kinds();
+        assert_eq!(direct.len(), 12);
+        assert!(direct.contains(&CastleFightBuildingKind::Tower(
+            CastleFightTowerKind::WatchTower
+        )));
+        assert!(direct.contains(&CastleFightBuildingKind::Tower(
+            CastleFightTowerKind::TreasureBox
+        )));
+        assert!(direct.contains(&CastleFightBuildingKind::Tower(
+            CastleFightTowerKind::HeroicShrine
+        )));
+        assert!(!direct.contains(&CastleFightBuildingKind::Tower(
+            CastleFightTowerKind::TinyWatchTower
+        )));
+        assert!(!direct.contains(&CastleFightBuildingKind::Tower(
+            CastleFightTowerKind::TinyMultishotTower
+        )));
     }
 
     #[test]

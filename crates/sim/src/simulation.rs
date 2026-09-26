@@ -12,9 +12,12 @@ const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
 const RANDOM_PURPOSE_UPHILL_MISS: u64 = 0x5550_4849_4c4c_0001;
 const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
 const RANDOM_PURPOSE_DEFEND_DEFLECT: u64 = 0x4445_4645_4e44_0001;
+const RANDOM_PURPOSE_HEROIC_SHRINE: u64 = 0x5348_5249_4e45_0001;
+const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
+const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 6;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 8;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -41,9 +44,9 @@ pub use snapshot::{
 };
 use status::{
     apply_ability_effect_to_unit, apply_melee_reactive_armor_effects, apply_timed_armor_modifier,
-    apply_timed_damage_over_time, apply_timed_movement_modifier, effective_armor_points_per_100,
-    effective_attack_cooldown_ticks, purge_expired_status_modifiers,
-    resolve_periodic_unit_statuses,
+    apply_timed_attack_speed_modifier, apply_timed_damage_over_time, apply_timed_movement_modifier,
+    effective_armor_points_per_100, effective_attack_cooldown_ticks,
+    purge_expired_status_modifiers, resolve_periodic_unit_statuses,
 };
 
 use crate::{
@@ -118,6 +121,10 @@ pub struct SimulationConfig {
     /// Canonical buildable regions for each team. An empty region list leaves that team
     /// unrestricted for generic/test maps that do not author build regions.
     pub team_build_regions: [Vec<BuildingFootprint>; 2],
+    /// Optional authored castle rectangle for each team. Castle Fight uses this for builder Blink
+    /// clamping and Human Artillery targeting; generic/test maps can leave it unset and fall back
+    /// to the team's build region.
+    pub team_castle_regions: [Option<BuildingFootprint>; 2],
     /// Optional standard-lane ingress guidance for targetless units. Generic maps leave this unset.
     pub targetless_lane: Option<TargetlessLane>,
     pub team_objective: [SimPoint; 2],
@@ -146,6 +153,7 @@ impl Default for SimulationConfig {
             air_static_blockers: Vec::new(),
             build_static_blockers: Vec::new(),
             team_build_regions: [Vec::new(), Vec::new()],
+            team_castle_regions: [None, None],
             targetless_lane: None,
             team_objective: [
                 SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0),
@@ -303,6 +311,8 @@ pub struct AttackEvent {
 pub enum AbilityCastTarget {
     Unit(SimId),
     AllEnemyUnits,
+    AllFriendlyUnits,
+    Point(SimPoint),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -551,6 +561,7 @@ pub struct Simulation {
     players: Vec<PlayerState>,
     lifecycle: MatchLifecycle,
     team_objectives: [Option<SimId>; 2],
+    gjallarhorn_constructed_count: [u32; 2],
     next_tick: u64,
     next_id: u64,
     configuration_identity: u64,
@@ -687,6 +698,7 @@ impl Simulation {
             players,
             lifecycle: MatchLifecycle::Running,
             team_objectives: [None, None],
+            gjallarhorn_constructed_count: [0, 0],
             next_tick: 0,
             next_id: 1,
             configuration_identity,
@@ -1274,7 +1286,18 @@ impl Simulation {
         destination: SimPoint,
         inset: i32,
     ) -> Option<SimPoint> {
-        let regions = self.config.team_build_regions.get(usize::from(team.0))?;
+        let team_index = usize::from(team.0);
+        if let Some(region) = *self.config.team_castle_regions.get(team_index)? {
+            return clamp_point_to_cell_rect(
+                destination,
+                NavCell::new(region.min_x, region.min_y),
+                NavCell::new(region.max_x(), region.max_y()),
+                self.config.navigation_cell_size,
+                inset,
+            );
+        }
+
+        let regions = self.config.team_build_regions.get(team_index)?;
         if regions.is_empty() {
             return clamp_point_to_cell_rect(
                 destination,
@@ -1776,6 +1799,7 @@ impl Simulation {
                 players: &self.players,
                 lifecycle: self.lifecycle,
                 team_objectives: self.team_objectives,
+                gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
             },
         );
         let checksum_time = phase_start.elapsed();
@@ -1886,6 +1910,7 @@ impl Simulation {
                 players: &self.players,
                 lifecycle: self.lifecycle,
                 team_objectives: self.team_objectives,
+                gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
             },
         )
     }
@@ -2427,6 +2452,28 @@ impl Simulation {
             return (0, 0);
         }
 
+        let shrine_rawcode = crate::content::CastleFightTowerKind::HeroicShrine
+            .definition()
+            .rawcode;
+        let mut shrines = self
+            .world
+            .iter_entities()
+            .filter_map(|entity| {
+                (entity.get::<ContentIdentity>()?.rawcode == shrine_rawcode
+                    && entity.get::<BuildingEconomyProfile>().is_some()
+                    && entity.get::<BuildingConstruction>().is_none()
+                    && entity
+                        .get::<Health>()
+                        .is_some_and(|health| health.current > 0))
+                .then_some((
+                    *entity.get::<SimId>()?,
+                    entity.get::<Owner>()?.0,
+                    *entity.get::<Team>()?,
+                ))
+            })
+            .collect::<Vec<_>>();
+        shrines.sort_unstable_by_key(|(id, ..)| *id);
+
         let units = self.units();
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
         let reservation_capacity = units
@@ -2521,26 +2568,55 @@ impl Simulation {
                 });
 
             if let Some((_cell, position)) = spawn {
+                let properties = UnitGameplayProperties {
+                    content: attempt.content,
+                    health_regen_per_second_per_10k: attempt.health_regen_per_second_per_10k,
+                    corpse: attempt.corpse,
+                    collision_radius: attempt.collision_radius,
+                    movement_class: attempt.movement_class,
+                    mechanical: attempt.mechanical,
+                    build_time_ticks: attempt.build_time_ticks,
+                    repair_time_ticks: attempt.repair_time_ticks,
+                    attack_targets: attempt.attack_targets,
+                    secondary_attack: attempt.secondary_attack,
+                    damage_type: attempt.damage_type,
+                    armor: attempt.armor,
+                    passive_effects: attempt.passive_effects,
+                };
                 self.spawn_unit_unchecked(
                     Some(attempt.owner),
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
-                    UnitGameplayProperties {
-                        content: attempt.content,
-                        health_regen_per_second_per_10k: attempt.health_regen_per_second_per_10k,
-                        corpse: attempt.corpse,
-                        collision_radius: attempt.collision_radius,
-                        movement_class: attempt.movement_class,
-                        mechanical: attempt.mechanical,
-                        build_time_ticks: attempt.build_time_ticks,
-                        repair_time_ticks: attempt.repair_time_ticks,
-                        attack_targets: attempt.attack_targets,
-                        secondary_attack: attempt.secondary_attack,
-                        damage_type: attempt.damage_type,
-                        armor: attempt.armor,
-                        passive_effects: attempt.passive_effects,
-                    },
+                    properties,
                     attempt.spellcasting,
                 );
+                let legendary = attempt.content.is_some_and(|content| {
+                    crate::content::unit_has_ability_927(
+                        content.rawcode,
+                        AbilityId(u32::from_be_bytes(*b"A06V")),
+                    )
+                });
+                for (shrine_id, shrine_owner, _) in shrines
+                    .iter()
+                    .filter(|(_, _, team)| *team == attempt.team)
+                    .take(if legendary { 0 } else { 2 })
+                {
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        self.next_tick,
+                        attempt.id,
+                        RANDOM_PURPOSE_HEROIC_SHRINE,
+                        shrine_id.0,
+                    ) % 100;
+                    if roll < 17 {
+                        self.spawn_unit_unchecked(
+                            Some(*shrine_owner),
+                            UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
+                            properties,
+                            attempt.spellcasting,
+                        );
+                        spawned += 1;
+                    }
+                }
                 reservations.insert_with_radius(next_reservation_index, position, collision_radius);
                 next_reservation_index += 1;
                 spawned += 1;
@@ -2920,6 +2996,9 @@ struct AttackIntent {
 enum AbilityIntentTarget {
     Unit { index: usize, id: SimId },
     AllEnemyUnits,
+    AllFriendlyUnits,
+    Corpse { id: SimId, position: SimPoint },
+    Point { position: SimPoint },
 }
 
 impl AbilityIntentTarget {
@@ -2927,6 +3006,9 @@ impl AbilityIntentTarget {
         match self {
             Self::Unit { id, .. } => (0, id),
             Self::AllEnemyUnits => (1, SimId(0)),
+            Self::AllFriendlyUnits => (2, SimId(0)),
+            Self::Corpse { id, .. } => (3, id),
+            Self::Point { .. } => (4, SimId(0)),
         }
     }
 
@@ -2934,6 +3016,9 @@ impl AbilityIntentTarget {
         match self {
             Self::Unit { id, .. } => AbilityCastTarget::Unit(id),
             Self::AllEnemyUnits => AbilityCastTarget::AllEnemyUnits,
+            Self::AllFriendlyUnits => AbilityCastTarget::AllFriendlyUnits,
+            Self::Corpse { position, .. } => AbilityCastTarget::Point(position),
+            Self::Point { position } => AbilityCastTarget::Point(position),
         }
     }
 }
@@ -3366,8 +3451,12 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         AbilityTargetPolicy::RandomEnemyUnit
         | AbilityTargetPolicy::RandomGroundEnemyUnit
         | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
-        | AbilityTargetPolicy::WoundedFriendlyUnit => {}
-        AbilityTargetPolicy::AllEnemyUnits | AbilityTargetPolicy::RandomEnemyUnitGlobal => {
+        | AbilityTargetPolicy::WoundedFriendlyUnit
+        | AbilityTargetPolicy::AllFriendlyUnits
+        | AbilityTargetPolicy::RandomCorpse => {}
+        AbilityTargetPolicy::AllEnemyUnits
+        | AbilityTargetPolicy::RandomEnemyUnitGlobal
+        | AbilityTargetPolicy::RandomEnemyBasePoint => {
             assert_eq!(spellcasting.ability.range, 0);
         }
     }
@@ -3449,6 +3538,51 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert_eq!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::WoundedFriendlyUnit
+            );
+        }
+        AbilityEffect::HolyFervour {
+            radius,
+            duration_ticks,
+            ..
+        } => {
+            assert!(radius > 0 && duration_ticks > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::AllFriendlyUnits
+            );
+        }
+        AbilityEffect::Purification {
+            damage,
+            radius,
+            consume_radius,
+            reveal_radius,
+            reveal_duration_ticks,
+        } => {
+            assert!(
+                damage > 0
+                    && radius > 0
+                    && consume_radius > 0
+                    && reveal_radius > 0
+                    && reveal_duration_ticks > 0
+            );
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RandomCorpse
+            );
+        }
+        AbilityEffect::ArtilleryBombardment {
+            min_damage,
+            max_damage,
+            speed_per_tick,
+            splash,
+            ..
+        } => {
+            assert!(min_damage > 0 && max_damage >= min_damage && speed_per_tick > 0);
+            assert!(splash.full_radius <= splash.medium_radius);
+            assert!(splash.medium_radius <= splash.outer_radius);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RandomEnemyBasePoint
             );
         }
     }

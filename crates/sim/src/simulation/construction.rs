@@ -25,6 +25,28 @@ impl Simulation {
             .expect("invalid authored building placement")
     }
 
+    /// Debug-only population helper that preserves authoritative building state while deliberately
+    /// bypassing ordinary pathing/build-blocker placement checks. The caller must still keep the
+    /// footprint inside the team's build region; this is used for deterministic stress rosters
+    /// that can be denser than legal player construction around the authored castle doodads.
+    pub fn debug_spawn_building_for_player_with_properties(
+        &mut self,
+        owner: PlayerId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+    ) -> SimId {
+        self.assert_player_team(owner, building.team);
+        self.validate_building_definition(building, properties);
+        assert!(
+            self.footprint_inside_team_build_region(building.team, building.footprint),
+            "debug building footprint must remain inside the owning team's build region"
+        );
+        let (id, entity) = self.spawn_building_shell(Some(owner), building, properties);
+        self.activate_building_entity(entity, building, properties);
+        self.topology_dirty = true;
+        id
+    }
+
     pub fn spawn_shared_building_with_properties(
         &mut self,
         building: BuildingSpawn,
@@ -301,6 +323,18 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) {
+        if properties.content.is_some_and(|content| {
+            content.rawcode
+                == crate::content::CastleFightTowerKind::Gjallarhorn
+                    .definition()
+                    .rawcode
+        }) {
+            let count = &mut self.gjallarhorn_constructed_count[usize::from(building.team.0)];
+            *count = count
+                .checked_add(1)
+                .expect("Gjallarhorn construction counter overflow");
+        }
+
         let mut entity = self.world.entity_mut(entity);
         if let Some(economy) = properties.economy {
             entity.insert(economy);

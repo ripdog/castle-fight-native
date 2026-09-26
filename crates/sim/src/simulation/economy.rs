@@ -104,15 +104,47 @@ impl Simulation {
     }
 
     fn raw_player_income_per_10k(&self, player: PlayerId) -> u64 {
-        self.world
+        let treasure_box_rawcode = u32::from_be_bytes(*b"h008");
+        let mut treasure_boxes = 0u32;
+        let raw = self
+            .world
             .iter_entities()
             .filter(|entity| entity.get::<Owner>() == Some(&Owner(player)))
-            .filter_map(|entity| entity.get::<BuildingEconomyProfile>())
+            .filter_map(|entity| {
+                let economy = entity.get::<BuildingEconomyProfile>()?;
+                if entity
+                    .get::<ContentIdentity>()
+                    .is_some_and(|content| content.rawcode == treasure_box_rawcode)
+                {
+                    treasure_boxes = treasure_boxes
+                        .checked_add(1)
+                        .expect("Treasure Box count overflow");
+                }
+                Some(economy)
+            })
             .fold(self.config.economy.base_income_per_10k, |total, economy| {
                 total
                     .checked_add(economy.income_per_10k)
                     .expect("player income overflow")
-            })
+            });
+        let multiplier_per_10k = match treasure_boxes {
+            0 => 10_000u64,
+            1 => 12_500,
+            2 => 14_625,
+            3 => 16_425,
+            4 => 17_950,
+            5 => 19_250,
+            6 => 20_350,
+            7 => 21_300,
+            8 => 22_100,
+            9 => 22_775,
+            count => 22_775u64
+                .checked_add(625u64 * u64::from(count - 9))
+                .expect("Treasure Box multiplier overflow"),
+        };
+        raw.checked_mul(multiplier_per_10k)
+            .expect("Treasure Box adjusted income overflow")
+            / RESOURCE_FIXED_SCALE
     }
 
     pub(super) fn advance_economy_income(&mut self) {

@@ -38,6 +38,7 @@ pub enum NativeEffectImplementationId {
     WarcraftCriticalStrikeV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
+    WarcraftHumanUtilityV1,
 }
 
 impl NativeEffectImplementationId {
@@ -57,6 +58,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftCriticalStrikeV1 => 10,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
+            Self::WarcraftHumanUtilityV1 => 13,
         }
     }
 
@@ -67,6 +69,7 @@ impl NativeEffectImplementationId {
                 | Self::WarcraftZeroDamageBarrageV1
                 | Self::WarcraftHumanSupportV1
                 | Self::WarcraftHumanPassiveV1
+                | Self::WarcraftHumanUtilityV1
         )
     }
 }

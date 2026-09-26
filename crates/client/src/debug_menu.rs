@@ -518,59 +518,70 @@ fn populate_debug_building_lines(
         let castle_center_x2 = castle.footprint.min_x * 2 + i32::from(castle.footprint.width) - 1;
         let region_center_x2 = region.min_x * 2 + i32::from(region.width) - 1;
         let outer_side_is_left = castle_center_x2 < region_center_x2;
+        let minimum_y = region.min_y + DEBUG_BUILDING_LINE_MARGIN_CELLS;
+        let maximum_y = region.max_y() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
+        let available_height = maximum_y - minimum_y + 1;
+        let total_building_height: i32 = definitions
+            .iter()
+            .map(|definition| i32::from(definition.footprint_size(content)))
+            .sum();
+        let gap_count = i32::try_from(definitions.len().saturating_sub(1))
+            .expect("debug building count must fit i32");
+        let preferred_gap = if gap_count == 0 {
+            0
+        } else {
+            ((available_height - total_building_height) / gap_count)
+                .clamp(0, DEBUG_BUILDING_LINE_GAP_CELLS)
+        };
+
         let line_min_x = if outer_side_is_left {
             region.min_x + DEBUG_BUILDING_LINE_MARGIN_CELLS
         } else {
             region.max_x() - DEBUG_BUILDING_LINE_MARGIN_CELLS - max_size_i32 + 1
         };
-        let minimum_y = region.min_y + DEBUG_BUILDING_LINE_MARGIN_CELLS;
-        let mut cursor_max_y = region.max_y() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
-
-        for definition in &definitions {
-            let definition = *definition;
+        let mut cursor_max_y = maximum_y;
+        let mut plan = Vec::with_capacity(definitions.len());
+        for &definition in &definitions {
             let size = definition.footprint_size(content);
             let size_i32 = i32::from(size);
             let min_x = line_min_x + (max_size_i32 - size_i32) / 2;
-            let mut candidate_max_y = cursor_max_y;
-            let mut placed = false;
+            let min_y = cursor_max_y - size_i32 + 1;
+            if min_y < minimum_y {
+                plan.clear();
+                break;
+            }
+            plan.push((definition, BuildingFootprint::new(min_x, min_y, size, size)));
+            cursor_max_y = min_y - preferred_gap - 1;
+        }
+        if plan.len() != definitions.len() {
+            skipped += definitions.len();
+            continue;
+        }
 
-            while candidate_max_y - size_i32 + 1 >= minimum_y {
-                let min_y = candidate_max_y - size_i32 + 1;
-                let footprint = BuildingFootprint::new(min_x, min_y, size, size);
-                if simulation.can_place_building_for_team(team, footprint) {
-                    match definition {
-                        DebugBuildingKind::Production(kind) => {
-                            let definition = content
-                                .production_building(kind)
-                                .expect("debug production kind must belong to selected content");
-                            simulation.spawn_building_for_player_with_properties(
-                                owner,
-                                definition.spawn(team, footprint),
-                                definition.gameplay_properties(),
-                            );
-                        }
-                        DebugBuildingKind::Tower(kind) => {
-                            let definition = content
-                                .tower(kind)
-                                .expect("debug tower kind must belong to selected content");
-                            simulation.spawn_building_for_player_with_properties(
-                                owner,
-                                definition.spawn(team, footprint),
-                                definition.gameplay_properties(),
-                            );
-                        }
-                    }
-                    cursor_max_y = min_y - DEBUG_BUILDING_LINE_GAP_CELLS - 1;
-                    spawned += 1;
-                    placed = true;
-                    break;
+        for (definition, footprint) in plan {
+            match definition {
+                DebugBuildingKind::Production(kind) => {
+                    let definition = content
+                        .production_building(kind)
+                        .expect("debug production kind must belong to selected content");
+                    simulation.debug_spawn_building_for_player_with_properties(
+                        owner,
+                        definition.spawn(team, footprint),
+                        definition.gameplay_properties(),
+                    );
                 }
-                candidate_max_y -= 1;
+                DebugBuildingKind::Tower(kind) => {
+                    let definition = content
+                        .tower(kind)
+                        .expect("debug tower kind must belong to selected content");
+                    simulation.debug_spawn_building_for_player_with_properties(
+                        owner,
+                        definition.spawn(team, footprint),
+                        definition.gameplay_properties(),
+                    );
+                }
             }
-
-            if !placed {
-                skipped += 1;
-            }
+            spawned += 1;
         }
     }
 

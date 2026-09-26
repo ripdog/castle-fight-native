@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 
 pub const SUBUNITS_PER_WORLD_UNIT: i32 = 1024;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct SimPoint {
     pub x: i32,
     pub y: i32,

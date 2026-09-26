@@ -5,7 +5,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 4;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -18,6 +18,7 @@ pub struct SimulationSnapshot {
     players: Vec<PlayerState>,
     lifecycle: MatchLifecycle,
     team_objectives: [Option<SimId>; 2],
+    gjallarhorn_constructed_count: [u32; 2],
     defense_alerts: Vec<DefenseAlert>,
     entities: Vec<CanonicalEntity>,
     checksum: u64,
@@ -202,6 +203,7 @@ impl Simulation {
             players: self.players.clone(),
             lifecycle: self.lifecycle,
             team_objectives: self.team_objectives,
+            gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
             defense_alerts: self.defense_alerts.clone(),
             entities: canonical_entities(&self.world),
             checksum: self.checksum(),
@@ -266,6 +268,7 @@ impl Simulation {
                 players: &snapshot.players,
                 lifecycle: snapshot.lifecycle,
                 team_objectives: snapshot.team_objectives,
+                gjallarhorn_constructed_count: snapshot.gjallarhorn_constructed_count,
             },
         );
         if restored_checksum != snapshot.checksum {
@@ -279,6 +282,7 @@ impl Simulation {
         self.players.clone_from(&snapshot.players);
         self.lifecycle = snapshot.lifecycle;
         self.team_objectives = snapshot.team_objectives;
+        self.gjallarhorn_constructed_count = snapshot.gjallarhorn_constructed_count;
         self.defense_alerts.clone_from(&snapshot.defense_alerts);
         self.next_tick = snapshot.next_tick;
         self.next_id = snapshot.next_id;

@@ -24,6 +24,10 @@ const RIGHT_BUILD_MIN_X_WORLD: i32 = 1_920;
 const RIGHT_BUILD_MAX_X_WORLD: i32 = 6_176;
 const BUILD_MIN_Y_WORLD: i32 = -2_048;
 const BUILD_MAX_Y_WORLD: i32 = 2_048;
+// Script globals NFb/MFb in Castle Fight 9.27. These are intentionally one 32-world-unit
+// cell narrower on the outer side than the native build regions.
+const LEFT_CASTLE_RECT_MIN_X_WORLD: i32 = -6_144;
+const RIGHT_CASTLE_RECT_MAX_X_WORLD: i32 = 6_144;
 const CENTRAL_GAP_MIN_X: i32 = LEFT_BUILD_MAX_X_WORLD / NAV_CELL_WORLD;
 const CENTRAL_GAP_MAX_X: i32 = RIGHT_BUILD_MIN_X_WORLD / NAV_CELL_WORLD - 1;
 const LANE_MIN_Y: i32 = -24;
@@ -498,6 +502,18 @@ fn simulation_config_927(
         RIGHT_BUILD_MAX_X_WORLD,
         BUILD_MAX_Y_WORLD,
     );
+    let left_castle_region = world_rect_footprint(
+        LEFT_CASTLE_RECT_MIN_X_WORLD,
+        BUILD_MIN_Y_WORLD,
+        LEFT_BUILD_MAX_X_WORLD,
+        BUILD_MAX_Y_WORLD,
+    );
+    let right_castle_region = world_rect_footprint(
+        RIGHT_BUILD_MIN_X_WORLD,
+        BUILD_MIN_Y_WORLD,
+        RIGHT_CASTLE_RECT_MAX_X_WORLD,
+        BUILD_MAX_Y_WORLD,
+    );
     let no_mans_land_blockers = vec![
         BuildingFootprint::new(
             CENTRAL_GAP_MIN_X,
@@ -609,6 +625,7 @@ fn simulation_config_927(
         air_static_blockers,
         build_static_blockers,
         team_build_regions: [vec![left_build_region], vec![right_build_region]],
+        team_castle_regions: [Some(left_castle_region), Some(right_castle_region)],
         targetless_lane: Some(TargetlessLane::new(
             STRATEGIC_LANE_MIN_Y_WORLD * SUBUNITS_PER_WORLD_UNIT,
             STRATEGIC_LANE_MAX_Y_WORLD * SUBUNITS_PER_WORLD_UNIT,
@@ -1046,7 +1063,7 @@ mod tests {
         assert_eq!(first.simulation.tick(), 0);
         assert_eq!(first.simulation.building_count(), 2);
         assert_eq!(first.content.identity, config.content_identity);
-        assert_eq!(first.direct_buildings.len(), 6);
+        assert_eq!(first.direct_buildings.len(), 12);
     }
 
     #[test]
@@ -1551,6 +1568,23 @@ mod tests {
         assert_eq!(
             resolved.simulation_config.team_build_regions[1],
             vec![right_build_region]
+        );
+        assert_eq!(
+            resolved.simulation_config.team_castle_regions,
+            [
+                Some(world_rect_footprint(
+                    LEFT_CASTLE_RECT_MIN_X_WORLD,
+                    BUILD_MIN_Y_WORLD,
+                    LEFT_BUILD_MAX_X_WORLD,
+                    BUILD_MAX_Y_WORLD,
+                )),
+                Some(world_rect_footprint(
+                    RIGHT_BUILD_MIN_X_WORLD,
+                    BUILD_MIN_Y_WORLD,
+                    RIGHT_CASTLE_RECT_MAX_X_WORLD,
+                    BUILD_MAX_Y_WORLD,
+                )),
+            ]
         );
 
         let left_dead_space = world_rect_footprint(

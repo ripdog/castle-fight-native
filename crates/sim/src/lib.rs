@@ -323,6 +323,7 @@ mod tests {
             air_static_blockers: Vec::new(),
             build_static_blockers: Vec::new(),
             team_build_regions: [Vec::new(), Vec::new()],
+            team_castle_regions: [None, None],
             targetless_lane: None,
             team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
             economy: EconomyRules::default(),
@@ -1448,6 +1449,281 @@ mod tests {
         sim.step();
         sim.step();
         assert_eq!(sim.unit(slowed_attacker).unwrap().cooldown_remaining, 54);
+    }
+
+    #[test]
+    fn imported_warlock_reproduces_post_cast_retreat_and_sleep_window() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let warlock = CastleFightUnitKind::Warlock.definition();
+        let start = SimPoint::new(30 * world, 0);
+        let caster = sim.spawn_resolved_unit(Team(0), start, warlock.resolved());
+        sim.spawn_unit(UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(60 * world, 0),
+            health: 10_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 100,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        let cast = sim.step();
+        assert_eq!(cast.ability_casts, 1);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].ability,
+            AbilityId(u32::from_be_bytes(*b"A00K"))
+        );
+        let after_cast = sim.unit(caster).unwrap();
+        assert_eq!(after_cast.status.warlock_retreat_start_tick, 9);
+        assert_eq!(after_cast.status.warlock_retreat_end_tick, 159);
+        assert_eq!(after_cast.stunned_until_tick, 357);
+        assert_eq!(after_cast.ability_ready_tick, Some(360));
+        assert_eq!(after_cast.target, None);
+
+        for _ in 0..8 {
+            sim.step();
+        }
+        assert_eq!(sim.tick(), 9);
+        assert_eq!(sim.unit(caster).unwrap().position, start);
+
+        sim.step();
+        assert!(
+            sim.unit(caster).unwrap().position.x < start.x,
+            "Warlock must retreat toward its own western castle after the 0.3s channel pause"
+        );
+
+        while sim.tick() < 159 {
+            sim.step();
+        }
+        let sleep_position = sim.unit(caster).unwrap().position;
+        sim.step();
+        assert_eq!(
+            sim.unit(caster).unwrap().position,
+            sleep_position,
+            "Warlock must stop moving for the scripted 6.6s sleep window"
+        );
+    }
+
+    #[test]
+    fn human_artillery_casts_extracted_bombardment_at_enemy_base_point() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let enemy_build_region = BuildingFootprint::new(70, 0, 20, 20);
+        let enemy_castle_region = BuildingFootprint::new(80, 4, 2, 3);
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                team_build_regions: [Vec::new(), vec![enemy_build_region]],
+                team_castle_regions: [None, Some(enemy_castle_region)],
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let artillery = CastleFightTowerKind::Artillery.definition();
+        let source = sim.spawn_building_with_properties(
+            artillery.spawn(Team(0), BuildingFootprint::new(10, 0, 4, 4)),
+            artillery.gameplay_properties(),
+        );
+
+        let tick = sim.step();
+        assert_eq!(tick.ability_casts, 1);
+        let event = sim.ability_casts_last_tick()[0];
+        assert_eq!(event.source, source);
+        assert_eq!(event.ability, AbilityId(u32::from_be_bytes(*b"A02K")));
+        let AbilityCastTarget::Point(target) = event.target else {
+            panic!("Artillery must cast at a point");
+        };
+        assert_eq!(event.target_position, Some(target));
+        assert_eq!(event.effect, artillery.spellcasting.unwrap().ability.effect);
+        assert!(target.x >= 80 * cell && target.x < 82 * cell);
+        assert!(target.y >= 4 * cell && target.y < 7 * cell);
+
+        let projectile = sim.projectiles();
+        assert_eq!(projectile.len(), 1);
+        assert_eq!(projectile[0].source, source);
+        assert_eq!(
+            projectile[0].kind,
+            ProjectileViewKind::Ballistic {
+                destination: target,
+                impact_radius: 320 * cell,
+            }
+        );
+    }
+
+    #[test]
+    fn human_utility_spell_profiles_keep_wc3_cooldown_separate_from_mana_cadence() {
+        let horn = CastleFightTowerKind::Gjallarhorn
+            .definition()
+            .spellcasting
+            .unwrap();
+        assert_eq!(horn.mana.maximum, 10);
+        assert_eq!(horn.mana.starting, 0);
+        assert_eq!(horn.mana.regen_per_tick_per_10k, 334);
+        assert_eq!(horn.ability.mana_cost, 7);
+        assert_eq!(
+            horn.ability.cooldown_ticks,
+            CASTLE_FIGHT_SIMULATION_HZ as u16
+        );
+
+        let vessel = CastleFightTowerKind::VesselOfPurity
+            .definition()
+            .spellcasting
+            .unwrap();
+        assert_eq!(vessel.mana.maximum, 18);
+        assert_eq!(vessel.mana.starting, 0);
+        assert_eq!(vessel.mana.regen_per_tick_per_10k, 334);
+        assert_eq!(vessel.ability.mana_cost, 15);
+        assert_eq!(
+            vessel.ability.cooldown_ticks,
+            CASTLE_FIGHT_SIMULATION_HZ as u16
+        );
+        assert_eq!(
+            vessel.ability.effect,
+            AbilityEffect::Purification {
+                damage: 150,
+                radius: 300 * SUBUNITS_PER_WORLD_UNIT,
+                consume_radius: 220 * SUBUNITS_PER_WORLD_UNIT,
+                reveal_radius: 400 * SUBUNITS_PER_WORLD_UNIT,
+                reveal_duration_ticks: 7 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+            }
+        );
+    }
+
+    #[test]
+    fn gjallarhorn_recasts_on_authored_seven_second_mana_cadence() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let horn = CastleFightTowerKind::Gjallarhorn.definition();
+        let source = sim.spawn_building_with_properties(
+            horn.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4)),
+            horn.gameplay_properties(),
+        );
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(30 * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+
+        for expected_tick in 0..209 {
+            let tick = sim.step();
+            assert_eq!(tick.completed_tick, expected_tick);
+            assert_eq!(tick.ability_casts, 0);
+        }
+        let first = sim.step();
+        assert_eq!(first.completed_tick, 209);
+        assert_eq!(first.ability_casts, 1);
+        assert_eq!(sim.building(source).unwrap().mana_current, Some(0));
+
+        for _ in 0..209 {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        let second = sim.step();
+        assert_eq!(second.completed_tick, 419);
+        assert_eq!(second.ability_casts, 1);
+        assert_eq!(sim.building(source).unwrap().mana_current, Some(0));
+    }
+
+    #[test]
+    fn vessel_of_purity_damages_enemies_and_consumes_qualifying_corpses() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let footman = CastleFightUnitKind::Footman.definition();
+        sim.spawn_resolved_unit(Team(1), SimPoint::new(40 * world, 0), footman.resolved());
+        assert_eq!(sim.debug_damage_all_units(99_999), 1);
+        let corpse = sim.corpses()[0];
+        assert_eq!(corpse.position, SimPoint::new(40 * world, 0));
+
+        let enemy = sim.spawn_unit(passive_unit(1, 50 * world));
+        let ally = sim.spawn_unit(passive_unit(0, 55 * world));
+        let vessel = CastleFightTowerKind::VesselOfPurity.definition();
+        let source = sim.spawn_building_with_properties(
+            vessel.spawn(Team(0), BuildingFootprint::new(10, 0, 4, 4)),
+            vessel.gameplay_properties(),
+        );
+
+        for _ in 0..449 {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        let tick = sim.step();
+        assert_eq!(tick.completed_tick, 449);
+        assert_eq!(tick.ability_casts, 1);
+        assert_eq!(sim.unit(enemy).unwrap().health, 9_850);
+        assert_eq!(sim.unit(ally).unwrap().health, 10_000);
+        assert!(sim.corpses().is_empty());
+        assert_eq!(
+            sim.ability_casts_last_tick(),
+            &[AbilityCastEvent {
+                source,
+                ability: AbilityId(u32::from_be_bytes(*b"A0HN")),
+                target: AbilityCastTarget::Point(corpse.position),
+                target_position: Some(corpse.position),
+                effect: vessel.spellcasting.unwrap().ability.effect,
+            }]
+        );
+    }
+
+    #[test]
+    fn heroic_shrine_clones_nonlegendary_production_but_excludes_legendary_units() {
+        fn production_count_for(kind: CastleFightUnitKind, match_seed: u64) -> usize {
+            let mut sim = Simulation::new(
+                SimulationConfig {
+                    match_seed,
+                    ..SimulationConfig::default()
+                },
+                1,
+            );
+            let shrine = CastleFightTowerKind::HeroicShrine.definition();
+            sim.spawn_building_for_player_with_properties(
+                PlayerId(0),
+                shrine.spawn(Team(0), BuildingFootprint::new(4, 0, 4, 4)),
+                shrine.gameplay_properties(),
+            );
+
+            let unit = kind.definition();
+            sim.spawn_building_for_player_with_properties(
+                PlayerId(0),
+                BuildingSpawn {
+                    team: Team(0),
+                    footprint: BuildingFootprint::new(20, 0, 4, 4),
+                    health: 1_000,
+                    production: Some(ProductionProfile {
+                        initial_delay_ticks: 0,
+                        interval_ticks: 30,
+                        search_radius_cells: 64,
+                        unit: unit.template(),
+                    }),
+                    attack: None,
+                    spellcasting: None,
+                },
+                BuildingGameplayProperties {
+                    production_unit: unit.gameplay_properties(),
+                    production_spellcasting: unit.spellcasting,
+                    ..BuildingGameplayProperties::default()
+                },
+            );
+
+            sim.step().units_spawned
+        }
+
+        let successful_seed = (0..128)
+            .find(|seed| production_count_for(CastleFightUnitKind::Footman, *seed) == 2)
+            .expect("Heroic Shrine must produce a successful 17% clone roll in a bounded seed set");
+        assert_eq!(
+            production_count_for(CastleFightUnitKind::HolyWarrior, successful_seed),
+            1,
+            "legendary A06V units must not be duplicated by Heroic Shrine"
+        );
     }
 
     #[test]
@@ -4649,6 +4925,10 @@ mod tests {
                 vec![BuildingFootprint::new(0, 0, 10, 10)],
                 vec![BuildingFootprint::new(20, 0, 10, 10)],
             ],
+            team_castle_regions: [
+                Some(BuildingFootprint::new(1, 1, 8, 8)),
+                Some(BuildingFootprint::new(21, 1, 8, 8)),
+            ],
             ..SimulationConfig::default()
         };
         let mut sim = Simulation::new(config, 1);
@@ -4675,8 +4955,8 @@ mod tests {
         let resolved = sim
             .order_builder_blink(builder, SimPoint::new(-10 * cell, 9 * cell))
             .unwrap();
-        assert_eq!(resolved.x, 2 * cell);
-        assert_eq!(resolved.y, 8 * cell - 1);
+        assert_eq!(resolved.x, 3 * cell);
+        assert_eq!(resolved.y, 7 * cell - 1);
         let view = sim.builder(builder).unwrap();
         assert_eq!(view.position, resolved);
         assert_eq!(view.destination, None);
@@ -4920,6 +5200,95 @@ mod tests {
             sim.player_economy(Team(0)).unwrap().income_progress_per_10k,
             0
         );
+    }
+
+    #[test]
+    fn gjallarhorn_scaling_uses_round_construction_count_not_live_count() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let horn = CastleFightTowerKind::Gjallarhorn.definition();
+        let ally = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(30 * world, 0),
+            health: 1_000,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 10,
+                range: world,
+                acquisition_range: 10 * world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let first = sim.spawn_building_with_properties(
+            horn.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4)),
+            horn.gameplay_properties(),
+        );
+
+        for _ in 0..209 {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        assert_eq!(sim.step().ability_casts, 1);
+        let view = sim.unit(ally).unwrap();
+        let active = &view.status.attack_speed_modifiers
+            [..usize::from(view.status.attack_speed_modifier_count)];
+        assert!(active.iter().any(|modifier| {
+            modifier.id == ModifierId(u32::from_be_bytes(*b"A016")) && modifier.percent_delta == 40
+        }));
+
+        let _second = sim.spawn_building_with_properties(
+            horn.spawn(Team(0), BuildingFootprint::new(24, 0, 4, 4)),
+            horn.gameplay_properties(),
+        );
+        assert!(sim.remove_building(first));
+        for _ in 0..209 {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        assert_eq!(sim.step().ability_casts, 1);
+
+        let view = sim.unit(ally).unwrap();
+        let active = &view.status.attack_speed_modifiers
+            [..usize::from(view.status.attack_speed_modifier_count)];
+        assert!(active.iter().any(|modifier| {
+            modifier.id == ModifierId(u32::from_be_bytes(*b"A016")) && modifier.percent_delta == 45
+        }));
+    }
+
+    #[test]
+    fn treasure_boxes_apply_extracted_compounding_multiplier_before_tax() {
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                economy: EconomyRules {
+                    base_income_per_10k: 100 * RESOURCE_FIXED_SCALE,
+                    income_tax_bracket_per_10k: 0,
+                    ..EconomyRules::default()
+                },
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let treasure = CastleFightTowerKind::TreasureBox.definition();
+        assert_eq!(treasure.health, 650);
+        assert_eq!(treasure.armor, ArmorProfile::new(ArmorType::Fortified, 5));
+        assert_eq!(treasure.economy.income_per_10k, 0);
+        assert_eq!(sim.player_income(Team(0)), Some(100));
+
+        let first = sim.spawn_building_with_properties(
+            treasure.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4)),
+            treasure.gameplay_properties(),
+        );
+        assert_eq!(sim.player_income(Team(0)), Some(125));
+
+        let second = sim.spawn_building_with_properties(
+            treasure.spawn(Team(0), BuildingFootprint::new(8, 0, 4, 4)),
+            treasure.gameplay_properties(),
+        );
+        assert_eq!(sim.player_income(Team(0)), Some(146));
+
+        assert!(sim.remove_building(second));
+        assert_eq!(sim.player_income(Team(0)), Some(125));
+        assert!(sim.remove_building(first));
+        assert_eq!(sim.player_income(Team(0)), Some(100));
     }
 
     #[test]
