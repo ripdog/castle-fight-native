@@ -545,6 +545,7 @@ struct PresentedEntry {
     entity: Entity,
     weapon: Option<Entity>,
     imported_rawcode: Option<u32>,
+    constructing: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1802,6 +1803,16 @@ fn update_imported_building_animations(
     }
 }
 
+fn building_presentation_needs_rebuild(
+    imported_rawcode: Option<u32>,
+    was_constructing: bool,
+    desired_rawcode: Option<u32>,
+    constructing: bool,
+) -> bool {
+    imported_rawcode != desired_rawcode
+        || (imported_rawcode.is_some() && was_constructing && !constructing)
+}
+
 fn building_construction_phase(current_tick: u64, building: &BuildingSample) -> Option<f32> {
     let started_tick = building.construction_started_tick?;
     let complete_tick = building.construction_complete_tick?;
@@ -2829,8 +2840,12 @@ fn sync_render_entities(
     // Upgrades deliberately retain the authoritative building SimId and footprint. If the
     // content rawcode changes in place, replace only the presentation root so the target model can
     // play its Birth sequence; cancellation performs the inverse swap back to the precursor's
-    // Stand model without fabricating a death/remnant.
-    let changed_building_models: Vec<_> = render_map
+    // Stand model without fabricating a death/remnant. Recreate imported models once construction
+    // completes as well. Construction drives Birth by seeking a paused animation; Bevy transitions
+    // deliberately do not fade a paused outgoing clip, so Birth can otherwise remain active beside
+    // Stand. WC3 Birth clips can also animate transform channels that Stand never touches, leaving
+    // the last construction pose latched even if Birth is stopped.
+    let building_presentations_to_rebuild: Vec<_> = render_map
         .buildings
         .iter()
         .filter_map(|(id, entry)| {
@@ -2840,10 +2855,16 @@ fn sync_render_entities(
                     .get(content.rawcode)
                     .map(|_| content.rawcode)
             });
-            (entry.imported_rawcode != desired_rawcode).then_some(*id)
+            building_presentation_needs_rebuild(
+                entry.imported_rawcode,
+                entry.constructing,
+                desired_rawcode,
+                building.construction_complete_tick.is_some(),
+            )
+            .then_some(*id)
         })
         .collect();
-    for id in changed_building_models {
+    for id in building_presentations_to_rebuild {
         if let Some(entry) = render_map.buildings.remove(&id) {
             commands.entity(entry.entity).despawn();
         }
@@ -3136,6 +3157,7 @@ fn sync_render_entities(
                 entity,
                 weapon: None,
                 imported_rawcode,
+                constructing: false,
             },
         );
     }
@@ -3208,6 +3230,7 @@ fn sync_render_entities(
                 entity,
                 weapon,
                 imported_rawcode,
+                constructing: false,
             },
         );
     }
@@ -3413,6 +3436,7 @@ fn sync_render_entities(
                 entity,
                 weapon: None,
                 imported_rawcode,
+                constructing: building.construction_complete_tick.is_some(),
             },
         );
     }
@@ -6041,6 +6065,32 @@ mod tests {
 
         building.production_interval_ticks = None;
         assert_eq!(production_progress(&building, 30.0), None);
+    }
+
+    #[test]
+    fn imported_building_model_rebuilds_once_when_construction_finishes() {
+        let rawcode = u32::from_be_bytes(*b"h02I");
+        assert!(!building_presentation_needs_rebuild(
+            Some(rawcode),
+            true,
+            Some(rawcode),
+            true,
+        ));
+        assert!(building_presentation_needs_rebuild(
+            Some(rawcode),
+            true,
+            Some(rawcode),
+            false,
+        ));
+        assert!(!building_presentation_needs_rebuild(
+            Some(rawcode),
+            false,
+            Some(rawcode),
+            false,
+        ));
+        assert!(!building_presentation_needs_rebuild(
+            None, true, None, false,
+        ));
     }
 
     #[test]
