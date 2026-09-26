@@ -59,6 +59,12 @@ pub(crate) enum UiCursorTheme {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum UiStatusIconRole {
+    Primary,
+    Secondary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum UiIconKey {
     Object {
         kind: UiObjectIconKind,
@@ -69,6 +75,10 @@ pub(crate) enum UiIconKey {
     Resource(UiResourceIcon),
     InfoDamage(DamageType),
     InfoArmor(ArmorType),
+    StatusEffect {
+        ability: u32,
+        role: UiStatusIconRole,
+    },
 }
 
 impl UiIconKey {
@@ -89,6 +99,15 @@ impl UiIconKey {
             role,
         }
     }
+
+    #[must_use]
+    pub(crate) const fn buff(rawcode: u32) -> Self {
+        Self::Object {
+            kind: UiObjectIconKind::Buff,
+            rawcode,
+            role: UiIconRole::Buff,
+        }
+    }
 }
 
 /// Versioned semantic bindings for command-card presentation.
@@ -106,6 +125,8 @@ pub(crate) struct CastleFightPresentationCatalog {
     pub(crate) repair_command: UiIconKey,
     pub(crate) repair_turn_off_command: UiIconKey,
     pub(crate) blink_command: UiIconKey,
+    pub(crate) stun_buff: UiIconKey,
+    pub(crate) permanent_holy_health: UiIconKey,
     pub(crate) cursor_theme: UiCursorTheme,
 }
 
@@ -127,6 +148,11 @@ impl CastleFightPresentationCatalog {
                 UiIconRole::TurnOff,
             ),
             blink_command: UiIconKey::ability(u32::from_be_bytes(*b"A0-1"), UiIconRole::Normal),
+            stun_buff: UiIconKey::buff(u32::from_be_bytes(*b"B005")),
+            permanent_holy_health: UiIconKey::StatusEffect {
+                ability: u32::from_be_bytes(*b"A03I"),
+                role: UiStatusIconRole::Primary,
+            },
             cursor_theme: UiCursorTheme::Human,
         })
     }
@@ -190,6 +216,34 @@ impl UiIconAssets {
         let handle = asset_server.load(path);
         self.handles.insert(key, handle.clone());
         Some(handle)
+    }
+
+    pub(crate) fn status_image(
+        &mut self,
+        ability: u32,
+        role: UiStatusIconRole,
+        asset_server: &AssetServer,
+    ) -> Option<Handle<Image>> {
+        self.image(UiIconKey::StatusEffect { ability, role }, asset_server)
+            .or_else(|| {
+                (role == UiStatusIconRole::Secondary)
+                    .then(|| {
+                        self.image(
+                            UiIconKey::StatusEffect {
+                                ability,
+                                role: UiStatusIconRole::Primary,
+                            },
+                            asset_server,
+                        )
+                    })
+                    .flatten()
+            })
+            .or_else(|| {
+                self.image(
+                    UiIconKey::ability(ability, UiIconRole::Normal),
+                    asset_server,
+                )
+            })
     }
 
     pub(crate) fn cursor_atlas(
@@ -377,6 +431,17 @@ fn parse_icon_key(entry: &UiBindingManifest) -> Result<UiIconKey, String> {
                 other => Err(format!("unknown info-panel icon {other:?}")),
             }
         }
+        "status_effects" => {
+            let role = match entry.role.as_str() {
+                "primary" => UiStatusIconRole::Primary,
+                "secondary" => UiStatusIconRole::Secondary,
+                other => return Err(format!("unknown status-effect icon role {other:?}")),
+            };
+            Ok(UiIconKey::StatusEffect {
+                ability: parse_rawcode(&entry.owner_rawcode)?,
+                role,
+            })
+        }
         other => Err(format!("unknown UI icon owner kind {other:?}")),
     }
 }
@@ -464,6 +529,12 @@ mod tests {
                     "png": "textures/light_armor.png"
                 },
                 {
+                    "owner_kind": "status_effects",
+                    "owner_rawcode": "A03M",
+                    "role": "primary",
+                    "png": "textures/inner_fire_buff.png"
+                },
+                {
                     "owner_kind": "cursors",
                     "owner_rawcode": "human",
                     "role": "atlas",
@@ -503,6 +574,13 @@ mod tests {
         assert_eq!(
             resolved.paths[&UiIconKey::InfoArmor(ArmorType::Small)],
             "wc3/ui/textures/light_armor.png"
+        );
+        assert_eq!(
+            resolved.paths[&UiIconKey::StatusEffect {
+                ability: u32::from_be_bytes(*b"A03M"),
+                role: UiStatusIconRole::Primary,
+            }],
+            "wc3/ui/textures/inner_fire_buff.png"
         );
         assert_eq!(
             resolved.cursor_paths[&UiCursorTheme::Human],

@@ -4958,6 +4958,8 @@ fn toggle_debug_controls(
 #[derive(SystemParam)]
 struct CameraControlResources<'w> {
     time: Res<'w, Time>,
+    fixed_time: Res<'w, Time<Fixed>>,
+    playback: Res<'w, SimulationPlayback>,
     keys: Res<'w, ButtonInput<KeyCode>>,
     mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
     metrics: Res<'w, WorldMetrics>,
@@ -4965,6 +4967,7 @@ struct CameraControlResources<'w> {
     hotkey_capture: Option<Res<'w, crate::build_ui::ActionPanelHotkeyCapture>>,
     samples: Res<'w, PresentationSamples>,
     camera_focus: ResMut<'w, CameraFocusRequest>,
+    portrait_hold: Res<'w, crate::inspection::PortraitCameraHold>,
 }
 
 fn update_camera(
@@ -4990,7 +4993,24 @@ fn update_camera(
         }
     }
 
-    if resources.mouse_buttons.just_pressed(MouseButton::Middle)
+    let tracking = resources.portrait_hold.0.and_then(|target| {
+        tracked_camera_focus(
+            target,
+            &resources.samples,
+            &resources.metrics,
+            &resources.terrain,
+            resources
+                .playback
+                .interpolation_alpha(&resources.fixed_time),
+        )
+    });
+    if let Some(focus) = tracking {
+        rig.focus = focus;
+        rig.grab_anchor = None;
+    }
+
+    if tracking.is_none()
+        && resources.mouse_buttons.just_pressed(MouseButton::Middle)
         && let Some(cursor) = window.cursor_position()
     {
         let camera_global = GlobalTransform::from(**transform);
@@ -5033,7 +5053,9 @@ fn update_camera(
         );
         movement += right * edge.x + forward * edge.y;
     }
-    pan_camera_focus(rig, movement, dt);
+    if tracking.is_none() {
+        pan_camera_focus(rig, movement, dt);
+    }
     if camera_key_pressed(KeyCode::KeyQ) {
         rig.yaw += 0.9 * dt;
     }
@@ -5049,14 +5071,15 @@ fn update_camera(
         world_size.min_element() * CAMERA_MIN_DISTANCE_FACTOR,
         CAMERA_MAX_DISTANCE_WORLD,
     );
-    if resources.keys.just_pressed(KeyCode::Home) {
+    if tracking.is_none() && resources.keys.just_pressed(KeyCode::Home) {
         rig.focus = resources.metrics.world_center();
         rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
         rig.distance = CAMERA_DEFAULT_DISTANCE_WORLD;
         rig.yaw = 0.0;
     }
 
-    if resources.mouse_buttons.pressed(MouseButton::Middle)
+    if tracking.is_none()
+        && resources.mouse_buttons.pressed(MouseButton::Middle)
         && let Some(anchor) = rig.grab_anchor
         && let Some(cursor) = window.cursor_position()
     {
@@ -5083,6 +5106,38 @@ fn update_camera(
     rig.focus.y = resources.terrain.height_at_world(rig.focus.xz());
 
     **transform = camera_transform(rig);
+}
+
+fn tracked_camera_focus(
+    target: SimId,
+    samples: &PresentationSamples,
+    metrics: &WorldMetrics,
+    terrain: &TerrainSurface,
+    alpha: f32,
+) -> Option<Vec3> {
+    if let Some(builder) = samples.current.builders.get(&target) {
+        let previous = samples.previous.builders.get(&target).unwrap_or(builder);
+        return Some(sim_point_to_terrain_world_lerp(
+            previous.position,
+            builder.position,
+            alpha,
+            terrain,
+        ));
+    }
+    if let Some(unit) = samples.current.units.get(&target) {
+        let previous = samples.previous.units.get(&target).unwrap_or(unit);
+        return Some(sim_point_to_terrain_world_lerp(
+            previous.position,
+            unit.position,
+            alpha,
+            terrain,
+        ));
+    }
+    samples.current.buildings.get(&target).map(|building| {
+        let (mut center, _) = metrics.footprint_center_size(building.footprint);
+        center.y = terrain.height_at_world(center.xz());
+        center
+    })
 }
 
 fn pan_camera_focus(rig: &mut RtsCamera, movement: Vec3, dt: f32) {
@@ -5854,7 +5909,15 @@ mod tests {
                 initial_camera_focus(player, &samples, &demo.metrics, &terrain),
                 sim_point_to_terrain_world(builder.position, &terrain)
             );
+            assert_eq!(
+                tracked_camera_focus(builder.id, &samples, &demo.metrics, &terrain, 1.0),
+                Some(sim_point_to_terrain_world(builder.position, &terrain))
+            );
         }
+        assert_eq!(
+            tracked_camera_focus(SimId(u64::MAX), &samples, &demo.metrics, &terrain, 1.0),
+            None
+        );
     }
 
     #[test]

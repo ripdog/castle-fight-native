@@ -738,11 +738,10 @@ fn load_ui_assets(
     let recovered = header_index(&headers, "recovered_value_json")?;
 
     let mut assets = BTreeSet::<(String, String, String, String)>::new();
+    let mut ability_buffs = BTreeMap::<String, Vec<String>>::new();
+    let mut buff_icons = BTreeMap::<String, String>::new();
     for row in fields.records() {
         let row = row?;
-        if row.get(value_type) != Some("icon") {
-            continue;
-        }
         let Some(owner_kind) = row.get(category) else {
             continue;
         };
@@ -752,12 +751,23 @@ fn load_ui_assets(
         let Some(field) = row.get(field_id) else {
             continue;
         };
+        if owner_kind == "abilities" && field == "abuf" {
+            ability_buffs
+                .entry(owner_rawcode.to_owned())
+                .or_insert_with(|| parse_json_comma_list(row.get(recovered).unwrap_or_default()));
+        }
+        if row.get(value_type) != Some("icon") {
+            continue;
+        }
         let Some(texture_path) = parse_json_string(row.get(recovered).unwrap_or_default()) else {
             continue;
         };
         let texture_path = texture_path.trim();
         if texture_path.is_empty() || texture_path.eq_ignore_ascii_case("none") {
             continue;
+        }
+        if owner_kind == "buffs" && field == "fart" {
+            buff_icons.insert(owner_rawcode.to_owned(), texture_path.to_owned());
         }
         let role = match field {
             "aart" => "normal",
@@ -775,6 +785,22 @@ fn load_ui_assets(
             role.to_owned(),
             texture_path.to_owned(),
         ));
+    }
+
+    // Status modifiers carry the source ability rawcode. Resolve that ability's authored buff
+    // list to the actual buff icon, rather than displaying its command-card ability icon.
+    for (ability, buffs) in ability_buffs {
+        for (index, buff) in buffs.iter().take(2).enumerate() {
+            let Some(icon) = buff_icons.get(buff) else {
+                continue;
+            };
+            assets.insert((
+                "status_effects".to_owned(),
+                ability.clone(),
+                if index == 0 { "primary" } else { "secondary" }.to_owned(),
+                icon.clone(),
+            ));
+        }
     }
 
     for (resource, texture_path) in [

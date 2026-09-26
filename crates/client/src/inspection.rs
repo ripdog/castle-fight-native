@@ -19,7 +19,7 @@ use crate::{
     },
     resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
-    ui_icons::{UiCommandIcon, UiIconAssets, UiIconKey, UiIconRole},
+    ui_icons::{UiCommandIcon, UiIconAssets, UiIconKey, UiIconRole, UiStatusIconRole},
 };
 
 const CONSOLE_HEIGHT: f32 = 300.0;
@@ -123,6 +123,33 @@ pub(crate) struct SelectionDrag {
 struct InspectionText;
 
 #[derive(Component)]
+struct InspectionHeading;
+
+#[derive(Component)]
+struct ProductionTooltipButton;
+
+#[derive(Component)]
+struct ProductionTooltipPanel;
+
+#[derive(Component)]
+struct ProductionTooltipTitle;
+
+#[derive(Component)]
+struct ProductionTooltipBody;
+
+#[derive(Component)]
+struct ActiveEffectIcon(usize);
+
+#[derive(Component)]
+struct ActiveEffectButton(usize);
+
+#[derive(Component)]
+struct ActiveEffectTooltip;
+
+#[derive(Resource, Default)]
+pub(crate) struct PortraitCameraHold(pub(crate) Option<SimId>);
+
+#[derive(Component)]
 struct ProductionUiRoot;
 
 #[derive(Component)]
@@ -146,6 +173,18 @@ struct CombatTypeButton(CombatTooltipKind);
 #[derive(Component)]
 struct CombatTypeLabel(CombatTooltipKind);
 
+#[derive(Clone, Copy)]
+enum AttackStatKind {
+    Range,
+    Cooldown,
+}
+
+#[derive(Component)]
+struct AttackStatLabel(usize, AttackStatKind);
+
+#[derive(Component)]
+struct ArmorReductionLabel;
+
 #[derive(Component)]
 struct CombatTypeIcon(CombatTooltipKind);
 
@@ -157,6 +196,33 @@ struct CombatBadgeIcons<'w, 's> {
     asset_server: Res<'w, AssetServer>,
     icon_assets: ResMut<'w, UiIconAssets>,
     images: Query<'w, 's, (&'static CombatTypeIcon, &'static mut ImageNode)>,
+}
+
+#[derive(SystemParam)]
+struct ProductionTooltipUi<'w, 's> {
+    button:
+        Single<'w, 's, (&'static Interaction, &'static mut Node), With<ProductionTooltipButton>>,
+    panel: Single<'w, 's, &'static mut Visibility, With<ProductionTooltipPanel>>,
+    title: Single<'w, 's, Entity, With<ProductionTooltipTitle>>,
+    body: Single<'w, 's, Entity, With<ProductionTooltipBody>>,
+}
+
+#[derive(SystemParam)]
+struct ActiveEffectUi<'w, 's> {
+    icon_assets: ResMut<'w, UiIconAssets>,
+    buttons: Query<
+        'w,
+        's,
+        (
+            &'static ActiveEffectButton,
+            &'static Interaction,
+            &'static mut Node,
+            &'static mut BorderColor,
+        ),
+    >,
+    images: Query<'w, 's, (&'static ActiveEffectIcon, &'static mut ImageNode)>,
+    tooltip:
+        Single<'w, 's, (&'static mut Text, &'static mut Visibility), With<ActiveEffectTooltip>>,
 }
 
 #[derive(Component)]
@@ -292,6 +358,25 @@ type CombatTooltipQuery<'w, 's> = Single<
     ),
 >;
 
+type CombatLabelsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Text,
+        Option<&'static CombatTypeLabel>,
+        Option<&'static AttackStatLabel>,
+        Option<&'static ArmorReductionLabel>,
+    ),
+    (
+        Without<CombatTooltip>,
+        Or<(
+            With<CombatTypeLabel>,
+            With<AttackStatLabel>,
+            With<ArmorReductionLabel>,
+        )>,
+    ),
+>;
+
 type SelectionTileInteractionQuery<'w, 's> = Query<
     'w,
     's,
@@ -303,6 +388,7 @@ impl Plugin for InspectionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InspectionSelection>()
             .init_resource::<SelectionDrag>()
+            .init_resource::<PortraitCameraHold>()
             .add_systems(Startup, setup_inspector_ui)
             .add_systems(
                 Update,
@@ -311,8 +397,10 @@ impl Plugin for InspectionPlugin {
                     handle_selection_hotkeys,
                     clear_stale_selection,
                     update_inspector_text,
+                    update_production_tooltip,
                     update_production_ui,
                     update_combat_tooltip,
+                    update_active_effect_icons,
                     update_debug_inspector_text,
                     update_selection_tiles,
                     handle_selection_tile_click,
@@ -324,7 +412,7 @@ impl Plugin for InspectionPlugin {
     }
 }
 
-fn setup_inspector_ui(mut commands: Commands) {
+fn setup_inspector_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -448,11 +536,37 @@ fn setup_inspector_ui(mut commands: Commands) {
                     ..default()
                 },))
                 .with_children(|details| {
-                    details.spawn((
-                        Text::new("SELECTION"),
-                        TextFont::from_font_size(19.0),
-                        TextColor(Color::srgb(0.92, 0.73, 0.25)),
-                    ));
+                    details
+                        .spawn((Node {
+                            align_items: AlignItems::Center,
+                            column_gap: px(8.0),
+                            ..default()
+                        },))
+                        .with_children(|heading| {
+                            heading.spawn((
+                                Text::new("No selection"),
+                                TextFont::from_font_size(19.0),
+                                TextColor(Color::srgb(0.92, 0.73, 0.25)),
+                                InspectionHeading,
+                            ));
+                            heading.spawn((
+                                Button,
+                                Node {
+                                    width: px(24.0),
+                                    height: px(24.0),
+                                    display: Display::None,
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::Center,
+                                    border: UiRect::all(px(1.0)),
+                                    ..default()
+                                },
+                                BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+                                Text::new("i"),
+                                TextFont::from_font_size(17.0),
+                                TextColor(Color::srgb(0.95, 0.78, 0.30)),
+                                ProductionTooltipButton,
+                            ));
+                        });
                     details.spawn((
                         Text::new("No selection."),
                         TextFont::from_font_size(15.0),
@@ -480,8 +594,14 @@ fn setup_inspector_ui(mut commands: Commands) {
                                     .spawn((
                                         Button,
                                         Node {
-                                            width: px(98.0),
-                                            height: px(56.0),
+                                            width: px(
+                                                if matches!(kind, CombatTooltipKind::Armor) {
+                                                    124.0
+                                                } else {
+                                                    188.0
+                                                },
+                                            ),
+                                            height: px(64.0),
                                             display: Display::None,
                                             align_items: AlignItems::Center,
                                             column_gap: px(5.0),
@@ -500,14 +620,112 @@ fn setup_inspector_ui(mut commands: Commands) {
                                             Pickable::IGNORE,
                                             CombatTypeIcon(kind),
                                         ));
-                                        badge.spawn((
-                                            Text::new(""),
-                                            TextFont::from_font_size(18.0),
-                                            TextColor(Color::srgb(0.96, 0.86, 0.56)),
-                                            Pickable::IGNORE,
-                                            CombatTypeLabel(kind),
-                                        ));
+                                        badge
+                                            .spawn((Node {
+                                                flex_direction: FlexDirection::Column,
+                                                row_gap: px(2.0),
+                                                ..default()
+                                            },))
+                                            .with_children(|stats| {
+                                                stats.spawn((
+                                                    Text::new(""),
+                                                    TextFont::from_font_size(18.0),
+                                                    TextColor(Color::srgb(0.96, 0.86, 0.56)),
+                                                    Pickable::IGNORE,
+                                                    CombatTypeLabel(kind),
+                                                ));
+                                                match kind {
+                                                    CombatTooltipKind::Attack(slot) => {
+                                                        for (stat, icon_path) in [
+                                                            (AttackStatKind::Range, "ui/range.png"),
+                                                            (
+                                                                AttackStatKind::Cooldown,
+                                                                "ui/cooldown.png",
+                                                            ),
+                                                        ] {
+                                                            stats
+                                                                .spawn((Node {
+                                                                    align_items: AlignItems::Center,
+                                                                    column_gap: px(3.0),
+                                                                    ..default()
+                                                                },))
+                                                                .with_children(|line| {
+                                                                    line.spawn((
+                                                                        ImageNode::new(
+                                                                            asset_server
+                                                                                .load(icon_path),
+                                                                        ),
+                                                                        Node {
+                                                                            width: px(15.0),
+                                                                            height: px(15.0),
+                                                                            ..default()
+                                                                        },
+                                                                        Pickable::IGNORE,
+                                                                    ));
+                                                                    line.spawn((
+                                                                        Text::new(""),
+                                                                        TextFont::from_font_size(
+                                                                            12.0,
+                                                                        ),
+                                                                        TextColor(Color::srgb(
+                                                                            0.82, 0.81, 0.75,
+                                                                        )),
+                                                                        Pickable::IGNORE,
+                                                                        AttackStatLabel(slot, stat),
+                                                                    ));
+                                                                });
+                                                        }
+                                                    }
+                                                    CombatTooltipKind::Armor => {
+                                                        stats.spawn((
+                                                            Text::new(""),
+                                                            TextFont::from_font_size(12.0),
+                                                            TextColor(Color::srgb(
+                                                                0.82, 0.81, 0.75,
+                                                            )),
+                                                            Pickable::IGNORE,
+                                                            ArmorReductionLabel,
+                                                        ));
+                                                    }
+                                                }
+                                            });
                                     });
+                            }
+                        });
+                    details
+                        .spawn((Node {
+                            position_type: PositionType::Absolute,
+                            left: px(0.0),
+                            bottom: px(0.0),
+                            width: percent(100.0),
+                            column_gap: px(4.0),
+                            ..default()
+                        },))
+                        .with_children(|effects| {
+                            for index in 0..32 {
+                                effects
+                                    .spawn((
+                                        Button,
+                                        Node {
+                                            width: px(30.0),
+                                            height: px(30.0),
+                                            display: Display::None,
+                                            border: UiRect::all(px(1.0)),
+                                            ..default()
+                                        },
+                                        BorderColor::all(Color::srgb(0.56, 0.47, 0.27)),
+                                        ActiveEffectButton(index),
+                                    ))
+                                    .with_child((
+                                        ImageNode::default(),
+                                        Node {
+                                            width: percent(100.0),
+                                            height: percent(100.0),
+                                            ..default()
+                                        },
+                                        Pickable::IGNORE,
+                                        ActiveEffectIcon(index),
+                                    ));
                             }
                         });
                 });
@@ -635,6 +853,59 @@ fn setup_inspector_ui(mut commands: Commands) {
         Text::new(""),
         TextFont::from_font_size(16.0),
         TextColor(Color::WHITE),
+    ));
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(ACTION_SLOT_WIDTH + 12.0),
+                bottom: px(CONSOLE_HEIGHT + 8.0),
+                width: px(440.0),
+                padding: UiRect::all(px(10.0)),
+                border: UiRect::all(px(2.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(5.0),
+                ..default()
+            },
+            BackgroundColor(PANEL_BACKGROUND),
+            BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+            Visibility::Hidden,
+            GlobalZIndex(1002),
+            Pickable::IGNORE,
+            ProductionTooltipPanel,
+        ))
+        .with_children(|tooltip| {
+            tooltip.spawn((
+                Text::new(""),
+                TextFont::from_font_size(17.0),
+                TextColor(Color::srgb(0.96, 0.77, 0.18)),
+                ProductionTooltipTitle,
+            ));
+            tooltip.spawn((
+                Text::new(""),
+                TextFont::from_font_size(14.0),
+                TextColor(Color::WHITE),
+                ProductionTooltipBody,
+            ));
+        });
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            right: px(ACTION_SLOT_WIDTH + 12.0),
+            bottom: px(CONSOLE_HEIGHT + 8.0),
+            padding: UiRect::all(px(8.0)),
+            border: UiRect::all(px(2.0)),
+            ..default()
+        },
+        BackgroundColor(PANEL_BACKGROUND),
+        BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+        Visibility::Hidden,
+        GlobalZIndex(1003),
+        Pickable::IGNORE,
+        Text::new(""),
+        TextFont::from_font_size(15.0),
+        TextColor(Color::WHITE),
+        ActiveEffectTooltip,
     ));
     commands
         .spawn((
@@ -1199,8 +1470,21 @@ fn selection_type_key(id: SimId, samples: &PresentationSamples) -> Option<(u8, u
 fn update_inspector_text(
     samples: Res<PresentationSamples>,
     selection: Res<InspectionSelection>,
-    mut text: Single<&mut Text, With<InspectionText>>,
+    mut heading: Single<&mut Text, (With<InspectionHeading>, Without<InspectionText>)>,
+    mut text: Single<&mut Text, (With<InspectionText>, Without<InspectionHeading>)>,
 ) {
+    let next_heading = if selection.members.len() > 1 {
+        format!("{} selected", selection.members.len())
+    } else {
+        selection
+            .selected
+            .and_then(|id| selected_entity_name(id, &samples))
+            .unwrap_or("No selection")
+            .to_owned()
+    };
+    if heading.0 != next_heading {
+        heading.0 = next_heading;
+    }
     let next = match selection.selected {
         None => "No selection.".into(),
         Some(_) if selection.members.len() > 1 => {
@@ -1226,6 +1510,110 @@ fn update_inspector_text(
     if text.0 != next {
         text.0 = next;
     }
+}
+
+fn selected_entity_name(id: SimId, samples: &PresentationSamples) -> Option<&'static str> {
+    samples
+        .current
+        .builders
+        .get(&id)
+        .map(|builder| builder.appearance.name)
+        .or_else(|| {
+            samples
+                .current
+                .units
+                .get(&id)
+                .and_then(|unit| unit.content.map(|content| content.name))
+        })
+        .or_else(|| {
+            samples
+                .current
+                .buildings
+                .get(&id)
+                .and_then(|building| building.content.map(|content| content.name))
+        })
+}
+
+fn update_production_tooltip(
+    mut commands: Commands,
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    selected_match: Res<SelectedMatch>,
+    mut ui: ProductionTooltipUi<'_, '_>,
+    mut shown: Local<Option<SimId>>,
+) {
+    let id = (selection.members.len() == 1)
+        .then_some(selection.selected)
+        .flatten();
+    let tooltips = id.and_then(|id| {
+        let rawcode = samples
+            .current
+            .builders
+            .get(&id)
+            .map(|builder| builder.appearance.rawcode)
+            .or_else(|| {
+                samples
+                    .current
+                    .units
+                    .get(&id)
+                    .and_then(|unit| unit.content.map(|content| content.rawcode))
+            })
+            .or_else(|| {
+                samples
+                    .current
+                    .buildings
+                    .get(&id)
+                    .and_then(|building| building.content.map(|content| content.rawcode))
+            })?;
+        selected_match
+            .content
+            .building_kind_for_rawcode(rawcode)
+            .and_then(|kind| kind.tooltips(selected_match.content))
+            .or_else(|| selected_match.content.unit_tooltips_for_rawcode(rawcode))
+            .filter(|(basic, extended)| !basic.is_empty() || !extended.is_empty())
+    });
+    ui.button.1.display = if tooltips.is_some() {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    let hovered = if tooltips.is_some()
+        && matches!(*ui.button.0, Interaction::Hovered | Interaction::Pressed)
+    {
+        id
+    } else {
+        None
+    };
+    **ui.panel = if hovered.is_some() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    if *shown == hovered {
+        return;
+    }
+    *shown = hovered;
+    if let Some((basic, extended)) = tooltips.filter(|_| hovered.is_some()) {
+        set_inspection_wc3_text(
+            &mut commands,
+            *ui.title,
+            basic,
+            Color::srgb(0.96, 0.77, 0.18),
+        );
+        set_inspection_wc3_text(&mut commands, *ui.body, extended, Color::WHITE);
+    }
+}
+
+fn set_inspection_wc3_text(commands: &mut Commands, entity: Entity, source: &str, color: Color) {
+    commands.entity(entity).despawn_children();
+    commands.entity(entity).with_children(|text| {
+        for run in crate::wc3_text::parse_wc3_text(source) {
+            let color = run.color.map_or(color, |color| {
+                Color::srgba_u8(color.red, color.green, color.blue, color.alpha)
+            });
+            text.spawn((TextSpan::new(run.text.replace('•', "-")), TextColor(color)));
+        }
+    });
 }
 
 fn update_production_ui(
@@ -1297,7 +1685,7 @@ fn update_combat_tooltip(
     samples: Res<PresentationSamples>,
     mut badge_icons: CombatBadgeIcons<'_, '_>,
     mut buttons: Query<(&CombatTypeButton, &Interaction, &mut Node), Without<CombatTooltip>>,
-    mut labels: Query<(&CombatTypeLabel, &mut Text), Without<CombatTooltip>>,
+    mut labels: CombatLabelsQuery<'_, '_>,
     mut tooltip: CombatTooltipQuery<'_, '_>,
 ) {
     let selected = (selection.members.len() == 1)
@@ -1320,14 +1708,35 @@ fn update_combat_tooltip(
             hovered = Some(button.0);
         }
     }
-    for (label, mut text) in &mut labels {
-        text.0 = match label.0 {
-            CombatTooltipKind::Attack(slot) => {
-                attacks[slot].map_or_else(String::new, |attack| attack.profile.damage.to_string())
+    for (mut text, kind, stat, armor_reduction) in &mut labels {
+        text.0 = if let Some(label) = kind {
+            match label.0 {
+                CombatTooltipKind::Attack(slot) => attacks[slot]
+                    .map_or_else(String::new, |attack| attack.profile.damage.to_string()),
+                CombatTooltipKind::Armor => armor.map_or_else(String::new, |armor| {
+                    armor_points_label(armor.points_per_100)
+                }),
             }
-            CombatTooltipKind::Armor => armor.map_or_else(String::new, |armor| {
-                armor_points_label(armor.points_per_100)
-            }),
+        } else if let Some(stat) = stat {
+            attacks[stat.0].map_or_else(String::new, |attack| match stat.1 {
+                AttackStatKind::Range => format!(
+                    "{:.0}",
+                    attack.profile.range as f32 / SUBUNITS_PER_WORLD_UNIT as f32
+                ),
+                AttackStatKind::Cooldown => format!(
+                    "{:.1}s",
+                    f32::from(attack.profile.cooldown_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32
+                ),
+            })
+        } else if armor_reduction.is_some() {
+            armor.map_or_else(String::new, |armor| {
+                armor_reduction_label(
+                    armor.points_per_100,
+                    samples.current.damage_rules.armor_factor_per_10k(),
+                )
+            })
+        } else {
+            String::new()
         };
     }
     for (slot, mut image) in &mut badge_icons.images {
@@ -1442,6 +1851,22 @@ fn selected_combat_badges(
     ([None; 2], None)
 }
 
+fn armor_reduction_label(points_per_100: i32, factor_per_10k: u16) -> String {
+    let factor = f64::from(factor_per_10k) / 10_000.0;
+    let armor = f64::from(points_per_100) / 100.0;
+    let reduction = if armor >= 0.0 {
+        1.0 - 1.0 / (1.0 + factor * armor)
+    } else {
+        // The authoritative negative-armor rule compounds per point, not linearly.
+        (1.0 - factor).powf(-armor) - 1.0
+    };
+    if reduction >= 0.0 {
+        format!("{:.0}% less", reduction * 100.0)
+    } else {
+        format!("{:.0}% more", -reduction * 100.0)
+    }
+}
+
 fn attack_matchup_tooltip(kind: DamageType, samples: &PresentationSamples) -> String {
     let mut lines = vec![format!("{} damage against:", damage_type_name(kind))];
     for armor in [
@@ -1509,8 +1934,7 @@ fn update_debug_inspector_text(
 fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
     if let Some(builder) = samples.current.builders.get(&id) {
         return format!(
-            "{}\nPlayer {} builder\n\n{}",
-            builder.appearance.name,
+            "Player {} builder\n\n{}",
             builder.owner.0 + 1,
             if builder.build_footprint.is_some() {
                 "Constructing"
@@ -1527,12 +1951,10 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
     }
     if let Some(unit) = samples.current.units.get(&id) {
         return format!(
-            "{} (Player {})\nHealth: {} / {}\n{}",
-            unit.content.map_or("Unit", |content| content.name),
+            "Player {}\nHealth: {} / {}",
             unit.owner.0 + 1,
             unit.health,
             unit.health_max,
-            status_effect_summary(unit, samples.current.tick)
         );
     }
     if let Some(building) = samples.current.buildings.get(&id) {
@@ -1583,8 +2005,7 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
                 )
             });
         return format!(
-            "{} ({})\nHealth: {} / {}{}{}{}",
-            building.content.map_or("Building", |content| content.name),
+            "{}\nHealth: {} / {}{}{}{}",
             building.owner.map_or_else(
                 || "Neutral".to_owned(),
                 |owner| format!("Player {}", owner.0 + 1)
@@ -1599,22 +2020,57 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
     "No selection.".into()
 }
 
-fn status_effect_summary(unit: &UnitSample, tick: u64) -> String {
-    let mut buffs = Vec::new();
-    let mut debuffs = Vec::new();
+struct ActiveEffectBadgeData {
+    icon: UiIconKey,
+    description: String,
+    beneficial: bool,
+}
+
+fn active_effect_badges(
+    id: SimId,
+    samples: &PresentationSamples,
+    catalog: crate::ui_icons::CastleFightPresentationCatalog,
+) -> Vec<ActiveEffectBadgeData> {
+    let tick = samples.current.tick;
+    let mut effects = Vec::new();
     let remaining = |expires_tick: u64| {
         expires_tick
             .saturating_sub(tick)
             .div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
     };
-    if unit.status.stunned_until_tick > tick {
-        debuffs.push(format!(
-            "Stunned ({}s)",
-            remaining(unit.status.stunned_until_tick)
-        ));
+    if let Some(building) = samples.current.buildings.get(&id) {
+        if let Some(until) = building.stunned_until_tick.filter(|until| *until > tick) {
+            effects.push(ActiveEffectBadgeData {
+                icon: catalog.stun_buff,
+                description: format!("Stunned ({}s)", remaining(until)),
+                beneficial: false,
+            });
+        }
+        return effects;
     }
-    if unit.active_defend_ability.is_some() {
-        buffs.push("Defend".to_owned());
+    let Some(unit) = samples.current.units.get(&id) else {
+        return effects;
+    };
+    if unit.status.stunned_until_tick > tick {
+        effects.push(ActiveEffectBadgeData {
+            icon: catalog.stun_buff,
+            description: format!("Stunned ({}s)", remaining(unit.status.stunned_until_tick)),
+            beneficial: false,
+        });
+    }
+    if let Some(ability) = unit.active_defend_ability {
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::ability(ability.0, UiIconRole::Normal),
+            description: "Defend".to_owned(),
+            beneficial: true,
+        });
+    }
+    if unit.status.permanent_holy_health_bonus {
+        effects.push(ActiveEffectBadgeData {
+            icon: catalog.permanent_holy_health,
+            description: "Permanent Holy health bonus".to_owned(),
+            beneficial: true,
+        });
     }
     for modifier in unit.status.movement_modifiers
         [..usize::from(unit.status.movement_modifier_count)]
@@ -1626,11 +2082,14 @@ fn status_effect_summary(unit: &UnitSample, tick: u64) -> String {
             modifier.percent_delta,
             remaining(modifier.expires_tick)
         );
-        if modifier.percent_delta >= 0 {
-            buffs.push(label);
-        } else {
-            debuffs.push(label);
-        }
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect {
+                ability: modifier.id.0,
+                role: UiStatusIconRole::Secondary,
+            },
+            description: label,
+            beneficial: modifier.percent_delta >= 0,
+        });
     }
     for modifier in unit.status.attack_speed_modifiers
         [..usize::from(unit.status.attack_speed_modifier_count)]
@@ -1642,11 +2101,14 @@ fn status_effect_summary(unit: &UnitSample, tick: u64) -> String {
             modifier.percent_delta,
             remaining(modifier.expires_tick)
         );
-        if modifier.percent_delta >= 0 {
-            buffs.push(label);
-        } else {
-            debuffs.push(label);
-        }
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect {
+                ability: modifier.id.0,
+                role: UiStatusIconRole::Secondary,
+            },
+            description: label,
+            beneficial: modifier.percent_delta >= 0,
+        });
     }
     for modifier in unit.status.armor_modifiers[..usize::from(unit.status.armor_modifier_count)]
         .iter()
@@ -1662,33 +2124,89 @@ fn status_effect_summary(unit: &UnitSample, tick: u64) -> String {
             armor_points_label(i32::from(modifier.armor_bonus_per_100)),
             remaining(modifier.expires_tick)
         );
-        if modifier.armor_bonus_per_100 >= 0 {
-            buffs.push(label);
-        } else {
-            debuffs.push(label);
-        }
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect {
+                ability: modifier.id.0,
+                role: UiStatusIconRole::Primary,
+            },
+            description: label,
+            beneficial: modifier.armor_bonus_per_100 >= 0,
+        });
     }
     for modifier in unit.status.damage_over_time[..usize::from(unit.status.damage_over_time_count)]
         .iter()
         .filter(|modifier| modifier.expires_tick > tick)
     {
-        debuffs.push(format!(
-            "{} damage/pulse ({}s)",
-            modifier.damage_per_pulse,
-            remaining(modifier.expires_tick)
-        ));
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect {
+                ability: modifier.id.0,
+                role: UiStatusIconRole::Primary,
+            },
+            description: format!(
+                "{} damage/pulse ({}s)",
+                modifier.damage_per_pulse,
+                remaining(modifier.expires_tick)
+            ),
+            beneficial: false,
+        });
     }
-    if buffs.is_empty() && debuffs.is_empty() {
-        return "Effects: None".to_owned();
+    effects
+}
+
+fn update_active_effect_icons(
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    selected_match: Res<SelectedMatch>,
+    asset_server: Res<AssetServer>,
+    mut ui: ActiveEffectUi<'_, '_>,
+) {
+    let effects = (selection.members.len() == 1)
+        .then_some(selection.selected)
+        .flatten()
+        .and_then(|id| {
+            crate::ui_icons::CastleFightPresentationCatalog::for_version(
+                selected_match.content.map_version,
+            )
+            .map(|catalog| active_effect_badges(id, &samples, catalog))
+        })
+        .unwrap_or_default();
+    let mut hovered = None;
+    for (slot, interaction, mut node, mut border) in &mut ui.buttons {
+        let effect = effects.get(slot.0);
+        node.display = if effect.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if let Some(effect) = effect {
+            *border = BorderColor::all(if effect.beneficial {
+                Color::srgb(0.25, 0.72, 0.35)
+            } else {
+                Color::srgb(0.78, 0.28, 0.25)
+            });
+            if matches!(interaction, Interaction::Hovered | Interaction::Pressed) {
+                hovered = Some(effect.description.as_str());
+            }
+        }
     }
-    let mut lines = Vec::new();
-    if !buffs.is_empty() {
-        lines.push(format!("Buffs: {}", buffs.join(", ")));
+    for (slot, mut image) in &mut ui.images {
+        *image = effects
+            .get(slot.0)
+            .and_then(|effect| match effect.icon {
+                UiIconKey::StatusEffect { ability, role } => {
+                    ui.icon_assets.status_image(ability, role, &asset_server)
+                }
+                icon => ui.icon_assets.image(icon, &asset_server),
+            })
+            .map_or_else(ImageNode::default, ImageNode::new);
     }
-    if !debuffs.is_empty() {
-        lines.push(format!("Debuffs: {}", debuffs.join(", ")));
-    }
-    lines.join("\n")
+    let (text, visibility) = &mut *ui.tooltip;
+    text.0 = hovered.unwrap_or_default().to_owned();
+    **visibility = if hovered.is_some() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
 }
 
 fn update_selection_tiles(
@@ -1789,9 +2307,15 @@ fn update_selection_tiles(
 
 fn handle_selection_tile_click(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     interactions: SelectionTileInteractionQuery<'_, '_>,
     mut selection: ResMut<InspectionSelection>,
+    mut camera_focus: ResMut<crate::presentation::CameraFocusRequest>,
+    mut portrait_hold: ResMut<PortraitCameraHold>,
 ) {
+    if !mouse.pressed(MouseButton::Left) {
+        portrait_hold.0 = None;
+    }
     for (slot, interaction) in &interactions {
         if *interaction != Interaction::Pressed {
             continue;
@@ -1799,6 +2323,10 @@ fn handle_selection_tile_click(
         let Some(&id) = selection.members.get(slot.0) else {
             continue;
         };
+        if selection.members.len() == 1 && slot.0 == 0 {
+            camera_focus.0 = Some(id);
+            portrait_hold.0 = Some(id);
+        }
         if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
             selection.toggle(id);
         } else {
@@ -2696,6 +3224,8 @@ mod tests {
         assert!(text.contains("Defense type: Light (3) <- Normal: 100% (0%) incoming"));
         assert!(!text.contains("Last attacker:"));
         assert!(!text.contains("Last attacked:"));
+        assert_eq!(selected_entity_name(SimId(7), &samples), Some("Footman"));
+        assert!(!selection_summary(SimId(7), &samples).contains("Footman"));
 
         let enemy = samples.current.units.get_mut(&SimId(8)).unwrap();
         enemy.status.stunned_until_tick = 16;
@@ -2704,7 +3234,24 @@ mod tests {
         enemy.status.movement_modifier_count = 1;
         let summary = selection_summary(SimId(8), &samples);
         assert!(summary.contains("Player 7"));
-        assert!(summary.contains("Debuffs: Stunned (1s), Move -25% (1s)"));
+        let effects = active_effect_badges(
+            SimId(8),
+            &samples,
+            crate::ui_icons::CastleFightPresentationCatalog::for_version(
+                castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27,
+            )
+            .unwrap(),
+        );
+        assert!(
+            effects
+                .iter()
+                .any(|effect| effect.description == "Stunned (1s)")
+        );
+        assert!(
+            effects
+                .iter()
+                .any(|effect| effect.description == "Move -25% (1s)")
+        );
     }
 
     #[test]
@@ -2729,6 +3276,9 @@ mod tests {
         assert_eq!(armor_points_label(300), "3");
         assert_eq!(armor_points_label(350), "3.5");
         assert_eq!(armor_points_label(-125), "-1.25");
+        assert_eq!(armor_reduction_label(0, 600), "0% less");
+        assert_eq!(armor_reduction_label(300, 600), "15% less");
+        assert_eq!(armor_reduction_label(-100, 600), "6% more");
     }
 
     #[test]

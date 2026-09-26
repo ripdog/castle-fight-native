@@ -484,6 +484,12 @@ mod tests {
                     == r"UI\Widgets\Console\Human\infocard-neutral-armor-medium.blp"
         }));
         assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "status_effects"
+                && asset.owner_rawcode == "A03M"
+                && asset.role == "primary"
+                && asset.texture_path == r"ReplaceableTextures\CommandButtons\BTNInnerFire.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
             asset.owner_kind == "cursors"
                 && asset.owner_rawcode == "human"
                 && asset.role == "atlas"
