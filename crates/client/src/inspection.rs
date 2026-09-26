@@ -246,6 +246,18 @@ struct SelectionTileIcon(usize);
 #[derive(Component)]
 struct SelectionTileHealth(usize);
 
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+enum PortraitResource {
+    Health,
+    Mana,
+}
+
+#[derive(Component)]
+struct PortraitResourceFill(PortraitResource);
+
+#[derive(Component)]
+struct PortraitResourceText(PortraitResource);
+
 #[derive(Component)]
 struct SelectionRectangle;
 
@@ -301,6 +313,28 @@ type SelectionBarsQuery<'w, 's> = Query<
     's,
     (&'static SelectionTileHealth, &'static mut Node),
     (Without<SelectionTileRoot>, Without<SelectionTile>),
+>;
+type PortraitBarsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static PortraitResource,
+        &'static mut Visibility,
+        &'static mut Node,
+    ),
+    (Without<SelectionTileIcon>, Without<PortraitResourceFill>),
+>;
+type PortraitFillsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static PortraitResourceFill, &'static mut Node),
+    (Without<SelectionTileIcon>, Without<PortraitResource>),
+>;
+type PortraitIconsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static SelectionTileIcon, &'static mut Node),
+    (Without<PortraitResourceFill>, Without<PortraitResource>),
 >;
 
 #[derive(SystemParam)]
@@ -403,6 +437,7 @@ impl Plugin for InspectionPlugin {
                     update_active_effect_icons,
                     update_debug_inspector_text,
                     update_selection_tiles,
+                    update_portrait_resources,
                     handle_selection_tile_click,
                     update_selection_rectangle,
                     draw_selection_highlight,
@@ -524,6 +559,62 @@ fn setup_inspector_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                     Pickable::IGNORE,
                                     SelectionTileHealth(index),
                                 ));
+                                if index == 0 {
+                                    for (resource, bottom, color) in [
+                                        (
+                                            PortraitResource::Health,
+                                            15.0,
+                                            Color::srgb(0.08, 0.68, 0.12),
+                                        ),
+                                        (
+                                            PortraitResource::Mana,
+                                            1.0,
+                                            Color::srgb(0.12, 0.34, 0.88),
+                                        ),
+                                    ] {
+                                        tile.spawn((
+                                            Node {
+                                                position_type: PositionType::Absolute,
+                                                left: px(1.0),
+                                                right: px(1.0),
+                                                bottom: px(bottom),
+                                                height: px(13.0),
+                                                ..default()
+                                            },
+                                            BackgroundColor(Color::srgb(0.06, 0.07, 0.10)),
+                                            Visibility::Hidden,
+                                            Pickable::IGNORE,
+                                            resource,
+                                        ))
+                                        .with_children(
+                                            |bar| {
+                                                bar.spawn((
+                                                    Node {
+                                                        width: percent(100.0),
+                                                        height: percent(100.0),
+                                                        ..default()
+                                                    },
+                                                    BackgroundColor(color),
+                                                    PortraitResourceFill(resource),
+                                                ));
+                                                bar.spawn((
+                                                    Text::new(""),
+                                                    TextFont::from_font_size(11.0),
+                                                    TextColor(Color::WHITE),
+                                                    Node {
+                                                        position_type: PositionType::Absolute,
+                                                        width: percent(100.0),
+                                                        height: percent(100.0),
+                                                        justify_content: JustifyContent::Center,
+                                                        align_items: AlignItems::Center,
+                                                        ..default()
+                                                    },
+                                                    PortraitResourceText(resource),
+                                                ));
+                                            },
+                                        );
+                                    }
+                                }
                             });
                     }
                 });
@@ -1950,12 +2041,7 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
         );
     }
     if let Some(unit) = samples.current.units.get(&id) {
-        return format!(
-            "Player {}\nHealth: {} / {}",
-            unit.owner.0 + 1,
-            unit.health,
-            unit.health_max,
-        );
+        return format!("Player {}", unit.owner.0 + 1);
     }
     if let Some(building) = samples.current.buildings.get(&id) {
         let status = if let Some(complete_tick) = building.construction_complete_tick {
@@ -1970,7 +2056,7 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
         } else {
             "Ready".into()
         };
-        let training_mana =
+        let training_status =
             building
                 .production_interval_ticks
                 .map_or_else(String::new, |interval| {
@@ -2004,20 +2090,13 @@ fn selection_summary(id: SimId, samples: &PresentationSamples) -> String {
                         .div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
                 )
             });
-        let mana = match (building.mana_current, building.mana_maximum) {
-            (Some(current), Some(maximum)) => format!("\nMana: {current} / {maximum}"),
-            _ => String::new(),
-        };
         return format!(
-            "{}\nHealth: {} / {}{}{}{}{}",
+            "{}{}{}{}",
             building.owner.map_or_else(
                 || "Neutral".to_owned(),
                 |owner| format!("Player {}", owner.0 + 1)
             ),
-            building.health,
-            building.health_max,
-            mana,
-            training_mana,
+            training_status,
             status,
             stun
         );
@@ -2282,6 +2361,10 @@ fn update_selection_tiles(
             .map_or_else(ImageNode::default, ImageNode::new);
     }
     for (slot, mut node) in &mut ui.bars {
+        if single && slot.0 == 0 {
+            node.width = px(0.0);
+            continue;
+        }
         let fraction = selection
             .members
             .get(slot.0)
@@ -2307,6 +2390,91 @@ fn update_selection_tiles(
                 }
             });
         node.width = percent(fraction * 100.0);
+    }
+}
+
+fn update_portrait_resources(
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    mut bars: PortraitBarsQuery<'_, '_>,
+    mut fills: PortraitFillsQuery<'_, '_>,
+    mut labels: Query<(&PortraitResourceText, &mut Text)>,
+    mut icons: PortraitIconsQuery<'_, '_>,
+) {
+    let resources = selection
+        .members
+        .first()
+        .filter(|_| selection.members.len() == 1)
+        .and_then(|id| {
+            samples
+                .current
+                .units
+                .get(id)
+                .map(|unit| {
+                    (
+                        (unit.health, unit.health_max),
+                        unit.mana_current.zip(unit.mana_maximum),
+                    )
+                })
+                .or_else(|| {
+                    samples.current.buildings.get(id).map(|building| {
+                        (
+                            (building.health, building.health_max),
+                            (building.production_queue.is_none())
+                                .then(|| building.mana_current.zip(building.mana_maximum))
+                                .flatten(),
+                        )
+                    })
+                })
+        });
+    for (slot, mut icon) in &mut icons {
+        if slot.0 == 0 {
+            icon.bottom = px(match resources {
+                Some((_, Some(_))) => 29.0,
+                Some(_) => 15.0,
+                None => 5.0,
+            });
+        }
+    }
+    for (resource, mut visibility, mut node) in &mut bars {
+        let values = resources.and_then(|(health, mana)| match resource {
+            PortraitResource::Health => Some(health),
+            PortraitResource::Mana => mana,
+        });
+        if *resource == PortraitResource::Health {
+            node.bottom = px(if resources.is_some_and(|(_, mana)| mana.is_some()) {
+                15.0
+            } else {
+                1.0
+            });
+        }
+        *visibility = if values.is_some() {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    for (resource, mut fill) in &mut fills {
+        let values = resources.and_then(|(health, mana)| match resource.0 {
+            PortraitResource::Health => Some(health),
+            PortraitResource::Mana => mana,
+        });
+        if let Some((current, maximum)) = values {
+            fill.width = percent(if maximum > 0 {
+                (current as f32 / maximum as f32).clamp(0.0, 1.0) * 100.0
+            } else {
+                0.0
+            });
+        }
+    }
+    for (resource, mut text) in &mut labels {
+        let values = resources.and_then(|(health, mana)| match resource.0 {
+            PortraitResource::Health => Some(health),
+            PortraitResource::Mana => mana,
+        });
+        if let Some((current, maximum)) = values {
+            text.0 = format!("{current} / {maximum}");
+        }
     }
 }
 

@@ -105,6 +105,8 @@ const HEALTH_BAR_SHADER_PATH: &str = "shaders/health_bar_overlay.wgsl";
 const HEALTH_BAR_BATCH_MAX_RECTS: usize = 8_192;
 const HEALTH_BAR_BATCH_MIN_BUFFER_RECTS: usize = 64;
 const HEALTH_BAR_HEIGHT_PIXELS: f32 = 9.0;
+const MANA_BAR_HEIGHT_PIXELS: f32 = 6.0;
+const MANA_BAR_GAP_PIXELS: f32 = 3.0;
 const PROGRESS_BAR_HEIGHT_PIXELS: f32 = 7.0;
 const PROGRESS_BAR_GAP_PIXELS: f32 = 4.0;
 const HEALTH_BAR_VERTICAL_GAP: f32 = 16.0;
@@ -4270,6 +4272,9 @@ fn update_health_bar_batch(
                 Color::srgb(0.085, 0.085, 0.095),
                 viewport,
             );
+            if let Some((mana, maximum)) = unit.mana_current.zip(unit.mana_maximum) {
+                push_mana_bar(&mut batch.rects, screen, mana, maximum, viewport);
+            }
         }
 
         for (id, building) in &samples.current.buildings {
@@ -4298,6 +4303,11 @@ fn update_health_bar_batch(
                 Color::srgb(0.085, 0.085, 0.095),
                 viewport,
             );
+            if building.production_queue.is_none()
+                && let Some((mana, maximum)) = building.mana_current.zip(building.mana_maximum)
+            {
+                push_mana_bar(&mut batch.rects, screen, mana, maximum, viewport);
+            }
             if let Some(progress) = building_progress(building, rendered_tick) {
                 let progress_screen = HealthBarScreenLayout {
                     top: screen.top + HEALTH_BAR_HEIGHT_PIXELS + PROGRESS_BAR_GAP_PIXELS,
@@ -4401,6 +4411,28 @@ fn health_bar_screen_layout(
 
 fn health_ratio(health: i32, max_health: i32) -> f32 {
     (health.max(0) as f32 / max_health.max(1) as f32).clamp(0.0, 1.0)
+}
+
+fn push_mana_bar(
+    rects: &mut Vec<HealthBarRect>,
+    health_layout: HealthBarScreenLayout,
+    mana: i32,
+    maximum: i32,
+    viewport: Rect,
+) {
+    let mana_layout = HealthBarScreenLayout {
+        top: health_layout.top + HEALTH_BAR_HEIGHT_PIXELS + MANA_BAR_GAP_PIXELS,
+        ..health_layout
+    };
+    push_split_bar(
+        rects,
+        mana_layout,
+        MANA_BAR_HEIGHT_PIXELS,
+        health_ratio(mana, maximum),
+        Color::srgb(0.12, 0.34, 0.88),
+        Color::srgb(0.06, 0.07, 0.10),
+        viewport,
+    );
 }
 
 fn push_split_bar(

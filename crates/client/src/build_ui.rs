@@ -2178,7 +2178,7 @@ fn building_is_controllable_tower(
     building: &BuildingSample,
     content: &CastleFightContentBundle,
 ) -> bool {
-    building_is_attack_capable(building.visual_kind)
+    (building_is_attack_capable(building.visual_kind) || building.mana_maximum.is_some())
         && building.content.is_some_and(|identity| {
             matches!(
                 content.building_kind_for_rawcode(identity.rawcode),
@@ -2337,6 +2337,37 @@ mod tests {
         assert_eq!(
             layout[command_slot(command_card.attack_command)],
             Some(PanelAction::Target(TargetingAction::Attack))
+        );
+    }
+
+    #[test]
+    fn spell_only_tower_is_controllable_and_exposes_its_cast_button() {
+        let demo = create_demo_world(1, Some(0));
+        let horn = demo
+            .content
+            .tower(castle_fight_sim::CastleFightTowerKind::Gjallarhorn)
+            .unwrap();
+        let mut simulation = demo.simulation;
+        let horn_id = simulation.spawn_building_with_properties(
+            horn.spawn(Team(0), BuildingFootprint::new(-120, 16, 4, 4)),
+            horn.gameplay_properties(),
+        );
+        let sample = crate::bridge::PresentationSnapshot::capture(&simulation);
+        let building = sample.buildings.get(&horn_id).unwrap();
+        assert!(building_is_controllable_tower(building, demo.content));
+        let state = ActionPanelState {
+            actor: Some(horn_id),
+            ..ActionPanelState::default()
+        };
+        let authoritative = AuthoritativeSimulation::new(simulation, demo.content);
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        };
+        assert!(
+            action_layout(&state, &authoritative, &selected_match)
+                .contains(&Some(PanelAction::GjallarhornSpell))
         );
     }
 

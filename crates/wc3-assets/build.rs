@@ -721,6 +721,16 @@ fn load_visual_assets(
             missile_arc: None,
         },
     ));
+    // Gjallarhorn's registered building spell creates this caster effect directly in the
+    // 9.27 script, so it has no object-field art link for the automatic extractor to follow.
+    visual_assets.push(VisualAssetSpec {
+        owner_kind: "abilities".to_owned(),
+        owner_rawcode: "A01K".to_owned(),
+        source_unit_rawcode: Some("h010".to_owned()),
+        role: "caster".to_owned(),
+        model_path: r"Abilities\Spells\Other\HowlOfTerror\HowlCaster.mdl".to_owned(),
+        missile_arc: None,
+    });
     Ok(VisualAssetCatalog {
         assets: visual_assets,
         status_visuals,

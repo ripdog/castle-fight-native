@@ -263,6 +263,8 @@ The inspection heading is the selected entity's authored name, not a generic `SE
 
 Active buffs and debuffs occupy an icon row anchored to the bottom of the single-entity inspection area. The row reflects authoritative status state, uses original extracted Warcraft ability/buff art, and exposes the remaining duration or effect description on hover. Pressing the single-selection portrait centers the camera on that entity; keeping the mouse button held follows its interpolated position until release. Camera tracking is local presentation state and never changes simulation orders.
 
+Single-entity health and mana values appear as unlabeled green and blue bars beneath the portrait, respectively. World-attached mana bars appear beneath health bars for units and spellcasting buildings. Production buildings do not show world-attached mana bars. Spellcasting towers without an attack still expose their spell command card when controlled by the local player or by the debug control override.
+
 A stale/dead `SimId` must fail gracefully.
 
 ## 15. Presentation events
