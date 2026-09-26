@@ -960,6 +960,17 @@ fn load_ui_assets(
         ));
     }
 
+    // Warcraft's autocast command-button indicator is an MDX particle effect rather than a
+    // static button frame. Its four PRE2 emitters all reference this stock texture. Export the
+    // authentic particle art through the UI pack so the native command panel can reproduce the
+    // feedback without hardcoding an install-relative texture path.
+    assets.insert((
+        "feedback".to_owned(),
+        "autocast".to_owned(),
+        "particle".to_owned(),
+        r"Textures\HeroLevel-Particle.blp".to_owned(),
+    ));
+
     // Warcraft cursor art is a fixed-layout sprite sheet. Keep every stock race atlas in the
     // generated presentation catalog even though Castle Fight 9.27 currently uses the Human
     // cursor theme. The client selects semantic frames from the atlas rather than embedding

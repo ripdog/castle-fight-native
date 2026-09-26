@@ -51,6 +51,11 @@ pub(crate) enum UiResourceIcon {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum UiFeedbackTexture {
+    AutocastParticle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum UiCursorTheme {
     Human,
     Orc,
@@ -73,6 +78,7 @@ pub(crate) enum UiIconKey {
     },
     Command(UiCommandIcon),
     Resource(UiResourceIcon),
+    Feedback(UiFeedbackTexture),
     InfoDamage(DamageType),
     InfoArmor(ArmorType),
     StatusEffect {
@@ -405,6 +411,15 @@ fn parse_icon_key(entry: &UiBindingManifest) -> Result<UiIconKey, String> {
             };
             Ok(UiIconKey::Resource(resource))
         }
+        "feedback" => {
+            if entry.owner_rawcode != "autocast" || entry.role != "particle" {
+                return Err(format!(
+                    "unknown UI feedback binding {}/{:?}",
+                    entry.owner_rawcode, entry.role
+                ));
+            }
+            Ok(UiIconKey::Feedback(UiFeedbackTexture::AutocastParticle))
+        }
         "info_panel" => {
             if entry.role != "icon" {
                 return Err(format!(
@@ -517,6 +532,12 @@ mod tests {
                     "png": "textures/gold.png"
                 },
                 {
+                    "owner_kind": "feedback",
+                    "owner_rawcode": "autocast",
+                    "role": "particle",
+                    "png": "textures/hero_level_particle.png"
+                },
+                {
                     "owner_kind": "info_panel",
                     "owner_rawcode": "damage_pierce",
                     "role": "icon",
@@ -566,6 +587,10 @@ mod tests {
         assert_eq!(
             resolved.paths[&UiIconKey::Resource(UiResourceIcon::Gold)],
             "wc3/ui/textures/gold.png"
+        );
+        assert_eq!(
+            resolved.paths[&UiIconKey::Feedback(UiFeedbackTexture::AutocastParticle)],
+            "wc3/ui/textures/hero_level_particle.png"
         );
         assert_eq!(
             resolved.paths[&UiIconKey::InfoDamage(DamageType::Pierce)],

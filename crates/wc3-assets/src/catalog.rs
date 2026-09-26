@@ -464,6 +464,12 @@ mod tests {
                 && asset.texture_path == r"ReplaceableTextures\CommandButtons\BTNCancel.blp"
         }));
         assert!(catalog.assets.iter().any(|asset| {
+            asset.owner_kind == "feedback"
+                && asset.owner_rawcode == "autocast"
+                && asset.role == "particle"
+                && asset.texture_path == r"Textures\HeroLevel-Particle.blp"
+        }));
+        assert!(catalog.assets.iter().any(|asset| {
             asset.owner_kind == "info_panel"
                 && asset.owner_rawcode == "damage_pierce"
                 && asset.role == "icon"

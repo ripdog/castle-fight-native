@@ -28,7 +28,9 @@ use crate::{
         cursor_over_map_controls,
     },
     terrain::TerrainSurface,
-    ui_icons::{CastleFightPresentationCatalog, UiIconAssets, UiIconKey, UiIconRole},
+    ui_icons::{
+        CastleFightPresentationCatalog, UiFeedbackTexture, UiIconAssets, UiIconKey, UiIconRole,
+    },
     wc3_effects::{Wc3MaterialProcessed, Wc3TeamTint, fix_wc3_scene_materials},
     wc3_text::{Wc3Color, parse_wc3_text},
 };
@@ -50,6 +52,12 @@ const PANEL_BACKGROUND: Color = Color::srgba(0.105, 0.070, 0.040, 0.97);
 const PANEL_BORDER: Color = Color::srgb(0.28, 0.25, 0.20);
 const SLOT_BORDER: Color = Color::srgb(0.34, 0.34, 0.32);
 const AUTOCAST_BORDER: Color = Color::srgb(0.78, 0.70, 0.24);
+const AUTOCAST_EMITTER_COUNT: usize = 4;
+const AUTOCAST_PARTICLE_SIZE: f32 = 14.0;
+const AUTOCAST_LOOP_SECONDS: f32 = 5.0 / 3.0;
+const AUTOCAST_TRAIL_PHASE: f32 = 0.018;
+const AUTOCAST_PARTICLE_HEAD: Color = Color::srgb(1.0, 0.86, 0.26);
+const AUTOCAST_PARTICLE_TRAIL: Color = Color::srgba(1.0, 0.78, 0.16, 0.48);
 const BUTTON_NORMAL: Color = Color::srgb(0.095, 0.075, 0.055);
 const BUTTON_HOVERED: Color = Color::srgb(0.18, 0.14, 0.095);
 const BUTTON_DISABLED: Color = Color::srgb(0.045, 0.043, 0.040);
@@ -173,6 +181,12 @@ struct SlotHotkey;
 
 #[derive(Component)]
 struct SlotIcon;
+
+#[derive(Component, Debug, Clone, Copy)]
+struct SlotAutocastParticle {
+    emitter: usize,
+    trail: bool,
+}
 
 #[derive(Component)]
 struct BuildTooltip;
@@ -321,6 +335,7 @@ impl Plugin for BuildUiPlugin {
                     handle_action_panel_buttons,
                     handle_action_panel_right_click,
                     style_action_panel_buttons,
+                    animate_autocast_particles,
                     update_build_tooltip,
                     update_build_preview,
                 )
@@ -338,7 +353,16 @@ impl Plugin for BuildUiPlugin {
     }
 }
 
-fn setup_action_panel(mut commands: Commands) {
+fn setup_action_panel(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut icon_assets: ResMut<UiIconAssets>,
+) {
+    let autocast_particle = icon_assets.image(
+        UiIconKey::Feedback(UiFeedbackTexture::AutocastParticle),
+        &asset_server,
+    );
+
     commands
         .spawn((
             Node {
@@ -402,6 +426,32 @@ fn setup_action_panel(mut commands: Commands) {
                                     CommandSlot(slot),
                                     SlotIcon,
                                 ));
+                                for emitter in 0..AUTOCAST_EMITTER_COUNT {
+                                    for trail in [true, false] {
+                                        let mut image = autocast_particle
+                                            .clone()
+                                            .map_or_else(ImageNode::default, ImageNode::new);
+                                        image.color = if trail {
+                                            AUTOCAST_PARTICLE_TRAIL
+                                        } else {
+                                            AUTOCAST_PARTICLE_HEAD
+                                        };
+                                        button.spawn((
+                                            image,
+                                            Node {
+                                                position_type: PositionType::Absolute,
+                                                width: px(AUTOCAST_PARTICLE_SIZE),
+                                                height: px(AUTOCAST_PARTICLE_SIZE),
+                                                ..default()
+                                            },
+                                            Visibility::Hidden,
+                                            GlobalZIndex(if trail { 3 } else { 4 }),
+                                            Pickable::IGNORE,
+                                            CommandSlot(slot),
+                                            SlotAutocastParticle { emitter, trail },
+                                        ));
+                                    }
+                                }
                                 button.spawn((
                                     Text::new(""),
                                     TextFont::from_font_size(12.0),
@@ -1458,6 +1508,79 @@ fn repair_autocast_button_hovered(interaction: Interaction, action: Option<Panel
         && action == Some(PanelAction::Target(TargetingAction::Repair))
 }
 
+fn action_autocast_active(
+    action: Option<PanelAction>,
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+) -> bool {
+    (action == Some(PanelAction::GjallarhornSpell)
+        && state
+            .actor
+            .and_then(|actor| authoritative.simulation.building(actor))
+            .and_then(|building| building.ability_autocast_enabled)
+            .unwrap_or(false))
+        || (action == Some(PanelAction::Target(TargetingAction::Repair))
+            && state.actor.is_some_and(|actor| {
+                authoritative
+                    .simulation
+                    .builder(actor)
+                    .is_some_and(|builder| builder.repair_autocast_enabled)
+            }))
+}
+
+fn autocast_particle_position(phase: f32) -> Vec2 {
+    let span = CELL_SIZE - AUTOCAST_PARTICLE_SIZE;
+    let perimeter_phase = phase.rem_euclid(1.0) * 4.0;
+    match perimeter_phase {
+        value if value < 1.0 => Vec2::new(span * value, 0.0),
+        value if value < 2.0 => Vec2::new(span, span * (value - 1.0)),
+        value if value < 3.0 => Vec2::new(span * (3.0 - value), span),
+        value => Vec2::new(0.0, span * (4.0 - value)),
+    }
+}
+
+fn animate_autocast_particles(
+    time: Res<Time>,
+    state: Res<ActionPanelState>,
+    authoritative: Res<AuthoritativeSimulation>,
+    buttons: Query<(&CommandSlot, &SlotAction), With<Button>>,
+    mut particles: Query<(
+        &CommandSlot,
+        &SlotAutocastParticle,
+        &mut Node,
+        &mut Visibility,
+    )>,
+) {
+    let mut active_slots = [false; SLOT_COUNT];
+    for (slot, action) in &buttons {
+        active_slots[slot.0] = action_autocast_active(action.0, &state, &authoritative);
+    }
+
+    let animation_phase = time.elapsed_secs() / AUTOCAST_LOOP_SECONDS;
+    for (slot, particle, mut node, mut visibility) in &mut particles {
+        let active = active_slots[slot.0];
+        *visibility = if active {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        if !active {
+            continue;
+        }
+
+        let trail_phase = if particle.trail {
+            AUTOCAST_TRAIL_PHASE
+        } else {
+            0.0
+        };
+        let phase =
+            animation_phase + particle.emitter as f32 / AUTOCAST_EMITTER_COUNT as f32 - trail_phase;
+        let position = autocast_particle_position(phase);
+        node.left = px(position.x);
+        node.top = px(position.y);
+    }
+}
+
 fn style_action_panel_buttons(
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
@@ -1514,19 +1637,7 @@ fn style_action_panel_buttons(
         } else {
             BUTTON_NORMAL
         });
-        let autocast_active = (action.0 == Some(PanelAction::GjallarhornSpell)
-            && state
-                .actor
-                .and_then(|actor| authoritative.simulation.building(actor))
-                .and_then(|building| building.ability_autocast_enabled)
-                .unwrap_or(false))
-            || action.0 == Some(PanelAction::Target(TargetingAction::Repair))
-                && state.actor.is_some_and(|actor| {
-                    authoritative
-                        .simulation
-                        .builder(actor)
-                        .is_some_and(|builder| builder.repair_autocast_enabled)
-                });
+        let autocast_active = action_autocast_active(action.0, &state, &authoritative);
         *border = BorderColor::all(if disabled {
             BUTTON_DISABLED_BORDER
         } else if autocast_active {
@@ -2726,6 +2837,16 @@ mod tests {
             Interaction::None,
             Some(PanelAction::Target(TargetingAction::Repair)),
         ));
+    }
+
+    #[test]
+    fn autocast_particles_follow_command_button_perimeter() {
+        let span = CELL_SIZE - AUTOCAST_PARTICLE_SIZE;
+        assert_eq!(autocast_particle_position(0.0), Vec2::new(0.0, 0.0));
+        assert_eq!(autocast_particle_position(0.25), Vec2::new(span, 0.0));
+        assert_eq!(autocast_particle_position(0.5), Vec2::new(span, span));
+        assert_eq!(autocast_particle_position(0.75), Vec2::new(0.0, span));
+        assert_eq!(autocast_particle_position(1.0), Vec2::new(0.0, 0.0));
     }
 
     #[test]
