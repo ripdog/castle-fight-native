@@ -600,6 +600,7 @@ pub struct StatusVisualBindingManifest {
 pub struct VisualBindingManifest {
     pub owner_kind: String,
     pub owner_rawcode: String,
+    pub source_unit_rawcode: Option<String>,
     pub role: String,
     pub source_model: String,
     pub gltf: Option<String>,
@@ -1006,6 +1007,7 @@ impl Exporter {
             .map(|asset| VisualAssetSpec {
                 owner_kind: asset.owner_kind.clone(),
                 owner_rawcode: asset.owner_rawcode.clone(),
+                source_unit_rawcode: asset.source_unit_rawcode.clone(),
                 role: asset.role.clone(),
                 model_path: normalize_model_path(&asset.model_path),
                 missile_arc: asset.missile_arc,
@@ -1072,6 +1074,7 @@ impl Exporter {
             .map(|asset| VisualBindingManifest {
                 owner_kind: asset.owner_kind,
                 owner_rawcode: asset.owner_rawcode,
+                source_unit_rawcode: asset.source_unit_rawcode,
                 role: asset.role,
                 gltf: model_outputs
                     .get(&asset.model_path.to_ascii_lowercase())
@@ -1094,6 +1097,7 @@ impl Exporter {
         let stun = stun_source.map(|source_model| VisualBindingManifest {
             owner_kind: "status".to_owned(),
             owner_rawcode: "stun".to_owned(),
+            source_unit_rawcode: None,
             role: "target".to_owned(),
             gltf: model_outputs
                 .get(&source_model.to_ascii_lowercase())
@@ -1103,7 +1107,7 @@ impl Exporter {
         });
 
         Ok(VisualAssetManifest {
-            schema_version: 4,
+            schema_version: 5,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",

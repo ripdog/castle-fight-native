@@ -64,10 +64,74 @@ pub(super) fn apply_ability_effect_to_unit(
                 TimedArmorModifier {
                     id: modifier,
                     armor_bonus_per_100,
+                    regeneration_per_second_per_10k: 0,
+                    mana_regeneration_per_second_per_10k: 0,
+                    damage_bonus_per_10k: 0,
                     expires_tick,
                     reactive_slow_duration_ticks: slow_duration_ticks,
                     reactive_movement_percent_delta: movement_percent_delta,
                     reactive_attack_speed_percent_delta: attack_speed_percent_delta,
+                },
+            );
+        }
+        AbilityEffect::HolyAid {
+            modifier,
+            healing,
+            armor_bonus_per_100,
+            regeneration_per_second_per_10k,
+            duration_ticks,
+            permanent_max_health_bonus,
+            resurrection_count: _,
+            resurrection_radius: _,
+        } => {
+            if permanent_max_health_bonus > 0 && !target.status.permanent_holy_health_bonus {
+                target.status.permanent_holy_health_bonus = true;
+                target.health_max = target.health_max.saturating_add(permanent_max_health_bonus);
+            }
+            target.health = target.health.saturating_add(healing).min(target.health_max);
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id: modifier,
+                    armor_bonus_per_100,
+                    regeneration_per_second_per_10k,
+                    mana_regeneration_per_second_per_10k: 0,
+                    damage_bonus_per_10k: 0,
+                    expires_tick: completed_tick + u64::from(duration_ticks),
+                    reactive_slow_duration_ticks: 0,
+                    reactive_movement_percent_delta: 0,
+                    reactive_attack_speed_percent_delta: 0,
+                },
+            );
+        }
+        AbilityEffect::Prayer {
+            modifier,
+            healing,
+            mana_restored,
+            armor_bonus_per_100,
+            damage_bonus_per_10k,
+            duration_ticks,
+            radius: _,
+            resurrection_count: _,
+            resurrection_radius: _,
+        } => {
+            target.health = target.health.saturating_add(healing).min(target.health_max);
+            if let (Some(profile), Some(mana)) = (target.spellcasting, target.mana_current.as_mut())
+            {
+                *mana = mana.saturating_add(mana_restored).min(profile.mana.maximum);
+            }
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id: modifier,
+                    armor_bonus_per_100,
+                    regeneration_per_second_per_10k: 0,
+                    mana_regeneration_per_second_per_10k: 0,
+                    damage_bonus_per_10k,
+                    expires_tick: completed_tick + u64::from(duration_ticks),
+                    reactive_slow_duration_ticks: 0,
+                    reactive_movement_percent_delta: 0,
+                    reactive_attack_speed_percent_delta: 0,
                 },
             );
         }
@@ -223,29 +287,14 @@ fn apply_timed_attack_speed_modifier(
     }
 }
 
-fn apply_timed_armor_modifier(status: &mut StatusState, incoming: TimedArmorModifier) {
+pub(super) fn apply_timed_armor_modifier(status: &mut StatusState, incoming: TimedArmorModifier) {
     let count = usize::from(status.armor_modifier_count);
     debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
     let active = &status.armor_modifiers[..count];
     match active.binary_search_by_key(&incoming.id, |modifier| modifier.id) {
         Ok(index) => {
             let modifier = &mut status.armor_modifiers[index];
-            assert_eq!(
-                (
-                    modifier.armor_bonus_per_100,
-                    modifier.reactive_slow_duration_ticks,
-                    modifier.reactive_movement_percent_delta,
-                    modifier.reactive_attack_speed_percent_delta,
-                ),
-                (
-                    incoming.armor_bonus_per_100,
-                    incoming.reactive_slow_duration_ticks,
-                    incoming.reactive_movement_percent_delta,
-                    incoming.reactive_attack_speed_percent_delta,
-                ),
-                "same ModifierId authored with conflicting armor/Frost Armor semantics"
-            );
-            modifier.expires_tick = modifier.expires_tick.max(incoming.expires_tick);
+            *modifier = incoming;
         }
         Err(index) => {
             assert!(

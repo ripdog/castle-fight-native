@@ -91,7 +91,9 @@ impl Simulation {
         economy: BuildingEconomyProfile,
     ) -> bool {
         self.player_resources_for(player).is_some_and(|resources| {
-            resources.gold >= economy.gold_cost && resources.lumber >= economy.lumber_cost
+            resources.gold >= economy.gold_cost
+                && resources.lumber >= economy.lumber_cost
+                && resources.legendary_points_available() >= economy.legendary_points_cost
         })
     }
 

@@ -10,7 +10,12 @@
       "chance_per_10k": 1000,
       "damage_multiplier_per_10k": 15000,
       "targets": "air-ground-units",
-      "provenance": {"fields": ["DataA1=10", "DataB1=1.5"]}
+      "provenance": {
+        "fields": [
+          "DataA1=10",
+          "DataB1=1.5"
+        ]
+      }
     },
     {
       "source_kind": "unit-ability",
@@ -20,7 +25,12 @@
       "chance_per_10k": 4000,
       "damage_multiplier_per_10k": 30000,
       "targets": "air-units",
-      "provenance": {"fields": ["DataA1=40", "DataB1=3"]}
+      "provenance": {
+        "fields": [
+          "DataA1=40",
+          "DataB1=3"
+        ]
+      }
     },
     {
       "source_kind": "unit-ability",
@@ -30,7 +40,12 @@
       "chance_per_10k": 2000,
       "damage_multiplier_per_10k": 20000,
       "targets": "air-ground-units",
-      "provenance": {"fields": ["DataA1=20", "DataB1=2"]}
+      "provenance": {
+        "fields": [
+          "DataA1=20",
+          "DataB1=2"
+        ]
+      }
     },
     {
       "source_kind": "unit-ability",
@@ -39,7 +54,9 @@
       "kind": "evasion",
       "chance_per_10k": 1500,
       "provenance": {
-        "fields": ["DataA1=0.15"]
+        "fields": [
+          "DataA1=0.15"
+        ]
       }
     },
     {
@@ -49,7 +66,9 @@
       "kind": "evasion",
       "chance_per_10k": 1500,
       "provenance": {
-        "fields": ["DataA1=0.15"],
+        "fields": [
+          "DataA1=0.15"
+        ],
         "source": "production-unit-abilities.tsv"
       }
     },
@@ -71,7 +90,9 @@
           "DataG1=0"
         ],
         "gameplay_constant": "DefendDeflection=1",
-        "script_fields": ["initial_defend_delay_seconds=0.7"],
+        "script_fields": [
+          "initial_defend_delay_seconds=0.7"
+        ],
         "tooltip": "Massive Shield: all ranged damage taken reduced by 60%; Pierce projectiles have 50% chance to be reflected"
       }
     },
@@ -85,7 +106,12 @@
       "stun_duration_millis": 2000,
       "targets": "ground-units",
       "provenance": {
-        "fields": ["DataA1=15", "DataC1=25", "Dur1=2", "targs1=ground"]
+        "fields": [
+          "DataA1=15",
+          "DataC1=25",
+          "Dur1=2",
+          "targs1=ground"
+        ]
       }
     },
     {
@@ -97,7 +123,12 @@
       "effect_ability_rawcode": "A05X",
       "targets": "air-ground-units",
       "provenance": {
-        "fields": ["Iob2=10", "Iob3=10", "Iob4=10", "Iobu=A05X"]
+        "fields": [
+          "Iob2=10",
+          "Iob3=10",
+          "Iob4=10",
+          "Iobu=A05X"
+        ]
       }
     },
     {
@@ -110,7 +141,12 @@
       "damage_reduction_per_10k": 2500,
       "targets": "air-ground-units",
       "provenance": {
-        "fields": ["DataA1=150", "DataB1=5", "DataC1=0.25", "Area1=500"]
+        "fields": [
+          "DataA1=150",
+          "DataB1=5",
+          "DataC1=0.25",
+          "Area1=500"
+        ]
       }
     },
     {
@@ -122,7 +158,12 @@
       "effect_ability_rawcode": "A03W",
       "targets": "air-ground-units",
       "provenance": {
-        "fields": ["Iob2=10", "Iob3=10", "Iob4=10", "Iobu=A03W"]
+        "fields": [
+          "Iob2=10",
+          "Iob3=10",
+          "Iob4=10",
+          "Iobu=A03W"
+        ]
       }
     },
     {
@@ -133,7 +174,10 @@
       "duration_millis": 7000,
       "targets": "air-ground-units",
       "provenance": {
-        "fields": ["DataA1=15", "Dur1=7"]
+        "fields": [
+          "DataA1=15",
+          "Dur1=7"
+        ]
       }
     },
     {
@@ -151,7 +195,16 @@
       "target_ground_units": true,
       "target_buildings": true,
       "provenance": {
-        "fields": ["Area1=225", "Hfs1=12", "Hfs2=0.25", "Hfs3=3", "Hfs4=1", "HeroDur1=1.01", "Dur1=2.51", "Hfs5=1"]
+        "fields": [
+          "Area1=225",
+          "Hfs1=12",
+          "Hfs2=0.25",
+          "Hfs3=3",
+          "Hfs4=1",
+          "HeroDur1=1.01",
+          "Dur1=2.51",
+          "Hfs5=1"
+        ]
       }
     },
     {
@@ -171,10 +224,51 @@
       "movement_percent_delta": -50,
       "attack_speed_percent_delta": -25,
       "provenance": {
-        "unit_fields": ["mana_max=250", "mana_start=150", "mana_regen=1.5"],
-        "protected_fields": ["mana_cost=35", "cooldown=8"],
-        "ability_fields": ["range=800", "DataA1=30", "DataB1=3.5", "Dur1=4"],
-        "warcraft_frost_constants": ["movement=-50%", "attack-speed=-25%"]
+        "unit_fields": [
+          "mana_max=250",
+          "mana_start=150",
+          "mana_regen=1.5"
+        ],
+        "protected_fields": [
+          "mana_cost=35",
+          "cooldown=8"
+        ],
+        "ability_fields": [
+          "range=800",
+          "DataA1=30",
+          "DataB1=3.5",
+          "Dur1=4"
+        ],
+        "warcraft_frost_constants": [
+          "movement=-50%",
+          "attack-speed=-25%"
+        ]
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01A",
+      "unit_rawcode": "h03B",
+      "kind": "bash",
+      "chance_per_10k": 2000,
+      "bonus_damage": 25,
+      "stun_duration_millis": 2000,
+      "targets": "ground-units",
+      "provenance": {
+        "source": "production-unit-abilities.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A090",
+      "unit_rawcode": "h074",
+      "kind": "bash",
+      "chance_per_10k": 5000,
+      "bonus_damage": 100,
+      "stun_duration_millis": 2000,
+      "targets": "ground-units",
+      "provenance": {
+        "source": "production-unit-abilities.tsv"
       }
     }
   ]

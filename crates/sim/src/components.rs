@@ -376,6 +376,28 @@ pub struct SplashFalloffProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CleaveEffectProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub damage_per_10k: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuraEffectProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub armor_bonus_per_100: i16,
+    pub mana_regeneration_per_second_per_10k: u32,
+    pub suspend_during_spell_cooldown: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpellResistanceEffectProfile {
+    pub ability: AbilityId,
+    pub damage_taken_per_10k: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
     Bash(BashEffectProfile),
     CriticalStrike(CriticalStrikeEffectProfile),
@@ -384,6 +406,9 @@ pub enum PassiveUnitEffect {
     Defend(DefendEffectProfile),
     TriggeredSpellProc(TriggeredSpellProcProfile),
     BurningOil(BurningOilEffectProfile),
+    Cleave(CleaveEffectProfile),
+    Aura(AuraEffectProfile),
+    SpellResistance(SpellResistanceEffectProfile),
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -516,6 +541,7 @@ pub(crate) struct Corpse {
     pub definition: CorpseDefinitionId,
     pub created_tick: u64,
     pub expires_tick: Option<u64>,
+    pub resurrection: Option<ResolvedUnitDefinition>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -666,12 +692,15 @@ pub struct UnitTemplate {
     pub movement: MovementProfile,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResolvedUnitDefinition {
     pub template: UnitTemplate,
     pub properties: UnitGameplayProperties,
     pub spellcasting: Option<SpellcastingProfile>,
 }
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResurrectionProfile(pub ResolvedUnitDefinition);
 
 #[derive(Debug, Clone, Copy)]
 pub struct UnitSpawn {
@@ -751,6 +780,8 @@ pub enum AbilityTargetPolicy {
     AllEnemyUnits,
     RandomEnemyUnitGlobal,
     RecentlyAttackedFriendlyUnit,
+    WoundedFriendlyUnit,
+    RandomGroundEnemyUnit,
 }
 
 impl AbilityTargetPolicy {
@@ -761,6 +792,8 @@ impl AbilityTargetPolicy {
             Self::AllEnemyUnits => 1,
             Self::RandomEnemyUnitGlobal => 2,
             Self::RecentlyAttackedFriendlyUnit => 3,
+            Self::WoundedFriendlyUnit => 4,
+            Self::RandomGroundEnemyUnit => 5,
         }
     }
 }
@@ -790,6 +823,27 @@ pub enum AbilityEffect {
         movement_percent_delta: i16,
         attack_speed_percent_delta: i16,
     },
+    HolyAid {
+        modifier: ModifierId,
+        healing: i32,
+        armor_bonus_per_100: i16,
+        regeneration_per_second_per_10k: u32,
+        duration_ticks: u16,
+        permanent_max_health_bonus: i32,
+        resurrection_count: u8,
+        resurrection_radius: i32,
+    },
+    Prayer {
+        modifier: ModifierId,
+        healing: i32,
+        mana_restored: i32,
+        armor_bonus_per_100: i16,
+        damage_bonus_per_10k: u16,
+        duration_ticks: u16,
+        radius: i32,
+        resurrection_count: u8,
+        resurrection_radius: i32,
+    },
 }
 
 impl AbilityEffect {
@@ -801,6 +855,8 @@ impl AbilityEffect {
             Self::ModifyMovementSpeedPercent { .. } => 2,
             Self::AreaDamage { .. } => 3,
             Self::FrostArmor { .. } => 4,
+            Self::HolyAid { .. } => 5,
+            Self::Prayer { .. } => 6,
         }
     }
 }
@@ -859,6 +915,9 @@ pub struct TimedAttackSpeedModifier {
 pub struct TimedArmorModifier {
     pub id: ModifierId,
     pub armor_bonus_per_100: i16,
+    pub regeneration_per_second_per_10k: u32,
+    pub mana_regeneration_per_second_per_10k: u32,
+    pub damage_bonus_per_10k: u16,
     pub expires_tick: u64,
     pub reactive_slow_duration_ticks: u16,
     pub reactive_movement_percent_delta: i16,
@@ -905,6 +964,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
+    pub permanent_holy_health_bonus: bool,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
     pub movement_modifier_count: u8,
     pub attack_speed_modifiers: [TimedAttackSpeedModifier; MAX_TIMED_ATTACK_SPEED_MODIFIERS],

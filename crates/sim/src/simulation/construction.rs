@@ -582,8 +582,24 @@ impl Simulation {
                 },
             ));
         }
+        let source_points = source_properties
+            .economy
+            .map_or(0, |economy| economy.legendary_points_cost);
+        let available_points = resources
+            .legendary_points_available()
+            .saturating_add(source_points);
+        if available_points < target_economy.legendary_points_cost {
+            return Err(BuildingUpgradeError::Resources(
+                ResourcePurchaseError::InsufficientLegendaryPoints {
+                    available: available_points,
+                    required: target_economy.legendary_points_cost,
+                },
+            ));
+        }
         resources.gold -= target_economy.gold_cost;
         resources.lumber -= target_economy.lumber_cost;
+        resources.legendary_points_used =
+            resources.legendary_points_used - source_points + target_economy.legendary_points_cost;
 
         let complete_tick = self
             .next_tick
@@ -648,9 +664,26 @@ impl Simulation {
         let Some(entity) = entity else {
             return false;
         };
+        self.release_building_legendary_points(entity);
         self.world.despawn(entity);
         self.topology_dirty = true;
         true
+    }
+
+    pub(super) fn release_building_legendary_points(&mut self, entity: Entity) {
+        let building = self.world.entity(entity);
+        let owner = building.get::<Owner>().map(|owner| owner.0);
+        let points = building
+            .get::<BuildingConstruction>()
+            .and_then(|construction| construction.properties.economy)
+            .or_else(|| building.get::<BuildingEconomyProfile>().copied())
+            .map_or(0, |economy| economy.legendary_points_cost);
+        if let Some(owner) = owner {
+            self.player_state_mut(owner)
+                .expect("building owner must exist")
+                .resources
+                .legendary_points_used -= points;
+        }
     }
 
     #[cfg(test)]
@@ -701,6 +734,12 @@ impl Simulation {
                 .lumber
                 .checked_add(economy.lumber_cost)
                 .expect("player lumber refund overflow");
+            let source_points = construction
+                .upgrade_from
+                .and_then(|source| source.properties.economy)
+                .map_or(0, |source| source.legendary_points_cost);
+            resources.legendary_points_used =
+                resources.legendary_points_used - economy.legendary_points_cost + source_points;
         }
         let outcome = if let Some(source) = construction.upgrade_from {
             self.world

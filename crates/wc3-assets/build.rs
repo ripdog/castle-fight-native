@@ -51,6 +51,7 @@ struct DoodadAssetSpec {
 struct VisualAssetSpec {
     owner_kind: String,
     owner_rawcode: String,
+    source_unit_rawcode: Option<String>,
     role: String,
     model_path: String,
     missile_arc: Option<f32>,
@@ -125,7 +126,10 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed={}", units_path.display());
     println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
-    println!("cargo:rerun-if-changed={}", unit_spell_semantics_path.display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        unit_spell_semantics_path.display()
+    );
     println!("cargo:rerun-if-changed={}", placed_doodads_path.display());
     println!("cargo:rerun-if-changed={}", map_skin_path.display());
     let map_readme = original_map.join("README.md");
@@ -613,11 +617,13 @@ fn load_visual_assets(
         .from_path(unit_spell_semantics_path)?;
     let semantic_headers = semantics.headers()?.clone();
     let ability_column = header_index(&semantic_headers, "ability_rawcode")?;
+    let unit_column = header_index(&semantic_headers, "unit_rawcode")?;
     let effects_column = header_index(&semantic_headers, "effect_rawcodes")?;
-    let mut bundled_art = Vec::new();
+    let mut bundled_art = BTreeSet::new();
     for row in semantics.records() {
         let row = row?;
         let parent = row.get(ability_column).unwrap_or_default();
+        let unit = row.get(unit_column).unwrap_or_default();
         for child in row.get(effects_column).unwrap_or_default().split(',') {
             if child == parent {
                 continue;
@@ -631,12 +637,17 @@ fn load_visual_assets(
                             && matches!(role.as_str(), "caster" | "effect" | "target" | "special")
                     })
                     .map(|(kind, _, role, path)| {
-                        (kind.clone(), parent.to_owned(), role.clone(), path.clone())
+                        (
+                            unit.to_owned(),
+                            kind.clone(),
+                            parent.to_owned(),
+                            role.clone(),
+                            path.clone(),
+                        )
                     }),
             );
         }
     }
-    assets.extend(bundled_art);
 
     let mut status_visuals = Vec::new();
     for (ability_rawcode, buffs) in ability_buff_ids {
@@ -678,22 +689,34 @@ fn load_visual_assets(
         ))
     });
 
+    let mut visual_assets: Vec<_> = assets
+        .into_iter()
+        .map(|(owner_kind, owner_rawcode, role, model_path)| {
+            let missile_arc = missile_arcs
+                .get(&(owner_rawcode.clone(), role.clone()))
+                .copied();
+            VisualAssetSpec {
+                owner_kind,
+                owner_rawcode,
+                source_unit_rawcode: None,
+                role,
+                model_path,
+                missile_arc,
+            }
+        })
+        .collect();
+    visual_assets.extend(bundled_art.into_iter().map(
+        |(unit, owner_kind, owner_rawcode, role, model_path)| VisualAssetSpec {
+            owner_kind,
+            owner_rawcode,
+            source_unit_rawcode: Some(unit),
+            role,
+            model_path,
+            missile_arc: None,
+        },
+    ));
     Ok(VisualAssetCatalog {
-        assets: assets
-            .into_iter()
-            .map(|(owner_kind, owner_rawcode, role, model_path)| {
-                let missile_arc = missile_arcs
-                    .get(&(owner_rawcode.clone(), role.clone()))
-                    .copied();
-                VisualAssetSpec {
-                    owner_kind,
-                    owner_rawcode,
-                    role,
-                    model_path,
-                    missile_arc,
-                }
-            })
-            .collect(),
+        assets: visual_assets,
         status_visuals,
         chain_lightning_abilities: chain_lightning_abilities.into_keys().collect(),
         stun_model_path,

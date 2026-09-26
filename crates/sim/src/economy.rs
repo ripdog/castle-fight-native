@@ -38,6 +38,8 @@ pub struct BuildingEconomyProfile {
     /// Lumber awarded when this building finishes. In Castle Fight this is normally the full gold
     /// cost for zero-lumber buildings and 75% of the gold cost for Siege buildings.
     pub lumber_refund: u32,
+    /// Legendary points reserved while this building is ordered, under construction, or active.
+    pub legendary_points_cost: u16,
     /// Gold income contributed by this finished building on each income tick, in 1/10,000 gold.
     /// Upgrade definitions include the inherited contribution of their precursor chain.
     pub income_per_10k: u64,
@@ -56,6 +58,7 @@ pub struct PlayerEconomyView {
 pub enum ResourcePurchaseError {
     InsufficientGold { available: u32, required: u32 },
     InsufficientLumber { available: u32, required: u32 },
+    InsufficientLegendaryPoints { available: u16, required: u16 },
 }
 
 #[must_use]

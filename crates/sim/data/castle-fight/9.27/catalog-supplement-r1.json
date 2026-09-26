@@ -41,6 +41,13 @@
       "hotkey": "Y"
     },
     {
+      "rawcode": "h00K",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S"
+    },
+    {
       "rawcode": "h015",
       "repair_time_seconds": 70,
       "button_x": 3,
@@ -62,6 +69,20 @@
       "hotkey": "S"
     },
     {
+      "rawcode": "h037",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A"
+    },
+    {
+      "rawcode": "h038",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R"
+    },
+    {
       "rawcode": "h039",
       "repair_time_seconds": 70,
       "button_x": 3,
@@ -71,6 +92,20 @@
     {
       "rawcode": "h03A",
       "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h03B",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "h03C",
+      "repair_time_seconds": 45,
       "button_x": 0,
       "button_y": 0,
       "hotkey": "Q"
@@ -102,6 +137,20 @@
       "button_x": 2,
       "button_y": 0,
       "hotkey": "E"
+    },
+    {
+      "rawcode": "h072",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R"
+    },
+    {
+      "rawcode": "h074",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q"
     },
     {
       "rawcode": "h07P",
@@ -150,6 +199,13 @@
       "repair_time_seconds": 26,
       "button_x": 0,
       "button_y": 0,
+      "hotkey": "Q"
+    },
+    {
+      "rawcode": "n005",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
       "hotkey": "Q"
     },
     {

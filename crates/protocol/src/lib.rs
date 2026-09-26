@@ -1196,6 +1196,7 @@ impl From<BuildingCommandError> for WireBuildingCommandError {
 pub enum WireResourcePurchaseError {
     InsufficientGold { available: u32, required: u32 },
     InsufficientLumber { available: u32, required: u32 },
+    InsufficientLegendaryPoints { available: u16, required: u16 },
 }
 
 impl From<ResourcePurchaseError> for WireResourcePurchaseError {
@@ -1212,6 +1213,13 @@ impl From<ResourcePurchaseError> for WireResourcePurchaseError {
                 available,
                 required,
             } => Self::InsufficientLumber {
+                available,
+                required,
+            },
+            ResourcePurchaseError::InsufficientLegendaryPoints {
+                available,
+                required,
+            } => Self::InsufficientLegendaryPoints {
                 available,
                 required,
             },

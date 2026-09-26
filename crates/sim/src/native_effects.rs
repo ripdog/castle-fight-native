@@ -36,6 +36,8 @@ pub enum NativeEffectImplementationId {
     WarcraftBurningOilV1,
     WarcraftFrostArmorV1,
     WarcraftCriticalStrikeV1,
+    WarcraftHumanSupportV1,
+    WarcraftHumanPassiveV1,
 }
 
 impl NativeEffectImplementationId {
@@ -53,13 +55,18 @@ impl NativeEffectImplementationId {
             Self::WarcraftBurningOilV1 => 8,
             Self::WarcraftFrostArmorV1 => 9,
             Self::WarcraftCriticalStrikeV1 => 10,
+            Self::WarcraftHumanSupportV1 => 11,
+            Self::WarcraftHumanPassiveV1 => 12,
         }
     }
 
     const fn requires_tuning(self) -> bool {
         !matches!(
             self,
-            Self::WarcraftMarkerOnlyV1 | Self::WarcraftZeroDamageBarrageV1
+            Self::WarcraftMarkerOnlyV1
+                | Self::WarcraftZeroDamageBarrageV1
+                | Self::WarcraftHumanSupportV1
+                | Self::WarcraftHumanPassiveV1
         )
     }
 }

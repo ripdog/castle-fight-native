@@ -2961,7 +2961,13 @@ fn sync_render_entities(
                 AbilityCastTarget::AllEnemyUnits => None,
             });
 
-        for visual in wc3_visuals.ability(cast.ability.0) {
+        let source_unit_rawcode = samples
+            .current
+            .units
+            .get(&cast.source)
+            .or_else(|| samples.previous.units.get(&cast.source))
+            .and_then(|unit| unit.content.map(|content| content.rawcode));
+        for visual in wc3_visuals.ability_for_source(cast.ability.0, source_unit_rawcode) {
             let position = match visual.anchor {
                 Wc3AbilityVisualAnchor::Source => source_position,
                 Wc3AbilityVisualAnchor::Target => target_position,

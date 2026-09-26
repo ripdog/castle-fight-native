@@ -161,6 +161,22 @@ impl Simulation {
                 AbilitySourceIndex::Unit(index) => {
                     units[index].mana_current = Some(remaining_mana);
                     units[index].ability_state = Some(state);
+                    for effect in units[index].passive_effects.iter() {
+                        let PassiveUnitEffect::Aura(profile) = effect else {
+                            continue;
+                        };
+                        if !profile.suspend_during_spell_cooldown {
+                            continue;
+                        }
+                        for modifier in units[index].status.armor_modifiers
+                            [..usize::from(units[index].status.armor_modifier_count)]
+                            .iter_mut()
+                        {
+                            if modifier.id.0 == profile.ability.0 {
+                                modifier.expires_tick = self.next_tick;
+                            }
+                        }
+                    }
                 }
                 AbilitySourceIndex::Building(index) => {
                     buildings[index].mana_current = Some(remaining_mana);
@@ -175,7 +191,26 @@ impl Simulation {
 
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::AreaDamage { radius, .. } = intent.ability.effect {
+                    if let AbilityEffect::Prayer { radius, .. } = intent.ability.effect {
+                        let center = units[index].position;
+                        let radius_sq = square_i32(radius);
+                        for target in units.iter_mut() {
+                            if target.health <= 0
+                                || target.team != source.team
+                                || center.distance_sq(target.position) > radius_sq
+                            {
+                                continue;
+                            }
+                            if apply_ability_effect_to_unit(
+                                target,
+                                intent.ability.effect,
+                                self.next_tick,
+                                self.combat_rules.damage_rules,
+                            ) {
+                                metrics.effects += 1;
+                            }
+                        }
+                    } else if let AbilityEffect::AreaDamage { radius, .. } = intent.ability.effect {
                         let center = units[index].position;
                         let radius_sq = square_i32(radius);
                         for target in units.iter_mut() {
@@ -219,6 +254,29 @@ impl Simulation {
                     }
                 }
             }
+            let resurrection = match intent.ability.effect {
+                AbilityEffect::HolyAid {
+                    resurrection_count,
+                    resurrection_radius,
+                    ..
+                } => Some((resurrection_count, resurrection_radius, source.origin)),
+                AbilityEffect::Prayer {
+                    resurrection_count,
+                    resurrection_radius,
+                    ..
+                } => target_position.map(|position| {
+                    (
+                        resurrection_count,
+                        resurrection_radius,
+                        AbilitySourceOrigin::Unit(position),
+                    )
+                }),
+                _ => None,
+            };
+            if let Some((count, radius, origin)) = resurrection {
+                metrics.effects +=
+                    self.resurrect_friendly_corpses(source.team, origin, radius, count);
+            }
             self.last_ability_casts.push(AbilityCastEvent {
                 source: intent.source_id,
                 ability: intent.ability.id,
@@ -230,6 +288,51 @@ impl Simulation {
         }
 
         metrics
+    }
+
+    fn resurrect_friendly_corpses(
+        &mut self,
+        team: Team,
+        origin: AbilitySourceOrigin,
+        radius: i32,
+        count: u8,
+    ) -> usize {
+        if count == 0 {
+            return 0;
+        }
+        let radius_sq = square_i32(radius);
+        let mut query = self.world.query::<(Entity, &SimId, &Corpse, &Position)>();
+        let mut candidates = query
+            .iter(&self.world)
+            .filter_map(|(entity, id, corpse, position)| {
+                (corpse.source_team == team
+                    && corpse.resurrection.is_some()
+                    && self.ability_source_distance_sq(origin, position.0) <= radius_sq)
+                    .then_some((
+                        self.ability_source_distance_sq(origin, position.0),
+                        *id,
+                        entity,
+                        *corpse,
+                        position.0,
+                    ))
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_unstable_by_key(|(distance, id, ..)| (*distance, *id));
+        let mut revived = 0;
+        for (_, _, entity, corpse, position) in candidates.into_iter().take(usize::from(count)) {
+            let definition = corpse
+                .resurrection
+                .expect("eligible corpse retains template");
+            self.world.despawn(entity);
+            self.spawn_unit_unchecked(
+                Some(corpse.source_owner),
+                UnitSpawn::from_template(team, position, definition.template),
+                definition.properties,
+                definition.spellcasting,
+            );
+            revived += 1;
+        }
+        revived
     }
 
     fn evaluate_automatic_ability(
@@ -256,8 +359,8 @@ impl Simulation {
 
         let mut candidate_checks = 0usize;
         let target = match spellcasting.ability.target_policy {
-            AbilityTargetPolicy::RandomEnemyUnit => self
-                .random_enemy_ability_target(
+            AbilityTargetPolicy::RandomEnemyUnit | AbilityTargetPolicy::RandomGroundEnemyUnit => {
+                self.random_enemy_ability_target(
                     source,
                     spellcasting.ability,
                     state.cast_sequence,
@@ -268,7 +371,8 @@ impl Simulation {
                 .map(|index| AbilityIntentTarget::Unit {
                     index,
                     id: units[index].id,
-                }),
+                })
+            }
             AbilityTargetPolicy::RandomEnemyUnitGlobal => self
                 .random_enemy_ability_target_global(
                     source,
@@ -290,6 +394,17 @@ impl Simulation {
             }
             AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => self
                 .recently_attacked_friendly_ability_target(
+                    source,
+                    spellcasting.ability,
+                    units,
+                    &mut candidate_checks,
+                )
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
+            AbilityTargetPolicy::WoundedFriendlyUnit => self
+                .wounded_friendly_ability_target(
                     source,
                     spellcasting.ability,
                     units,
@@ -345,6 +460,8 @@ impl Simulation {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
                 if candidate.health <= 0
+                    || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
+                        && candidate.movement_class != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
                 {
                     return;
@@ -408,6 +525,30 @@ impl Simulation {
             .map(|(_, _, index)| index)
     }
 
+    fn wounded_friendly_ability_target(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        units: &[UnitSnapshot],
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        let range_sq = square_i32(ability.range);
+        units
+            .iter()
+            .enumerate()
+            .filter_map(|(index, candidate)| {
+                *candidate_checks += 1;
+                (candidate.health > 0
+                    && candidate.health < candidate.health_max
+                    && candidate.team == source.team
+                    && self.ability_source_distance_sq(source.origin, candidate.position)
+                        <= range_sq)
+                    .then_some((candidate.health, candidate.id, index))
+            })
+            .min()
+            .map(|(_, _, index)| index)
+    }
+
     fn random_enemy_ability_target_global(
         &self,
         source: AbilitySourceSnapshot,
@@ -464,6 +605,12 @@ impl Simulation {
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }
+                        AbilityTargetPolicy::RandomGroundEnemyUnit => {
+                            target.team != source.team
+                                && target.movement_class == MovementClass::Ground
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
+                        }
                         AbilityTargetPolicy::RandomEnemyUnitGlobal => target.team != source.team,
                         AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => {
@@ -485,6 +632,12 @@ impl Simulation {
                                     _ => true,
                                 }
                         }
+                        AbilityTargetPolicy::WoundedFriendlyUnit => {
+                            target.team == source.team
+                                && target.health < target.health_max
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
+                        }
                     }
             }
             AbilityIntentTarget::AllEnemyUnits => {
@@ -494,5 +647,71 @@ impl Simulation {
                         .any(|target| target.health > 0 && target.team != source.team)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resurrection_uses_friendly_corpse_template_and_survives_snapshot_restore() {
+        let config = SimulationConfig::default();
+        let mut sim = Simulation::new(config.clone(), 1);
+        let template = crate::components::UnitTemplate {
+            health: 80,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 7,
+                range: SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 5 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let definition = ResolvedUnitDefinition {
+            template,
+            properties: UnitGameplayProperties {
+                attack_targets: AttackTargetMask::GROUND_UNITS,
+                ..UnitGameplayProperties::default()
+            },
+            spellcasting: None,
+        };
+        let position = SimPoint::new(100 * SUBUNITS_PER_WORLD_UNIT, 100 * SUBUNITS_PER_WORLD_UNIT);
+        for team in [Team(0), Team(1)] {
+            let id = sim.allocate_id();
+            sim.world.spawn((
+                id,
+                Position(position),
+                Corpse {
+                    source_unit: id,
+                    source_owner: PlayerId(team.0),
+                    source_team: team,
+                    definition: CorpseDefinitionId(1),
+                    created_tick: 0,
+                    expires_tick: None,
+                    resurrection: Some(definition),
+                },
+            ));
+        }
+        let snapshot = sim.capture_snapshot();
+        let mut restored = Simulation::new(config, 1);
+        restored.restore_snapshot(&snapshot).unwrap();
+        assert_eq!(restored.checksum(), sim.checksum());
+
+        for candidate in [&mut sim, &mut restored] {
+            assert_eq!(
+                candidate.resurrect_friendly_corpses(
+                    Team(0),
+                    AbilitySourceOrigin::Unit(position),
+                    10 * SUBUNITS_PER_WORLD_UNIT,
+                    1,
+                ),
+                1,
+            );
+            assert_eq!(candidate.corpse_count(), 1);
+            assert_eq!(candidate.unit_count(), 1);
+        }
+        assert_eq!(restored.checksum(), sim.checksum());
     }
 }

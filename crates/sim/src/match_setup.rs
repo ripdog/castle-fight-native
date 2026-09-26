@@ -1046,7 +1046,7 @@ mod tests {
         assert_eq!(first.simulation.tick(), 0);
         assert_eq!(first.simulation.building_count(), 2);
         assert_eq!(first.content.identity, config.content_identity);
-        assert_eq!(first.direct_buildings.len(), 3);
+        assert_eq!(first.direct_buildings.len(), 6);
     }
 
     #[test]

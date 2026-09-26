@@ -219,7 +219,12 @@ impl Simulation {
         let available_lumber = resources
             .lumber
             .saturating_add(committed.map_or(0, |old| old.lumber_cost));
-        available_gold >= economy.gold_cost && available_lumber >= economy.lumber_cost
+        let available_points = resources
+            .legendary_points_available()
+            .saturating_add(committed.map_or(0, |old| old.legendary_points_cost));
+        available_gold >= economy.gold_cost
+            && available_lumber >= economy.lumber_cost
+            && available_points >= economy.legendary_points_cost
     }
 
     pub fn spawn_builder(&mut self, builder: BuilderSpawn) -> SimId {
@@ -579,6 +584,14 @@ impl Simulation {
                 },
             ));
         }
+        if resources.legendary_points_available() < economy.legendary_points_cost {
+            return Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientLegendaryPoints {
+                    available: resources.legendary_points_available(),
+                    required: economy.legendary_points_cost,
+                },
+            ));
+        }
 
         let id = self
             .try_spawn_building_internal(Some(owner), building, properties)
@@ -589,6 +602,7 @@ impl Simulation {
             .resources;
         resources.gold -= economy.gold_cost;
         resources.lumber -= economy.lumber_cost;
+        resources.legendary_points_used += economy.legendary_points_cost;
         resources.lumber = resources
             .lumber
             .checked_add(economy.lumber_refund)
@@ -662,6 +676,17 @@ impl Simulation {
                 },
             ));
         }
+        let available_points = resources
+            .legendary_points_available()
+            .saturating_add(current_economy.map_or(0, |old| old.legendary_points_cost));
+        if available_points < economy.legendary_points_cost {
+            return Err(BuilderBuildError::Resources(
+                ResourcePurchaseError::InsufficientLegendaryPoints {
+                    available: available_points,
+                    required: economy.legendary_points_cost,
+                },
+            ));
+        }
 
         self.cancel_builder_build_order_internal(builder_entity);
         let resources = &mut self
@@ -670,6 +695,7 @@ impl Simulation {
             .resources;
         resources.gold -= economy.gold_cost;
         resources.lumber -= economy.lumber_cost;
+        resources.legendary_points_used += economy.legendary_points_cost;
         self.world
             .entity_mut(builder_entity)
             .insert(BuilderBuildOrder {
@@ -719,6 +745,7 @@ impl Simulation {
                 .lumber
                 .checked_add(economy.lumber_cost)
                 .expect("player lumber refund overflow");
+            resources.legendary_points_used -= economy.legendary_points_cost;
         }
         true
     }

@@ -36,6 +36,7 @@ pub struct BuildingAssetSpec {
 pub struct VisualAssetSpec {
     pub owner_kind: String,
     pub owner_rawcode: String,
+    pub source_unit_rawcode: Option<String>,
     pub role: String,
     pub model_path: String,
     pub missile_arc: Option<f32>,
@@ -479,7 +480,8 @@ mod tests {
             asset.owner_kind == "info_panel"
                 && asset.owner_rawcode == "armor_medium"
                 && asset.role == "icon"
-                && asset.texture_path == r"UI\Widgets\Console\Human\infocard-neutral-armor-medium.blp"
+                && asset.texture_path
+                    == r"UI\Widgets\Console\Human\infocard-neutral-armor-medium.blp"
         }));
         assert!(catalog.assets.iter().any(|asset| {
             asset.owner_kind == "cursors"

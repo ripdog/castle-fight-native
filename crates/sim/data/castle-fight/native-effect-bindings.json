@@ -136,6 +136,158 @@
       "valid_from": "9.27",
       "valid_through": "9.27",
       "notes": "Sniper building Channel marker has no directly configured effect."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FK",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Channel marker for Crusader and Paladin targeting."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0EZ",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Warlock scripted channel marker."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A070",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Holy Warrior anti-hex classification marker; no native attack change."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06V",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Legendary classification marker."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07H",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Legendary classification channel marker."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03M",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Inner Fire carrier cast by Crusader Heal script."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03I",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Inner Fire carrier cast by Paladin Heal script."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03H",
+      "implementation": "warcraft-marker-only-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Resurrection carrier cast by Paladin Heal script."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01A",
+      "implementation": "warcraft-bash-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Crusader and Paladin ground attack Bash."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A090",
+      "implementation": "warcraft-bash-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Holy Warrior ground attack Bash."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01F",
+      "implementation": "warcraft-human-passive-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AD",
+      "implementation": "warcraft-human-passive-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AH",
+      "implementation": "warcraft-human-passive-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03J",
+      "implementation": "warcraft-human-passive-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HZ",
+      "implementation": "warcraft-human-passive-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00F",
+      "implementation": "warcraft-human-passive-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03K",
+      "implementation": "warcraft-human-support-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 automatic spell bundle resolved into a spellcasting profile."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0I0",
+      "implementation": "warcraft-human-support-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 automatic spell bundle resolved into a spellcasting profile."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00K",
+      "implementation": "warcraft-human-support-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Version-scoped Castle Fight 9.27 automatic spell bundle resolved into a spellcasting profile."
     }
   ]
 }

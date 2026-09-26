@@ -101,6 +101,52 @@ impl Simulation {
                             },
                         );
                         debug_assert!(applied.is_some());
+                        if matches!(intent.attack.delivery, AttackDelivery::Melee)
+                            && let TargetIndex::Unit(primary_index) = intent.target
+                        {
+                            for effect in intent.passive_effects.iter() {
+                                let PassiveUnitEffect::Cleave(profile) = effect else {
+                                    continue;
+                                };
+                                let splash_damage = i32::try_from(
+                                    i64::from(damage) * i64::from(profile.damage_per_10k) / 10_000,
+                                )
+                                .expect("cleave damage exceeds i32");
+                                for index in 0..units.len() {
+                                    if index == primary_index
+                                        || units[index].team == intent.source_team
+                                        || !matches!(
+                                            units[index].movement_class,
+                                            MovementClass::Ground
+                                        )
+                                        || unit_health[index] <= 0
+                                        || target_position.distance_sq(positions[index])
+                                            > square_i32(profile.radius)
+                                    {
+                                        continue;
+                                    }
+                                    apply_damage_to_target(
+                                        TargetIndex::Unit(index),
+                                        intent.source_id,
+                                        splash_damage,
+                                        intent.damage_type,
+                                        completed_tick,
+                                        self.debug_buildings_invulnerable,
+                                        DamageTargetState {
+                                            damage_rules: self.combat_rules.damage_rules,
+                                            units,
+                                            buildings,
+                                            unit_positions: positions,
+                                            unit_health,
+                                            building_health,
+                                            attackers_this_tick,
+                                            next_defense_alerts,
+                                            navigation_cell_size: self.config.navigation_cell_size,
+                                        },
+                                    );
+                                }
+                            }
+                        }
                         let pending = apply_pending_attack_effects(
                             intent.target,
                             on_hit,
@@ -445,7 +491,11 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::Evasion(_) | PassiveUnitEffect::Defend(_) => {}
+                PassiveUnitEffect::Evasion(_)
+                | PassiveUnitEffect::Defend(_)
+                | PassiveUnitEffect::Cleave(_)
+                | PassiveUnitEffect::Aura(_)
+                | PassiveUnitEffect::SpellResistance(_) => {}
             }
         }
         (bonus_damage, on_hit, critical)
@@ -497,6 +547,19 @@ impl Simulation {
                     if distance_sq > attack.range_sq() {
                         return None;
                     }
+                    let mut attack = attack;
+                    let damage_bonus_per_10k: u32 = source.status.armor_modifiers
+                        [..usize::from(source.status.armor_modifier_count)]
+                        .iter()
+                        .filter(|modifier| self.next_tick < modifier.expires_tick)
+                        .map(|modifier| u32::from(modifier.damage_bonus_per_10k))
+                        .sum();
+                    attack.damage = attack.damage.saturating_add(
+                        i32::try_from(
+                            i64::from(attack.damage) * i64::from(damage_bonus_per_10k) / 10_000,
+                        )
+                        .expect("buffed attack damage exceeds i32"),
+                    );
                     Some(AttackIntent {
                         source: AttackSourceIndex::Unit(source_index),
                         target,

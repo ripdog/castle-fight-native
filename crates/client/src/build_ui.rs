@@ -2007,6 +2007,10 @@ fn build_button_label(kind: BuildKind, content: &CastleFightContentBundle) -> St
         BuildKind::Production(ProductionKind::OrcishSiegeFactory) => "Siege Fac.",
         BuildKind::Production(ProductionKind::IceTrollHut) => "Ice Hut",
         BuildKind::Production(ProductionKind::GryphonRock) => "Gryph Rock",
+        BuildKind::Production(ProductionKind::Chapel) => "Chapel",
+        BuildKind::Production(ProductionKind::Church) => "Church",
+        BuildKind::Production(ProductionKind::HolyAltar) => "Holy Altar",
+        BuildKind::Production(ProductionKind::Hjordhejmen) => "Hjordhejmen",
         BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower) => "Watch Tower",
         BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::PoofTower) => "Poof Tower",
     };

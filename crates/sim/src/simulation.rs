@@ -40,9 +40,10 @@ pub use snapshot::{
     SnapshotWireError,
 };
 use status::{
-    apply_ability_effect_to_unit, apply_melee_reactive_armor_effects, apply_timed_damage_over_time,
-    apply_timed_movement_modifier, effective_armor_points_per_100, effective_attack_cooldown_ticks,
-    purge_expired_status_modifiers, resolve_periodic_unit_statuses,
+    apply_ability_effect_to_unit, apply_melee_reactive_armor_effects, apply_timed_armor_modifier,
+    apply_timed_damage_over_time, apply_timed_movement_modifier, effective_armor_points_per_100,
+    effective_attack_cooldown_ticks, purge_expired_status_modifiers,
+    resolve_periodic_unit_statuses,
 };
 
 use crate::{
@@ -65,9 +66,10 @@ use crate::{
         ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
         ProductionSecondaryAttack, ProductionSpellcastingProfile, ProductionState,
         ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition,
-        RetaliationState, SecondaryAttackProfile, SimId, SpawnTick, SpellcastingProfile,
-        StatusState, TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier,
-        TimedDamageOverTime, TriggeredAttackEffect, UnitGameplayProperties, UnitSpawn,
+        ResurrectionProfile, RetaliationState, SecondaryAttackProfile, SimId, SpawnTick,
+        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
+        UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -837,9 +839,10 @@ impl Simulation {
                 &Position,
                 &mut Health,
                 Option<&CorpseProducer>,
+                Option<&ResurrectionProfile>,
                 &MovementProfile,
             )>();
-            for (entity, id, owner, team, position, mut health, corpse, _) in
+            for (entity, id, owner, team, position, mut health, corpse, resurrection, _) in
                 query.iter_mut(&mut self.world)
             {
                 if health.current <= 0 {
@@ -858,13 +861,16 @@ impl Simulation {
                         *team,
                         position.0,
                         corpse.map(|corpse| corpse.0),
+                        resurrection.map(|profile| profile.0),
                     ));
                 }
             }
         }
 
-        fatalities.sort_unstable_by_key(|(_, id, _, _, _, _)| *id);
-        for (entity, source_unit, source_owner, source_team, position, corpse) in fatalities {
+        fatalities.sort_unstable_by_key(|(_, id, ..)| *id);
+        for (entity, source_unit, source_owner, source_team, position, corpse, resurrection) in
+            fatalities
+        {
             self.world.despawn(entity);
             let Some(profile) = corpse else {
                 continue;
@@ -885,6 +891,7 @@ impl Simulation {
                     definition: profile.definition,
                     created_tick: self.next_tick,
                     expires_tick,
+                    resurrection,
                 },
             ));
         }
@@ -1397,6 +1404,7 @@ impl Simulation {
         let mut snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.apply_passive_auras(&mut units);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
         let abilities = phase_start.elapsed();
 
@@ -1586,7 +1594,18 @@ impl Simulation {
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
                 if let Some(profile) = unit.corpse {
-                    corpse_spawns.push((unit.id, unit.owner, unit.team, positions[index], profile));
+                    let resurrection = self
+                        .world
+                        .get::<ResurrectionProfile>(unit.entity)
+                        .map(|profile| profile.0);
+                    corpse_spawns.push((
+                        unit.id,
+                        unit.owner,
+                        unit.team,
+                        positions[index],
+                        profile,
+                        resurrection,
+                    ));
                 }
                 self.world.despawn(unit.entity);
                 deaths += 1;
@@ -1602,6 +1621,7 @@ impl Simulation {
                 .get_mut::<Health>()
                 .expect("unit health missing")
                 .current = unit_health[index];
+            entity.get_mut::<Health>().expect("unit health missing").max = unit.health_max;
             entity
                 .get_mut::<AttackCooldown>()
                 .expect("unit cooldown missing")
@@ -1652,7 +1672,9 @@ impl Simulation {
         }
 
         let corpses_spawned = corpse_spawns.len();
-        for (source_unit, source_owner, source_team, position, profile) in corpse_spawns {
+        for (source_unit, source_owner, source_team, position, profile, resurrection) in
+            corpse_spawns
+        {
             let id = self.allocate_id();
             let expires_tick = profile.lifetime_ticks.map(|lifetime_ticks| {
                 completed_tick
@@ -1669,6 +1691,7 @@ impl Simulation {
                     definition: profile.definition,
                     created_tick: completed_tick,
                     expires_tick,
+                    resurrection,
                 },
             ));
         }
@@ -1723,6 +1746,7 @@ impl Simulation {
         }
         if !building_deaths.is_empty() {
             for entity in building_deaths {
+                self.release_building_legendary_points(entity);
                 self.world.despawn(entity);
             }
             self.topology_dirty = true;
@@ -2076,6 +2100,15 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
+        entity.insert(ResurrectionProfile(ResolvedUnitDefinition {
+            template: crate::components::UnitTemplate {
+                health: unit.health,
+                attack: unit.attack,
+                movement: unit.movement,
+            },
+            properties,
+            spellcasting,
+        }));
         if let Some(owner) = owner {
             entity.insert(Owner(owner));
         }
@@ -2150,15 +2183,75 @@ impl Simulation {
         true
     }
 
+    fn apply_passive_auras(&self, units: &mut [UnitSnapshot]) {
+        let sources = units
+            .iter()
+            .filter(|unit| unit.health > 0)
+            .flat_map(|unit| {
+                unit.passive_effects.iter().filter_map(move |effect| {
+                    let PassiveUnitEffect::Aura(profile) = effect else {
+                        return None;
+                    };
+                    if profile.suspend_during_spell_cooldown
+                        && unit.ability_state.is_some_and(|state| {
+                            state.cast_sequence > 0 && state.ready_tick > self.next_tick
+                        })
+                    {
+                        return None;
+                    }
+                    Some((unit.id, unit.team, unit.position, profile))
+                })
+            })
+            .collect::<Vec<_>>();
+        for (source_id, team, position, profile) in sources {
+            for target in units.iter_mut() {
+                if target.health <= 0
+                    || target.team != team
+                    || (profile.radius == 0 && target.id != source_id)
+                    || position.distance_sq(target.position) > square_i32(profile.radius)
+                {
+                    continue;
+                }
+                apply_timed_armor_modifier(
+                    &mut target.status,
+                    TimedArmorModifier {
+                        id: ModifierId(profile.ability.0),
+                        armor_bonus_per_100: profile.armor_bonus_per_100,
+                        regeneration_per_second_per_10k: 0,
+                        mana_regeneration_per_second_per_10k: profile
+                            .mana_regeneration_per_second_per_10k,
+                        damage_bonus_per_10k: 0,
+                        expires_tick: self.next_tick + 2,
+                        reactive_slow_duration_ticks: 0,
+                        reactive_movement_percent_delta: 0,
+                        reactive_attack_speed_percent_delta: 0,
+                    },
+                );
+            }
+        }
+    }
+
     fn advance_cooldowns(&mut self) {
         let mut query = self.world.query::<&mut AttackCooldown>();
         for mut cooldown in query.iter_mut(&mut self.world) {
             cooldown.remaining = cooldown.remaining.saturating_sub(1);
         }
 
-        let mut health_regen_query = self.world.query::<(&mut Health, &mut HealthRegeneration)>();
-        for (mut health, mut regeneration) in health_regen_query.iter_mut(&mut self.world) {
-            if health.current >= health.max || regeneration.per_second_per_10k == 0 {
+        let mut health_regen_query =
+            self.world
+                .query::<(&mut Health, &mut HealthRegeneration, Option<&StatusState>)>();
+        for (mut health, mut regeneration, status) in health_regen_query.iter_mut(&mut self.world) {
+            let bonus_per_second_per_10k = status.map_or(0, |status| {
+                status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                    .iter()
+                    .filter(|modifier| self.next_tick < modifier.expires_tick)
+                    .map(|modifier| modifier.regeneration_per_second_per_10k)
+                    .sum::<u32>()
+            });
+            let rate = regeneration
+                .per_second_per_10k
+                .saturating_add(bonus_per_second_per_10k);
+            if health.current >= health.max || rate == 0 {
                 health.current = health.current.min(health.max);
                 regeneration.remainder_per_10k_hz = 0;
                 continue;
@@ -2168,8 +2261,7 @@ impl Simulation {
                     u64::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz is positive"),
                 )
                 .expect("health regeneration fixed-point denominator overflow");
-            let accumulated = u64::from(regeneration.remainder_per_10k_hz)
-                + u64::from(regeneration.per_second_per_10k);
+            let accumulated = u64::from(regeneration.remainder_per_10k_hz) + u64::from(rate);
             let whole_health = accumulated / denominator;
             let remainder = accumulated % denominator;
             let regenerated = i64::from(health.current)
@@ -2185,15 +2277,28 @@ impl Simulation {
             }
         }
 
-        let mut mana_query = self.world.query::<(&SpellcastingProfile, &mut ManaState)>();
-        for (profile, mut mana) in mana_query.iter_mut(&mut self.world) {
+        let mut mana_query = self
+            .world
+            .query::<(&SpellcastingProfile, &mut ManaState, Option<&StatusState>)>();
+        for (profile, mut mana, status) in mana_query.iter_mut(&mut self.world) {
             if mana.current >= profile.mana.maximum {
                 mana.current = profile.mana.maximum;
                 mana.regen_remainder_per_10k = 0;
                 continue;
             }
+            let aura_per_tick = status.map_or(0, |status| {
+                status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                    .iter()
+                    .filter(|modifier| self.next_tick < modifier.expires_tick)
+                    .map(|modifier| {
+                        modifier.mana_regeneration_per_second_per_10k
+                            / u32::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("positive tick rate")
+                    })
+                    .sum::<u32>()
+            });
             let accumulated = u64::from(mana.regen_remainder_per_10k)
-                + u64::from(profile.mana.regen_per_tick_per_10k);
+                + u64::from(profile.mana.regen_per_tick_per_10k)
+                + u64::from(aura_per_tick);
             let whole_mana = accumulated / 10_000;
             let remainder = accumulated % 10_000;
             let regenerated = i64::from(mana.current)
@@ -2531,6 +2636,7 @@ impl Simulation {
                         team: *team,
                         position: position.0,
                         health: health.current,
+                        health_max: health.max,
                         attack: *attack,
                         cooldown_remaining: cooldown.remaining,
                         attack_sequence,
@@ -2647,6 +2753,7 @@ struct UnitSnapshot {
     team: Team,
     position: SimPoint,
     health: i32,
+    health_max: i32,
     attack: AttackProfile,
     cooldown_remaining: u16,
     attack_sequence: u64,
@@ -3257,7 +3364,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.ability.range >= 0);
     match spellcasting.ability.target_policy {
         AbilityTargetPolicy::RandomEnemyUnit
-        | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => {}
+        | AbilityTargetPolicy::RandomGroundEnemyUnit
+        | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
+        | AbilityTargetPolicy::WoundedFriendlyUnit => {}
         AbilityTargetPolicy::AllEnemyUnits | AbilityTargetPolicy::RandomEnemyUnitGlobal => {
             assert_eq!(spellcasting.ability.range, 0);
         }
@@ -3299,6 +3408,47 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert_eq!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
+            );
+        }
+        AbilityEffect::HolyAid {
+            healing,
+            armor_bonus_per_100,
+            regeneration_per_second_per_10k: _,
+            duration_ticks,
+            permanent_max_health_bonus,
+            resurrection_count,
+            resurrection_radius,
+            modifier: _,
+        } => {
+            assert!(healing >= 0);
+            assert!(armor_bonus_per_100 >= 0);
+            assert!(duration_ticks > 0);
+            assert!(permanent_max_health_bonus >= 0);
+            assert!(resurrection_count == 0 || resurrection_radius > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::WoundedFriendlyUnit
+            );
+        }
+        AbilityEffect::Prayer {
+            healing,
+            mana_restored,
+            armor_bonus_per_100,
+            damage_bonus_per_10k,
+            duration_ticks,
+            radius,
+            resurrection_count,
+            resurrection_radius,
+            modifier: _,
+        } => {
+            assert!(healing >= 0 && mana_restored >= 0);
+            assert!(armor_bonus_per_100 >= 0);
+            assert!(damage_bonus_per_10k <= 10_000);
+            assert!(duration_ticks > 0 && radius > 0);
+            assert!(resurrection_count == 0 || resurrection_radius > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::WoundedFriendlyUnit
             );
         }
     }
@@ -3670,10 +3820,17 @@ fn resolve_directed_projectile_defense(
 }
 
 fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u64) -> i32 {
-    active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
+    let damage = active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
         .map_or(damage, |profile| {
             scale_damage_per_10k(damage, profile.spell_damage_taken_per_10k)
-        })
+        });
+    unit.passive_effects.iter().fold(damage, |damage, effect| {
+        if let PassiveUnitEffect::SpellResistance(profile) = effect {
+            scale_damage_per_10k(damage, profile.damage_taken_per_10k)
+        } else {
+            damage
+        }
+    })
 }
 
 fn apply_damage_to_target(

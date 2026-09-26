@@ -5,7 +5,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 3;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -523,6 +523,31 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(corpse) = unit.corpse {
                     entity.insert(CorpseProducer(corpse));
                 }
+                entity.insert(ResurrectionProfile(ResolvedUnitDefinition {
+                    template: crate::components::UnitTemplate {
+                        health: unit.health.max,
+                        attack: unit.attack,
+                        movement: unit.movement,
+                    },
+                    properties: UnitGameplayProperties {
+                        content: unit.content,
+                        health_regen_per_second_per_10k: unit
+                            .health_regeneration
+                            .per_second_per_10k,
+                        corpse: unit.corpse,
+                        collision_radius: unit.collision_radius,
+                        movement_class: unit.movement_class,
+                        mechanical: unit.mechanical,
+                        build_time_ticks: unit.build_time_ticks,
+                        repair_time_ticks: unit.repair_time_ticks,
+                        attack_targets: unit.attack_targets,
+                        secondary_attack: unit.secondary_attack,
+                        damage_type: unit.damage_type,
+                        armor: unit.armor,
+                        passive_effects: unit.passive_effects,
+                    },
+                    spellcasting: unit.spellcasting,
+                }));
                 if let Some(radius) = unit.collision_radius {
                     entity.insert(radius);
                 }

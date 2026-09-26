@@ -345,6 +345,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_u64(u64::from(economy.gold_cost));
                     hash.write_u64(u64::from(economy.lumber_cost));
                     hash.write_u64(u64::from(economy.lumber_refund));
+                    hash.write_u16(economy.legendary_points_cost);
                     hash.write_u64(economy.income_per_10k);
                 } else {
                     hash.write_u8(0);
@@ -600,6 +601,47 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(u64::from(corpse.corpse.definition.0));
                 hash.write_u64(corpse.corpse.created_tick);
                 hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
+                match corpse.corpse.resurrection {
+                    Some(definition) => {
+                        hash.write_u8(1);
+                        hash.write_i32(definition.template.health);
+                        hash_attack_delivery(&mut hash, definition.template.attack.delivery);
+                        hash.write_i32(definition.template.attack.damage);
+                        hash.write_i32(definition.template.attack.range);
+                        hash.write_i32(definition.template.attack.acquisition_range);
+                        hash.write_u16(definition.template.attack.cooldown_ticks);
+                        hash.write_i32(definition.template.movement.speed_per_tick);
+                        let properties = definition.properties;
+                        hash_content_identity(&mut hash, properties.content);
+                        hash.write_u32(properties.health_regen_per_second_per_10k);
+                        hash.write_u8(properties.corpse.is_some() as u8);
+                        if let Some(profile) = properties.corpse {
+                            hash.write_u32(profile.definition.0);
+                            hash_optional_u32(&mut hash, profile.lifetime_ticks);
+                        }
+                        hash.write_i32(properties.collision_radius.map_or(-1, |radius| radius.0));
+                        hash.write_u8(match properties.movement_class {
+                            MovementClass::Ground => 0,
+                            MovementClass::Air => 1,
+                        });
+                        hash.write_u8(u8::from(properties.mechanical));
+                        hash_optional_u32(&mut hash, properties.build_time_ticks);
+                        hash_optional_u32(&mut hash, properties.repair_time_ticks);
+                        hash.write_u8(properties.attack_targets.bits());
+                        hash_secondary_attack(&mut hash, properties.secondary_attack);
+                        hash.write_u8(properties.damage_type.stable_tag());
+                        hash.write_u8(properties.armor.armor_type.stable_tag());
+                        hash.write_i32(i32::from(properties.armor.armor_points));
+                        hash_passive_unit_effects(&mut hash, properties.passive_effects);
+                        if let Some(spellcasting) = definition.spellcasting {
+                            hash.write_u8(1);
+                            hash_spellcasting_profile(&mut hash, spellcasting);
+                        } else {
+                            hash.write_u8(0);
+                        }
+                    }
+                    None => hash.write_u8(0),
+                }
             }
             CanonicalEntity::BurningOil(zone) => {
                 hash.write_u8(7);
@@ -961,6 +1003,7 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
+    hash.write_u8(u8::from(status.permanent_holy_health_bonus));
     hash.write_u8(status.movement_modifier_count);
     let count = usize::from(status.movement_modifier_count);
     debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
@@ -983,6 +1026,9 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     for modifier in &status.armor_modifiers[..count] {
         hash.write_u64(u64::from(modifier.id.0));
         hash.write_i32(i32::from(modifier.armor_bonus_per_100));
+        hash.write_u64(u64::from(modifier.regeneration_per_second_per_10k));
+        hash.write_u64(u64::from(modifier.mana_regeneration_per_second_per_10k));
+        hash.write_u16(modifier.damage_bonus_per_10k);
         hash.write_u64(modifier.expires_tick);
         hash.write_u16(modifier.reactive_slow_duration_ticks);
         hash.write_i32(i32::from(modifier.reactive_movement_percent_delta));
@@ -1023,6 +1069,7 @@ fn hash_building_definition(
         hash.write_u64(u64::from(economy.gold_cost));
         hash.write_u64(u64::from(economy.lumber_cost));
         hash.write_u64(u64::from(economy.lumber_refund));
+        hash.write_u16(economy.legendary_points_cost);
         hash.write_u64(economy.income_per_10k);
     } else {
         hash.write_u8(0);
@@ -1151,6 +1198,25 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u8(4);
                 hash_burning_oil_profile(hash, profile);
             }
+            PassiveUnitEffect::Cleave(profile) => {
+                hash.write_u8(7);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_i32(profile.radius);
+                hash.write_u16(profile.damage_per_10k);
+            }
+            PassiveUnitEffect::Aura(profile) => {
+                hash.write_u8(8);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_i32(profile.radius);
+                hash.write_i32(i32::from(profile.armor_bonus_per_100));
+                hash.write_u64(u64::from(profile.mana_regeneration_per_second_per_10k));
+                hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
+            }
+            PassiveUnitEffect::SpellResistance(profile) => {
+                hash.write_u8(9);
+                hash.write_u64(u64::from(profile.ability.0));
+                hash.write_u16(profile.damage_taken_per_10k);
+            }
         }
     }
 }
@@ -1260,6 +1326,46 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u16(slow_duration_ticks);
             hash.write_i32(i32::from(movement_percent_delta));
             hash.write_i32(i32::from(attack_speed_percent_delta));
+        }
+        AbilityEffect::HolyAid {
+            modifier,
+            healing,
+            armor_bonus_per_100,
+            regeneration_per_second_per_10k,
+            duration_ticks,
+            permanent_max_health_bonus,
+            resurrection_count,
+            resurrection_radius,
+        } => {
+            hash.write_u64(u64::from(modifier.0));
+            hash.write_i32(healing);
+            hash.write_i32(i32::from(armor_bonus_per_100));
+            hash.write_u64(u64::from(regeneration_per_second_per_10k));
+            hash.write_u16(duration_ticks);
+            hash.write_i32(permanent_max_health_bonus);
+            hash.write_u8(resurrection_count);
+            hash.write_i32(resurrection_radius);
+        }
+        AbilityEffect::Prayer {
+            modifier,
+            healing,
+            mana_restored,
+            armor_bonus_per_100,
+            damage_bonus_per_10k,
+            duration_ticks,
+            radius,
+            resurrection_count,
+            resurrection_radius,
+        } => {
+            hash.write_u64(u64::from(modifier.0));
+            hash.write_i32(healing);
+            hash.write_i32(mana_restored);
+            hash.write_i32(i32::from(armor_bonus_per_100));
+            hash.write_u16(damage_bonus_per_10k);
+            hash.write_u16(duration_ticks);
+            hash.write_i32(radius);
+            hash.write_u8(resurrection_count);
+            hash.write_i32(resurrection_radius);
         }
     }
 }

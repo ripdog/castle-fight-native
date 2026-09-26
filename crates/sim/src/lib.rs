@@ -1577,8 +1577,8 @@ mod tests {
         fn run(workers: usize) -> u64 {
             let world = SUBUNITS_PER_WORLD_UNIT;
             let config = SimulationConfig {
-                navigation_max: NavCell::new(500, 64),
-                team_objective: [SimPoint::new(500 * world, 0), SimPoint::new(0, 0)],
+                navigation_max: NavCell::new(800, 64),
+                team_objective: [SimPoint::new(800 * world, 0), SimPoint::new(0, 0)],
                 ..SimulationConfig::default()
             };
             let mut sim = Simulation::new_with_combat_rules(
@@ -1595,7 +1595,7 @@ mod tests {
                     let x = if team == 0 {
                         40 + index as i32 * 36
                     } else {
-                        460 - index as i32 * 36
+                        760 - index as i32 * 36
                     };
                     sim.spawn_unit_with_properties(
                         UnitSpawn::from_template(
@@ -5283,6 +5283,63 @@ mod tests {
             125 + stronghold.economy.lumber_refund
         );
         assert!(sim.player_income(Team(0)).unwrap() > source_income);
+    }
+
+    #[test]
+    fn legendary_upgrade_reserves_and_releases_points() {
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                economy: castle_fight_economy_rules(),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let source = CastleFightProductionKind::Church.definition();
+        let target = CastleFightProductionKind::HolyAltar.definition();
+        let footprint = BuildingFootprint::new(0, 0, 4, 4);
+        let building = sim.spawn_building_with_properties(
+            source.spawn(Team(0), footprint),
+            source.gameplay_properties(),
+        );
+        for _ in 0..2 {
+            sim.cancel_production_unit_for_player(PlayerId(0), building)
+                .unwrap();
+        }
+        sim.debug_grant_player_resources(Team(0), 0, 500);
+        let start_upgrade = |sim: &mut Simulation| {
+            sim.start_building_upgrade(
+                building,
+                source.spawn(Team(0), footprint),
+                source.gameplay_properties(),
+                target.spawn(Team(0), footprint),
+                target.gameplay_properties(),
+            )
+        };
+        start_upgrade(&mut sim).unwrap();
+        assert_eq!(
+            sim.player_resources(Team(0))
+                .unwrap()
+                .legendary_points_available(),
+            0
+        );
+        assert_eq!(
+            sim.cancel_building_construction(Team(0), building).unwrap(),
+            BuildingConstructionCancelOutcome::RevertedUpgrade
+        );
+        assert_eq!(
+            sim.player_resources(Team(0))
+                .unwrap()
+                .legendary_points_available(),
+            1
+        );
+        start_upgrade(&mut sim).unwrap();
+        assert!(sim.remove_building(building));
+        assert_eq!(
+            sim.player_resources(Team(0))
+                .unwrap()
+                .legendary_points_available(),
+            1
+        );
     }
 
     #[test]

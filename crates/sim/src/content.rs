@@ -8,12 +8,14 @@ use serde::Deserialize;
 
 use crate::{
     components::{
-        AbilityEffect, AttackDelivery, AttackProfile, AttackTargetMask, BuilderConfiguration,
+        AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
+        AttackTargetMask, AuraEffectProfile, AutomaticAbilityProfile, BuilderConfiguration,
         BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, CollisionRadius, ContentIdentity,
-        CorpseDefinitionId, CorpseProfile, GameplayBundleIdentity, MovementClass, MovementProfile,
-        PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, ResolvedUnitDefinition,
-        SecondaryAttackProfile, SpellcastingProfile, SplashFalloffProfile, Team,
+        BuildingGameplayProperties, BuildingSpawn, CleaveEffectProfile, CollisionRadius,
+        ContentIdentity, CorpseDefinitionId, CorpseProfile, GameplayBundleIdentity, ManaProfile,
+        ModifierId, MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects,
+        ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile,
+        SpellResistanceEffectProfile, SpellcastingProfile, SplashFalloffProfile, Team,
         TriggeredAttackEffect, UnitGameplayProperties, UnitTemplate,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -28,7 +30,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r5";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r6";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -181,6 +183,15 @@ impl CastleFightContentBundle {
         self.units.values().copied()
     }
 
+    /// The basic and extended object-data tooltip pair for one authored unit rawcode.
+    #[must_use]
+    pub fn unit_tooltips_for_rawcode(&self, rawcode: u32) -> Option<(&'static str, &'static str)> {
+        (self.map_version == MapVersion::CASTLE_FIGHT_9_27)
+            .then(|| extracted_content_927().units.get(&rawcode))
+            .flatten()
+            .map(|unit| (unit.basic_tooltip, unit.extended_tooltip))
+    }
+
     pub fn builder_definitions(&self) -> impl Iterator<Item = &CastleFightBuilderDefinition> + '_ {
         self.builders.values()
     }
@@ -303,6 +314,9 @@ impl CastleFightContentBundle {
                 CastleFightProductionKind::Barracks,
                 CastleFightProductionKind::SniperNest,
                 CastleFightProductionKind::WeaponLab,
+                CastleFightProductionKind::GryphonRock,
+                CastleFightProductionKind::Chapel,
+                CastleFightProductionKind::Hjordhejmen,
             ],
             _ => unreachable!("unsupported Castle Fight content bundle version"),
         };
@@ -723,6 +737,10 @@ pub enum CastleFightUnitKind {
     Catapult,
     IceTrollShadowPriest,
     GryphonRider,
+    Crusader,
+    Paladin,
+    HolyWarrior,
+    Warlock,
 }
 
 impl CastleFightUnitKind {
@@ -739,10 +757,14 @@ impl CastleFightUnitKind {
             Self::Catapult => 0x1000_0004,
             Self::IceTrollShadowPriest => 0x1000_0005,
             Self::GryphonRider => 0x1000_0006,
+            Self::Crusader => 0x1000_000b,
+            Self::Paladin => 0x1000_000c,
+            Self::HolyWarrior => 0x1000_000d,
+            Self::Warlock => 0x1000_000e,
         })
     }
 
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 14] = [
         Self::Footman,
         Self::Defender,
         Self::Sniper,
@@ -753,6 +775,10 @@ impl CastleFightUnitKind {
         Self::Catapult,
         Self::IceTrollShadowPriest,
         Self::GryphonRider,
+        Self::Crusader,
+        Self::Paladin,
+        Self::HolyWarrior,
+        Self::Warlock,
     ];
 
     #[must_use]
@@ -788,9 +814,161 @@ impl CastleFightUnitKind {
         {
             passive_effects.push(PassiveUnitEffect::SplashFalloff(profile));
         }
+        passive_effects.extend(self.human_passive_effects_9_27());
         definition.passive_effects = PassiveUnitEffects::from_slice(&passive_effects);
-        definition.spellcasting = mechanics.spellcasting;
+        definition.spellcasting = mechanics
+            .spellcasting
+            .or_else(|| self.human_spellcasting_9_27());
         Ok(definition)
+    }
+
+    fn human_spellcasting_9_27(self) -> Option<SpellcastingProfile> {
+        let (mana, ability) = match self {
+            Self::Crusader => (
+                ManaProfile {
+                    maximum: 200,
+                    starting: 150,
+                    regen_per_tick_per_10k: 666,
+                },
+                AutomaticAbilityProfile {
+                    id: AbilityId(u32::from_be_bytes(*b"A03K")),
+                    mana_cost: 66,
+                    cooldown_ticks: 7 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    range: world(300),
+                    target_policy: AbilityTargetPolicy::WoundedFriendlyUnit,
+                    effect: AbilityEffect::HolyAid {
+                        modifier: ModifierId(u32::from_be_bytes(*b"A03M")),
+                        healing: 25,
+                        armor_bonus_per_100: 600,
+                        regeneration_per_second_per_10k: 160_000,
+                        duration_ticks: 10 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                        permanent_max_health_bonus: 0,
+                        resurrection_count: 0,
+                        resurrection_radius: 0,
+                    },
+                },
+            ),
+            Self::Paladin => (
+                ManaProfile {
+                    maximum: 300,
+                    starting: 30,
+                    regen_per_tick_per_10k: 833,
+                },
+                AutomaticAbilityProfile {
+                    id: AbilityId(u32::from_be_bytes(*b"A03K")),
+                    mana_cost: 66,
+                    cooldown_ticks: 7 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    range: world(300),
+                    target_policy: AbilityTargetPolicy::WoundedFriendlyUnit,
+                    effect: AbilityEffect::HolyAid {
+                        modifier: ModifierId(u32::from_be_bytes(*b"A03I")),
+                        healing: 25,
+                        armor_bonus_per_100: 900,
+                        regeneration_per_second_per_10k: 240_000,
+                        duration_ticks: 10 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                        permanent_max_health_bonus: 100,
+                        resurrection_count: 1,
+                        resurrection_radius: world(900),
+                    },
+                },
+            ),
+            Self::HolyWarrior => (
+                ManaProfile {
+                    maximum: 200,
+                    starting: 100,
+                    regen_per_tick_per_10k: 443,
+                },
+                AutomaticAbilityProfile {
+                    id: AbilityId(u32::from_be_bytes(*b"A0I0")),
+                    mana_cost: 50,
+                    cooldown_ticks: 20 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    range: world(300),
+                    target_policy: AbilityTargetPolicy::WoundedFriendlyUnit,
+                    effect: AbilityEffect::Prayer {
+                        modifier: ModifierId(u32::from_be_bytes(*b"A0I2")),
+                        healing: 50,
+                        mana_restored: 50,
+                        armor_bonus_per_100: 300,
+                        damage_bonus_per_10k: 2_000,
+                        duration_ticks: 7 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                        radius: world(450),
+                        resurrection_count: 3,
+                        resurrection_radius: world(500),
+                    },
+                },
+            ),
+            Self::Warlock => (
+                ManaProfile {
+                    maximum: 100,
+                    starting: 100,
+                    regen_per_tick_per_10k: 333,
+                },
+                AutomaticAbilityProfile {
+                    id: AbilityId(u32::from_be_bytes(*b"A00K")),
+                    mana_cost: 35,
+                    cooldown_ticks: 12 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                    range: world(500),
+                    target_policy: AbilityTargetPolicy::RandomGroundEnemyUnit,
+                    effect: AbilityEffect::AreaDamage {
+                        amount: 270,
+                        radius: world(370),
+                    },
+                },
+            ),
+            _ => return None,
+        };
+        Some(SpellcastingProfile { mana, ability })
+    }
+
+    fn human_passive_effects_9_27(self) -> Vec<PassiveUnitEffect> {
+        let mut effects = Vec::new();
+        match self {
+            Self::Crusader | Self::Paladin => {
+                effects.push(PassiveUnitEffect::Cleave(CleaveEffectProfile {
+                    ability: AbilityId(u32::from_be_bytes(*b"A01F")),
+                    radius: world(175),
+                    damage_per_10k: 2_500,
+                }));
+                if self == Self::Paladin {
+                    effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"A03J")),
+                        radius: world(400),
+                        armor_bonus_per_100: 300,
+                        mana_regeneration_per_second_per_10k: 0,
+                        suspend_during_spell_cooldown: false,
+                    }));
+                }
+            }
+            Self::HolyWarrior => {
+                effects.push(PassiveUnitEffect::Cleave(CleaveEffectProfile {
+                    ability: AbilityId(u32::from_be_bytes(*b"A0AD")),
+                    radius: world(225),
+                    damage_per_10k: 4_000,
+                }));
+                effects.push(PassiveUnitEffect::SpellResistance(
+                    SpellResistanceEffectProfile {
+                        ability: AbilityId(u32::from_be_bytes(*b"A0AH")),
+                        damage_taken_per_10k: 3_000,
+                    },
+                ));
+                effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                    ability: AbilityId(u32::from_be_bytes(*b"A0HZ")),
+                    radius: world(420),
+                    armor_bonus_per_100: 900,
+                    mana_regeneration_per_second_per_10k: 0,
+                    suspend_during_spell_cooldown: false,
+                }));
+            }
+            Self::Warlock => effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                ability: AbilityId(u32::from_be_bytes(*b"A00F")),
+                radius: 0,
+                armor_bonus_per_100: 0,
+                mana_regeneration_per_second_per_10k: 10_000,
+                suspend_during_spell_cooldown: true,
+            })),
+            _ => {}
+        }
+        effects
     }
 
     fn definition_9_27(self) -> CastleFightUnitDefinition {
@@ -809,6 +987,10 @@ impl CastleFightUnitKind {
                 true,
             ),
             Self::GryphonRider => (u32::from_be_bytes(*b"h016"), "Gryphon Rider", false),
+            Self::Crusader => (u32::from_be_bytes(*b"h03B"), "Crusader", true),
+            Self::Paladin => (u32::from_be_bytes(*b"h03C"), "Paladin", true),
+            Self::HolyWarrior => (u32::from_be_bytes(*b"h074"), "Holy Warrior", true),
+            Self::Warlock => (u32::from_be_bytes(*b"n005"), "Warlock", true),
         };
         extracted_unit_definition_927(rawcode, name, expose_corpse)
     }
@@ -894,6 +1076,10 @@ pub enum CastleFightProductionKind {
     OrcishSiegeFactory,
     IceTrollHut,
     GryphonRock,
+    Chapel,
+    Church,
+    HolyAltar,
+    Hjordhejmen,
 }
 
 impl CastleFightProductionKind {
@@ -910,10 +1096,14 @@ impl CastleFightProductionKind {
             Self::OrcishSiegeFactory => 0x2000_0004,
             Self::IceTrollHut => 0x2000_0005,
             Self::GryphonRock => 0x2000_0006,
+            Self::Chapel => 0x2000_000b,
+            Self::Church => 0x2000_000c,
+            Self::HolyAltar => 0x2000_000d,
+            Self::Hjordhejmen => 0x2000_000e,
         })
     }
 
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 14] = [
         Self::Barracks,
         Self::Stronghold,
         Self::SniperNest,
@@ -924,6 +1114,10 @@ impl CastleFightProductionKind {
         Self::OrcishSiegeFactory,
         Self::IceTrollHut,
         Self::GryphonRock,
+        Self::Chapel,
+        Self::Church,
+        Self::HolyAltar,
+        Self::Hjordhejmen,
     ];
 
     #[must_use]
@@ -950,6 +1144,10 @@ impl CastleFightProductionKind {
             value if value == u32::from_be_bytes(*b"h02I") => Some(Self::OrcishSiegeFactory),
             value if value == u32::from_be_bytes(*b"h03K") => Some(Self::IceTrollHut),
             value if value == u32::from_be_bytes(*b"h015") => Some(Self::GryphonRock),
+            value if value == u32::from_be_bytes(*b"h037") => Some(Self::Chapel),
+            value if value == u32::from_be_bytes(*b"h038") => Some(Self::Church),
+            value if value == u32::from_be_bytes(*b"h072") => Some(Self::HolyAltar),
+            value if value == u32::from_be_bytes(*b"h00K") => Some(Self::Hjordhejmen),
             _ => None,
         })
     }
@@ -1036,6 +1234,13 @@ impl CastleFightProductionKind {
                 u32::from_be_bytes(*b"h015"),
                 CastleFightUnitKind::GryphonRider,
             ),
+            Self::Chapel => (u32::from_be_bytes(*b"h037"), CastleFightUnitKind::Crusader),
+            Self::Church => (u32::from_be_bytes(*b"h038"), CastleFightUnitKind::Paladin),
+            Self::HolyAltar => (
+                u32::from_be_bytes(*b"h072"),
+                CastleFightUnitKind::HolyWarrior,
+            ),
+            Self::Hjordhejmen => (u32::from_be_bytes(*b"h00K"), CastleFightUnitKind::Warlock),
         };
         production_definition(rawcode, unit)
     }
@@ -1425,6 +1630,63 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A07E") => {
             0x4000_0011
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0FK") => {
+            0x4000_0012
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0EZ") => {
+            0x4000_0013
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A070") => {
+            0x4000_0014
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06V") => {
+            0x4000_0015
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A07H") => {
+            0x4000_0016
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03M") => {
+            0x4000_0017
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03I") => {
+            0x4000_0018
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03H") => {
+            0x4000_0019
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A01A") => {
+            0x4000_001a
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A090") => {
+            0x4000_001b
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A01F") => {
+            0x4000_001c
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0AD") => {
+            0x4000_001d
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0AH") => {
+            0x4000_001e
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03J") => {
+            0x4000_001f
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0HZ") => {
+            0x4000_0020
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00F") => {
+            0x4000_0021
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03K") => {
+            0x4000_0022
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0I0") => {
+            0x4000_0023
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00K") => {
+            0x4000_0024
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1666,6 +1928,7 @@ fn hash_building_economy(hash: &mut ContentHash64, economy: BuildingEconomyProfi
     hash.write_u32(economy.gold_cost);
     hash.write_u32(economy.lumber_cost);
     hash.write_u32(economy.lumber_refund);
+    hash.write_u16(economy.legendary_points_cost);
     hash.write_u64(economy.income_per_10k);
 }
 
@@ -1766,6 +2029,25 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u8(u8::from(profile.target_ground_units));
                 hash.write_u8(u8::from(profile.target_buildings));
             }
+            PassiveUnitEffect::Cleave(profile) => {
+                hash.write_u8(7);
+                hash.write_u32(profile.ability.0);
+                hash.write_i32(profile.radius);
+                hash.write_u16(profile.damage_per_10k);
+            }
+            PassiveUnitEffect::Aura(profile) => {
+                hash.write_u8(8);
+                hash.write_u32(profile.ability.0);
+                hash.write_i32(profile.radius);
+                hash.write_i32(i32::from(profile.armor_bonus_per_100));
+                hash.write_u32(profile.mana_regeneration_per_second_per_10k);
+                hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
+            }
+            PassiveUnitEffect::SpellResistance(profile) => {
+                hash.write_u8(9);
+                hash.write_u32(profile.ability.0);
+                hash.write_u16(profile.damage_taken_per_10k);
+            }
         }
     }
 }
@@ -1836,6 +2118,46 @@ fn hash_optional_spellcasting(hash: &mut ContentHash64, spellcasting: Option<Spe
             hash.write_u16(slow_duration_ticks);
             hash.write_i32(i32::from(movement_percent_delta));
             hash.write_i32(i32::from(attack_speed_percent_delta));
+        }
+        AbilityEffect::HolyAid {
+            modifier,
+            healing,
+            armor_bonus_per_100,
+            regeneration_per_second_per_10k,
+            duration_ticks,
+            permanent_max_health_bonus,
+            resurrection_count,
+            resurrection_radius,
+        } => {
+            hash.write_u32(modifier.0);
+            hash.write_i32(healing);
+            hash.write_i32(i32::from(armor_bonus_per_100));
+            hash.write_u32(regeneration_per_second_per_10k);
+            hash.write_u16(duration_ticks);
+            hash.write_i32(permanent_max_health_bonus);
+            hash.write_u8(resurrection_count);
+            hash.write_i32(resurrection_radius);
+        }
+        AbilityEffect::Prayer {
+            modifier,
+            healing,
+            mana_restored,
+            armor_bonus_per_100,
+            damage_bonus_per_10k,
+            duration_ticks,
+            radius,
+            resurrection_count,
+            resurrection_radius,
+        } => {
+            hash.write_u32(modifier.0);
+            hash.write_i32(healing);
+            hash.write_i32(mana_restored);
+            hash.write_i32(i32::from(armor_bonus_per_100));
+            hash.write_u16(damage_bonus_per_10k);
+            hash.write_u16(duration_ticks);
+            hash.write_i32(radius);
+            hash.write_u8(resurrection_count);
+            hash.write_i32(resurrection_radius);
         }
     }
 }
@@ -1963,6 +2285,7 @@ enum ExtractedWeaponKind927 {
 struct ExtractedProduction927 {
     unit_rawcode: u32,
     spawn_interval_ticks: u16,
+    legendary_points_cost: u16,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2340,11 +2663,15 @@ impl ExtractedContent927 {
         let production_kind = tsv_column_index_927(production_header, "building_kind")?;
         let production_unit_rawcode = tsv_column_index_927(production_header, "unit_rawcode")?;
         let production_spawn_time = tsv_column_index_927(production_header, "spawn_time")?;
+        let production_food_used = tsv_column_index_927(production_header, "food_used")?;
+        let production_is_legendary = tsv_column_index_927(production_header, "is_legendary")?;
         let production_required_max = [
             production_building_rawcode,
             production_kind,
             production_unit_rawcode,
             production_spawn_time,
+            production_food_used,
+            production_is_legendary,
         ]
         .into_iter()
         .max()
@@ -2366,6 +2693,13 @@ impl ExtractedContent927 {
             let row = ExtractedProduction927 {
                 unit_rawcode,
                 spawn_interval_ticks,
+                legendary_points_cost: if columns[production_is_legendary] == "1" {
+                    columns[production_food_used]
+                        .parse::<u16>()
+                        .map_err(|error| error.to_string())?
+                } else {
+                    0
+                },
             };
             if production.insert(building_rawcode, row).is_some() {
                 return Err(format!(
@@ -2986,6 +3320,10 @@ fn extracted_building_economy_927(rawcode: u32) -> BuildingEconomyProfile {
         gold_cost: u32::from(gold_cost),
         lumber_cost: u32::from(lumber_cost),
         lumber_refund,
+        legendary_points_cost: extracted_content_927()
+            .production
+            .get(&rawcode)
+            .map_or(0, |row| row.legendary_points_cost),
         income_per_10k: extracted_building_income_per_10k_927(rawcode),
     }
 }
@@ -3611,8 +3949,8 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 0x6bcb_fec0_2360_147c);
-        assert_eq!(bundle.behaviors().len(), 17);
+        assert_eq!(bundle.identity.gameplay_hash, 15148639712578998569);
+        assert_eq!(bundle.behaviors().len(), 36);
         assert!(
             bundle
                 .behaviors()
@@ -3759,6 +4097,7 @@ mod tests {
                     gold_cost: 100,
                     lumber_cost: 0,
                     lumber_refund: 100,
+                    legendary_points_cost: 0,
                     income_per_10k: 20_000,
                 },
             ),
@@ -3770,6 +4109,7 @@ mod tests {
                     lumber_refund: 200,
                     // Ranger's Hall inherits the 3 gold income from its 150g Hunter's Hall
                     // precursor and adds another 4 from its own 200g upgrade cost.
+                    legendary_points_cost: 0,
                     income_per_10k: 70_000,
                 },
             ),
@@ -3781,6 +4121,7 @@ mod tests {
                     gold_cost: 380,
                     lumber_cost: 0,
                     lumber_refund: 285,
+                    legendary_points_cost: 0,
                     income_per_10k: 68_400,
                 },
             ),
@@ -3790,6 +4131,7 @@ mod tests {
                     gold_cost: 175,
                     lumber_cost: 0,
                     lumber_refund: 175,
+                    legendary_points_cost: 0,
                     income_per_10k: 35_000,
                 },
             ),
@@ -3799,6 +4141,7 @@ mod tests {
                     gold_cost: 250,
                     lumber_cost: 0,
                     lumber_refund: 250,
+                    legendary_points_cost: 0,
                     income_per_10k: 50_000,
                 },
             ),
@@ -3808,6 +4151,7 @@ mod tests {
                     gold_cost: 150,
                     lumber_cost: 300,
                     lumber_refund: 0,
+                    legendary_points_cost: 0,
                     income_per_10k: 6_000,
                 },
             ),
@@ -3817,6 +4161,7 @@ mod tests {
                     gold_cost: 230,
                     lumber_cost: 300,
                     lumber_refund: 0,
+                    legendary_points_cost: 0,
                     income_per_10k: 9_200,
                 },
             ),

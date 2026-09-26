@@ -143,6 +143,7 @@ pub enum Wc3AbilityVisualAnchor {
 pub struct Wc3AbilityVisual {
     pub model: Wc3VisualModel,
     pub anchor: Wc3AbilityVisualAnchor,
+    pub source_unit_rawcode: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -333,6 +334,8 @@ struct StatusVisualBinding {
 struct VisualBinding {
     owner_kind: String,
     owner_rawcode: String,
+    #[serde(default)]
+    source_unit_rawcode: Option<String>,
     role: String,
     gltf: Option<String>,
     #[serde(default)]
@@ -2179,6 +2182,18 @@ impl Wc3VisualSet {
             .get(&rawcode)
             .map(Vec::as_slice)
             .unwrap_or_default()
+    }
+
+    pub fn ability_for_source(
+        &self,
+        rawcode: u32,
+        source_unit_rawcode: Option<u32>,
+    ) -> impl Iterator<Item = &Wc3AbilityVisual> {
+        self.ability(rawcode).iter().filter(move |visual| {
+            visual
+                .source_unit_rawcode
+                .is_none_or(|required| Some(required) == source_unit_rawcode)
+        })
     }
 
     #[must_use]
@@ -4277,7 +4292,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
     let manifest: VisualManifest =
         serde_json::from_str(&json).map_err(|error| format!("invalid visual manifest: {error}"))?;
-    if manifest.schema_version != 4 {
+    if manifest.schema_version != 5 {
         return Err(format!(
             "unsupported visual asset manifest schema {}",
             manifest.schema_version
@@ -4323,6 +4338,11 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                     .push(Wc3AbilityVisual {
                         model: visual,
                         anchor: ability_visual_anchor(role),
+                        source_unit_rawcode: binding
+                            .source_unit_rawcode
+                            .as_deref()
+                            .map(parse_rawcode)
+                            .transpose()?,
                     });
             }
             // Missile art needs an authoritative travel interval/path. Do not pin a missile
