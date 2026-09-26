@@ -940,6 +940,9 @@ pub(crate) fn building_upgrade_hotkey_target(
     authoritative: &AuthoritativeSimulation,
     selected_match: &SelectedMatch,
 ) -> Option<BuildKind> {
+    if !building_upgrade_queue_is_clear(state, authoritative) {
+        return None;
+    }
     let mut selected = None;
     for action in action_layout(state, authoritative, selected_match)
         .into_iter()
@@ -1128,7 +1131,6 @@ fn action_layout(
         if let Some(kind) = first_kind
             && buildings.iter().all(|building| {
                 building.construction_complete_tick.is_none()
-                    && building.production_queue.is_none_or(|count| count == 0)
                     && selected_building_kind_from_content(building.content, selected_match.content)
                         == Some(kind)
             })
@@ -1197,9 +1199,7 @@ fn action_layout(
                         );
                     }
 
-                    if building.production_queue.is_none_or(|count| count == 0)
-                        && let Some(kind) = kind
-                    {
+                    if let Some(kind) = kind {
                         insert_building_upgrade_actions(
                             &mut slots,
                             BuildKind::from(kind),
@@ -1276,13 +1276,15 @@ fn handle_action_panel_buttons(
                 state.status = "Choose a building.".into();
             }
             PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
-                queue_building_upgrade(
-                    &mut authoritative,
-                    &mut state,
-                    target,
-                    &selected_match,
-                    &debug_menu,
-                );
+                if building_upgrade_queue_is_clear(&state, &authoritative) {
+                    queue_building_upgrade(
+                        &mut authoritative,
+                        &mut state,
+                        target,
+                        &selected_match,
+                        &debug_menu,
+                    );
+                }
             }
             PanelAction::TrainUnit => {
                 if production_queue_has_room(&state, &authoritative) {
@@ -1477,7 +1479,13 @@ fn style_action_panel_buttons(
                 !can_afford_build_kind(&authoritative, &state, kind, selected_match.content)
             }
             PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
-                !can_afford_building_upgrade(&authoritative, &state, target, selected_match.content)
+                !building_upgrade_queue_is_clear(&state, &authoritative)
+                    || !can_afford_building_upgrade(
+                        &authoritative,
+                        &state,
+                        target,
+                        selected_match.content,
+                    )
             }
             PanelAction::TrainUnit => !production_queue_has_room(&state, &authoritative),
             PanelAction::GjallarhornSpell => state
@@ -1983,6 +1991,23 @@ fn queue_single_building_upgrade(
     );
 }
 
+fn building_upgrade_queue_is_clear(
+    state: &ActionPanelState,
+    authoritative: &AuthoritativeSimulation,
+) -> bool {
+    let queue_is_clear = |actor| {
+        authoritative
+            .simulation
+            .building(actor)
+            .is_some_and(|building| building.production_queue.is_none_or(|count| count == 0))
+    };
+    if state.members.is_empty() {
+        state.actor.is_some_and(queue_is_clear)
+    } else {
+        state.members.iter().copied().all(queue_is_clear)
+    }
+}
+
 fn can_afford_building_upgrade(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
@@ -2455,8 +2480,11 @@ mod tests {
         );
         assert_eq!(
             active_layout[command_slot(stronghold_definition.command_card_position)],
-            None
+            Some(PanelAction::Building(BuildingPanelAction::Upgrade(
+                BuildKind::Production(stronghold)
+            )))
         );
+        assert!(!building_upgrade_queue_is_clear(&state, &authoritative));
         for _ in 0..2 {
             authoritative
                 .simulation
@@ -2464,6 +2492,7 @@ mod tests {
                 .unwrap();
         }
         assert!(production_queue_has_room(&state, &authoritative));
+        assert!(building_upgrade_queue_is_clear(&state, &authoritative));
         let layout = action_layout(&state, &authoritative, &selected_match);
         assert_eq!(
             layout[command_slot(stronghold_definition.command_card_position)],
@@ -2544,6 +2573,15 @@ mod tests {
             .production_building(target)
             .unwrap()
             .command_card_position;
+        let queued_layout = action_layout(&state, &authoritative, &selected_match);
+        assert_eq!(
+            queued_layout[command_slot(position)],
+            Some(PanelAction::Building(BuildingPanelAction::Upgrade(
+                BuildKind::Production(target)
+            )))
+        );
+        assert!(!building_upgrade_queue_is_clear(&state, &authoritative));
+
         for building in [first, second] {
             for _ in 0..2 {
                 authoritative
@@ -2588,6 +2626,13 @@ mod tests {
             .production_building(ProductionKind::Stronghold)
             .unwrap();
         assert_eq!(stronghold.hotkey, 'R');
+        let mut blocked_keys = ButtonInput::<KeyCode>::default();
+        blocked_keys.press(key_code_for_hotkey(stronghold.hotkey).unwrap());
+        assert_eq!(
+            building_upgrade_hotkey_target(&blocked_keys, &state, &authoritative, &selected_match,),
+            None
+        );
+
         for _ in 0..2 {
             authoritative
                 .simulation
