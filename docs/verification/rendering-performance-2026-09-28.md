@@ -1,0 +1,243 @@
+# Rendering architecture investigation — 2026-09-28
+
+Status: investigation and opt-in measurement tools; proposed renderer changes are not implemented.
+
+## Scope and reproducibility
+
+The simulation is excluded from the primary comparison by keeping it paused. The user supplied
+screenshots showing 29.28 ms/frame with 13.073 ms main CPU and 54.25 ms/frame with 14.907 ms main
+CPU. The latter had no simulation ticks, 9,108 visible mesh entities, 5,503 skins and 1,107 animation
+players. Its two largest reported GPU passes were 4.317 ms transparent and 3.321 ms opaque.
+These are different scenes, not a controlled before/after. The unaccounted frame interval cannot
+be labelled GPU time: it includes extraction, waiting for the render thread, and presentation.
+Likewise the displayed “3D CPU” covers application Update systems, not all Bevy rendering work.
+
+The requested repeatable fixture is `--stress-units 500`. Primary measurements use the real window,
+release build, fixed map-centred camera and paused simulation, ten seconds of warm-up, and ten seconds of
+capture. Ambient effects and presentation animation continue. Each experiment starts a fresh
+process; runs are sequential. The existing local changes to presentation/effect binding and asset
+export were preserved, so results describe that working tree rather than pristine HEAD.
+
+Reference hardware: AMD Ryzen 5 5600 (6 cores / 12 threads), Radeon RX 6900 XT, Mesa RADV 26.2.3.
+The dependency source inspected is Bevy 0.19.1 from Cargo.lock. The source base is
+`b885a20b686eacd83276178b1f8e16275489e4d6` plus the preserved working-tree changes and this instrumentation.
+
+Generated asset manifest SHA-256 fingerprints:
+
+| Pack | SHA-256 |
+| --- | --- |
+| units | `ca2cfc8297ab9724dfcbd1d3439621947456df6974c7ffd3a15ee63fed4cb773` |
+| buildings | `8527ff209292c16797c991b0e5def2daa5d3108fec037b2454e100f28923d8ac` |
+| doodads | `8996de6895208a184286d1b738c5c5fd89295f488449cc5207e79a215ff403a7` |
+| effects | `82990941e2730c9eb5cdd0a9d7f7784e7171e5ff0ae6224d904b9afe15d852a6` |
+
+
+```sh
+tools/cargo-interactive build --release -p castle-fight-client
+# Run the built binary separately, so compiler CPU affinity does not constrain the game.
+target/release/castle-fight-client --stress-units 500 --profile --profile-paused --profile-warmup 10 --profile-duration 10
+# Repeat with one of:
+# --render-experiment freeze-bounds
+# --render-experiment hide-skinned
+# --render-experiment hide-particles
+# --render-experiment hide-transparent
+```
+
+The ordinary quicksave could not be used: snapshot decoding reported a missing
+`resurrection_mana_cost` field. The original save was not modified or migrated.
+
+An exploratory run before the camera fix was discarded: the default view started at the builder
+and was manually panned. All comparison runs below must use the automatically centred fixed camera.
+
+## Controlled results
+
+All seven runs used a visible 3840×2160 window with `AutoNoVsync`, camera position
+`(0, 3394.0002, 3060)` and forward direction `(0, -0.7270132, -0.6866236)`.
+Every run ended at simulation tick 0 with exactly 500 units, 2 builders, 2 buildings, no corpses and
+no projectiles. Camera/window identity and population were checked across the reports.
+No compiler ran during the timed captures. Ordinary desktop activity was not isolated.
+
+| Experiment | FPS | Frame ms | p95 ms | Main ms | Extract ms | Prepare ms | Render/submit/present ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Baseline 1 | 46.51 | 21.503 | 23.936 | 11.468 | 2.553 | 3.167 | 9.339 |
+| Freeze bounds | 48.24 | 20.731 | 23.039 | 10.396 | 2.627 | 3.130 | 9.248 |
+| Hide particles | 91.20 | 10.964 | 14.340 | 8.876 | 2.011 | 2.194 | 2.272 |
+| Hide skinned meshes | 110.31 | 9.065 | 11.381 | 8.478 | 0.299 | 1.485 | 2.485 |
+| Hide transparent meshes | 102.85 | 9.723 | 12.436 | 8.490 | 1.160 | 1.313 | 1.071 |
+| Baseline 2 | 46.53 | 21.490 | 23.877 | 11.487 | 2.562 | 3.160 | 9.346 |
+| Hide particles repeat | 87.85 | 11.383 | 14.494 | 9.272 | 2.033 | 2.235 | 2.348 |
+
+[Complete captured reports](rendering-performance-2026-09-28-results.txt) include all render stages,
+CPU/GPU pass measurements, scene counts, 1% lows and camera identity. Render stages run in parallel
+with the main schedule; the columns are not additive. “Render/submit/present” includes driver and
+presentation waits and is not a GPU timer. Its exact internal split still needs a driver/CPU trace.
+
+The two baselines differ by only 0.02 FPS. Disabling ordinary particle visibility improves frame
+time by 47–49% in two runs, despite continuing to spawn and update those particles. The number of
+sampled transparent draw-function calls falls from 1,947–2,026 to 427–447. Recent transparent-pass
+CPU time falls from about 1.5 ms to 0.28–0.30 ms, and GPU time from about 3.1 ms to 1.32–1.34 ms.
+Render/submit/present falls from about 9.34 ms to 2.27–2.35 ms. This implicates both submission work
+and GPU work; the pass timings alone do not account for the whole frame improvement.
+
+Freezing bounds saves only about 0.77 ms/frame here (3.6%). It also changes which meshes pass
+culling, so that is not a pure bound-update cost. Prioritize particle representation and the model
+rendering path before spending the whole effort on this smaller cost.
+
+Hiding all skinned meshes reaches 110 FPS while retaining their skeleton/animation entities;
+extraction falls from 2.55 ms to 0.30 ms and the skin upload disappears. This removes most imported
+geometry, including doodads, so it does not measure skin arithmetic alone. Hiding transparent meshes
+reaches 103 FPS; that overlaps heavily with the particle and skin probes and is not an additional
+independent saving.
+
+Baseline census: approximately 71,400 entities, 8,800 mesh entities, 5,115 skinned meshes, 929 animation
+players, and 3,500 ordinary particles. Skins contain 203,780 joint references for 26,016 distinct joint
+entities (7.83× references); the renderer uploads 13,578,880 bytes of palette staging data each frame.
+A palette per model instance can remove repeated joint work and storage. This byte count alone does
+not establish PCIe bandwidth saturation, and the reduction from sharing palettes is not yet measured.
+
+There are also 2,007 frustum-visible meshes with zero-determinant transforms. See the shader caveat
+below: these are candidates for a geoset-visibility audit, not proof that all are visually absent.
+
+These are deliberately destructive visual probes, not equivalent-quality optimizations. Their FPS
+numbers are not promised gains from the proposed designs. Particle populations vary modestly with
+presentation clocks and capture phase; animation throttling and CPU/render-thread overlap also mean
+that differences between main-thread averages are not exclusive subsystem costs.
+
+## Architectural findings from source
+
+### Repeated skeleton work per mesh layer
+
+`wc3-assets/src/export.rs::build_gltf` exports geosets as separate mesh nodes sharing one source
+skin. Bevy expands these into separate SkinnedMesh entities. `wc3_effects.rs::fix_wc3_scene_materials`
+adds another skinned child for non-building team-colour underlays and requests dynamic bounds for
+it. The model's joint list is therefore referenced repeatedly across geosets and layers.
+
+Bevy's `bevy_camera::visibility::update_skinned_mesh_bounds` visits every dynamically bounded skin,
+without a pose-change or visibility filter. Its PBR `extract_skins` scans all skin components and
+checks changed joints for each registered skin. `prepare_skins` uploads the current staging buffer
+every frame, even if a pose did not change. Throttling animation sampling does not eliminate those
+costs. Stock animation evaluation also visits animation targets independently of view visibility.
+
+Desktop Bevy DOES support skin batching through storage buffers. Its `no_automatic_skin_batching`
+only disables batching on platforms that require uniform buffers. Thus “one skin = one draw” is not
+a valid premise for this redesign.
+
+### Rendering state expanded into assets and extra geometry
+
+Animated material alpha/texture tracks clone a StandardMaterial for each affected mesh in
+`fix_wc3_scene_materials`. The update systems sample each track, climb the parent chain to find its
+model clock, and modify the asset when its value changes. Distinct assets do not necessarily mean
+separate draw calls because Bevy supports bindless material slabs, but they still add asset lifecycle,
+extraction and update work. Transparent sorting also limits which compatible items can be batched.
+
+Geoset visibility is exported as zero/nonzero node scale (`visibility_scale`), rather than exclusion
+from render submission. The audit counts visible zero-determinant transforms, but these MUST NOT be
+assumed to produce no pixels: Bevy's `mesh.wgsl` SKINNED branch obtains `world_from_local` from
+`skinning::skin_model` instead of the mesh transform. This is also a potential fidelity mismatch
+between exported geoset visibility and the native skinning path. Audit the source visibility tracks
+and rendered output before claiming that all such meshes are safe to remove. A dedicated per-geoset
+visibility mask avoids both ambiguous scale-based hiding and needless submission.
+
+### One general-purpose mesh entity per ordinary particle
+
+`emit_wc3_particles` spawns a Mesh3d/StandardMaterial entity for each particle. `update_wc3_particles`
+updates its transform and swaps mesh handles for atlas frames and material handles for lifecycle
+colour/alpha steps. The material cache builds formatted string keys. This converts cheap particle
+parameters into entity churn, geometry/material identity changes, extraction and transparent-phase
+sorting. A hidden-particle experiment retains the particle update/emission cost, so its improvement
+only attributes the work removed by hiding them.
+
+Ribbons allocate fresh attribute/index vectors and replace a Mesh each frame. Legacy model particles
+instantiate entire imported model scenes; those are separate from the ordinary quad-particle test.
+
+### Imported scenes retained as full hierarchies
+
+Doodads, units, corpses and effects all retain general scene graphs. Some composed-model features
+walk ancestors repeatedly. The non-inheritance correction pass traverses and writes entire affected
+subtrees after normal transform propagation, including unchanged values. Corpse animation lookup
+also linearly searches the corpse collection for each unmatched controller. These are real CPU
+costs, but their priority should follow measurements rather than imply they explain all frame time.
+
+## Proposed designs
+
+Recommended order: dedicated particle buffers first, shared model palettes and material-layer
+programs second, model-level culling and retained-pose lifecycle third. Keep the current path as a
+visual reference during each migration. The initial 500-unit scene contains no corpses, so corpse
+optimizations require a separate compatible saved-scene benchmark before making performance claims.
+
+### 1. Dedicated particle and ribbon buffers
+
+Represent ordinary particles in compact arrays with persistent capacity. One shared quad and a
+per-particle record carry position, size, rotation, atlas rectangle, colour and alpha. Update/upload
+contiguous records rather than spawn general scene hierarchies or swap assets. Evaluate sprite
+animation and lifecycle colour in the shader where faithful; CPU integration can remain initially.
+Replace ribbon mesh recreation with reusable vertex/index or procedural strip buffers.
+
+Partition by blend/depth/texture state. Batch compatible additive particles where ordering permits;
+for ordinary alpha preserve back-to-front order and required interleaving with other transparent
+geometry. One giant unsorted particle draw is not an acceptable substitute. Keep legacy model
+particles on a distinct model-instance path. View culling must account for particle lifetime,
+trajectory and trail extent, not only the emitter's current location.
+
+### 2. One model instance, one palette, shared material state
+
+Introduce an immutable, version-scoped ModelDefinition containing geometry sections, material-layer
+programs, joint hierarchy, animation clips, attachment bindings and conservative bounds. Runtime
+instances carry only stable presentation/SimId mapping, root transform, sequence/time/blend state,
+owner colour, visibility mask and a palette offset. Evaluate a skeleton once per visible/dirty model
+instance and let all its geosets/layers reference the same persistent GPU palette allocation.
+Upload changed ranges; preserve previous-pose data for any motion-vector use.
+
+Compose team-colour underlay plus textured overlay in a single material pass wherever equivalent.
+Keep animated alpha, texture selection, owner tint and per-geoset visibility as instance data rather
+than cloned assets. Group opaque/masked geometry by compatible mesh/pipeline/material resources;
+retain authored priority planes and correct ordering for genuine blend/add/multiply layers. Never
+convert all transparency to opaque or mask merely to improve a benchmark.
+
+Start with the material/underlay path and palette sharing, retaining the existing renderer as a
+comparison path. A later crowd path can evaluate clips on the GPU or cache quantized poses for
+far units, after measuring memory/quality costs. CPU attachment transforms must use the same pose
+math for the needed joint ancestor closure; avoid a GPU readback dependency for attachments.
+
+### 3. Model-level culling and pose-aware lifecycle
+
+Cull a conservative model envelope before animation and geoset expansion. Use versioned offline
+clip envelopes with conservative interpolation bounds, or a union of conservative transformed bone
+bounds; arbitrary sparse animation samples are not proof of containment. Root movement updates the
+world envelope cheaply. Recompute pose-dependent bounds once per instance when the pose changes,
+then share them across sections and underlays. Exclude truly hidden geosets from submission while
+retaining their timeline events and independently visible attachments.
+
+Separate visible, off-screen, and settled-pose presentation states. Off-screen models retain logical
+sequence/event clocks but can avoid unnecessary pose evaluation and GPU uploads. Re-entering the view
+seeks directly to the correct pose. Settled corpses can retain a cached pose/geometry while their
+authoritative identity, lifetime and decay phase remain unchanged. Never shorten gameplay corpse
+lifetime to reduce render load. Static doodads should use compact spatial instance groups; animated
+or emitting doodads retain only the dynamic components they need.
+
+The freeze-bounds experiment is an attribution tool, not this implementation: it can falsely cull
+later poses. Production acceptance requires camera-edge, movement, scale, transition, attachment,
+death/decay and resurrection comparisons with the current dynamic-bounds path.
+
+## Acceptance gates
+
+- Compare full-scene frame distribution, extraction/handoff, render stages, pass CPU/GPU timing,
+  transparent draw calls, palette bytes and scene populations on the same fixture and camera.
+- Re-run paused, moving/combat, corpse-heavy and effect-heavy cases. A 500-unit initial fixture alone
+  does not validate the screenshots' corpse workload or every model type.
+- Compare animation transitions, team colour, multilayer blending, geoset visibility, texture tracks,
+  global sequences, attachments, non-inheritance and particle/ribbon lifetimes visually. Use the
+  existing per-entity fidelity checklist when validating affected Warcraft content.
+- Keep authoritative snapshots/checksums identical under all production rendering paths. Selection
+  and inspection preserve stable identity when rendering instances are pooled or grouped.
+- Do not present geometry-hiding gains as shipped optimizations. Every shipped change must preserve
+  the intended picture and include its own before/after measurement.
+
+## Validation of investigation tools
+
+The client test suite passes (194 tests); Clippy passes for all client targets with warnings denied;
+format and patch whitespace checks pass; the release client builds and all seven bounded profiles
+complete. The profiling plugin and experiments are only registered in automated profiling mode.
+Normal gameplay rendering is unchanged. Interactive stress startup now centres the camera, while
+automated profiles centre and lock it. No production rendering redesign has been shipped in this
+investigation.
