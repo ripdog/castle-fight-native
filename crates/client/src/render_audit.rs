@@ -22,7 +22,7 @@ use bevy::{
     },
 };
 
-use crate::wc3_effects::Wc3Particle;
+use crate::wc3_effects::{Wc3Particle, Wc3ParticleMaterial};
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum RenderExperiment {
@@ -249,6 +249,7 @@ type ExperimentMeshes<'w, 's> = Query<
         Entity,
         &'static mut Visibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
         Has<SkinnedMesh>,
         Has<Wc3Particle>,
         Has<DynamicSkinnedMeshBounds>,
@@ -266,7 +267,17 @@ fn apply_render_experiment(
     if *experiment == RenderExperiment::Baseline {
         return;
     }
-    for (entity, mut visibility, material, skin, particle, dynamic, has_bounds) in &mut meshes {
+    for (
+        entity,
+        mut visibility,
+        material,
+        particle_material,
+        skin,
+        particle,
+        dynamic,
+        has_bounds,
+    ) in &mut meshes
+    {
         let hide = match *experiment {
             RenderExperiment::Baseline => false,
             RenderExperiment::FreezeBounds => {
@@ -277,9 +288,12 @@ fn apply_render_experiment(
             }
             RenderExperiment::HideSkinned => skin,
             RenderExperiment::HideParticles => particle,
-            RenderExperiment::HideTransparent => material
-                .and_then(|handle| materials.get(&handle.0))
-                .is_some_and(|material| is_transparent(material.alpha_mode)),
+            RenderExperiment::HideTransparent => {
+                particle_material.is_some()
+                    || material
+                        .and_then(|handle| materials.get(&handle.0))
+                        .is_some_and(|material| is_transparent(material.alpha_mode))
+            }
         };
         if hide {
             visibility.set_if_neq(Visibility::Hidden);
@@ -301,6 +315,7 @@ type CensusMeshes<'w, 's> = Query<
         &'static Mesh3d,
         &'static ViewVisibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
         Option<&'static SkinnedMesh>,
         Has<DynamicSkinnedMeshBounds>,
         Has<Wc3Particle>,
@@ -334,8 +349,17 @@ impl SceneCensus<'_, '_> {
         let mut mesh_assets = HashSet::new();
         let mut material_assets = HashSet::new();
         let mut visible_pairs = HashSet::new();
-        for (mesh, visibility, material, skin, bounds, particle, unbatched, transform) in
-            &self.meshes
+        for (
+            mesh,
+            visibility,
+            material,
+            particle_material,
+            skin,
+            bounds,
+            particle,
+            unbatched,
+            transform,
+        ) in &self.meshes
         {
             total += 1;
             visible += usize::from(visibility.get());
@@ -355,6 +379,8 @@ impl SceneCensus<'_, '_> {
                             .is_some_and(|material| is_transparent(material.alpha_mode)),
                     );
                 }
+            } else if visibility.get() && particle_material.is_some() {
+                transparent += 1;
             }
             if let Some(skin) = skin {
                 skins += 1;

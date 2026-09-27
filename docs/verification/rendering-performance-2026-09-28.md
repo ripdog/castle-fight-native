@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools; proposed renderer changes are not implemented.
+Status: investigation and opt-in measurement tools, plus one measured renderer change: ordinary additive particles now share buffered render state. The remaining renderer designs are still proposed work.
 
 ## Scope and reproducibility
 
@@ -102,6 +102,50 @@ These are deliberately destructive visual probes, not equivalent-quality optimiz
 numbers are not promised gains from the proposed designs. Particle populations vary modestly with
 presentation clocks and capture phase; animation throttling and CPU/render-thread overlap also mean
 that differences between main-thread averages are not exclusive subsystem costs.
+
+## Implementation result 1 — buffered additive ordinary particles
+
+The first production change takes the safe subset of the particle-buffer proposal. Ordinary WC3
+particles using additive blend mode (`filter_mode == 1`) and a texture now share one unit quad and
+one custom material per texture. A persistent storage buffer holds per-particle lifecycle colour,
+alpha and atlas UV rectangle, indexed through Bevy's per-instance `MeshTag`. Slots are recycled and
+the storage buffer grows geometrically. Particle transforms and lifetime integration remain on the
+CPU for now.
+
+This deliberately does **not** collapse the transparent phase into one unsorted draw. Each particle
+still has its own render entity/transform, so Bevy retains the authored depth ordering and
+interleaving with other transparent geometry; adjacent compatible additive particles can then use
+normal automatic instancing. Alpha-blended, multiply and masked ordinary particles remain on the
+reference `StandardMaterial` path. Ribbons and legacy model-particle scenes are unchanged. The old
+31-step lifecycle-colour quantization is also retained, so this change does not silently alter the
+sampled colour/alpha curve.
+
+A fresh baseline was captured immediately before implementation, then the same release fixture was
+captured twice after implementation. These runs use the same 500-unit, paused, map-centred,
+3840×2160 `AutoNoVsync` setup as the controlled investigation above.
+
+| Run | FPS | Frame ms | p95 ms | Main ms | Effects ms | Specialize ms | Queue ms | Transparent draws | Transparent GPU ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fresh baseline | 47.75 | 20.944 | 23.761 | 11.010 | 2.144 | 2.351 | 1.735 | 1,965 | 3.060 |
+| Buffered additive 1 | 51.72 | 19.336 | 22.008 | 9.695 | 1.046 | 1.115 | 0.880 | 1,524 | 2.674 |
+| Buffered additive 2 | 52.26 | 19.137 | 21.778 | 9.541 | 1.040 | 1.111 | 0.843 | 1,555 | 2.656 |
+
+Averaging the two implementation runs gives 19.237 ms/frame, **8.2% lower** than the fresh baseline,
+and 51.99 FPS, **8.9% higher**. The application-side effects slice falls by about **51%**,
+render specialization by about **53%**, render queueing by about **50%**, sampled transparent draw
+calls by about **22%**, and recent transparent-pass GPU time by about **13%**. The ordinary particle
+population was 3,543 in the fresh baseline and 3,486 / 3,471 in the implementation captures; this is
+the modest presentation-clock variation already noted above, not a particle-count reduction
+optimization.
+
+`render/submit/present` did not fall in these captures (9.148 ms baseline versus 9.783 / 9.662 ms).
+That scope overlaps CPU/render-thread work and presentation waiting, so it is not additive with the
+other stages and should not be interpreted as contradicting the lower whole-frame time. The useful
+structural evidence is the repeated reduction in effects work, specialization, queueing, draw calls
+and transparent GPU time.
+
+The profiler's `hide-transparent` experiment and scene census now recognize the custom additive
+particle material as transparent, so future attribution runs continue to measure the intended set.
 
 ## Architectural findings from source
 
@@ -233,11 +277,12 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 - Do not present geometry-hiding gains as shipped optimizations. Every shipped change must preserve
   the intended picture and include its own before/after measurement.
 
-## Validation of investigation tools
+## Validation
 
 The client test suite passes (194 tests); Clippy passes for all client targets with warnings denied;
-format and patch whitespace checks pass; the release client builds and all seven bounded profiles
-complete. The profiling plugin and experiments are only registered in automated profiling mode.
-Normal gameplay rendering is unchanged. Interactive stress startup now centres the camera, while
-automated profiles centre and lock it. No production rendering redesign has been shipped in this
-investigation.
+formatting passes; the release client builds, the original seven bounded investigation profiles
+complete, and the buffered-additive implementation completed two repeat captures after a fresh
+baseline. The profiling plugin and experiments are only registered in automated profiling mode.
+Normal gameplay rendering is changed only for textured additive ordinary particles in this first
+step; alpha/multiply/mask particles, ribbons and legacy model particles retain the reference path.
+Interactive stress startup centres the camera, while automated profiles centre and lock it.

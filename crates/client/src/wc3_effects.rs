@@ -12,9 +12,17 @@ use bevy::{
     camera::visibility::DynamicSkinnedMeshBounds,
     ecs::system::SystemParam,
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
-    mesh::{Indices, PrimitiveTopology, skinning::SkinnedMesh},
+    mesh::{Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology, skinning::SkinnedMesh},
+    pbr::{Material, MaterialPipeline, MaterialPipelineKey},
     prelude::*,
-    render::render_resource::TextureFormat,
+    reflect::TypePath,
+    render::{
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError, TextureFormat,
+        },
+        storage::ShaderBuffer,
+    },
+    shader::ShaderRef,
 };
 use serde::Deserialize;
 
@@ -22,6 +30,8 @@ use crate::terrain::{TerrainSurface, client_asset_root};
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
+const WC3_PARTICLE_SHADER_PATH: &str = "shaders/wc3_particle.wgsl";
+const ADDITIVE_PARTICLE_BATCH_MIN_SLOTS: usize = 64;
 const CONVERTED_MODEL_PACKS: [(&str, &str); 4] = [
     ("wc3/units/manifest.json", "wc3/units"),
     ("wc3/buildings/manifest.json", "wc3/buildings"),
@@ -2067,6 +2077,18 @@ struct Wc3ParticleVisualSpec {
     asset_prefix: &'static str,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AdditiveParticleBatchKey {
+    asset_prefix: &'static str,
+    texture: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AdditiveParticleSlot {
+    batch_index: usize,
+    slot_index: u32,
+}
+
 #[derive(Component)]
 pub struct Wc3Particle {
     velocity: Vec3,
@@ -2079,6 +2101,63 @@ pub struct Wc3Particle {
     atlas_frame: u32,
     visual: Arc<Wc3ParticleVisualSpec>,
     material_step: u8,
+    additive_slot: Option<AdditiveParticleSlot>,
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub(crate) struct Wc3ParticleMaterial {
+    #[storage(0, read_only)]
+    particle_data: Handle<ShaderBuffer>,
+    #[texture(1)]
+    #[sampler(2)]
+    texture: Handle<Image>,
+}
+
+impl Material for Wc3ParticleMaterial {
+    fn vertex_shader() -> ShaderRef {
+        WC3_PARTICLE_SHADER_PATH.into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        WC3_PARTICLE_SHADER_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Add
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex_layout = layout.0.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+        descriptor.primitive.cull_mode = None;
+        Ok(())
+    }
+}
+
+struct AdditiveParticleBatch {
+    material: Handle<Wc3ParticleMaterial>,
+    buffer: Handle<ShaderBuffer>,
+    gpu_data: Vec<[f32; 4]>,
+    free_slots: Vec<u32>,
+    next_slot: u32,
+    capacity_slots: usize,
+    dirty: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2106,6 +2185,8 @@ pub(crate) struct Wc3RibbonTrail {
 pub struct Wc3ParticleAssets {
     particle_quads: HashMap<(u32, u32, u32), Handle<Mesh>>,
     materials: HashMap<String, Handle<StandardMaterial>>,
+    additive_batch_indices: HashMap<AdditiveParticleBatchKey, usize>,
+    additive_batches: Vec<AdditiveParticleBatch>,
 }
 
 impl Wc3ConvertedModelRegistry {
@@ -2447,6 +2528,8 @@ impl Wc3ParticleAssets {
         Self {
             particle_quads,
             materials: HashMap::new(),
+            additive_batch_indices: HashMap::new(),
+            additive_batches: Vec::new(),
         }
     }
 
@@ -2503,6 +2586,116 @@ impl Wc3ParticleAssets {
         });
         self.materials.insert(key, handle.clone());
         handle
+    }
+
+    fn acquire_additive_particle_slot(
+        &mut self,
+        visual: &Wc3ParticleVisualSpec,
+        asset_server: &AssetServer,
+        particle_materials: &mut Assets<Wc3ParticleMaterial>,
+        shader_buffers: &mut Assets<ShaderBuffer>,
+    ) -> Option<(AdditiveParticleSlot, Handle<Wc3ParticleMaterial>)> {
+        if visual.filter_mode != 1 {
+            return None;
+        }
+        let texture = visual.texture.as_ref()?;
+        let key = AdditiveParticleBatchKey {
+            asset_prefix: visual.asset_prefix,
+            texture: texture.clone(),
+        };
+        let batch_index = if let Some(&index) = self.additive_batch_indices.get(&key) {
+            index
+        } else {
+            let capacity_slots = ADDITIVE_PARTICLE_BATCH_MIN_SLOTS;
+            let gpu_data = vec![[0.0; 4]; capacity_slots * 2];
+            let buffer = shader_buffers.add(ShaderBuffer::from(gpu_data.clone()));
+            let material = particle_materials.add(Wc3ParticleMaterial {
+                particle_data: buffer.clone(),
+                texture: asset_server.load(format!("{}/{}", visual.asset_prefix, texture)),
+            });
+            let index = self.additive_batches.len();
+            self.additive_batches.push(AdditiveParticleBatch {
+                material,
+                buffer,
+                gpu_data,
+                free_slots: Vec::new(),
+                next_slot: 0,
+                capacity_slots,
+                dirty: false,
+            });
+            self.additive_batch_indices.insert(key, index);
+            index
+        };
+
+        let batch = &mut self.additive_batches[batch_index];
+        let slot_index = batch.free_slots.pop().unwrap_or_else(|| {
+            let slot = batch.next_slot;
+            batch.next_slot = batch.next_slot.saturating_add(1);
+            slot
+        });
+        let required_slots = slot_index as usize + 1;
+        if required_slots > batch.capacity_slots {
+            let new_capacity = required_slots
+                .next_power_of_two()
+                .max(ADDITIVE_PARTICLE_BATCH_MIN_SLOTS);
+            batch.capacity_slots = new_capacity;
+            batch.gpu_data.resize(new_capacity * 2, [0.0; 4]);
+            let new_buffer = shader_buffers.add(ShaderBuffer::from(batch.gpu_data.clone()));
+            batch.buffer = new_buffer.clone();
+            let mut material = particle_materials
+                .get_mut(&batch.material)
+                .expect("additive particle material must outlive its batch");
+            material.particle_data = new_buffer;
+        }
+        Some((
+            AdditiveParticleSlot {
+                batch_index,
+                slot_index,
+            },
+            batch.material.clone(),
+        ))
+    }
+
+    fn release_additive_particle_slot(&mut self, slot: AdditiveParticleSlot) {
+        let Some(batch) = self.additive_batches.get_mut(slot.batch_index) else {
+            return;
+        };
+        let base = slot.slot_index as usize * 2;
+        if base + 1 < batch.gpu_data.len() {
+            batch.gpu_data[base] = [0.0; 4];
+            batch.gpu_data[base + 1] = [0.0; 4];
+            batch.dirty = true;
+        }
+        batch.free_slots.push(slot.slot_index);
+    }
+
+    fn update_additive_particle_slot(
+        &mut self,
+        slot: AdditiveParticleSlot,
+        color: [f32; 4],
+        uv_rect: [f32; 4],
+    ) {
+        let batch = self
+            .additive_batches
+            .get_mut(slot.batch_index)
+            .expect("additive particle batch index must remain stable");
+        let base = slot.slot_index as usize * 2;
+        debug_assert!(base + 1 < batch.gpu_data.len());
+        batch.gpu_data[base] = color;
+        batch.gpu_data[base + 1] = uv_rect;
+        batch.dirty = true;
+    }
+
+    fn flush_additive_particle_buffers(&mut self, shader_buffers: &mut Assets<ShaderBuffer>) {
+        for batch in &mut self.additive_batches {
+            if !batch.dirty {
+                continue;
+            }
+            if let Some(mut buffer) = shader_buffers.get_mut(&batch.buffer) {
+                buffer.set_data(batch.gpu_data.clone());
+            }
+            batch.dirty = false;
+        }
     }
 
     fn ribbon_material(
@@ -3653,8 +3846,22 @@ pub(crate) struct Wc3ParticleRenderAssets<'w> {
     asset_server: Res<'w, AssetServer>,
     particle_assets: ResMut<'w, Wc3ParticleAssets>,
     materials: ResMut<'w, Assets<StandardMaterial>>,
+    particle_materials: ResMut<'w, Assets<Wc3ParticleMaterial>>,
+    shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
     meshes: ResMut<'w, Assets<Mesh>>,
 }
+
+type Wc3ParticleQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static mut Transform,
+        &'static mut Mesh3d,
+        Option<&'static mut MeshMaterial3d<StandardMaterial>>,
+        &'static mut Wc3Particle,
+    ),
+>;
 
 pub fn emit_wc3_particles(
     mut commands: Commands,
@@ -3697,12 +3904,8 @@ pub fn emit_wc3_particles(
                 continue;
             }
             let material_step = particle_material_step(0.0);
-            let material = assets.particle_assets.material(
-                &emitter.visual,
-                material_step,
-                &assets.asset_server,
-                &mut assets.materials,
-            );
+            let additive_batchable =
+                emitter.visual.filter_mode == 1 && emitter.visual.texture.is_some();
             let atlas = Wc3ParticleAtlasAnimation {
                 rows: emitter.spec.rows,
                 columns: emitter.spec.columns,
@@ -3719,12 +3922,28 @@ pub fn emit_wc3_particles(
                 },
             };
             let initial_frame = particle_atlas_frame(atlas, 0.0);
-            let particle_mesh = assets.particle_assets.particle_mesh(
-                emitter.spec.rows,
-                emitter.spec.columns,
-                initial_frame,
-                &mut assets.meshes,
-            );
+            let particle_mesh = if additive_batchable {
+                assets
+                    .particle_assets
+                    .particle_mesh(1, 1, 0, &mut assets.meshes)
+            } else {
+                assets.particle_assets.particle_mesh(
+                    emitter.spec.rows,
+                    emitter.spec.columns,
+                    initial_frame,
+                    &mut assets.meshes,
+                )
+            };
+            let legacy_material = if additive_batchable {
+                None
+            } else {
+                Some(assets.particle_assets.material(
+                    &emitter.visual,
+                    material_step,
+                    &assets.asset_server,
+                    &mut assets.materials,
+                ))
+            };
             let bound_transform = emitter
                 .source_node
                 .and_then(|node| transforms.get(node).ok());
@@ -3754,23 +3973,62 @@ pub fn emit_wc3_particles(
                     sample.variation,
                     sample.latitude,
                 ) * uniform_scale;
+                let particle = Wc3Particle {
+                    velocity,
+                    gravity: sample.gravity * uniform_scale,
+                    age: 0.0,
+                    lifespan: emitter.spec.lifespan.max(0.01),
+                    middle_time: emitter.spec.time,
+                    scales: particle_scales,
+                    atlas,
+                    atlas_frame: initial_frame,
+                    visual: emitter.visual.clone(),
+                    material_step,
+                    additive_slot: None,
+                };
+                let transform = Transform::from_translation(origin)
+                    .with_scale(Vec3::splat(particle_scales[0].max(0.01)));
+                if additive_batchable {
+                    let acquired = assets.particle_assets.acquire_additive_particle_slot(
+                        &emitter.visual,
+                        &assets.asset_server,
+                        &mut assets.particle_materials,
+                        &mut assets.shader_buffers,
+                    );
+                    if let Some((slot, material)) = acquired {
+                        let (color, alpha) = particle_lifecycle_color_alpha(&emitter.visual, 0.0);
+                        assets.particle_assets.update_additive_particle_slot(
+                            slot,
+                            [color[0], color[1], color[2], alpha],
+                            particle_atlas_uv_rect(
+                                emitter.spec.rows,
+                                emitter.spec.columns,
+                                initial_frame,
+                            ),
+                        );
+                        commands.spawn((
+                            Mesh3d(particle_mesh.clone()),
+                            MeshMaterial3d(material),
+                            MeshTag(slot.slot_index),
+                            transform,
+                            Wc3Particle {
+                                additive_slot: Some(slot),
+                                ..particle
+                            },
+                        ));
+                        continue;
+                    }
+                }
                 commands.spawn((
                     Mesh3d(particle_mesh.clone()),
-                    MeshMaterial3d(material.clone()),
-                    Transform::from_translation(origin)
-                        .with_scale(Vec3::splat(particle_scales[0].max(0.01))),
-                    Wc3Particle {
-                        velocity,
-                        gravity: sample.gravity * uniform_scale,
-                        age: 0.0,
-                        lifespan: emitter.spec.lifespan.max(0.01),
-                        middle_time: emitter.spec.time,
-                        scales: particle_scales,
-                        atlas,
-                        atlas_frame: initial_frame,
-                        visual: emitter.visual.clone(),
-                        material_step,
-                    },
+                    MeshMaterial3d(
+                        legacy_material
+                            .as_ref()
+                            .expect("non-batched particle must have a standard material")
+                            .clone(),
+                    ),
+                    transform,
+                    particle,
                 ));
             }
         }
@@ -3786,19 +4044,16 @@ pub fn update_wc3_particles(
     time: Res<Time>,
     cameras: Query<&GlobalTransform, With<Camera3d>>,
     mut assets: Wc3ParticleRenderAssets,
-    mut particles: Query<(
-        Entity,
-        &mut Transform,
-        &mut Mesh3d,
-        &mut MeshMaterial3d<StandardMaterial>,
-        &mut Wc3Particle,
-    )>,
+    mut particles: Wc3ParticleQuery,
 ) {
     let dt = time.delta_secs().min(0.1);
     let camera_rotation = cameras.iter().next().map(GlobalTransform::rotation);
-    for (entity, mut transform, mut mesh, mut material, mut particle) in &mut particles {
+    for (entity, mut transform, mut mesh, mut legacy_material, mut particle) in &mut particles {
         particle.age += dt;
         if particle.age >= particle.lifespan {
+            if let Some(slot) = particle.additive_slot {
+                assets.particle_assets.release_additive_particle_slot(slot);
+            }
             commands.entity(entity).despawn();
             continue;
         }
@@ -3812,27 +4067,60 @@ pub fn update_wc3_particles(
         transform.scale = Vec3::splat(scale.max(0.01));
 
         let atlas_frame = particle_atlas_frame(particle.atlas, t);
-        if atlas_frame != particle.atlas_frame {
-            mesh.0 = assets.particle_assets.particle_mesh(
-                particle.atlas.rows,
-                particle.atlas.columns,
-                atlas_frame,
-                &mut assets.meshes,
-            );
+        let atlas_changed = atlas_frame != particle.atlas_frame;
+        if atlas_changed {
+            if particle.additive_slot.is_none() {
+                mesh.0 = assets.particle_assets.particle_mesh(
+                    particle.atlas.rows,
+                    particle.atlas.columns,
+                    atlas_frame,
+                    &mut assets.meshes,
+                );
+            }
             particle.atlas_frame = atlas_frame;
         }
 
         let material_step = particle_material_step(t);
-        if material_step != particle.material_step {
-            material.0 = assets.particle_assets.material(
-                &particle.visual,
-                material_step,
-                &assets.asset_server,
-                &mut assets.materials,
-            );
+        let material_changed = material_step != particle.material_step;
+        if material_changed {
+            if particle.additive_slot.is_none() {
+                let material = legacy_material
+                    .as_mut()
+                    .expect("non-batched particle must have a standard material");
+                material.0 = assets.particle_assets.material(
+                    &particle.visual,
+                    material_step,
+                    &assets.asset_server,
+                    &mut assets.materials,
+                );
+            }
             particle.material_step = material_step;
         }
+
+        if let Some(slot) = particle.additive_slot
+            && (atlas_changed || material_changed)
+        {
+            let quantized_t =
+                f32::from(particle.material_step) / f32::from(PARTICLE_MATERIAL_STEPS);
+            let (color, alpha) = particle_lifecycle_color_alpha(&particle.visual, quantized_t);
+            assets.particle_assets.update_additive_particle_slot(
+                slot,
+                [color[0], color[1], color[2], alpha],
+                particle_atlas_uv_rect(
+                    particle.atlas.rows,
+                    particle.atlas.columns,
+                    particle.atlas_frame,
+                ),
+            );
+        }
     }
+}
+
+pub fn flush_wc3_particle_buffers(
+    mut particle_assets: ResMut<Wc3ParticleAssets>,
+    mut shader_buffers: ResMut<Assets<ShaderBuffer>>,
+) {
+    particle_assets.flush_additive_particle_buffers(&mut shader_buffers);
 }
 
 #[derive(Debug, Clone, Copy)]
