@@ -11,6 +11,7 @@ mod lobby;
 mod network;
 mod performance_ui;
 mod presentation;
+mod render_audit;
 mod resource_ui;
 mod terrain;
 mod ui_icons;
@@ -64,6 +65,9 @@ use performance_ui::{
     PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, performance_trace_layer,
 };
 use presentation::CastlePresentationPlugin;
+use render_audit::{
+    RenderAudit, RenderAuditPlugin, RenderExperiment, SceneCensus, format_render_passes,
+};
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 use view_state::{
@@ -388,7 +392,7 @@ fn main() {
         })
         .insert_resource(authoritative)
         .insert_resource(SimulationPlayback {
-            paused: show_lobby || options.profile_quicksave.is_some(),
+            paused: show_lobby || options.is_profiling(),
         })
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
@@ -460,6 +464,12 @@ fn main() {
         app.insert_resource(lobby_state).add_plugins(LobbyPlugin);
     }
 
+    if options.stress_units.is_some() || options.is_profiling() {
+        app.insert_resource(presentation::BenchmarkCamera {
+            lock_input: options.is_profiling(),
+        });
+    }
+
     if options.perf_log {
         app.insert_resource(PerfTelemetry(Timer::from_seconds(
             1.0,
@@ -467,13 +477,26 @@ fn main() {
         )))
         .add_systems(Update, print_perf_telemetry);
     }
-    if let Some(path) = options.profile_quicksave {
+    if options.is_profiling() {
+        app.insert_resource(options.render_experiment)
+            .add_plugins(RenderAuditPlugin);
+        let source = options.profile_quicksave.as_ref().map_or_else(
+            || {
+                format!(
+                    "stress-units={}",
+                    options.stress_units.expect("profiling needs a scene")
+                )
+            },
+            |path| path.display().to_string(),
+        );
         app.insert_resource(AutomatedProfileRun {
-            path,
+            source,
             warmup: options.profile_warmup,
             duration: options.profile_duration,
             warmup_started: None,
             capture_started: None,
+            paused: options.profile_paused,
+            experiment: options.render_experiment,
         })
         .add_systems(
             Update,
@@ -486,11 +509,13 @@ fn main() {
 
 #[derive(Resource)]
 struct AutomatedProfileRun {
-    path: PathBuf,
+    source: String,
     warmup: Duration,
     duration: Duration,
     warmup_started: Option<Instant>,
     capture_started: Option<Instant>,
+    paused: bool,
+    experiment: RenderExperiment,
 }
 
 fn finish_automated_profile(
@@ -500,6 +525,7 @@ fn finish_automated_profile(
     trace_display: Res<SystemTraceDisplay>,
     mut playback: ResMut<SimulationPlayback>,
     mut exit: MessageWriter<AppExit>,
+    audit: (Res<RenderAudit>, Res<DiagnosticsStore>, SceneCensus),
 ) {
     let now = Instant::now();
     let warmup_started = *run.warmup_started.get_or_insert(now);
@@ -507,8 +533,9 @@ fn finish_automated_profile(
         if now.duration_since(warmup_started) < run.warmup {
             return;
         }
-        playback.paused = false;
+        playback.paused = run.paused;
         counters.start_capture();
+        audit.0.start_capture();
         run.capture_started = Some(now);
         return;
     }
@@ -523,7 +550,7 @@ fn finish_automated_profile(
         .expect("automated profiling run must own an active performance capture");
     println!(
         "client-profile source={} final_tick={} builders={} units={} buildings={} corpses={} projectiles={}",
-        run.path.display(),
+        run.source,
         presentation.current.tick,
         presentation.current.builders.len(),
         presentation.current.units.len(),
@@ -531,7 +558,14 @@ fn finish_automated_profile(
         presentation.current.corpses.len(),
         presentation.current.projectiles.len(),
     );
+    println!(
+        "client-profile paused={} experiment={:?}",
+        run.paused, run.experiment
+    );
     print!("{}", report.format());
+    print!("{}", audit.0.format());
+    print!("{}", audit.2.format());
+    print!("{}", format_render_passes(&audit.1));
     print!("{}", trace_display.format());
     exit.write(AppExit::Success);
 }
@@ -574,6 +608,9 @@ struct ClientOptions {
     profile_quicksave: Option<PathBuf>,
     profile_warmup: Duration,
     profile_duration: Duration,
+    profile_paused: bool,
+    profile: bool,
+    render_experiment: RenderExperiment,
     map_version: MapVersion,
     release_revision: String,
     match_seed: u64,
@@ -583,6 +620,10 @@ struct ClientOptions {
 }
 
 impl ClientOptions {
+    fn is_profiling(&self) -> bool {
+        self.profile || self.profile_quicksave.is_some()
+    }
+
     fn parse() -> Self {
         let mut options = Self {
             stress_units: None,
@@ -591,6 +632,9 @@ impl ClientOptions {
             profile_quicksave: None,
             profile_warmup: Duration::from_secs(5),
             profile_duration: Duration::from_secs(10),
+            profile_paused: false,
+            profile: false,
+            render_experiment: RenderExperiment::Baseline,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: DEVELOPMENT_MATCH_SEED,
@@ -613,6 +657,13 @@ impl ClientOptions {
                 }
                 "--no-health-bars" => options.health_bars = false,
                 "--perf-log" => options.perf_log = true,
+                "--profile-paused" => options.profile_paused = true,
+                "--profile" => options.profile = true,
+                "--render-experiment" => {
+                    let value = args.next().expect("--render-experiment requires a name");
+                    options.render_experiment =
+                        RenderExperiment::parse(&value).unwrap_or_else(|error| panic!("{error}"));
+                }
                 "--profile-quicksave" => options.profile_quicksave = Some(quicksave_path()),
                 "--profile-quicksave-path" => {
                     options.profile_quicksave = Some(PathBuf::from(
@@ -676,13 +727,25 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent]"
                     );
                     std::process::exit(0);
                 }
                 unknown => panic!("unknown client option: {unknown}"),
             }
         }
+        assert!(
+            !options.profile
+                || options.stress_units.is_some()
+                || options.profile_quicksave.is_some(),
+            "--profile requires --stress-units or --profile-quicksave",
+        );
+        assert!(
+            options.is_profiling()
+                || (!options.profile_paused
+                    && options.render_experiment == RenderExperiment::Baseline),
+            "render experiments and --profile-paused require --profile or --profile-quicksave",
+        );
         options
     }
 }

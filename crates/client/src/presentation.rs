@@ -635,6 +635,11 @@ impl Default for DebugPresentation {
 #[derive(Resource, Default)]
 pub(crate) struct CameraFocusRequest(pub(crate) Option<SimId>);
 
+#[derive(Resource)]
+pub(crate) struct BenchmarkCamera {
+    pub(crate) lock_input: bool,
+}
+
 #[derive(Component)]
 struct RtsCamera {
     focus: Vec3,
@@ -1010,7 +1015,13 @@ fn initial_camera_focus(
     samples: &PresentationSamples,
     metrics: &WorldMetrics,
     terrain: &TerrainSurface,
+    map_center: bool,
 ) -> Vec3 {
+    if map_center {
+        let mut center = metrics.clamp_focus(metrics.world_center());
+        center.y = terrain.height_at_world(center.xz());
+        return center;
+    }
     let focus = samples
         .current
         .builders
@@ -1027,6 +1038,15 @@ fn initial_camera_focus(
     metrics.clamp_focus(focus)
 }
 
+#[derive(SystemParam)]
+struct SceneWorldResources<'w> {
+    metrics: Res<'w, WorldMetrics>,
+    terrain: Res<'w, TerrainSurface>,
+    terrain_texture_layout: Res<'w, TerrainTextureLayout>,
+    terrain_textures: Res<'w, TerrainTextureSet>,
+    benchmark_camera: Option<Res<'w, BenchmarkCamera>>,
+}
+
 fn setup_scene(
     mut commands: Commands,
     model_sets: (
@@ -1037,17 +1057,18 @@ fn setup_scene(
     ),
     selected_match: Res<SelectedMatch>,
     samples: Res<PresentationSamples>,
-    world: (
-        Res<WorldMetrics>,
-        Res<TerrainSurface>,
-        Res<TerrainTextureLayout>,
-        Res<TerrainTextureSet>,
-    ),
+    world: SceneWorldResources<'_>,
     assets: SceneAssetResources<'_>,
     mut gizmo_configs: ResMut<GizmoConfigStore>,
 ) {
     let (mut unit_models, mut building_models, mut wc3_visuals, mut converted_models) = model_sets;
-    let (metrics, terrain, terrain_texture_layout, terrain_textures) = world;
+    let SceneWorldResources {
+        metrics,
+        terrain,
+        terrain_texture_layout,
+        terrain_textures,
+        benchmark_camera,
+    } = world;
     let SceneAssetResources {
         asset_server,
         mut meshes,
@@ -1255,8 +1276,13 @@ fn setup_scene(
         lightning_material,
     });
 
-    let initial_camera_focus =
-        initial_camera_focus(selected_match.local_player, &samples, &metrics, &terrain);
+    let initial_camera_focus = initial_camera_focus(
+        selected_match.local_player,
+        &samples,
+        &metrics,
+        &terrain,
+        benchmark_camera.is_some(),
+    );
     let ground_mesh = meshes.add(terrain.mesh());
     let ground_material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.16, 0.20, 0.13),
@@ -5046,6 +5072,7 @@ fn toggle_debug_controls(
 
 #[derive(SystemParam)]
 struct CameraControlResources<'w> {
+    benchmark: Option<Res<'w, BenchmarkCamera>>,
     time: Res<'w, Time>,
     fixed_time: Res<'w, Time<Fixed>>,
     playback: Res<'w, SimulationPlayback>,
@@ -5065,6 +5092,14 @@ fn update_camera(
     mut camera: Single<(&Camera, &mut RtsCamera, &mut Transform), With<Camera3d>>,
     mut resources: CameraControlResources<'_>,
 ) {
+    if resources
+        .benchmark
+        .as_ref()
+        .is_some_and(|camera| camera.lock_input)
+    {
+        mouse_wheel.clear();
+        return;
+    }
     let (camera_component, rig, transform) = &mut *camera;
 
     if let Some(target) = resources.camera_focus.0.take() {
@@ -5995,7 +6030,7 @@ mod tests {
                 .find(|builder| builder.owner == player)
                 .expect("development player has a builder");
             assert_eq!(
-                initial_camera_focus(player, &samples, &demo.metrics, &terrain),
+                initial_camera_focus(player, &samples, &demo.metrics, &terrain, false),
                 sim_point_to_terrain_world(builder.position, &terrain)
             );
             assert_eq!(
@@ -6007,6 +6042,25 @@ mod tests {
             tracked_camera_focus(SimId(u64::MAX), &samples, &demo.metrics, &terrain, 1.0),
             None
         );
+    }
+
+    #[test]
+    fn benchmark_camera_focus_uses_terrain_height_at_map_center() {
+        let demo = crate::demo::create_demo_world(1, Some(500));
+        let samples = PresentationSamples::new(PresentationSnapshot::capture(&demo.simulation));
+        let terrain = TerrainSurface::new(demo.terrain);
+        let center = demo.metrics.world_center();
+        let expected = Vec3::new(center.x, terrain.height_at_world(center.xz()), center.z);
+        for player in [PlayerId(0), PlayerId(6)] {
+            assert_eq!(
+                initial_camera_focus(player, &samples, &demo.metrics, &terrain, true),
+                expected
+            );
+            assert_ne!(
+                initial_camera_focus(player, &samples, &demo.metrics, &terrain, false),
+                expected
+            );
+        }
     }
 
     #[test]

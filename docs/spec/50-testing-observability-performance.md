@@ -279,6 +279,48 @@ The selected map version, release revision, seed, and team size MUST describe th
 that created the quicksave; incompatible snapshots fail before the timed run. The mode is offline
 and cannot be combined with `--server` or `--stress-units`.
 
+The same bounded capture is available for the generated presentation fixture with
+`--stress-units N --profile`. Ordinary `--stress-units N` still runs until the window is closed.
+Both modes use a real window with the saved display settings and disable vertical synchronization.
+Stress scenes and automated profiling MUST start with the camera focused on the terrain at the map
+centre, using the normal initial distance and orientation. Automated captures hold that camera fixed
+so pointer edge scrolling, input or portrait tracking cannot change the measured view. Interactive
+stress scenes remain freely movable; ordinary matches still start at the local player's builder.
+The capture report records the camera position/direction and physical window size.
+Rendering investigations can keep the simulation paused for the entire capture with
+`--profile-paused`. Presentation clocks, ambient animation and effects still run, as they do during
+ordinary simulation pause. Stress profiling also pauses during warm-up to preserve the requested
+initial unit population.
+
+The opt-in `--render-experiment` accepts `baseline`, `freeze-bounds`, `hide-skinned`,
+`hide-particles`, and `hide-transparent`. These experiments require a profiling mode and MUST NOT
+affect the authoritative simulation. They deliberately change presentation for cost attribution:
+
+- `freeze-bounds` keeps each mesh's first available bounds and removes its dynamic skin-bounds
+  updates. Those bounds need not contain later poses, so this is not a production culling solution.
+- `hide-skinned` hides skinned mesh entities while retaining animation and skeleton processing.
+- `hide-particles` hides ordinary quad particles while retaining their emission/update/lifetime
+  work; legacy model particles, ribbons and other effects remain.
+- `hide-transparent` hides StandardMaterial blended/additive/multiplicative meshes; opaque,
+  alpha-masked and alpha-to-coverage geometry remain. Custom materials are not included.
+
+Experiments apply throughout warm-up and capture. Their differences are not additive cost budgets:
+removing geometry also changes visibility, batching, GPU work and pipeline overlap. Compare the
+same save, build, view, resolution and capture duration, and repeat baseline runs.
+
+Automated profiling also reports CPU time around render-world extraction/handoff and render
+schedule stages, a scene census, sampled transparent draw-function calls after batching, and recent
+CPU/GPU pass diagnostics. Main-thread handoff includes extraction and any wait for the render thread;
+these overlapping scopes MUST NOT be summed with main or GPU time. Pass diagnostics are recent
+rolling samples, not averages over the entire capture. Mesh/material pairs and skin counts are not
+draw-call counts. A `SYSTEM CPU` report with no samples does not imply zero engine-system cost;
+per-system tracing requires Bevy's tracing feature.
+
+```text
+tools/cargo-interactive run --release -p castle-fight-client -- --stress-units 500 --profile --profile-paused --profile-warmup 10 --profile-duration 10
+tools/cargo-interactive run --release -p castle-fight-client -- --profile-quicksave --profile-paused --render-experiment freeze-bounds --profile-warmup 10 --profile-duration 10
+```
+
 The stdout report includes average FPS, 1% low FPS, average/p95/p99/maximum frame and simulation
 tick times, average main-schedule and presentation phase costs, collision-fallback work, tick range,
 final entity counts, source path, and actual capture duration. The 1% low is the reciprocal of the

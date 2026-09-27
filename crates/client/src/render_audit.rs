@@ -1,0 +1,527 @@
+//! Opt-in, presentation-only experiments. These deliberately trade visual correctness
+//! for attribution and must never be enabled by ordinary gameplay configuration.
+
+use std::{
+    collections::HashSet,
+    fmt::Write as _,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+
+use bevy::{
+    camera::{primitives::Aabb, visibility::DynamicSkinnedMeshBounds},
+    core_pipeline::core_3d::Transparent3d,
+    diagnostic::DiagnosticsStore,
+    ecs::system::SystemParam,
+    mesh::skinning::SkinnedMesh,
+    pbr::SkinUniforms,
+    prelude::*,
+    render::{
+        Render, RenderApp, RenderSystems, batching::NoAutomaticBatching,
+        pipelined_rendering::RenderExtractApp, render_phase::ViewSortedRenderPhases,
+    },
+};
+
+use crate::wc3_effects::Wc3Particle;
+
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum RenderExperiment {
+    #[default]
+    Baseline,
+    FreezeBounds,
+    HideSkinned,
+    HideParticles,
+    HideTransparent,
+}
+
+impl RenderExperiment {
+    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "baseline" => Ok(Self::Baseline),
+            "freeze-bounds" => Ok(Self::FreezeBounds),
+            "hide-skinned" => Ok(Self::HideSkinned),
+            "hide-particles" => Ok(Self::HideParticles),
+            "hide-transparent" => Ok(Self::HideTransparent),
+            _ => Err(format!(
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, or hide-transparent"
+            )),
+        }
+    }
+}
+
+const STAGES: [(&str, Option<RenderSystems>); 14] = [
+    ("handoff incl wait/extract", None),
+    ("world sync/extract", None),
+    ("extract commands", Some(RenderSystems::ExtractCommands)),
+    ("prepare assets", Some(RenderSystems::PrepareAssets)),
+    ("prepare meshes", Some(RenderSystems::PrepareMeshes)),
+    ("create views", Some(RenderSystems::CreateViews)),
+    ("specialize", Some(RenderSystems::Specialize)),
+    ("prepare views", Some(RenderSystems::PrepareViews)),
+    ("queue", Some(RenderSystems::Queue)),
+    ("phase sort", Some(RenderSystems::PhaseSort)),
+    ("prepare resources", Some(RenderSystems::Prepare)),
+    ("render/submit/present", Some(RenderSystems::Render)),
+    ("cleanup", Some(RenderSystems::Cleanup)),
+    ("post cleanup", Some(RenderSystems::PostCleanup)),
+];
+
+#[derive(Clone, Copy, Default)]
+struct StageTiming {
+    calls: u64,
+    total: Duration,
+    max: Duration,
+}
+
+impl StageTiming {
+    fn record(&mut self, duration: Duration) {
+        self.calls += 1;
+        self.total += duration;
+        self.max = self.max.max(duration);
+    }
+}
+
+#[derive(Default)]
+struct Measurements {
+    started: Option<Instant>,
+    stages: [StageTiming; STAGES.len()],
+    transparent: Option<(usize, usize, usize)>,
+}
+
+#[derive(Resource, Clone, Default)]
+pub(crate) struct RenderAudit(Arc<Mutex<Measurements>>);
+
+impl RenderAudit {
+    pub(crate) fn start_capture(&self) {
+        *self.0.lock().expect("render audit mutex poisoned") = Measurements {
+            started: Some(Instant::now()),
+            ..default()
+        };
+    }
+
+    fn record(&self, stage: usize, started: Instant) {
+        let finished = Instant::now();
+        let mut measurements = self.0.lock().expect("render audit mutex poisoned");
+        // Do not import a warm-up frame straddling the capture boundary.
+        if measurements
+            .started
+            .is_some_and(|capture| started >= capture)
+        {
+            measurements.stages[stage].record(finished.duration_since(started));
+        }
+    }
+
+    pub(crate) fn format(&self) -> String {
+        let measurements = self.0.lock().expect("render audit mutex poisoned");
+        let mut output =
+            String::from("\nRENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)\n");
+        for ((name, _), timing) in STAGES.iter().zip(&measurements.stages) {
+            if timing.calls > 0 {
+                writeln!(
+                    output,
+                    "  {name:<25} {:>8.3}ms {:>8.3}ms {}",
+                    timing.total.as_secs_f64() * 1000.0 / timing.calls as f64,
+                    timing.max.as_secs_f64() * 1000.0,
+                    timing.calls
+                )
+                .unwrap();
+            }
+        }
+        if let Some((items, draws, palette_bytes)) = measurements.transparent {
+            writeln!(output, "  transparent phase: {items} items, {draws} draw-function calls (latest sampled frame, all views)").unwrap();
+            writeln!(
+                output,
+                "  skin palette staging: {palette_bytes} bytes uploaded/frame (latest sample)"
+            )
+            .unwrap();
+        }
+        output
+    }
+}
+
+pub(crate) struct RenderAuditPlugin;
+
+impl Plugin for RenderAuditPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<RenderAudit>().add_systems(
+            PostUpdate,
+            apply_render_experiment
+                .before(bevy::camera::visibility::VisibilitySystems::CalculateBounds)
+                .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+        );
+    }
+
+    fn finish(&self, app: &mut App) {
+        let audit = app.world().resource::<RenderAudit>().clone();
+        if let Some(extract_app) = app.get_sub_app_mut(RenderExtractApp)
+            && let Some(mut extract) = extract_app.take_extract()
+        {
+            let audit = audit.clone();
+            extract_app.set_extract(move |main, render| {
+                let started = Instant::now();
+                extract(main, render);
+                audit.record(0, started);
+            });
+        }
+        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+            return;
+        };
+        render_app.insert_resource(audit.clone()).add_systems(
+            Render,
+            sample_transparent_batches
+                .after(RenderSystems::Prepare)
+                .before(RenderSystems::Render),
+        );
+        if let Some(mut extract) = render_app.take_extract() {
+            let audit = audit.clone();
+            render_app.set_extract(move |main, render| {
+                let started = Instant::now();
+                extract(main, render);
+                audit.record(1, started);
+            });
+        }
+        // Bracket the engine's existing ordered sets without serializing systems
+        // inside them. The handoff includes extraction and may wait for rendering,
+        // so the report's scopes must not be added together.
+        for (index, (_, phase)) in STAGES.iter().enumerate() {
+            let Some(phase) = phase else { continue };
+            let started = Arc::new(Mutex::new(None::<Instant>));
+            let start_slot = started.clone();
+            let audit = audit.clone();
+            let mut begin =
+                (move || *start_slot.lock().unwrap() = Some(Instant::now())).before(phase.clone());
+            let mut end = (move || {
+                if let Some(started) = started.lock().unwrap().take() {
+                    audit.record(index, started);
+                }
+            })
+            .after(phase.clone());
+            if let Some(previous) = STAGES[index - 1].1.as_ref() {
+                begin = begin.after(previous.clone());
+            }
+            if let Some((_, Some(next))) = STAGES.get(index + 1) {
+                end = end.before(next.clone());
+            }
+            render_app.add_systems(Render, (begin, end));
+        }
+    }
+}
+
+fn sample_transparent_batches(
+    phases: Res<ViewSortedRenderPhases<Transparent3d>>,
+    skins: Res<SkinUniforms>,
+    audit: Res<RenderAudit>,
+    mut last_sample: Local<Option<Instant>>,
+) {
+    let now = Instant::now();
+    if last_sample.is_some_and(|last| now.duration_since(last) < Duration::from_secs(1)) {
+        return;
+    }
+    *last_sample = Some(now);
+    let mut items = 0;
+    let mut draws = 0;
+    for phase in phases.values() {
+        items += phase.items.len();
+        // Follow SortedRenderPhase::render_range: a batch's representative
+        // advances over the instances it draws; empty ranges don't issue a call.
+        let mut index = 0;
+        while index < phase.items.len() {
+            let count = phase.items[index].batch_range.len();
+            draws += usize::from(count > 0);
+            index += count.max(1);
+        }
+    }
+    audit
+        .0
+        .lock()
+        .expect("render audit mutex poisoned")
+        .transparent = Some((
+        items,
+        draws,
+        skins.current_staging_buffer.len() * size_of::<Mat4>(),
+    ));
+}
+
+type ExperimentMeshes<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static mut Visibility,
+        Option<&'static MeshMaterial3d<StandardMaterial>>,
+        Has<SkinnedMesh>,
+        Has<Wc3Particle>,
+        Has<DynamicSkinnedMeshBounds>,
+        Has<Aabb>,
+    ),
+    With<Mesh3d>,
+>;
+
+fn apply_render_experiment(
+    mut commands: Commands,
+    experiment: Res<RenderExperiment>,
+    materials: Res<Assets<StandardMaterial>>,
+    mut meshes: ExperimentMeshes,
+) {
+    if *experiment == RenderExperiment::Baseline {
+        return;
+    }
+    for (entity, mut visibility, material, skin, particle, dynamic, has_bounds) in &mut meshes {
+        let hide = match *experiment {
+            RenderExperiment::Baseline => false,
+            RenderExperiment::FreezeBounds => {
+                if dynamic && has_bounds {
+                    commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();
+                }
+                false
+            }
+            RenderExperiment::HideSkinned => skin,
+            RenderExperiment::HideParticles => particle,
+            RenderExperiment::HideTransparent => material
+                .and_then(|handle| materials.get(&handle.0))
+                .is_some_and(|material| is_transparent(material.alpha_mode)),
+        };
+        if hide {
+            visibility.set_if_neq(Visibility::Hidden);
+        }
+    }
+}
+
+fn is_transparent(alpha: AlphaMode) -> bool {
+    matches!(
+        alpha,
+        AlphaMode::Blend | AlphaMode::Premultiplied | AlphaMode::Add | AlphaMode::Multiply
+    )
+}
+
+type CensusMeshes<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static Mesh3d,
+        &'static ViewVisibility,
+        Option<&'static MeshMaterial3d<StandardMaterial>>,
+        Option<&'static SkinnedMesh>,
+        Has<DynamicSkinnedMeshBounds>,
+        Has<Wc3Particle>,
+        Has<NoAutomaticBatching>,
+        &'static GlobalTransform,
+    ),
+>;
+
+#[derive(SystemParam)]
+pub(crate) struct SceneCensus<'w, 's> {
+    meshes: CensusMeshes<'w, 's>,
+    materials: Res<'w, Assets<StandardMaterial>>,
+    players: Query<'w, 's, (), With<AnimationPlayer>>,
+    entities: Query<'w, 's, Entity>,
+    windows: Query<'w, 's, &'static Window>,
+    cameras: Query<'w, 's, &'static GlobalTransform, With<Camera3d>>,
+}
+
+impl SceneCensus<'_, '_> {
+    pub(crate) fn format(&self) -> String {
+        let mut total = 0;
+        let mut visible = 0;
+        let mut skins = 0;
+        let mut dynamic = 0;
+        let mut particles = 0;
+        let mut transparent = 0;
+        let mut no_batch = 0;
+        let mut joint_references = 0;
+        let mut collapsed_visible = 0;
+        let mut joints = HashSet::new();
+        let mut mesh_assets = HashSet::new();
+        let mut material_assets = HashSet::new();
+        let mut visible_pairs = HashSet::new();
+        for (mesh, visibility, material, skin, bounds, particle, unbatched, transform) in
+            &self.meshes
+        {
+            total += 1;
+            visible += usize::from(visibility.get());
+            dynamic += usize::from(bounds);
+            particles += usize::from(particle);
+            no_batch += usize::from(unbatched);
+            mesh_assets.insert(mesh.id());
+            collapsed_visible +=
+                usize::from(visibility.get() && transform.affine().matrix3.determinant() == 0.0);
+            if let Some(material) = material {
+                material_assets.insert(material.id());
+                if visibility.get() {
+                    visible_pairs.insert((mesh.id(), material.id()));
+                    transparent += usize::from(
+                        self.materials
+                            .get(material.id())
+                            .is_some_and(|material| is_transparent(material.alpha_mode)),
+                    );
+                }
+            }
+            if let Some(skin) = skin {
+                skins += 1;
+                joint_references += skin.joints.len();
+                joints.extend(skin.joints.iter().copied());
+            }
+        }
+        let mut output = format!(
+            "\nSCENE  entities={} meshes={} visible={} skinned={} dynamic_bounds={} particles={} transparent_visible={} no_auto_batch={}\n  mesh_assets={} material_assets={} visible_mesh_material_pairs={} animation_players={} joint_references={} unique_joints={}\n",
+            self.entities.iter().count(),
+            total,
+            visible,
+            skins,
+            dynamic,
+            particles,
+            transparent,
+            no_batch,
+            mesh_assets.len(),
+            material_assets.len(),
+            visible_pairs.len(),
+            self.players.iter().count(),
+            joint_references,
+            joints.len()
+        );
+        for window in &self.windows {
+            writeln!(
+                output,
+                "  window={}x{} present={:?} visible={}",
+                window.physical_width(),
+                window.physical_height(),
+                window.present_mode,
+                window.visible
+            )
+            .unwrap();
+        }
+        for camera in &self.cameras {
+            writeln!(
+                output,
+                "  camera_position={:?} camera_forward={:?}",
+                camera.translation(),
+                camera.forward()
+            )
+            .unwrap();
+        }
+        writeln!(output, "  collapsed_visible={collapsed_visible} (zero determinant; candidates for geoset visibility)").unwrap();
+        output
+    }
+}
+
+pub(crate) fn format_render_passes(diagnostics: &DiagnosticsStore) -> String {
+    let mut rows = diagnostics
+        .iter()
+        .filter_map(|diagnostic| {
+            let path = diagnostic.path().as_str();
+            (path.starts_with("render/")
+                && (path.ends_with("/elapsed_cpu") || path.ends_with("/elapsed_gpu")))
+            .then(|| diagnostic.average().map(|ms| (path, ms)))
+            .flatten()
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|(name, _)| *name);
+    let mut output =
+        String::from("\nRENDER PASSES  recent diagnostic average (not whole capture)\n");
+    for (name, ms) in rows {
+        writeln!(output, "  {name} {ms:.3}ms").unwrap();
+    }
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_experiments_reject_misspelled_names() {
+        assert_eq!(
+            RenderExperiment::parse("freeze-bounds"),
+            Ok(RenderExperiment::FreezeBounds)
+        );
+        assert!(RenderExperiment::parse("hide-everything").is_err());
+    }
+
+    #[test]
+    fn masking_is_not_classified_as_blended_transparency() {
+        assert!(!is_transparent(AlphaMode::Opaque));
+        assert!(!is_transparent(AlphaMode::Mask(0.5)));
+        assert!(!is_transparent(AlphaMode::AlphaToCoverage));
+        assert!(is_transparent(AlphaMode::Blend));
+        assert!(is_transparent(AlphaMode::Add));
+    }
+
+    #[test]
+    fn capture_drops_warmup_and_resets_totals() {
+        let audit = RenderAudit::default();
+        let warmup = Instant::now();
+        audit.start_capture();
+        audit.record(1, warmup);
+        assert_eq!(audit.0.lock().unwrap().stages[1].calls, 0);
+        audit.record(1, Instant::now());
+        assert_eq!(audit.0.lock().unwrap().stages[1].calls, 1);
+        audit.start_capture();
+        assert_eq!(audit.0.lock().unwrap().stages[1].calls, 0);
+    }
+
+    #[test]
+    fn hiding_skin_preserves_static_geometry_and_baseline_visibility() {
+        let mut app = App::new();
+        app.init_resource::<Assets<StandardMaterial>>()
+            .insert_resource(RenderExperiment::Baseline)
+            .add_systems(Update, apply_render_experiment);
+        let skin = app
+            .world_mut()
+            .spawn((
+                Mesh3d::default(),
+                Visibility::Inherited,
+                SkinnedMesh {
+                    inverse_bindposes: Handle::default(),
+                    joints: Vec::new(),
+                },
+            ))
+            .id();
+        let terrain = app
+            .world_mut()
+            .spawn((Mesh3d::default(), Visibility::Inherited))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Visibility>(skin),
+            Some(&Visibility::Inherited)
+        );
+        app.insert_resource(RenderExperiment::HideSkinned);
+        app.update();
+        assert_eq!(
+            app.world().get::<Visibility>(skin),
+            Some(&Visibility::Hidden)
+        );
+        assert_eq!(
+            app.world().get::<Visibility>(terrain),
+            Some(&Visibility::Inherited)
+        );
+        assert!(app.world().get::<SkinnedMesh>(skin).is_some());
+    }
+
+    #[test]
+    fn bounds_experiment_waits_for_bounds_and_keeps_culling_enabled() {
+        let mut app = App::new();
+        app.init_resource::<Assets<StandardMaterial>>()
+            .insert_resource(RenderExperiment::FreezeBounds)
+            .add_systems(Update, apply_render_experiment);
+        let mesh = app
+            .world_mut()
+            .spawn((
+                Mesh3d::default(),
+                Visibility::Inherited,
+                DynamicSkinnedMeshBounds,
+            ))
+            .id();
+        app.update();
+        assert!(app.world().get::<DynamicSkinnedMeshBounds>(mesh).is_some());
+        app.world_mut().entity_mut(mesh).insert(Aabb::default());
+        app.update();
+        assert!(app.world().get::<DynamicSkinnedMeshBounds>(mesh).is_none());
+        assert!(app.world().get::<Aabb>(mesh).is_some());
+        assert!(
+            app.world()
+                .get::<bevy::camera::visibility::NoFrustumCulling>(mesh)
+                .is_none()
+        );
+    }
+}
