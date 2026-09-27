@@ -5203,10 +5203,14 @@ fn layer_static_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u
             .textures(texture_id as usize)
             .is_some_and(|texture| texture.replaceable_id() == replaceable_id)
     };
-    texture_matches(layer.texture_id())
-        || layer
-            .sub_textures_iter()
+    let sub_textures = layer.sub_textures_iter().collect::<Vec<_>>();
+    if sub_textures.is_empty() {
+        texture_matches(layer.texture_id())
+    } else {
+        sub_textures
+            .iter()
             .any(|sub_texture| texture_matches(sub_texture.texture_id()))
+    }
 }
 
 #[cfg(test)]
@@ -6810,6 +6814,29 @@ mod tests {
         assert!(layer_uses_replaceable(&model, &layer, 1));
         assert!(!layer_static_uses_replaceable(&model, &layer, 2));
         assert!(!layer_uses_replaceable(&model, &layer, 2));
+    }
+
+    #[test]
+    fn modern_subtextures_ignore_stale_legacy_team_color_texture_id() {
+        let mut model = Model::new();
+        model.resize_textures(2);
+        model
+            .textures_mut(0)
+            .expect("legacy team color texture")
+            .set_replaceable_id(1);
+
+        let mut layer = Layer::new();
+        layer.set_texture_id(0);
+        layer.resize_sub_textures(1);
+        {
+            let mut diffuse = layer.sub_textures_mut(0).expect("diffuse slot");
+            diffuse.set_slot(LayerSlotType::DiffuseMap);
+            diffuse.set_texture_id(1);
+        }
+
+        assert_eq!(layer_diffuse_texture_id(&layer), 1);
+        assert!(!layer_static_uses_replaceable(&model, &layer, 1));
+        assert!(!layer_uses_replaceable(&model, &layer, 1));
     }
 
     #[test]
