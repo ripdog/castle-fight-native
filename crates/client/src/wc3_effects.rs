@@ -13,7 +13,7 @@ use bevy::{
     ecs::system::SystemParam,
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
     mesh::{Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology, skinning::SkinnedMesh},
-    pbr::{Material, MaterialPipeline, MaterialPipelineKey},
+    pbr::{ExtendedMaterial, Material, MaterialExtension, MaterialPipeline, MaterialPipelineKey},
     prelude::*,
     reflect::TypePath,
     render::{
@@ -26,11 +26,15 @@ use bevy::{
 };
 use serde::Deserialize;
 
-use crate::terrain::{TerrainSurface, client_asset_root};
+use crate::{
+    render_audit::RenderExperiment,
+    terrain::{TerrainSurface, client_asset_root},
+};
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
 const WC3_PARTICLE_SHADER_PATH: &str = "shaders/wc3_particle.wgsl";
+const WC3_TEAM_COLOR_SHADER_PATH: &str = "shaders/wc3_team_color.wgsl";
 const ADDITIVE_PARTICLE_BATCH_MIN_SLOTS: usize = 64;
 const CONVERTED_MODEL_PACKS: [(&str, &str); 4] = [
     ("wc3/units/manifest.json", "wc3/units"),
@@ -2489,6 +2493,8 @@ struct Wc3MaterialExtras {
     filter_mode: Option<String>,
     #[serde(rename = "wc3LayerAlpha", default = "default_material_alpha")]
     layer_alpha: f32,
+    #[serde(rename = "wc3LayerCount", default = "default_material_layer_count")]
+    layer_count: u32,
     #[serde(rename = "wc3AlphaTrack", default)]
     alpha_track: Option<Wc3ScalarTrack>,
     #[serde(rename = "wc3TextureId", default)]
@@ -2518,6 +2524,10 @@ struct Wc3MaterialTexturePath {
 
 const fn default_material_alpha() -> f32 {
     1.0
+}
+
+const fn default_material_layer_count() -> u32 {
+    1
 }
 
 impl Wc3ParticleAssets {
@@ -2925,7 +2935,31 @@ pub fn setup_wc3_visual_animation_players(
     }
 }
 
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub(crate) struct Wc3TeamColorExtension {
+    #[uniform(100)]
+    team_color: LinearRgba,
+}
+
+impl MaterialExtension for Wc3TeamColorExtension {
+    fn fragment_shader() -> ShaderRef {
+        WC3_TEAM_COLOR_SHADER_PATH.into()
+    }
+
+    fn deferred_fragment_shader() -> ShaderRef {
+        WC3_TEAM_COLOR_SHADER_PATH.into()
+    }
+
+    fn alpha_mode() -> Option<AlphaMode> {
+        Some(AlphaMode::Opaque)
+    }
+}
+
+pub(crate) type Wc3TeamColorMaterial = ExtendedMaterial<StandardMaterial, Wc3TeamColorExtension>;
+
 type TeamMaterialCache = HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>;
+type TeamCompositeMaterialCache =
+    HashMap<(AssetId<StandardMaterial>, u8), Handle<Wc3TeamColorMaterial>>;
 type TeamImageCache = HashMap<(AssetId<Image>, u8), Handle<Image>>;
 
 type Wc3MaterialWorld<'w, 's> = (
@@ -2937,9 +2971,11 @@ type Wc3MaterialWorld<'w, 's> = (
 
 type Wc3MaterialAssets<'w, 's> = (
     ResMut<'w, Assets<StandardMaterial>>,
+    ResMut<'w, Assets<Wc3TeamColorMaterial>>,
     ResMut<'w, Assets<Image>>,
     Local<'s, TeamMaterialCache>,
     Local<'s, TeamMaterialCache>,
+    Local<'s, TeamCompositeMaterialCache>,
     Local<'s, TeamImageCache>,
     Local<'s, HashMap<(AssetId<StandardMaterial>, [u8; 3]), Handle<StandardMaterial>>>,
 );
@@ -2961,17 +2997,22 @@ pub fn fix_wc3_scene_materials(
     mut commands: Commands,
     world: Wc3MaterialWorld<'_, '_>,
     material_assets: Wc3MaterialAssets<'_, '_>,
+    experiment: Option<Res<RenderExperiment>>,
     mut meshes: Wc3MaterialMeshQuery<'_, '_>,
 ) {
     let (asset_server, parents, team_roots, tint_roots) = world;
     let (
         mut materials,
+        mut team_composite_materials,
         mut images,
         mut team_materials,
         mut team_glow_materials,
+        mut team_composite_cache,
         mut team_images,
         mut tinted_materials,
     ) = material_assets;
+    let legacy_team_color =
+        experiment.is_some_and(|experiment| *experiment == RenderExperiment::LegacyTeamColor);
     'mesh: for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
             commands.entity(entity).insert(Wc3MaterialProcessed);
@@ -3037,7 +3078,26 @@ pub fn fix_wc3_scene_materials(
             && let Some(team) = team
         {
             let key = (source_material_id, team.index);
-            if building_team_color {
+            if !legacy_team_color
+                && can_composite_unit_team_color(&extras, team, tint, &material_template)
+            {
+                let composite_handle = if let Some(handle) = team_composite_cache.get(&key) {
+                    handle.clone()
+                } else {
+                    let handle = team_composite_materials.add(team_color_composite_material(
+                        material_template.clone(),
+                        team.color,
+                        extras.priority_plane,
+                    ));
+                    team_composite_cache.insert(key, handle.clone());
+                    handle
+                };
+                commands
+                    .entity(entity)
+                    .remove::<MeshMaterial3d<StandardMaterial>>()
+                    .insert((MeshMaterial3d(composite_handle), Wc3MaterialProcessed));
+                continue;
+            } else if building_team_color {
                 let flattened_handle = if let Some(handle) = team_materials.get(&key) {
                     handle.clone()
                 } else {
@@ -3486,6 +3546,40 @@ fn wc3_material_depth_bias(
         } else {
             0.0
         }
+}
+
+fn can_composite_unit_team_color(
+    extras: &Wc3MaterialExtras,
+    team: Wc3TeamTint,
+    tint: Option<[u8; 3]>,
+    material: &StandardMaterial,
+) -> bool {
+    team.asset_prefix == "wc3/units"
+        && extras.layer_count == 2
+        && extras
+            .filter_mode
+            .as_deref()
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("Blend"))
+        && extras.alpha_track.is_none()
+        && extras.texture_id_track.is_none()
+        && !extras.team_glow_layer
+        && tint.is_none()
+        && material.emissive == LinearRgba::BLACK
+}
+
+fn team_color_composite_material(
+    mut material: StandardMaterial,
+    color: Color,
+    priority_plane: i32,
+) -> Wc3TeamColorMaterial {
+    material.alpha_mode = AlphaMode::Opaque;
+    material.depth_bias = priority_plane as f32;
+    Wc3TeamColorMaterial {
+        base: material,
+        extension: Wc3TeamColorExtension {
+            team_color: color.to_linear(),
+        },
+    }
 }
 
 fn team_color_underlay_material(
@@ -5094,6 +5188,63 @@ mod tests {
             .expect("flattened image keeps CPU pixel data");
         assert_eq!(&data[0..4], &[0, 255, 0, 255]);
         assert_eq!(&data[4..8], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn static_two_layer_unit_team_color_uses_single_pass_composite() {
+        let extras: Wc3MaterialExtras = serde_json::from_str(
+            r#"{
+                "wc3FilterMode":"Blend",
+                "wc3LayerAlpha":1.0,
+                "wc3LayerCount":2,
+                "wc3PriorityPlane":3,
+                "wc3TeamColorUnderlay":true
+            }"#,
+        )
+        .expect("valid material extras");
+        let team = Wc3TeamTint::new(0, Color::srgb(1.0, 0.0, 0.0), "wc3/units");
+        let source = StandardMaterial::default();
+        assert!(can_composite_unit_team_color(&extras, team, None, &source));
+
+        let composite = team_color_composite_material(source, team.color, extras.priority_plane);
+        assert_eq!(composite.base.alpha_mode, AlphaMode::Opaque);
+        assert_eq!(composite.base.depth_bias, 3.0);
+        assert_eq!(composite.extension.team_color, team.color.to_linear());
+    }
+
+    #[test]
+    fn animated_or_nonstandard_unit_team_color_keeps_two_pass_reference_path() {
+        let animated: Wc3MaterialExtras = serde_json::from_str(
+            r#"{
+                "wc3FilterMode":"Blend",
+                "wc3LayerCount":2,
+                "wc3TeamColorUnderlay":true,
+                "wc3AlphaTrack":{"global_sequence_id":null,"interpolation":"linear","timestamps":[0],"values":[1.0]}
+            }"#,
+        )
+        .expect("valid animated material extras");
+        let team = Wc3TeamTint::new(0, Color::WHITE, "wc3/units");
+        assert!(!can_composite_unit_team_color(
+            &animated,
+            team,
+            None,
+            &StandardMaterial::default(),
+        ));
+
+        let additive: Wc3MaterialExtras = serde_json::from_str(
+            r#"{
+                "wc3FilterMode":"Additive",
+                "wc3LayerCount":2,
+                "wc3TeamColorUnderlay":true
+            }"#,
+        )
+        .expect("valid additive material extras");
+        assert!(!can_composite_unit_team_color(
+            &additive,
+            team,
+            None,
+            &StandardMaterial::default(),
+        ));
     }
 
     #[test]

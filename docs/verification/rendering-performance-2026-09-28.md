@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus one measured renderer change: ordinary additive particles now share buffered render state. The remaining renderer designs are still proposed work.
+Status: investigation and opt-in measurement tools, plus two measured renderer changes: ordinary additive particles share buffered render state, and the common static unit team-colour layer is composited in one pass. The remaining renderer designs are still proposed work.
 
 ## Scope and reproducibility
 
@@ -41,6 +41,7 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment hide-skinned
 # --render-experiment hide-particles
 # --render-experiment hide-transparent
+# --render-experiment legacy-team-color
 ```
 
 The ordinary quicksave could not be used: snapshot decoding reported a missing
@@ -146,6 +147,47 @@ and transparent GPU time.
 
 The profiler's `hide-transparent` experiment and scene census now recognize the custom additive
 particle material as transparent, so future attribution runs continue to measure the intended set.
+
+## Implementation result 2 — single-pass static unit team colour
+
+The second production change takes the first material-layer slice of the shared-model-state proposal.
+The common classic unit team-colour representation previously rendered the same skinned geoset twice:
+an opaque team-colour underlay plus a textured `Blend` overlay. The new path uses an extended PBR
+material and composites those two authored layers in the fragment shader, so the geometry and skin
+are submitted only once. The shader keeps the existing texture, PBR lighting, priority plane and
+owner colour while making the final composite opaque, matching the fact that the old underlay made
+the combined result opaque.
+
+The path is intentionally narrow. An audit of the current unit asset pack finds **161** materials
+matching the exact static two-layer `Blend` case. Materials with alpha animation, texture animation,
+team glow, additive/nonstandard blend modes, vertex tint, different layer counts, or non-unit asset
+packs retain the old two-pass implementation. Building team colour also retains its existing
+pre-flattened texture path. A profiling-only `legacy-team-color` experiment forces the old unit path
+so the same release binary can make a controlled A/B comparison.
+
+Three production-path captures bracket one legacy-path capture on the same 500-unit, paused,
+map-centred, 3840×2160 `AutoNoVsync` fixture:
+
+| Run | FPS | Frame ms | p95 ms | Extract ms | Render/submit/present ms | Transparent draws | Transparent GPU ms | Skinned meshes | Skin upload bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single-pass 1 | 61.10 | 16.365 | 18.733 | 2.054 | 7.640 | 1,167 | 1.752 | 4,683 | 12,432,064 |
+| Single-pass 2 | 60.05 | 16.652 | 19.222 | 2.109 | 7.647 | 1,171 | 1.758 | 4,683 | 12,432,064 |
+| Legacy two-pass | 52.03 | 19.218 | 21.660 | 2.412 | 9.743 | 1,598 | 2.668 | 5,115 | 13,578,880 |
+| Single-pass 3 | 58.02 | 17.236 | 19.982 | 2.172 | 7.943 | 1,222 | 1.755 | 4,683 | 12,432,064 |
+
+Averaging the three production-path runs gives 16.751 ms/frame, **12.8% lower** than the legacy
+path, and 59.72 FPS, **14.8% higher**. The structural reductions are deterministic across the runs:
+**432 fewer skinned meshes/dynamic bounds**, **17,041 fewer joint references**, and **1,146,816 fewer
+skin-palette staging bytes per frame** (about 8.4%). Against the three-run production average,
+world extraction falls about **12.5%**, sampled transparent draw calls about **25.7%**,
+transparent-pass CPU about **22.3%**, transparent-pass GPU about **34.2%**, and the overlapping
+`render/submit/present` scope about **20.5%**. Opaque-pass GPU time remains essentially unchanged at
+about 3.06 ms.
+
+The third production capture is noisier than the first two but remains clearly separated from the
+legacy run. Particle populations also vary with presentation-clock phase as noted above; the skin,
+joint and palette reductions do not vary and directly reflect removal of the duplicate team-colour
+skin layer.
 
 ## Architectural findings from source
 
@@ -279,10 +321,10 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 
 ## Validation
 
-The client test suite passes (194 tests); Clippy passes for all client targets with warnings denied;
+The client test suite passes (196 tests); Clippy passes for all client targets with warnings denied;
 formatting passes; the release client builds, the original seven bounded investigation profiles
-complete, and the buffered-additive implementation completed two repeat captures after a fresh
-baseline. The profiling plugin and experiments are only registered in automated profiling mode.
-Normal gameplay rendering is changed only for textured additive ordinary particles in this first
-step; alpha/multiply/mask particles, ribbons and legacy model particles retain the reference path.
-Interactive stress startup centres the camera, while automated profiles centre and lock it.
+complete, and both production renderer changes have repeat measurements. The profiling plugin and
+experiments are only registered in automated profiling mode. Normal gameplay rendering is changed
+for textured additive ordinary particles and the narrowly gated static two-layer unit team-colour
+case; all excluded particle/material cases retain their reference paths. Interactive stress startup
+centres the camera, while automated profiles centre and lock it.

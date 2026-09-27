@@ -22,7 +22,7 @@ use bevy::{
     },
 };
 
-use crate::wc3_effects::{Wc3Particle, Wc3ParticleMaterial};
+use crate::wc3_effects::{Wc3Particle, Wc3ParticleMaterial, Wc3TeamColorMaterial};
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum RenderExperiment {
@@ -32,6 +32,7 @@ pub(crate) enum RenderExperiment {
     HideSkinned,
     HideParticles,
     HideTransparent,
+    LegacyTeamColor,
 }
 
 impl RenderExperiment {
@@ -42,8 +43,9 @@ impl RenderExperiment {
             "hide-skinned" => Ok(Self::HideSkinned),
             "hide-particles" => Ok(Self::HideParticles),
             "hide-transparent" => Ok(Self::HideTransparent),
+            "legacy-team-color" => Ok(Self::LegacyTeamColor),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, or hide-transparent"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, or legacy-team-color"
             )),
         }
     }
@@ -264,7 +266,10 @@ fn apply_render_experiment(
     materials: Res<Assets<StandardMaterial>>,
     mut meshes: ExperimentMeshes,
 ) {
-    if *experiment == RenderExperiment::Baseline {
+    if matches!(
+        *experiment,
+        RenderExperiment::Baseline | RenderExperiment::LegacyTeamColor
+    ) {
         return;
     }
     for (
@@ -279,7 +284,7 @@ fn apply_render_experiment(
     ) in &mut meshes
     {
         let hide = match *experiment {
-            RenderExperiment::Baseline => false,
+            RenderExperiment::Baseline | RenderExperiment::LegacyTeamColor => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();
@@ -316,6 +321,7 @@ type CensusMeshes<'w, 's> = Query<
         &'static ViewVisibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
         Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3TeamColorMaterial>>,
         Option<&'static SkinnedMesh>,
         Has<DynamicSkinnedMeshBounds>,
         Has<Wc3Particle>,
@@ -349,11 +355,14 @@ impl SceneCensus<'_, '_> {
         let mut mesh_assets = HashSet::new();
         let mut material_assets = HashSet::new();
         let mut visible_pairs = HashSet::new();
+        let mut team_material_assets = HashSet::new();
+        let mut team_visible_pairs = HashSet::new();
         for (
             mesh,
             visibility,
             material,
             particle_material,
+            team_material,
             skin,
             bounds,
             particle,
@@ -382,6 +391,12 @@ impl SceneCensus<'_, '_> {
             } else if visibility.get() && particle_material.is_some() {
                 transparent += 1;
             }
+            if let Some(material) = team_material {
+                team_material_assets.insert(material.id());
+                if visibility.get() {
+                    team_visible_pairs.insert((mesh.id(), material.id()));
+                }
+            }
             if let Some(skin) = skin {
                 skins += 1;
                 joint_references += skin.joints.len();
@@ -399,8 +414,8 @@ impl SceneCensus<'_, '_> {
             transparent,
             no_batch,
             mesh_assets.len(),
-            material_assets.len(),
-            visible_pairs.len(),
+            material_assets.len() + team_material_assets.len(),
+            visible_pairs.len() + team_visible_pairs.len(),
             self.players.iter().count(),
             joint_references,
             joints.len()
@@ -459,6 +474,10 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("freeze-bounds"),
             Ok(RenderExperiment::FreezeBounds)
+        );
+        assert_eq!(
+            RenderExperiment::parse("legacy-team-color"),
+            Ok(RenderExperiment::LegacyTeamColor)
         );
         assert!(RenderExperiment::parse("hide-everything").is_err());
     }
