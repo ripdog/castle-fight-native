@@ -33,6 +33,7 @@ pub(crate) enum RenderExperiment {
     HideParticles,
     HideTransparent,
     LegacyTeamColor,
+    LegacyGeosetVisibility,
 }
 
 impl RenderExperiment {
@@ -44,8 +45,9 @@ impl RenderExperiment {
             "hide-particles" => Ok(Self::HideParticles),
             "hide-transparent" => Ok(Self::HideTransparent),
             "legacy-team-color" => Ok(Self::LegacyTeamColor),
+            "legacy-geoset-visibility" => Ok(Self::LegacyGeosetVisibility),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, or legacy-team-color"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, or legacy-geoset-visibility"
             )),
         }
     }
@@ -268,7 +270,9 @@ fn apply_render_experiment(
 ) {
     if matches!(
         *experiment,
-        RenderExperiment::Baseline | RenderExperiment::LegacyTeamColor
+        RenderExperiment::Baseline
+            | RenderExperiment::LegacyTeamColor
+            | RenderExperiment::LegacyGeosetVisibility
     ) {
         return;
     }
@@ -284,7 +288,9 @@ fn apply_render_experiment(
     ) in &mut meshes
     {
         let hide = match *experiment {
-            RenderExperiment::Baseline | RenderExperiment::LegacyTeamColor => false,
+            RenderExperiment::Baseline
+            | RenderExperiment::LegacyTeamColor
+            | RenderExperiment::LegacyGeosetVisibility => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();
@@ -478,6 +484,10 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-team-color"),
             Ok(RenderExperiment::LegacyTeamColor)
+        );
+        assert_eq!(
+            RenderExperiment::parse("legacy-geoset-visibility"),
+            Ok(RenderExperiment::LegacyGeosetVisibility)
         );
         assert!(RenderExperiment::parse("hide-everything").is_err());
     }

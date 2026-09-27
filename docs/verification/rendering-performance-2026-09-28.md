@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus two measured renderer changes: ordinary additive particles share buffered render state, and the common static unit team-colour layer is composited in one pass. The remaining renderer designs are still proposed work.
+Status: investigation and opt-in measurement tools, plus three measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, and exported binary geoset visibility now excludes truly hidden geosets from submission. The broader model-envelope/off-screen pose lifecycle work remains proposed.
 
 ## Scope and reproducibility
 
@@ -42,6 +42,7 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment hide-particles
 # --render-experiment hide-transparent
 # --render-experiment legacy-team-color
+# --render-experiment legacy-geoset-visibility
 ```
 
 The ordinary quicksave could not be used: snapshot decoding reported a missing
@@ -189,6 +190,55 @@ legacy run. Particle populations also vary with presentation-clock phase as note
 joint and palette reductions do not vary and directly reflect removal of the duplicate team-colour
 skin layer.
 
+## Implementation result 3 — explicit exported geoset visibility
+
+The third production change takes the safe hidden-geoset slice of the model-level culling proposal.
+The converter already marks every Warcraft geoset node with `wc3Geoset` metadata and exports geoset
+alpha as an exact binary STEP animation on node scale: `[0,0,0]` for hidden and `[1,1,1]` for visible.
+The client now recognizes only those marked nodes and maps that authored binary state to Bevy
+`Visibility` immediately after animation sampling. Animation clocks, timeline events, attachments,
+root movement and the original transform animation continue unchanged; this change only stops an
+authored-hidden geoset from entering view submission. This also fixes the old representation hazard
+where Bevy skinning could ignore the zero mesh transform and still shade a supposedly hidden geoset.
+
+A profiling-only `legacy-geoset-visibility` experiment leaves the old scale-only representation in
+place, allowing a same-binary A/B. Bevy still runs dynamic skinned-bound recomputation for hidden
+entities, so this slice is expected to reduce view extraction, skin-palette allocation/upload and
+submission rather than eliminate the remaining bounds cost. Conservative whole-model envelopes,
+off-screen pose suppression, settled-corpse pose caching and static doodad grouping remain separate
+parts of proposal 3.
+
+Two production runs bracketed one legacy run on the paused 500-unit fixture:
+
+| Run | FPS | Frame ms | Extract ms | Handoff ms | Render/submit/present ms | Transparent draws | Transparent GPU ms | Skin upload bytes | Collapsed visible |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Explicit visibility 1 | 67.20 | 14.882 | 1.338 | 5.202 | 6.746 | 1,014 | 1.523 | 11,327,552 | 0 |
+| Legacy scale-only | 56.52 | 17.694 | 2.344 | 7.388 | 7.996 | 1,237 | 1.759 | 12,432,064 | 1,936 |
+| Explicit visibility 2 | 68.01 | 14.703 | 1.303 | 5.119 | 6.674 | 960 | 1.526 | 11,327,552 | 0 |
+
+Averaging the two production runs gives 14.793 ms/frame, **16.4% lower** than the legacy path, and
+67.61 FPS, **19.6% higher**. World extraction falls about **43.7%**, the overlapping handoff scope
+about **30.1%**, render/submit/present about **16.1%**, sampled transparent draws about **20.2%**,
+transparent-pass GPU time about **13.3%**, and skin-palette staging by **1,104,512 bytes/frame**
+(**8.9%**). The production census has zero frustum-visible zero-determinant candidates versus 1,936
+on the legacy path. Dynamic-bound component count remains 4,683 in both paths, consistent with the
+known Bevy bounds limitation above.
+
+The same release binary was also run with the simulation active, because combat continuously changes
+sequences and creates corpses/effects. The production and legacy captures finished at nearly the same
+authoritative state (295/294 ticks, 115 living units and 330 corpses; 4/3 projectiles):
+
+| Active run | FPS | Frame ms | Extract ms | Handoff ms | Render/submit/present ms | Transparent draws | Transparent GPU ms | Skin upload bytes | Collapsed visible |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Explicit visibility | 19.72 | 50.709 | 2.985 | 25.157 | 16.130 | 1,230 | 2.841 | 11,327,552 | 0 |
+| Legacy scale-only | 18.22 | 54.892 | 4.194 | 28.646 | 17.772 | 1,490 | 3.201 | 15,131,136 | 1,307 |
+
+That active comparison is **7.6% lower frame time / 8.2% higher FPS**. Extraction falls **28.8%**,
+handoff **12.2%**, render/submit/present **9.2%**, sampled transparent draws **17.4%**, transparent
+GPU time **11.2%**, and skin-palette staging **25.1%**. The active benchmark is intentionally noisy
+and contains large combat-time asset/scene churn, so the structural visibility/palette/draw-count
+changes are the stronger attribution signal.
+
 ## Architectural findings from source
 
 ### Repeated skeleton work per mesh layer
@@ -321,7 +371,7 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 
 ## Validation
 
-The client test suite passes (196 tests); Clippy passes for all client targets with warnings denied;
+The client test suite passes (198 tests); Clippy passes for all client targets with warnings denied;
 formatting passes; the release client builds, the original seven bounded investigation profiles
 complete, and both production renderer changes have repeat measurements. The profiling plugin and
 experiments are only registered in automated profiling mode. Normal gameplay rendering is changed

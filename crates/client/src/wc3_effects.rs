@@ -798,10 +798,17 @@ impl Wc3NonInheritance {
     }
 }
 
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Wc3GeosetVisibility {
+    hidden: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct Wc3NodeExtras {
     #[serde(rename = "wc3ObjectId")]
     wc3_object_id: Option<u32>,
+    #[serde(rename = "wc3Geoset", default)]
+    wc3_geoset: Option<u32>,
     #[serde(rename = "wc3NodeFlags", default)]
     wc3_node_flags: i32,
     #[serde(rename = "wc3Light", default)]
@@ -905,6 +912,11 @@ pub fn setup_wc3_model_composed_features(
         let Ok(extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
             continue;
         };
+        if extras.wc3_geoset.is_some() {
+            commands
+                .entity(entity)
+                .insert(Wc3GeosetVisibility::default());
+        }
         if let Some(non_inheritance) = Wc3NonInheritance::from_node_flags(extras.wc3_node_flags) {
             commands.entity(entity).insert(non_inheritance);
         }
@@ -1016,6 +1028,46 @@ pub fn setup_wc3_model_composed_features(
                 _ => {}
             }
         }
+    }
+}
+
+type Wc3GeosetVisibilityQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static Transform,
+        &'static mut Visibility,
+        &'static mut Wc3GeosetVisibility,
+    ),
+    Or<(Changed<Transform>, Added<Wc3GeosetVisibility>)>,
+>;
+
+pub(crate) fn apply_wc3_geoset_visibility(
+    experiment: Option<Res<RenderExperiment>>,
+    mut geosets: Wc3GeosetVisibilityQuery,
+) {
+    if experiment.is_some_and(|experiment| {
+        matches!(
+            *experiment,
+            RenderExperiment::LegacyGeosetVisibility
+                | RenderExperiment::HideSkinned
+                | RenderExperiment::HideTransparent
+        )
+    }) {
+        return;
+    }
+
+    for (transform, mut visibility, mut geoset_visibility) in &mut geosets {
+        let hidden = transform.scale == Vec3::ZERO;
+        if hidden == geoset_visibility.hidden {
+            continue;
+        }
+        visibility.set_if_neq(if hidden {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        });
+        geoset_visibility.hidden = hidden;
     }
 }
 
@@ -5042,6 +5094,61 @@ mod tests {
         assert_eq!(
             model.looping_animation_source().unwrap().animation_name,
             "Stand"
+        );
+    }
+
+    #[test]
+    fn geoset_visibility_uses_exported_binary_scale() {
+        let extras = serde_json::from_str::<Wc3NodeExtras>(r#"{"wc3Geoset":3}"#).unwrap();
+        assert_eq!(extras.wc3_geoset, Some(3));
+
+        let mut app = App::new();
+        app.add_systems(Update, apply_wc3_geoset_visibility);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::from_scale(Vec3::ZERO),
+                Visibility::Inherited,
+                Wc3GeosetVisibility::default(),
+            ))
+            .id();
+
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(entity).unwrap(),
+            Visibility::Hidden
+        );
+
+        app.world_mut()
+            .entity_mut(entity)
+            .get_mut::<Transform>()
+            .unwrap()
+            .scale = Vec3::ONE;
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(entity).unwrap(),
+            Visibility::Inherited
+        );
+    }
+
+    #[test]
+    fn legacy_geoset_visibility_experiment_keeps_scale_only_path() {
+        let mut app = App::new();
+        app.insert_resource(RenderExperiment::LegacyGeosetVisibility)
+            .add_systems(Update, apply_wc3_geoset_visibility);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::from_scale(Vec3::ZERO),
+                Visibility::Inherited,
+                Wc3GeosetVisibility::default(),
+            ))
+            .id();
+
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(entity).unwrap(),
+            Visibility::Inherited
         );
     }
 
