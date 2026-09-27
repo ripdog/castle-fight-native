@@ -2956,10 +2956,13 @@ fn sync_render_entities(
         if let Some(animation) = visual.model.animation_source() {
             commands.entity(entity).insert(animation);
         }
+        let lifetime = visual
+            .model
+            .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
         timed_effects.0.push(TimedWc3Effect {
             entity,
-            remaining: ABILITY_MODEL_EFFECT_SECONDS,
-            lifetime: ABILITY_MODEL_EFFECT_SECONDS,
+            remaining: lifetime,
+            lifetime,
             mesh: None,
             fade_material: None,
         });
@@ -3050,10 +3053,13 @@ fn sync_render_entities(
             if let Some(animation) = visual.model.animation_source() {
                 commands.entity(entity).insert(animation);
             }
+            let lifetime = visual
+                .model
+                .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
             timed_effects.0.push(TimedWc3Effect {
                 entity,
-                remaining: ABILITY_MODEL_EFFECT_SECONDS,
-                lifetime: ABILITY_MODEL_EFFECT_SECONDS,
+                remaining: lifetime,
+                lifetime,
                 mesh: None,
                 fade_material: None,
             });
@@ -3116,10 +3122,13 @@ fn sync_render_entities(
             if let Some(animation) = visual.model.animation_source() {
                 commands.entity(entity).insert(animation);
             }
+            let lifetime = visual
+                .model
+                .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
             timed_effects.0.push(TimedWc3Effect {
                 entity,
-                remaining: ABILITY_MODEL_EFFECT_SECONDS,
-                lifetime: ABILITY_MODEL_EFFECT_SECONDS,
+                remaining: lifetime,
+                lifetime,
                 mesh: None,
                 fade_material: None,
             });

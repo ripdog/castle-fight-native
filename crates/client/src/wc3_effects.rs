@@ -23,6 +23,7 @@ use bevy::{
         storage::ShaderBuffer,
     },
     shader::ShaderRef,
+    world_serialization::{WorldInstance, WorldInstanceSpawner},
 };
 use serde::Deserialize;
 
@@ -81,6 +82,7 @@ pub struct Wc3VisualModel {
     pub scene: Handle<WorldAsset>,
     gltf: Handle<Gltf>,
     animation_name: Option<String>,
+    animation_duration_seconds: Option<f32>,
     stand_animation_name: Option<String>,
     pub emitters: Vec<Wc3ParticleEmitter>,
     pub ribbons: Vec<Wc3RibbonEmitter>,
@@ -103,6 +105,13 @@ impl Wc3VisualModel {
                 .clone(),
             looping: true,
         })
+    }
+
+    #[must_use]
+    pub fn effect_lifetime_seconds(&self, fallback: f32) -> f32 {
+        self.animation_duration_seconds
+            .filter(|duration| duration.is_finite() && *duration > 0.0)
+            .map_or(fallback, |duration| duration.max(fallback))
     }
 
     #[must_use]
@@ -1931,35 +1940,19 @@ pub fn update_wc3_spawned_event_models(
     }
 }
 
-fn belongs_to_model_root(entity: Entity, root: Entity, parents: &Query<&ChildOf>) -> bool {
-    let mut current = entity;
-    for _ in 0..128 {
-        if current == root {
-            return true;
-        }
-        let Ok(parent) = parents.get(current) else {
-            return false;
-        };
-        current = parent.parent();
-    }
-    false
-}
-
-fn resolve_wc3_object_nodes(
-    root: Entity,
+fn resolve_wc3_object_nodes<'a>(
+    nodes: impl IntoIterator<Item = (Entity, &'a GltfExtras)>,
     requested: &BTreeSet<u32>,
-    extras: &Query<(Entity, &GltfExtras)>,
-    parents: &Query<&ChildOf>,
 ) -> BTreeMap<u32, Entity> {
     let mut resolved = BTreeMap::new();
-    for (entity, raw_extras) in extras.iter() {
+    for (entity, raw_extras) in nodes {
         let Ok(node_extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
             continue;
         };
         let Some(object_id) = node_extras.wc3_object_id else {
             continue;
         };
-        if requested.contains(&object_id) && belongs_to_model_root(entity, root, parents) {
+        if requested.contains(&object_id) {
             resolved.entry(object_id).or_insert(entity);
         }
     }
@@ -1967,13 +1960,17 @@ fn resolve_wc3_object_nodes(
 }
 
 pub fn resolve_wc3_emitter_nodes(
-    mut emitter_sources: Query<(Entity, &mut Wc3EmitterSource)>,
-    mut ribbon_sources: Query<(Entity, &mut Wc3RibbonSource)>,
-    extras: Query<(Entity, &GltfExtras)>,
-    parents: Query<&ChildOf>,
+    spawner: Res<WorldInstanceSpawner>,
+    mut emitter_sources: Query<(&WorldInstance, &mut Wc3EmitterSource)>,
+    mut ribbon_sources: Query<(&WorldInstance, &mut Wc3RibbonSource)>,
+    extras: Query<&GltfExtras>,
 ) {
-    for (root, mut source) in &mut emitter_sources {
+    for (instance, mut source) in &mut emitter_sources {
         if source.node_binding_complete {
+            continue;
+        }
+        let instance_id = **instance;
+        if !spawner.instance_is_ready(instance_id) {
             continue;
         }
         let requested = source
@@ -1986,7 +1983,12 @@ pub fn resolve_wc3_emitter_nodes(
             continue;
         }
 
-        let resolved = resolve_wc3_object_nodes(root, &requested, &extras, &parents);
+        let resolved = resolve_wc3_object_nodes(
+            spawner
+                .iter_instance_entities(instance_id)
+                .filter_map(|entity| extras.get(entity).ok().map(|extras| (entity, extras))),
+            &requested,
+        );
         for emitter in &mut source.emitters {
             if emitter.source_node.is_none()
                 && let Some(object_id) = emitter.spec.object_id
@@ -1995,14 +1997,15 @@ pub fn resolve_wc3_emitter_nodes(
                 emitter.source_node = Some(*entity);
             }
         }
-        source.node_binding_complete = source
-            .emitters
-            .iter()
-            .all(|emitter| emitter.spec.object_id.is_none() || emitter.source_node.is_some());
+        source.node_binding_complete = true;
     }
 
-    for (root, mut source) in &mut ribbon_sources {
+    for (instance, mut source) in &mut ribbon_sources {
         if source.node_binding_complete {
+            continue;
+        }
+        let instance_id = **instance;
+        if !spawner.instance_is_ready(instance_id) {
             continue;
         }
         let requested = source
@@ -2015,7 +2018,12 @@ pub fn resolve_wc3_emitter_nodes(
             continue;
         }
 
-        let resolved = resolve_wc3_object_nodes(root, &requested, &extras, &parents);
+        let resolved = resolve_wc3_object_nodes(
+            spawner
+                .iter_instance_entities(instance_id)
+                .filter_map(|entity| extras.get(entity).ok().map(|extras| (entity, extras))),
+            &requested,
+        );
         for ribbon in &mut source.ribbons {
             if ribbon.source_node.is_none()
                 && let Some(object_id) = ribbon.spec.object_id
@@ -2024,10 +2032,7 @@ pub fn resolve_wc3_emitter_nodes(
                 ribbon.source_node = Some(*entity);
             }
         }
-        source.node_binding_complete = source
-            .ribbons
-            .iter()
-            .all(|ribbon| ribbon.spec.object_id.is_none() || ribbon.source_node.is_some());
+        source.node_binding_complete = true;
     }
 }
 
@@ -4813,7 +4818,7 @@ fn resolve_visual_model(
     let gltf = gltf.replace('\\', "/");
     validate_relative_asset_path(&gltf)?;
     let asset_path = format!("{EFFECT_ASSET_PREFIX}/{gltf}");
-    let animation_name = model
+    let animation = model
         .animations
         .iter()
         .find(|animation| animation.name.eq_ignore_ascii_case("Birth"))
@@ -4828,12 +4833,13 @@ fn resolve_visual_model(
                 .animations
                 .iter()
                 .find(|animation| !animation.name.eq_ignore_ascii_case("Nothing"))
-        })
-        .map(|animation| animation.name.clone());
+        });
     Ok(Wc3VisualModel {
         scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset_path.clone())),
         gltf: asset_server.load(asset_path),
-        animation_name,
+        animation_name: animation.map(|animation| animation.name.clone()),
+        animation_duration_seconds: animation
+            .map(|animation| animation.end_ms.saturating_sub(animation.start_ms) as f32 / 1_000.0),
         stand_animation_name: model
             .animations
             .iter()
@@ -4850,7 +4856,7 @@ fn resolve_status_visual_model(
     asset_server: &AssetServer,
 ) -> Result<Wc3VisualModel, String> {
     let mut visual = resolve_visual_model(gltf, model, asset_server)?;
-    visual.animation_name = model
+    let animation = model
         .animations
         .iter()
         .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
@@ -4865,8 +4871,10 @@ fn resolve_status_visual_model(
                 .animations
                 .iter()
                 .find(|animation| !animation.name.eq_ignore_ascii_case("Nothing"))
-        })
-        .map(|animation| animation.name.clone());
+        });
+    visual.animation_name = animation.map(|animation| animation.name.clone());
+    visual.animation_duration_seconds = animation
+        .map(|animation| animation.end_ms.saturating_sub(animation.start_ms) as f32 / 1_000.0);
     Ok(visual)
 }
 
@@ -5009,11 +5017,13 @@ mod tests {
             scene: Handle::default(),
             gltf: Handle::default(),
             animation_name: Some("Birth".to_owned()),
+            animation_duration_seconds: Some(4.567),
             stand_animation_name: Some("Stand".to_owned()),
             emitters: vec![stand, birth],
             ribbons: Vec::new(),
         };
 
+        assert_eq!(model.effect_lifetime_seconds(0.9), 4.567);
         let birth_source = model.emitter_source();
         assert_eq!(birth_source.emitters.len(), 1);
         assert_eq!(birth_source.emitters[0].spec.object_id, Some(18));
@@ -5037,78 +5047,48 @@ mod tests {
 
     #[test]
     fn model_local_vfx_object_ids_bind_within_their_own_scene_root() {
-        let mut app = App::new();
-        app.add_systems(Update, resolve_wc3_emitter_nodes);
-
-        let root_a = app
-            .world_mut()
-            .spawn((
-                Wc3EmitterSource::with_asset_prefix(&[test_particle_emitter(17)], "wc3/units"),
-                Wc3RibbonSource::with_asset_prefix(&[test_ribbon_emitter(23)], "wc3/units"),
-            ))
-            .id();
-        let root_b = app
-            .world_mut()
-            .spawn((
-                Wc3EmitterSource::with_asset_prefix(&[test_particle_emitter(17)], "wc3/units"),
-                Wc3RibbonSource::with_asset_prefix(&[test_ribbon_emitter(23)], "wc3/units"),
-            ))
-            .id();
-
-        let emitter_a = app
-            .world_mut()
+        let mut world = World::new();
+        let emitter_a = world
             .spawn(GltfExtras {
                 value: r#"{"wc3ObjectId":17}"#.to_owned(),
             })
             .id();
-        let ribbon_a = app
-            .world_mut()
+        let ribbon_a = world
             .spawn(GltfExtras {
                 value: r#"{"wc3ObjectId":23}"#.to_owned(),
             })
             .id();
-        let emitter_b = app
-            .world_mut()
+        let emitter_b = world
             .spawn(GltfExtras {
                 value: r#"{"wc3ObjectId":17}"#.to_owned(),
             })
             .id();
-        let ribbon_b = app
-            .world_mut()
+        let ribbon_b = world
             .spawn(GltfExtras {
                 value: r#"{"wc3ObjectId":23}"#.to_owned(),
             })
             .id();
-        app.world_mut()
-            .entity_mut(root_a)
-            .add_children(&[emitter_a, ribbon_a]);
-        app.world_mut()
-            .entity_mut(root_b)
-            .add_children(&[emitter_b, ribbon_b]);
+        let requested = BTreeSet::from([17, 23]);
 
-        app.update();
+        let resolved_a = resolve_wc3_object_nodes(
+            [
+                (emitter_a, world.get::<GltfExtras>(emitter_a).unwrap()),
+                (ribbon_a, world.get::<GltfExtras>(ribbon_a).unwrap()),
+            ],
+            &requested,
+        );
+        let resolved_b = resolve_wc3_object_nodes(
+            [
+                (emitter_b, world.get::<GltfExtras>(emitter_b).unwrap()),
+                (ribbon_b, world.get::<GltfExtras>(ribbon_b).unwrap()),
+            ],
+            &requested,
+        );
 
-        let source_a = app
-            .world()
-            .get::<Wc3EmitterSource>(root_a)
-            .expect("root A emitter source");
-        let source_b = app
-            .world()
-            .get::<Wc3EmitterSource>(root_b)
-            .expect("root B emitter source");
-        assert_eq!(source_a.emitters[0].source_node, Some(emitter_a));
-        assert_eq!(source_b.emitters[0].source_node, Some(emitter_b));
-
-        let ribbons_a = app
-            .world()
-            .get::<Wc3RibbonSource>(root_a)
-            .expect("root A ribbon source");
-        let ribbons_b = app
-            .world()
-            .get::<Wc3RibbonSource>(root_b)
-            .expect("root B ribbon source");
-        assert_eq!(ribbons_a.ribbons[0].source_node, Some(ribbon_a));
-        assert_eq!(ribbons_b.ribbons[0].source_node, Some(ribbon_b));
+        assert_eq!(resolved_a.get(&17), Some(&emitter_a));
+        assert_eq!(resolved_a.get(&23), Some(&ribbon_a));
+        assert_eq!(resolved_b.get(&17), Some(&emitter_b));
+        assert_eq!(resolved_b.get(&23), Some(&ribbon_b));
     }
 
     #[test]
@@ -5155,10 +5135,12 @@ mod tests {
             scene: Handle::default(),
             gltf: Handle::default(),
             animation_name: Some("Birth".to_owned()),
+            animation_duration_seconds: None,
             stand_animation_name: Some("Stand".to_owned()),
             emitters: vec![emitter("Stand", 16.0), emitter("Death", 160.0)],
             ribbons: Vec::new(),
         };
+        assert_eq!(model.effect_lifetime_seconds(0.9), 0.9);
         let source = model.looping_emitter_source();
         assert_eq!(source.emitters.len(), 1);
         assert_eq!(source.emitters[0].spec.segment_scaling, [16.0; 3]);
