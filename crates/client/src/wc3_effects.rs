@@ -35,8 +35,10 @@ use crate::{
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
 const WC3_PARTICLE_SHADER_PATH: &str = "shaders/wc3_particle.wgsl";
+const WC3_SPLAT_SHADER_PATH: &str = "shaders/wc3_splat.wgsl";
 const WC3_TEAM_COLOR_SHADER_PATH: &str = "shaders/wc3_team_color.wgsl";
 const ADDITIVE_PARTICLE_BATCH_MIN_SLOTS: usize = 64;
+const SPLAT_BUFFER_MIN_SLOTS: usize = 64;
 const CONVERTED_MODEL_PACKS: [(&str, &str); 4] = [
     ("wc3/units/manifest.json", "wc3/units"),
     ("wc3/buildings/manifest.json", "wc3/buildings"),
@@ -806,6 +808,7 @@ pub(crate) struct Wc3SpawnedSplat {
     spec: Wc3EventSplatSpec,
     age: f32,
     frame: u32,
+    gpu_slot: Option<u32>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1838,6 +1841,11 @@ fn splat_color(color: [u8; 4]) -> Color {
     Color::srgba_u8(color[0], color[1], color[2], color[3])
 }
 
+fn splat_gpu_color(color: [u8; 4]) -> [f32; 4] {
+    let linear = splat_color(color).to_linear();
+    [linear.red, linear.green, linear.blue, linear.alpha]
+}
+
 fn splat_terrain_uvs(rows: u32, columns: u32, frame: u32) -> Vec<[f32; 2]> {
     let [u0, v0, u1, v1] = particle_atlas_uv_rect(rows, columns, frame);
     let count = WC3_SPLAT_TERRAIN_SUBDIVISIONS;
@@ -1912,11 +1920,15 @@ pub(crate) struct Wc3SplatSpawnAssets<'w> {
     terrain: Res<'w, TerrainSurface>,
     meshes: ResMut<'w, Assets<Mesh>>,
     materials: ResMut<'w, Assets<StandardMaterial>>,
+    splat_materials: ResMut<'w, Assets<Wc3SplatMaterial>>,
+    shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
+    effect_assets: ResMut<'w, Wc3ParticleAssets>,
 }
 
 pub fn emit_wc3_splat_events(
     mut commands: Commands,
     time: Res<Time>,
+    experiment: Option<Res<RenderExperiment>>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     mut assets: Wc3SplatSpawnAssets,
@@ -1944,32 +1956,72 @@ pub fn emit_wc3_splat_events(
         let (rgba, frame) = splat_sample(&runtime.splat, 0.0);
         let (source_scale, rotation, center) = source_transform.to_scale_rotation_translation();
         let scale = runtime.splat.scale.max(0.01) * source_scale.x.abs().max(source_scale.z.abs());
+        let legacy_material_state = experiment
+            .as_ref()
+            .is_some_and(|experiment| **experiment == RenderExperiment::LegacySplatMaterialState);
         for _ in 0..count {
+            if legacy_material_state {
+                let mesh = assets.meshes.add(build_splat_terrain_mesh(
+                    &assets.terrain,
+                    center,
+                    rotation,
+                    scale,
+                    runtime.splat.rows,
+                    runtime.splat.columns,
+                    frame,
+                ));
+                let material = assets.materials.add(StandardMaterial {
+                    base_color: splat_color(rgba),
+                    base_color_texture: Some(runtime.texture.clone()),
+                    alpha_mode: particle_alpha_mode(runtime.splat.blend_mode),
+                    unlit: true,
+                    double_sided: true,
+                    ..default()
+                });
+                commands.spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(material),
+                    Transform::from_translation(Vec3::new(center.x, 0.0, center.z)),
+                    Wc3SpawnedSplat {
+                        spec: runtime.splat.clone(),
+                        age: 0.0,
+                        frame,
+                        gpu_slot: None,
+                    },
+                ));
+                continue;
+            }
+
             let mesh = assets.meshes.add(build_splat_terrain_mesh(
                 &assets.terrain,
                 center,
                 rotation,
                 scale,
-                runtime.splat.rows,
-                runtime.splat.columns,
-                frame,
+                1,
+                1,
+                0,
             ));
-            let material = assets.materials.add(StandardMaterial {
-                base_color: splat_color(rgba),
-                base_color_texture: Some(runtime.texture.clone()),
-                alpha_mode: particle_alpha_mode(runtime.splat.blend_mode),
-                unlit: true,
-                double_sided: true,
-                ..default()
-            });
+            let (slot, material) = assets.effect_assets.acquire_splat_slot(
+                &runtime.texture,
+                runtime.splat.blend_mode,
+                &mut assets.splat_materials,
+                &mut assets.shader_buffers,
+            );
+            assets.effect_assets.update_splat_slot(
+                slot,
+                splat_gpu_color(rgba),
+                particle_atlas_uv_rect(runtime.splat.rows, runtime.splat.columns, frame),
+            );
             commands.spawn((
                 Mesh3d(mesh),
                 MeshMaterial3d(material),
+                MeshTag(slot),
                 Transform::from_translation(Vec3::new(center.x, 0.0, center.z)),
                 Wc3SpawnedSplat {
                     spec: runtime.splat.clone(),
                     age: 0.0,
                     frame,
+                    gpu_slot: Some(slot),
                 },
             ));
         }
@@ -1982,10 +2034,11 @@ pub fn update_wc3_spawned_splats(
     experiment: Option<Res<RenderExperiment>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut effect_assets: ResMut<Wc3ParticleAssets>,
     mut splats: Query<(
         Entity,
         &Mesh3d,
-        &MeshMaterial3d<StandardMaterial>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
         &mut Wc3SpawnedSplat,
     )>,
 ) {
@@ -1997,13 +2050,36 @@ pub fn update_wc3_spawned_splats(
     for (entity, mesh, material, mut splat) in &mut splats {
         splat.age += time.delta_secs().max(0.0);
         if splat.age >= splat_lifespan(&splat.spec) {
-            materials.remove(material.0.id());
+            if let Some(material) = material {
+                materials.remove(material.0.id());
+            }
+            if let Some(slot) = splat.gpu_slot {
+                effect_assets.release_splat_slot(slot);
+            }
             meshes.remove(mesh.0.id());
             commands.entity(entity).despawn();
             continue;
         }
-        let (color, frame) = splat_sample(&splat.spec, splat.age);
-        let color = splat_color(color);
+        let (sampled_color, frame) = splat_sample(&splat.spec, splat.age);
+        if let Some(slot) = splat.gpu_slot {
+            let color = if freeze_materials {
+                splat_sample(&splat.spec, 0.0).0
+            } else {
+                sampled_color
+            };
+            effect_assets.update_splat_slot(
+                slot,
+                splat_gpu_color(color),
+                particle_atlas_uv_rect(splat.spec.rows, splat.spec.columns, frame),
+            );
+            splat.frame = frame;
+            continue;
+        }
+
+        let Some(material) = material else {
+            continue;
+        };
+        let color = splat_color(sampled_color);
         // A mutable asset lookup emits Modified even if we write the same value.
         // Blood/footprint splats can spend seconds at a constant authored colour:
         // do not rebuild their GPU material bindings on every presentation frame.
@@ -2215,6 +2291,54 @@ pub struct Wc3Particle {
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub(crate) struct Wc3SplatMaterial {
+    #[storage(0, read_only)]
+    splat_data: Handle<ShaderBuffer>,
+    #[texture(1)]
+    #[sampler(2)]
+    texture: Handle<Image>,
+    #[uniform(3)]
+    blend_mode: u32,
+}
+
+impl Material for Wc3SplatMaterial {
+    fn vertex_shader() -> ShaderRef {
+        WC3_SPLAT_SHADER_PATH.into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        WC3_SPLAT_SHADER_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        particle_alpha_mode(self.blend_mode)
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex_layout = layout.0.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+        descriptor.primitive.cull_mode = None;
+        Ok(())
+    }
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub(crate) struct Wc3ParticleMaterial {
     #[storage(0, read_only)]
     particle_data: Handle<ShaderBuffer>,
@@ -2291,12 +2415,25 @@ pub(crate) struct Wc3RibbonTrail {
     has_rendered_strip: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct SplatMaterialKey {
+    texture: AssetId<Image>,
+    blend_mode: u32,
+}
+
 #[derive(Resource)]
 pub struct Wc3ParticleAssets {
     particle_quads: HashMap<(u32, u32, u32), Handle<Mesh>>,
     materials: HashMap<String, Handle<StandardMaterial>>,
     additive_batch_indices: HashMap<AdditiveParticleBatchKey, usize>,
     additive_batches: Vec<AdditiveParticleBatch>,
+    splat_materials: HashMap<SplatMaterialKey, Handle<Wc3SplatMaterial>>,
+    splat_buffer: Option<Handle<ShaderBuffer>>,
+    splat_gpu_data: Vec<[f32; 4]>,
+    splat_free_slots: Vec<u32>,
+    splat_next_slot: u32,
+    splat_capacity_slots: usize,
+    splat_dirty: bool,
 }
 
 impl Wc3ConvertedModelRegistry {
@@ -2646,6 +2783,13 @@ impl Wc3ParticleAssets {
             materials: HashMap::new(),
             additive_batch_indices: HashMap::new(),
             additive_batches: Vec::new(),
+            splat_materials: HashMap::new(),
+            splat_buffer: None,
+            splat_gpu_data: Vec::new(),
+            splat_free_slots: Vec::new(),
+            splat_next_slot: 0,
+            splat_capacity_slots: 0,
+            splat_dirty: false,
         }
     }
 
@@ -2812,6 +2956,86 @@ impl Wc3ParticleAssets {
             }
             batch.dirty = false;
         }
+    }
+
+    fn acquire_splat_slot(
+        &mut self,
+        texture: &Handle<Image>,
+        blend_mode: u32,
+        splat_materials: &mut Assets<Wc3SplatMaterial>,
+        shader_buffers: &mut Assets<ShaderBuffer>,
+    ) -> (u32, Handle<Wc3SplatMaterial>) {
+        let buffer = self.splat_buffer.get_or_insert_with(|| {
+            self.splat_capacity_slots = SPLAT_BUFFER_MIN_SLOTS;
+            self.splat_gpu_data = vec![[0.0; 4]; self.splat_capacity_slots * 2];
+            shader_buffers.add(ShaderBuffer::from(self.splat_gpu_data.clone()))
+        });
+
+        let slot = self.splat_free_slots.pop().unwrap_or_else(|| {
+            let slot = self.splat_next_slot;
+            self.splat_next_slot = self.splat_next_slot.saturating_add(1);
+            slot
+        });
+        let required_slots = slot as usize + 1;
+        if required_slots > self.splat_capacity_slots {
+            self.splat_capacity_slots = required_slots
+                .next_power_of_two()
+                .max(SPLAT_BUFFER_MIN_SLOTS);
+            self.splat_gpu_data
+                .resize(self.splat_capacity_slots * 2, [0.0; 4]);
+            self.splat_dirty = true;
+        }
+
+        let key = SplatMaterialKey {
+            texture: texture.id(),
+            blend_mode,
+        };
+        let material = self
+            .splat_materials
+            .entry(key)
+            .or_insert_with(|| {
+                splat_materials.add(Wc3SplatMaterial {
+                    splat_data: buffer.clone(),
+                    texture: texture.clone(),
+                    blend_mode,
+                })
+            })
+            .clone();
+        (slot, material)
+    }
+
+    fn update_splat_slot(&mut self, slot: u32, color: [f32; 4], uv_rect: [f32; 4]) {
+        let base = slot as usize * 2;
+        debug_assert!(base + 1 < self.splat_gpu_data.len());
+        if self.splat_gpu_data[base] == color && self.splat_gpu_data[base + 1] == uv_rect {
+            return;
+        }
+        self.splat_gpu_data[base] = color;
+        self.splat_gpu_data[base + 1] = uv_rect;
+        self.splat_dirty = true;
+    }
+
+    fn release_splat_slot(&mut self, slot: u32) {
+        let base = slot as usize * 2;
+        if base + 1 < self.splat_gpu_data.len() {
+            self.splat_gpu_data[base] = [0.0; 4];
+            self.splat_gpu_data[base + 1] = [0.0; 4];
+            self.splat_dirty = true;
+        }
+        self.splat_free_slots.push(slot);
+    }
+
+    fn flush_splat_buffer(&mut self, shader_buffers: &mut Assets<ShaderBuffer>) {
+        if !self.splat_dirty {
+            return;
+        }
+        let Some(buffer) = self.splat_buffer.as_ref() else {
+            return;
+        };
+        if let Some(mut buffer) = shader_buffers.get_mut(buffer) {
+            buffer.set_data(self.splat_gpu_data.clone());
+        }
+        self.splat_dirty = false;
     }
 
     fn ribbon_material(
@@ -4329,6 +4553,7 @@ pub fn flush_wc3_particle_buffers(
     mut shader_buffers: ResMut<Assets<ShaderBuffer>>,
 ) {
     particle_assets.flush_additive_particle_buffers(&mut shader_buffers);
+    particle_assets.flush_splat_buffer(&mut shader_buffers);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -5772,6 +5997,46 @@ mod tests {
             global_elapsed_ms: 650.0,
         };
         assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 100.0), 0);
+    }
+
+    #[test]
+    fn splat_gpu_slots_share_materials_and_reuse_released_indices() {
+        let mut meshes = Assets::<Mesh>::default();
+        let mut effect_assets = Wc3ParticleAssets::new(&mut meshes);
+        let mut splat_materials = Assets::<Wc3SplatMaterial>::default();
+        let mut shader_buffers = Assets::<ShaderBuffer>::default();
+        let texture = Handle::<Image>::default();
+
+        let (first_slot, first_material) = effect_assets.acquire_splat_slot(
+            &texture,
+            0,
+            &mut splat_materials,
+            &mut shader_buffers,
+        );
+        let (second_slot, second_material) = effect_assets.acquire_splat_slot(
+            &texture,
+            0,
+            &mut splat_materials,
+            &mut shader_buffers,
+        );
+        assert_eq!(first_material, second_material);
+        assert_ne!(first_slot, second_slot);
+
+        let color = [0.25, 0.5, 0.75, 1.0];
+        let uv = [0.0, 0.25, 0.5, 0.75];
+        effect_assets.update_splat_slot(first_slot, color, uv);
+        let base = first_slot as usize * 2;
+        assert_eq!(effect_assets.splat_gpu_data[base], color);
+        assert_eq!(effect_assets.splat_gpu_data[base + 1], uv);
+
+        effect_assets.release_splat_slot(first_slot);
+        let (reused_slot, _) = effect_assets.acquire_splat_slot(
+            &texture,
+            0,
+            &mut splat_materials,
+            &mut shader_buffers,
+        );
+        assert_eq!(reused_slot, first_slot);
     }
 
     #[test]

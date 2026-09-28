@@ -22,7 +22,9 @@ use bevy::{
     },
 };
 
-use crate::wc3_effects::{Wc3Particle, Wc3ParticleMaterial, Wc3TeamColorMaterial};
+use crate::wc3_effects::{
+    Wc3Particle, Wc3ParticleMaterial, Wc3SplatMaterial, Wc3TeamColorMaterial,
+};
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum RenderExperiment {
@@ -36,6 +38,7 @@ pub(crate) enum RenderExperiment {
     LegacyGeosetVisibility,
     LegacyAttachmentSearch,
     LegacySplatUpdates,
+    LegacySplatMaterialState,
     FreezeMaterials,
 }
 
@@ -51,9 +54,10 @@ impl RenderExperiment {
             "legacy-geoset-visibility" => Ok(Self::LegacyGeosetVisibility),
             "legacy-attachment-search" => Ok(Self::LegacyAttachmentSearch),
             "legacy-splat-updates" => Ok(Self::LegacySplatUpdates),
+            "legacy-splat-material-state" => Ok(Self::LegacySplatMaterialState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, or freeze-materials"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, legacy-splat-material-state, or freeze-materials"
             )),
         }
     }
@@ -260,6 +264,7 @@ type ExperimentMeshes<'w, 's> = Query<
         &'static mut Visibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
         Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3SplatMaterial>>,
         Has<SkinnedMesh>,
         Has<Wc3Particle>,
         Has<DynamicSkinnedMeshBounds>,
@@ -281,6 +286,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyGeosetVisibility
             | RenderExperiment::LegacyAttachmentSearch
             | RenderExperiment::LegacySplatUpdates
+            | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::FreezeMaterials
     ) {
         return;
@@ -290,6 +296,7 @@ fn apply_render_experiment(
         mut visibility,
         material,
         particle_material,
+        splat_material,
         skin,
         particle,
         dynamic,
@@ -302,6 +309,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyGeosetVisibility
             | RenderExperiment::LegacyAttachmentSearch
             | RenderExperiment::LegacySplatUpdates
+            | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::FreezeMaterials => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
@@ -313,6 +321,7 @@ fn apply_render_experiment(
             RenderExperiment::HideParticles => particle,
             RenderExperiment::HideTransparent => {
                 particle_material.is_some()
+                    || splat_material.is_some()
                     || material
                         .and_then(|handle| materials.get(&handle.0))
                         .is_some_and(|material| is_transparent(material.alpha_mode))
@@ -339,6 +348,7 @@ type CensusMeshes<'w, 's> = Query<
         &'static ViewVisibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
         Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3SplatMaterial>>,
         Option<&'static MeshMaterial3d<Wc3TeamColorMaterial>>,
         Option<&'static SkinnedMesh>,
         Has<DynamicSkinnedMeshBounds>,
@@ -380,6 +390,7 @@ impl SceneCensus<'_, '_> {
             visibility,
             material,
             particle_material,
+            splat_material,
             team_material,
             skin,
             bounds,
@@ -406,7 +417,8 @@ impl SceneCensus<'_, '_> {
                             .is_some_and(|material| is_transparent(material.alpha_mode)),
                     );
                 }
-            } else if visibility.get() && particle_material.is_some() {
+            } else if visibility.get() && (particle_material.is_some() || splat_material.is_some())
+            {
                 transparent += 1;
             }
             if let Some(material) = team_material {
@@ -500,6 +512,10 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-geoset-visibility"),
             Ok(RenderExperiment::LegacyGeosetVisibility)
+        );
+        assert_eq!(
+            RenderExperiment::parse("legacy-splat-material-state"),
+            Ok(RenderExperiment::LegacySplatMaterialState)
         );
         assert!(RenderExperiment::parse("hide-everything").is_err());
     }

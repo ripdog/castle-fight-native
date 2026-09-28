@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus three measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, and exported binary geoset visibility now excludes truly hidden geosets from submission. The broader model-envelope/off-screen pose lifecycle work remains proposed.
+Status: investigation and opt-in measurement tools, plus four measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, and terrain-conforming splats use persistent shared material state with per-instance GPU records. The broader model-envelope/off-screen pose lifecycle and animated-model material-state work remains proposed.
 
 ## Scope and reproducibility
 
@@ -43,6 +43,7 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment hide-transparent
 # --render-experiment legacy-team-color
 # --render-experiment legacy-geoset-visibility
+# --render-experiment legacy-splat-material-state
 ```
 
 The ordinary quicksave could not be used: snapshot decoding reported a missing
@@ -286,17 +287,45 @@ Render-stage timings include scheduling/waiting and overlap; they are not additi
    retaining the exact sampled colour, alpha, atlas frame and lifetime. The legacy switch raises
    asset preparation from about 6.9 to 11.3 ms/frame and lowers FPS to 21.09.
 
+### Implementation follow-up: persistent terrain-splat material state
+
+The first architectural follow-up now moves terrain-conforming splats off mutable per-instance
+`StandardMaterial` assets. Each splat keeps its existing terrain-sampled mesh entity, source-event
+transform, authored lifetime and sorted transparent submission. Colour/alpha and atlas-frame UV
+selection instead live in a compact shared storage buffer indexed by `MeshTag`; materials are
+immutable and shared by texture/blend mode. Released slots are recycled, buffer capacity grows
+geometrically, and uploads occur only when a record changes. The current effects manifest uses only
+Blend and Additive splat modes; the custom shader preserves both, including additive premultiplication.
+
+A profiling-only `legacy-splat-material-state` switch restores the previous per-splat StandardMaterial
+and mesh-UV mutation path in the same release binary. Because the paused tick-0 fixture emits no combat
+splats, this comparison uses the active 500-unit first-ten-seconds combat capture. All three runs
+finish at tick 300 with 115 living units and 330 corpses; each has two projectiles at capture end.
+
+| Active combat | FPS | Mean frame ms | Main CPU ms | Effects ms | Prepare assets ms | Prepare meshes ms | Specialize ms | Queue ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Buffered splats, run 1 | 29.74 | 33.621 | 18.039 | 2.030 | 2.041 | 1.397 | 1.976 | 2.577 |
+| Legacy splat material state | 24.63 | 40.606 | 19.918 | 2.332 | 6.668 | 2.239 | 3.231 | 4.093 |
+| Buffered splats, run 2 | 30.42 | 32.869 | 17.254 | 1.941 | 2.176 | 1.279 | 1.885 | 2.566 |
+
+The two production runs average **30.08 FPS / 33.245 ms**, versus **24.63 FPS / 40.606 ms** on the
+legacy path: **18.1% lower mean frame time and 22.1% higher FPS**. Asset preparation falls from
+6.668 to an average **2.109 ms/frame (68.4%)**. Main-thread CPU falls about **11.4%**, the measured
+effects slice about **14.9%**, mesh preparation about **40.2%**, specialization about **40.2%**, and
+queueing about **37.2%**. Transparent-pass GPU time averages 2.264 ms versus 2.474 ms legacy. The
+render/submit/present scope is noisier and overlaps scheduling/waiting, so it is not used as the main
+attribution metric here.
+
+This implements the splat-first portion of persistent material state. Animated model alpha/texture
+layers still clone and mutate material assets and remain the next extension of this representation.
+
 ### Next architectural changes, in priority order
 
-- **Persistent material state for animated effects.** The material-freeze diagnostic improves FPS
-  by another 44% over the updated runs and cuts asset preparation to 0.579 ms. It freezes both
-  model alpha/texture tracks and splat colour, so it does not isolate their individual shares or
-  predict the exact gain of a faithful implementation. Make textures, samplers, blend/depth rules
-  and pipeline identity immutable/shared; place changing colour, alpha and texture selection in
-  per-instance buffer records. Start with terrain-conforming splats: retain their terrain mesh,
-  source-event transform, authored lifetime and transparent ordering, but update a compact record
-  instead of replacing a StandardMaterial binding. Then extend that representation to animated
-  model layers. Do not quantize authored values or freeze visible animation as the production fix.
+- **Persistent material state for animated model layers.** Extend the splat representation to model
+  alpha and texture-id tracks: keep textures, samplers, blend/depth rules and pipeline identity
+  immutable/shared, and place changing alpha/texture selection in per-instance records. Preserve
+  authored values, priority planes and transparent ordering; do not freeze or quantize visible
+  animation as the production fix.
 - **Bound attachment indices and retained effect instances.** The new local search removes the
   scene-wide multiplier. An index built when each model scene becomes ready can resolve repeated
   attachment names once and record absent names until the hierarchy changes. Pool frequently
@@ -310,9 +339,10 @@ Render-stage timings include scheduling/waiting and overlap; they are not additi
   their authored phase actually stops changing; do not freeze death or decay sequences or alter
   authoritative corpse lifetime. Measure this after material state is fixed, since the costs overlap.
 
-The release build, client-binary Clippy with warnings denied, formatting and live captures pass.
-**No tests were run, as requested.** The material-freeze path is profiling-only and intentionally
-changes the picture; only the owner-local search and unchanged-write suppression ship by default.
+The release build, client Clippy with warnings denied, formatting, the client test suite and live
+captures pass. The material-freeze path is profiling-only and intentionally changes the picture;
+owner-local attachment search, unchanged-write suppression, and persistent terrain-splat material
+state ship by default.
 
 ## Architectural findings from source
 
@@ -446,10 +476,11 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 
 ## Validation
 
-The client test suite passes (198 tests); Clippy passes for all client targets with warnings denied;
+The client test suite passes (199 tests); Clippy passes for all client targets with warnings denied;
 formatting passes; the release client builds, the original seven bounded investigation profiles
-complete, and both production renderer changes have repeat measurements. The profiling plugin and
-experiments are only registered in automated profiling mode. Normal gameplay rendering is changed
-for textured additive ordinary particles and the narrowly gated static two-layer unit team-colour
-case; all excluded particle/material cases retain their reference paths. Interactive stress startup
-centres the camera, while automated profiles centre and lock it.
+complete, and the measured production renderer changes have repeat or same-binary A/B captures. The
+profiling plugin and experiments are only registered in automated profiling mode. Normal gameplay
+rendering is changed for textured additive ordinary particles, the narrowly gated static two-layer
+unit team-colour case, exported hidden-geoset submission, and terrain-splat material state; excluded
+cases retain their reference paths. Interactive stress startup centres the camera, while automated
+profiles centre and lock it.
