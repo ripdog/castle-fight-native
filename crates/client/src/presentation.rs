@@ -49,14 +49,14 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
-        Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode,
+        Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
         Wc3ConvertedModelRegistry, Wc3EmitterSource, Wc3ModelSequenceSelection, Wc3ParticleAssets,
         Wc3ParticleMaterial, Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind,
         Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs, Wc3VisualModel,
         Wc3VisualSet, advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance,
         emit_wc3_model_particles, emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events,
         emit_wc3_splat_events, fix_wc3_scene_materials, flush_wc3_particle_buffers,
-        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
+        index_wc3_model_attachments, resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
         setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
@@ -932,6 +932,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<TimedWc3Effects>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .init_gizmo_group::<MapGridGizmos>()
+            .add_observer(index_wc3_model_attachments)
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -3216,6 +3217,7 @@ fn sync_render_entities(
                         rawcode: builder.appearance.rawcode,
                         presentation_root: entity,
                     },
+                    Wc3AttachmentOwner,
                     Wc3TeamTint::new(builder.owner.0, player_color(builder.owner), "wc3/units"),
                     Transform {
                         translation: Vec3::NEG_Y * BUILDER_HEIGHT * 0.5,
@@ -3285,6 +3287,7 @@ fn sync_render_entities(
                         rawcode,
                         presentation_root: entity,
                     },
+                    Wc3AttachmentOwner,
                     Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
                     Transform {
                         translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
@@ -3488,6 +3491,7 @@ fn sync_render_entities(
                         rawcode,
                         presentation_root: entity,
                     },
+                    Wc3AttachmentOwner,
                     Wc3TeamTint::new(
                         building.owner.map_or(24, |owner| owner.0),
                         owner_color(building.owner),
@@ -3559,6 +3563,7 @@ fn sync_render_entities(
                         rawcode,
                         presentation_root: entity,
                     },
+                    Wc3AttachmentOwner,
                     Wc3TeamTint::new(
                         corpse.source_owner.0,
                         player_color(corpse.source_owner),

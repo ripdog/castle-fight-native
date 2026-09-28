@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus six measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, and texture-ID animated layers now switch among immutable shared material variants instead of mutating material assets. The broader model-envelope/off-screen pose lifecycle work remains proposed.
+Status: investigation and opt-in measurement tools, plus six measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, and texture-ID animated layers now switch among immutable shared material variants instead of mutating material assets. Per-instance attachment indices also bound repeated effect attachment lookup; that change is tail-latency/complexity work rather than a measured throughput gain. The broader model-envelope/off-screen pose lifecycle work remains proposed.
 
 ## Scope and reproducibility
 
@@ -43,6 +43,7 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment hide-transparent
 # --render-experiment legacy-team-color
 # --render-experiment legacy-geoset-visibility
+# --render-experiment legacy-attachment-index
 # --render-experiment legacy-splat-material-state
 # --render-experiment legacy-animated-alpha-state
 # --render-experiment legacy-animated-texture-state
@@ -399,14 +400,35 @@ Two later production repeats in the pasted benchmark log also land near 161–16
 reports contain nonzero simulation ticks despite `--profile-paused`; they are therefore excluded from
 the controlled table above. The clean zero-tick pair is the attribution result.
 
+### Implementation follow-up: per-instance attachment indices
+
+Each imported unit/building/corpse model now builds a normalized attachment-node index when its
+`WorldInstance` becomes ready. Dynamic effects resolve against that owner-local index, cache both
+hits and misses for repeated attachment names, and never walk unrelated scene hierarchies. A
+profiling-only `legacy-attachment-index` switch restores the immediately previous owner-local walk,
+so this comparison isolates indexing from the older scene-wide attachment-search optimization.
+
+Two production captures bracketed two legacy-index captures on the active 500-unit first-ten-seconds
+combat fixture. All runs ended at tick 300/301 with 115 living units and 330 corpses.
+
+| Attachment path | FPS | Mean frame ms | 1% low FPS | p99 ms | Main CPU ms | Scene setup ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Indexed, 2-run average | 35.60 | 28.097 | 13.31 | 61.342 | 15.744 | 0.723 |
+| Owner-local walk, 2-run average | 35.58 | 28.109 | 12.00 | 64.921 | 15.526 | 0.688 |
+
+Mean frame time is effectively identical (about **0.04% lower** on the indexed path), so this is not
+claimed as an average-FPS optimization on the current fixture. The indexed runs do show a better
+average 1% low (13.31 vs 12.00 FPS) and p99 (61.3 vs 64.9 ms), but max-frame results move the other
+way and the sample is too small to claim a robust tail win. The production value is therefore the
+bounded lookup cost and cached misses/repeated names; the retained-effect work below remains the
+expected way to reduce the larger scene/material activation spikes.
+
 ### Next architectural changes, in priority order
 
-- **Bound attachment indices and retained effect instances.** The new local search removes the
-  scene-wide multiplier. An index built when each model scene becomes ready can resolve repeated
-  attachment names once and record absent names until the hierarchy changes. Pool frequently
-  spawned effect instances/resources to reduce the remaining initial scene/material activation
-  spikes; reset animation, event cursors, bindings and lifetime on reuse. Benchmark the transition
-  separately from later combat, since the updated worst frame still exceeds 100 ms.
+- **Retain and pool effect instances/resources.** Pool frequently spawned effect instances/resources
+  to reduce the remaining initial scene/material activation spikes; reset animation, event cursors,
+  bindings and lifetime on reuse. Benchmark the transition separately from later combat, since the
+  updated worst frame still exceeds 100 ms.
 - **One skeleton evaluation and palette per model.** CPU samples also show animation evaluation,
   transform propagation and skinned bounds among the dominant consumers. Updated combat still
   averages about 10.5 ms in PostUpdate and stages 11.3 MB of palettes per sampled frame. The shared
@@ -552,7 +574,7 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 
 ## Validation
 
-The client test suite passes (203 tests); Clippy passes for all client targets with warnings denied;
+The client test suite passes (204 tests); Clippy passes for all client targets with warnings denied;
 formatting passes; the release client builds, the original seven bounded investigation profiles
 complete, and the measured production renderer changes have repeat or same-binary A/B captures. The
 profiling plugin and experiments are only registered in automated profiling mode. Normal gameplay

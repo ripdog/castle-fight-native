@@ -23,7 +23,9 @@ use bevy::{
         storage::ShaderBuffer,
     },
     shader::ShaderRef,
-    world_serialization::{WorldInstance, WorldInstanceSpawner},
+    world_serialization::{
+        WorldAssetRoot, WorldInstance, WorldInstanceReady, WorldInstanceSpawner,
+    },
 };
 use serde::Deserialize;
 
@@ -513,27 +515,122 @@ pub struct Wc3TeamTint {
 pub struct Wc3VertexTint(pub [u8; 3]);
 
 #[derive(Component)]
+pub(crate) struct Wc3AttachmentOwner;
+
+#[derive(Component)]
 pub struct Wc3AttachToNode {
     pub owner_root: Entity,
     pub attachment_point: String,
 }
 
+#[derive(Component, Debug, Default)]
+pub(crate) struct Wc3AttachmentIndex {
+    nodes: Vec<(String, Entity)>,
+    resolved: HashMap<String, Option<Entity>>,
+}
+
+impl Wc3AttachmentIndex {
+    fn resolve(&mut self, requested: &str) -> Option<Entity> {
+        if let Some(cached) = self.resolved.get(requested) {
+            return *cached;
+        }
+        let mut best = None;
+        for (normalized, entity) in &self.nodes {
+            let Some(priority) = wc3_attachment_priority_normalized(normalized, requested) else {
+                continue;
+            };
+            if best.is_none_or(|(previous, _)| priority < previous) {
+                best = Some((priority, *entity));
+                if priority == 0 {
+                    break;
+                }
+            }
+        }
+        let resolved = best.map(|(_, entity)| entity);
+        self.resolved.insert(requested.to_owned(), resolved);
+        resolved
+    }
+}
+
+#[derive(SystemParam)]
+pub(crate) struct Wc3AttachmentIndexWorld<'w, 's> {
+    names: Query<'w, 's, &'static Name>,
+    children: Query<'w, 's, &'static Children>,
+    world_roots: Query<'w, 's, (), With<WorldAssetRoot>>,
+    attachment_owners: Query<'w, 's, (), With<Wc3AttachmentOwner>>,
+}
+
+pub(crate) fn index_wc3_model_attachments(
+    scene_ready: On<WorldInstanceReady>,
+    mut commands: Commands,
+    world: Wc3AttachmentIndexWorld<'_, '_>,
+    experiment: Option<Res<RenderExperiment>>,
+    mut stack: Local<Vec<(Entity, usize)>>,
+) {
+    let owner_root = scene_ready.entity;
+    if owner_root == Entity::PLACEHOLDER
+        || !world.attachment_owners.contains(owner_root)
+        || experiment.as_ref().is_some_and(|experiment| {
+            matches!(
+                **experiment,
+                RenderExperiment::LegacyAttachmentSearch | RenderExperiment::LegacyAttachmentIndex
+            )
+        })
+    {
+        return;
+    }
+
+    stack.clear();
+    stack.push((owner_root, 0));
+    let mut index = Wc3AttachmentIndex::default();
+    while let Some((entity, depth)) = stack.pop() {
+        if entity != owner_root && world.world_roots.contains(entity) {
+            // Nested WorldAssetRoot children are independent effect/model scenes.
+            // Attachment lookup for this owner must never bind into those subtrees.
+            continue;
+        }
+        if let Ok(name) = world.names.get(entity) {
+            let normalized = normalize_attachment_name(name.as_str());
+            if !normalized.is_empty() {
+                index.nodes.push((normalized, entity));
+            }
+        }
+        if depth < 127
+            && let Ok(descendants) = world.children.get(entity)
+        {
+            stack.extend(descendants.iter().rev().map(|child| (child, depth + 1)));
+        }
+    }
+    commands.entity(owner_root).try_insert(index);
+}
+
+#[derive(SystemParam)]
+pub(crate) struct Wc3AttachmentWorld<'w, 's> {
+    pending: Query<'w, 's, (Entity, &'static Wc3AttachToNode)>,
+    names: Query<'w, 's, (Entity, &'static Name)>,
+    parents: Query<'w, 's, &'static ChildOf>,
+    children: Query<'w, 's, &'static Children>,
+    indices: Query<'w, 's, &'static mut Wc3AttachmentIndex>,
+}
+
 pub fn resolve_wc3_visual_attachments(
     mut commands: Commands,
-    pending: Query<(Entity, &Wc3AttachToNode)>,
-    names: Query<(Entity, &Name)>,
-    parents: Query<&ChildOf>,
-    children: Query<&Children>,
+    mut world: Wc3AttachmentWorld<'_, '_>,
     experiment: Option<Res<RenderExperiment>>,
     mut stack: Local<Vec<(Entity, usize)>>,
 ) {
     let legacy_search = experiment
-        .is_some_and(|experiment| *experiment == RenderExperiment::LegacyAttachmentSearch);
-    for (effect, binding) in &pending {
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacyAttachmentSearch);
+    let legacy_index = experiment
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacyAttachmentIndex);
+    for (effect, binding) in &world.pending {
         let requested = normalize_attachment_name(&binding.attachment_point);
         let target = if legacy_search {
             // Profiling reference: each pending effect used to search the entire scene.
-            names
+            world
+                .names
                 .iter()
                 .filter_map(|(entity, name)| {
                     let priority = wc3_attachment_priority(name.as_str(), &requested)?;
@@ -545,16 +642,15 @@ pub fn resolve_wc3_visual_attachments(
                         if current == binding.owner_root {
                             return Some((priority, entity));
                         }
-                        current = parents.get(current).ok()?.parent();
+                        current = world.parents.get(current).ok()?.parent();
                     }
                     None
                 })
                 .min_by_key(|(priority, _)| *priority)
                 .map(|(_, entity)| entity)
-        } else {
-            // Only this owner's hierarchy can contain an eligible attachment. Skip
-            // the effect's own subtree to prevent a cyclic reparent. Keep retrying
-            // while the owner's asynchronously spawned scene is incomplete.
+        } else if legacy_index {
+            // Profiling reference for the immediately previous production path:
+            // walk only this owner's hierarchy for every pending attachment.
             stack.clear();
             stack.push((binding.owner_root, 0));
             let mut best = None;
@@ -562,29 +658,47 @@ pub fn resolve_wc3_visual_attachments(
                 if entity == effect {
                     continue;
                 }
-                if let Ok((_, name)) = names.get(entity)
+                if let Ok((_, name)) = world.names.get(entity)
                     && let Some(priority) = wc3_attachment_priority(name.as_str(), &requested)
                     && best.is_none_or(|(previous, _)| priority < previous)
                 {
                     best = Some((priority, entity));
                 }
                 if depth < 127
-                    && let Ok(descendants) = children.get(entity)
+                    && let Ok(descendants) = world.children.get(entity)
                 {
                     stack.extend(descendants.iter().rev().map(|child| (child, depth + 1)));
                 }
             }
             best.map(|(_, entity)| entity)
+        } else {
+            // WorldInstanceReady builds this once for the owner's imported model
+            // hierarchy. Pending attachments do no hierarchy traversal while the
+            // scene is loading, and repeated/missing names are cached per instance.
+            world
+                .indices
+                .get_mut(binding.owner_root)
+                .ok()
+                .and_then(|mut index| index.resolve(&requested))
         };
         if let Some(node) = target {
-            commands.entity(node).add_child(effect);
-            commands.entity(effect).remove::<Wc3AttachToNode>();
+            commands.queue(move |world: &mut World| {
+                if world.get_entity(node).is_err() || world.get_entity(effect).is_err() {
+                    return;
+                }
+                world.entity_mut(node).add_child(effect);
+                world.entity_mut(effect).remove::<Wc3AttachToNode>();
+            });
         }
     }
 }
 
 fn wc3_attachment_priority(name: &str, requested: &str) -> Option<u8> {
     let normalized = normalize_attachment_name(name);
+    wc3_attachment_priority_normalized(&normalized, requested)
+}
+
+fn wc3_attachment_priority_normalized(normalized: &str, requested: &str) -> Option<u8> {
     let suffix = normalized.strip_prefix(requested)?;
     Some(if suffix == "ref" {
         0
@@ -5704,6 +5818,32 @@ mod tests {
         assert_eq!(
             model.looping_animation_source().unwrap().animation_name,
             "Stand"
+        );
+    }
+
+    #[test]
+    fn attachment_index_preserves_ref_exact_prefix_priority_and_caches_misses() {
+        let mut world = World::new();
+        let prefix = world.spawn_empty().id();
+        let exact = world.spawn_empty().id();
+        let reference = world.spawn_empty().id();
+        let late = world.spawn_empty().id();
+        let mut index = Wc3AttachmentIndex {
+            nodes: vec![
+                ("handleftsocket".to_owned(), prefix),
+                ("handleft".to_owned(), exact),
+                ("handleftref".to_owned(), reference),
+            ],
+            resolved: HashMap::new(),
+        };
+
+        assert_eq!(index.resolve("handleft"), Some(reference));
+        assert_eq!(index.resolve("origin"), None);
+        index.nodes.push(("originref".to_owned(), late));
+        assert_eq!(
+            index.resolve("origin"),
+            None,
+            "misses stay cached until the index is rebuilt"
         );
     }
 

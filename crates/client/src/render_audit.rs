@@ -38,6 +38,7 @@ pub(crate) enum RenderExperiment {
     LegacyTeamColor,
     LegacyGeosetVisibility,
     LegacyAttachmentSearch,
+    LegacyAttachmentIndex,
     LegacySplatUpdates,
     LegacySplatMaterialState,
     LegacyAnimatedAlphaState,
@@ -56,13 +57,14 @@ impl RenderExperiment {
             "legacy-team-color" => Ok(Self::LegacyTeamColor),
             "legacy-geoset-visibility" => Ok(Self::LegacyGeosetVisibility),
             "legacy-attachment-search" => Ok(Self::LegacyAttachmentSearch),
+            "legacy-attachment-index" => Ok(Self::LegacyAttachmentIndex),
             "legacy-splat-updates" => Ok(Self::LegacySplatUpdates),
             "legacy-splat-material-state" => Ok(Self::LegacySplatMaterialState),
             "legacy-animated-alpha-state" => Ok(Self::LegacyAnimatedAlphaState),
             "legacy-animated-texture-state" => Ok(Self::LegacyAnimatedTextureState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, or freeze-materials"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, or freeze-materials"
             )),
         }
     }
@@ -292,6 +294,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyTeamColor
             | RenderExperiment::LegacyGeosetVisibility
             | RenderExperiment::LegacyAttachmentSearch
+            | RenderExperiment::LegacyAttachmentIndex
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
@@ -318,6 +321,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyTeamColor
             | RenderExperiment::LegacyGeosetVisibility
             | RenderExperiment::LegacyAttachmentSearch
+            | RenderExperiment::LegacyAttachmentIndex
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
@@ -554,6 +558,10 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-splat-material-state"),
             Ok(RenderExperiment::LegacySplatMaterialState)
+        );
+        assert_eq!(
+            RenderExperiment::parse("legacy-attachment-index"),
+            Ok(RenderExperiment::LegacyAttachmentIndex)
         );
         assert_eq!(
             RenderExperiment::parse("legacy-animated-alpha-state"),
