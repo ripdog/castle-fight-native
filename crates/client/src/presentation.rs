@@ -56,15 +56,16 @@ use crate::{
         Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3ParticleMaterial, Wc3RibbonSource,
         Wc3SplatMaterial, Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
         Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
-        apply_wc3_non_inheritance, emit_wc3_model_particles, emit_wc3_particles,
-        emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
-        fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
+        apply_wc3_non_inheritance, configure_wc3_shared_skin_palette_rendering,
+        emit_wc3_model_particles, emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events,
+        emit_wc3_splat_events, fix_wc3_scene_materials, flush_wc3_particle_buffers,
+        index_wc3_model_attachments, prepare_wc3_shared_skin_palettes,
         reset_reused_wc3_effect_instances, resolve_wc3_emitter_nodes,
         resolve_wc3_visual_attachments, setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
         update_wc3_model_particles, update_wc3_particles, update_wc3_ribbon_trails,
-        update_wc3_spawned_event_models, update_wc3_spawned_splats,
+        update_wc3_shared_skin_bounds, update_wc3_spawned_event_models, update_wc3_spawned_splats,
     },
 };
 
@@ -929,6 +930,7 @@ impl CastlePresentationPlugin {
 
 impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
+        configure_wc3_shared_skin_palette_rendering(app);
         app.add_plugins(MaterialPlugin::<HealthBarMaterial>::default())
             .add_plugins(MaterialPlugin::<Wc3AnimatedAlphaMaterial>::default())
             .add_plugins(MaterialPlugin::<Wc3ParticleMaterial>::default())
@@ -1003,6 +1005,18 @@ impl Plugin for CastlePresentationPlugin {
                 )
                     .chain()
                     .after(finish_entity_sync_profile),
+            )
+            .add_systems(
+                PostUpdate,
+                prepare_wc3_shared_skin_palettes
+                    .before(bevy::transform::TransformSystems::Propagate),
+            )
+            .add_systems(
+                PostUpdate,
+                update_wc3_shared_skin_bounds
+                    .after(apply_wc3_non_inheritance)
+                    .after(bevy::camera::visibility::calculate_bounds)
+                    .in_set(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
             )
             .add_systems(
                 PostUpdate,
