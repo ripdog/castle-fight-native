@@ -642,6 +642,12 @@ pub(crate) struct BenchmarkCamera {
     pub(crate) lock_input: bool,
 }
 
+#[derive(Resource, Debug, Clone, Copy)]
+pub(crate) struct ProfileVisualStress {
+    pub(crate) rawcode: u32,
+    pub(crate) count: usize,
+}
+
 #[derive(Component)]
 struct RtsCamera {
     focus: Vec3,
@@ -1051,6 +1057,7 @@ struct SceneWorldResources<'w> {
     terrain_texture_layout: Res<'w, TerrainTextureLayout>,
     terrain_textures: Res<'w, TerrainTextureSet>,
     benchmark_camera: Option<Res<'w, BenchmarkCamera>>,
+    visual_stress: Option<Res<'w, ProfileVisualStress>>,
 }
 
 fn setup_scene(
@@ -1074,6 +1081,7 @@ fn setup_scene(
         terrain_texture_layout,
         terrain_textures,
         benchmark_camera,
+        visual_stress,
     } = world;
     let SceneAssetResources {
         asset_server,
@@ -1082,7 +1090,7 @@ fn setup_scene(
         mut health_bar_materials,
         mut shader_buffers,
     } = assets;
-    let selected_unit_models = selected_match
+    let mut selected_unit_models = selected_match
         .content
         .unit_definitions()
         .map(|definition| definition.rawcode)
@@ -1093,7 +1101,21 @@ fn setup_scene(
                 .map(|definition| definition.rawcode),
         )
         .collect::<Vec<_>>();
+    if let Some(stress) = visual_stress.as_ref()
+        && !selected_unit_models.contains(&stress.rawcode)
+    {
+        selected_unit_models.push(stress.rawcode);
+    }
     *unit_models = UnitModelSet::load_selected(&asset_server, &selected_unit_models);
+    if let Some(stress) = visual_stress.as_ref() {
+        spawn_profile_visual_stress(
+            &mut commands,
+            stress.rawcode,
+            stress.count,
+            &unit_models,
+            &terrain,
+        );
+    }
     let selected_building_models = selected_match
         .content
         .production_building_definitions()
@@ -1394,6 +1416,43 @@ fn setup_scene(
         camera_transform(&rig),
         rig,
     ));
+}
+
+fn spawn_profile_visual_stress(
+    commands: &mut Commands,
+    rawcode: u32,
+    count: usize,
+    unit_models: &UnitModelSet,
+    terrain: &TerrainSurface,
+) {
+    const COLUMNS: usize = 40;
+    const SPACING_WORLD: f32 = 96.0;
+
+    let model = unit_models.get(rawcode).unwrap_or_else(|| {
+        panic!("profiling visual rawcode {rawcode:#010x} is not in the generated unit manifest")
+    });
+    let rows = count.div_ceil(COLUMNS).max(1);
+    for index in 0..count {
+        let column = index % COLUMNS;
+        let row = index / COLUMNS;
+        let x = (column as f32 - (COLUMNS.saturating_sub(1)) as f32 * 0.5) * SPACING_WORLD;
+        let z = (row as f32 - (rows.saturating_sub(1)) as f32 * 0.5) * SPACING_WORLD;
+        let y = terrain.height_at_world(Vec2::new(x, z));
+        let entity = commands
+            .spawn((
+                WorldAssetRoot(model.scene.clone()),
+                Transform {
+                    translation: Vec3::new(x, y, z),
+                    rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                    scale: Vec3::splat(model.scale),
+                },
+            ))
+            .id();
+        if let Some(tint) = model.tint_rgb {
+            commands.entity(entity).insert(Wc3VertexTint(tint));
+        }
+    }
+    println!("spawned {count} profiling WC3 visual scene(s) for rawcode {rawcode:#010x}");
 }
 
 fn prepare_unit_model_animations(

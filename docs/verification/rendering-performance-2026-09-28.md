@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus five measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, and alpha-only animated model layers now keep alpha in per-instance GPU records instead of mutable material assets. The broader model-envelope/off-screen pose lifecycle and texture-ID material-state work remains proposed.
+Status: investigation and opt-in measurement tools, plus six measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, and texture-ID animated layers now switch among immutable shared material variants instead of mutating material assets. The broader model-envelope/off-screen pose lifecycle work remains proposed.
 
 ## Scope and reproducibility
 
@@ -45,6 +45,9 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment legacy-geoset-visibility
 # --render-experiment legacy-splat-material-state
 # --render-experiment legacy-animated-alpha-state
+# --render-experiment legacy-animated-texture-state
+# Texture-ID-heavy visual fixture used for that comparison:
+# target/release/castle-fight-client --stress-visual h02W 500 --profile --profile-paused --profile-warmup 10 --profile-duration 10
 ```
 
 The ordinary quicksave could not be used: snapshot decoding reported a missing
@@ -358,13 +361,46 @@ The scene census gives the clearest structural signal: production averages **290
 of **68.8%** and **51.5%** respectively. Skin-palette staging remains 11.33 MB/frame in both paths, as
 expected; this optimization changes material state rather than skeleton work.
 
+### Implementation follow-up: persistent animated texture-ID state
+
+The remaining material-state slice covers the 15 converted materials with texture-ID tracks: 14
+texture-only and one combined alpha/texture layer. Some Naga water materials select among as many as
+46 authored textures, so a small fixed texture binding set is not sufficient. The production path
+instead prebuilds immutable shared material variants for the authored texture IDs and animates by
+switching mesh material handles. Texture assets, samplers, blend/depth state, tint, priority plane and
+all other material properties stay immutable. The combined alpha/texture case reuses the existing
+per-instance alpha buffer and switches among `Wc3AnimatedAlphaMaterial` variants that share that same
+alpha storage. Unknown or absent texture IDs retain the authored static texture fallback.
+
+A profiling-only `legacy-animated-texture-state` switch restores the old behavior: each affected mesh
+owns a cloned StandardMaterial and mutates its base-colour texture as the track changes. Because the
+normal 500-unit battle does not densely exercise these rare tracks, this comparison uses the dedicated
+presentation fixture `--stress-visual h02W 500`, which instantiates 500 copies of the converted model
+while leaving the simulation paused. The clean baseline and legacy captures both report zero simulation
+ticks during the timed ten-second window and exactly **1,000 animated texture tracks**.
+
+| 500 × h02W visual fixture | FPS | Mean frame ms | Main CPU ms | Handoff ms | Prepare assets ms | Specialize ms | Queue ms | Render/submit/present ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Shared immutable variants | 163.64 | 6.111 | 5.047 | 1.000 | 0.068 | 0.131 | 0.112 | 1.548 |
+| Legacy mutable materials | 146.34 | 6.833 | 5.136 | 1.639 | 0.532 | 0.176 | 0.152 | 1.771 |
+
+The shared-variant path is **10.6% lower in mean frame time and 11.8% higher in FPS**. Asset
+preparation falls **87.2%**, the overlapping handoff scope **39.0%**, specialization **25.6%**, queueing
+**26.3%**, and render/submit/present **12.6%**. World extraction falls about **9.0%**. GPU pass timing
+is effectively unchanged (transparent 0.635 vs 0.640 ms; opaque 1.457 vs 1.469 ms), which is consistent
+with this optimization targeting CPU-side material lifecycle rather than pixel cost.
+
+The structural result is larger than the frame-time delta: material assets fall from **1,179 to 181**
+and visible mesh/material pairs from **1,129 to 131**, while transparent draw-function calls remain
+essentially unchanged (123 legacy vs 124 production). This confirms that the gain comes from removing
+per-instance mutable material state, not from hiding geometry or changing rendered ordering.
+
+Two later production repeats in the pasted benchmark log also land near 161–166 FPS, but their capture
+reports contain nonzero simulation ticks despite `--profile-paused`; they are therefore excluded from
+the controlled table above. The clean zero-tick pair is the attribution result.
+
 ### Next architectural changes, in priority order
 
-- **Persistent texture-ID state for animated model layers.** Only 15 converted materials currently
-  use texture-ID animation (14 texture-only and one combined alpha/texture layer). Move texture
-  selection to immutable/shared texture bindings plus per-instance selection state without changing
-  authored texture IDs, priority planes or transparent ordering. The combined alpha/texture case
-  should then join the buffered alpha path rather than retaining a cloned material.
 - **Bound attachment indices and retained effect instances.** The new local search removes the
   scene-wide multiplier. An index built when each model scene becomes ready can resolve repeated
   attachment names once and record absent names until the hierarchy changes. Pool frequently
@@ -381,7 +417,7 @@ expected; this optimization changes material state rather than skeleton work.
 The release build, client Clippy with warnings denied, formatting, the client test suite and live
 captures pass. The material-freeze path is profiling-only and intentionally changes the picture;
 owner-local attachment search, unchanged-write suppression, persistent terrain-splat material
-state, and buffered alpha-only model material state ship by default.
+state, buffered alpha-only model material state, and immutable texture-ID material variants ship by default.
 
 ## Architectural findings from source
 
@@ -406,10 +442,11 @@ a valid premise for this redesign.
 
 Originally, animated material alpha/texture tracks cloned a StandardMaterial for each affected mesh
 in `fix_wc3_scene_materials`, then modified that asset as its track changed. Alpha-only tracks now use
-the shared GPU-record path measured above; texture-ID tracks and the single combined alpha/texture
-case still retain the cloned-material reference path. Distinct assets do not necessarily mean separate
-draw calls because Bevy supports bindless material slabs, but they still add asset lifecycle,
-extraction and update work. Transparent sorting also limits which compatible items can be batched.
+the shared GPU-record path measured above. Texture-ID tracks switch among immutable shared variants,
+and the single combined alpha/texture case shares the alpha buffer across those variants. Distinct
+material handles do not necessarily mean separate draw calls because Bevy supports bindless material
+slabs, but removing per-instance mutation still avoids asset lifecycle, extraction and preparation
+work. Transparent sorting continues to limit which compatible items can be batched.
 
 Geoset visibility is still exported as binary zero/nonzero node scale (`visibility_scale`) for glTF
 animation, but the client now translates that authored state into explicit Bevy visibility before
@@ -515,12 +552,13 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 
 ## Validation
 
-The client test suite passes (200 tests); Clippy passes for all client targets with warnings denied;
+The client test suite passes (203 tests); Clippy passes for all client targets with warnings denied;
 formatting passes; the release client builds, the original seven bounded investigation profiles
 complete, and the measured production renderer changes have repeat or same-binary A/B captures. The
 profiling plugin and experiments are only registered in automated profiling mode. Normal gameplay
 rendering is changed for textured additive ordinary particles, the narrowly gated static two-layer
-unit team-colour case, exported hidden-geoset submission, terrain-splat material state, and alpha-only
-animated model material state; excluded cases retain their reference paths. Interactive stress startup
+unit team-colour case, exported hidden-geoset submission, terrain-splat material state, alpha-only
+animated model material state, and texture-ID animated material variants; excluded cases retain their
+reference paths. Interactive stress startup
 centres the camera, while automated
 profiles centre and lock it.

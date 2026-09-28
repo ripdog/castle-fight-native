@@ -439,6 +439,7 @@ mod tests {
     fn options() -> ClientOptions {
         ClientOptions {
             stress_units: None,
+            stress_visual: None,
             health_bars: true,
             perf_log: false,
             profile_quicksave: None,

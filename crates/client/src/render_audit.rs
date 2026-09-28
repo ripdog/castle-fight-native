@@ -23,8 +23,8 @@ use bevy::{
 };
 
 use crate::wc3_effects::{
-    Wc3AnimatedAlphaMaterial, Wc3Particle, Wc3ParticleMaterial, Wc3SplatMaterial,
-    Wc3TeamColorMaterial,
+    Wc3AnimatedAlphaMaterial, Wc3AnimatedMaterialTexture, Wc3Particle, Wc3ParticleMaterial,
+    Wc3SplatMaterial, Wc3TeamColorMaterial,
 };
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -41,6 +41,7 @@ pub(crate) enum RenderExperiment {
     LegacySplatUpdates,
     LegacySplatMaterialState,
     LegacyAnimatedAlphaState,
+    LegacyAnimatedTextureState,
     FreezeMaterials,
 }
 
@@ -58,9 +59,10 @@ impl RenderExperiment {
             "legacy-splat-updates" => Ok(Self::LegacySplatUpdates),
             "legacy-splat-material-state" => Ok(Self::LegacySplatMaterialState),
             "legacy-animated-alpha-state" => Ok(Self::LegacyAnimatedAlphaState),
+            "legacy-animated-texture-state" => Ok(Self::LegacyAnimatedTextureState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, or freeze-materials"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, or freeze-materials"
             )),
         }
     }
@@ -293,6 +295,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
+            | RenderExperiment::LegacyAnimatedTextureState
             | RenderExperiment::FreezeMaterials
     ) {
         return;
@@ -318,6 +321,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
+            | RenderExperiment::LegacyAnimatedTextureState
             | RenderExperiment::FreezeMaterials => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
@@ -380,6 +384,7 @@ pub(crate) struct SceneCensus<'w, 's> {
     materials: Res<'w, Assets<StandardMaterial>>,
     animated_alpha_materials: Res<'w, Assets<Wc3AnimatedAlphaMaterial>>,
     players: Query<'w, 's, (), With<AnimationPlayer>>,
+    animated_textures: Query<'w, 's, (), With<Wc3AnimatedMaterialTexture>>,
     entities: Query<'w, 's, Entity>,
     windows: Query<'w, 's, &'static Window>,
     cameras: Query<'w, 's, &'static GlobalTransform, With<Camera3d>>,
@@ -464,7 +469,7 @@ impl SceneCensus<'_, '_> {
             }
         }
         let mut output = format!(
-            "\nSCENE  entities={} meshes={} visible={} skinned={} dynamic_bounds={} particles={} transparent_visible={} no_auto_batch={}\n  mesh_assets={} material_assets={} visible_mesh_material_pairs={} animation_players={} joint_references={} unique_joints={}\n",
+            "\nSCENE  entities={} meshes={} visible={} skinned={} dynamic_bounds={} particles={} transparent_visible={} no_auto_batch={}\n  mesh_assets={} material_assets={} visible_mesh_material_pairs={} animation_players={} animated_texture_tracks={} joint_references={} unique_joints={}\n",
             self.entities.iter().count(),
             total,
             visible,
@@ -479,6 +484,7 @@ impl SceneCensus<'_, '_> {
                 + team_material_assets.len(),
             visible_pairs.len() + animated_alpha_visible_pairs.len() + team_visible_pairs.len(),
             self.players.iter().count(),
+            self.animated_textures.iter().count(),
             joint_references,
             joints.len()
         );
@@ -552,6 +558,10 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-animated-alpha-state"),
             Ok(RenderExperiment::LegacyAnimatedAlphaState)
+        );
+        assert_eq!(
+            RenderExperiment::parse("legacy-animated-texture-state"),
+            Ok(RenderExperiment::LegacyAnimatedTextureState)
         );
         assert!(RenderExperiment::parse("hide-everything").is_err());
     }

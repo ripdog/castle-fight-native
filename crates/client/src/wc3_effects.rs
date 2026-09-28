@@ -452,6 +452,10 @@ pub(crate) struct Wc3AnimatedMaterialTexture {
     static_texture_id: u32,
     static_texture: Option<Handle<Image>>,
     textures: BTreeMap<u32, Handle<Image>>,
+    standard_materials: BTreeMap<u32, Handle<StandardMaterial>>,
+    alpha_materials: BTreeMap<u32, Handle<Wc3AnimatedAlphaMaterial>>,
+    fallback_standard_material: Option<Handle<StandardMaterial>>,
+    fallback_alpha_material: Option<Handle<Wc3AnimatedAlphaMaterial>>,
     track: Wc3UnsignedTrack,
     sequence_windows: Vec<Wc3EmitterSequenceWindow>,
     global_sequence_durations_ms: Vec<u32>,
@@ -2443,13 +2447,19 @@ struct SplatMaterialKey {
     blend_mode: u32,
 }
 
+type AnimatedAlphaMaterialCache =
+    HashMap<(AssetId<StandardMaterial>, Option<AssetId<Image>>), Handle<Wc3AnimatedAlphaMaterial>>;
+type AnimatedTextureMaterialCache =
+    HashMap<(AssetId<StandardMaterial>, AssetId<Image>), Handle<StandardMaterial>>;
+
 #[derive(Resource)]
 pub struct Wc3ParticleAssets {
     particle_quads: HashMap<(u32, u32, u32), Handle<Mesh>>,
     materials: HashMap<String, Handle<StandardMaterial>>,
     additive_batch_indices: HashMap<AdditiveParticleBatchKey, usize>,
     additive_batches: Vec<AdditiveParticleBatch>,
-    animated_alpha_materials: HashMap<AssetId<StandardMaterial>, Handle<Wc3AnimatedAlphaMaterial>>,
+    animated_alpha_materials: AnimatedAlphaMaterialCache,
+    animated_texture_materials: AnimatedTextureMaterialCache,
     animated_alpha_buffer: Option<Handle<ShaderBuffer>>,
     animated_alpha_gpu_data: Vec<[f32; 4]>,
     animated_alpha_slots: HashMap<Entity, u32>,
@@ -2814,6 +2824,7 @@ impl Wc3ParticleAssets {
             additive_batch_indices: HashMap::new(),
             additive_batches: Vec::new(),
             animated_alpha_materials: HashMap::new(),
+            animated_texture_materials: HashMap::new(),
             animated_alpha_buffer: None,
             animated_alpha_gpu_data: Vec::new(),
             animated_alpha_slots: HashMap::new(),
@@ -2996,6 +3007,37 @@ impl Wc3ParticleAssets {
         }
     }
 
+    fn animated_alpha_material_for(
+        &mut self,
+        source_material_id: AssetId<StandardMaterial>,
+        source_material: StandardMaterial,
+        animated_materials: &mut Assets<Wc3AnimatedAlphaMaterial>,
+        shader_buffers: &mut Assets<ShaderBuffer>,
+    ) -> Handle<Wc3AnimatedAlphaMaterial> {
+        let buffer = self
+            .animated_alpha_buffer
+            .get_or_insert_with(|| {
+                self.animated_alpha_capacity_slots = ANIMATED_ALPHA_BUFFER_MIN_SLOTS;
+                self.animated_alpha_gpu_data = vec![[0.0; 4]; self.animated_alpha_capacity_slots];
+                shader_buffers.add(ShaderBuffer::from(self.animated_alpha_gpu_data.clone()))
+            })
+            .clone();
+        let texture_id = source_material.base_color_texture.as_ref().map(Handle::id);
+        self.animated_alpha_materials
+            .entry((source_material_id, texture_id))
+            .or_insert_with(|| {
+                let mut base = source_material;
+                let base_color = base.base_color.to_linear();
+                base.base_color =
+                    Color::linear_rgba(base_color.red, base_color.green, base_color.blue, 1.0);
+                animated_materials.add(ExtendedMaterial {
+                    base,
+                    extension: Wc3AnimatedAlphaExtension { alpha_data: buffer },
+                })
+            })
+            .clone()
+    }
+
     fn acquire_animated_alpha_slot(
         &mut self,
         entity: Entity,
@@ -3005,12 +3047,12 @@ impl Wc3ParticleAssets {
         animated_materials: &mut Assets<Wc3AnimatedAlphaMaterial>,
         shader_buffers: &mut Assets<ShaderBuffer>,
     ) -> (u32, Handle<Wc3AnimatedAlphaMaterial>) {
-        let buffer = self.animated_alpha_buffer.get_or_insert_with(|| {
-            self.animated_alpha_capacity_slots = ANIMATED_ALPHA_BUFFER_MIN_SLOTS;
-            self.animated_alpha_gpu_data = vec![[0.0; 4]; self.animated_alpha_capacity_slots];
-            shader_buffers.add(ShaderBuffer::from(self.animated_alpha_gpu_data.clone()))
-        });
-
+        let material = self.animated_alpha_material_for(
+            source_material_id,
+            source_material,
+            animated_materials,
+            shader_buffers,
+        );
         let slot = self.animated_alpha_free_slots.pop().unwrap_or_else(|| {
             let slot = self.animated_alpha_next_slot;
             self.animated_alpha_next_slot = self.animated_alpha_next_slot.saturating_add(1);
@@ -3027,24 +3069,24 @@ impl Wc3ParticleAssets {
         self.animated_alpha_gpu_data[slot as usize] = [initial_alpha, 0.0, 0.0, 0.0];
         self.animated_alpha_slots.insert(entity, slot);
         self.animated_alpha_dirty = true;
-
-        let material = self
-            .animated_alpha_materials
-            .entry(source_material_id)
-            .or_insert_with(|| {
-                let mut base = source_material;
-                let base_color = base.base_color.to_linear();
-                base.base_color =
-                    Color::linear_rgba(base_color.red, base_color.green, base_color.blue, 1.0);
-                animated_materials.add(ExtendedMaterial {
-                    base,
-                    extension: Wc3AnimatedAlphaExtension {
-                        alpha_data: buffer.clone(),
-                    },
-                })
-            })
-            .clone();
         (slot, material)
+    }
+
+    fn animated_texture_material_for(
+        &mut self,
+        source_material_id: AssetId<StandardMaterial>,
+        source_material: &StandardMaterial,
+        texture: &Handle<Image>,
+        materials: &mut Assets<StandardMaterial>,
+    ) -> Handle<StandardMaterial> {
+        self.animated_texture_materials
+            .entry((source_material_id, texture.id()))
+            .or_insert_with(|| {
+                let mut material = source_material.clone();
+                material.base_color_texture = Some(texture.clone());
+                materials.add(material)
+            })
+            .clone()
     }
 
     fn update_animated_alpha_slot(&mut self, slot: u32, alpha: f32) {
@@ -3489,6 +3531,9 @@ pub fn fix_wc3_scene_materials(
     let legacy_animated_alpha = experiment
         .as_ref()
         .is_some_and(|experiment| **experiment == RenderExperiment::LegacyAnimatedAlphaState);
+    let legacy_animated_texture = experiment
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacyAnimatedTextureState);
     'mesh: for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
             commands.entity(entity).insert(Wc3MaterialProcessed);
@@ -3666,28 +3711,100 @@ pub fn fix_wc3_scene_materials(
 
         let alpha_track = extras.alpha_track.clone();
         let texture_id_track = extras.texture_id_track.clone();
-        let persistent_alpha =
-            alpha_track.is_some() && texture_id_track.is_none() && !legacy_animated_alpha;
-        let mut alpha_gpu_slot = None;
-        if persistent_alpha {
-            let source_material_id = material_handle.0.id();
-            let Some(source) = materials.get(&material_handle.0).cloned() else {
+        let persistent_texture = texture_id_track.is_some()
+            && !legacy_animated_texture
+            && (alpha_track.is_none() || !legacy_animated_alpha);
+        let persistent_alpha = alpha_track.is_some()
+            && !legacy_animated_alpha
+            && (texture_id_track.is_none() || persistent_texture);
+        let needs_source = persistent_alpha || persistent_texture;
+        let source_handle = material_handle.0.clone();
+        let source_material_id = source_handle.id();
+        let source_material = if needs_source {
+            let Some(source) = materials.get(&source_handle).cloned() else {
                 continue 'mesh;
             };
+            Some(source)
+        } else {
+            None
+        };
+        let static_texture = source_material
+            .as_ref()
+            .and_then(|material| material.base_color_texture.clone())
+            .or_else(|| {
+                materials
+                    .get(&source_handle)
+                    .and_then(|material| material.base_color_texture.clone())
+            });
+        let textures = if texture_id_track.is_some() {
+            wc3_material_texture_handles(
+                &asset_server,
+                static_texture.as_ref(),
+                &extras.texture_paths,
+            )
+        } else {
+            BTreeMap::new()
+        };
+
+        let mut alpha_gpu_slot = None;
+        let mut standard_texture_materials = BTreeMap::new();
+        let mut alpha_texture_materials = BTreeMap::new();
+        let mut fallback_standard_material = None;
+        let mut fallback_alpha_material = None;
+
+        if persistent_alpha {
+            let source = source_material
+                .as_ref()
+                .expect("persistent alpha material must retain its source");
             let initial_alpha = extras.layer_alpha.clamp(0.0, 1.0);
-            let (slot, animated_handle) = effect_assets.acquire_animated_alpha_slot(
+            let (slot, base_alpha_material) = effect_assets.acquire_animated_alpha_slot(
                 entity,
                 source_material_id,
-                source,
+                source.clone(),
                 initial_alpha,
                 &mut animated_alpha_materials,
                 &mut shader_buffers,
             );
             alpha_gpu_slot = Some(slot);
+            fallback_alpha_material = Some(base_alpha_material.clone());
+            if persistent_texture {
+                for (texture_id, texture) in &textures {
+                    let mut variant = source.clone();
+                    variant.base_color_texture = Some(texture.clone());
+                    let handle = effect_assets.animated_alpha_material_for(
+                        source_material_id,
+                        variant,
+                        &mut animated_alpha_materials,
+                        &mut shader_buffers,
+                    );
+                    alpha_texture_materials.insert(*texture_id, handle);
+                }
+            }
+            let initial_material = alpha_texture_materials
+                .get(&extras.texture_id)
+                .cloned()
+                .unwrap_or(base_alpha_material);
             commands
                 .entity(entity)
                 .remove::<MeshMaterial3d<StandardMaterial>>()
-                .insert((MeshMaterial3d(animated_handle), MeshTag(slot)));
+                .insert((MeshMaterial3d(initial_material), MeshTag(slot)));
+        } else if persistent_texture {
+            let source = source_material
+                .as_ref()
+                .expect("persistent texture material must retain its source");
+            fallback_standard_material = Some(source_handle.clone());
+            for (texture_id, texture) in &textures {
+                let handle = effect_assets.animated_texture_material_for(
+                    source_material_id,
+                    source,
+                    texture,
+                    &mut materials,
+                );
+                standard_texture_materials.insert(*texture_id, handle);
+            }
+            if let Some(initial_material) = standard_texture_materials.get(&extras.texture_id) {
+                material_handle.0 = initial_material.clone();
+            }
         } else if alpha_track.is_some() || texture_id_track.is_some() {
             let Some(source) = materials.get(&material_handle.0).cloned() else {
                 continue 'mesh;
@@ -3708,18 +3825,14 @@ pub fn fix_wc3_scene_materials(
         }
 
         if let Some(track) = texture_id_track {
-            let static_texture = materials
-                .get(&material_handle.0)
-                .and_then(|material| material.base_color_texture.clone());
-            let textures = wc3_material_texture_handles(
-                &asset_server,
-                static_texture.as_ref(),
-                &extras.texture_paths,
-            );
             commands.entity(entity).insert(Wc3AnimatedMaterialTexture {
                 static_texture_id: extras.texture_id,
                 static_texture,
                 textures,
+                standard_materials: standard_texture_materials,
+                alpha_materials: alpha_texture_materials,
+                fallback_standard_material,
+                fallback_alpha_material,
                 track,
                 sequence_windows: extras.sequence_windows,
                 global_sequence_durations_ms: extras.global_sequence_durations_ms,
@@ -4000,23 +4113,30 @@ pub fn update_wc3_material_alpha(
     }
 }
 
+type Wc3AnimatedTextureQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        Option<&'static mut MeshMaterial3d<StandardMaterial>>,
+        Option<&'static mut MeshMaterial3d<Wc3AnimatedAlphaMaterial>>,
+        &'static mut Wc3AnimatedMaterialTexture,
+    ),
+>;
+
 pub fn update_wc3_material_texture(
     time: Res<Time>,
     experiment: Option<Res<RenderExperiment>>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut animated: Query<(
-        Entity,
-        &MeshMaterial3d<StandardMaterial>,
-        &mut Wc3AnimatedMaterialTexture,
-    )>,
+    mut animated: Wc3AnimatedTextureQuery,
 ) {
     if experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials) {
         return;
     }
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
-    for (entity, material_handle, mut animation) in &mut animated {
+    for (entity, mut standard_handle, mut alpha_handle, mut animation) in &mut animated {
         animation.fallback_elapsed_ms += dt_ms;
         let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
         let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
@@ -4038,12 +4158,39 @@ pub fn update_wc3_material_texture(
         if animation.last_texture_id == Some(texture_id) {
             continue;
         }
+
+        if let Some(alpha_handle) = alpha_handle.as_mut()
+            && let Some(selected) = animation
+                .alpha_materials
+                .get(&texture_id)
+                .cloned()
+                .or_else(|| animation.fallback_alpha_material.clone())
+        {
+            alpha_handle.set_if_neq(MeshMaterial3d(selected));
+            animation.last_texture_id = Some(texture_id);
+            continue;
+        }
+        if let Some(standard_handle) = standard_handle.as_mut()
+            && let Some(selected) = animation
+                .standard_materials
+                .get(&texture_id)
+                .cloned()
+                .or_else(|| animation.fallback_standard_material.clone())
+        {
+            standard_handle.set_if_neq(MeshMaterial3d(selected));
+            animation.last_texture_id = Some(texture_id);
+            continue;
+        }
+
         let selected = animation
             .textures
             .get(&texture_id)
             .cloned()
             .or_else(|| animation.static_texture.clone());
-        let Some(mut material) = materials.get_mut(&material_handle.0) else {
+        let Some(standard_handle) = standard_handle else {
+            continue;
+        };
+        let Some(mut material) = materials.get_mut(&standard_handle.0) else {
             continue;
         };
         material.base_color_texture = selected;
@@ -6234,6 +6381,95 @@ mod tests {
         assert_eq!(
             effect_assets.animated_alpha_gpu_data[first_slot as usize][0],
             0.5
+        );
+    }
+
+    #[test]
+    fn animated_texture_variants_are_shared_and_leave_source_immutable() {
+        let mut meshes = Assets::<Mesh>::default();
+        let mut effect_assets = Wc3ParticleAssets::new(&mut meshes);
+        let mut materials = Assets::<StandardMaterial>::default();
+        let mut images = Assets::<Image>::default();
+        let source_texture = images.add(Image::default());
+        let source_handle = materials.add(StandardMaterial {
+            base_color_texture: Some(source_texture.clone()),
+            ..default()
+        });
+        let source = materials.get(&source_handle).unwrap().clone();
+        let alternate_texture = images.add(Image::default());
+
+        let first = effect_assets.animated_texture_material_for(
+            source_handle.id(),
+            &source,
+            &alternate_texture,
+            &mut materials,
+        );
+        let second = effect_assets.animated_texture_material_for(
+            source_handle.id(),
+            &source,
+            &alternate_texture,
+            &mut materials,
+        );
+
+        assert_eq!(first, second);
+        assert_eq!(
+            materials
+                .get(&source_handle)
+                .unwrap()
+                .base_color_texture
+                .as_ref()
+                .map(Handle::id),
+            Some(source_texture.id())
+        );
+        assert_eq!(
+            materials
+                .get(&first)
+                .unwrap()
+                .base_color_texture
+                .as_ref()
+                .map(Handle::id),
+            Some(alternate_texture.id())
+        );
+    }
+
+    #[test]
+    fn animated_alpha_texture_variants_share_alpha_buffer() {
+        let mut meshes = Assets::<Mesh>::default();
+        let mut effect_assets = Wc3ParticleAssets::new(&mut meshes);
+        let mut animated_materials = Assets::<Wc3AnimatedAlphaMaterial>::default();
+        let mut shader_buffers = Assets::<ShaderBuffer>::default();
+        let mut materials = Assets::<StandardMaterial>::default();
+        let mut images = Assets::<Image>::default();
+        let source_id = materials.add(StandardMaterial::default()).id();
+        let first_texture = images.add(Image::default());
+        let second_texture = images.add(Image::default());
+        let first = effect_assets.animated_alpha_material_for(
+            source_id,
+            StandardMaterial {
+                base_color_texture: Some(first_texture),
+                ..default()
+            },
+            &mut animated_materials,
+            &mut shader_buffers,
+        );
+        let second = effect_assets.animated_alpha_material_for(
+            source_id,
+            StandardMaterial {
+                base_color_texture: Some(second_texture),
+                ..default()
+            },
+            &mut animated_materials,
+            &mut shader_buffers,
+        );
+
+        assert_ne!(first, second);
+        assert_eq!(
+            animated_materials.get(&first).unwrap().extension.alpha_data,
+            animated_materials
+                .get(&second)
+                .unwrap()
+                .extension
+                .alpha_data
         );
     }
 

@@ -252,12 +252,22 @@ fn main() {
         );
         std::process::exit(2);
     }
+    if options.server.is_some() && options.stress_visual.is_some() {
+        eprintln!(
+            "--stress-visual is an offline presentation fixture and cannot be used with --server"
+        );
+        std::process::exit(2);
+    }
     if options.server.is_some() && options.profile_quicksave.is_some() {
         eprintln!("--profile-quicksave is an offline mode and cannot be used with --server");
         std::process::exit(2);
     }
     if options.stress_units.is_some() && options.profile_quicksave.is_some() {
         eprintln!("--profile-quicksave cannot be combined with --stress-units");
+        std::process::exit(2);
+    }
+    if options.stress_visual.is_some() && options.profile_quicksave.is_some() {
+        eprintln!("--profile-quicksave cannot be combined with --stress-visual");
         std::process::exit(2);
     }
     let match_config = client_match_config(&options).unwrap_or_else(|error| {
@@ -338,7 +348,10 @@ fn main() {
         (local_player, None)
     };
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
-    let present_mode = if options.stress_units.is_some() || options.profile_quicksave.is_some() {
+    let present_mode = if options.stress_units.is_some()
+        || options.stress_visual.is_some()
+        || options.profile_quicksave.is_some()
+    {
         PresentMode::AutoNoVsync
     } else {
         PresentMode::AutoVsync
@@ -470,10 +483,13 @@ fn main() {
         app.insert_resource(lobby_state).add_plugins(LobbyPlugin);
     }
 
-    if options.stress_units.is_some() || options.is_profiling() {
+    if options.stress_units.is_some() || options.stress_visual.is_some() || options.is_profiling() {
         app.insert_resource(presentation::BenchmarkCamera {
             lock_input: options.is_profiling(),
         });
+    }
+    if let Some(stress_visual) = options.stress_visual {
+        app.insert_resource(stress_visual);
     }
 
     if options.perf_log {
@@ -488,10 +504,19 @@ fn main() {
             .add_plugins(RenderAuditPlugin);
         let source = options.profile_quicksave.as_ref().map_or_else(
             || {
-                format!(
-                    "stress-units={}",
-                    options.stress_units.expect("profiling needs a scene")
-                )
+                if let Some(stress) = options.stress_visual {
+                    let rawcode = stress.rawcode.to_be_bytes();
+                    format!(
+                        "stress-visual={}:{}",
+                        String::from_utf8_lossy(&rawcode),
+                        stress.count
+                    )
+                } else {
+                    format!(
+                        "stress-units={}",
+                        options.stress_units.expect("profiling needs a scene")
+                    )
+                }
             },
             |path| path.display().to_string(),
         );
@@ -609,6 +634,7 @@ fn print_perf_telemetry(
 #[derive(Debug, Clone)]
 struct ClientOptions {
     stress_units: Option<usize>,
+    stress_visual: Option<presentation::ProfileVisualStress>,
     health_bars: bool,
     perf_log: bool,
     profile_quicksave: Option<PathBuf>,
@@ -633,6 +659,7 @@ impl ClientOptions {
     fn parse() -> Self {
         let mut options = Self {
             stress_units: None,
+            stress_visual: None,
             health_bars: true,
             perf_log: false,
             profile_quicksave: None,
@@ -660,6 +687,21 @@ impl ClientOptions {
                             .parse()
                             .expect("--stress-units requires a non-negative integer"),
                     );
+                }
+                "--stress-visual" => {
+                    let rawcode = args
+                        .next()
+                        .expect("--stress-visual requires a four-character unit rawcode and count");
+                    let count = args
+                        .next()
+                        .expect("--stress-visual requires a four-character unit rawcode and count")
+                        .parse()
+                        .expect("--stress-visual count must be a non-negative integer");
+                    options.stress_visual = Some(presentation::ProfileVisualStress {
+                        rawcode: parse_profile_rawcode(&rawcode)
+                            .unwrap_or_else(|error| panic!("{error}")),
+                        count,
+                    });
                 }
                 "--no-health-bars" => options.health_bars = false,
                 "--perf-log" => options.perf_log = true,
@@ -733,7 +775,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|freeze-materials]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials]"
                     );
                     std::process::exit(0);
                 }
@@ -743,17 +785,29 @@ impl ClientOptions {
         assert!(
             !options.profile
                 || options.stress_units.is_some()
+                || options.stress_visual.is_some()
                 || options.profile_quicksave.is_some(),
-            "--profile requires --stress-units or --profile-quicksave",
+            "--profile requires --stress-units, --stress-visual, or --profile-quicksave",
         );
         assert!(
             options.is_profiling()
                 || (!options.profile_paused
-                    && options.render_experiment == RenderExperiment::Baseline),
-            "render experiments and --profile-paused require --profile or --profile-quicksave",
+                    && options.render_experiment == RenderExperiment::Baseline
+                    && options.stress_visual.is_none()),
+            "render experiments, --profile-paused, and --stress-visual require --profile or --profile-quicksave",
         );
         options
     }
+}
+
+fn parse_profile_rawcode(value: &str) -> Result<u32, String> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 4 || !bytes.is_ascii() {
+        return Err("--stress-visual rawcode must be exactly four ASCII characters".to_owned());
+    }
+    Ok(u32::from_be_bytes(
+        bytes.try_into().expect("validated four-byte rawcode"),
+    ))
 }
 
 fn parse_profile_warmup(value: &str) -> Result<Duration, String> {
@@ -1629,6 +1683,17 @@ fn default_worker_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profiling_visual_rawcode_requires_exact_ascii_fourcc() {
+        assert_eq!(
+            parse_profile_rawcode("h02W").unwrap(),
+            u32::from_be_bytes(*b"h02W")
+        );
+        for invalid in ["h02", "h02WW", "水水"] {
+            assert!(parse_profile_rawcode(invalid).is_err(), "{invalid}");
+        }
+    }
 
     #[test]
     fn profiling_duration_accepts_fractional_seconds_and_rejects_invalid_values() {
