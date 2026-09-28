@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus four measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, and terrain-conforming splats use persistent shared material state with per-instance GPU records. The broader model-envelope/off-screen pose lifecycle and animated-model material-state work remains proposed.
+Status: investigation and opt-in measurement tools, plus five measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, and alpha-only animated model layers now keep alpha in per-instance GPU records instead of mutable material assets. The broader model-envelope/off-screen pose lifecycle and texture-ID material-state work remains proposed.
 
 ## Scope and reproducibility
 
@@ -44,6 +44,7 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment legacy-team-color
 # --render-experiment legacy-geoset-visibility
 # --render-experiment legacy-splat-material-state
+# --render-experiment legacy-animated-alpha-state
 ```
 
 The ordinary quicksave could not be used: snapshot decoding reported a missing
@@ -316,16 +317,54 @@ queueing about **37.2%**. Transparent-pass GPU time averages 2.264 ms versus 2.4
 render/submit/present scope is noisier and overlaps scheduling/waiting, so it is not used as the main
 attribution metric here.
 
-This implements the splat-first portion of persistent material state. Animated model alpha/texture
-layers still clone and mutate material assets and remain the next extension of this representation.
+This implements the splat-first portion of persistent material state.
+
+### Implementation follow-up: persistent animated-alpha model state
+
+The next slice targets model-layer alpha tracks while deliberately leaving texture-ID animation on
+the reference path. An asset audit across the converted classic model packs found **549 animated
+materials: 534 alpha-only, 14 texture-only, and 1 with both alpha and texture-ID tracks**. That makes
+alpha-only state the dominant safe slice.
+
+Eligible alpha-only layers now share an `ExtendedMaterial` keyed by their immutable processed
+`StandardMaterial` state. Each model-layer entity receives a compact alpha slot via `MeshTag`; the
+fragment shader reads that slot from a shared storage buffer immediately after normal StandardMaterial
+sampling, then runs the same alpha discard, lighting, unlit, priority-plane and blend-mode logic as the
+reference PBR path. Team colour, vertex tint, depth bias, Mask/Blend/Add/Multiply modes and existing
+transparent ordering remain part of the immutable base material. Texture-ID animated layers still use
+the old cloned StandardMaterial path. Slots are reclaimed when animated-alpha components disappear.
+
+A profiling-only `legacy-animated-alpha-state` switch restores the old per-entity material clone and
+base-colour-alpha mutation path in the same release binary. The comparison uses active 500-unit combat,
+ten seconds warm-up and ten seconds capture. The final fidelity-corrected shader preserves sampled
+texture/vertex alpha by normalizing immutable base-material alpha to one and multiplying the sampled
+alpha by the authored animated value. Both production runs and the intervening legacy run end at tick
+300 with 115 living units and 330 corpses.
+
+| Active combat | FPS | Mean frame ms | Main CPU ms | Handoff ms | Prepare assets ms | Specialize ms | Queue ms | Render/submit/present ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Buffered alpha, run 1 | 36.62 | 27.305 | 15.428 | 11.788 | 0.264 | 1.554 | 1.854 | 15.060 |
+| Legacy animated alpha | 30.80 | 32.464 | 16.888 | 15.478 | 2.117 | 1.973 | 2.476 | 16.697 |
+| Buffered alpha, run 2 | 35.95 | 27.817 | 15.615 | 12.111 | 0.264 | 1.551 | 1.902 | 15.336 |
+
+The two production runs average **36.29 FPS / 27.561 ms**, versus **30.80 FPS / 32.464 ms** on the
+legacy path: **15.1% lower mean frame time and 17.8% higher FPS**. Asset preparation falls from 2.117
+to **0.264 ms/frame (87.5%)**. The overlapping handoff scope falls **22.8%**, world extraction
+**8.9%**, specialization **21.3%**, queueing **24.2%**, render/submit/present **9.0%**, and main-thread
+CPU **8.1%**. Transparent-pass GPU time falls about **7.1%** while opaque GPU time is unchanged.
+
+The scene census gives the clearest structural signal: production averages **290 material assets and
+386 visible mesh/material pairs**, versus **929 materials and 796 visible pairs** on legacy—reductions
+of **68.8%** and **51.5%** respectively. Skin-palette staging remains 11.33 MB/frame in both paths, as
+expected; this optimization changes material state rather than skeleton work.
 
 ### Next architectural changes, in priority order
 
-- **Persistent material state for animated model layers.** Extend the splat representation to model
-  alpha and texture-id tracks: keep textures, samplers, blend/depth rules and pipeline identity
-  immutable/shared, and place changing alpha/texture selection in per-instance records. Preserve
-  authored values, priority planes and transparent ordering; do not freeze or quantize visible
-  animation as the production fix.
+- **Persistent texture-ID state for animated model layers.** Only 15 converted materials currently
+  use texture-ID animation (14 texture-only and one combined alpha/texture layer). Move texture
+  selection to immutable/shared texture bindings plus per-instance selection state without changing
+  authored texture IDs, priority planes or transparent ordering. The combined alpha/texture case
+  should then join the buffered alpha path rather than retaining a cloned material.
 - **Bound attachment indices and retained effect instances.** The new local search removes the
   scene-wide multiplier. An index built when each model scene becomes ready can resolve repeated
   attachment names once and record absent names until the hierarchy changes. Pool frequently
@@ -341,8 +380,8 @@ layers still clone and mutate material assets and remain the next extension of t
 
 The release build, client Clippy with warnings denied, formatting, the client test suite and live
 captures pass. The material-freeze path is profiling-only and intentionally changes the picture;
-owner-local attachment search, unchanged-write suppression, and persistent terrain-splat material
-state ship by default.
+owner-local attachment search, unchanged-write suppression, persistent terrain-splat material
+state, and buffered alpha-only model material state ship by default.
 
 ## Architectural findings from source
 
@@ -365,19 +404,19 @@ a valid premise for this redesign.
 
 ### Rendering state expanded into assets and extra geometry
 
-Animated material alpha/texture tracks clone a StandardMaterial for each affected mesh in
-`fix_wc3_scene_materials`. The update systems sample each track, climb the parent chain to find its
-model clock, and modify the asset when its value changes. Distinct assets do not necessarily mean
-separate draw calls because Bevy supports bindless material slabs, but they still add asset lifecycle,
+Originally, animated material alpha/texture tracks cloned a StandardMaterial for each affected mesh
+in `fix_wc3_scene_materials`, then modified that asset as its track changed. Alpha-only tracks now use
+the shared GPU-record path measured above; texture-ID tracks and the single combined alpha/texture
+case still retain the cloned-material reference path. Distinct assets do not necessarily mean separate
+draw calls because Bevy supports bindless material slabs, but they still add asset lifecycle,
 extraction and update work. Transparent sorting also limits which compatible items can be batched.
 
-Geoset visibility is exported as zero/nonzero node scale (`visibility_scale`), rather than exclusion
-from render submission. The audit counts visible zero-determinant transforms, but these MUST NOT be
-assumed to produce no pixels: Bevy's `mesh.wgsl` SKINNED branch obtains `world_from_local` from
-`skinning::skin_model` instead of the mesh transform. This is also a potential fidelity mismatch
-between exported geoset visibility and the native skinning path. Audit the source visibility tracks
-and rendered output before claiming that all such meshes are safe to remove. A dedicated per-geoset
-visibility mask avoids both ambiguous scale-based hiding and needless submission.
+Geoset visibility is still exported as binary zero/nonzero node scale (`visibility_scale`) for glTF
+animation, but the client now translates that authored state into explicit Bevy visibility before
+render submission. This is required because Bevy's `mesh.wgsl` SKINNED branch obtains
+`world_from_local` from `skinning::skin_model` instead of the mesh transform, so zero mesh scale alone
+was not a reliable hide operation. The dedicated per-geoset visibility path measured above removes
+both that fidelity ambiguity and needless submission.
 
 ### One general-purpose mesh entity per ordinary particle
 
@@ -476,11 +515,12 @@ death/decay and resurrection comparisons with the current dynamic-bounds path.
 
 ## Validation
 
-The client test suite passes (199 tests); Clippy passes for all client targets with warnings denied;
+The client test suite passes (200 tests); Clippy passes for all client targets with warnings denied;
 formatting passes; the release client builds, the original seven bounded investigation profiles
 complete, and the measured production renderer changes have repeat or same-binary A/B captures. The
 profiling plugin and experiments are only registered in automated profiling mode. Normal gameplay
 rendering is changed for textured additive ordinary particles, the narrowly gated static two-layer
-unit team-colour case, exported hidden-geoset submission, and terrain-splat material state; excluded
-cases retain their reference paths. Interactive stress startup centres the camera, while automated
+unit team-colour case, exported hidden-geoset submission, terrain-splat material state, and alpha-only
+animated model material state; excluded cases retain their reference paths. Interactive stress startup
+centres the camera, while automated
 profiles centre and lock it.

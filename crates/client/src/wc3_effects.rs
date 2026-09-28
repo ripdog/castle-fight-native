@@ -34,10 +34,12 @@ use crate::{
 
 const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
+const WC3_ANIMATED_ALPHA_SHADER_PATH: &str = "shaders/wc3_animated_alpha.wgsl";
 const WC3_PARTICLE_SHADER_PATH: &str = "shaders/wc3_particle.wgsl";
 const WC3_SPLAT_SHADER_PATH: &str = "shaders/wc3_splat.wgsl";
 const WC3_TEAM_COLOR_SHADER_PATH: &str = "shaders/wc3_team_color.wgsl";
 const ADDITIVE_PARTICLE_BATCH_MIN_SLOTS: usize = 64;
+const ANIMATED_ALPHA_BUFFER_MIN_SLOTS: usize = 256;
 const SPLAT_BUFFER_MIN_SLOTS: usize = 64;
 const CONVERTED_MODEL_PACKS: [(&str, &str); 4] = [
     ("wc3/units/manifest.json", "wc3/units"),
@@ -442,6 +444,7 @@ pub(crate) struct Wc3AnimatedMaterialAlpha {
     global_sequence_durations_ms: Vec<u32>,
     fallback_elapsed_ms: f32,
     last_alpha_bits: u32,
+    gpu_slot: Option<u32>,
 }
 
 #[derive(Component, Debug, Clone)]
@@ -2290,6 +2293,25 @@ pub struct Wc3Particle {
     additive_slot: Option<AdditiveParticleSlot>,
 }
 
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub(crate) struct Wc3AnimatedAlphaExtension {
+    #[storage(100, read_only)]
+    alpha_data: Handle<ShaderBuffer>,
+}
+
+impl MaterialExtension for Wc3AnimatedAlphaExtension {
+    fn fragment_shader() -> ShaderRef {
+        WC3_ANIMATED_ALPHA_SHADER_PATH.into()
+    }
+
+    fn deferred_fragment_shader() -> ShaderRef {
+        WC3_ANIMATED_ALPHA_SHADER_PATH.into()
+    }
+}
+
+pub(crate) type Wc3AnimatedAlphaMaterial =
+    ExtendedMaterial<StandardMaterial, Wc3AnimatedAlphaExtension>;
+
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub(crate) struct Wc3SplatMaterial {
     #[storage(0, read_only)]
@@ -2427,6 +2449,14 @@ pub struct Wc3ParticleAssets {
     materials: HashMap<String, Handle<StandardMaterial>>,
     additive_batch_indices: HashMap<AdditiveParticleBatchKey, usize>,
     additive_batches: Vec<AdditiveParticleBatch>,
+    animated_alpha_materials: HashMap<AssetId<StandardMaterial>, Handle<Wc3AnimatedAlphaMaterial>>,
+    animated_alpha_buffer: Option<Handle<ShaderBuffer>>,
+    animated_alpha_gpu_data: Vec<[f32; 4]>,
+    animated_alpha_slots: HashMap<Entity, u32>,
+    animated_alpha_free_slots: Vec<u32>,
+    animated_alpha_next_slot: u32,
+    animated_alpha_capacity_slots: usize,
+    animated_alpha_dirty: bool,
     splat_materials: HashMap<SplatMaterialKey, Handle<Wc3SplatMaterial>>,
     splat_buffer: Option<Handle<ShaderBuffer>>,
     splat_gpu_data: Vec<[f32; 4]>,
@@ -2783,6 +2813,14 @@ impl Wc3ParticleAssets {
             materials: HashMap::new(),
             additive_batch_indices: HashMap::new(),
             additive_batches: Vec::new(),
+            animated_alpha_materials: HashMap::new(),
+            animated_alpha_buffer: None,
+            animated_alpha_gpu_data: Vec::new(),
+            animated_alpha_slots: HashMap::new(),
+            animated_alpha_free_slots: Vec::new(),
+            animated_alpha_next_slot: 0,
+            animated_alpha_capacity_slots: 0,
+            animated_alpha_dirty: false,
             splat_materials: HashMap::new(),
             splat_buffer: None,
             splat_gpu_data: Vec::new(),
@@ -2956,6 +2994,104 @@ impl Wc3ParticleAssets {
             }
             batch.dirty = false;
         }
+    }
+
+    fn acquire_animated_alpha_slot(
+        &mut self,
+        entity: Entity,
+        source_material_id: AssetId<StandardMaterial>,
+        source_material: StandardMaterial,
+        initial_alpha: f32,
+        animated_materials: &mut Assets<Wc3AnimatedAlphaMaterial>,
+        shader_buffers: &mut Assets<ShaderBuffer>,
+    ) -> (u32, Handle<Wc3AnimatedAlphaMaterial>) {
+        let buffer = self.animated_alpha_buffer.get_or_insert_with(|| {
+            self.animated_alpha_capacity_slots = ANIMATED_ALPHA_BUFFER_MIN_SLOTS;
+            self.animated_alpha_gpu_data = vec![[0.0; 4]; self.animated_alpha_capacity_slots];
+            shader_buffers.add(ShaderBuffer::from(self.animated_alpha_gpu_data.clone()))
+        });
+
+        let slot = self.animated_alpha_free_slots.pop().unwrap_or_else(|| {
+            let slot = self.animated_alpha_next_slot;
+            self.animated_alpha_next_slot = self.animated_alpha_next_slot.saturating_add(1);
+            slot
+        });
+        let required_slots = slot as usize + 1;
+        if required_slots > self.animated_alpha_capacity_slots {
+            self.animated_alpha_capacity_slots = required_slots
+                .next_power_of_two()
+                .max(ANIMATED_ALPHA_BUFFER_MIN_SLOTS);
+            self.animated_alpha_gpu_data
+                .resize(self.animated_alpha_capacity_slots, [0.0; 4]);
+        }
+        self.animated_alpha_gpu_data[slot as usize] = [initial_alpha, 0.0, 0.0, 0.0];
+        self.animated_alpha_slots.insert(entity, slot);
+        self.animated_alpha_dirty = true;
+
+        let material = self
+            .animated_alpha_materials
+            .entry(source_material_id)
+            .or_insert_with(|| {
+                let mut base = source_material;
+                let base_color = base.base_color.to_linear();
+                base.base_color =
+                    Color::linear_rgba(base_color.red, base_color.green, base_color.blue, 1.0);
+                animated_materials.add(ExtendedMaterial {
+                    base,
+                    extension: Wc3AnimatedAlphaExtension {
+                        alpha_data: buffer.clone(),
+                    },
+                })
+            })
+            .clone();
+        (slot, material)
+    }
+
+    fn update_animated_alpha_slot(&mut self, slot: u32, alpha: f32) {
+        let value = &mut self.animated_alpha_gpu_data[slot as usize][0];
+        if value.to_bits() == alpha.to_bits() {
+            return;
+        }
+        *value = alpha;
+        self.animated_alpha_dirty = true;
+    }
+
+    fn reclaim_animated_alpha_slots(
+        &mut self,
+        animated: &Query<(), With<Wc3AnimatedMaterialAlpha>>,
+    ) {
+        let Self {
+            animated_alpha_slots,
+            animated_alpha_free_slots,
+            animated_alpha_gpu_data,
+            animated_alpha_dirty,
+            ..
+        } = self;
+        animated_alpha_slots.retain(|entity, slot| {
+            if animated.contains(*entity) {
+                return true;
+            }
+            let value = &mut animated_alpha_gpu_data[*slot as usize];
+            if *value != [0.0; 4] {
+                *value = [0.0; 4];
+                *animated_alpha_dirty = true;
+            }
+            animated_alpha_free_slots.push(*slot);
+            false
+        });
+    }
+
+    fn flush_animated_alpha_buffer(&mut self, shader_buffers: &mut Assets<ShaderBuffer>) {
+        if !self.animated_alpha_dirty {
+            return;
+        }
+        let Some(buffer) = self.animated_alpha_buffer.as_ref() else {
+            return;
+        };
+        if let Some(mut buffer) = shader_buffers.get_mut(buffer) {
+            buffer.set_data(self.animated_alpha_gpu_data.clone());
+        }
+        self.animated_alpha_dirty = false;
     }
 
     fn acquire_splat_slot(
@@ -3301,8 +3437,11 @@ type Wc3MaterialWorld<'w, 's> = (
 
 type Wc3MaterialAssets<'w, 's> = (
     ResMut<'w, Assets<StandardMaterial>>,
+    ResMut<'w, Assets<Wc3AnimatedAlphaMaterial>>,
     ResMut<'w, Assets<Wc3TeamColorMaterial>>,
     ResMut<'w, Assets<Image>>,
+    ResMut<'w, Assets<ShaderBuffer>>,
+    ResMut<'w, Wc3ParticleAssets>,
     Local<'s, TeamMaterialCache>,
     Local<'s, TeamMaterialCache>,
     Local<'s, TeamCompositeMaterialCache>,
@@ -3333,16 +3472,23 @@ pub fn fix_wc3_scene_materials(
     let (asset_server, parents, team_roots, tint_roots) = world;
     let (
         mut materials,
+        mut animated_alpha_materials,
         mut team_composite_materials,
         mut images,
+        mut shader_buffers,
+        mut effect_assets,
         mut team_materials,
         mut team_glow_materials,
         mut team_composite_cache,
         mut team_images,
         mut tinted_materials,
     ) = material_assets;
-    let legacy_team_color =
-        experiment.is_some_and(|experiment| *experiment == RenderExperiment::LegacyTeamColor);
+    let legacy_team_color = experiment
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacyTeamColor);
+    let legacy_animated_alpha = experiment
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacyAnimatedAlphaState);
     'mesh: for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
             commands.entity(entity).insert(Wc3MaterialProcessed);
@@ -3520,7 +3666,29 @@ pub fn fix_wc3_scene_materials(
 
         let alpha_track = extras.alpha_track.clone();
         let texture_id_track = extras.texture_id_track.clone();
-        if alpha_track.is_some() || texture_id_track.is_some() {
+        let persistent_alpha =
+            alpha_track.is_some() && texture_id_track.is_none() && !legacy_animated_alpha;
+        let mut alpha_gpu_slot = None;
+        if persistent_alpha {
+            let source_material_id = material_handle.0.id();
+            let Some(source) = materials.get(&material_handle.0).cloned() else {
+                continue 'mesh;
+            };
+            let initial_alpha = extras.layer_alpha.clamp(0.0, 1.0);
+            let (slot, animated_handle) = effect_assets.acquire_animated_alpha_slot(
+                entity,
+                source_material_id,
+                source,
+                initial_alpha,
+                &mut animated_alpha_materials,
+                &mut shader_buffers,
+            );
+            alpha_gpu_slot = Some(slot);
+            commands
+                .entity(entity)
+                .remove::<MeshMaterial3d<StandardMaterial>>()
+                .insert((MeshMaterial3d(animated_handle), MeshTag(slot)));
+        } else if alpha_track.is_some() || texture_id_track.is_some() {
             let Some(source) = materials.get(&material_handle.0).cloned() else {
                 continue 'mesh;
             };
@@ -3535,6 +3703,7 @@ pub fn fix_wc3_scene_materials(
                 global_sequence_durations_ms: extras.global_sequence_durations_ms.clone(),
                 fallback_elapsed_ms: 0.0,
                 last_alpha_bits: u32::MAX,
+                gpu_slot: alpha_gpu_slot,
             });
         }
 
@@ -3779,9 +3948,10 @@ pub fn update_wc3_material_alpha(
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut effect_assets: ResMut<Wc3ParticleAssets>,
     mut animated: Query<(
         Entity,
-        &MeshMaterial3d<StandardMaterial>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
         &mut Wc3AnimatedMaterialAlpha,
     )>,
 ) {
@@ -3813,6 +3983,14 @@ pub fn update_wc3_material_alpha(
         if alpha_bits == animation.last_alpha_bits {
             continue;
         }
+        if let Some(slot) = animation.gpu_slot {
+            effect_assets.update_animated_alpha_slot(slot, alpha);
+            animation.last_alpha_bits = alpha_bits;
+            continue;
+        }
+        let Some(material_handle) = material_handle else {
+            continue;
+        };
         let Some(mut material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
@@ -4551,7 +4729,10 @@ pub fn update_wc3_particles(
 pub fn flush_wc3_particle_buffers(
     mut particle_assets: ResMut<Wc3ParticleAssets>,
     mut shader_buffers: ResMut<Assets<ShaderBuffer>>,
+    animated_alpha: Query<(), With<Wc3AnimatedMaterialAlpha>>,
 ) {
+    particle_assets.reclaim_animated_alpha_slots(&animated_alpha);
+    particle_assets.flush_animated_alpha_buffer(&mut shader_buffers);
     particle_assets.flush_additive_particle_buffers(&mut shader_buffers);
     particle_assets.flush_splat_buffer(&mut shader_buffers);
 }
@@ -6000,6 +6181,63 @@ mod tests {
     }
 
     #[test]
+    fn animated_alpha_gpu_slots_share_static_material_state() {
+        let mut meshes = Assets::<Mesh>::default();
+        let mut effect_assets = Wc3ParticleAssets::new(&mut meshes);
+        let mut standard_materials = Assets::<StandardMaterial>::default();
+        let mut animated_materials = Assets::<Wc3AnimatedAlphaMaterial>::default();
+        let mut shader_buffers = Assets::<ShaderBuffer>::default();
+        let source_handle = standard_materials.add(StandardMaterial::default());
+        let source = standard_materials.get(&source_handle).unwrap().clone();
+        let mut world = World::new();
+        let first_entity = world.spawn_empty().id();
+        let second_entity = world.spawn_empty().id();
+
+        let (first_slot, first_material) = effect_assets.acquire_animated_alpha_slot(
+            first_entity,
+            source_handle.id(),
+            source.clone(),
+            0.25,
+            &mut animated_materials,
+            &mut shader_buffers,
+        );
+        let (second_slot, second_material) = effect_assets.acquire_animated_alpha_slot(
+            second_entity,
+            source_handle.id(),
+            source,
+            0.75,
+            &mut animated_materials,
+            &mut shader_buffers,
+        );
+
+        assert_eq!(first_material, second_material);
+        assert_ne!(first_slot, second_slot);
+        assert_eq!(
+            animated_materials
+                .get(&first_material)
+                .unwrap()
+                .base
+                .base_color
+                .to_linear()
+                .alpha,
+            1.0
+        );
+        assert_eq!(
+            effect_assets.animated_alpha_gpu_data[first_slot as usize][0],
+            0.25
+        );
+        assert_eq!(
+            effect_assets.animated_alpha_gpu_data[second_slot as usize][0],
+            0.75
+        );
+        effect_assets.update_animated_alpha_slot(first_slot, 0.5);
+        assert_eq!(
+            effect_assets.animated_alpha_gpu_data[first_slot as usize][0],
+            0.5
+        );
+    }
+
+    #[test]
     fn splat_gpu_slots_share_materials_and_reuse_released_indices() {
         let mut meshes = Assets::<Mesh>::default();
         let mut effect_assets = Wc3ParticleAssets::new(&mut meshes);
@@ -6238,6 +6476,7 @@ mod tests {
             global_sequence_durations_ms: Vec::new(),
             fallback_elapsed_ms: 0.0,
             last_alpha_bits: u32::MAX,
+            gpu_slot: None,
         };
         let clock = Wc3ModelSequenceClock {
             sequence_name: "Stand".to_owned(),

@@ -23,7 +23,8 @@ use bevy::{
 };
 
 use crate::wc3_effects::{
-    Wc3Particle, Wc3ParticleMaterial, Wc3SplatMaterial, Wc3TeamColorMaterial,
+    Wc3AnimatedAlphaMaterial, Wc3Particle, Wc3ParticleMaterial, Wc3SplatMaterial,
+    Wc3TeamColorMaterial,
 };
 
 #[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -39,6 +40,7 @@ pub(crate) enum RenderExperiment {
     LegacyAttachmentSearch,
     LegacySplatUpdates,
     LegacySplatMaterialState,
+    LegacyAnimatedAlphaState,
     FreezeMaterials,
 }
 
@@ -55,9 +57,10 @@ impl RenderExperiment {
             "legacy-attachment-search" => Ok(Self::LegacyAttachmentSearch),
             "legacy-splat-updates" => Ok(Self::LegacySplatUpdates),
             "legacy-splat-material-state" => Ok(Self::LegacySplatMaterialState),
+            "legacy-animated-alpha-state" => Ok(Self::LegacyAnimatedAlphaState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, legacy-splat-material-state, or freeze-materials"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, or freeze-materials"
             )),
         }
     }
@@ -263,6 +266,7 @@ type ExperimentMeshes<'w, 's> = Query<
         Entity,
         &'static mut Visibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3AnimatedAlphaMaterial>>,
         Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
         Option<&'static MeshMaterial3d<Wc3SplatMaterial>>,
         Has<SkinnedMesh>,
@@ -277,6 +281,7 @@ fn apply_render_experiment(
     mut commands: Commands,
     experiment: Res<RenderExperiment>,
     materials: Res<Assets<StandardMaterial>>,
+    animated_alpha_materials: Option<Res<Assets<Wc3AnimatedAlphaMaterial>>>,
     mut meshes: ExperimentMeshes,
 ) {
     if matches!(
@@ -287,6 +292,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAttachmentSearch
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
+            | RenderExperiment::LegacyAnimatedAlphaState
             | RenderExperiment::FreezeMaterials
     ) {
         return;
@@ -295,6 +301,7 @@ fn apply_render_experiment(
         entity,
         mut visibility,
         material,
+        animated_alpha_material,
         particle_material,
         splat_material,
         skin,
@@ -310,6 +317,7 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAttachmentSearch
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
+            | RenderExperiment::LegacyAnimatedAlphaState
             | RenderExperiment::FreezeMaterials => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
@@ -322,6 +330,13 @@ fn apply_render_experiment(
             RenderExperiment::HideTransparent => {
                 particle_material.is_some()
                     || splat_material.is_some()
+                    || animated_alpha_material
+                        .and_then(|handle| {
+                            animated_alpha_materials
+                                .as_ref()
+                                .and_then(|materials| materials.get(&handle.0))
+                        })
+                        .is_some_and(|material| is_transparent(material.base.alpha_mode))
                     || material
                         .and_then(|handle| materials.get(&handle.0))
                         .is_some_and(|material| is_transparent(material.alpha_mode))
@@ -347,6 +362,7 @@ type CensusMeshes<'w, 's> = Query<
         &'static Mesh3d,
         &'static ViewVisibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
+        Option<&'static MeshMaterial3d<Wc3AnimatedAlphaMaterial>>,
         Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
         Option<&'static MeshMaterial3d<Wc3SplatMaterial>>,
         Option<&'static MeshMaterial3d<Wc3TeamColorMaterial>>,
@@ -362,6 +378,7 @@ type CensusMeshes<'w, 's> = Query<
 pub(crate) struct SceneCensus<'w, 's> {
     meshes: CensusMeshes<'w, 's>,
     materials: Res<'w, Assets<StandardMaterial>>,
+    animated_alpha_materials: Res<'w, Assets<Wc3AnimatedAlphaMaterial>>,
     players: Query<'w, 's, (), With<AnimationPlayer>>,
     entities: Query<'w, 's, Entity>,
     windows: Query<'w, 's, &'static Window>,
@@ -383,12 +400,15 @@ impl SceneCensus<'_, '_> {
         let mut mesh_assets = HashSet::new();
         let mut material_assets = HashSet::new();
         let mut visible_pairs = HashSet::new();
+        let mut animated_alpha_material_assets = HashSet::new();
+        let mut animated_alpha_visible_pairs = HashSet::new();
         let mut team_material_assets = HashSet::new();
         let mut team_visible_pairs = HashSet::new();
         for (
             mesh,
             visibility,
             material,
+            animated_alpha_material,
             particle_material,
             splat_material,
             team_material,
@@ -415,6 +435,16 @@ impl SceneCensus<'_, '_> {
                         self.materials
                             .get(material.id())
                             .is_some_and(|material| is_transparent(material.alpha_mode)),
+                    );
+                }
+            } else if let Some(material) = animated_alpha_material {
+                animated_alpha_material_assets.insert(material.id());
+                if visibility.get() {
+                    animated_alpha_visible_pairs.insert((mesh.id(), material.id()));
+                    transparent += usize::from(
+                        self.animated_alpha_materials
+                            .get(material.id())
+                            .is_some_and(|material| is_transparent(material.base.alpha_mode)),
                     );
                 }
             } else if visibility.get() && (particle_material.is_some() || splat_material.is_some())
@@ -444,8 +474,10 @@ impl SceneCensus<'_, '_> {
             transparent,
             no_batch,
             mesh_assets.len(),
-            material_assets.len() + team_material_assets.len(),
-            visible_pairs.len() + team_visible_pairs.len(),
+            material_assets.len()
+                + animated_alpha_material_assets.len()
+                + team_material_assets.len(),
+            visible_pairs.len() + animated_alpha_visible_pairs.len() + team_visible_pairs.len(),
             self.players.iter().count(),
             joint_references,
             joints.len()
@@ -516,6 +548,10 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-splat-material-state"),
             Ok(RenderExperiment::LegacySplatMaterialState)
+        );
+        assert_eq!(
+            RenderExperiment::parse("legacy-animated-alpha-state"),
+            Ok(RenderExperiment::LegacyAnimatedAlphaState)
         );
         assert!(RenderExperiment::parse("hide-everything").is_err());
     }
