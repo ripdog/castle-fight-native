@@ -1,14 +1,14 @@
 use std::{collections::HashMap, time::Duration};
 
 use bevy::{
-    asset::RenderAssetUsages,
+    asset::{AssetId, RenderAssetUsages},
     audio::SpatialListener,
     camera::{
         Exposure,
         primitives::{Frustum, Sphere},
         visibility::NoFrustumCulling,
     },
-    ecs::system::SystemParam,
+    ecs::{entity_disabling::Disabled, system::SystemParam},
     gltf::Gltf,
     input::mouse::MouseWheel,
     light::AmbientLight,
@@ -26,6 +26,7 @@ use bevy::{
     shader::ShaderRef,
     time::Fixed,
     window::PrimaryWindow,
+    world_serialization::{WorldAsset, WorldInstance},
 };
 use castle_fight_sim::{
     AbilityCastTarget, AbilityEffect, AttackDelivery, BuildingFootprint,
@@ -46,18 +47,20 @@ use crate::{
         finish_effects_profile, finish_entity_sync_profile, finish_model_prep_profile,
         finish_presentation_profile, finish_scene_setup_profile, finish_transform_profile,
     },
+    render_audit::RenderExperiment,
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
-        Wc3ConvertedModelRegistry, Wc3EmitterSource, Wc3ModelSequenceSelection, Wc3ParticleAssets,
-        Wc3ParticleMaterial, Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind,
-        Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs, Wc3VisualModel,
-        Wc3VisualSet, advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance,
-        emit_wc3_model_particles, emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events,
-        emit_wc3_splat_events, fix_wc3_scene_materials, flush_wc3_particle_buffers,
-        index_wc3_model_attachments, resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
-        setup_wc3_model_composed_features, setup_wc3_model_lights,
+        Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EmitterSource,
+        Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3ParticleMaterial, Wc3RibbonSource,
+        Wc3SplatMaterial, Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
+        Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
+        apply_wc3_non_inheritance, emit_wc3_model_particles, emit_wc3_particles,
+        emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
+        fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
+        reset_reused_wc3_effect_instances, resolve_wc3_emitter_nodes,
+        resolve_wc3_visual_attachments, setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
         update_wc3_model_particles, update_wc3_particles, update_wc3_ribbon_trails,
@@ -614,10 +617,25 @@ struct TimedWc3Effect {
     lifetime: f32,
     mesh: Option<Handle<Mesh>>,
     fade_material: Option<Handle<StandardMaterial>>,
+    pooled_lightning: bool,
+    pooled_scene: Option<AssetId<WorldAsset>>,
+}
+
+#[derive(Debug, Clone)]
+struct PooledLightningEffect {
+    entity: Entity,
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
 }
 
 #[derive(Resource, Default)]
 struct TimedWc3Effects(Vec<TimedWc3Effect>);
+
+#[derive(Resource, Default)]
+struct TimedWc3EffectPool {
+    lightning: Vec<PooledLightningEffect>,
+    scenes: HashMap<AssetId<WorldAsset>, Vec<Entity>>,
+}
 
 #[derive(Resource)]
 pub(crate) struct DebugPresentation {
@@ -930,6 +948,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<ProjectileImpacts>()
             .init_resource::<AbilityAreaImpacts>()
             .init_resource::<TimedWc3Effects>()
+            .init_resource::<TimedWc3EffectPool>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .init_gizmo_group::<MapGridGizmos>()
             .add_observer(index_wc3_model_attachments)
@@ -956,7 +975,7 @@ impl Plugin for CastlePresentationPlugin {
             .add_systems(
                 Update,
                 (
-                    fix_wc3_scene_materials,
+                    (reset_reused_wc3_effect_instances, fix_wc3_scene_materials).chain(),
                     (setup_wc3_model_lights, setup_wc3_model_composed_features),
                     resolve_wc3_visual_attachments,
                     resolve_wc3_emitter_nodes,
@@ -2759,6 +2778,7 @@ type SyncRenderWorld<'w> = (
     Res<'w, UnitModelSet>,
     Res<'w, BuildingModelSet>,
     Res<'w, Wc3VisualSet>,
+    Option<Res<'w, RenderExperiment>>,
 );
 
 type SyncRenderEffects<'w> = (
@@ -2766,6 +2786,7 @@ type SyncRenderEffects<'w> = (
     ResMut<'w, ProjectileImpacts>,
     ResMut<'w, AbilityAreaImpacts>,
     ResMut<'w, TimedWc3Effects>,
+    ResMut<'w, TimedWc3EffectPool>,
     ResMut<'w, Assets<Mesh>>,
     ResMut<'w, Assets<StandardMaterial>>,
 );
@@ -2805,6 +2826,48 @@ fn spawn_persistent_unit_attachments(
     }
 }
 
+fn spawn_or_reuse_timed_wc3_visual(
+    commands: &mut Commands,
+    pool: &mut TimedWc3EffectPool,
+    model: &Wc3VisualModel,
+    transform: Transform,
+    pooling_enabled: bool,
+) -> (Entity, Option<AssetId<WorldAsset>>) {
+    let pool_key = model.pool_key();
+    if pooling_enabled
+        && model.poolable_instance()
+        && let Some(entity) = pool.scenes.get_mut(&pool_key).and_then(Vec::pop)
+    {
+        commands
+            .entity(entity)
+            .remove_recursive::<Children, Disabled>()
+            .insert((
+                transform,
+                model.emitter_source(),
+                Wc3RibbonSource::new(&model.ribbons),
+                Wc3EffectReusePending,
+            ));
+        if let Some(animation) = model.animation_source() {
+            commands.entity(entity).insert(animation);
+        }
+        return (entity, Some(pool_key));
+    }
+
+    let entity = commands
+        .spawn((
+            WorldAssetRoot(model.scene.clone()),
+            transform,
+            model.emitter_source(),
+            Wc3RibbonSource::new(&model.ribbons),
+        ))
+        .id();
+    if let Some(animation) = model.animation_source() {
+        commands.entity(entity).insert(animation);
+    }
+    let pooled_scene = (pooling_enabled && model.poolable_instance()).then_some(pool_key);
+    (entity, pooled_scene)
+}
+
 fn sync_render_entities(
     mut commands: Commands,
     samples: Res<PresentationSamples>,
@@ -2813,15 +2876,19 @@ fn sync_render_entities(
     effects: SyncRenderEffects<'_>,
     imported_roots: Query<(Entity, &ImportedUnitModelRoot)>,
 ) {
-    let (metrics, terrain, assets, unit_models, building_models, wc3_visuals) = world;
+    let (metrics, terrain, assets, unit_models, building_models, wc3_visuals, experiment) = world;
     let (
         mut remnants,
         mut projectile_impacts,
         mut ability_impacts,
         mut timed_effects,
+        mut effect_pool,
         mut meshes,
         mut materials,
     ) = effects;
+    let legacy_effect_pooling = experiment
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacyEffectPooling);
     if !samples.is_changed() {
         return;
     }
@@ -3008,17 +3075,13 @@ fn sync_render_entities(
             continue;
         };
         let position = sim_point_to_terrain_world(attack.target_position, &terrain) + Vec3::Y * 8.0;
-        let entity = commands
-            .spawn((
-                WorldAssetRoot(visual.model.scene.clone()),
-                Transform::from_translation(position),
-                visual.model.emitter_source(),
-                Wc3RibbonSource::new(&visual.model.ribbons),
-            ))
-            .id();
-        if let Some(animation) = visual.model.animation_source() {
-            commands.entity(entity).insert(animation);
-        }
+        let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+            &mut commands,
+            &mut effect_pool,
+            &visual.model,
+            Transform::from_translation(position),
+            !legacy_effect_pooling,
+        );
         let lifetime = visual
             .model
             .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
@@ -3028,6 +3091,8 @@ fn sync_render_entities(
             lifetime,
             mesh: None,
             fade_material: None,
+            pooled_lightning: false,
+            pooled_scene,
         });
     }
 
@@ -3043,25 +3108,49 @@ fn sync_render_entities(
                 ^ chain.source.0 as u32
                 ^ samples.current.tick as u32
                 ^ lightning_segment_seed(segment_index as u32, 0x9e37_79b9);
-            let mesh = meshes.add(build_wc3_chain_lightning_mesh(start, end, seed, width));
-            let lightning_material = materials
-                .get(&assets.lightning_material)
-                .cloned()
-                .expect("WC3 Chain Lightning material must exist while presentation is running");
-            let lightning_material = materials.add(lightning_material);
-            let entity = commands
-                .spawn((
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(lightning_material.clone()),
-                    Transform::IDENTITY,
-                ))
-                .id();
+            let lightning_mesh = build_wc3_chain_lightning_mesh(start, end, seed, width);
+            let (entity, mesh, lightning_material, pooled_lightning) = if !legacy_effect_pooling
+                && !effect_pool.lightning.is_empty()
+            {
+                let effect = effect_pool
+                    .lightning
+                    .pop()
+                    .expect("non-empty lightning pool must yield an effect");
+                *meshes
+                    .get_mut(&effect.mesh)
+                    .expect("pooled WC3 Chain Lightning mesh must remain allocated") =
+                    lightning_mesh;
+                materials
+                    .get_mut(&effect.material)
+                    .expect("pooled WC3 Chain Lightning material must remain allocated")
+                    .base_color = Color::WHITE;
+                commands
+                    .entity(effect.entity)
+                    .insert((Transform::IDENTITY, Visibility::Inherited));
+                (effect.entity, effect.mesh, effect.material, true)
+            } else {
+                let mesh = meshes.add(lightning_mesh);
+                let lightning_material = materials.get(&assets.lightning_material).cloned().expect(
+                    "WC3 Chain Lightning material must exist while presentation is running",
+                );
+                let lightning_material = materials.add(lightning_material);
+                let entity = commands
+                    .spawn((
+                        Mesh3d(mesh.clone()),
+                        MeshMaterial3d(lightning_material.clone()),
+                        Transform::IDENTITY,
+                    ))
+                    .id();
+                (entity, mesh, lightning_material, !legacy_effect_pooling)
+            };
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: LIGHTNING_EFFECT_SECONDS,
                 lifetime: LIGHTNING_EFFECT_SECONDS,
                 mesh: Some(mesh),
                 fade_material: Some(lightning_material),
+                pooled_lightning,
+                pooled_scene: None,
             });
         }
     }
@@ -3105,17 +3194,13 @@ fn sync_render_entities(
             let Some(position) = position else {
                 continue;
             };
-            let entity = commands
-                .spawn((
-                    WorldAssetRoot(visual.model.scene.clone()),
-                    Transform::from_translation(position),
-                    visual.model.emitter_source(),
-                    Wc3RibbonSource::new(&visual.model.ribbons),
-                ))
-                .id();
-            if let Some(animation) = visual.model.animation_source() {
-                commands.entity(entity).insert(animation);
-            }
+            let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+                &mut commands,
+                &mut effect_pool,
+                &visual.model,
+                Transform::from_translation(position),
+                !legacy_effect_pooling,
+            );
             let lifetime = visual
                 .model
                 .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
@@ -3125,6 +3210,8 @@ fn sync_render_entities(
                 lifetime,
                 mesh: None,
                 fade_material: None,
+                pooled_lightning: false,
+                pooled_scene,
             });
         }
 
@@ -3194,6 +3281,8 @@ fn sync_render_entities(
                 lifetime,
                 mesh: None,
                 fade_material: None,
+                pooled_lightning: false,
+                pooled_scene: None,
             });
         }
     }
@@ -4155,6 +4244,8 @@ fn age_timed_wc3_effects(
     mut commands: Commands,
     time: Res<Time>,
     mut effects: ResMut<TimedWc3Effects>,
+    mut effect_pool: ResMut<TimedWc3EffectPool>,
+    world_instances: Query<(), With<WorldInstance>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -4170,12 +4261,42 @@ fn age_timed_wc3_effects(
             ));
         }
         if effect.remaining <= 0.0 {
-            commands.entity(effect.entity).despawn();
-            if let Some(mesh) = effect.mesh.take() {
-                meshes.remove(mesh.id());
-            }
-            if let Some(material) = effect.fade_material.take() {
-                materials.remove(material.id());
+            if let Some(pool_key) = effect.pooled_scene.take() {
+                if world_instances.get(effect.entity).is_ok() {
+                    commands
+                        .entity(effect.entity)
+                        .insert_recursive::<Children>(Disabled);
+                    effect_pool
+                        .scenes
+                        .entry(pool_key)
+                        .or_default()
+                        .push(effect.entity);
+                } else {
+                    commands.entity(effect.entity).despawn();
+                }
+            } else if effect.pooled_lightning {
+                let mesh = effect
+                    .mesh
+                    .take()
+                    .expect("pooled lightning effect must retain its mesh");
+                let material = effect
+                    .fade_material
+                    .take()
+                    .expect("pooled lightning effect must retain its material");
+                commands.entity(effect.entity).insert(Visibility::Hidden);
+                effect_pool.lightning.push(PooledLightningEffect {
+                    entity: effect.entity,
+                    mesh,
+                    material,
+                });
+            } else {
+                commands.entity(effect.entity).despawn();
+                if let Some(mesh) = effect.mesh.take() {
+                    meshes.remove(mesh.id());
+                }
+                if let Some(material) = effect.fade_material.take() {
+                    materials.remove(material.id());
+                }
             }
         }
     }

@@ -90,6 +90,7 @@ pub struct Wc3VisualModel {
     animation_name: Option<String>,
     animation_duration_seconds: Option<f32>,
     stand_animation_name: Option<String>,
+    poolable_instance: bool,
     pub emitters: Vec<Wc3ParticleEmitter>,
     pub ribbons: Vec<Wc3RibbonEmitter>,
 }
@@ -111,6 +112,16 @@ impl Wc3VisualModel {
                 .clone(),
             looping: true,
         })
+    }
+
+    #[must_use]
+    pub fn pool_key(&self) -> AssetId<WorldAsset> {
+        self.scene.id()
+    }
+
+    #[must_use]
+    pub const fn poolable_instance(&self) -> bool {
+        self.poolable_instance
     }
 
     #[must_use]
@@ -381,6 +392,8 @@ struct ModelManifest {
     particle_emitters: Vec<Wc3ParticleEmitter>,
     #[serde(default)]
     ribbon_emitters: Vec<Wc3RibbonEmitter>,
+    #[serde(default)]
+    attachments: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -467,6 +480,9 @@ pub(crate) struct Wc3AnimatedMaterialTexture {
 
 #[derive(Component)]
 pub struct Wc3VisualAnimationController;
+
+#[derive(Component)]
+pub(crate) struct Wc3EffectReusePending;
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualAnimationGraphs {
@@ -4017,6 +4033,106 @@ fn advance_model_sequence_clock(
     clock.global_elapsed_ms += dt_ms;
 }
 
+#[derive(SystemParam)]
+pub(crate) struct Wc3EffectReuseState<'w, 's> {
+    children: Query<'w, 's, &'static Children>,
+    players: Query<'w, 's, &'static mut AnimationPlayer>,
+    selections: Query<'w, 's, &'static Wc3ModelSequenceSelection>,
+    clocks: Query<'w, 's, &'static mut Wc3ModelSequenceClock>,
+    emitters: Query<'w, 's, &'static mut Wc3EmitterSource>,
+    ribbons: Query<'w, 's, &'static mut Wc3RibbonSource>,
+    material_alpha: Query<'w, 's, &'static mut Wc3AnimatedMaterialAlpha>,
+    material_texture: Query<'w, 's, &'static mut Wc3AnimatedMaterialTexture>,
+    lights: Query<'w, 's, &'static mut Wc3PointLightRuntime>,
+    attachments: Query<'w, 's, &'static mut Wc3ModelAttachmentRuntime>,
+    model_emitters: Query<'w, 's, &'static mut Wc3LegacyModelEmitterRuntime>,
+    spawn_events: Query<'w, 's, &'static mut Wc3SpawnEventRuntime>,
+    sound_events: Query<'w, 's, &'static mut Wc3SoundEventRuntime>,
+    splat_events: Query<'w, 's, &'static mut Wc3SplatEventRuntime>,
+}
+
+pub(crate) fn reset_reused_wc3_effect_instances(
+    mut commands: Commands,
+    roots: Query<Entity, Added<Wc3EffectReusePending>>,
+    mut state: Wc3EffectReuseState<'_, '_>,
+) {
+    for root in &roots {
+        let mut stack = vec![root];
+        while let Some(entity) = stack.pop() {
+            if let Ok(children) = state.children.get(entity) {
+                stack.extend(children.iter());
+            }
+            if let Ok(mut player) = state.players.get_mut(entity) {
+                for (_, animation) in player.playing_animations_mut() {
+                    animation.replay();
+                    animation.resume();
+                    animation.set_weight(1.0);
+                }
+            }
+            if let Ok(mut clock) = state.clocks.get_mut(entity) {
+                if let Ok(selection) = state.selections.get(entity) {
+                    clock.sequence_name.clone_from(&selection.name);
+                }
+                clock.sequence_elapsed_ms = 0.0;
+                clock.global_elapsed_ms = 0.0;
+            }
+            if let Ok(mut source) = state.emitters.get_mut(entity) {
+                for emitter in &mut source.emitters {
+                    emitter.accumulator = 0.0;
+                    emitter.burst_pending = emitter.spec.squirt;
+                    emitter.sequence = 0;
+                }
+                if let Some(clock) = source.sequence_clock.as_mut() {
+                    clock.elapsed_ms = 0.0;
+                }
+                source.global_elapsed_ms = 0.0;
+            }
+            if let Ok(mut source) = state.ribbons.get_mut(entity) {
+                if let Some(clock) = source.sequence_clock.as_mut() {
+                    clock.elapsed_ms = 0.0;
+                }
+                source.global_elapsed_ms = 0.0;
+            }
+            if let Ok(mut alpha) = state.material_alpha.get_mut(entity) {
+                alpha.fallback_elapsed_ms = 0.0;
+                alpha.last_alpha_bits = u32::MAX;
+            }
+            if let Ok(mut texture) = state.material_texture.get_mut(entity) {
+                texture.fallback_elapsed_ms = 0.0;
+                texture.last_texture_id = None;
+            }
+            if let Ok(mut light) = state.lights.get_mut(entity) {
+                light.fallback_elapsed_ms = 0.0;
+            }
+            if let Ok(mut attachment) = state.attachments.get_mut(entity) {
+                attachment.fallback_elapsed_ms = 0.0;
+            }
+            if let Ok(mut emitter) = state.model_emitters.get_mut(entity) {
+                emitter.fallback_elapsed_ms = 0.0;
+                emitter.accumulator = 0.0;
+                emitter.sequence = 0;
+            }
+            if let Ok(mut event) = state.spawn_events.get_mut(entity) {
+                event.previous_sequence_name = None;
+                event.previous_sequence_elapsed_ms = None;
+                event.previous_global_elapsed_ms = None;
+            }
+            if let Ok(mut event) = state.sound_events.get_mut(entity) {
+                event.previous_sequence_name = None;
+                event.previous_sequence_elapsed_ms = None;
+                event.previous_global_elapsed_ms = None;
+                event.sequence = 0;
+            }
+            if let Ok(mut event) = state.splat_events.get_mut(entity) {
+                event.previous_sequence_name = None;
+                event.previous_sequence_elapsed_ms = None;
+                event.previous_global_elapsed_ms = None;
+            }
+        }
+        commands.entity(root).remove::<Wc3EffectReusePending>();
+    }
+}
+
 fn inherited_wc3_model_sequence_clock(
     entity: Entity,
     parents: &Query<&ChildOf>,
@@ -5621,6 +5737,7 @@ fn resolve_visual_model(
             .iter()
             .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
             .map(|animation| animation.name.clone()),
+        poolable_instance: model.ribbon_emitters.is_empty() && model.attachments.is_empty(),
         emitters: model.particle_emitters.clone(),
         ribbons: model.ribbon_emitters.clone(),
     })
@@ -5795,6 +5912,7 @@ mod tests {
             animation_name: Some("Birth".to_owned()),
             animation_duration_seconds: Some(4.567),
             stand_animation_name: Some("Stand".to_owned()),
+            poolable_instance: true,
             emitters: vec![stand, birth],
             ribbons: Vec::new(),
         };
@@ -5994,6 +6112,7 @@ mod tests {
             animation_name: Some("Birth".to_owned()),
             animation_duration_seconds: None,
             stand_animation_name: Some("Stand".to_owned()),
+            poolable_instance: true,
             emitters: vec![emitter("Stand", 16.0), emitter("Death", 160.0)],
             ribbons: Vec::new(),
         };
@@ -6421,6 +6540,7 @@ mod tests {
                     animations: Vec::new(),
                     particle_emitters: Vec::new(),
                     ribbon_emitters: Vec::new(),
+                    attachments: Vec::new(),
                 },
             },
             spec: Wc3EventObjectSpec {
@@ -6782,6 +6902,7 @@ mod tests {
                     animations: Vec::new(),
                     particle_emitters: Vec::new(),
                     ribbon_emitters: Vec::new(),
+                    attachments: Vec::new(),
                 },
             },
             visibility_track: Some(Wc3ScalarTrack {

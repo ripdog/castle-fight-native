@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus six measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, and texture-ID animated layers now switch among immutable shared material variants instead of mutating material assets. Per-instance attachment indices also bound repeated effect attachment lookup; that change is tail-latency/complexity work rather than a measured throughput gain. The broader model-envelope/off-screen pose lifecycle work remains proposed.
+Status: investigation and opt-in measurement tools, plus seven measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, texture-ID animated layers switch among immutable shared material variants instead of mutating material assets, and frequently spawned timed effects now reuse retained instances/resources when their hierarchy is safe to reset. Per-instance attachment indices also bound repeated effect attachment lookup; that change is tail-latency/complexity work rather than a measured throughput gain. The broader model-envelope/off-screen pose lifecycle work remains proposed.
 
 ## Scope and reproducibility
 
@@ -44,6 +44,7 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment legacy-team-color
 # --render-experiment legacy-geoset-visibility
 # --render-experiment legacy-attachment-index
+# --render-experiment legacy-effect-pooling
 # --render-experiment legacy-splat-material-state
 # --render-experiment legacy-animated-alpha-state
 # --render-experiment legacy-animated-texture-state
@@ -423,12 +424,44 @@ way and the sample is too small to claim a robust tail win. The production value
 bounded lookup cost and cached misses/repeated names; the retained-effect work below remains the
 expected way to reduce the larger scene/material activation spikes.
 
+### Implementation follow-up: retained timed effect instances
+
+Frequently spawned timed effects now reuse retained runtime state instead of always allocating and
+tearing it down. Chain Lightning retains its entity, mesh asset and mutable fade material, replacing
+only the mesh contents and resetting alpha on reuse. Imported timed WC3 effects retain the complete
+spawned `WorldInstance` hierarchy when their source model has neither ribbons nor authored model
+attachments. Those two feature classes are deliberately left on the instantiate/despawn path because
+their cross-entity lifetime/parenting relationships require a stronger generation model before reuse
+can be guaranteed visually equivalent.
+
+On retirement, eligible imported hierarchies are recursively `Disabled`, so ordinary systems and
+render extraction ignore them without destroying the scene graph. Reuse restores the hierarchy at
+the new transform and resets animation playback, model sequence clocks, particle emitter accumulators
+and squirt bursts, animated material cursors, light clocks, legacy model-emitter counters, and
+spawn/sound/splat event cursors. Independently spawned particles, splats, sounds and event models keep
+their authored residual lifetimes. Effects that expire before their `WorldInstance` is ready are
+still destroyed rather than retained. A profiling-only `legacy-effect-pooling` switch restores the
+old allocation/despawn behavior for both imported timed effects and Chain Lightning.
+
+The comparison uses the active 500-unit first-ten-seconds combat fixture, with ten seconds of warm-up
+and four sequential A/B/A/B runs from the same release binary. Production runs ended at tick 300/301;
+legacy runs ended at tick 300. All had 115 living units and 330 corpses.
+
+| Active combat, 2-run average | FPS | Mean frame ms | 1% low FPS | p95 ms | p99 ms | Main CPU ms | Entity sync ms | Effects ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Retained effect pool | 36.39 | 27.486 | 13.72 | 49.482 | 52.766 | 15.746 | 0.197 | 2.016 |
+| Legacy instantiate/despawn | 35.03 | 28.549 | 11.99 | 54.658 | 64.100 | 16.177 | 0.206 | 2.067 |
+
+Pooling lowers mean frame time by **3.7%** and raises FPS by **3.9%**. The stronger result is frame
+stability: 1% low improves **14.4%**, p95 falls **9.5%**, and p99 falls **17.7%**. Main-thread CPU is
+**2.7%** lower, entity sync **4.4%** lower, and the measured effects slice **2.5%** lower. The overlapping
+render handoff scope falls about **5.1%** and render/submit/present about **2.0%**. Maximum single-frame
+latency is not improved (the two pooled runs contain 125.9/131.8 ms outliers versus 101.3/104.9 ms
+legacy), so the change is not claimed to eliminate every transition spike; it reduces the repeatable
+p95/p99 churn while preserving the conservative non-poolable paths.
+
 ### Next architectural changes, in priority order
 
-- **Retain and pool effect instances/resources.** Pool frequently spawned effect instances/resources
-  to reduce the remaining initial scene/material activation spikes; reset animation, event cursors,
-  bindings and lifetime on reuse. Benchmark the transition separately from later combat, since the
-  updated worst frame still exceeds 100 ms.
 - **One skeleton evaluation and palette per model.** CPU samples also show animation evaluation,
   transform propagation and skinned bounds among the dominant consumers. Updated combat still
   averages about 10.5 ms in PostUpdate and stages 11.3 MB of palettes per sampled frame. The shared
@@ -438,8 +471,9 @@ expected way to reduce the larger scene/material activation spikes.
 
 The release build, client Clippy with warnings denied, formatting, the client test suite and live
 captures pass. The material-freeze path is profiling-only and intentionally changes the picture;
-owner-local attachment search, unchanged-write suppression, persistent terrain-splat material
-state, buffered alpha-only model material state, and immutable texture-ID material variants ship by default.
+owner-local attachment search, per-instance attachment indices, unchanged-write suppression,
+persistent terrain-splat material state, buffered alpha-only model material state, immutable texture-ID
+material variants, and conservative timed-effect pooling ship by default.
 
 ## Architectural findings from source
 
