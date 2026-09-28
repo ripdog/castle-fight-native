@@ -292,9 +292,8 @@ Rendering investigations can keep the simulation paused for the entire capture w
 ordinary simulation pause. Stress profiling also pauses during warm-up to preserve the requested
 initial unit population.
 
-The opt-in `--render-experiment` accepts `baseline`, `freeze-bounds`, `hide-skinned`,
-`hide-particles`, and `hide-transparent`. These experiments require a profiling mode and MUST NOT
-affect the authoritative simulation. They deliberately change presentation for cost attribution:
+The opt-in `--render-experiment` defaults to `baseline`. The experiments below require a profiling
+mode and MUST NOT affect the authoritative simulation. They deliberately change presentation for cost attribution:
 
 - `freeze-bounds` keeps each mesh's first available bounds and removes its dynamic skin-bounds
   updates. Those bounds need not contain later poses, so this is not a production culling solution.
@@ -303,6 +302,19 @@ affect the authoritative simulation. They deliberately change presentation for c
   work; legacy model particles, ribbons and other effects remain.
 - `hide-transparent` hides StandardMaterial blended/additive/multiplicative meshes; opaque,
   alpha-masked and alpha-to-coverage geometry remain. Custom materials are not included.
+- `legacy-team-color` restores separate team-colour underlay geometry for the static unit
+  layers that ordinary rendering composites into a single pass.
+- `legacy-geoset-visibility` restores scale-only hiding for authored hidden geosets.
+- `legacy-attachment-search` restores the scene-wide name scan for pending visual attachments.
+  Ordinary rendering searches only the owning hierarchy, excludes the effect's own subtree,
+  and retries unresolved bindings while asynchronous scene creation completes. Authored `Ref`
+  names retain priority over exact names and other prefix matches.
+- `legacy-splat-updates` restores unconditional material writes for ground splats. Ordinary
+  rendering updates the material only when its sampled colour actually changes; authored colour,
+  alpha, atlas animation and lifetime remain unchanged.
+- `freeze-materials` suppresses model alpha/texture track writes and ground-splat colour writes.
+  This deliberately changes the picture to attribute material update costs; splat geometry,
+  lifetime and the authoritative simulation continue normally.
 
 Experiments apply throughout warm-up and capture. Their differences are not additive cost budgets:
 removing geometry also changes visibility, batching, GPU work and pipeline overlap. Compare the

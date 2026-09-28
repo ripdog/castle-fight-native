@@ -514,42 +514,76 @@ pub fn resolve_wc3_visual_attachments(
     pending: Query<(Entity, &Wc3AttachToNode)>,
     names: Query<(Entity, &Name)>,
     parents: Query<&ChildOf>,
+    children: Query<&Children>,
+    experiment: Option<Res<RenderExperiment>>,
+    mut stack: Local<Vec<(Entity, usize)>>,
 ) {
+    let legacy_search = experiment
+        .is_some_and(|experiment| *experiment == RenderExperiment::LegacyAttachmentSearch);
     for (effect, binding) in &pending {
         let requested = normalize_attachment_name(&binding.attachment_point);
-        let target = names
-            .iter()
-            .filter_map(|(entity, name)| {
-                let normalized = normalize_attachment_name(name.as_str());
-                if !normalized.starts_with(&requested) {
-                    return None;
-                }
-                let priority = if normalized.strip_prefix(&requested) == Some("ref") {
-                    0
-                } else if normalized == requested {
-                    1
-                } else {
-                    2
-                };
-                let mut current = entity;
-                for _ in 0..128 {
-                    if current == effect {
-                        return None;
+        let target = if legacy_search {
+            // Profiling reference: each pending effect used to search the entire scene.
+            names
+                .iter()
+                .filter_map(|(entity, name)| {
+                    let priority = wc3_attachment_priority(name.as_str(), &requested)?;
+                    let mut current = entity;
+                    for _ in 0..128 {
+                        if current == effect {
+                            return None;
+                        }
+                        if current == binding.owner_root {
+                            return Some((priority, entity));
+                        }
+                        current = parents.get(current).ok()?.parent();
                     }
-                    if current == binding.owner_root {
-                        return Some((priority, entity));
-                    }
-                    current = parents.get(current).ok()?.parent();
+                    None
+                })
+                .min_by_key(|(priority, _)| *priority)
+                .map(|(_, entity)| entity)
+        } else {
+            // Only this owner's hierarchy can contain an eligible attachment. Skip
+            // the effect's own subtree to prevent a cyclic reparent. Keep retrying
+            // while the owner's asynchronously spawned scene is incomplete.
+            stack.clear();
+            stack.push((binding.owner_root, 0));
+            let mut best = None;
+            while let Some((entity, depth)) = stack.pop() {
+                if entity == effect {
+                    continue;
                 }
-                None
-            })
-            .min_by_key(|(priority, _)| *priority)
-            .map(|(_, entity)| entity);
+                if let Ok((_, name)) = names.get(entity)
+                    && let Some(priority) = wc3_attachment_priority(name.as_str(), &requested)
+                    && best.is_none_or(|(previous, _)| priority < previous)
+                {
+                    best = Some((priority, entity));
+                }
+                if depth < 127
+                    && let Ok(descendants) = children.get(entity)
+                {
+                    stack.extend(descendants.iter().rev().map(|child| (child, depth + 1)));
+                }
+            }
+            best.map(|(_, entity)| entity)
+        };
         if let Some(node) = target {
             commands.entity(node).add_child(effect);
             commands.entity(effect).remove::<Wc3AttachToNode>();
         }
     }
+}
+
+fn wc3_attachment_priority(name: &str, requested: &str) -> Option<u8> {
+    let normalized = normalize_attachment_name(name);
+    let suffix = normalized.strip_prefix(requested)?;
+    Some(if suffix == "ref" {
+        0
+    } else if suffix.is_empty() {
+        1
+    } else {
+        2
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1945,6 +1979,7 @@ pub fn emit_wc3_splat_events(
 pub fn update_wc3_spawned_splats(
     mut commands: Commands,
     time: Res<Time>,
+    experiment: Option<Res<RenderExperiment>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut splats: Query<(
@@ -1954,6 +1989,11 @@ pub fn update_wc3_spawned_splats(
         &mut Wc3SpawnedSplat,
     )>,
 ) {
+    let legacy_updates = experiment
+        .as_ref()
+        .is_some_and(|experiment| **experiment == RenderExperiment::LegacySplatUpdates);
+    let freeze_materials =
+        experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials);
     for (entity, mesh, material, mut splat) in &mut splats {
         splat.age += time.delta_secs().max(0.0);
         if splat.age >= splat_lifespan(&splat.spec) {
@@ -1963,8 +2003,17 @@ pub fn update_wc3_spawned_splats(
             continue;
         }
         let (color, frame) = splat_sample(&splat.spec, splat.age);
-        if let Some(mut material) = materials.get_mut(&material.0) {
-            material.base_color = splat_color(color);
+        let color = splat_color(color);
+        // A mutable asset lookup emits Modified even if we write the same value.
+        // Blood/footprint splats can spend seconds at a constant authored colour:
+        // do not rebuild their GPU material bindings on every presentation frame.
+        if !freeze_materials
+            && materials
+                .get(&material.0)
+                .is_some_and(|material| legacy_updates || material.base_color != color)
+            && let Some(mut material) = materials.get_mut(&material.0)
+        {
+            material.base_color = color;
         }
         if frame != splat.frame {
             if let Some(mut mesh_asset) = meshes.get_mut(&mesh.0) {
@@ -3502,6 +3551,7 @@ pub fn update_wc3_model_lights(
 
 pub fn update_wc3_material_alpha(
     time: Res<Time>,
+    experiment: Option<Res<RenderExperiment>>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -3511,6 +3561,9 @@ pub fn update_wc3_material_alpha(
         &mut Wc3AnimatedMaterialAlpha,
     )>,
 ) {
+    if experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials) {
+        return;
+    }
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, material_handle, mut animation) in &mut animated {
         animation.fallback_elapsed_ms += dt_ms;
@@ -3547,6 +3600,7 @@ pub fn update_wc3_material_alpha(
 
 pub fn update_wc3_material_texture(
     time: Res<Time>,
+    experiment: Option<Res<RenderExperiment>>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -3556,6 +3610,9 @@ pub fn update_wc3_material_texture(
         &mut Wc3AnimatedMaterialTexture,
     )>,
 ) {
+    if experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials) {
+        return;
+    }
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, material_handle, mut animation) in &mut animated {
         animation.fallback_elapsed_ms += dt_ms;

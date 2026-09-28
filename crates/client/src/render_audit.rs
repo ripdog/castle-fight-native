@@ -34,6 +34,9 @@ pub(crate) enum RenderExperiment {
     HideTransparent,
     LegacyTeamColor,
     LegacyGeosetVisibility,
+    LegacyAttachmentSearch,
+    LegacySplatUpdates,
+    FreezeMaterials,
 }
 
 impl RenderExperiment {
@@ -46,8 +49,11 @@ impl RenderExperiment {
             "hide-transparent" => Ok(Self::HideTransparent),
             "legacy-team-color" => Ok(Self::LegacyTeamColor),
             "legacy-geoset-visibility" => Ok(Self::LegacyGeosetVisibility),
+            "legacy-attachment-search" => Ok(Self::LegacyAttachmentSearch),
+            "legacy-splat-updates" => Ok(Self::LegacySplatUpdates),
+            "freeze-materials" => Ok(Self::FreezeMaterials),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, or legacy-geoset-visibility"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-splat-updates, or freeze-materials"
             )),
         }
     }
@@ -273,6 +279,9 @@ fn apply_render_experiment(
         RenderExperiment::Baseline
             | RenderExperiment::LegacyTeamColor
             | RenderExperiment::LegacyGeosetVisibility
+            | RenderExperiment::LegacyAttachmentSearch
+            | RenderExperiment::LegacySplatUpdates
+            | RenderExperiment::FreezeMaterials
     ) {
         return;
     }
@@ -290,7 +299,10 @@ fn apply_render_experiment(
         let hide = match *experiment {
             RenderExperiment::Baseline
             | RenderExperiment::LegacyTeamColor
-            | RenderExperiment::LegacyGeosetVisibility => false,
+            | RenderExperiment::LegacyGeosetVisibility
+            | RenderExperiment::LegacyAttachmentSearch
+            | RenderExperiment::LegacySplatUpdates
+            | RenderExperiment::FreezeMaterials => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();

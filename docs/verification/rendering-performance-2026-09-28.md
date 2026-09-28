@@ -239,6 +239,81 @@ GPU time **11.2%**, and skin-palette staging **25.1%**. The active benchmark is 
 and contains large combat-time asset/scene churn, so the structural visibility/palette/draw-count
 changes are the stronger attribution signal.
 
+## Active-combat follow-up: attachment search and material updates
+
+The simulation remains a small part of the regression: the original 30-second combat capture
+averaged **1.329 ms/tick**, versus **46.939 ms/frame**. Real-window measurements below use the
+same 500-unit fixture, centred/locked camera, 3840×2160, AutoNoVsync and ten-second paused warm-up.
+The original binary was built from `4c05a22`; the updated binary includes the changes accompanying
+this section. No compilation overlapped the captures. Full reports are in
+[the combat results](rendering-combat-performance-2026-09-28-results.txt).
+
+| First ten seconds of combat | FPS | Mean frame ms | p99 ms | Max ms | Scene setup ms | Prepare assets ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original binary | 19.91 | 50.213 | 261.945 | 317.643 | 3.338 | 11.269 |
+| Updated, run 1 | 23.83 | 41.965 | 78.439 | 106.530 | 1.028 | 6.948 |
+| Restore global attachment search only | 23.00 | 43.473 | 116.697 | 312.092 | 2.969 | 6.823 |
+| Restore unconditional splat writes only | 21.09 | 47.415 | 78.672 | 103.335 | 1.028 | 11.283 |
+| Freeze material animation (diagnostic only) | 34.51 | 28.978 | 65.884 | 102.662 | 0.769 | 0.579 |
+| Updated, run 2 | 23.98 | 41.694 | 77.853 | 106.744 | 0.993 | 6.834 |
+
+The two updated runs average **23.91 FPS**, about **20% higher** than the original. The original
+finishes at tick 297 and the updated runs at 300; all have 115 units and 330 corpses. The production
+changes improve the first-ten-second 1% low from **3.45 FPS to 10.35–10.48 FPS**. The individual
+legacy switches and material-freeze experiment use the same updated binary.
+
+A longer, single 30-second comparison improves from **21.30 to 37.97 FPS** (46.939 to 26.336 ms),
+with p99 falling from 92.685 to 68.335 ms. That result includes the quieter period after the battle;
+it is not the FPS of the initial pitched battle. The runs end at ticks 891/901 with different
+corpse-expiry populations, so the repeated ten-second captures are the cleaner comparison.
+Render-stage timings include scheduling/waiting and overlap; they are not additive CPU budgets.
+
+### Changes implemented
+
+1. **Owner-local attachment resolution.** `resolve_wc3_visual_attachments` previously scanned all
+   named entities and allocated a normalized name for each, for every pending attachment on every
+   frame. Missing or not-yet-ready attachment points repeated that work indefinitely. CPU sampling
+   during combat attributed 3.39% of sampled cycles to name normalization alone. The resolver now
+   walks only the owner's hierarchy with a reusable stack, excludes the effect's own subtree,
+   preserves `Ref`/exact/prefix priority, and retries asynchronous loads. The legacy switch
+   restores the global scan and brings back the large frame spikes. Equally ranked duplicate
+   names now resolve in hierarchy order instead of ECS query order.
+2. **Avoid unchanged ground-splat material writes.** Blood/footprint/other event splats previously
+   performed a mutable material lookup and colour write every frame, including constant-colour
+   portions of their authored lifecycle. This produces asset modification events. Bevy's
+   `PreparedMaterial::prepare_asset` frees and reallocates the material binding even for a change
+   confined to uniform data. Read-only colour comparison now suppresses redundant writes while
+   retaining the exact sampled colour, alpha, atlas frame and lifetime. The legacy switch raises
+   asset preparation from about 6.9 to 11.3 ms/frame and lowers FPS to 21.09.
+
+### Next architectural changes, in priority order
+
+- **Persistent material state for animated effects.** The material-freeze diagnostic improves FPS
+  by another 44% over the updated runs and cuts asset preparation to 0.579 ms. It freezes both
+  model alpha/texture tracks and splat colour, so it does not isolate their individual shares or
+  predict the exact gain of a faithful implementation. Make textures, samplers, blend/depth rules
+  and pipeline identity immutable/shared; place changing colour, alpha and texture selection in
+  per-instance buffer records. Start with terrain-conforming splats: retain their terrain mesh,
+  source-event transform, authored lifetime and transparent ordering, but update a compact record
+  instead of replacing a StandardMaterial binding. Then extend that representation to animated
+  model layers. Do not quantize authored values or freeze visible animation as the production fix.
+- **Bound attachment indices and retained effect instances.** The new local search removes the
+  scene-wide multiplier. An index built when each model scene becomes ready can resolve repeated
+  attachment names once and record absent names until the hierarchy changes. Pool frequently
+  spawned effect instances/resources to reduce the remaining initial scene/material activation
+  spikes; reset animation, event cursors, bindings and lifetime on reuse. Benchmark the transition
+  separately from later combat, since the updated worst frame still exceeds 100 ms.
+- **One skeleton evaluation and palette per model.** CPU samples also show animation evaluation,
+  transform propagation and skinned bounds among the dominant consumers. Updated combat still
+  averages about 10.5 ms in PostUpdate and stages 11.3 MB of palettes per sampled frame. The shared
+  palette/model-level bounds design above remains relevant. Retain settled corpse poses only when
+  their authored phase actually stops changing; do not freeze death or decay sequences or alter
+  authoritative corpse lifetime. Measure this after material state is fixed, since the costs overlap.
+
+The release build, client-binary Clippy with warnings denied, formatting and live captures pass.
+**No tests were run, as requested.** The material-freeze path is profiling-only and intentionally
+changes the picture; only the owner-local search and unchanged-write suppression ship by default.
+
 ## Architectural findings from source
 
 ### Repeated skeleton work per mesh layer
