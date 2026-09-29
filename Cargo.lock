@@ -1961,6 +1961,7 @@ name = "castle-fight-client"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bytemuck",
  "castle-fight-protocol",
  "castle-fight-sim",
  "serde",

@@ -9,6 +9,7 @@ mod doodads;
 mod inspection;
 mod lobby;
 mod network;
+mod particle_renderer;
 mod performance_ui;
 mod presentation;
 mod render_audit;
@@ -414,6 +415,7 @@ fn main() {
         .insert_resource(TerrainSurface::new(demo.terrain))
         .insert_resource(terrain_texture_layout)
         .insert_resource(terrain_textures)
+        .insert_resource(options.render_experiment)
         .add_plugins(
             DefaultPlugins
                 .set(bevy::render::RenderPlugin {
@@ -520,8 +522,7 @@ fn main() {
         .add_systems(Update, print_perf_telemetry);
     }
     if options.is_profiling() {
-        app.insert_resource(options.render_experiment)
-            .add_plugins(RenderAuditPlugin);
+        app.add_plugins(RenderAuditPlugin);
         let source = options.profile_quicksave.as_ref().map_or_else(
             || {
                 if let Some(stress) = options.stress_visual {

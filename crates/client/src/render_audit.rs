@@ -23,7 +23,7 @@ use bevy::{
 };
 
 use crate::wc3_effects::{
-    Wc3AnimatedAlphaMaterial, Wc3AnimatedMaterialTexture, Wc3Particle, Wc3ParticleMaterial,
+    Wc3AnimatedAlphaMaterial, Wc3AnimatedMaterialTexture, Wc3BillboardParticles, Wc3Particle,
     Wc3SplatMaterial, Wc3TeamColorMaterial,
 };
 
@@ -325,7 +325,6 @@ type ExperimentMeshes<'w, 's> = Query<
         &'static mut Visibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
         Option<&'static MeshMaterial3d<Wc3AnimatedAlphaMaterial>>,
-        Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
         Option<&'static MeshMaterial3d<Wc3SplatMaterial>>,
         Has<SkinnedMesh>,
         Has<Wc3Particle>,
@@ -369,7 +368,6 @@ fn apply_render_experiment(
         mut visibility,
         material,
         animated_alpha_material,
-        particle_material,
         splat_material,
         skin,
         particle,
@@ -404,8 +402,7 @@ fn apply_render_experiment(
             RenderExperiment::HideSkinned => skin,
             RenderExperiment::HideParticles => particle,
             RenderExperiment::HideTransparent => {
-                particle_material.is_some()
-                    || splat_material.is_some()
+                splat_material.is_some()
                     || animated_alpha_material
                         .and_then(|handle| {
                             animated_alpha_materials
@@ -439,7 +436,6 @@ type CensusMeshes<'w, 's> = Query<
         &'static ViewVisibility,
         Option<&'static MeshMaterial3d<StandardMaterial>>,
         Option<&'static MeshMaterial3d<Wc3AnimatedAlphaMaterial>>,
-        Option<&'static MeshMaterial3d<Wc3ParticleMaterial>>,
         Option<&'static MeshMaterial3d<Wc3SplatMaterial>>,
         Option<&'static MeshMaterial3d<Wc3TeamColorMaterial>>,
         Option<&'static SkinnedMesh>,
@@ -455,6 +451,7 @@ pub(crate) struct SceneCensus<'w, 's> {
     meshes: CensusMeshes<'w, 's>,
     materials: Res<'w, Assets<StandardMaterial>>,
     animated_alpha_materials: Res<'w, Assets<Wc3AnimatedAlphaMaterial>>,
+    billboard_particles: Res<'w, Wc3BillboardParticles>,
     players: Query<'w, 's, (), With<AnimationPlayer>>,
     animated_textures: Query<'w, 's, (), With<Wc3AnimatedMaterialTexture>>,
     entities: Query<'w, 's, Entity>,
@@ -468,8 +465,8 @@ impl SceneCensus<'_, '_> {
         let mut visible = 0;
         let mut skins = 0;
         let mut dynamic = 0;
-        let mut particles = 0;
-        let mut transparent = 0;
+        let mut particles = self.billboard_particles.len();
+        let mut transparent = self.billboard_particles.len();
         let mut no_batch = 0;
         let mut joint_references = 0;
         let mut collapsed_visible = 0;
@@ -486,7 +483,6 @@ impl SceneCensus<'_, '_> {
             visibility,
             material,
             animated_alpha_material,
-            particle_material,
             splat_material,
             team_material,
             skin,
@@ -524,8 +520,7 @@ impl SceneCensus<'_, '_> {
                             .is_some_and(|material| is_transparent(material.base.alpha_mode)),
                     );
                 }
-            } else if visibility.get() && (particle_material.is_some() || splat_material.is_some())
-            {
+            } else if visibility.get() && splat_material.is_some() {
                 transparent += 1;
             }
             if let Some(material) = team_material {

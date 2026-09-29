@@ -131,27 +131,49 @@ non-bindless fallback in this fixture. The normal renderer now uses 64 slots; `b
 available as the stock-policy control. A final post-refactor release capture confirmed the promoted
 `baseline` at 45.30 FPS / 22.074 ms versus `bindless-auto` at 36.22 FPS / 27.611 ms.
 
-### 2. Buffered particle state has not removed particle submission overhead
+### 2. Dedicated billboard rendering removes ordinary-particle ECS/PBR overhead
 
-`emit_wc3_particles` still creates a `Mesh3d`, material component, transform and entity for each
-ordinary particle, including additive particles. `update_wc3_particles` still changes each particle's
-transform. Existing buffers eliminate colour/UV asset churn, but not ECS traversal, mesh extraction,
-visibility processing or the many interleaved transparent draws.
+The ordinary WC3 particle path now keeps Blend, Add and Multiply particles in compact CPU arrays
+instead of spawning a `Mesh3d`, material component, transform and entity for every quad. The compact
+records retain position, velocity, gravity, lifespan, authored three-stage scale/colour/alpha,
+atlas frame and texture identity. Alpha-mask particles remain on the legacy mesh path because they
+participate in the depth-writing masked pass; model-particle emitters and ribbons remain separate.
 
-Hiding particles retains emission, integration and lifetimes, yet removes roughly **1,000 draws**,
-halves frame time and lowers submission from 14.88 to 5.07 ms. Transparent GPU time falls only from
-about 2.08 to 1.27 ms in the recent pass sample, while opaque GPU time remains about 2.5 ms. The large
-opportunity is the CPU path for issuing particle geometry.
+A dedicated render-world path extracts compact billboard instance records and inserts one transient
+item per particle into Bevy's existing `Transparent3d` phase. This deliberately preserves the
+depth ordering between particles and alpha-blended model layers. After Bevy sorts that phase,
+adjacent compatible particle items are packed into one instance buffer and represented by one draw.
+The renderer uses texture/sampler binding arrays where non-uniform indexing is supported, with a
+64-texture maximum slab and smaller 16/1-entry fallbacks for weaker or non-bindless devices.
+The no-bindless profiling mode successfully exercised the one-texture fallback.
 
-Next design: compact particle arrays and a dedicated billboard draw path with position, size,
-colour and atlas coordinates in instance records. Avoid general Mesh3d entities and PBR bindings
-for individual quads. Merge particle items into the existing transparent ordering and batch only
-compatible contiguous runs; retain interleaving with alpha-blended model layers. Additive blending
-does not permit arbitrary reordering across alpha geometry. Texture arrays grouped by compatible
-size/format or carefully authored atlases may reduce bindings further without giant arrays of
-separate texture resources. Preserve blend/depth rules, priority, atlas timing and residual lifetimes.
-This is the unfinished geometry/submission half of the original particle design, not another colour
-buffer optimization. Legacy model particles and ribbons need separate handling.
+The 64-entry limit is intentional rather than simply using the device maximum. A 128-entry trial
+landed within the run-to-run spread of the 64-entry configuration (54.33 FPS / 18.406 ms in one
+capture) and did not establish a repeatable gain. A 256-entry trial regressed to 48.08 FPS /
+20.800 ms and raised render/submit/present to 13.504 ms. This mirrors the earlier material-slab
+finding that oversized binding arrays are expensive on the tested RADV driver.
+
+Using the same 3840×2160, 500-unit, 10-second warm-up and 10-second capture as the pre-change
+measurement:
+
+| Ordinary-particle path | FPS | Mean frame ms | Effects CPU ms | Specialize ms | Queue ms | Prepare meshes ms | Render/submit/present ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Per-particle `Mesh3d` baseline | 46.54 | 21.488 | 1.575 | 1.211 | 1.694 | 0.991 | 10.739 |
+| Compact billboard path, 64-slot final two-run mean | 52.49 | 19.054 | 0.852 | 0.088 | 0.309 | 0.721 | 11.527 |
+
+That is a **11.3% mean-frame-time reduction** and **12.8% FPS increase** versus the retained
+pre-change baseline. The largest wins are where expected from removing general mesh/material
+entities: effects CPU fell about 46%, specialization about 93%, queueing about 82%, and mesh
+preparation about 27%.
+
+The result also sets an important boundary for the next renderer optimization. Transparent phase
+draw calls only fell from 2,163 in the retained baseline to roughly 2,094 across the final two
+captures, and render/submit/present did not improve. Strict ordering against transparent model
+layers fragments particle runs heavily. An experiment that forced Alpha and Add particles onto one
+premultiplied pipeline reduced the latest draw-call count to 1,892 but regressed badly to 35.56 FPS /
+28.124 ms and 15.062 ms render/submit/present, so it was rejected. Further draw-call reduction needs
+a design that preserves the authored transparent ordering rather than broad reordering or a larger
+binding array.
 
 ### Lower-priority findings
 
@@ -172,7 +194,12 @@ captures. Removing steady submission overhead will not alone eliminate that acti
 
 ## Changes and validation
 
-Added profiling-only `freeze-poses` and `no-bindless`, actual bindless-mode logging, the read-only
-channel audit, this design report and raw measurements. Normal gameplay rendering remains unchanged.
-Release build, client-binary Clippy with warnings denied, formatting and all seven live captures
-passed. **No tests were run, as requested.**
+Added the profiling controls and channel audit used for the investigation, capped StandardMaterial
+bindless slabs at 64, and replaced ordinary Blend/Add/Multiply particle entities with the dedicated
+sorted billboard renderer described above. Alpha-mask particles, model-particle emitters and ribbons
+retain their previous rendering paths. The dedicated renderer also has a non-binding-array fallback.
+
+Validation for the particle implementation included formatting, `cargo check`, **206 client tests**,
+client Clippy with warnings denied, release builds, shader/pipeline runtime smoke tests, a no-bindless
+fallback smoke test, and the live 64/128/256 texture-slab comparisons above. Rejected experimental
+variants were backed out before the final source state.
