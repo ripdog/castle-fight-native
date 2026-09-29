@@ -56,6 +56,78 @@ fi
 build_cpus="$(choose_build_cpus)"
 build_nice="${CF_BUILD_NICE:-10}"
 
+resolve_target_dir() {
+    local target_dir=""
+    local arg
+
+    # A command-line target dir overrides CARGO_TARGET_DIR. Stop at -- so a
+    # program argument named --target-dir is not mistaken for Cargo's option.
+    while (($# > 0)); do
+        arg="$1"
+        case "$arg" in
+            --)
+                break
+                ;;
+            --target-dir=*)
+                target_dir="${arg#--target-dir=}"
+                ;;
+            --target-dir)
+                shift
+                if (($# == 0)); then
+                    break
+                fi
+                target_dir="$1"
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$target_dir" ]]; then
+        target_dir="${CARGO_TARGET_DIR:-}"
+    fi
+    if [[ -z "$target_dir" ]]; then
+        target_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/target"
+    elif [[ "$target_dir" != /* ]]; then
+        target_dir="$(pwd)/$target_dir"
+    fi
+
+    printf '%s\n' "$target_dir"
+}
+
+repair_stale_rustc_info() {
+    command -v sccache >/dev/null 2>&1 || return 0
+
+    local target_dir
+    local rustc_info
+    local rustc=""
+
+    target_dir="$(resolve_target_dir "$@")"
+    rustc_info="$target_dir/.rustc_info.json"
+    [[ -f "$rustc_info" ]] || return 0
+
+    # Cargo can persist a transient rustc-wrapper failure here and replay it on
+    # every later invocation without consulting the wrapper again. Only repair
+    # the exact sandbox-style sccache failure we have observed, and only when a
+    # fresh direct wrapper probe now succeeds.
+    grep -Fq '"success":false' "$rustc_info" || return 0
+    grep -Fq 'sccache: error: Operation not permitted (os error 1)' "$rustc_info" || return 0
+
+    if [[ -n "${RUSTC:-}" ]]; then
+        rustc="$RUSTC"
+    elif command -v rustup >/dev/null 2>&1; then
+        rustc="$(rustup which rustc 2>/dev/null || true)"
+    fi
+    if [[ -z "$rustc" ]]; then
+        rustc="$(command -v rustc 2>/dev/null || true)"
+    fi
+    [[ -n "$rustc" ]] || return 0
+
+    if sccache "$rustc" -vV >/dev/null 2>&1; then
+        rm -f -- "$rustc_info"
+        printf 'cargo-interactive: removed stale Cargo rustc probe cache after a successful sccache probe\n' >&2
+    fi
+}
+
 # The default 10 GiB sccache store is too small for Bevy plus several active
 # worktrees/profiles and was observed sitting at its eviction ceiling. This is a
 # maximum, not a reservation; callers can override it when disk is constrained.
@@ -85,5 +157,7 @@ if [[ "${CF_BUILD_SERIALIZE:-1}" != "0" ]] && command -v flock >/dev/null 2>&1; 
         flock 9
     fi
 fi
+
+repair_stale_rustc_info "$@"
 
 exec taskset --cpu-list "$build_cpus" nice -n "$build_nice" ionice -c 2 -n 7 cargo "$@"
