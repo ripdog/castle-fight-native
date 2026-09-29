@@ -1,5 +1,5 @@
-//! Opt-in, presentation-only experiments. These deliberately trade visual correctness
-//! for attribution and must never be enabled by ordinary gameplay configuration.
+//! Opt-in, presentation-only experiments. Some deliberately trade visual correctness
+//! for attribution; all remain separate from ordinary gameplay configuration.
 
 use std::{
     collections::HashSet,
@@ -45,6 +45,8 @@ pub(crate) enum RenderExperiment {
     LegacyAnimatedAlphaState,
     LegacyAnimatedTextureState,
     FreezeMaterials,
+    FreezePoses,
+    NoBindless,
 }
 
 impl RenderExperiment {
@@ -65,8 +67,10 @@ impl RenderExperiment {
             "legacy-animated-alpha-state" => Ok(Self::LegacyAnimatedAlphaState),
             "legacy-animated-texture-state" => Ok(Self::LegacyAnimatedTextureState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
+            "freeze-poses" => Ok(Self::FreezePoses),
+            "no-bindless" => Ok(Self::NoBindless),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, or freeze-materials"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, or no-bindless"
             )),
         }
     }
@@ -172,6 +176,12 @@ impl Plugin for RenderAuditPlugin {
                 .before(bevy::camera::visibility::VisibilitySystems::CalculateBounds)
                 .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
         );
+        app.add_systems(
+            PostUpdate,
+            freeze_animation_poses
+                .after(crate::wc3_effects::skip_unchanged_paused_animation_poses)
+                .before(bevy::animation::animate_targets),
+        );
     }
 
     fn finish(&self, app: &mut App) {
@@ -189,6 +199,15 @@ impl Plugin for RenderAuditPlugin {
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
+        if let Some(device) = render_app
+            .world()
+            .get_resource::<bevy::render::renderer::RenderDevice>()
+        {
+            println!(
+                "client-profile standard_material_bindless={}",
+                bevy::pbr::material_uses_bindless_resources::<StandardMaterial>(device)
+            );
+        }
         render_app.insert_resource(audit.clone()).add_systems(
             Render,
             sample_transparent_batches
@@ -226,6 +245,22 @@ impl Plugin for RenderAuditPlugin {
                 end = end.before(next.clone());
             }
             render_app.add_systems(Render, (begin, end));
+        }
+    }
+}
+
+// Attribution only: clocks keep advancing, but no joint curves are applied.
+// Root movement and the authoritative simulation continue normally.
+fn freeze_animation_poses(
+    experiment: Res<RenderExperiment>,
+    mut players: Query<&mut AnimationPlayer>,
+) {
+    if *experiment != RenderExperiment::FreezePoses {
+        return;
+    }
+    for mut player in &mut players {
+        for (_, animation) in player.playing_animations_mut() {
+            animation.set_weight(0.0);
         }
     }
 }
@@ -303,6 +338,8 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAnimatedAlphaState
             | RenderExperiment::LegacyAnimatedTextureState
             | RenderExperiment::FreezeMaterials
+            | RenderExperiment::FreezePoses
+            | RenderExperiment::NoBindless
     ) {
         return;
     }
@@ -330,7 +367,9 @@ fn apply_render_experiment(
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
             | RenderExperiment::LegacyAnimatedTextureState
-            | RenderExperiment::FreezeMaterials => false,
+            | RenderExperiment::FreezeMaterials
+            | RenderExperiment::FreezePoses
+            | RenderExperiment::NoBindless => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();

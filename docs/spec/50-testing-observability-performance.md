@@ -315,6 +315,14 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
 - `freeze-materials` suppresses model alpha/texture track writes and ground-splat colour writes.
   This deliberately changes the picture to attribute material update costs; splat geometry,
   lifetime and the authoritative simulation continue normally.
+- `freeze-poses` sets animation weights to zero immediately before Bevy evaluates animation targets.
+  Root motion, logical animation clocks and the simulation continue, but poses and pose-dependent
+  attachments are intentionally incorrect. This measures a combined animation/propagation cost,
+  not an acceptable production animation policy.
+- `no-bindless` disables the device's texture-binding-array feature at renderer creation, exercising
+  Bevy's ordinary material-binding fallback. It keeps geometry, skin components, simulation and
+  authored visual parameters intact. Profiling logs report whether StandardMaterial actually uses
+  bindless resources. This comparison changes batching as well as resource tracking costs.
 
 Experiments apply throughout warm-up and capture. Their differences are not additive cost budgets:
 removing geometry also changes visibility, batching, GPU work and pipeline overlap. Compare the

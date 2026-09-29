@@ -1,5 +1,9 @@
 # Rendering architecture investigation — 2026-09-28
 
+Follow-up: [2026-09-29 renderer audit](rendering-performance-2026-09-29.md) explains the rejected
+shared-palette approach, the narrow Bevy patch it would need, and the newly measured binding/particle
+submission priorities.
+
 Status: investigation and opt-in measurement tools, plus seven measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, texture-ID animated layers switch among immutable shared material variants instead of mutating material assets, and frequently spawned timed effects now reuse retained instances/resources when their hierarchy is safe to reset. Per-instance attachment indices also bound repeated effect attachment lookup; that change is tail-latency/complexity work rather than a measured throughput gain. The broader model-envelope/off-screen pose lifecycle work remains proposed.
 
 ## Scope and reproducibility
