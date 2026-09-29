@@ -133,6 +133,11 @@ repair_stale_rustc_info() {
 # maximum, not a reservation; callers can override it when disk is constrained.
 export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-32G}"
 
+# sccache's default 600-second idle timeout can fire while long rustc jobs are
+# still running. Disable idle shutdown so those jobs keep their server
+# connection instead of falling back to duplicate local compilation.
+export SCCACHE_IDLE_TIMEOUT="${SCCACHE_IDLE_TIMEOUT:-0}"
+
 # sccache is a long-lived daemon and launches rustc itself. Constraining only
 # Cargo is therefore insufficient: pin the daemon as well so current and future
 # rustc children inherit the same CPU affinity.

@@ -6,6 +6,9 @@ jobs = 6
 incremental = false
 
 [env]
-# Cargo exports this to rustc wrappers as well, so manually-invoked Cargo gets
-# the same cache budget as tools/cargo-interactive. This is only a size ceiling.
+# Cargo exports these to rustc wrappers as well, so manually-invoked Cargo gets
+# the same sccache policy as tools/cargo-interactive.
 SCCACHE_CACHE_SIZE = { value = "32G", force = false }
+# sccache's default 600-second idle timeout can expire while long rustc jobs are
+# still running, disconnecting them and forcing duplicate local compilation.
+SCCACHE_IDLE_TIMEOUT = { value = "0", force = false }
