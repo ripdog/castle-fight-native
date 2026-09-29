@@ -1,6 +1,6 @@
 # Rendering architecture investigation — 2026-09-28
 
-Status: investigation and opt-in measurement tools, plus eight measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, texture-ID animated layers switch among immutable shared material variants instead of mutating material assets, frequently spawned timed effects reuse retained instances/resources when their hierarchy is safe to reset, and compatible geosets in one imported model now render from one shared full skin palette. Per-instance attachment indices also bound repeated effect attachment lookup; that change is tail-latency/complexity work rather than a measured throughput gain. Broader model-envelope/off-screen pose lifecycle work remains proposed.
+Status: investigation and opt-in measurement tools, plus seven measured renderer changes: ordinary additive particles share buffered render state, the common static unit team-colour layer is composited in one pass, exported binary geoset visibility excludes truly hidden geosets from submission, terrain-conforming splats use persistent shared material state, alpha-only animated model layers keep alpha in per-instance GPU records, texture-ID animated layers switch among immutable shared material variants instead of mutating material assets, and frequently spawned timed effects now reuse retained instances/resources when their hierarchy is safe to reset. Per-instance attachment indices also bound repeated effect attachment lookup; that change is tail-latency/complexity work rather than a measured throughput gain. The broader model-envelope/off-screen pose lifecycle work remains proposed.
 
 ## Scope and reproducibility
 
@@ -45,7 +45,6 @@ target/release/castle-fight-client --stress-units 500 --profile --profile-paused
 # --render-experiment legacy-geoset-visibility
 # --render-experiment legacy-attachment-index
 # --render-experiment legacy-effect-pooling
-# --render-experiment legacy-shared-skin-palette
 # --render-experiment legacy-splat-material-state
 # --render-experiment legacy-animated-alpha-state
 # --render-experiment legacy-animated-texture-state
@@ -461,52 +460,29 @@ latency is not improved (the two pooled runs contain 125.9/131.8 ms outliers ver
 legacy), so the change is not claimed to eliminate every transition spike; it reduces the repeatable
 p95/p99 churn while preserving the conservative non-poolable paths.
 
-### Implementation follow-up: one shared skin palette per imported model
+### Next architectural changes, in priority order
 
-Compatible skinned geosets in one imported model instance now share one full Bevy skin palette instead
-of each carrying the complete joint list through render extraction. A synthetic skin anchor owns the
-full joint list and inverse-bindpose asset. Each mesh retains a one-joint placeholder `SkinnedMesh` so
-Bevy continues to select the skinned pipeline, while the GPU-preprocessing input record is redirected
-to the anchor's palette index before the instance buffer is uploaded. Team-colour underlays naturally
-join the same group when their skin is identical. Groups are accepted only when the full joint list and
-inverse-bindpose asset match exactly; mismatches stay on Bevy's ordinary path.
+- **One skeleton evaluation and palette per model.** CPU samples also show animation evaluation,
+  transform propagation and skinned bounds among the dominant consumers. Updated combat still
+  averages about 10.5 ms in PostUpdate and stages 11.3 MB of palettes per sampled frame. The shared
+  palette/model-level bounds design above remains relevant. Retain settled corpse poses only when
+  their authored phase actually stops changing; do not freeze death or decay sequences or alter
+  authoritative corpse lifetime. Measure this after material state is fixed, since the costs overlap.
 
-This path is enabled only when Bevy is using storage-buffer skins and GPU mesh preprocessing. Uniform-
-buffer or CPU-preprocessing platforms keep the reference behavior. Dynamic bounds also remain
-fidelity-equivalent: each aliased mesh keeps its original full skin solely for the existing per-geoset
-bounds calculation. A trial model-level conservative bound implementation was rejected because it
-raised PostUpdate materially on this fixture; it does not ship. Likewise corpse death/flesh/bone
-sequences are not frozen: their authored pose continues changing throughout their authoritative phase.
-
-`legacy-shared-skin-palette` restores the previous per-mesh palette path for controlled comparison.
-The benchmark is the active 500-unit first-ten-seconds combat fixture used for effect pooling, with ten
-seconds warm-up and two sequential A/B pairs. All four runs ended at tick 300 with 115 living units,
-330 corpses, 2 buildings and 2 projectiles.
-
-| Active combat, 2-run average | FPS | Mean frame ms | 1% low FPS | p95 ms | p99 ms | Main CPU ms | PostUpdate ms | World sync/extract ms | Prepare resources ms |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Shared model palette | 35.33 | 28.307 | 12.05 | 54.626 | 63.836 | 15.957 | 8.170 | 1.592 | 4.353 |
-| Legacy per-mesh palettes | 35.18 | 28.426 | 11.97 | 55.021 | 63.242 | 16.173 | 8.383 | 2.067 | 4.181 |
-
-The measured gain is modest but repeatable in the CPU scopes: mean frame time falls **0.4%**, main CPU
-**1.3%**, PostUpdate **2.5%**, and render-world sync/extraction **23.0%**. FPS rises **0.4%** and p95 falls
-**0.7%**; p99 is **0.9% worse**, so this is not presented as a tail-latency win. Mesh-bound joint
-references in the scene census fall from **174,260 to 4,494** because the full lists move to one anchor
-per model and mesh components retain only their placeholder joint.
-
-The current Bevy 0.19 skin allocator keeps a high-water staging vector after earlier allocations, so
-this change does **not** yet reduce the measured palette upload: the optimized runs report 11,354,688
-bytes/frame versus 11,327,616 bytes/frame on the legacy path. Prepare-resources CPU is also about
-**4.1% higher**, partly offsetting the extraction saving. The production value today is therefore
-removing repeated full-joint extraction and reducing PostUpdate work, not GPU skin-buffer bandwidth.
-A future allocator-level/renderer integration can make the persistent buffer compact without the
-per-mesh placeholder allocations; that should be measured separately rather than attributed here.
+  A first implementation that replaced each mesh's full `SkinnedMesh` with a one-joint placeholder
+  and patched the GPU-preprocessing skin index to a synthetic per-model anchor was **rejected and
+  reverted**. Its two-pair 500-unit benchmark improved mean frame time by only about **0.4%** while
+  reducing render-world extraction about **23%**, but live animated combat exposed severe correctness
+  failures: team-colour geometry could explode into very large polygons as units animated, and
+  resurrection effects developed instance-dependent missing regions. Future work here must integrate
+  shared palette ownership at the renderer/allocator or model-instance level; do not ship a path that
+  mutates mesh skin identity and patches Bevy's per-instance GPU skin index after extraction.
 
 The release build, client Clippy with warnings denied, formatting, the client test suite and live
 captures pass. The material-freeze path is profiling-only and intentionally changes the picture;
 owner-local attachment search, per-instance attachment indices, unchanged-write suppression,
 persistent terrain-splat material state, buffered alpha-only model material state, immutable texture-ID
-material variants, conservative timed-effect pooling, and shared model skin palettes ship by default.
+material variants, and conservative timed-effect pooling ship by default.
 
 ## Architectural findings from source
 

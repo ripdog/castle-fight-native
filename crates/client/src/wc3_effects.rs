@@ -2,44 +2,25 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fs,
     path::{Component, Path},
-    sync::{
-        Arc,
-        atomic::{AtomicU8, Ordering},
-    },
+    sync::Arc,
     time::Duration,
 };
 
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
     audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialListener, SpatialScale, Volume},
-    camera::{
-        primitives::Aabb,
-        visibility::{DynamicSkinnedMeshBounds, NoCpuCulling, ViewVisibility},
-    },
-    ecs::{entity_disabling::Disabled, query::Allow, system::SystemParam},
+    camera::visibility::DynamicSkinnedMeshBounds,
+    ecs::system::SystemParam,
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
-    mesh::{
-        Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology,
-        skinning::{
-            SkinnedMesh, SkinnedMeshInverseBindposes, entity_aabb_from_skinned_mesh_bounds,
-        },
-    },
-    pbr::{
-        ExtendedMaterial, Material, MaterialExtension, MaterialPipeline, MaterialPipelineKey,
-        MeshInputUniform, MeshPipeline, MeshUniform, RenderMeshInstances, SkinUniforms,
-        skins_use_uniform_buffers,
-    },
+    mesh::{Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology, skinning::SkinnedMesh},
+    pbr::{ExtendedMaterial, Material, MaterialExtension, MaterialPipeline, MaterialPipelineKey},
     prelude::*,
     reflect::TypePath,
     render::{
-        Extract, ExtractSchedule, Render, RenderApp, RenderSystems,
-        batching::gpu_preprocessing::{self, BatchedInstanceBuffers},
         render_resource::{
             AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError, TextureFormat,
         },
-        renderer::RenderDevice,
         storage::ShaderBuffer,
-        sync_world::MainEntity,
     },
     shader::ShaderRef,
     world_serialization::{
@@ -2390,61 +2371,6 @@ impl Wc3TeamTint {
 #[derive(Component)]
 pub(crate) struct Wc3MaterialProcessed;
 
-const WC3_SKIN_PALETTE_SUPPORT_STORAGE: u8 = 1;
-const WC3_SKIN_PALETTE_SUPPORT_UNIFORM: u8 = 2;
-
-#[derive(Resource, Clone, Default)]
-pub(crate) struct Wc3SharedSkinPaletteSupport(Arc<AtomicU8>);
-
-impl Wc3SharedSkinPaletteSupport {
-    fn set_storage_buffer_support(&self, supported: bool) {
-        self.0.store(
-            if supported {
-                WC3_SKIN_PALETTE_SUPPORT_STORAGE
-            } else {
-                WC3_SKIN_PALETTE_SUPPORT_UNIFORM
-            },
-            Ordering::Relaxed,
-        );
-    }
-
-    fn storage_buffer_support(&self) -> Option<bool> {
-        match self.0.load(Ordering::Relaxed) {
-            WC3_SKIN_PALETTE_SUPPORT_STORAGE => Some(true),
-            WC3_SKIN_PALETTE_SUPPORT_UNIFORM => Some(false),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Component)]
-pub(crate) struct Wc3SharedSkinPaletteHandled;
-
-#[derive(Component, Clone, Copy)]
-pub(crate) struct Wc3SharedSkinPaletteAlias {
-    anchor: Entity,
-}
-
-#[derive(Component, Clone)]
-pub(crate) struct Wc3SharedSkinBoundsSource(SkinnedMesh);
-
-#[derive(Component)]
-pub(crate) struct Wc3SharedSkinPaletteAnchor;
-
-struct Wc3SharedSkinPaletteGroup {
-    anchor: Entity,
-    inverse_bindposes: AssetId<SkinnedMeshInverseBindposes>,
-    joints: Vec<Entity>,
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct Wc3SharedSkinPaletteGroups {
-    groups: HashMap<Entity, Wc3SharedSkinPaletteGroup>,
-}
-
-#[derive(Resource, Default)]
-struct Wc3RenderSkinPaletteAliases(Vec<(MainEntity, MainEntity)>);
-
 #[derive(Clone)]
 struct EmitterRuntime {
     spec: Wc3ParticleEmitter,
@@ -3707,202 +3633,6 @@ type Wc3MaterialMeshQuery<'w, 's> = Query<
     ),
     Without<Wc3MaterialProcessed>,
 >;
-
-type Wc3SharedSkinPaletteCandidates<'w, 's> = Query<
-    'w,
-    's,
-    (Entity, &'static mut SkinnedMesh),
-    (
-        Without<Wc3SharedSkinPaletteAlias>,
-        Without<Wc3SharedSkinPaletteAnchor>,
-        Without<Wc3SharedSkinPaletteHandled>,
-    ),
->;
-
-pub(crate) fn configure_wc3_shared_skin_palette_rendering(app: &mut App) {
-    let support = Wc3SharedSkinPaletteSupport::default();
-    app.insert_resource(support.clone())
-        .init_resource::<Wc3SharedSkinPaletteGroups>();
-
-    let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
-        return;
-    };
-    render_app
-        .insert_resource(support)
-        .init_resource::<Wc3RenderSkinPaletteAliases>()
-        .add_systems(ExtractSchedule, extract_wc3_render_skin_palette_aliases)
-        .add_systems(
-            Render,
-            patch_wc3_shared_skin_palette_indices
-                .in_set(RenderSystems::PrepareResourcesFlush)
-                .before(gpu_preprocessing::write_batched_instance_buffers::<MeshPipeline>),
-        );
-}
-
-pub(crate) fn prepare_wc3_shared_skin_palettes(
-    mut commands: Commands,
-    support: Res<Wc3SharedSkinPaletteSupport>,
-    experiment: Option<Res<RenderExperiment>>,
-    mut groups: ResMut<Wc3SharedSkinPaletteGroups>,
-    mut candidates: Wc3SharedSkinPaletteCandidates<'_, '_>,
-    all_entities: Query<(), Allow<Disabled>>,
-) {
-    let legacy = experiment
-        .as_ref()
-        .is_some_and(|experiment| **experiment == RenderExperiment::LegacySharedSkinPalette);
-    match support.storage_buffer_support() {
-        Some(true) if !legacy => {}
-        Some(_) => {
-            for (entity, _) in &mut candidates {
-                commands.entity(entity).insert(Wc3SharedSkinPaletteHandled);
-            }
-            return;
-        }
-        None => return,
-    }
-
-    groups.groups.retain(|_, group| {
-        all_entities.get(group.anchor).is_ok()
-            && group
-                .joints
-                .first()
-                .is_some_and(|joint| all_entities.get(*joint).is_ok())
-    });
-
-    for (entity, mut skin) in &mut candidates {
-        let Some(&group_key) = skin.joints.first() else {
-            commands.entity(entity).insert(Wc3SharedSkinPaletteHandled);
-            continue;
-        };
-        if skin.joints.len() <= 1 {
-            commands.entity(entity).insert(Wc3SharedSkinPaletteHandled);
-            continue;
-        }
-
-        let anchor = if let Some(group) = groups.groups.get(&group_key) {
-            if group.inverse_bindposes != skin.inverse_bindposes.id() || group.joints != skin.joints
-            {
-                commands.entity(entity).insert(Wc3SharedSkinPaletteHandled);
-                continue;
-            }
-            group.anchor
-        } else {
-            let anchor = commands
-                .spawn((
-                    skin.clone(),
-                    ViewVisibility::VISIBLE,
-                    NoCpuCulling,
-                    Wc3SharedSkinPaletteAnchor,
-                ))
-                .id();
-            commands.entity(entity).add_child(anchor);
-            groups.groups.insert(
-                group_key,
-                Wc3SharedSkinPaletteGroup {
-                    anchor,
-                    inverse_bindposes: skin.inverse_bindposes.id(),
-                    joints: skin.joints.clone(),
-                },
-            );
-            anchor
-        };
-
-        let full_skin = skin.clone();
-        skin.joints = vec![group_key];
-        commands
-            .entity(entity)
-            .insert((
-                Wc3SharedSkinPaletteAlias { anchor },
-                Wc3SharedSkinBoundsSource(full_skin),
-                Wc3SharedSkinPaletteHandled,
-            ))
-            .remove::<DynamicSkinnedMeshBounds>();
-    }
-}
-
-pub(crate) fn update_wc3_shared_skin_bounds(
-    inverse_bindposes_assets: Res<Assets<SkinnedMeshInverseBindposes>>,
-    mesh_assets: Res<Assets<Mesh>>,
-    mut mesh_entities: Query<
-        (
-            &mut Aabb,
-            &Mesh3d,
-            &Wc3SharedSkinBoundsSource,
-            Option<&GlobalTransform>,
-        ),
-        Without<DynamicSkinnedMeshBounds>,
-    >,
-    joint_entities: Query<&GlobalTransform>,
-) {
-    mesh_entities
-        .par_iter_mut()
-        .for_each(|(mut aabb, mesh, full_skin, world_from_entity)| {
-            if let Some(inverse_bindposes) =
-                inverse_bindposes_assets.get(&full_skin.0.inverse_bindposes)
-                && let Some(mesh_asset) = mesh_assets.get(mesh)
-                && let Ok(skinned_aabb) = entity_aabb_from_skinned_mesh_bounds(
-                    &joint_entities,
-                    mesh_asset,
-                    &full_skin.0,
-                    inverse_bindposes,
-                    world_from_entity,
-                )
-            {
-                *aabb = skinned_aabb.into();
-            }
-        });
-}
-
-fn extract_wc3_render_skin_palette_aliases(
-    mut aliases: ResMut<Wc3RenderSkinPaletteAliases>,
-    support: Res<Wc3SharedSkinPaletteSupport>,
-    render_device: Res<RenderDevice>,
-    render_mesh_instances: Res<RenderMeshInstances>,
-    query: Extract<Query<(Entity, &Wc3SharedSkinPaletteAlias)>>,
-) {
-    let storage_supported = !skins_use_uniform_buffers(&render_device.limits())
-        && matches!(*render_mesh_instances, RenderMeshInstances::GpuBuilding(_));
-    support.set_storage_buffer_support(storage_supported);
-    aliases.0.clear();
-    if !storage_supported {
-        return;
-    }
-    aliases.0.extend(
-        query
-            .iter()
-            .map(|(entity, alias)| (entity.into(), alias.anchor.into())),
-    );
-}
-
-fn patch_wc3_shared_skin_palette_indices(
-    aliases: Res<Wc3RenderSkinPaletteAliases>,
-    skin_uniforms: Res<SkinUniforms>,
-    render_mesh_instances: Res<RenderMeshInstances>,
-    instance_buffers: Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>,
-) {
-    let RenderMeshInstances::GpuBuilding(_) = *render_mesh_instances else {
-        return;
-    };
-    for &(entity, anchor) in &aliases.0 {
-        let Some(shared_skin_index) = skin_uniforms.skin_index(anchor) else {
-            continue;
-        };
-        let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
-            continue;
-        };
-        let input_index = mesh_instance.current_uniform_index.0;
-        let mut mesh_input = instance_buffers
-            .current_input_buffer
-            .get_unchecked(input_index);
-        if mesh_input.current_skin_index == shared_skin_index {
-            continue;
-        }
-        mesh_input.current_skin_index = shared_skin_index;
-        instance_buffers
-            .current_input_buffer
-            .set(input_index, mesh_input);
-    }
-}
 
 pub fn fix_wc3_scene_materials(
     mut commands: Commands,
@@ -6075,75 +5805,6 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn shared_skin_palette_setup_keeps_one_full_anchor_and_shrinks_mesh_skins() {
-        let mut app = App::new();
-        let support = Wc3SharedSkinPaletteSupport::default();
-        support.set_storage_buffer_support(true);
-        app.insert_resource(support)
-            .insert_resource(RenderExperiment::Baseline)
-            .init_resource::<Wc3SharedSkinPaletteGroups>()
-            .add_systems(Update, prepare_wc3_shared_skin_palettes);
-
-        let joints = [
-            app.world_mut().spawn_empty().id(),
-            app.world_mut().spawn_empty().id(),
-            app.world_mut().spawn_empty().id(),
-        ];
-        let skin = SkinnedMesh {
-            inverse_bindposes: Handle::default(),
-            joints: joints.to_vec(),
-        };
-        let first = app
-            .world_mut()
-            .spawn((skin.clone(), DynamicSkinnedMeshBounds))
-            .id();
-        let second = app.world_mut().spawn((skin, DynamicSkinnedMeshBounds)).id();
-
-        app.update();
-
-        let groups = app.world().resource::<Wc3SharedSkinPaletteGroups>();
-        assert_eq!(groups.groups.len(), 1);
-        let group = groups.groups.values().next().expect("shared palette group");
-        let anchor = group.anchor;
-        assert_eq!(
-            app.world().get::<SkinnedMesh>(anchor).unwrap().joints,
-            joints
-        );
-        assert!(
-            app.world()
-                .get::<Wc3SharedSkinPaletteAnchor>(anchor)
-                .is_some()
-        );
-        assert!(app.world().get::<NoCpuCulling>(anchor).is_some());
-        assert!(app.world().get::<ViewVisibility>(anchor).unwrap().get());
-
-        for entity in [first, second] {
-            let mesh_skin = app.world().get::<SkinnedMesh>(entity).unwrap();
-            assert_eq!(mesh_skin.joints, [joints[0]]);
-            let alias = app
-                .world()
-                .get::<Wc3SharedSkinPaletteAlias>(entity)
-                .expect("mesh should alias shared palette");
-            assert_eq!(alias.anchor, anchor);
-            let bounds_skin = app
-                .world()
-                .get::<Wc3SharedSkinBoundsSource>(entity)
-                .expect("full skin retained for dynamic bounds");
-            assert_eq!(bounds_skin.0.joints, joints);
-            assert!(
-                app.world()
-                    .get::<DynamicSkinnedMeshBounds>(entity)
-                    .is_none()
-            );
-            assert!(
-                app.world()
-                    .get::<Wc3SharedSkinPaletteHandled>(entity)
-                    .is_some()
-            );
-        }
-    }
 
     fn test_particle_emitter(object_id: u32) -> Wc3ParticleEmitter {
         Wc3ParticleEmitter {

@@ -40,7 +40,6 @@ pub(crate) enum RenderExperiment {
     LegacyAttachmentSearch,
     LegacyAttachmentIndex,
     LegacyEffectPooling,
-    LegacySharedSkinPalette,
     LegacySplatUpdates,
     LegacySplatMaterialState,
     LegacyAnimatedAlphaState,
@@ -61,14 +60,13 @@ impl RenderExperiment {
             "legacy-attachment-search" => Ok(Self::LegacyAttachmentSearch),
             "legacy-attachment-index" => Ok(Self::LegacyAttachmentIndex),
             "legacy-effect-pooling" => Ok(Self::LegacyEffectPooling),
-            "legacy-shared-skin-palette" => Ok(Self::LegacySharedSkinPalette),
             "legacy-splat-updates" => Ok(Self::LegacySplatUpdates),
             "legacy-splat-material-state" => Ok(Self::LegacySplatMaterialState),
             "legacy-animated-alpha-state" => Ok(Self::LegacyAnimatedAlphaState),
             "legacy-animated-texture-state" => Ok(Self::LegacyAnimatedTextureState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-shared-skin-palette, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, or freeze-materials"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, or freeze-materials"
             )),
         }
     }
@@ -300,7 +298,6 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAttachmentSearch
             | RenderExperiment::LegacyAttachmentIndex
             | RenderExperiment::LegacyEffectPooling
-            | RenderExperiment::LegacySharedSkinPalette
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
@@ -329,7 +326,6 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAttachmentSearch
             | RenderExperiment::LegacyAttachmentIndex
             | RenderExperiment::LegacyEffectPooling
-            | RenderExperiment::LegacySharedSkinPalette
             | RenderExperiment::LegacySplatUpdates
             | RenderExperiment::LegacySplatMaterialState
             | RenderExperiment::LegacyAnimatedAlphaState
@@ -574,10 +570,6 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-effect-pooling"),
             Ok(RenderExperiment::LegacyEffectPooling)
-        );
-        assert_eq!(
-            RenderExperiment::parse("legacy-shared-skin-palette"),
-            Ok(RenderExperiment::LegacySharedSkinPalette)
         );
         assert_eq!(
             RenderExperiment::parse("legacy-animated-alpha-state"),
