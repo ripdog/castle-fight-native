@@ -105,6 +105,32 @@ Keep shader semantics and material state unchanged. This work does not require s
 A configurable non-bindless path is the simplest candidate if smaller slabs do not beat it.
 Do not disable wgpu validation or memory initialization to achieve the gain.
 
+#### Implemented follow-up: cap StandardMaterial bindless slabs at 64
+
+A follow-up implementation replaces only Bevy's `StandardMaterial` bind-group allocator before the
+first material-preparation pass, preserving the existing material type, shaders, texture bindings,
+and authored material state. The allocator keeps bindless rendering enabled but caps each slab at 64
+materials, creating additional slabs as needed. Unsupported bindless hardware still follows Bevy's
+normal non-bindless fallback. Profiling switches retain explicit 64/128/256 caps plus Bevy's stock
+`Auto` policy for future driver/GPU comparisons.
+
+Fresh 3840×2160 / 500-unit captures on Linux 7.2.6 + Mesa 26.2.3, using the same 10-second paused
+warm-up and 10-second combat capture, produced:
+
+| StandardMaterial policy | FPS | Mean frame ms | p99 ms | Render/submit/present ms |
+| --- | ---: | ---: | ---: | ---: |
+| Bevy Auto (2,048 on Linux), two-run mean | 36.17 | 27.656 | 64.663 | 15.310 |
+| 64 slots, two-run mean | 46.32 | 21.589 | 45.093 | 9.596 |
+| 128 slots | 45.63 | 21.917 | 44.659 | 10.003 |
+| 256 slots | 42.50 | 23.528 | 58.688 | 10.837 |
+| Non-bindless | 42.72 | 23.410 | 50.667 | 10.550 |
+
+The 64-slot policy reduced mean frame time by **21.9%** and render/submit/present time by **37.3%**
+versus the bracketing Bevy-Auto runs, while keeping bindless material semantics. It also beat the
+non-bindless fallback in this fixture. The normal renderer now uses 64 slots; `bindless-auto` remains
+available as the stock-policy control. A final post-refactor release capture confirmed the promoted
+`baseline` at 45.30 FPS / 22.074 ms versus `bindless-auto` at 36.22 FPS / 27.611 ms.
+
 ### 2. Buffered particle state has not removed particle submission overhead
 
 `emit_wc3_particles` still creates a `Mesh3d`, material component, transform and entity for each

@@ -46,6 +46,10 @@ pub(crate) enum RenderExperiment {
     LegacyAnimatedTextureState,
     FreezeMaterials,
     FreezePoses,
+    BindlessAuto,
+    Bindless64,
+    Bindless128,
+    Bindless256,
     NoBindless,
 }
 
@@ -68,10 +72,23 @@ impl RenderExperiment {
             "legacy-animated-texture-state" => Ok(Self::LegacyAnimatedTextureState),
             "freeze-materials" => Ok(Self::FreezeMaterials),
             "freeze-poses" => Ok(Self::FreezePoses),
+            "bindless-auto" => Ok(Self::BindlessAuto),
+            "bindless-64" => Ok(Self::Bindless64),
+            "bindless-128" => Ok(Self::Bindless128),
+            "bindless-256" => Ok(Self::Bindless256),
             "no-bindless" => Ok(Self::NoBindless),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, or no-bindless"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-64, bindless-128, bindless-256, or no-bindless"
             )),
+        }
+    }
+
+    pub(crate) fn standard_material_bindless_slots(self) -> Option<u32> {
+        match self {
+            Self::BindlessAuto => None,
+            Self::Bindless128 => Some(128),
+            Self::Bindless256 => Some(256),
+            _ => Some(crate::render_tuning::DEFAULT_STANDARD_MATERIAL_BINDLESS_SLOTS),
         }
     }
 }
@@ -339,6 +356,10 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAnimatedTextureState
             | RenderExperiment::FreezeMaterials
             | RenderExperiment::FreezePoses
+            | RenderExperiment::BindlessAuto
+            | RenderExperiment::Bindless64
+            | RenderExperiment::Bindless128
+            | RenderExperiment::Bindless256
             | RenderExperiment::NoBindless
     ) {
         return;
@@ -369,6 +390,10 @@ fn apply_render_experiment(
             | RenderExperiment::LegacyAnimatedTextureState
             | RenderExperiment::FreezeMaterials
             | RenderExperiment::FreezePoses
+            | RenderExperiment::BindlessAuto
+            | RenderExperiment::Bindless64
+            | RenderExperiment::Bindless128
+            | RenderExperiment::Bindless256
             | RenderExperiment::NoBindless => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
@@ -617,6 +642,34 @@ mod tests {
         assert_eq!(
             RenderExperiment::parse("legacy-animated-texture-state"),
             Ok(RenderExperiment::LegacyAnimatedTextureState)
+        );
+        assert_eq!(
+            RenderExperiment::parse("bindless-auto"),
+            Ok(RenderExperiment::BindlessAuto)
+        );
+        assert_eq!(
+            RenderExperiment::parse("bindless-64"),
+            Ok(RenderExperiment::Bindless64)
+        );
+        assert_eq!(
+            RenderExperiment::parse("bindless-128"),
+            Ok(RenderExperiment::Bindless128)
+        );
+        assert_eq!(
+            RenderExperiment::parse("bindless-256"),
+            Ok(RenderExperiment::Bindless256)
+        );
+        assert_eq!(
+            RenderExperiment::Baseline.standard_material_bindless_slots(),
+            Some(64)
+        );
+        assert_eq!(
+            RenderExperiment::BindlessAuto.standard_material_bindless_slots(),
+            None
+        );
+        assert_eq!(
+            RenderExperiment::Bindless128.standard_material_bindless_slots(),
+            Some(128)
         );
         assert!(RenderExperiment::parse("hide-everything").is_err());
     }

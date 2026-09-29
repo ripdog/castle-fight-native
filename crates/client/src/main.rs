@@ -12,6 +12,7 @@ mod network;
 mod performance_ui;
 mod presentation;
 mod render_audit;
+mod render_tuning;
 mod resource_ui;
 mod terrain;
 mod ui_icons;
@@ -68,6 +69,7 @@ use presentation::CastlePresentationPlugin;
 use render_audit::{
     RenderAudit, RenderAuditPlugin, RenderExperiment, SceneCensus, format_render_passes,
 };
+use render_tuning::StandardMaterialBindlessSlabPlugin;
 use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 use view_state::{
@@ -449,6 +451,9 @@ fn main() {
                     ..default()
                 }),
         )
+        .add_plugins(StandardMaterialBindlessSlabPlugin::new(
+            options.render_experiment.standard_material_bindless_slots(),
+        ))
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
             CastlePresentationPlugin::new(options.health_bars),
@@ -790,7 +795,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
